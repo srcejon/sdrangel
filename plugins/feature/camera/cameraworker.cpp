@@ -1364,8 +1364,11 @@ void CameraWorker::captureTick()
 
     if (m_settings.isFfmpegMediaSource())
     {
-        readVideoFileFrame();
-        if (m_capturing && m_mediaPlayback.m_playing && !m_settings.isStreamCamera()) {
+        const bool frameRead = readVideoFileFrame();
+        if (m_capturing
+            && m_mediaPlayback.m_playing
+            && (!m_settings.isStreamCamera() || frameRead))
+        {
             scheduleNextVideoFileTick();
         }
         return;
@@ -1835,17 +1838,6 @@ bool CameraWorker::takeDecodedVideoFileFrame(CameraMediaPlaybackState::DecodedFr
         return false;
     }
 
-    const size_t skippedFrames = m_mediaPlayback.m_decodedFrames.size() - 1;
-    while (m_mediaPlayback.m_decodedFrames.size() > 1)
-    {
-        CameraMediaPlaybackState::DecodedFrame skippedFrame = std::move(m_mediaPlayback.m_decodedFrames.front());
-        m_mediaPlayback.m_decodedFrames.pop_front();
-        stashSkippedVideoFileAudio(skippedFrame);
-    }
-    if (skippedFrames > 0) {
-        m_mediaPlayback.m_decodeDroppedFrames.fetch_add(static_cast<quint64>(skippedFrames));
-    }
-
     frame = std::move(m_mediaPlayback.m_decodedFrames.front());
     m_mediaPlayback.m_decodedFrames.pop_front();
     if (!m_mediaPlayback.m_skippedAudio.isEmpty()
@@ -1968,6 +1960,45 @@ void CameraWorker::submitDecodedVideoFileFrame(
 
 bool CameraWorker::readQueuedVideoFileFrame(bool submitAudio)
 {
+    if (m_settings.isStreamCamera())
+    {
+        static constexpr qint64 maxEarlyReleaseMs = 2;
+        static constexpr qint64 maxRetryDelayMs = 50;
+
+        int queuedFrames = 0;
+        qint64 nextFramePositionMs = -1;
+        {
+            QMutexLocker locker(&m_mediaPlayback.m_decodedFramesMutex);
+            queuedFrames = static_cast<int>(m_mediaPlayback.m_decodedFrames.size());
+            if (queuedFrames > 0) {
+                nextFramePositionMs = m_mediaPlayback.m_decodedFrames.front().m_positionMs;
+            }
+        }
+
+        if (queuedFrames <= 0) {
+            return false;
+        }
+
+        if ((m_mediaPlayback.m_basePositionMs < 0)
+            && (queuedFrames < static_cast<int>(CameraMediaPlaybackState::m_streamInitialBufferFrames)))
+        {
+            m_captureTimer.setSingleShot(true);
+            m_captureTimer.start(qMax(1, videoFileFrameIntervalMs() / 2));
+            return false;
+        }
+
+        if ((m_mediaPlayback.m_basePositionMs >= 0) && (nextFramePositionMs >= 0))
+        {
+            const qint64 earlyMs = nextFramePositionMs - videoFilePlaybackClockMs();
+            if (earlyMs > maxEarlyReleaseMs)
+            {
+                m_captureTimer.setSingleShot(true);
+                m_captureTimer.start(static_cast<int>(qBound<qint64>(1, earlyMs, maxRetryDelayMs)));
+                return false;
+            }
+        }
+    }
+
     CameraMediaPlaybackState::DecodedFrame decodedFrame;
     if (!takeDecodedVideoFileFrame(decodedFrame)) {
         return false;
@@ -1999,7 +2030,7 @@ bool CameraWorker::readQueuedVideoFileFrame(bool submitAudio)
         true,
         submitAudio,
         true,
-        true);
+        false);
     return true;
 }
 
@@ -2241,10 +2272,11 @@ void CameraWorker::scheduleNextVideoFileTick()
     if ((m_mediaPlayback.m_basePositionMs >= 0) && (m_mediaPlayback.m_lastFramePtsMs >= 0))
     {
         const qint64 nextFramePtsMs = m_mediaPlayback.m_lastFramePtsMs + static_cast<qint64>(std::llround(intervalMs));
-        delayMs = nextFramePtsMs - videoFilePlaybackClockMs() - m_mediaPlayback.m_lastDecodeMs;
+        delayMs = nextFramePtsMs - videoFilePlaybackClockMs();
         if (m_settings.isStreamCamera()) {
             delayMs = qBound<qint64>(1, delayMs, static_cast<qint64>(std::llround(intervalMs)));
         } else {
+            delayMs -= m_mediaPlayback.m_lastDecodeMs;
             delayMs = qMax<qint64>(1, delayMs);
         }
     }

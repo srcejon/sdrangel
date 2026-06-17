@@ -100,7 +100,10 @@ public:
     int m_decodePendingAudioBytes = 0;
     int m_decodePendingVideoFrames = 0;
     int m_decodePendingVideoPackets = 0;
-    static constexpr size_t m_maxDecodedStreamFrames = 4;
+    // 4K stream decode can occasionally stall for 150-250 ms. Keep enough
+    // decoded frames to absorb that jitter without letting memory run away.
+    static constexpr size_t m_streamInitialBufferFrames = 5;
+    static constexpr size_t m_maxDecodedStreamFrames = 8;
 
     QElapsedTimer m_statsTimer;
     QElapsedTimer m_tickTimer;

@@ -906,10 +906,10 @@ bool CameraVideoFileDecoder::readAheadAudio(QByteArray& pcmS16Stereo, qint64 vid
     ++m_debugStats.m_readAheadCalls;
     static constexpr qint64 audioLeadMs = 50;
     static constexpr int bytesPerSampleFrame = 4;
-    // The audio monitor FIFO is already the live-stream jitter buffer; keep
-    // decoder-side audio prefetch small so the audio clock does not run far
-    // ahead of the video PTS.
-    static constexpr int streamTargetAudioMs = 200;
+    // Match the live audio decoder cushion to the monitor FIFO low-water mark.
+    // The monitor target is 850 ms with 150 ms jitter, so keeping about 700 ms
+    // decoded prevents per-frame top-up bursts without letting audio run away.
+    static constexpr int streamTargetAudioMs = 700;
     const int maxPacketsRead = m_urlSource ? 96 : 32;
     const int frameAudioFrames = static_cast<int>((m_outputSampleRate / std::max(1.0, m_frameRate)) + 0.5);
     const int targetAudioFrames = m_urlSource
@@ -1011,7 +1011,11 @@ bool CameraVideoFileDecoder::readAheadAudio(QByteArray& pcmS16Stereo, qint64 vid
                 if (!queueOneDecodedVideoFrame(errorMessage)) {
                     return false;
                 }
-                return true;
+                ++packetsRead;
+                if (!needsAudio() || (m_pendingVideoFrames.size() >= maxPendingVideoFrames)) {
+                    return true;
+                }
+                continue;
             }
 
             AVPacket *parkedPacket = av_packet_clone(m_packet);
@@ -1152,7 +1156,7 @@ void CameraVideoFileDecoder::trimLivePendingAudio()
 {
 #ifdef CAMERA_FFMPEG_STREAMING
     static constexpr int bytesPerSampleFrame = 4;
-    static constexpr int maxLivePendingAudioMs = 750;
+    static constexpr int maxLivePendingAudioMs = 1200;
 
     if (!m_urlSource || (m_outputSampleRate <= 0) || (pendingAudioBytes() <= 0)) {
         return;

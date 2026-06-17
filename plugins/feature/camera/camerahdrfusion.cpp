@@ -314,4 +314,122 @@ bool CameraHdrFusion::mergeMertensCudaRgb(
 
     return false;
 }
+
+bool CameraHdrFusion::mergeDebevecCudaRgb(
+    const std::vector<cv::Mat>& rgbFrames,
+    const std::vector<float>& exposureTimesSeconds,
+    cv::cuda::GpuMat& tonemappedRgbGpu,
+    cv::cuda::Stream& stream,
+    QString *errorMessage)
+{
+    tonemappedRgbGpu.release();
+    if (rgbFrames.empty())
+    {
+        setError(errorMessage, QStringLiteral("No HDR frames supplied"));
+        return false;
+    }
+
+    std::vector<cv::cuda::GpuMat> rgbFramesGpu;
+    rgbFramesGpu.reserve(rgbFrames.size());
+    for (const cv::Mat& frame : rgbFrames)
+    {
+        if (frame.empty())
+        {
+            setError(errorMessage, QStringLiteral("HDR frames must be non-empty same-size RGB images"));
+            return false;
+        }
+
+        cv::cuda::GpuMat uploadedGpu;
+        uploadedGpu.upload(frame, stream);
+        rgbFramesGpu.push_back(uploadedGpu);
+    }
+
+    return mergeDebevecCudaRgb(rgbFramesGpu, exposureTimesSeconds, tonemappedRgbGpu, stream, errorMessage);
+}
+
+bool CameraHdrFusion::mergeDebevecCudaRgb(
+    const std::vector<cv::cuda::GpuMat>& rgbFramesGpu,
+    const std::vector<float>& exposureTimesSeconds,
+    cv::cuda::GpuMat& tonemappedRgbGpu,
+    cv::cuda::Stream& stream,
+    QString *errorMessage)
+{
+    tonemappedRgbGpu.release();
+    if (rgbFramesGpu.empty())
+    {
+        setError(errorMessage, QStringLiteral("No HDR frames supplied"));
+        return false;
+    }
+    if (rgbFramesGpu.size() != exposureTimesSeconds.size())
+    {
+        setError(errorMessage, QStringLiteral("HDR frame/exposure count mismatch"));
+        return false;
+    }
+
+    try
+    {
+        const cv::Size frameSize = rgbFramesGpu.front().size();
+        cv::cuda::GpuMat numerator(frameSize, CV_32FC3, cv::Scalar::all(0.0));
+        cv::cuda::GpuMat denominator(frameSize, CV_32FC3, cv::Scalar::all(1.0e-6));
+
+        std::vector<float> sortedExposureTimes = exposureTimesSeconds;
+        std::sort(sortedExposureTimes.begin(), sortedExposureTimes.end());
+        const float referenceExposure = std::max(1.0e-6f, sortedExposureTimes[sortedExposureTimes.size() / 2]);
+
+        for (size_t sampleIndex = 0; sampleIndex < rgbFramesGpu.size(); ++sampleIndex)
+        {
+            const cv::cuda::GpuMat& uploadedGpu = rgbFramesGpu[sampleIndex];
+            if (uploadedGpu.empty()
+                || (uploadedGpu.size() != frameSize)
+                || (uploadedGpu.channels() != 3))
+            {
+                setError(errorMessage, QStringLiteral("HDR frames must be non-empty same-size RGB images"));
+                return false;
+            }
+
+            cv::cuda::GpuMat floatGpu;
+            if (uploadedGpu.depth() == CV_16U) {
+                uploadedGpu.convertTo(floatGpu, CV_32FC3, 1.0 / 65535.0, 0.0, stream);
+            } else if (uploadedGpu.depth() == CV_8U) {
+                uploadedGpu.convertTo(floatGpu, CV_32FC3, 1.0 / 255.0, 0.0, stream);
+            } else {
+                uploadedGpu.convertTo(floatGpu, CV_32FC3, 1.0, 0.0, stream);
+            }
+
+            cv::cuda::GpuMat weightGpu;
+            cv::cuda::subtract(floatGpu, cv::Scalar::all(0.5), weightGpu, cv::noArray(), -1, stream);
+            cv::cuda::abs(weightGpu, weightGpu, stream);
+            weightGpu.convertTo(weightGpu, CV_32FC3, -2.0, 1.0, stream);
+            cv::cuda::max(weightGpu, cv::Scalar::all(1.0e-4), weightGpu, stream);
+
+            cv::cuda::GpuMat weightedRadianceGpu;
+            cv::cuda::multiply(floatGpu, weightGpu, weightedRadianceGpu, 1.0, -1, stream);
+            weightedRadianceGpu.convertTo(
+                weightedRadianceGpu,
+                CV_32FC3,
+                1.0 / std::max(1.0e-6f, exposureTimesSeconds[sampleIndex]),
+                0.0,
+                stream);
+
+            cv::cuda::add(numerator, weightedRadianceGpu, numerator, cv::noArray(), -1, stream);
+            cv::cuda::add(denominator, weightGpu, denominator, cv::noArray(), -1, stream);
+        }
+
+        cv::cuda::GpuMat radianceGpu;
+        cv::cuda::divide(numerator, denominator, radianceGpu, 1.0, -1, stream);
+        radianceGpu.convertTo(radianceGpu, CV_32FC3, referenceExposure, 0.0, stream);
+
+        cv::cuda::GpuMat denominatorToneGpu;
+        cv::cuda::add(radianceGpu, cv::Scalar::all(1.0), denominatorToneGpu, cv::noArray(), -1, stream);
+        cv::cuda::divide(radianceGpu, denominatorToneGpu, tonemappedRgbGpu, 1.0, -1, stream);
+        cv::cuda::pow(tonemappedRgbGpu, 1.0 / 2.2, tonemappedRgbGpu, stream);
+        return !tonemappedRgbGpu.empty() && (tonemappedRgbGpu.type() == CV_32FC3);
+    }
+    catch (const cv::Exception& error)
+    {
+        setError(errorMessage, QString::fromLocal8Bit(error.what()));
+    }
+
+    return false;
+}
 #endif

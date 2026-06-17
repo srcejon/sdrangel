@@ -58,6 +58,18 @@ public:
         cv::cuda::Stream& stream,
         cv::Ptr<cv::cuda::Filter>& laplacianFilter,
         QString *errorMessage = nullptr);
+    static bool mergeDebevecCudaRgb(
+        const std::vector<cv::Mat>& rgbFrames,
+        const std::vector<float>& exposureTimesSeconds,
+        cv::cuda::GpuMat& tonemappedRgbGpu,
+        cv::cuda::Stream& stream,
+        QString *errorMessage = nullptr);
+    static bool mergeDebevecCudaRgb(
+        const std::vector<cv::cuda::GpuMat>& rgbFramesGpu,
+        const std::vector<float>& exposureTimesSeconds,
+        cv::cuda::GpuMat& tonemappedRgbGpu,
+        cv::cuda::Stream& stream,
+        QString *errorMessage = nullptr);
 #endif
 };
 

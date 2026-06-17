@@ -319,6 +319,49 @@ bool CameraFrameStacker::applyMertensFusionCuda(const std::vector<const HdrFrame
     return true;
 }
 
+bool CameraFrameStacker::applyDebevecFusionCuda(
+    const std::vector<const HdrFrameSample *>& sortedSamples,
+    const std::vector<float>& exposureTimesSeconds,
+    cv::cuda::GpuMat& tonemappedRgbGpu)
+{
+    tonemappedRgbGpu.release();
+    if (!canUseCudaStacking() || sortedSamples.empty()) {
+        return false;
+    }
+
+    std::vector<cv::Mat> rgbFrames;
+    rgbFrames.reserve(sortedSamples.size());
+    std::vector<cv::cuda::GpuMat> rgbFramesGpu;
+    rgbFramesGpu.reserve(sortedSamples.size());
+    bool allFramesHaveGpu = true;
+    for (const HdrFrameSample *sample : sortedSamples)
+    {
+        if (!sample) {
+            return false;
+        }
+        rgbFrames.push_back(sample->m_frameMat);
+        if (sample->m_frameGpu.empty()) {
+            allFramesHaveGpu = false;
+        } else {
+            rgbFramesGpu.push_back(sample->m_frameGpu);
+        }
+    }
+
+    QString errorMessage;
+    const bool success = allFramesHaveGpu
+        ? CameraHdrFusion::mergeDebevecCudaRgb(rgbFramesGpu, exposureTimesSeconds, tonemappedRgbGpu, m_cudaStackingStream, &errorMessage)
+        : CameraHdrFusion::mergeDebevecCudaRgb(rgbFrames, exposureTimesSeconds, tonemappedRgbGpu, m_cudaStackingStream, &errorMessage);
+    if (!success)
+    {
+        if (!errorMessage.isEmpty()) {
+            qWarning() << "CameraFrameStacker: CUDA Debevec HDR merge failed; falling back to CPU:" << errorMessage;
+        }
+        return false;
+    }
+
+    return true;
+}
+
 void CameraFrameStacker::setCudaBgrOutputFromRgbGpu(CameraPipelineFrame& inputFrame, const cv::cuda::GpuMat& rgbGpu, int outputDepth)
 {
     cv::cuda::GpuMat rgbOutputGpu;
@@ -1286,6 +1329,24 @@ bool CameraFrameStacker::applyFrameStacking(CameraPipelineFrame& inputFrame, QIm
 
             std::vector<cv::Mat> ldrFrames;
             std::vector<float> exposureTimesSeconds;
+            bool exposureTimesPrepared = false;
+            auto prepareExposureTimes = [&]()
+            {
+                if (exposureTimesPrepared) {
+                    return;
+                }
+
+                exposureTimesSeconds.reserve(m_hdrFrameSamples.size());
+                for (const HdrFrameSample *sample : sortedSamples)
+                {
+                    float exposureSeconds = static_cast<float>(std::max(1.0e-6, sample->m_exposureTimeMs / 1000.0));
+                    if (!exposureTimesSeconds.empty() && (exposureSeconds <= exposureTimesSeconds.back())) {
+                        exposureSeconds = exposureTimesSeconds.back() + std::max(1.0e-6f, exposureTimesSeconds.back() * 1.0e-4f);
+                    }
+                    exposureTimesSeconds.push_back(exposureSeconds);
+                }
+                exposureTimesPrepared = true;
+            };
             bool ldrFramesPrepared = false;
             auto prepareLdrFrames = [&]()
             {
@@ -1293,8 +1354,8 @@ bool CameraFrameStacker::applyFrameStacking(CameraPipelineFrame& inputFrame, QIm
                     return;
                 }
 
+                prepareExposureTimes();
                 ldrFrames.reserve(m_hdrFrameSamples.size());
-                exposureTimesSeconds.reserve(m_hdrFrameSamples.size());
 
                 for (const HdrFrameSample *sample : sortedSamples)
                 {
@@ -1310,12 +1371,6 @@ bool CameraFrameStacker::applyFrameStacking(CameraPipelineFrame& inputFrame, QIm
 
                     cv::cvtColor(ldrFrame8u, ldrFrame8u, cv::COLOR_RGB2BGR);
                     ldrFrames.push_back(ldrFrame8u);
-
-                    float exposureSeconds = static_cast<float>(std::max(1.0e-6, sample->m_exposureTimeMs / 1000.0));
-                    if (!exposureTimesSeconds.empty() && (exposureSeconds <= exposureTimesSeconds.back())) {
-                        exposureSeconds = exposureTimesSeconds.back() + std::max(1.0e-6f, exposureTimesSeconds.back() * 1.0e-4f);
-                    }
-                    exposureTimesSeconds.push_back(exposureSeconds);
                 }
 
                 ldrFramesPrepared = true;
@@ -1378,13 +1433,13 @@ bool CameraFrameStacker::applyFrameStacking(CameraPipelineFrame& inputFrame, QIm
             }
             else
             {
-                prepareLdrFrames();
-                cv::Mat timesMat(static_cast<int>(exposureTimesSeconds.size()), 1, CV_32F, exposureTimesSeconds.data());
                 cv::Mat responseCurve;
                 cv::Mat hdrRadiance;
 
                 if (m_settings.m_stackHdrAlgorithm == CameraSettings::StackHdrAlgorithmRobertson)
                 {
+                    prepareLdrFrames();
+                    cv::Mat timesMat(static_cast<int>(exposureTimesSeconds.size()), 1, CV_32F, exposureTimesSeconds.data());
                     cv::Ptr<cv::CalibrateRobertson> calibrateRobertson = cv::createCalibrateRobertson();
                     calibrateRobertson->process(ldrFrames, responseCurve, timesMat);
 
@@ -1393,20 +1448,68 @@ bool CameraFrameStacker::applyFrameStacking(CameraPipelineFrame& inputFrame, QIm
                 }
                 else
                 {
-                    cv::Ptr<cv::MergeDebevec> mergeDebevec = cv::createMergeDebevec();
-                    // Live brackets are too small and scene-dependent for a reliable per-stack CRF fit.
-                    mergeDebevec->process(ldrFrames, hdrRadiance, timesMat);
-                }
+#ifdef CAMERA_OPENCV_CUDA_STACKING
+                    cv::cuda::GpuMat tonemappedGpu;
+                    prepareExposureTimes();
+                    if (useCudaStacking && applyDebevecFusionCuda(sortedSamples, exposureTimesSeconds, tonemappedGpu))
+                    {
+                        hdrCudaUsed = true;
+                        hdrMergeMs = elapsedSince(previousHdrMs);
 
-                if (hdrRadiance.depth() != CV_32F) {
-                    hdrRadiance.convertTo(hdrRadiance, CV_32FC3);
-                }
-                sanitizeFloatImage(hdrRadiance, false);
-                hdrMergeMs = elapsedSince(previousHdrMs);
+                        if (m_settings.m_stackDisplayMode == CameraSettings::StackDisplayStacked)
+                        {
+                            const int completedHdrFrameCount = static_cast<int>(m_hdrFrameSamples.size());
+                            setCudaBgrOutputFromRgbGpu(inputFrame, tonemappedGpu, CV_8U);
+                            m_cudaStackingStream.waitForCompletion();
+                            outputImage = QImage();
+                            stackCount = completedHdrFrameCount;
+                            m_hdrFrameSamples.clear();
+                            m_lastStackedImage = QImage();
+                            hdrOutputMs = elapsedSince(previousHdrMs);
 
-                cv::Ptr<cv::TonemapReinhard> tonemap = cv::createTonemapReinhard(2.2f, 0.0f, 1.0f, 0.0f);
-                tonemap->process(hdrRadiance, tonemapped);
-                hdrTonemapMs = elapsedSince(previousHdrMs);
+                            qDebug() << "CameraFrameStacker: HDR processing timing"
+                                     << "algorithm" << m_settings.m_stackHdrAlgorithm
+                                     << "frames" << completedHdrFrameCount
+                                     << "size" << frameMat.cols << "x" << frameMat.rows
+                                     << "inputDepth" << frameMat.depth()
+                                     << "cudaAvailable" << useCudaStacking
+                                     << "cudaUsed" << hdrCudaUsed
+                                     << "sortMs" << hdrSortMs
+                                     << "prepareMs" << hdrPrepareMs
+                                     << "mergeMs" << hdrMergeMs
+                                     << "tonemapMs" << hdrTonemapMs
+                                     << "validateMs" << hdrValidateMs
+                                     << "fallbackMs" << hdrFallbackMs
+                                     << "outputMs" << hdrOutputMs
+                                     << "totalMs" << hdrTimer.elapsed()
+                                     << "fallback" << hdrFallback;
+                            PROFILER_STOP(__FUNCTION__);
+                            return true;
+                        }
+
+                        tonemappedGpu.download(tonemapped, m_cudaStackingStream);
+                        m_cudaStackingStream.waitForCompletion();
+                    }
+                    else
+#endif
+                    {
+                        prepareLdrFrames();
+                        cv::Mat timesMat(static_cast<int>(exposureTimesSeconds.size()), 1, CV_32F, exposureTimesSeconds.data());
+                        cv::Ptr<cv::MergeDebevec> mergeDebevec = cv::createMergeDebevec();
+                        // Live brackets are too small and scene-dependent for a reliable per-stack CRF fit.
+                        mergeDebevec->process(ldrFrames, hdrRadiance, timesMat);
+
+                        if (hdrRadiance.depth() != CV_32F) {
+                            hdrRadiance.convertTo(hdrRadiance, CV_32FC3);
+                        }
+                        sanitizeFloatImage(hdrRadiance, false);
+                        hdrMergeMs = elapsedSince(previousHdrMs);
+
+                        cv::Ptr<cv::TonemapReinhard> tonemap = cv::createTonemapReinhard(2.2f, 0.0f, 1.0f, 0.0f);
+                        tonemap->process(hdrRadiance, tonemapped);
+                        hdrTonemapMs = elapsedSince(previousHdrMs);
+                    }
+                }
             }
 
             if (tonemapped.depth() != CV_32F) {

@@ -273,6 +273,64 @@ bool runHdrComparison(const QString& dataDir, const QString& outputDir)
         return false;
     }
 
+    const std::vector<float> exposureTimesSeconds = {0.0125f, 0.05f};
+    cv::Mat exposureTimesMat(static_cast<int>(exposureTimesSeconds.size()), 1, CV_32F, const_cast<float*>(exposureTimesSeconds.data()));
+    auto runCpuDebevec = [&]() -> cv::Mat {
+        cv::Mat hdrRadiance;
+        cv::Mat tonemappedBgr;
+        cv::Mat tonemappedRgb;
+        cv::Ptr<cv::MergeDebevec> mergeDebevec = cv::createMergeDebevec();
+        mergeDebevec->process(bgrFrames, hdrRadiance, exposureTimesMat);
+        cv::Ptr<cv::TonemapReinhard> tonemap = cv::createTonemapReinhard(2.2f, 0.0f, 1.0f, 0.0f);
+        tonemap->process(hdrRadiance, tonemappedBgr);
+        cv::cvtColor(tonemappedBgr, tonemappedRgb, cv::COLOR_BGR2RGB);
+        return tonemappedRgb;
+    };
+
+    cv::Mat cpuDebevecRgb = runCpuDebevec();
+    const TimingStats cpuDebevecTiming = measureTiming(timingIterations, [&]() {
+        cv::Mat timedCpuDebevecRgb = runCpuDebevec();
+        return !timedCpuDebevecRgb.empty();
+    });
+
+    cv::cuda::GpuMat cudaDebevecGpu;
+    QString debevecErrorMessage;
+    if (!CameraHdrFusion::mergeDebevecCudaRgb(rgbFramesGpu, exposureTimesSeconds, cudaDebevecGpu, stream, &debevecErrorMessage))
+    {
+        std::cerr << "FAIL: CUDA Debevec fusion failed: " << debevecErrorMessage.toStdString() << "\n";
+        return false;
+    }
+    cv::Mat cudaDebevecRgb;
+    cudaDebevecGpu.download(cudaDebevecRgb, stream);
+    stream.waitForCompletion();
+    const TimingStats cudaDebevecTiming = measureTiming(timingIterations, [&]() {
+        cv::cuda::GpuMat timedCudaDebevecGpu;
+        QString timedDebevecErrorMessage;
+        return CameraHdrFusion::mergeDebevecCudaRgb(rgbFramesGpu, exposureTimesSeconds, timedCudaDebevecGpu, stream, &timedDebevecErrorMessage)
+            && !timedCudaDebevecGpu.empty();
+    });
+
+    const cv::Mat cpuDebevec8u = floatRgbTo8u(cpuDebevecRgb);
+    const cv::Mat cudaDebevec8u = floatRgbTo8u(cudaDebevecRgb);
+    const DifferenceMetrics debevecMetrics = compareImages(cpuDebevec8u, cudaDebevec8u);
+    writeRgbImage(QDir(outputDir).filePath(QStringLiteral("hdr-debevec-cpu.jpg")), cpuDebevec8u);
+    writeRgbImage(QDir(outputDir).filePath(QStringLiteral("hdr-debevec-cuda.jpg")), cudaDebevec8u);
+
+    std::cout << "Debevec CPU/CUDA diagnostic"
+              << " meanAbs=" << debevecMetrics.m_meanAbs
+              << " rmse=" << debevecMetrics.m_rmse
+              << " p99Abs=" << debevecMetrics.m_p99Abs
+              << " maxAbs=" << debevecMetrics.m_maxAbs
+              << " badFraction=" << debevecMetrics.m_badFraction
+              << " cpuMinMs=" << cpuDebevecTiming.m_minMs
+              << " cpuAvgMs=" << cpuDebevecTiming.m_avgMs
+              << " cudaGpuInputMinMs=" << cudaDebevecTiming.m_minMs
+              << " cudaGpuInputAvgMs=" << cudaDebevecTiming.m_avgMs
+              << " speedupGpuInputMin=" << (cudaDebevecTiming.m_minMs > 0.0 ? cpuDebevecTiming.m_minMs / cudaDebevecTiming.m_minMs : 0.0)
+              << " speedupGpuInputAvg=" << (cudaDebevecTiming.m_avgMs > 0.0 ? cpuDebevecTiming.m_avgMs / cudaDebevecTiming.m_avgMs : 0.0)
+              << " iterations=" << timingIterations
+              << "\n";
+
     std::cout << "PASS: CUDA HDR output is close to CPU output\n";
     return true;
 }

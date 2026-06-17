@@ -11672,332 +11672,13 @@ QVector<Evaluation> buildBrightPairSeeds(const CameraSettings& settings,
     return seeds;
 }
 
-QVector<Evaluation> buildBlindQuadSeeds(const CameraSettings& settings,
-                                        const PlateSolveCatalogContext& catalogContext,
-                                        const QSize& imageSize,
-                                        const QDateTime& captureDateTimeUtc,
-                                        const QVector<CameraPipelineStarDetection>& starDetections,
-                                        const QVector<int>& detectionIndices,
-                                        const QVector<VisibleCatalogStar>& visibleStars)
-{
-    QVector<Evaluation> seeds;
-    if (isCancellationRequested() || (visibleStars.size() < settings.m_plateSolveMinMatches)) {
-        return seeds;
-    }
-
-    const bool isWideFisheyeLens = isWidePlateSolveContext(settings);
-    const QVector<int> signatureDetectionIndices = isWideFisheyeLens
-        ? selectDetectionIndicesForBlindSignatures(starDetections, detectionIndices, 10, 10, 16)
-        : detectionIndices;
-    const QVector<QuadSignature> detectionQuads = buildDetectionQuadSignatures(
-        starDetections,
-        signatureDetectionIndices,
-        isWideFisheyeLens ? 16 : 14);
-    if (isCancellationRequested()) {
-        return seeds;
-    }
-    const QVector<QuadSignature> catalogQuads = buildCatalogQuadSignatures(settings, visibleStars);
-    if (isCancellationRequested() || detectionQuads.isEmpty() || catalogQuads.isEmpty()) {
-        return seeds;
-    }
-    const double ratioTolerance = (isNarrowGuidedDirectionSolve(settings))
-        ? 0.06
-        : isWideFisheyeLens ? 0.06
-        : 0.03;
-    const bool ignoreOrientationHandedness = isWideFisheyeLens
-        || (isNarrowGuidedDirectionSolve(settings));
-    const QHash<qint64, QVector<int>> catalogQuadBuckets =
-        buildQuadSignatureBuckets(catalogQuads, ratioTolerance);
-    const int bucketRadius = 1;
-    recordProfileMetric(QStringLiteral("search.quadDetectionSignatures"), detectionQuads.size());
-    recordProfileMetric(QStringLiteral("search.quadCatalogSignatures"), catalogQuads.size());
-
-    const int minBlindSeedMatches = std::max(
-        settings.m_plateSolveMinMatches + 1,
-        std::min(6, static_cast<int>(detectionIndices.size())));
-    const bool useStartLens = plateSolveStartUsesLens(settings);
-    const double fixedCenterOffsetX = useStartLens ? settings.m_lensCenterOffsetX : 0.0;
-    const double fixedCenterOffsetY = useStartLens ? settings.m_lensCenterOffsetY : 0.0;
-    const double fixedDistortionK1 = useStartLens ? settings.m_lensDistortionK1 : 0.0;
-
-    struct TriedDirection { double azimuthDegrees; double elevationDegrees; };
-    QVector<TriedDirection> triedDirections;
-    bool earlyExit = false;
-    qint64 ratioCandidates = 0;
-    qint64 ratioMatches = 0;
-    qint64 seedEvaluations = 0;
-    qint64 verifiedSeeds = 0;
-
-    for (const QuadSignature& detectionQuad : detectionQuads)
-    {
-        if (earlyExit || isCancellationRequested()) break;
-        const int detectionFirstBin = signatureRatioBin(detectionQuad.edgeRatios[0], ratioTolerance);
-        const int detectionSecondBin = signatureRatioBin(detectionQuad.edgeRatios[1], ratioTolerance);
-        for (int firstBinOffset = -bucketRadius; firstBinOffset <= bucketRadius; ++firstBinOffset)
-        {
-            if (earlyExit || isCancellationRequested()) break;
-            for (int secondBinOffset = -bucketRadius; secondBinOffset <= bucketRadius; ++secondBinOffset)
-            {
-                if (earlyExit || isCancellationRequested()) break;
-                const auto bucketIt = catalogQuadBuckets.constFind(
-                    signatureBucketKey(detectionFirstBin + firstBinOffset, detectionSecondBin + secondBinOffset));
-                if (bucketIt == catalogQuadBuckets.constEnd()) {
-                    continue;
-                }
-                for (int catalogQuadIndex : *bucketIt)
-                {
-                    if (earlyExit || isCancellationRequested()) break;
-                    const QuadSignature& catalogQuad = catalogQuads.at(catalogQuadIndex);
-                    ++ratioCandidates;
-                    bool ratiosMatch = true;
-                    for (int idx = 0; idx < 5; ++idx)
-                    {
-                        if (std::fabs(detectionQuad.edgeRatios[idx] - catalogQuad.edgeRatios[idx]) > ratioTolerance)
-                        {
-                            ratiosMatch = false;
-                            break;
-                        }
-                    }
-                    if (!ratiosMatch) {
-                        continue;
-                    }
-
-                    ++ratioMatches;
-                    if (!ignoreOrientationHandedness && ((detectionQuad.orientation * catalogQuad.orientation) < 0.0)) {
-                        continue;
-                    }
-
-                    const VisibleCatalogStar& a = visibleStars[catalogQuad.indices[0]];
-                    const VisibleCatalogStar& b = visibleStars[catalogQuad.indices[1]];
-                    const VisibleCatalogStar& c = visibleStars[catalogQuad.indices[2]];
-                    const VisibleCatalogStar& d = visibleStars[catalogQuad.indices[3]];
-            const SkyVector center = normalize({
-                a.vector.x + b.vector.x + c.vector.x + d.vector.x,
-                a.vector.y + b.vector.y + c.vector.y + d.vector.y,
-                a.vector.z + b.vector.z + c.vector.z + d.vector.z
-            });
-            if (length(center) <= 0.0) {
-                continue;
-            }
-
-            const double seedAzimuth = normalizeDegrees(std::atan2(center.x, center.y) * 180.0 / kPi);
-            const double seedElevation = std::asin(std::clamp(center.z, -1.0, 1.0)) * 180.0 / kPi;
-
-            std::array<double, 6> angularDistances{{
-                std::acos(std::clamp(dot(a.vector, b.vector), -1.0, 1.0)) * 180.0 / kPi,
-                std::acos(std::clamp(dot(a.vector, c.vector), -1.0, 1.0)) * 180.0 / kPi,
-                std::acos(std::clamp(dot(a.vector, d.vector), -1.0, 1.0)) * 180.0 / kPi,
-                std::acos(std::clamp(dot(b.vector, c.vector), -1.0, 1.0)) * 180.0 / kPi,
-                std::acos(std::clamp(dot(b.vector, d.vector), -1.0, 1.0)) * 180.0 / kPi,
-                std::acos(std::clamp(dot(c.vector, d.vector), -1.0, 1.0)) * 180.0 / kPi
-            }};
-            const double maxAngularDistance = *std::max_element(angularDistances.begin(), angularDistances.end());
-            if (maxAngularDistance <= 0.01) {
-                continue;
-            }
-
-            const double baseSeedFov = std::clamp(
-                maxAngularDistance * static_cast<double>(std::max(imageSize.width(), imageSize.height())) / std::max(1.0, detectionQuad.longestDistance),
-                static_cast<double>(CameraSettings::m_minFov),
-                static_cast<double>(CameraSettings::m_maxFov));
-            if (!seedFovCompatibleWithStartFov(settings, baseSeedFov)) {
-                continue;
-            }
-
-            // FoV-scaled dedup so wide-field seeds don't swallow nearby distinct directions.
-            const double dedupRadiusDegrees = std::clamp(baseSeedFov * 0.05, 0.5, 5.0);
-            bool alreadyTried = false;
-            for (const TriedDirection& tried : triedDirections) {
-                // Use wrap-aware azimuth distance so seeds near 0°/360° are correctly deduped.
-                const double azDiff = std::fabs(seedAzimuth - tried.azimuthDegrees);
-                const double azDist = (azDiff <= 180.0) ? azDiff : 360.0 - azDiff;
-                if (azDist < dedupRadiusDegrees
-                    && std::fabs(seedElevation - tried.elevationDegrees) < dedupRadiusDegrees)
-                {
-                    alreadyTried = true;
-                    break;
-                }
-            }
-            if (alreadyTried) continue;
-            triedDirections.append({seedAzimuth, seedElevation});
-
-            const std::array<QPointF, 4> detectionPoints {{
-                starDetections[detectionQuad.indices[0]].m_center,
-                starDetections[detectionQuad.indices[1]].m_center,
-                starDetections[detectionQuad.indices[2]].m_center,
-                starDetections[detectionQuad.indices[3]].m_center
-            }};
-            const std::array<VisibleCatalogStar, 4> quadStars {{a, b, c, d}};
-            QVector<int> allowedCatalogIndices {
-                a.catalogIndex,
-                b.catalogIndex,
-                c.catalogIndex,
-                d.catalogIndex
-            };
-
-            // See buildBlindTriangleSeeds for the rationale on the broader fisheye sweep.
-            const bool isFisheyeLensQ = (settings.m_lensProjection != CameraSettings::LensProjectionRectilinear);
-            const std::array<double, 5> quadFovScales = plateSolveStartUsesFov(settings)
-                ? std::array<double, 5>{{0.96, 1.0, 1.04, 1.0, 1.0}}
-                : isFisheyeLensQ
-                    ? std::array<double, 5>{{0.60, 0.80, 1.0, 1.25, 1.60}}
-                    : std::array<double, 5>{{0.85, 0.95, 1.0, 1.10, 1.20}};
-            const int quadFovScaleCount = plateSolveStartUsesFov(settings) ? 3 : 5;
-            const double quadSeedBaseFov = plateSolveStartUsesFov(settings)
-                ? static_cast<double>(settings.m_fov)
-                : baseSeedFov;
-            for (int fovScaleIndex = 0; fovScaleIndex < quadFovScaleCount; ++fovScaleIndex)
-            {
-                if (earlyExit || isCancellationRequested()) break;
-                const double fovScale = quadFovScales[fovScaleIndex];
-                const double seedFov = std::clamp(
-                    quadSeedBaseFov * fovScale,
-                    static_cast<double>(CameraSettings::m_minFov),
-                    static_cast<double>(CameraSettings::m_maxFov));
-                const SkyProjector rollProjector = createProjector(
-                    settings,
-                    imageSize,
-                    seedAzimuth,
-                    seedElevation,
-                    0.0,
-                    seedFov,
-                    fixedCenterOffsetX,
-                    fixedCenterOffsetY,
-                    fixedDistortionK1);
-                if (!rollProjector.valid) {
-                    continue;
-                }
-
-                std::array<QPointF, 4> projectedPoints;
-                bool projected = true;
-                for (int idx = 0; idx < 4; ++idx)
-                {
-                    if (!projectVector(rollProjector, quadStars[idx].vector, projectedPoints[idx]))
-                    {
-                        projected = false;
-                        break;
-                    }
-                }
-                if (!projected) {
-                    continue;
-                }
-
-                for (const std::array<int, 4>& permutation : kQuadPermutations)
-                {
-                    if (earlyExit || isCancellationRequested()) break;
-                    const QLineF detectionBase(detectionPoints[0], detectionPoints[1]);
-                    const QLineF projectedBase(projectedPoints[permutation[0]], projectedPoints[permutation[1]]);
-                    double baseRoll = projectedBase.angleTo(detectionBase);
-                    if (!std::isfinite(baseRoll)) {
-                        baseRoll = 0.0;
-                    }
-
-                    // Sweep small roll perturbations to tolerate centroiding noise on the reference edge.
-                    for (double rollDelta : {-10.0, -5.0, 0.0, 5.0, 10.0})
-                    {
-                        if (earlyExit || isCancellationRequested()) break;
-                        const double seedRoll = baseRoll + rollDelta;
-
-                        const Evaluation seededCandidate = evaluatePose(
-                            settings,
-                            catalogContext,
-                            imageSize,
-                            captureDateTimeUtc,
-                            starDetections,
-                            detectionIndices,
-                            seedAzimuth,
-                            seedElevation,
-                            seedRoll,
-                            seedFov,
-                            &allowedCatalogIndices,
-                            fixedCenterOffsetX,
-                            fixedCenterOffsetY,
-                            fixedDistortionK1);
-                        ++seedEvaluations;
-                        if (!seededCandidate.valid) {
-                            continue;
-                        }
-                        const std::array<int, 4> anchorCatalogIndices {{
-                            quadStars[permutation[0]].catalogIndex,
-                            quadStars[permutation[1]].catalogIndex,
-                            quadStars[permutation[2]].catalogIndex,
-                            quadStars[permutation[3]].catalogIndex
-                        }};
-                        const double anchorDistancePixels = std::min(
-                            static_cast<double>(settings.m_plateSolveMatchRadius),
-                            std::max(6.0, static_cast<double>(settings.m_plateSolveFinalMatchRadius)));
-                        const int seedAnchorMatches = countProjectedAnchorSupport(
-                            settings,
-                            catalogContext,
-                            imageSize,
-                            starDetections,
-                            seededCandidate,
-                            detectionQuad.indices,
-                            anchorCatalogIndices,
-                            anchorDistancePixels);
-                        if (seedAnchorMatches < 3) {
-                            continue;
-                        }
-
-                        const Evaluation candidate = evaluatePose(
-                            settings,
-                            catalogContext,
-                            imageSize,
-                            captureDateTimeUtc,
-                            starDetections,
-                            detectionIndices,
-                            seededCandidate.azimuthDegrees,
-                            seededCandidate.elevationDegrees,
-                            seededCandidate.rollDegrees,
-                            seededCandidate.fovDegrees,
-                            nullptr,
-                            fixedCenterOffsetX,
-                            fixedCenterOffsetY,
-                            fixedDistortionK1);
-                        const Evaluation verifiedCandidate = verifyBlindSeedCandidate(
-                            settings,
-                            catalogContext,
-                            imageSize,
-                            captureDateTimeUtc,
-                            starDetections,
-                            detectionIndices,
-                            candidate);
-                        if (verifiedCandidate.valid) {
-                            seeds.append(verifiedCandidate);
-                            ++verifiedSeeds;
-                            if (verifiedCandidate.matchCount >= minBlindSeedMatches + 3
-                                && verifiedCandidate.rmsErrorPixels < kBlindSeedMaxRmsPixels * 0.5)
-                            {
-                                earlyExit = true;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-        }
-    }
-
-    recordProfileMetric(QStringLiteral("search.quadRatioCandidates"), ratioCandidates);
-    recordProfileMetric(QStringLiteral("search.quadRatioMatches"), ratioMatches);
-    recordProfileMetric(QStringLiteral("search.quadSeedEvaluations"), seedEvaluations);
-    recordProfileMetric(QStringLiteral("search.quadVerifiedSeeds"), verifiedSeeds);
-
-    std::sort(seeds.begin(), seeds.end(), [this](const Evaluation& lhs, const Evaluation& rhs) {
-        return isBetterWeakModeEvaluation(lhs, rhs);
-    });
-    const int seedLimit = isWideFisheyeLens ? 64 : 12;
-    return selectConsensusSeedRepresentatives(settings, seeds, seedLimit, "quad");
-}
-
 // Vector-space quad-hash blind seed engine (design notes "Blind quad-hash geometric
 // indexing" plan, items 1-6). Mode 1 only (FoV known/trusted): unprojects detection pixels
 // into camera-frame rays at the known FoV, builds vector quad codes for groups of 4
 // detections, looks them up in a catalog quad-code index built from the visible sky, and
-// recovers az/el/roll for each code match via the N-vector Wahba solver. Runs alongside
-// buildBlindQuadSeeds (which remains the fallback for mode 0 / unknown FoV).
+// recovers az/el/roll for each code match via the N-vector Wahba solver. For mode 0 (unknown
+// FoV) the caller sweeps a set of candidate FoVs via seedFovOverride; the wide-fallback grid
+// below is the final blind-search backstop.
 QVector<Evaluation> buildVectorQuadBlindSeeds(const CameraSettings& settings,
                                               const PlateSolveCatalogContext& catalogContext,
                                               const QSize& imageSize,
@@ -12014,8 +11695,8 @@ QVector<Evaluation> buildVectorQuadBlindSeeds(const CameraSettings& settings,
 
     // Mode 0 (blind FoV) is supported via an explicit seedFovOverride: the caller
     // sweeps a set of candidate FoVs, calling this once per FoV. Without an
-    // override, mode 0 stays on the legacy buildBlindQuadSeeds fallback (the
-    // engine needs an assumed FoV to unproject pixels to camera-frame rays).
+    // override, mode 0 falls through to the wide-fallback grid below (this engine
+    // needs an assumed FoV to unproject pixels to camera-frame rays).
     if (!plateSolveStartUsesFov(settings) && (seedFovOverride <= 0.0)) {
         return seeds;
     }
@@ -19578,9 +19259,28 @@ Evaluation searchBestPose(const CameraSettings& settings,
                     || isStrongWideWeakBlindSeed(best));
         };
 
+        // Ablation harness hook: SDRANGEL_CAMERA_PLATE_SOLVER_DISABLE_SEEDS is a comma-separated
+        // list of seed-engine tokens (brighttriangle, brightpair) to skip, so each engine's
+        // marginal contribution to the suite can be measured. The vector-quad engine has its own
+        // SDRANGEL_CAMERA_PLATE_SOLVER_DISABLE_QUAD_INDEX toggle.
+        const QString disabledSeedTokens = qEnvironmentVariable("SDRANGEL_CAMERA_PLATE_SOLVER_DISABLE_SEEDS");
+        const auto seedDisabled = [&disabledSeedTokens](const char* token) {
+            if (disabledSeedTokens.isEmpty()) {
+                return false;
+            }
+            const QStringList tokens = disabledSeedTokens.split(QLatin1Char(','), Qt::SkipEmptyParts);
+            for (const QString& t : tokens) {
+                if (t.trimmed().compare(QLatin1String(token), Qt::CaseInsensitive) == 0) {
+                    return true;
+                }
+            }
+            return false;
+        };
+
         const bool useBrightGuidedTriangles = useStartDirection
             && !wideWeakMode
-            && (isNarrowField(settings));
+            && (isNarrowField(settings))
+            && !seedDisabled("brighttriangle");
 
         qint64 seedStageStartMs = searchProfileTimer.elapsed();
         if (isCancellationRequested()) {
@@ -19631,7 +19331,7 @@ Evaluation searchBestPose(const CameraSettings& settings,
         if (isCancellationRequested()) {
             return best;
         }
-        const QVector<Evaluation> brightPairSeeds = wideWeakMode
+        const QVector<Evaluation> brightPairSeeds = (wideWeakMode && !seedDisabled("brightpair"))
             ? buildBrightPairSeeds(
                 settings,
                 catalogContext,
@@ -19684,8 +19384,8 @@ Evaluation searchBestPose(const CameraSettings& settings,
             // wide fisheye at zenith captures almost the whole visible hemisphere,
             // so the brightest whole-sky catalog stars are essentially all in frame
             // and the bright-pool catalog index covers them. Stop early once a
-            // strong seed is found. This is purely additive - the legacy
-            // buildBlindQuadSeeds / wide-fallback-grid stages still run below.
+            // strong seed is found. This is purely additive - the wide-fallback grid
+            // stage still runs below.
             seedStageStartMs = searchProfileTimer.elapsed();
             static const double kBlindQuadFovSweepDegrees[] = {180.0, 160.0, 140.0, 120.0, 95.0, 70.0, 45.0};
             for (double candidateFov : kBlindQuadFovSweepDegrees)
@@ -19716,86 +19416,40 @@ Evaluation searchBestPose(const CameraSettings& settings,
             && isAcceptableDirectionSeedSolve(settings, minMatchCount, best)
             && hasAcceptableBrightnessConsistency(best);
         const bool wideBrightPairSeedAlreadyAcceptable = wideWeakMode && hasGoodWideBlindSeed();
-        if (brightTriangleSeedAlreadyAcceptable || brightPairSeedAlreadyAcceptable || wideBrightPairSeedAlreadyAcceptable)
+        // The legacy blind-triangle and ratio blind-quad seed engines were removed here. Ablation
+        // across the REAL + fisheye + wide + narrow synthetic corpora (test/seed-ablation.ps1)
+        // showed blind-quad contributed ZERO unique solves and blind-triangle only one synthetic
+        // case; the bright-guided / bright-pair seeds, the vector-quad engine, and the wide-fallback
+        // grid below cover their role. (The core buildBlindTriangleSeeds routine is retained -- it
+        // is still used as a subroutine by the bright-guided triangle engine.)
+        if (!brightTriangleSeedAlreadyAcceptable
+            && !brightPairSeedAlreadyAcceptable
+            && !wideBrightPairSeedAlreadyAcceptable)
         {
-            recordProfileMetric(QStringLiteral("search.blindTriangleSkipped"), 1);
-            recordProfileMetric(QStringLiteral("search.blindQuadSkipped"), 1);
-            logSearchProfile("blind-triangle-seeds", searchProfileTimer.elapsed());
-            logSearchProfile("blind-quad-seeds", searchProfileTimer.elapsed());
-        }
-        else
-        {
-            seedStageStartMs = searchProfileTimer.elapsed();
-            if (isCancellationRequested()) {
-                return best;
-            }
-            const QVector<Evaluation> blindTriangleSeeds = buildBlindTriangleSeeds(
-                settings,
-                catalogContext,
-                imageSize,
-                captureDateTimeUtc,
-                starDetections,
-                detectionIndices,
-                *blindVisibleStars);
-            logSearchProfile("blind-triangle-seeds", seedStageStartMs);
-            consumeBlindSeeds(blindTriangleSeeds, "blind-triangle-seed");
-
             if (!wideWeakMode && !consumeBrightPairsBeforeTriangle) {
                 consumeBlindSeeds(brightPairSeeds, "bright-pair-seed");
             }
 
-            if (hasGoodWideBlindSeed())
-            {
-                recordProfileMetric(QStringLiteral("search.blindQuadSkipped"), 1);
-                logSearchProfile("blind-quad-seeds", searchProfileTimer.elapsed());
-            }
-            else
+            // Vector quad-hash engine (assumed/known FoV). For wideWeakMode mode-1 images it
+            // already ran earlier (before the bright-pair short-circuit) -- don't run it twice.
+            if (!hasGoodWideBlindSeed()
+                && !vectorQuadSeedsRunEarly
+                && !qEnvironmentVariableIsSet("SDRANGEL_CAMERA_PLATE_SOLVER_DISABLE_QUAD_INDEX"))
             {
                 seedStageStartMs = searchProfileTimer.elapsed();
                 if (isCancellationRequested()) {
                     return best;
                 }
-                // Vector quad-hash engine (mode 1, FoV known) runs first; the legacy
-                // ratio-based quad matcher below remains as the fallback for mode 0
-                // (blind FoV) and for any cases the new engine doesn't resolve. For
-                // wideWeakMode mode-1 images this already ran earlier (above), before
-                // the bright-pair short-circuit - don't run it twice.
-                if (!vectorQuadSeedsRunEarly && !qEnvironmentVariableIsSet("SDRANGEL_CAMERA_PLATE_SOLVER_DISABLE_QUAD_INDEX"))
-                {
-                    const QVector<Evaluation> vectorQuadSeeds = buildVectorQuadBlindSeeds(
-                        settings,
-                        catalogContext,
-                        imageSize,
-                        captureDateTimeUtc,
-                        starDetections,
-                        detectionIndices,
-                        *blindVisibleStars);
-                    logSearchProfile("vector-quad-seeds", seedStageStartMs);
-                    consumeBlindSeeds(vectorQuadSeeds, "vector-quad-seed");
-                }
-
-                if (hasGoodWideBlindSeed())
-                {
-                    recordProfileMetric(QStringLiteral("search.blindQuadSkipped"), 1);
-                    logSearchProfile("blind-quad-seeds", searchProfileTimer.elapsed());
-                }
-                else
-                {
-                    seedStageStartMs = searchProfileTimer.elapsed();
-                    if (isCancellationRequested()) {
-                        return best;
-                    }
-                    const QVector<Evaluation> blindQuadSeeds = buildBlindQuadSeeds(
-                        settings,
-                        catalogContext,
-                        imageSize,
-                        captureDateTimeUtc,
-                        starDetections,
-                        detectionIndices,
-                        *blindVisibleStars);
-                    logSearchProfile("blind-quad-seeds", seedStageStartMs);
-                    consumeBlindSeeds(blindQuadSeeds, "blind-quad-seed");
-                }
+                const QVector<Evaluation> vectorQuadSeeds = buildVectorQuadBlindSeeds(
+                    settings,
+                    catalogContext,
+                    imageSize,
+                    captureDateTimeUtc,
+                    starDetections,
+                    detectionIndices,
+                    *blindVisibleStars);
+                logSearchProfile("vector-quad-seeds", seedStageStartMs);
+                consumeBlindSeeds(vectorQuadSeeds, "vector-quad-seed");
             }
         }
         logSearchProfile("blind-seeds", stageStartMs);

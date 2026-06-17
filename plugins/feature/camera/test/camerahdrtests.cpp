@@ -17,8 +17,11 @@
 ///////////////////////////////////////////////////////////////////////////////////
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
+#include <functional>
 #include <iostream>
+#include <limits>
 #include <numeric>
 #include <string>
 #include <vector>
@@ -48,6 +51,41 @@ struct DifferenceMetrics
     int m_maxAbs = 0;
     double m_badFraction = 0.0;
 };
+
+struct TimingStats
+{
+    double m_minMs = 0.0;
+    double m_avgMs = 0.0;
+};
+
+TimingStats measureTiming(int iterations, const std::function<bool()>& fn)
+{
+    TimingStats stats;
+    if (iterations <= 0) {
+        return stats;
+    }
+
+    double totalMs = 0.0;
+    stats.m_minMs = std::numeric_limits<double>::max();
+
+    for (int i = 0; i < iterations; ++i)
+    {
+        const auto start = std::chrono::steady_clock::now();
+        if (!fn())
+        {
+            stats.m_minMs = 0.0;
+            stats.m_avgMs = 0.0;
+            return stats;
+        }
+        const auto end = std::chrono::steady_clock::now();
+        const double elapsedMs = std::chrono::duration<double, std::milli>(end - start).count();
+        totalMs += elapsedMs;
+        stats.m_minMs = std::min(stats.m_minMs, elapsedMs);
+    }
+
+    stats.m_avgMs = totalMs / iterations;
+    return stats;
+}
 
 cv::Mat clampFloat01(const cv::Mat& input)
 {
@@ -117,6 +155,7 @@ bool writeRgbImage(const QString& fileName, const cv::Mat& rgb)
 
 bool runHdrComparison(const QString& dataDir, const QString& outputDir)
 {
+    const int timingIterations = 5;
     const QString hdr1Name = QDir(dataDir).filePath(QStringLiteral("images/hdr1.jpg"));
     const QString hdr2Name = QDir(dataDir).filePath(QStringLiteral("images/hdr2.jpg"));
 
@@ -144,6 +183,11 @@ bool runHdrComparison(const QString& dataDir, const QString& outputDir)
     cv::Mat cpuBgr;
     cv::Ptr<cv::MergeMertens> mergeMertens = cv::createMergeMertens();
     mergeMertens->process(bgrFrames, cpuBgr);
+    const TimingStats cpuTiming = measureTiming(timingIterations, [&]() {
+        cv::Mat timedCpuBgr;
+        mergeMertens->process(bgrFrames, timedCpuBgr);
+        return !timedCpuBgr.empty();
+    });
     cv::Mat cpuRgb;
     cv::cvtColor(cpuBgr, cpuRgb, cv::COLOR_BGR2RGB);
 
@@ -162,6 +206,34 @@ bool runHdrComparison(const QString& dataDir, const QString& outputDir)
         std::cerr << "FAIL: CUDA Mertens fusion failed: " << errorMessage.toStdString() << "\n";
         return false;
     }
+    const TimingStats cudaTiming = measureTiming(timingIterations, [&]() {
+        cv::Mat timedCudaRgb;
+        QString timedErrorMessage;
+        return CameraHdrFusion::mergeMertensCudaRgb(rgbFrames, timedCudaRgb, stream, laplacianFilter, &timedErrorMessage)
+            && !timedCudaRgb.empty();
+    });
+    std::vector<cv::cuda::GpuMat> rgbFramesGpu;
+    rgbFramesGpu.reserve(rgbFrames.size());
+    for (const cv::Mat& frame : rgbFrames)
+    {
+        cv::cuda::GpuMat frameGpu;
+        frameGpu.upload(frame, stream);
+        rgbFramesGpu.push_back(frameGpu);
+    }
+    cv::Mat preUploadedCudaRgb;
+    QString preUploadedErrorMessage;
+    if (!CameraHdrFusion::mergeMertensCudaRgb(rgbFramesGpu, preUploadedCudaRgb, stream, laplacianFilter, &preUploadedErrorMessage))
+    {
+        std::cerr << "FAIL: CUDA Mertens fusion with pre-uploaded frames failed: "
+                  << preUploadedErrorMessage.toStdString() << "\n";
+        return false;
+    }
+    const TimingStats cudaGpuInputTiming = measureTiming(timingIterations, [&]() {
+        cv::Mat timedCudaRgb;
+        QString timedErrorMessage;
+        return CameraHdrFusion::mergeMertensCudaRgb(rgbFramesGpu, timedCudaRgb, stream, laplacianFilter, &timedErrorMessage)
+            && !timedCudaRgb.empty();
+    });
 
     const cv::Mat cpu8u = floatRgbTo8u(cpuRgb);
     const cv::Mat cuda8u = floatRgbTo8u(cudaRgb);
@@ -181,6 +253,17 @@ bool runHdrComparison(const QString& dataDir, const QString& outputDir)
               << " p99Abs=" << metrics.m_p99Abs
               << " maxAbs=" << metrics.m_maxAbs
               << " badFraction=" << metrics.m_badFraction
+              << " cpuMinMs=" << cpuTiming.m_minMs
+              << " cpuAvgMs=" << cpuTiming.m_avgMs
+              << " cudaMinMs=" << cudaTiming.m_minMs
+              << " cudaAvgMs=" << cudaTiming.m_avgMs
+              << " cudaGpuInputMinMs=" << cudaGpuInputTiming.m_minMs
+              << " cudaGpuInputAvgMs=" << cudaGpuInputTiming.m_avgMs
+              << " speedupMin=" << (cudaTiming.m_minMs > 0.0 ? cpuTiming.m_minMs / cudaTiming.m_minMs : 0.0)
+              << " speedupAvg=" << (cudaTiming.m_avgMs > 0.0 ? cpuTiming.m_avgMs / cudaTiming.m_avgMs : 0.0)
+              << " speedupGpuInputMin=" << (cudaGpuInputTiming.m_minMs > 0.0 ? cpuTiming.m_minMs / cudaGpuInputTiming.m_minMs : 0.0)
+              << " speedupGpuInputAvg=" << (cudaGpuInputTiming.m_avgMs > 0.0 ? cpuTiming.m_avgMs / cudaGpuInputTiming.m_avgMs : 0.0)
+              << " iterations=" << timingIterations
               << " outputDir=" << outputDir.toStdString()
               << "\n";
 

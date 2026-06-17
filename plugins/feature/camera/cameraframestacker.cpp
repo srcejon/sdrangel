@@ -279,16 +279,35 @@ bool CameraFrameStacker::applyMertensFusionCuda(const std::vector<const HdrFrame
 
     std::vector<cv::Mat> rgbFrames;
     rgbFrames.reserve(sortedSamples.size());
+#if defined(CAMERA_OPENCV_CUDA_STACKING)
+    std::vector<cv::cuda::GpuMat> rgbFramesGpu;
+    rgbFramesGpu.reserve(sortedSamples.size());
+    bool allFramesHaveGpu = true;
+#endif
     for (const HdrFrameSample *sample : sortedSamples)
     {
         if (!sample) {
             return false;
         }
         rgbFrames.push_back(sample->m_frameMat);
+#if defined(CAMERA_OPENCV_CUDA_STACKING)
+        if (sample->m_frameGpu.empty()) {
+            allFramesHaveGpu = false;
+        } else {
+            rgbFramesGpu.push_back(sample->m_frameGpu);
+        }
+#endif
     }
 
     QString errorMessage;
-    if (!CameraHdrFusion::mergeMertensCudaRgb(rgbFrames, tonemappedRgb, m_cudaStackingStream, m_cudaHdrLaplacianFilter, &errorMessage))
+    const bool success =
+#if defined(CAMERA_OPENCV_CUDA_STACKING)
+        allFramesHaveGpu
+            ? CameraHdrFusion::mergeMertensCudaRgb(rgbFramesGpu, tonemappedRgb, m_cudaStackingStream, m_cudaHdrLaplacianFilter, &errorMessage)
+            :
+#endif
+            CameraHdrFusion::mergeMertensCudaRgb(rgbFrames, tonemappedRgb, m_cudaStackingStream, m_cudaHdrLaplacianFilter, &errorMessage);
+    if (!success)
     {
         if (!errorMessage.isEmpty()) {
             qWarning() << "CameraFrameStacker: CUDA Mertens exposure fusion failed; falling back to CPU:" << errorMessage;
@@ -1143,7 +1162,18 @@ bool CameraFrameStacker::applyFrameStacking(CameraPipelineFrame& inputFrame, QIm
             return false;
         }
 
-        m_hdrFrameSamples.push_back({frameMat.clone(), std::max(CameraSettings::m_minExposureTimeMs, inputFrame.m_exposureTimeMs)});
+        HdrFrameSample hdrSample;
+        hdrSample.m_frameMat = frameMat.clone();
+#ifdef CAMERA_OPENCV_CUDA_STACKING
+        if (!cudaFrameMat.empty()
+            && (cudaFrameMat.size() == frameMat.size())
+            && (cudaFrameMat.channels() == frameMat.channels()))
+        {
+            hdrSample.m_frameGpu = cudaFrameMat;
+        }
+#endif
+        hdrSample.m_exposureTimeMs = std::max(CameraSettings::m_minExposureTimeMs, inputFrame.m_exposureTimeMs);
+        m_hdrFrameSamples.push_back(hdrSample);
         stackCount = static_cast<int>(m_hdrFrameSamples.size());
 
         if (static_cast<int>(m_hdrFrameSamples.size()) < inputFrame.m_hdrExposureCount)

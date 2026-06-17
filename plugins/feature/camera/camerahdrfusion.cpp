@@ -66,11 +66,44 @@ bool CameraHdrFusion::mergeMertensCudaRgb(
         return false;
     }
 
+    std::vector<cv::cuda::GpuMat> rgbFramesGpu;
+    rgbFramesGpu.reserve(rgbFrames.size());
+
+    for (const cv::Mat& frame : rgbFrames)
+    {
+        if (frame.empty())
+        {
+            setError(errorMessage, QStringLiteral("HDR frames must be non-empty same-size RGB images"));
+            return false;
+        }
+
+        cv::cuda::GpuMat uploadedGpu;
+        uploadedGpu.upload(frame, stream);
+        rgbFramesGpu.push_back(uploadedGpu);
+    }
+
+    return mergeMertensCudaRgb(rgbFramesGpu, tonemappedRgb, stream, laplacianFilter, errorMessage);
+}
+
+bool CameraHdrFusion::mergeMertensCudaRgb(
+    const std::vector<cv::cuda::GpuMat>& rgbFramesGpu,
+    cv::Mat& tonemappedRgb,
+    cv::cuda::Stream& stream,
+    cv::Ptr<cv::cuda::Filter>& laplacianFilter,
+    QString *errorMessage)
+{
+    tonemappedRgb.release();
+    if (rgbFramesGpu.empty())
+    {
+        setError(errorMessage, QStringLiteral("No HDR frames supplied"));
+        return false;
+    }
+
     try
     {
-        const cv::Size frameSize = rgbFrames.front().size();
+        const cv::Size frameSize = rgbFramesGpu.front().size();
         std::vector<cv::cuda::GpuMat> frameFloatGpu;
-        frameFloatGpu.reserve(rgbFrames.size());
+        frameFloatGpu.reserve(rgbFramesGpu.size());
 
         if (!laplacianFilter) {
             laplacianFilter = cv::cuda::createLaplacianFilter(CV_32FC1, CV_32FC1, 1);
@@ -90,28 +123,25 @@ bool CameraHdrFusion::mergeMertensCudaRgb(
         }
         const int pyramidLevels = static_cast<int>(pyramidSizes.size());
 
-        std::vector<std::vector<cv::cuda::GpuMat>> weightPyramids(rgbFrames.size());
-        std::vector<cv::cuda::GpuMat> weights(rgbFrames.size());
+        std::vector<std::vector<cv::cuda::GpuMat>> weightPyramids(rgbFramesGpu.size());
+        std::vector<cv::cuda::GpuMat> weights(rgbFramesGpu.size());
         cv::cuda::GpuMat weightSum(frameSize, CV_32FC1, cv::Scalar::all(0.0));
 
-        for (size_t sampleIndex = 0; sampleIndex < rgbFrames.size(); ++sampleIndex)
+        for (size_t sampleIndex = 0; sampleIndex < rgbFramesGpu.size(); ++sampleIndex)
         {
-            const cv::Mat& frame = rgbFrames[sampleIndex];
-            if (frame.empty()
-                || (frame.size() != frameSize)
-                || (frame.channels() != 3))
+            const cv::cuda::GpuMat& uploadedGpu = rgbFramesGpu[sampleIndex];
+            if (uploadedGpu.empty()
+                || (uploadedGpu.size() != frameSize)
+                || (uploadedGpu.channels() != 3))
             {
                 setError(errorMessage, QStringLiteral("HDR frames must be non-empty same-size RGB images"));
                 return false;
             }
 
-            cv::cuda::GpuMat uploadedGpu;
-            uploadedGpu.upload(frame, stream);
-
             cv::cuda::GpuMat floatGpu;
-            if (frame.depth() == CV_16U) {
+            if (uploadedGpu.depth() == CV_16U) {
                 uploadedGpu.convertTo(floatGpu, CV_32FC3, 1.0 / 65535.0, 0.0, stream);
-            } else if (frame.depth() == CV_8U) {
+            } else if (uploadedGpu.depth() == CV_8U) {
                 uploadedGpu.convertTo(floatGpu, CV_32FC3, 1.0 / 255.0, 0.0, stream);
             } else {
                 uploadedGpu.convertTo(floatGpu, CV_32FC3, 1.0, 0.0, stream);

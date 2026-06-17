@@ -77,6 +77,9 @@ private:
     struct HdrFrameSample
     {
         cv::Mat m_frameMat;
+#ifdef CAMERA_OPENCV_CUDA_STACKING
+        cv::cuda::GpuMat m_frameGpu;
+#endif
         double m_exposureTimeMs = 0.0;
     };
 

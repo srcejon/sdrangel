@@ -2009,7 +2009,7 @@ bool CameraWorker::readQueuedVideoFileFrame(bool submitAudio)
         true,
         submitAudio,
         true,
-        false);
+        true);
     return true;
 }
 

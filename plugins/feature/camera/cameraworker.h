@@ -648,6 +648,9 @@ private:
     QTimer m_videoFileDelayedSubmitTimer;
     QElapsedTimer m_videoFileDelayedSubmitClock;
     QVector<DelayedVideoFileFrame> m_delayedVideoFileFrames;
+    QTimer m_streamFrameRetryTimer;
+    CameraPipelineFramePtr m_pendingStreamFrame;
+    quint64 m_pendingStreamFrameGeneration = 0;
     struct DecodedVideoFileFrame
     {
         QImage m_image;
@@ -782,6 +785,9 @@ private:
     void closeVideoFileDecoder();
     void setVideoFilePlaying(bool playing);
     void submitVideoFileFrame(const CameraPipelineFramePtr& frame, bool applyPlaybackOffset);
+    bool submitOrQueueStreamVideoFileFrame(const CameraPipelineFramePtr& frame);
+    void clearPendingStreamVideoFileFrame();
+    void releasePendingStreamVideoFileFrame();
     void clearDelayedVideoFileFrames();
     void scheduleDelayedVideoFileFrameSubmit();
     void releaseDelayedVideoFileFrames();

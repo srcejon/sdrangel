@@ -68,6 +68,7 @@ CameraWorker::CameraWorker() :
     m_videoFileDurationMs(0),
     m_videoFilePlaying(false),
     m_videoFileDelayedSubmitTimer(this),
+    m_streamFrameRetryTimer(this),
     m_networkManager(nullptr),
     m_cameraFinder(new CameraFinder(this)),
     m_stackFrameIndex(0),
@@ -119,6 +120,7 @@ void CameraWorker::startWork()
     QObject::connect(&m_inputMessageQueue, &MessageQueue::messageEnqueued, this, &CameraWorker::handleInputMessages);
     QObject::connect(&m_captureTimer, &QTimer::timeout, this, &CameraWorker::captureTick);
     QObject::connect(&m_videoFileDelayedSubmitTimer, &QTimer::timeout, this, &CameraWorker::releaseDelayedVideoFileFrames);
+    QObject::connect(&m_streamFrameRetryTimer, &QTimer::timeout, this, &CameraWorker::releasePendingStreamVideoFileFrame);
     QObject::connect(&m_statusTimer, &QTimer::timeout, this, &CameraWorker::statusTick);
 
     if (!m_networkManager) {
@@ -148,6 +150,7 @@ void CameraWorker::stopWork()
     QObject::disconnect(&m_inputMessageQueue, &MessageQueue::messageEnqueued, this, &CameraWorker::handleInputMessages);
     QObject::disconnect(&m_captureTimer, &QTimer::timeout, this, &CameraWorker::captureTick);
     QObject::disconnect(&m_videoFileDelayedSubmitTimer, &QTimer::timeout, this, &CameraWorker::releaseDelayedVideoFileFrames);
+    QObject::disconnect(&m_streamFrameRetryTimer, &QTimer::timeout, this, &CameraWorker::releasePendingStreamVideoFileFrame);
     QObject::disconnect(&m_statusTimer, &QTimer::timeout, this, &CameraWorker::statusTick);
     stopCapture();
 
@@ -1449,6 +1452,7 @@ void CameraWorker::closeVideoFileDecoder()
 {
     m_captureTimer.stop();
     stopVideoFileDecodeThread();
+    clearPendingStreamVideoFileFrame();
     clearDelayedVideoFileFrames();
     m_videoFileDecoder.reset();
     m_videoFileFrameRate = 25.0;
@@ -1511,11 +1515,11 @@ void CameraWorker::submitVideoFileFrame(const CameraPipelineFramePtr& frame, boo
 
     if (videoDelayMs <= 0)
     {
-        if (m_settings.isStreamCamera() && m_framePreprocessor->wouldReplacePendingFrame())
-        {
-            ++m_videoFileStatsDroppedPipelineFrames;
+        if (m_settings.isStreamCamera()) {
+            submitOrQueueStreamVideoFileFrame(frame);
             return;
         }
+
         frame->m_pipelineInputWallClockMs = QDateTime::currentMSecsSinceEpoch();
         m_framePreprocessor->submitFrame(frame);
         return;
@@ -1549,6 +1553,84 @@ void CameraWorker::submitVideoFileFrame(const CameraPipelineFramePtr& frame, boo
     }
 
     scheduleDelayedVideoFileFrameSubmit();
+}
+
+bool CameraWorker::submitOrQueueStreamVideoFileFrame(const CameraPipelineFramePtr& frame)
+{
+    if (!frame || !m_framePreprocessor) {
+        return false;
+    }
+
+    if (!m_capturing
+        || !m_settings.isStreamCamera()
+        || !m_videoFilePlaying
+        || (frame->m_captureEpoch != m_captureEpoch))
+    {
+        return false;
+    }
+
+    if (m_framePreprocessor->wouldReplacePendingFrame())
+    {
+        if (m_pendingStreamFrame) {
+            ++m_videoFileStatsDroppedPipelineFrames;
+        }
+        m_pendingStreamFrame = frame;
+        m_pendingStreamFrameGeneration = m_videoFileFrameSubmitGeneration;
+        if (!m_streamFrameRetryTimer.isActive()) {
+            m_streamFrameRetryTimer.start(5);
+        }
+        return false;
+    }
+
+    if (m_pendingStreamFrame)
+    {
+        ++m_videoFileStatsDroppedPipelineFrames;
+        m_pendingStreamFrame.clear();
+        m_pendingStreamFrameGeneration = 0;
+    }
+
+    frame->m_pipelineInputWallClockMs = QDateTime::currentMSecsSinceEpoch();
+    m_framePreprocessor->submitFrame(frame);
+    return true;
+}
+
+void CameraWorker::clearPendingStreamVideoFileFrame()
+{
+    m_streamFrameRetryTimer.stop();
+    m_pendingStreamFrame.clear();
+    m_pendingStreamFrameGeneration = 0;
+}
+
+void CameraWorker::releasePendingStreamVideoFileFrame()
+{
+    if (!m_pendingStreamFrame)
+    {
+        clearPendingStreamVideoFileFrame();
+        return;
+    }
+
+    if (!m_capturing
+        || !m_settings.isStreamCamera()
+        || !m_videoFilePlaying
+        || !m_framePreprocessor
+        || (m_pendingStreamFrame->m_captureEpoch != m_captureEpoch)
+        || (m_pendingStreamFrameGeneration != m_videoFileFrameSubmitGeneration))
+    {
+        clearPendingStreamVideoFileFrame();
+        return;
+    }
+
+    if (m_framePreprocessor->wouldReplacePendingFrame())
+    {
+        m_streamFrameRetryTimer.start(5);
+        return;
+    }
+
+    CameraPipelineFramePtr frame = m_pendingStreamFrame;
+    m_pendingStreamFrame.clear();
+    m_pendingStreamFrameGeneration = 0;
+    frame->m_pipelineInputWallClockMs = QDateTime::currentMSecsSinceEpoch();
+    m_framePreprocessor->submitFrame(frame);
 }
 
 void CameraWorker::clearDelayedVideoFileFrames()
@@ -1884,6 +1966,7 @@ bool CameraWorker::readQueuedVideoFileFrame(bool submitAudio)
         CameraPipelineFramePtr frame(new CameraPipelineFrame);
         frame->m_image = decodedFrame.m_image;
         populateFrameExposureMetadata(*frame);
+        frame->m_captureEpoch = m_captureEpoch;
         frame->m_pipelineInputWallClockMs = QDateTime::currentMSecsSinceEpoch();
         frame->m_playbackPositionMs = m_videoFilePositionMs;
         frame->m_playbackFrameRate = qMax(1.0, m_videoFileFrameRate) * qMax(0.1, m_settings.m_videoPlaybackRate);
@@ -2044,6 +2127,7 @@ bool CameraWorker::readVideoFileFrame(bool submitAudio, qint64 minimumPositionMs
         CameraPipelineFramePtr frame(new CameraPipelineFrame);
         frame->m_image = image;
         populateFrameExposureMetadata(*frame);
+        frame->m_captureEpoch = m_captureEpoch;
         frame->m_pipelineInputWallClockMs = QDateTime::currentMSecsSinceEpoch();
         frame->m_playbackPositionMs = m_videoFilePositionMs;
         frame->m_playbackFrameRate = qMax(1.0, m_videoFileFrameRate) * qMax(0.1, m_settings.m_videoPlaybackRate);

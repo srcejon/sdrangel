@@ -1798,12 +1798,16 @@ void CameraWorker::clearDecodedVideoFileFrames()
 void CameraWorker::queueDecodedVideoFileFrame(CameraMediaPlaybackState::DecodedFrame&& frame)
 {
     QMutexLocker locker(&m_mediaPlayback.m_decodedFramesMutex);
-    while (!m_mediaPlayback.m_decodedFrames.empty() && (m_mediaPlayback.m_decodedFrames.size() >= CameraMediaPlaybackState::m_maxDecodedStreamFrames))
+    while ((m_mediaPlayback.m_decodedFrames.size() >= CameraMediaPlaybackState::m_maxDecodedStreamFrames)
+        && !m_mediaPlayback.m_decodeThreadStop.load())
     {
-        m_mediaPlayback.m_decodedFrames.pop_front();
-        ++m_mediaPlayback.m_decodeDroppedFrames;
-        ++m_mediaPlayback.m_decodeDroppedSinceLastSubmit;
+        m_mediaPlayback.m_decodedFramesNotFull.wait(&m_mediaPlayback.m_decodedFramesMutex, 20);
     }
+
+    if (m_mediaPlayback.m_decodeThreadStop.load()) {
+        return;
+    }
+
     m_mediaPlayback.m_decodedFrames.push_back(std::move(frame));
     m_mediaPlayback.m_decodedFramesAvailable.wakeAll();
     if (!m_mediaPlayback.m_decodeFrameWakeQueued.exchange(true)) {
@@ -1938,31 +1942,11 @@ bool CameraWorker::readQueuedVideoFileFrame(bool submitAudio)
         m_mediaPlayback.m_decodeFrameWakeQueued.store(false);
         static constexpr qint64 maxEarlyReleaseMs = 2;
         static constexpr qint64 maxRetryDelayMs = 50;
-        static constexpr qint64 maxQueuedFrameLateMs = 250;
 
         int queuedFrames = 0;
         qint64 nextFramePositionMs = -1;
         {
             QMutexLocker locker(&m_mediaPlayback.m_decodedFramesMutex);
-            if (m_mediaPlayback.m_basePositionMs >= 0)
-            {
-                const qint64 playbackClockMs = videoFilePlaybackClockMs();
-                while (m_mediaPlayback.m_decodedFrames.size() > 1)
-                {
-                    const qint64 queuedPositionMs = m_mediaPlayback.m_decodedFrames.front().m_positionMs;
-                    if ((queuedPositionMs < 0) || ((playbackClockMs - queuedPositionMs) <= maxQueuedFrameLateMs)) {
-                        break;
-                    }
-
-                    m_mediaPlayback.m_decodedFrames.pop_front();
-                    ++m_mediaPlayback.m_decodeDroppedFrames;
-                    ++m_mediaPlayback.m_decodeDroppedSinceLastSubmit;
-                }
-                if (m_mediaPlayback.m_decodedFrames.empty()) {
-                    m_mediaPlayback.m_decodedFramesNotFull.wakeAll();
-                    return false;
-                }
-            }
             queuedFrames = static_cast<int>(m_mediaPlayback.m_decodedFrames.size());
             if (queuedFrames > 0) {
                 nextFramePositionMs = m_mediaPlayback.m_decodedFrames.front().m_positionMs;

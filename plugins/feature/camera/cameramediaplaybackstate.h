@@ -100,8 +100,8 @@ public:
     int m_decodePendingAudioBytes = 0;
     int m_decodePendingVideoFrames = 0;
     int m_decodePendingVideoPackets = 0;
-    // Keep enough live video headroom to read interleaved audio packets, while
-    // stale-frame dropping keeps the displayed stream close to real time.
+    // Keep enough live video headroom to read interleaved audio packets without
+    // letting normal stream jitter create unbounded preview latency.
     static constexpr size_t m_streamInitialBufferFrames = 4;
     static constexpr size_t m_maxDecodedStreamFrames = 6;
 

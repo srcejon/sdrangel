@@ -33,6 +33,7 @@
 #include <QTimeEdit>
 #include <QToolButton>
 #include <QVBoxLayout>
+#include <limits>
 
 #include "device/deviceset.h"
 #include "channel/channelapi.h"
@@ -50,6 +51,13 @@
 #include "ui_schedulergui.h"
 #include "scheduler.h"
 #include "schedulergui.h"
+
+namespace {
+
+constexpr int MaxTimerDelaySeconds = std::numeric_limits<int>::max() / 1000;
+constexpr int MaxTimerDelayMinutes = MaxTimerDelaySeconds / 60;
+
+}
 
 SchedulerGUI* SchedulerGUI::create(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *feature)
 {
@@ -191,6 +199,8 @@ SchedulerGUI::SchedulerGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Fea
     ui->eventDelayUnit->addItem(tr("minutes"), SchedulerSettings::DelayMinutes);
     ui->durationUnit->addItem(tr("seconds"), SchedulerSettings::DelaySeconds);
     ui->durationUnit->addItem(tr("minutes"), SchedulerSettings::DelayMinutes);
+    updateEventDelayLimit();
+    updateDurationLimit();
 
     ui->acquisitionAction->addItem(tr("No change"), SchedulerSettings::ActionNoChange);
     ui->acquisitionAction->addItem(tr("Start"), SchedulerSettings::ActionStart);
@@ -256,13 +266,19 @@ void SchedulerGUI::makeUIConnections()
     connect(ui->saturday, &QCheckBox::toggled, this, &SchedulerGUI::onRuleEditorChanged);
     connect(ui->sunday, &QCheckBox::toggled, this, &SchedulerGUI::onRuleEditorChanged);
     connect(ui->duration, QOverload<int>::of(&QSpinBox::valueChanged), this, &SchedulerGUI::onRuleEditorChanged);
-    connect(ui->durationUnit, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &SchedulerGUI::onRuleEditorChanged);
+    connect(ui->durationUnit, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int) {
+        updateDurationLimit();
+        onRuleEditorChanged();
+    });
     connect(ui->eventType, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &SchedulerGUI::onRuleEditorChanged);
     connect(ui->eventSource, &QComboBox::currentTextChanged, this, &SchedulerGUI::onRuleEditorChanged);
     connect(ui->eventDataRegex, &QLineEdit::textChanged, this, &SchedulerGUI::onRuleEditorChanged);
     connect(ui->eventCount, QOverload<int>::of(&QSpinBox::valueChanged), this, &SchedulerGUI::onRuleEditorChanged);
     connect(ui->eventDelay, QOverload<int>::of(&QSpinBox::valueChanged), this, &SchedulerGUI::onRuleEditorChanged);
-    connect(ui->eventDelayUnit, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &SchedulerGUI::onRuleEditorChanged);
+    connect(ui->eventDelayUnit, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int) {
+        updateEventDelayLimit();
+        onRuleEditorChanged();
+    });
     connect(ui->command, &QLineEdit::editingFinished, this, &SchedulerGUI::onRuleEditorChanged);
     connect(ui->speech, &QLineEdit::editingFinished, this, &SchedulerGUI::onRuleEditorChanged);
 
@@ -772,14 +788,16 @@ void SchedulerGUI::displayRuleEditor()
         ui->dateUntil->setDate(rule->m_dateUntil.isValid() ? rule->m_dateUntil : noDateUntil());
         ui->recurrence->setCurrentIndex(ui->recurrence->findData(rule->m_recurrence));
         setWeekdayWidgets(ui, rule->m_weekdayMask);
-        ui->duration->setValue(rule->m_duration);
         ui->durationUnit->setCurrentIndex(ui->durationUnit->findData(rule->m_durationUnit));
+        updateDurationLimit();
+        ui->duration->setValue(rule->m_duration);
         ui->eventType->setCurrentIndex(ui->eventType->findData(rule->m_eventType));
         updateEventSourceList(rule->m_eventSourceId);
         ui->eventDataRegex->setText(rule->m_eventDataRegex);
         ui->eventCount->setValue(qMax(1, rule->m_eventCount));
-        ui->eventDelay->setValue(rule->m_eventDelay);
         ui->eventDelayUnit->setCurrentIndex(ui->eventDelayUnit->findData(rule->m_eventDelayUnit));
+        updateEventDelayLimit();
+        ui->eventDelay->setValue(rule->m_eventDelay);
         ui->command->setText(rule->m_command);
         ui->speech->setText(rule->m_speech);
     }
@@ -792,11 +810,14 @@ void SchedulerGUI::displayRuleEditor()
         ui->time->setTime(time.time());
         ui->dateUntil->setDate(noDateUntil());
         setWeekdayWidgets(ui, DefaultWeekdayMask);
-        ui->duration->setValue(0);
         ui->durationUnit->setCurrentIndex(ui->durationUnit->findData(SchedulerSettings::DelaySeconds));
+        updateDurationLimit();
+        ui->duration->setValue(0);
         updateEventSourceList(QString());
         ui->eventDataRegex->clear();
         ui->eventCount->setValue(1);
+        ui->eventDelayUnit->setCurrentIndex(ui->eventDelayUnit->findData(SchedulerSettings::DelaySeconds));
+        updateEventDelayLimit();
         ui->eventDelay->setValue(0);
         ui->command->clear();
         ui->speech->clear();
@@ -1619,6 +1640,20 @@ void SchedulerGUI::updateTimeScheduleVisibility()
     ui->weekdaysWidget->setVisible(isDaily);
 }
 
+void SchedulerGUI::updateEventDelayLimit()
+{
+    updateTimerLimit(
+        ui->eventDelay,
+        static_cast<SchedulerSettings::DelayUnit>(ui->eventDelayUnit->currentData().toInt()));
+}
+
+void SchedulerGUI::updateDurationLimit()
+{
+    updateTimerLimit(
+        ui->duration,
+        static_cast<SchedulerSettings::DelayUnit>(ui->durationUnit->currentData().toInt()));
+}
+
 void SchedulerGUI::updateRegexState()
 {
     const QString regex = ui->eventDataRegex->text();
@@ -2426,6 +2461,20 @@ void SchedulerGUI::onRefreshLists()
 QDate SchedulerGUI::noDateUntil()
 {
     return QDate(1900, 1, 1);
+}
+
+int SchedulerGUI::maximumTimerValue(SchedulerSettings::DelayUnit unit)
+{
+    return unit == SchedulerSettings::DelayMinutes ? MaxTimerDelayMinutes : MaxTimerDelaySeconds;
+}
+
+void SchedulerGUI::updateTimerLimit(QSpinBox *spinBox, SchedulerSettings::DelayUnit unit)
+{
+    if (!spinBox) {
+        return;
+    }
+
+    spinBox->setMaximum(maximumTimerValue(unit));
 }
 
 QString SchedulerGUI::presetText(const QString& group, quint64 frequency, const QString& description)

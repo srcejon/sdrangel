@@ -153,6 +153,8 @@ private:
     void updateFeatureActionList(const SchedulerSettings::FeatureAction *selectedAction);
     void updateTriggerVisibility();
     void updateTimeScheduleVisibility();
+    void updateEventDelayLimit();
+    void updateDurationLimit();
     void updateRegexState();
     QString eventCountText(const SchedulerSettings::ScheduleRule& rule) const;
     void selectRule(int row);
@@ -186,6 +188,8 @@ private:
     static QString channelKey(int channelIndex, const QString& channelId);
     static bool channelSupportsAction(const QString& channelId, SchedulerSettings::RunAction action);
     static bool featureSupportsAction(const QString& featureId, SchedulerSettings::RunAction action);
+    static int maximumTimerValue(SchedulerSettings::DelayUnit unit);
+    static void updateTimerLimit(QSpinBox *spinBox, SchedulerSettings::DelayUnit unit);
     static int weekdayMaskFromWidgets(const Ui::SchedulerGUI *ui);
     static void setWeekdayWidgets(Ui::SchedulerGUI *ui, int mask);
     static bool ruleHasDeviceSetAction(const SchedulerSettings::ScheduleRule& rule, int deviceSetIndex);

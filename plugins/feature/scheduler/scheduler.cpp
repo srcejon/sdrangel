@@ -18,6 +18,7 @@
 #include <QDebug>
 #include <QProcess>
 #include <QRegularExpression>
+#include <limits>
 
 #include "SWGDeviceState.h"
 #include "SWGFeatureSettings.h"
@@ -99,6 +100,25 @@ QList<SchedulerSettings::SettingValue> parseSettingValues(
     }
 
     return settings;
+}
+
+int timerDelayMs(int value, SchedulerSettings::DelayUnit unit, const QString& kind, const QString& ruleName)
+{
+    const qint64 clampedValue = qMax(0, value);
+    qint64 delayMs = clampedValue * 1000;
+
+    if (unit == SchedulerSettings::DelayMinutes) {
+        delayMs *= 60;
+    }
+
+    if (delayMs > std::numeric_limits<int>::max())
+    {
+        qWarning().noquote() << QStringLiteral("Scheduler::%1 exceeds QTimer range for rule \"%2\" - clamping to %3 ms")
+            .arg(kind, ruleName, QString::number(std::numeric_limits<int>::max()));
+        return std::numeric_limits<int>::max();
+    }
+
+    return static_cast<int>(delayMs);
 }
 
 }
@@ -615,7 +635,11 @@ void Scheduler::handleEvent(const MainCore::MsgEvent& eventMessage)
         matchedCount = 0;
 
         const QString ruleId = rule.m_id;
-        const int delayMs = SchedulerSettings::delaySeconds(rule) * 1000;
+        const int delayMs = timerDelayMs(
+            rule.m_eventDelay,
+            rule.m_eventDelayUnit,
+            QStringLiteral("event delay"),
+            rule.m_name);
 
         if (delayMs > 0)
         {
@@ -755,7 +779,11 @@ void Scheduler::executeRuleActions(const SchedulerSettings::ScheduleRule& rule, 
         const int durationSeconds = SchedulerSettings::durationSeconds(rule);
         if (durationSeconds > 0)
         {
-            const int durationMs = qMin(durationSeconds, 2147483) * 1000;
+            const int durationMs = timerDelayMs(
+                rule.m_duration,
+                rule.m_durationUnit,
+                QStringLiteral("duration"),
+                rule.m_name);
             const QString ruleId = rule.m_id;
             const QByteArray state = ruleState(rule);
 

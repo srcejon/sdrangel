@@ -21,9 +21,11 @@
 
 #include "SWGDeviceState.h"
 #include "SWGFeatureSettings.h"
+#include "SWGSchedulerChannelAction.h"
 #include "SWGSchedulerDeviceSetAction.h"
 #include "SWGSchedulerFeatureAction.h"
 #include "SWGSchedulerRule.h"
+#include "SWGSchedulerSettingValue.h"
 #include "SWGSchedulerSettings.h"
 
 #include "channel/channelwebapiutils.h"
@@ -39,6 +41,67 @@
 #include "scheduler.h"
 
 MESSAGE_CLASS_DEFINITION(Scheduler::MsgConfigureScheduler, Message)
+
+namespace {
+
+QDate schedulerDateFromString(const QString *text)
+{
+    if (!text) {
+        return QDate();
+    }
+
+    return QDate::fromString(*text, Qt::ISODate);
+}
+
+QString schedulerDateToString(const QDate& date)
+{
+    return date.isValid() ? date.toString(Qt::ISODate) : QString();
+}
+
+QList<SWGSDRangel::SWGSchedulerSettingValue*> *formatSettingValues(
+    const QList<SchedulerSettings::SettingValue>& settings)
+{
+    auto *swgSettings = new QList<SWGSDRangel::SWGSchedulerSettingValue*>();
+
+    for (const SchedulerSettings::SettingValue& setting : settings)
+    {
+        auto *swgSetting = new SWGSDRangel::SWGSchedulerSettingValue();
+        swgSetting->init();
+        swgSetting->setName(new QString(setting.m_name));
+        swgSetting->setValue(new QString(setting.m_value));
+        swgSetting->setType((int) setting.m_type);
+        swgSettings->append(swgSetting);
+    }
+
+    return swgSettings;
+}
+
+QList<SchedulerSettings::SettingValue> parseSettingValues(
+    const QList<SWGSDRangel::SWGSchedulerSettingValue*> *swgSettings)
+{
+    QList<SchedulerSettings::SettingValue> settings;
+
+    if (!swgSettings) {
+        return settings;
+    }
+
+    for (auto *swgSetting : *swgSettings)
+    {
+        if (!swgSetting) {
+            continue;
+        }
+
+        SchedulerSettings::SettingValue setting;
+        setting.m_name = swgSetting->getName() ? *swgSetting->getName() : QString();
+        setting.m_value = swgSetting->getValue() ? *swgSetting->getValue() : QString();
+        setting.m_type = (SchedulerSettings::SettingValueType) swgSetting->getType();
+        settings.append(setting);
+    }
+
+    return settings;
+}
+
+}
 
 const char* const Scheduler::m_featureIdURI = "sdrangel.feature.scheduler";
 const char* const Scheduler::m_featureId = "Scheduler";
@@ -169,12 +232,17 @@ void Scheduler::webapiFormatFeatureSettings(
         swgRule->setEnabled(rule.m_enabled ? 1 : 0);
         swgRule->setTriggerType((int) rule.m_triggerType);
         swgRule->setTime(new QString(schedulerDateTimeToString(rule.m_time)));
+        swgRule->setDateUntil(new QString(schedulerDateToString(rule.m_dateUntil)));
         swgRule->setRecurrence((int) rule.m_recurrence);
+        swgRule->setWeekdayMask(rule.m_weekdayMask);
         swgRule->setEventType(rule.m_eventType);
         swgRule->setEventSourceId(new QString(rule.m_eventSourceId));
         swgRule->setEventDataRegex(new QString(rule.m_eventDataRegex));
+        swgRule->setEventCount(rule.m_eventCount);
         swgRule->setEventDelay(rule.m_eventDelay);
         swgRule->setEventDelayUnit((int) rule.m_eventDelayUnit);
+        swgRule->setDuration(rule.m_duration);
+        swgRule->setDurationUnit((int) rule.m_durationUnit);
         swgRule->setCommand(new QString(rule.m_command));
         swgRule->setSpeech(new QString(rule.m_speech));
 
@@ -195,9 +263,32 @@ void Scheduler::webapiFormatFeatureSettings(
             double centerFrequency = 0.0;
             swgAction->setOverrideCenterFrequency(parseFrequency(action.m_centerFrequency, centerFrequency) ? 1 : 0);
             swgAction->setCenterFrequency((qint64) qRound64(centerFrequency));
+            swgAction->setSettings(formatSettingValues(action.m_settings));
             swgDeviceActions->append(swgAction);
         }
         swgRule->setDeviceSetActions(swgDeviceActions);
+
+        QList<SWGSDRangel::SWGSchedulerChannelAction*> *swgChannelActions =
+            new QList<SWGSDRangel::SWGSchedulerChannelAction*>();
+        for (const SchedulerSettings::ChannelAction& action : rule.m_channelActions)
+        {
+            SWGSDRangel::SWGSchedulerChannelAction *swgAction =
+                new SWGSDRangel::SWGSchedulerChannelAction();
+            swgAction->init();
+            swgAction->setDeviceSetIndex(action.m_deviceSetIndex);
+            swgAction->setDeviceSetId(new QString(action.m_deviceSetId));
+            swgAction->setChannelIndex(action.m_channelIndex);
+            swgAction->setChannelId(new QString(action.m_channelId));
+            swgAction->setAction((int) action.m_action);
+            swgAction->setText(new QString(action.m_text));
+            swgAction->setCallsign(new QString(action.m_callsign));
+            swgAction->setTo(new QString(action.m_to));
+            swgAction->setVia(new QString(action.m_via));
+            swgAction->setData(new QString(action.m_data));
+            swgAction->setSettings(formatSettingValues(action.m_settings));
+            swgChannelActions->append(swgAction);
+        }
+        swgRule->setChannelActions(swgChannelActions);
 
         QList<SWGSDRangel::SWGSchedulerFeatureAction*> *swgFeatureActions =
             new QList<SWGSDRangel::SWGSchedulerFeatureAction*>();
@@ -217,6 +308,7 @@ void Scheduler::webapiFormatFeatureSettings(
             swgAction->setCameraImageCount(action.m_cameraImageCount);
             swgAction->setCameraVideoDuration(action.m_cameraVideoDuration);
             swgAction->setFindTarget(new QString(action.m_findTarget));
+            swgAction->setSettings(formatSettingValues(action.m_settings));
             swgFeatureActions->append(swgAction);
         }
         swgRule->setFeatureActions(swgFeatureActions);
@@ -275,12 +367,17 @@ void Scheduler::webapiUpdateFeatureSettings(
                 rule.m_enabled = swgRule->getEnabled() != 0;
                 rule.m_triggerType = (SchedulerSettings::TriggerType) swgRule->getTriggerType();
                 rule.m_time = schedulerDateTimeFromString(swgRule->getTime());
+                rule.m_dateUntil = schedulerDateFromString(swgRule->getDateUntil());
                 rule.m_recurrence = (SchedulerSettings::Recurrence) swgRule->getRecurrence();
+                rule.m_weekdayMask = swgRule->getWeekdayMask();
                 rule.m_eventType = swgRule->getEventType();
                 rule.m_eventSourceId = swgRule->getEventSourceId() ? *swgRule->getEventSourceId() : QString();
                 rule.m_eventDataRegex = swgRule->getEventDataRegex() ? *swgRule->getEventDataRegex() : QString();
+                rule.m_eventCount = swgRule->getEventCount();
                 rule.m_eventDelay = swgRule->getEventDelay();
                 rule.m_eventDelayUnit = (SchedulerSettings::DelayUnit) swgRule->getEventDelayUnit();
+                rule.m_duration = swgRule->getDuration();
+                rule.m_durationUnit = (SchedulerSettings::DelayUnit) swgRule->getDurationUnit();
                 rule.m_command = swgRule->getCommand() ? *swgRule->getCommand() : QString();
                 rule.m_speech = swgRule->getSpeech() ? *swgRule->getSpeech() : QString();
 
@@ -303,7 +400,32 @@ void Scheduler::webapiUpdateFeatureSettings(
                         action.m_centerFrequency = swgAction->getOverrideCenterFrequency() != 0
                             ? QString::number(swgAction->getCenterFrequency())
                             : QString();
+                        action.m_settings = parseSettingValues(swgAction->getSettings());
                         rule.m_deviceSetActions.append(action);
+                    }
+                }
+
+                if (swgRule->getChannelActions())
+                {
+                    for (auto *swgAction : *swgRule->getChannelActions())
+                    {
+                        if (!swgAction) {
+                            continue;
+                        }
+
+                        SchedulerSettings::ChannelAction action;
+                        action.m_deviceSetIndex = swgAction->getDeviceSetIndex();
+                        action.m_deviceSetId = swgAction->getDeviceSetId() ? *swgAction->getDeviceSetId() : QString();
+                        action.m_channelIndex = swgAction->getChannelIndex();
+                        action.m_channelId = swgAction->getChannelId() ? *swgAction->getChannelId() : QString();
+                        action.m_action = (SchedulerSettings::RunAction) swgAction->getAction();
+                        action.m_text = swgAction->getText() ? *swgAction->getText() : QString();
+                        action.m_callsign = swgAction->getCallsign() ? *swgAction->getCallsign() : QString();
+                        action.m_to = swgAction->getTo() ? *swgAction->getTo() : QString();
+                        action.m_via = swgAction->getVia() ? *swgAction->getVia() : QString();
+                        action.m_data = swgAction->getData() ? *swgAction->getData() : QString();
+                        action.m_settings = parseSettingValues(swgAction->getSettings());
+                        rule.m_channelActions.append(action);
                     }
                 }
 
@@ -327,6 +449,7 @@ void Scheduler::webapiUpdateFeatureSettings(
                         action.m_cameraImageCount = swgAction->getCameraImageCount();
                         action.m_cameraVideoDuration = swgAction->getCameraVideoDuration();
                         action.m_findTarget = swgAction->getFindTarget() ? *swgAction->getFindTarget() : QString();
+                        action.m_settings = parseSettingValues(swgAction->getSettings());
                         rule.m_featureActions.append(action);
                     }
                 }

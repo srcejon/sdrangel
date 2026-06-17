@@ -1,10 +1,10 @@
 project (swagger)
 
-file(GLOB swagger_SOURCES
+file(GLOB swagger_SOURCES CONFIGURE_DEPENDS
     ${CMAKE_SOURCE_DIR}/swagger/sdrangel/code/qt5/client/*.cpp
 )
 
-file(GLOB swagger_HEADERS
+file(GLOB swagger_HEADERS CONFIGURE_DEPENDS
     ${CMAKE_SOURCE_DIR}/swagger/sdrangel/code/qt5/client/*.h
 )
 

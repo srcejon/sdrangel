@@ -1054,7 +1054,7 @@ void Camera::webapiFormatFeatureSettings(
     swg->setPlateSolveMinMatches(settings.m_plateSolveMinMatches);
     swg->setPlateSolveMatchRadius(settings.m_plateSolveMatchRadius);
     swg->setPlateSolveFinalMatchRadius(settings.m_plateSolveFinalMatchRadius);
-    swg->setPlateSolveSearchRadius(settings.m_plateSolveSearchRadius);
+    swg->setPlateSolveSearchRadius(settings.m_plateSolveAzElSearchRadius);
     swg->setPlateSolveStartMode((int) settings.m_plateSolveStartMode);
     swg->setPlateSolveLabelMode((int) settings.m_plateSolveLabelMode);
     swg->setPlateSolveUseCaptureDateTime(settings.m_plateSolveUseCaptureDateTime ? 1 : 0);
@@ -1749,7 +1749,7 @@ void Camera::webapiUpdateFeatureSettings(
         settings.m_plateSolveFinalMatchRadius = swg->getPlateSolveFinalMatchRadius();
     }
     if (featureSettingsKeys.contains("plateSolveSearchRadius")) {
-        settings.m_plateSolveSearchRadius = swg->getPlateSolveSearchRadius();
+        settings.m_plateSolveAzElSearchRadius = swg->getPlateSolveSearchRadius();
     }
     if (featureSettingsKeys.contains("plateSolveStartMode")) {
         settings.m_plateSolveStartMode = (CameraSettings::PlateSolveStartMode) swg->getPlateSolveStartMode();

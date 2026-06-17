@@ -157,34 +157,28 @@ void setVisibleEnabled(QWidget *widget, bool visible, bool enabled)
     widget->setEnabled(enabled);
 }
 
-struct YouTubeBitratePreset
+struct BitratePreset
 {
     const char *m_label;
     int m_kbps;
 };
 
-const std::array<YouTubeBitratePreset, 14>& youtubeBitratePresets()
+const std::array<BitratePreset, 8>& bitratePresets()
 {
-    static const std::array<YouTubeBitratePreset, 14> presets = {{
-        {"8K standard - 80 Mbps", 80000},
-        {"8K standard - 160 Mbps", 160000},
-        {"8K high frame rate - 120 Mbps", 120000},
-        {"8K high frame rate - 240 Mbps", 240000},
-        {"2160p (4K) standard - 35 Mbps", 35000},
-        {"2160p (4K) standard - 45 Mbps", 45000},
-        {"2160p (4K) high frame rate - 53 Mbps", 53000},
-        {"2160p (4K) high frame rate - 68 Mbps", 68000},
-        {"1440p (2K) standard - 16 Mbps", 16000},
-        {"1440p (2K) high frame rate - 24 Mbps", 24000},
-        {"1080p standard - 8 Mbps", 8000},
-        {"1080p high frame rate - 12 Mbps", 12000},
-        {"720p standard - 5 Mbps", 5000},
-        {"720p high frame rate - 7.5 Mbps", 7500}
+    static const std::array<BitratePreset, 8> presets = {{
+        {"720p 30FPS - 5 Mbps", 5000},
+        {"720p 60FPS - 7.5 Mbps", 7500},
+        {"1080p 30FPS - 8 Mbps", 8000},
+        {"1080p 60FPS - 12 Mbps", 12000},
+        {"4K 30FPS - 35 Mbps", 35000},
+        {"4K 30FPS HDR - 45 Mbps", 45000},
+        {"4K 60FPS - 53 Mbps", 53000},
+        {"4K 60FPS HDR - 68 Mbps", 68000}
     }};
     return presets;
 }
 
-QString youtubeBitrateText(int kbps)
+QString bitrateText(int kbps)
 {
     if ((kbps % 1000) == 0) {
         return QStringLiteral("%1 Mbps").arg(kbps / 1000);
@@ -192,7 +186,7 @@ QString youtubeBitrateText(int kbps)
     return QStringLiteral("%1 Mbps").arg(kbps / 1000.0, 0, 'f', 1);
 }
 
-int parseYouTubeBitrateKbps(const QString& text, int fallbackKbps)
+int parseBitrateKbps(const QString& text, int fallbackKbps)
 {
     const QString trimmed = text.trimmed();
     const QString bitrateText = trimmed.contains(QLatin1Char('-'))
@@ -223,20 +217,16 @@ void populateBitratePresetCombo(QComboBox *combo, bool clear = true)
         combo->clear();
     }
 
-    for (const YouTubeBitratePreset& preset : youtubeBitratePresets()) {
+    for (const BitratePreset& preset : bitratePresets()) {
         combo->addItem(QString::fromLatin1(preset.m_label), preset.m_kbps);
     }
 
-    combo->addItem(QStringLiteral("480p standard - 2.5 Mbps"), 2500);
-    combo->addItem(QStringLiteral("480p high frame rate - 4 Mbps"), 4000);
-    combo->addItem(QStringLiteral("360p standard - 1 Mbps"), 1000);
-    combo->addItem(QStringLiteral("360p high frame rate - 1.5 Mbps"), 1500);
     combo->setInsertPolicy(QComboBox::NoInsert);
 }
 
 QString videoRecordBitrateText(int kbps)
 {
-    return kbps > 0 ? youtubeBitrateText(kbps) : QStringLiteral("Auto");
+    return kbps > 0 ? bitrateText(kbps) : QStringLiteral("Auto");
 }
 
 int parseVideoRecordBitrateKbps(const QString& text, int fallbackKbps)
@@ -246,7 +236,7 @@ int parseVideoRecordBitrateKbps(const QString& text, int fallbackKbps)
         return 0;
     }
 
-    return parseYouTubeBitrateKbps(trimmed, fallbackKbps > 0 ? fallbackKbps : 8000);
+    return parseBitrateKbps(trimmed, fallbackKbps > 0 ? fallbackKbps : 8000);
 }
 
 QDateTime captureDateTimeFromFileName(const QString& fileName)
@@ -1827,7 +1817,8 @@ void CameraGUI::displaySettings()
     settingsUI()->plateSolveMinMatchesSpin->setValue(m_settings.m_plateSolveMinMatches);
     settingsUI()->plateSolveMatchRadiusSpin->setValue(m_settings.m_plateSolveMatchRadius);
     settingsUI()->plateSolveFinalMatchRadiusSpin->setValue(m_settings.m_plateSolveFinalMatchRadius);
-    settingsUI()->plateSolveSearchRadiusSpin->setValue(m_settings.m_plateSolveSearchRadius);
+    settingsUI()->plateSolveSearchRadiusSpin->setValue(m_settings.m_plateSolveAzElSearchRadius);
+    settingsUI()->plateSolveFovToleranceSpin->setValue(m_settings.m_plateSolveFovTolerance);
     settingsUI()->plateSolveStartModeCombo->setCurrentIndex(static_cast<int>(m_settings.m_plateSolveStartMode));
     updatePlateSolveStartModeUi();
     settingsUI()->plateSolveDateTimeModeCombo->setCurrentIndex(m_settings.m_plateSolveUseCaptureDateTime ? 0 : 1);
@@ -2620,6 +2611,7 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->plateSolveMatchRadiusSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_plateSolveMatchRadiusSpin_valueChanged);
     QObject::connect(settingsUI()->plateSolveFinalMatchRadiusSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_plateSolveFinalMatchRadiusSpin_valueChanged);
     QObject::connect(settingsUI()->plateSolveSearchRadiusSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_plateSolveSearchRadiusSpin_valueChanged);
+    QObject::connect(settingsUI()->plateSolveFovToleranceSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_plateSolveFovToleranceSpin_valueChanged);
     QObject::connect(settingsUI()->plateSolveStartModeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_plateSolveStartModeCombo_currentIndexChanged);
     QObject::connect(settingsUI()->plateSolveDateTimeModeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_plateSolveDateTimeModeCombo_currentIndexChanged);
     QObject::connect(settingsUI()->plateSolveDateTimeEdit, &QDateTimeEdit::dateTimeChanged, this, &CameraGUI::on_plateSolveDateTimeEdit_dateTimeChanged);
@@ -3375,13 +3367,13 @@ void CameraGUI::updateYouTubeBitrateCombo()
     if (index >= 0) {
         combo->setCurrentIndex(index);
     } else {
-        combo->setCurrentText(youtubeBitrateText(m_settings.m_youtubeStreamBitrateKbps));
+        combo->setCurrentText(bitrateText(m_settings.m_youtubeStreamBitrateKbps));
     }
 }
 
 void CameraGUI::applyYouTubeBitrateComboText()
 {
-    const int bitrateKbps = parseYouTubeBitrateKbps(
+    const int bitrateKbps = parseBitrateKbps(
         settingsUI()->youtubeStreamBitrateCombo->currentText(),
         m_settings.m_youtubeStreamBitrateKbps);
     if (bitrateKbps == m_settings.m_youtubeStreamBitrateKbps)
@@ -5944,7 +5936,7 @@ void CameraGUI::on_youtubeStreamBitrateCombo_activated(int index)
     if (bitrateData.isValid()) {
         m_settings.m_youtubeStreamBitrateKbps = qBound(100, bitrateData.toInt(), 240000);
     } else {
-        m_settings.m_youtubeStreamBitrateKbps = parseYouTubeBitrateKbps(
+        m_settings.m_youtubeStreamBitrateKbps = parseBitrateKbps(
             settingsUI()->youtubeStreamBitrateCombo->currentText(),
             m_settings.m_youtubeStreamBitrateKbps);
     }
@@ -6456,7 +6448,7 @@ void CameraGUI::updateMotionExclusionPreview()
 
 void CameraGUI::updatePlateSolveStartModeUi()
 {
-    QString searchRadiusLabelText = tr("Search radius");
+    QString searchRadiusLabelText = tr("Az/El search radius");
     const bool usesSearchRadius =
         m_settings.m_plateSolveStartMode == CameraSettings::PlateSolveStartFovElevation
         || m_settings.m_plateSolveStartMode == CameraSettings::PlateSolveStartFovAzEl
@@ -7583,7 +7575,8 @@ void CameraGUI::on_detectionResetDefaultsButton_clicked()
     m_settings.m_plateSolveMinMatches = defaults.m_plateSolveMinMatches;
     m_settings.m_plateSolveMatchRadius = defaults.m_plateSolveMatchRadius;
     m_settings.m_plateSolveFinalMatchRadius = defaults.m_plateSolveFinalMatchRadius;
-    m_settings.m_plateSolveSearchRadius = defaults.m_plateSolveSearchRadius;
+    m_settings.m_plateSolveAzElSearchRadius = defaults.m_plateSolveAzElSearchRadius;
+    m_settings.m_plateSolveFovTolerance = defaults.m_plateSolveFovTolerance;
     m_settings.m_plateSolveStartMode = defaults.m_plateSolveStartMode;
     m_settings.m_plateSolveUseCaptureDateTime = defaults.m_plateSolveUseCaptureDateTime;
     m_settings.m_plateSolveDateTime = defaults.m_plateSolveDateTime;
@@ -7834,8 +7827,14 @@ void CameraGUI::on_plateSolveFinalMatchRadiusSpin_valueChanged(double value)
 
 void CameraGUI::on_plateSolveSearchRadiusSpin_valueChanged(double value)
 {
-    m_settings.m_plateSolveSearchRadius = value;
+    m_settings.m_plateSolveAzElSearchRadius = value;
     applySetting("plateSolveSearchRadius");
+}
+
+void CameraGUI::on_plateSolveFovToleranceSpin_valueChanged(double value)
+{
+    m_settings.m_plateSolveFovTolerance = value;
+    applySetting("plateSolveFovTolerance");
 }
 
 void CameraGUI::on_plateSolveStartModeCombo_currentIndexChanged(int index)

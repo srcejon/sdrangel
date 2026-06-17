@@ -357,7 +357,8 @@ void CameraSettings::resetToDefaults()
     // (e.g. detection-density-adaptive) radius strategy.
     m_plateSolveMatchRadius = 24.0;
     m_plateSolveFinalMatchRadius = 24.0;
-    m_plateSolveSearchRadius = 12.0;
+    m_plateSolveAzElSearchRadius = 12.0;
+    m_plateSolveFovTolerance = 3.0;
     m_plateSolveStartMode = PlateSolveStartFovAzElRoll;
     m_plateSolveLabelMode = PlateSolveLabelName;
     m_plateSolveUseCaptureDateTime = true;
@@ -530,7 +531,8 @@ QByteArray CameraSettings::serialize() const
     s.writeS32(124, m_plateSolveMinMatches);
     s.writeDouble(125, m_plateSolveMatchRadius);
     s.writeDouble(126, m_plateSolveFinalMatchRadius);
-    s.writeDouble(127, m_plateSolveSearchRadius);
+    s.writeDouble(127, m_plateSolveAzElSearchRadius);
+    s.writeDouble(261, m_plateSolveFovTolerance);
     s.writeS32(128, static_cast<qint32>(m_plateSolveStartMode));
     s.writeBool(129, m_plateSolveUseDownloadedCatalog);
     s.writeBool(130, m_plateSolveUseCaptureDateTime);
@@ -926,7 +928,8 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readS32(124, &m_plateSolveMinMatches, 4);
         d.readDouble(125, &m_plateSolveMatchRadius, 24.0);
         d.readDouble(126, &m_plateSolveFinalMatchRadius, m_plateSolveMatchRadius);
-        d.readDouble(127, &m_plateSolveSearchRadius, 12.0);
+        d.readDouble(127, &m_plateSolveAzElSearchRadius, 12.0);
+        d.readDouble(261, &m_plateSolveFovTolerance, 3.0);
         d.readBool(129, &m_plateSolveUseDownloadedCatalog, false);
         d.readBool(130, &m_plateSolveUseCaptureDateTime, true);
         d.readBool(212, &m_plateSolveDateTimeUtc, false);
@@ -961,7 +964,8 @@ bool CameraSettings::deserialize(const QByteArray& data)
         m_plateSolveMinMatches = qBound(m_minPlateSolveMatches, m_plateSolveMinMatches, m_maxPlateSolveMatches);
         m_plateSolveMatchRadius = qBound(m_minPlateSolveMatchRadius, m_plateSolveMatchRadius, m_maxPlateSolveMatchRadius);
         m_plateSolveFinalMatchRadius = qBound(m_minPlateSolveMatchRadius, m_plateSolveFinalMatchRadius, m_maxPlateSolveMatchRadius);
-        m_plateSolveSearchRadius = qBound(m_minPlateSolveSearchRadius, m_plateSolveSearchRadius, m_maxPlateSolveSearchRadius);
+        m_plateSolveAzElSearchRadius = qBound(m_minPlateSolveAzElSearchRadius, m_plateSolveAzElSearchRadius, m_maxPlateSolveAzElSearchRadius);
+        m_plateSolveFovTolerance = qBound(m_minPlateSolveFovTolerance, m_plateSolveFovTolerance, m_maxPlateSolveFovTolerance);
         m_plateSolveApplyMode = static_cast<PlateSolveApplyMode>(qBound(0, static_cast<int>(m_plateSolveApplyMode), 3));
         m_plateSolveStartMode = static_cast<PlateSolveStartMode>(qBound(0, static_cast<int>(m_plateSolveStartMode), 6));
         m_plateSolveLabelMode = static_cast<PlateSolveLabelMode>(qBound(0, static_cast<int>(m_plateSolveLabelMode), 2));
@@ -1815,7 +1819,10 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
         m_plateSolveFinalMatchRadius = settings.m_plateSolveFinalMatchRadius;
     }
     if (settingsKeys.contains("plateSolveSearchRadius")) {
-        m_plateSolveSearchRadius = settings.m_plateSolveSearchRadius;
+        m_plateSolveAzElSearchRadius = settings.m_plateSolveAzElSearchRadius;
+    }
+    if (settingsKeys.contains("plateSolveFovTolerance")) {
+        m_plateSolveFovTolerance = settings.m_plateSolveFovTolerance;
     }
     if (settingsKeys.contains("plateSolveStartMode")) {
         m_plateSolveStartMode = settings.m_plateSolveStartMode;
@@ -2565,7 +2572,10 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
         ostr << " m_plateSolveFinalMatchRadius: " << m_plateSolveFinalMatchRadius;
     }
     if (settingsKeys.contains("plateSolveSearchRadius") || force) {
-        ostr << " m_plateSolveSearchRadius: " << m_plateSolveSearchRadius;
+        ostr << " m_plateSolveAzElSearchRadius: " << m_plateSolveAzElSearchRadius;
+    }
+    if (settingsKeys.contains("plateSolveFovTolerance") || force) {
+        ostr << " m_plateSolveFovTolerance: " << m_plateSolveFovTolerance;
     }
     if (settingsKeys.contains("plateSolveStartMode") || force) {
         ostr << " m_plateSolveStartMode: " << static_cast<int>(m_plateSolveStartMode);

@@ -669,6 +669,7 @@ private slots:
     void on_plateSolveMatchRadiusSpin_valueChanged(double value);
     void on_plateSolveFinalMatchRadiusSpin_valueChanged(double value);
     void on_plateSolveSearchRadiusSpin_valueChanged(double value);
+    void on_plateSolveFovToleranceSpin_valueChanged(double value);
     void on_plateSolveStartModeCombo_currentIndexChanged(int index);
     void on_plateSolveDateTimeModeCombo_currentIndexChanged(int index);
     void on_plateSolveDateTimeEdit_dateTimeChanged(const QDateTime& dateTime);

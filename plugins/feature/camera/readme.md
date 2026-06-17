@@ -7,29 +7,31 @@ This is to support multimode observations, such as combing radio and optical obs
 
 The Camera plugin supports images and video from:
 
-* Qt6 Multimedia API (FFmpeg backend)
+* Qt6 Multimedia API (FFmpeg backend, which uses DirectShow on Windows, V4L2 on Linux and avfoundation on macOS)
 * Qt5 Multimedia API (DirectShow on Windows, GStreamer/V4L2 on Linux)
-* ASCOM Alpaca API (including support for Filter Wheels and Focusers)
+* ASCOM Alpaca API supported by some telescopes (including support for Filter Wheels and Focusers)
 * ASI cameras (ASICamera2 only currently included in Windows builds)
-* Video files such as MP4 (via FFMPEG)
+* Video files such as MP4, MOV, AVI (via FFmpeg)
+* Streaming protocols such as http: rtsp: rtmp: (via FFmpeg)
+* Image files such as PNG, JPEG and FITS.
 
 The Camera plugin also supports a variety of post-processing, detection and overlay features, such as:
 
 * Image stacking with dark, flat and bias calibration frames
 * HDR stacking with multiple exposure buckets and merging algorithms
 * Histogram stretching and colour adjustment
-* YOLO object detection
+* YOLO AI object detection (CPU, OpenCV CUDA or TensorRT acceleration)
 * Motion detection
 * Star detection and plate solving
 * Difference detection between images
-* ADS-B, satellite and star tracker object overlay
+* ADS-B, AIS, satellite and star tracker item overlay
 * Date/time and custom HTML overlay
 * Spectrum overlay from SDRangel's SDR devices
 * Azimuth/elevation and right ascension/declination sky grid overlays
 * Generation of 24-hour keograms
 * CUDA acceleration is supported for most operations and the processing runs in multiple threads.
 
-Raw and post-processed images can be saved as JPEG, PNG or FITS files, and video can be recorded in H264/H264 encoded MP4 files. Video can also be streamed to YouTube via RTMP.
+Raw, calibrated, filtered or post-processed images can be saved as JPEG, PNG or FITS files, and video can be recorded in H264/H265 encoded MP4 files. Video can also be streamed to YouTube Live via RTMP.
 
 The Camera feature can send events to the Scheduler feature when motion or specific YOLO object classes are detected, allowing you to automate actions such as recording from SDR devices, sending notifications or running custom commands. 
 Recoding images and video can also be triggered via the Scheduler feature, allowing triggering based on time or RF events.
@@ -46,7 +48,14 @@ Starts or stops image capture from the selected camera.
 
 <h3>2: Camera</h3>
 
-Selects the camera source. This list contains Qt Multimedia cameras, ASCOM Alpaca cameras and the file camera source when available.
+Selects the camera source. A prefix followed by a colon indicates the underlaying API used to access the camera:
+
+* qt: Qt Multimedia camera source for most webcams. For Qt6 this uses the FFmpeg backend (which itself uses DirectShow on Windows, V4L2 on Linux and avfoundation on macOS), while for Qt5 it directly uses GStreamer/V4L2 on Linux.
+* alpaca: ASCOM Alpaca camera source, for smart telescopes such as Seestar or Dwarf and many others.
+* asi: ASI camera source, which uses the ASICamera2 library for ZWO ASI cameras.
+* video: Video file source, which can read from MP4, MOV or AVI files.
+* image: Image file source, which can read from PNG, JPEG or FITS files.
+* stream: Streaming camera source, which can read from RTSP, RTMP or HTTP streams.
 
 <h3>3: Refresh cameras</h3>
 
@@ -64,6 +73,10 @@ Selects the video file used by the file camera source.
 
 Restarts playback of the selected video file from the beginning.
 
+<h3>Step back one frame</h3>
+
+<h3>Step forward one frame</h3>
+
 <h3>7: Play/Pause video</h3>
 
 Plays or pauses the selected video file.
@@ -75,6 +88,10 @@ When checked, video file playback loops when the end of the file is reached.
 <h3>9: Playback rate</h3>
 
 Sets the video file playback speed. 1.0 is normal speed.
+
+<h3>Audio sync</h3>
+
+Delay in milliseconds to apply to audio in order to synchronize with video. Negative value delays video, positive value delays audio.
 
 <h3>10: Playback position</h3>
 
@@ -98,19 +115,25 @@ Resizes the image view so the current image fits in the available display area.
 
 <h3>15: Save current image</h3>
 
-Saves the currently displayed image to a JPEG file.
+Saves the currently displayed image to a JPEG or PNG file.
 
 <h3>16: Save images</h3>
 
-When checked, saves captured images using the image filename and record mode configured in the Recording tab.
+When checked, saves captured images using the image filename and record mode configured in the Recording tab in the Camera Settings dialog.
 
 <h3>17: Record video</h3>
 
-When checked, records video using the video filename and record mode configured in the Recording tab.
+When checked, records video using the video filename and record mode configured in the Recording tab in the Camera Settings dialog.
+
+<h3>Generate Keogram</h3>
+
+<h3>Stream to YouTube Live</h3>
+
+Check to enable streaming to YouTube Live. The YouTube Live key needs to be set in the Recording tab in the Camera Settings dialog.
 
 <h3>18: Image stacking</h3>
 
-Enables image stacking using the calibration and stacking settings in the Cal / Stack tab.
+Enables image stacking using the calibration and stacking settings in the Cal / Stack tab in the Camera Settings dialog.
 
 <h3>19: Invert colours</h3>
 
@@ -120,37 +143,37 @@ Inverts the displayed image colours.
 
 Opens the histogram window for the current image.
 
-<h3>21: Difference mask</h3>
+<h3>Object detection</h3>
+
+Enables YOLO object detection. A YOLO ONNX model to use must be set in the Object Detection tab in the Camera Settings dialog.
+
+<h3>Object detection history</h3>
+
+Click to show the YOLO object detection history dialog.
+
+<h3>Motion detection</h3>
+
+Enables motion detection using the Motion Detection settings in the Camera Settings dialog.
+
+<h3>Difference mask</h3>
 
 Enables display of differences from previous images using the Difference Detection settings.
-
-<h3>22: Motion detection</h3>
-
-Enables motion detection using the Motion Detection settings.
 
 <h3>23: Star detection and plate solving</h3>
 
 Enables star detection and plate solving using the Star Detection settings.
 
-<h3>24: Object detection</h3>
+<h3>26: Item overlay</h3>
 
-Enables YOLO object detection using the Object Detection settings.
-
-<h3>25: Detection history</h3>
-
-Opens the object detection history window.
-
-<h3>26: Tracked object overlay</h3>
-
-Overlays ADS-B, satellite and star tracked objects on the camera image using the Position and Sky Grid settings.
+Overlays ADS-B, AIS, satellite and star tracked items on the camera image using the Position and Sky Grid settings.
 
 <h3>27: Date/time overlay</h3>
 
 Overlays the configured date and time string on the image.
 
-<h3>28: HTML text overlay</h3>
+<h3>28: HTML overlay</h3>
 
-Overlays the configured HTML text on the image.
+Overlays the configured HTML on the image.
 
 <h3>29: Spectrum overlay</h3>
 
@@ -166,7 +189,7 @@ Overlays the right ascension/declination sky grid.
 
 <h3>32: Constellation overlay</h3>
 
-Overlays selected constellation stars.
+Overlays selected constellation stars. This can be used to help determine teh camera's pose.
 
 <h3>33: Image display</h3>
 
@@ -424,10 +447,11 @@ https://www.zwoastro.com/layouts/download-desktop-app/
 
 Start ASCOM Remote Server.
 
-
 ASCOM Alpaca Device API docs are at: https://ascom-standards.org/api/
 
 If imageready is always false, try restarting the ASCOM Remote Server.
+
+If using a Seestar telescope, connect to the telescope using the Seestar app, before trying to control it with SDRangel.
 
 <h2>API</h2>
 

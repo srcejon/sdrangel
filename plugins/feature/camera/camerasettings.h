@@ -297,8 +297,10 @@ struct CameraSettings
     static constexpr int m_maxPlateSolveMatches = 32;
     static constexpr double m_minPlateSolveMatchRadius = 1.0;
     static constexpr double m_maxPlateSolveMatchRadius = 256.0;
-    static constexpr double m_minPlateSolveSearchRadius = 0.0;
-    static constexpr double m_maxPlateSolveSearchRadius = 45.0;
+    static constexpr double m_minPlateSolveAzElSearchRadius = 0.0;
+    static constexpr double m_maxPlateSolveAzElSearchRadius = 45.0;
+    static constexpr double m_minPlateSolveFovTolerance = 0.0;
+    static constexpr double m_maxPlateSolveFovTolerance = 50.0;
     static constexpr int m_minStarCatalogDiskCacheSizeGb = 0;
     static constexpr int m_maxStarCatalogDiskCacheSizeGb = 1024;
     static constexpr qint64 m_minPlateSolveDateTimeMs = 0;
@@ -537,7 +539,8 @@ struct CameraSettings
     int    m_plateSolveMinMatches; ///< Minimum matches required for a successful solve
     double m_plateSolveMatchRadius; ///< Maximum image-space distance in pixels for acquisition/coarse star matching
     double m_plateSolveFinalMatchRadius; ///< Maximum image-space distance in pixels for final accepted star matches
-    double m_plateSolveSearchRadius; ///< Search radius in degrees around the current pointing estimate when the chosen start mode uses it
+    double m_plateSolveAzElSearchRadius; ///< Az/El search radius in degrees around the current pointing estimate when the chosen start mode uses it
+    double m_plateSolveFovTolerance; ///< How well the entered FoV is known, as a percentage of FoV. 0 = exact (pin to the entered FoV); larger lets the solver refine the FoV away from the seed (for un-calibrated wide/fisheye lenses)
     PlateSolveStartMode m_plateSolveStartMode; ///< Which current camera settings should be used as starting inputs for plate solving
     PlateSolveLabelMode m_plateSolveLabelMode; ///< Which catalog metadata should be shown for solved stars
     bool   m_plateSolveUseCaptureDateTime; ///< Use the frame capture date/time for plate solving instead of a fixed timestamp

@@ -974,9 +974,24 @@ CameraSettings makeSettings(const StarTestCase& test)
             settings.m_plateSolveFinalMatchRadius = overrideRadius;
         }
     }
-    settings.m_plateSolveSearchRadius = (test.fov > 30.0)
-        ? 24.0
-        : static_cast<float>(std::max(3.5, test.fov * 5.0));
+    // Leave m_plateSolveAzElSearchRadius at the CameraSettings default (12, set by the
+    // constructor) so the harness matches what the GUI uses out of the box. (It previously
+    // used a FoV-scaled heuristic of 24 for wide / fov*5 for narrow, which diverged from
+    // the product default for no test-relevant reason.)
+    // Experiment only (SDRANGEL_CAMERA_STAR_TEST_AZEL_SEARCH_RADIUS): override the Az/El
+    // search radius to match a GUI configuration when reproducing a field report; no-op
+    // when unset.
+    {
+        bool azElOk = false;
+        const double overrideAzEl = qEnvironmentVariable("SDRANGEL_CAMERA_STAR_TEST_AZEL_SEARCH_RADIUS").toDouble(&azElOk);
+        if (azElOk && (overrideAzEl > 0.0)) {
+            settings.m_plateSolveAzElSearchRadius = static_cast<float>(overrideAzEl);
+        }
+    }
+    // Default FoV confidence (percentage of FoV). Wide/fisheye FoVs are typically
+    // un-calibrated, so the solver is allowed to refine the FoV within this band rather
+    // than being pinned to a possibly-wrong entered value.
+    settings.m_plateSolveFovTolerance = 3.0;
     settings.m_detectionRoiX      = test.roiX;
     settings.m_detectionRoiY      = test.roiY;
     settings.m_detectionRoiWidth  = test.roiWidth;

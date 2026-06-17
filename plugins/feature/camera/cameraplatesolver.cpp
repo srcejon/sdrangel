@@ -1986,7 +1986,7 @@ SirilQueryGeometry sirilQueryGeometry(const CameraSettings& settings,
     }
 
     const double diagonalFov = fovLongEdgeDiagonalDegrees(imageSize, settings.m_fov);
-    geometry.queryRadiusDegrees = std::max(0.5, diagonalFov * 0.5 + settings.m_plateSolveSearchRadius + 1.0);
+    geometry.queryRadiusDegrees = std::max(0.5, diagonalFov * 0.5 + settings.m_plateSolveAzElSearchRadius + 1.0);
     if (geometry.queryRadiusDegrees > kSirilMaxQueryRadiusDegrees)
     {
         geometry.tooWide = true;
@@ -5823,7 +5823,7 @@ PlateSolveCatalogContext buildPlateSolveCatalogContext(const CameraSettings& set
         .arg(qRound64(static_cast<double>(settings.m_azimuth) * 1e4))
         .arg(qRound64(static_cast<double>(settings.m_elevation) * 1e4))
         .arg(qRound64(static_cast<double>(settings.m_fov) * 1e4))
-        .arg(qRound64(static_cast<double>(settings.m_plateSolveSearchRadius) * 1e4))
+        .arg(qRound64(static_cast<double>(settings.m_plateSolveAzElSearchRadius) * 1e4))
         .arg(imageSize.width())
         .arg(imageSize.height())
         .arg(captureDateTimeUtc.toSecsSinceEpoch())
@@ -8359,7 +8359,7 @@ QVector<Evaluation> buildBrightGuidedAnchorTriangleSeeds(const CameraSettings& s
     qint64 ratioMatches = 0;
     const double ratioTolerance = 0.085;
     const double startDirectionMaxDelta = std::max(
-        static_cast<double>(settings.m_plateSolveSearchRadius) + static_cast<double>(settings.m_fov) * 2.0,
+        static_cast<double>(settings.m_plateSolveAzElSearchRadius) + static_cast<double>(settings.m_fov) * 2.0,
         static_cast<double>(settings.m_fov) * 4.0);
 
 #if 1
@@ -10677,7 +10677,7 @@ QVector<Evaluation> buildBrightPairSeeds(const CameraSettings& settings,
         if (namedCatalogExtraCount < namedCatalogExtraLimit)
         {
             const double localRadiusDegrees = std::max(
-                static_cast<double>(settings.m_plateSolveSearchRadius) + static_cast<double>(settings.m_fov) * 2.0,
+                static_cast<double>(settings.m_plateSolveAzElSearchRadius) + static_cast<double>(settings.m_fov) * 2.0,
                 static_cast<double>(settings.m_fov) * 4.0);
             const double minDot = std::cos(localRadiusDegrees * kPi / 180.0);
             for (const VisibleCatalogStar& visibleStar : catalogContext.visibleStars)
@@ -10759,7 +10759,7 @@ QVector<Evaluation> buildBrightPairSeeds(const CameraSettings& settings,
     }
     const bool useNarrowGuidedNoRoll = useNarrowGuidedPairSeeds && !plateSolveStartUsesRoll(settings);
     const bool useNarrowGuidedRadialPrior = useNarrowGuidedNoRoll
-        && (static_cast<double>(settings.m_plateSolveSearchRadius)
+        && (static_cast<double>(settings.m_plateSolveAzElSearchRadius)
             <= std::max(1.0, static_cast<double>(settings.m_fov) * 1.25));
     SkyProjector radialProjector;
     QPointF radialCenter;
@@ -12911,6 +12911,7 @@ static void appendSupplementalMatches(const QVector<CameraPipelineStarDetection>
                                       double matchRadiusPixels,
                                       const QVector<int>* supplementalDetectionIndices,
                                       bool narrowGuidedSolve,
+                                      bool allowTightArtifactCoincidence,
                                       QVector<Match>& matches)
 {
     QVector<bool> detectionMatched(starDetections.size(), false);
@@ -12946,12 +12947,40 @@ static void appendSupplementalMatches(const QVector<CameraPipelineStarDetection>
         projectedGrid[spatialCellKey(cellX, cellY)].append(projectedIndex);
     }
 
+    // A hot-pixel-suspect detection is normally excluded from supplemental matching (its
+    // compact/low-fill signature is shared with hot pixels and cosmic-ray spikes). But in a
+    // WIDE FISHEYE real stars are heavily undersampled (~1 px) and routinely get flagged
+    // suspect, and a TIGHT positional coincidence with a projected catalogue star at the solved
+    // pose is strong evidence the detection is that real star: an artifact is fixed to the
+    // sensor and would not land on a moving sky position (the single-frame equivalent of the
+    // star tracking across frames). So for wide fisheye only, admit a hot-pixel-suspect
+    // detection -- and waive the compact-bright guard for it -- when it falls within this tight
+    // radius (well inside the loose supplemental cap). Non-suspect detections and narrow fields
+    // keep the original behaviour, so genuine artifacts within the loose radius stay rejected.
+    // The exception is deliberately narrow: a tight radius, and only for a genuinely BRIGHT
+    // detection coinciding with a BRIGHT catalogue star. A real bright star mis-flagged as a hot
+    // pixel (Dziban: snr~134, mag 4.57) fits this; faint compact artifacts -- the dangerous,
+    // common case in dense/synthetic frames -- do not, so they stay excluded.
+    const double tightCoincidenceRadius = std::min(supplementalRadiusCap, std::max(2.0, matchRadiusPixels * 0.10));
+    const double tightCoincidenceRadiusSquared = tightCoincidenceRadius * tightCoincidenceRadius;
+    constexpr double kSuspectCoincidenceMinSnr = 100.0;
+    constexpr double kSuspectCoincidenceMaxCatalogMag = 6.5;
+
     const auto appendSupplementalForDetection = [&](int detectionIndex)
     {
         if ((detectionIndex < 0)
             || (detectionIndex >= starDetections.size())
-            || detectionMatched[detectionIndex]
-            || starDetections[detectionIndex].m_hotPixelSuspect)
+            || detectionMatched[detectionIndex])
+        {
+            return;
+        }
+        const bool detectionSuspect = starDetections[detectionIndex].m_hotPixelSuspect;
+        // Hot-pixel-suspect detections are admitted only via the wide-fisheye tight-coincidence
+        // exception, and only when the detection itself is bright; otherwise keep the original
+        // outright exclusion.
+        if (detectionSuspect
+            && (!allowTightArtifactCoincidence
+                || (static_cast<double>(starDetections[detectionIndex].m_snr) < kSuspectCoincidenceMinSnr)))
         {
             return;
         }
@@ -12977,17 +13006,26 @@ static void appendSupplementalMatches(const QVector<CameraPipelineStarDetection>
                     if (catalogMatched.contains(projected.catalogIndex)) {
                         continue;
                     }
-                    if (isImplausiblyCompactBrightCatalogDetection(
-                            starDetections[detectionIndex],
-                            projected.magnitude,
-                            narrowGuidedSolve))
-                    {
-                        continue;
-                    }
                     const double dxp = detectionPoint.x() - projected.point.x();
                     const double dyp = detectionPoint.y() - projected.point.y();
                     const double distanceSquared = dxp * dxp + dyp * dyp;
                     if (distanceSquared > maxDistanceSquared) {
+                        continue;
+                    }
+                    // A hot-pixel-suspect detection (wide fisheye) is admitted only on a tight
+                    // coincidence; the compact-bright guard is waived for exactly that case.
+                    const bool tightSuspectCoincidence = detectionSuspect
+                        && allowTightArtifactCoincidence
+                        && (distanceSquared <= tightCoincidenceRadiusSquared)
+                        && (projected.magnitude <= kSuspectCoincidenceMaxCatalogMag);
+                    if (detectionSuspect && !tightSuspectCoincidence) {
+                        continue;
+                    }
+                    const bool compactReject = isImplausiblyCompactBrightCatalogDetection(
+                        starDetections[detectionIndex],
+                        projected.magnitude,
+                        narrowGuidedSolve);
+                    if (compactReject && !tightSuspectCoincidence) {
                         continue;
                     }
                     const double distancePixels = std::sqrt(distanceSquared);
@@ -13657,7 +13695,7 @@ bool isAcceptableSparseGuidedPairEvaluation(const CameraSettings& settings,
     const double maxDirectionDelta = std::max(
         1.0,
         std::min(
-            static_cast<double>(settings.m_plateSolveSearchRadius) + static_cast<double>(settings.m_fov) * 0.5,
+            static_cast<double>(settings.m_plateSolveAzElSearchRadius) + static_cast<double>(settings.m_fov) * 0.5,
             static_cast<double>(settings.m_fov) * 2.5));
     if (angularDistanceDegrees(evaluation.azimuthDegrees, settings.m_azimuth) > maxDirectionDelta) {
         return false;
@@ -14540,7 +14578,35 @@ struct ResidualGates
     double maxRms = std::numeric_limits<double>::infinity();
     double maxMedian = std::numeric_limits<double>::infinity();
     double maxWorst = std::numeric_limits<double>::infinity();
+    // Number of largest residuals to ignore when applying the maxWorst gate. A wide
+    // fisheye projects its rim stars at very high field angles, so even a correct solve
+    // can have a couple of extreme-rim residuals; gating on the literal single worst
+    // star then vetoes an otherwise-excellent dense solve. When > 0 the worst gate is
+    // applied to the worst residual *after* dropping this many of the largest, so a lone
+    // rim outlier cannot sink the solve while RMS/median still carry false-positive
+    // protection. 0 keeps the strict absolute-maximum behaviour.
+    int worstTrimCount = 0;
 };
+
+// Worst residual after discarding the `dropCount` largest matches. Falls back to the
+// absolute maximum when there are too few matches to spare any (so sparse solves stay
+// strict).
+static double trimmedWorstDistancePixels(const QVector<Match>& matches, int dropCount)
+{
+    if (matches.isEmpty()) {
+        return 0.0;
+    }
+    if ((dropCount <= 0) || (matches.size() <= dropCount + 1)) {
+        return maxDistancePixels(matches);
+    }
+    QVector<double> distances;
+    distances.reserve(matches.size());
+    for (const Match& match : matches) {
+        distances.append(match.distancePixels);
+    }
+    std::sort(distances.begin(), distances.end());
+    return distances[distances.size() - 1 - dropCount];
+}
 
 static bool passesResidualGates(const QVector<Match>& matches,
                                 double rmsErrorPixels,
@@ -14550,9 +14616,12 @@ static bool passesResidualGates(const QVector<Match>& matches,
     if (matches.size() < gates.minMatches) {
         return false;
     }
+    const double worstForGate = (gates.worstTrimCount > 0)
+        ? trimmedWorstDistancePixels(matches, gates.worstTrimCount)
+        : maxErrorPixels;
     return (rmsErrorPixels <= gates.maxRms)
         && (medianDistancePixels(matches) <= gates.maxMedian)
-        && (maxErrorPixels <= gates.maxWorst);
+        && (worstForGate <= gates.maxWorst);
 }
 
 static bool isAcceptableBlindSolve(const CameraSettings& settings,
@@ -14690,6 +14759,15 @@ static ResidualGates directionSeedResidualGates(const CameraSettings& settings,
     gates.maxWorst = std::min(
         settings.m_plateSolveFinalMatchRadius * (isWidePlateSolveContext(settings) ? 1.15 : 1.05),
         36.0);
+    // For a dense wide-fisheye solve, ignore the few most extreme rim residuals when
+    // applying the worst gate -- rim distortion at ~80 deg field angle inflates the
+    // single worst star even on a correct pose, and one such star should not veto a
+    // 70-star, median-4 px solution. Capped at 3 and only above 20 matches so sparse
+    // solves keep the strict absolute-max gate.
+    if (!narrowField && isWidePlateSolveContext(settings) && (matchCount >= 20)) {
+        gates.worstTrimCount = std::min(3,
+            std::max(1, static_cast<int>(std::ceil(matchCount * 0.03))));
+    }
     return gates;
 }
 
@@ -14712,8 +14790,11 @@ static QString directionSeedRejectionReason(const CameraSettings& settings,
     if (medianError > gates.maxMedian) {
         reasons.append(QStringLiteral("median %1 > %2").arg(medianError, 0, 'f', 2).arg(gates.maxMedian, 0, 'f', 2));
     }
-    if (maxErrorPixels > gates.maxWorst) {
-        reasons.append(QStringLiteral("max %1 > %2").arg(maxErrorPixels, 0, 'f', 2).arg(gates.maxWorst, 0, 'f', 2));
+    const double worstForGate = (gates.worstTrimCount > 0)
+        ? trimmedWorstDistancePixels(matches, gates.worstTrimCount)
+        : maxErrorPixels;
+    if (worstForGate > gates.maxWorst) {
+        reasons.append(QStringLiteral("max %1 > %2").arg(worstForGate, 0, 'f', 2).arg(gates.maxWorst, 0, 'f', 2));
     }
     return reasons.isEmpty() ? QStringLiteral("accepted") : reasons.join(QStringLiteral(", "));
 }
@@ -15544,6 +15625,7 @@ FinalMatchPassEvaluation evaluateFinalMatchPass(const CameraSettings& settings,
         finalMatchRadius,
         restrictSupplementalMatchesToDetectionIndices ? &detectionIndices : nullptr,
         useNarrowGuidedBrightPrior,
+        false,   // tight-artifact coincidence is applied label-only post-acceptance, not during scoring
         finalPass.finalMatches);
     appendWideBrightSupplementalMatches(
         settings,
@@ -16741,7 +16823,7 @@ double finalMatchPassEvidenceScore(const CameraSettings& settings,
         const double directionDistance = directionSeedAngularDistanceDegrees(evaluation.pose);
         const double directionScale = narrowGuided
             ? std::max(0.25, static_cast<double>(settings.m_fov))
-            : std::max(5.0, static_cast<double>(settings.m_plateSolveSearchRadius));
+            : std::max(5.0, static_cast<double>(settings.m_plateSolveAzElSearchRadius));
         score -= 2.0 * std::min(9.0, std::pow(directionDistance / directionScale, 2.0));
 
         const double fovDelta = std::fabs(evaluation.pose.fovDegrees - m_directionSeedReferenceFovDegrees);
@@ -17839,7 +17921,7 @@ Evaluation searchGuidedAnchorPose(const CameraSettings& settings,
     }
 
     const double localRadiusDegrees = std::max(
-        static_cast<double>(settings.m_plateSolveSearchRadius) + static_cast<double>(settings.m_fov) * 2.0,
+        static_cast<double>(settings.m_plateSolveAzElSearchRadius) + static_cast<double>(settings.m_fov) * 2.0,
         static_cast<double>(settings.m_fov) * 4.0);
     const QVector<VisibleCatalogStar> localVisibleStars = selectLocalVisibleStars(
         catalogContext.visibleStars,
@@ -18156,7 +18238,7 @@ FinalMatchPassEvaluation searchBrightAnchorVerifierRescue(const CameraSettings& 
     }
 
     const double localRadiusDegrees = std::max(
-        static_cast<double>(settings.m_plateSolveSearchRadius) + static_cast<double>(settings.m_fov) * 2.0,
+        static_cast<double>(settings.m_plateSolveAzElSearchRadius) + static_cast<double>(settings.m_fov) * 2.0,
         static_cast<double>(settings.m_fov) * 4.0);
     const QVector<VisibleCatalogStar> localVisibleStars = selectLocalVisibleStars(
         catalogContext.visibleStars,
@@ -18937,7 +19019,7 @@ Evaluation searchBestPose(const CameraSettings& settings,
     if (useWideBlindSeedRadius) {
         m_weakModeNormalizationPixels = std::max(m_weakModeNormalizationPixels, wideBlindSeedMatchRadius);
     }
-    const double coarseSearchRadius = std::max(0.0, settings.m_plateSolveSearchRadius);
+    const double coarseSearchRadius = std::max(0.0, settings.m_plateSolveAzElSearchRadius);
     const double coarseRollRadius = useStartRoll
         ? std::max(15.0, std::min(45.0, static_cast<double>(settings.m_fov) * 0.20))
         : std::max(4.0, std::min(20.0, static_cast<double>(settings.m_fov) * 0.20));
@@ -18971,7 +19053,7 @@ Evaluation searchBestPose(const CameraSettings& settings,
     if (useStartDirection && (isNarrowField(settings)))
     {
         const double localRadiusDegrees = std::max(
-            static_cast<double>(settings.m_plateSolveSearchRadius) + static_cast<double>(settings.m_fov) * 2.0,
+            static_cast<double>(settings.m_plateSolveAzElSearchRadius) + static_cast<double>(settings.m_fov) * 2.0,
             static_cast<double>(settings.m_fov) * 4.0);
         const QVector<VisibleCatalogStar> localBrightStars = selectLocalVisibleStars(
             catalogContext.visibleStars,
@@ -19417,7 +19499,7 @@ Evaluation searchBestPose(const CameraSettings& settings,
         if (useStartDirection && (isNarrowField(settings)))
         {
             const double localRadiusDegrees = std::max(
-                static_cast<double>(settings.m_plateSolveSearchRadius) + static_cast<double>(settings.m_fov) * 2.0,
+                static_cast<double>(settings.m_plateSolveAzElSearchRadius) + static_cast<double>(settings.m_fov) * 2.0,
                 static_cast<double>(settings.m_fov) * 4.0);
             localVisibleStars = selectLocalVisibleStars(
                 catalogContext.visibleStars,
@@ -19435,7 +19517,7 @@ Evaluation searchBestPose(const CameraSettings& settings,
         else if (useElevationSeedOnly)
         {
             const double localElevationRadiusDegrees = std::max(
-                static_cast<double>(settings.m_plateSolveSearchRadius) + static_cast<double>(settings.m_fov) * 0.5,
+                static_cast<double>(settings.m_plateSolveAzElSearchRadius) + static_cast<double>(settings.m_fov) * 0.5,
                 static_cast<double>(settings.m_fov));
             localVisibleStars = selectVisibleStarsNearElevation(
                 catalogContext.visibleStars,
@@ -20839,6 +20921,7 @@ QVector<Match> rebuildRefinementMatchesAtPose(const CameraSettings& settings,
         matchRadiusPixels,
         &detectionIndices,
         m_useDirectionSeedPreference && (isNarrowField(settings)),
+        false,   // tight-artifact coincidence is applied label-only post-acceptance, not during scoring
         matches);
     appendWideBrightSupplementalMatches(
         settings,
@@ -21350,6 +21433,11 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
         return finishCancelled();
     }
     result.m_detectedStarsConsidered = starDetections.size();
+    // Which catalog file this solve actually loads. downloadedCatalogDir() resolves via
+    // QStandardPaths AppDataLocation, which differs by application name -- so the GUI
+    // (sdrangel) and the test harness can pick different files (downloaded HYG vs bundled
+    // resource), giving different star positions from otherwise-identical inputs.
+    qInfo().nospace() << "CameraPlateSolver: solve catalogPath=" << currentCatalogPath(settings);
     const bool useCurrentSettingsOnly = plateSolveStartUsesCurrentSettingsOnly(settings);
     const bool useStartFov = plateSolveStartUsesFov(settings);
     const bool useStartElevation = plateSolveStartUsesElevation(settings);
@@ -21367,7 +21455,7 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
     m_useElevationSeedPreference = useElevationSeedOnly;
     m_elevationSeedReferenceDegrees = settings.m_elevation;
     m_elevationSeedReferenceFovDegrees = settings.m_fov;
-    m_elevationSeedScaleDegrees = std::max(2.0, static_cast<double>(settings.m_plateSolveSearchRadius) * 0.35);
+    m_elevationSeedScaleDegrees = std::max(2.0, static_cast<double>(settings.m_plateSolveAzElSearchRadius) * 0.35);
     m_elevationSeedFovScaleDegrees = std::max(4.0, static_cast<double>(settings.m_fov) * 0.05);
     m_useDirectionSeedPreference = useStartDirection;
     m_directionSeedHasRollPreference = useStartRoll;
@@ -21379,9 +21467,9 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
         ? std::max(
             2.0,
             std::min(
-                static_cast<double>(settings.m_plateSolveSearchRadius) * 0.35,
+                static_cast<double>(settings.m_plateSolveAzElSearchRadius) * 0.35,
                 static_cast<double>(settings.m_fov) * 2.0))
-        : std::max(2.0, static_cast<double>(settings.m_plateSolveSearchRadius) * 0.35);
+        : std::max(2.0, static_cast<double>(settings.m_plateSolveAzElSearchRadius) * 0.35);
     m_directionSeedRollScaleDegrees = std::max(15.0, std::min(45.0, static_cast<double>(settings.m_fov) * 0.15));
     m_directionSeedFovScaleDegrees = (isNarrowField(settings))
         ? std::max(0.3, static_cast<double>(settings.m_fov) * 0.25)
@@ -21519,6 +21607,7 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
             finalMatchRadius,
             nullptr,
             isNarrowGuidedDirectionSolve(settings),
+            false,   // tight-artifact coincidence is applied label-only post-acceptance, not during scoring
             finalMatches);
 
         if (finalMatches.isEmpty()) {
@@ -21936,6 +22025,195 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
             std::max(3, settings.m_plateSolveMinMatches - 1),
             weakModeCandidatePoolMinMatches,
             useStartDirection);
+
+        // Seed-anchored direct refine. With a trusted pointing (a direction start mode) the
+        // true pose lies near the entered Az/El, so descend to it deterministically instead of
+        // relying on the chaotic far-ranging search: evaluate the seed pose, then iterate
+        // (LM refine -> re-match) to convergence and add the result to the candidate pool. A
+        // direct descent from a good seed is insensitive to the ~1e-4 px cross-build numerical
+        // noise that otherwise perturbs the broad search and flips marginal images
+        // (stars-wide-7 GUI-vs-harness divergence). Only reached when the main search best was
+        // not already early-accepted -- i.e. exactly the cases that need it -- and it only ever
+        // ADDS a candidate, so the final acceptance still picks the best-scoring solution.
+        // Also runs for an elevation-only start (mode 2): there the entered azimuth is used as the
+        // lens-recovery calibration pose, but azimuth then refines freely (see lockSeedAz below),
+        // so the off-centre lens is recovered and the best azimuth can win on quality instead of
+        // the search settling on a degenerate near-zenith azimuth/roll alias with no lens.
+        if (useStartDirection || plateSolveStartUsesElevation(settings))
+        {
+            const bool seedUsesLens = plateSolveStartUsesLens(settings);
+            Evaluation seedAnchored = evaluatePose(
+                settings, catalogContext, imageSize, captureDateTimeUtc, starDetections,
+                detectionIndices,
+                settings.m_azimuth, settings.m_elevation, settings.m_roll, settings.m_fov,
+                nullptr,
+                seedUsesLens ? settings.m_lensCenterOffsetX : 0.0,
+                seedUsesLens ? settings.m_lensCenterOffsetY : 0.0,
+                seedUsesLens ? settings.m_lensDistortionK1 : 0.0);
+            if (seedAnchored.valid && (seedAnchored.matchCount >= settings.m_plateSolveMinMatches))
+            {
+                // Distortion + principal-point co-refinement. A wide fisheye solved in a direction
+                // mode (no entered lens calibration) must recover both a large radial K1 and a
+                // possibly off-centre principal point from scratch. A free-parameter LM from the
+                // distortion-free seed mislocates them (mis-projected rim -> wrong matches), and a
+                // single coarse (Cx,Cy,K1) grid leaves the candidate too loose, so the downstream
+                // free-principal-point refine then diverges build-to-build (it reached cx=-41 in one
+                // build, cx=+91 in another). Instead recover the lens by MATCH COUNT (LM-free, hence
+                // ULP-robust and identical across builds): a coarse grid to find the basin, then
+                // alternate a pose LM (principal point LOCKED) with a shrinking-step (Cx,Cy,K1) grid
+                // around the current best. This converges to a tight solution deterministically, so
+                // the downstream refine starts already-converged and cannot diverge.
+                const auto isBetterSeedAnchored = [](const Evaluation& a, const Evaluation& b) {
+                    if (!b.valid) { return a.valid; }
+                    if (!a.valid) { return false; }
+                    if (a.matchCount != b.matchCount) { return a.matchCount > b.matchCount; }
+                    return a.rmsErrorPixels < b.rmsErrorPixels;
+                };
+                // For WIDE FISHEYE, pin azimuth+elevation to the seed during this refine (refine
+                // ROLL/FoV/K1 + the gridded principal point only); narrow fields keep Az/El free.
+                // This builds a strong hypothesis AT THE ENTERED DIRECTION with the off-centre lens
+                // recovered. Near zenith Az and Roll are degenerate, so a free Az LM slides along
+                // that valley to a near-tied alternate basin (same match count + RMS, wrong pose),
+                // and which basin it lands in flips with ~1e-13 trig ULP between the independently-
+                // compiled GUI DLL and test EXE (mode 3 wide-9: one build kept Az~51 -> 174 matches,
+                // the other slid to Az~43 -> refine ran away). Pinning Az removes that choice; the
+                // downstream refine-from-matches does the final sub-degree polish. For an elevation-
+                // only start (mode 2) this candidate is ADDITIVE -- the broad azimuth search still
+                // runs and keeps azimuth free; this just adds a lens-recovered hypothesis at the
+                // entered azimuth so, when that azimuth is roughly right, the good rms~1 solution
+                // beats the lens-less degenerate alias the broad search would otherwise settle on.
+                // Narrow guided solves have no such degeneracy and DO need precise Az/El here
+                // (locking regressed galaxy-m51-2), so the lock is wide-only.
+                const bool lockSeedDirection = isWidePlateSolveContext(settings);
+                const std::array<bool, PlateSolveLmParameterCount> seedActiveParameters = {{
+                    !lockSeedDirection,          // PlateSolveLmAzimuth (wide: pinned to entered direction)
+                    !lockSeedDirection,          // PlateSolveLmElevation (wide: pinned to entered direction)
+                    true,                        // PlateSolveLmRoll
+                    true,                        // PlateSolveLmFov
+                    false,                       // PlateSolveLmCenterX (recovered by the grid)
+                    false,                       // PlateSolveLmCenterY (recovered by the grid)
+                    canCalibrateLens(settings)   // PlateSolveLmDistortionK1
+                }};
+                const auto evalLens = [&](const Evaluation& pose, double cx, double cy, double k1) {
+                    return evaluatePose(
+                        settings, catalogContext, imageSize, captureDateTimeUtc, starDetections,
+                        detectionIndices,
+                        pose.azimuthDegrees, pose.elevationDegrees, pose.rollDegrees, pose.fovDegrees,
+                        nullptr, cx, cy, k1);
+                };
+                const auto refinePoseStep = [&](const Evaluation& start) {
+                    const QVector<Match> fixedMatches = uniqueValidMatchesForRefinement(
+                        catalogContext, starDetections, start.matches, nullptr);
+                    if (fixedMatches.size() < settings.m_plateSolveMinMatches) {
+                        return start;
+                    }
+                    const QVector<int> rankDetectionIndices = detectionIndicesForMatches(fixedMatches);
+                    const Evaluation lm = runPlateSolveLmRefinement(
+                        settings, catalogContext, imageSize, starDetections, fixedMatches,
+                        rankDetectionIndices, start, seedActiveParameters, finalMatchRadius);
+                    const Evaluation rematched = evalLens(
+                        lm, lm.centerOffsetXPixels, lm.centerOffsetYPixels, lm.distortionK1);
+                    const Evaluation iterate = isBetterSeedAnchored(rematched, lm) ? rematched : lm;
+                    return isBetterSeedAnchored(iterate, start) ? iterate : start;
+                };
+
+                if (canCalibrateLens(settings))
+                {
+                    // Coarse pass: locate the principal-point / distortion basin at the seed pose.
+                    Evaluation bestSeed = seedAnchored;
+                    static const double kCenterGrid[] = { -60.0, -30.0, 0.0, 30.0, 60.0 };
+                    static const double kK1Grid[] = { -0.15, -0.10, -0.05, 0.0, 0.05 };
+                    for (const double cx : kCenterGrid) {
+                        for (const double cy : kCenterGrid) {
+                            for (const double k1 : kK1Grid) {
+                                const Evaluation swept = evalLens(seedAnchored, cx, cy, k1);
+                                if (isBetterSeedAnchored(swept, bestSeed)) {
+                                    bestSeed = swept;
+                                }
+                            }
+                        }
+                    }
+                    seedAnchored = bestSeed;
+                }
+
+                // Refine the pose (az/el/roll/fov + K1) from the grid-selected (or seed) start
+                // with the principal point LOCKED at the grid value; keep the best iterate. From
+                // this good basin the LM converges without overfitting, and the downstream refine
+                // polishes the principal point to its precise value.
+                for (int pass = 0; pass < 5; ++pass)
+                {
+                    const int prevMatches = seedAnchored.matchCount;
+                    const Evaluation refined = refinePoseStep(seedAnchored);
+                    if (!isBetterSeedAnchored(refined, seedAnchored)) {
+                        break;
+                    }
+                    seedAnchored = refined;
+                    if (seedAnchored.matchCount <= prevMatches) {
+                        break;
+                    }
+                }
+
+                // Clamped free-principal-point polish. The match-count grid above finds the basin
+                // robustly but only a COARSE principal point (no match-count gradient near the
+                // optimum), which caps the match count; reaching the precise off-centre principal
+                // point needs an RMS-minimising LM, which is the build-dependent step (it converged
+                // to cx=-41 in one build but overfit to cx=+91 in another, leaving the GUI matching
+                // far fewer stars). Free the principal point here but CLAMP it to a window around
+                // the robust grid value after each step: the true principal point lies within the
+                // window (it is at most a grid step from the chosen cell) so convergence is
+                // unaffected, while a runaway overfit is clamped to a worse pose and rejected by the
+                // keep-best rule -- making the precise refine converge identically across builds.
+                if (canCalibratePrincipalPoint(settings))
+                {
+                    const double anchorCx = seedAnchored.centerOffsetXPixels;
+                    const double anchorCy = seedAnchored.centerOffsetYPixels;
+                    constexpr double kCenterWindowPixels = 30.0;
+                    // Az/El follow the same wide-only lock as the pose LM above (lockSeedDirection);
+                    // Roll/FoV/principal-point/K1 are freed, with the principal point clamped to the
+                    // grid window below.
+                    const std::array<bool, PlateSolveLmParameterCount> freeParameters = {{
+                        !lockSeedDirection, !lockSeedDirection, true, true, true, true, canCalibrateLens(settings)
+                    }};
+                    for (int pass = 0; pass < 5; ++pass)
+                    {
+                        const int prevMatches = seedAnchored.matchCount;
+                        const QVector<Match> fixedMatches = uniqueValidMatchesForRefinement(
+                            catalogContext, starDetections, seedAnchored.matches, nullptr);
+                        if (fixedMatches.size() < settings.m_plateSolveMinMatches) {
+                            break;
+                        }
+                        const QVector<int> rankDetectionIndices = detectionIndicesForMatches(fixedMatches);
+                        Evaluation lm = runPlateSolveLmRefinement(
+                            settings, catalogContext, imageSize, starDetections, fixedMatches,
+                            rankDetectionIndices, seedAnchored, freeParameters, finalMatchRadius);
+                        lm.centerOffsetXPixels = std::clamp(
+                            lm.centerOffsetXPixels, anchorCx - kCenterWindowPixels, anchorCx + kCenterWindowPixels);
+                        lm.centerOffsetYPixels = std::clamp(
+                            lm.centerOffsetYPixels, anchorCy - kCenterWindowPixels, anchorCy + kCenterWindowPixels);
+                        const Evaluation rematched = evalLens(
+                            lm, lm.centerOffsetXPixels, lm.centerOffsetYPixels, lm.distortionK1);
+                        if (!isBetterSeedAnchored(rematched, seedAnchored)) {
+                            break;
+                        }
+                        seedAnchored = rematched;
+                        if (seedAnchored.matchCount <= prevMatches) {
+                            break;
+                        }
+                    }
+                }
+
+                logPlateSolveEvaluation("seed-anchored-refine", seedAnchored, false, true);
+                insertDistinctEvaluationCandidate(
+                    coarseCandidates,
+                    seedAnchored,
+                    multiHypothesisCandidateLimit,
+                    useWeakModeScoring,
+                    "seed-anchored-refine",
+                    std::max(3, settings.m_plateSolveMinMatches - 1),
+                    weakModeCandidatePoolMinMatches,
+                    useStartDirection);
+            }
+        }
         logWeakModeCandidatePool("coarse-candidate-pool", coarseCandidates);
         QVector<Evaluation> rescoredCandidates;
         rescoredCandidates.reserve(coarseCandidates.size());
@@ -22312,10 +22590,28 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
         && selectedFinalPass.projectorValid
         && (std::fabs(best.fovDegrees - settings.m_fov)
             >= std::max(0.01, static_cast<double>(settings.m_fov) * 0.008));
+    // FoV-pinned re-check trigger: fire only when the refined FoV has drifted beyond what
+    // the user's FoV confidence allows. m_plateSolveFovTolerance is a percentage of the FoV
+    // (0 = exact, so any drift re-checks/pins to the entered FoV; larger lets the refined
+    // FoV stand within that band). This is the user-facing "how well do you know your FoV"
+    // knob: a calibrated lens (telescope or characterised fisheye) sets it low and the
+    // entered FoV is honoured; a first, un-calibrated wide/fisheye image sets it high and
+    // the solver is free to refine the FoV (e.g. stars-wide-5 refines 163.5->159.8 rather
+    // than being force-pinned to a wrong seed). Narrow fields keep the legacy 2 deg trigger
+    // and rely on useNarrowKnownFovRecovery for their precise FoV recovery.
+    // The tolerance applies to GUIDED wide solves (mode 3+: the user has deliberately set
+    // up the camera, so the entered FoV is a calibrated-but-possibly-approximate value).
+    // Narrow fields and non-direction modes (blind / FoV-only) keep the tight legacy 2 deg
+    // pinned re-check, which robustly rescues a wrong FoV refinement when the entered FoV is
+    // exact (as the synthetic corpora's seeds are).
+    const double fovPinTriggerDegrees = (isNarrowField(settings) || !useStartDirection)
+        ? 2.0
+        : std::max(0.0, static_cast<double>(settings.m_fov)
+            * static_cast<double>(settings.m_plateSolveFovTolerance) / 100.0);
     if (selectedFinalPass.projectorValid
         && rankFinalPassWithSelectedDetections
         && useStartFov
-        && ((std::fabs(best.fovDegrees - settings.m_fov) >= 2.0)
+        && ((std::fabs(best.fovDegrees - settings.m_fov) >= fovPinTriggerDegrees)
             || useNarrowKnownFovRecovery))
     {
         stageStartMs = solveProfileTimer.elapsed();
@@ -22928,6 +23224,21 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
         result.m_outlierStars = selectedFinalPass.outlierCount;
     }
 
+    // Label-only recovery (wide fisheye): admit hot-pixel-suspect detections that sit in tight
+    // coincidence with a bright catalogue star at the ACCEPTED pose -- a real bright star the
+    // detector mis-flagged as a hot pixel in this heavily-undersampled field (e.g. Dziban in
+    // stars-wide-9). This runs AFTER acceptance and only on the winning pose, so it can add
+    // labels but cannot change the solve verdict, candidate selection, or acceptance (the scoring
+    // passes all use allowTightArtifactCoincidence=false).
+    appendSupplementalMatches(
+        starDetections,
+        projectedStars,
+        finalMatchRadius,
+        nullptr,
+        isNarrowGuidedDirectionSolve(settings),
+        isWidePlateSolveContext(settings),
+        selectedFinalPass.finalMatches);
+
     QHash<int, QPointF> projectedPointsByCatalogIndex;
     for (const ProjectedCatalogStar& projectedStar : projectedStars) {
         projectedPointsByCatalogIndex.insert(projectedStar.catalogIndex, projectedStar.point);
@@ -23353,6 +23664,21 @@ bool CameraPlateSolver::isCancellationRequested() const
     return m_cancelRequested.load();
 }
 
+// The configured Az/El search radius is an upper bound on how far the true pointing might
+// be from the seed. For a narrow (telescope) FoV that bound is physically much smaller --
+// you cannot be 12 deg off with a tracking mount -- and a too-wide search invites spurious
+// matches (a flat 12 deg radius was breaking narrow galaxy solves). Cap the configured
+// radius by a FoV-relative value so narrow fields auto-tighten while wide/fisheye fields
+// keep the full configured radius: min(setting, max(3.5, fov*5)). This reproduces the
+// per-FoV tuning the test harness used to apply locally, but now in the solver so the GUI
+// and the harness behave identically from the single configured setting.
+static double effectiveAzElSearchRadiusDegrees(const CameraSettings& settings)
+{
+    const double configured = std::max(0.0, static_cast<double>(settings.m_plateSolveAzElSearchRadius));
+    const double fovCap = std::max(3.5, static_cast<double>(settings.m_fov) * 5.0);
+    return std::min(configured, fovCap);
+}
+
 CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
                                                 const QSize& imageSize,
                                                 const QDateTime& captureDateTime,
@@ -23362,6 +23688,59 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
     // from a previous solve doesn't block subsequent ones.
     m_cancelRequested.store(false);
     m_cancelNetworkRequests.store(false);
+
+    // Dump every setting that drives the solve so a GUI run and a test-harness run
+    // can be diffed line-for-line when they disagree on the same image. Split across
+    // several statements: the MSVC/Qt toolchain silently truncates a single qInfo
+    // with >= ~10 streamed/arg fields, so keep each line short.
+    qInfo().nospace() << "CameraPlateSolver: solve image=" << imageSize.width() << "x" << imageSize.height()
+                      << " detections=" << starDetections.size()
+                      << " captureDateTime=" << captureDateTime.toString(Qt::ISODate);
+    qInfo().nospace() << "CameraPlateSolver: solve seed Az=" << settings.m_azimuth
+                      << " El=" << settings.m_elevation
+                      << " Roll=" << settings.m_roll
+                      << " FoV=" << settings.m_fov
+                      << " startMode=" << static_cast<int>(settings.m_plateSolveStartMode);
+    qInfo().nospace() << "CameraPlateSolver: solve lens projection=" << static_cast<int>(settings.m_lensProjection)
+                      << " Cx=" << settings.m_lensCenterOffsetX
+                      << " Cy=" << settings.m_lensCenterOffsetY
+                      << " K1=" << settings.m_lensDistortionK1;
+    qInfo().nospace() << "CameraPlateSolver: solve detect=" << settings.m_starDetect
+                      << " threshold=" << settings.m_starThreshold
+                      << " backgroundBlur=" << settings.m_starBackgroundBlur
+                      << " minArea=" << settings.m_starMinArea
+                      << " maxArea=" << settings.m_starMaxArea
+                      << " maxAspectRatio=" << settings.m_starMaxAspectRatio;
+    qInfo().nospace() << "CameraPlateSolver: solve minMatches=" << settings.m_plateSolveMinMatches
+                      << " matchRadius=" << settings.m_plateSolveMatchRadius
+                      << " finalMatchRadius=" << settings.m_plateSolveFinalMatchRadius
+                      << " maxMagnitude=" << settings.m_plateSolveMaxMagnitude
+                      << " azElSearchRadius=" << settings.m_plateSolveAzElSearchRadius
+                      << " fovTolerance=" << settings.m_plateSolveFovTolerance;
+    qInfo().nospace() << "CameraPlateSolver: solve applyMode=" << static_cast<int>(settings.m_plateSolveApplyMode)
+                      << " catalogSource=" << static_cast<int>(settings.m_plateSolveCatalogSource)
+                      << " useDownloadedCatalog=" << settings.m_plateSolveUseDownloadedCatalog
+                      << " useCaptureDateTime=" << settings.m_plateSolveUseCaptureDateTime;
+    // Observer location and the configured solve time. For an Az/El-seeded solve these
+    // map the pointing to RA/Dec, so a location or time mismatch between GUI and harness
+    // shifts where every catalog star projects -- the prime suspect when detections and
+    // pose seed match but the fit is systematically off.
+    qInfo().nospace() << "CameraPlateSolver: solve latitude=" << settings.m_latitude
+                      << " longitude=" << settings.m_longitude
+                      << " plateSolveDateTime=" << settings.m_plateSolveDateTime.toString(Qt::ISODate)
+                      << " dateTimeUtc=" << settings.m_plateSolveDateTimeUtc;
+    // FoV-aware cap of the Az/El search radius, applied once to the base settings so every
+    // run -- including retries that escalate from this base -- uses the tightened radius
+    // for narrow fields. See effectiveAzElSearchRadiusDegrees().
+    CameraSettings cappedSettings(settings);
+    cappedSettings.m_plateSolveAzElSearchRadius = effectiveAzElSearchRadiusDegrees(settings);
+    if (std::fabs(cappedSettings.m_plateSolveAzElSearchRadius
+                  - static_cast<double>(settings.m_plateSolveAzElSearchRadius)) > 1e-3) {
+        qInfo().nospace() << "CameraPlateSolver: solve azElSearchRadius capped "
+                          << settings.m_plateSolveAzElSearchRadius << " -> "
+                          << cappedSettings.m_plateSolveAzElSearchRadius
+                          << " (FoV " << settings.m_fov << ")";
+    }
 
     auto evictSirilRangeCacheIfNeeded = [&]() {
         qint64 rangeCacheBytes = 0;
@@ -23513,20 +23892,20 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
         && (settings.m_plateSolveMaxMagnitude >= 18.0f)
         && (starDetections.size() > 128))
     {
-        CameraSettings retrySettings(settings);
+        CameraSettings retrySettings(cappedSettings);
         retrySettings.m_plateSolveMaxMagnitude = 15.0f;
-        retrySettings.m_plateSolveSearchRadius = static_cast<float>(std::max(
-            static_cast<double>(retrySettings.m_plateSolveSearchRadius),
+        retrySettings.m_plateSolveAzElSearchRadius = static_cast<float>(std::max(
+            static_cast<double>(retrySettings.m_plateSolveAzElSearchRadius),
             kRetrySearchRadiusDegrees));
         qDebug() << "CameraPlateSolver: trying dense narrow bright catalog before full catalog"
                  << "maxMagnitude" << retrySettings.m_plateSolveMaxMagnitude
-                 << "searchRadius" << retrySettings.m_plateSolveSearchRadius;
+                 << "searchRadius" << retrySettings.m_plateSolveAzElSearchRadius;
         markAttemptedDenseNarrowBrightCatalogMagnitude(retrySettings.m_plateSolveMaxMagnitude);
         result = runSolve(retrySettings, QStringLiteral("bright-catalog"));
     }
     if (tryWithoutRollBeforeRollPrior)
     {
-        CameraSettings retrySettings(settings);
+        CameraSettings retrySettings(cappedSettings);
         retrySettings.m_plateSolveStartMode = CameraSettings::PlateSolveStartFovAzEl;
         qDebug() << "CameraPlateSolver: trying dense narrow roll-prior solve without roll constraint first"
                  << "maxMagnitude" << settings.m_plateSolveMaxMagnitude;
@@ -23539,7 +23918,7 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
         && (result.m_matchedStars < std::max(settings.m_plateSolveMinMatches + 120, 160));
     if (!result.m_solved || modestEarlyBrightCatalogSolve)
     {
-        CameraPlateSolveResult initialResult = runSolve(settings, QStringLiteral("initial"));
+        CameraPlateSolveResult initialResult = runSolve(cappedSettings, QStringLiteral("initial"));
         if (!result.m_solved
             || (initialResult.m_solved
                 && (initialResult.m_matchedStars > result.m_matchedStars + 20)))
@@ -23597,14 +23976,14 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
                 continue;
             }
             markAttemptedDenseNarrowBrightCatalogMagnitude(retryMagnitude);
-            CameraSettings retrySettings(settings);
+            CameraSettings retrySettings(cappedSettings);
             retrySettings.m_plateSolveMaxMagnitude = static_cast<float>(retryMagnitude);
-            retrySettings.m_plateSolveSearchRadius = static_cast<float>(std::max(
-                static_cast<double>(retrySettings.m_plateSolveSearchRadius),
+            retrySettings.m_plateSolveAzElSearchRadius = static_cast<float>(std::max(
+                static_cast<double>(retrySettings.m_plateSolveAzElSearchRadius),
                 kRetrySearchRadiusDegrees));
             qDebug() << "CameraPlateSolver: retrying dense narrow direction solve with bright catalog"
                      << "maxMagnitude" << retrySettings.m_plateSolveMaxMagnitude
-                     << "searchRadius" << retrySettings.m_plateSolveSearchRadius;
+                     << "searchRadius" << retrySettings.m_plateSolveAzElSearchRadius;
             QVector<CameraPipelineStarDetection> detectionsBeforeRetry = starDetections;
             CameraPlateSolveResult retryResult = runSolve(retrySettings, QStringLiteral("bright-catalog"));
             const double currentScore = denseNarrowResultRetryScore(result);
@@ -23727,7 +24106,7 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
                     break;
                 }
                 ++deepenEscapeRuns;
-                CameraSettings retrySettings(settings);
+                CameraSettings retrySettings(cappedSettings);
                 retrySettings.m_plateSolveMaxMagnitude = static_cast<float>(escapeMagnitude);
                 retrySettings.m_azimuth = static_cast<float>(SolverContext::normalizeDegrees(
                     static_cast<double>(settings.m_azimuth) + azimuthOffset));
@@ -23905,20 +24284,20 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
             }
             ++recenterAttempts;
             starDetections = detectionsBeforeRecenters;
-            CameraSettings retrySettings(settings);
+            CameraSettings retrySettings(cappedSettings);
             retrySettings.m_azimuth = static_cast<float>(SolverContext::normalizeDegrees(
                 static_cast<double>(settings.m_azimuth) + offset.first));
             retrySettings.m_elevation = static_cast<float>(std::clamp(
                 static_cast<double>(settings.m_elevation) + offset.second,
                 -90.0,
                 90.0));
-            retrySettings.m_plateSolveSearchRadius = static_cast<float>(std::max(
-                static_cast<double>(retrySettings.m_plateSolveSearchRadius),
+            retrySettings.m_plateSolveAzElSearchRadius = static_cast<float>(std::max(
+                static_cast<double>(retrySettings.m_plateSolveAzElSearchRadius),
                 kRetrySearchRadiusDegrees));
             qDebug() << "CameraPlateSolver: retrying dense narrow direction solve with recentered seed"
                      << "azimuth" << retrySettings.m_azimuth
                      << "elevation" << retrySettings.m_elevation
-                     << "searchRadius" << retrySettings.m_plateSolveSearchRadius;
+                     << "searchRadius" << retrySettings.m_plateSolveAzElSearchRadius;
             CameraPlateSolveResult retryResult = runSolve(retrySettings, QStringLiteral("recenter"), true);
             const double retryScore = denseNarrowRecenterScore(retryResult);
             const double bestScore = denseNarrowRecenterScore(bestRecenterResult);
@@ -24013,7 +24392,7 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
         && (!result.m_solved || (directionDeltaDegrees(result) > rollPriorDirectionRetryThreshold)))
     {
         QVector<CameraPipelineStarDetection> rollPriorDetections = starDetections;
-        CameraSettings retrySettings(settings);
+        CameraSettings retrySettings(cappedSettings);
         retrySettings.m_plateSolveStartMode = CameraSettings::PlateSolveStartFovAzEl;
         qDebug() << "CameraPlateSolver: retrying narrow roll-prior solve without roll constraint"
                  << "directionDelta" << (result.m_solved ? directionDeltaDegrees(result) : -1.0)
@@ -24077,7 +24456,7 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
                 continue;
             }
             markAttemptedDenseNarrowBrightCatalogMagnitude(escapeMagnitude);
-            CameraSettings retrySettings(settings);
+            CameraSettings retrySettings(cappedSettings);
             retrySettings.m_plateSolveMaxMagnitude = static_cast<float>(escapeMagnitude);
             qDebug() << "CameraPlateSolver: depth-escape retry at shallower catalog"
                      << "maxMagnitude" << retrySettings.m_plateSolveMaxMagnitude;

@@ -50,6 +50,7 @@ namespace {
     struct Detection
     {
         QDateTime dateTimeUtc;
+        QDateTime displayDateTimeUtc;
         double peakAmplitude;
         double peakPowerDB;
         double backgroundPowerDB;
@@ -370,6 +371,9 @@ namespace {
                 const auto& detection = (const MeteorDemodSink::MsgMeteorDetected&) *message;
                 detections.push_back({
                     detection.getDateTimeUtc(),
+                    detection.getDisplayDateTimeUtc().isValid()
+                        ? detection.getDisplayDateTimeUtc()
+                        : detection.getDateTimeUtc(),
                     detection.getPeakAmplitude(),
                     detection.getPeakPowerDB(),
                     detection.getBackgroundPowerDB(),
@@ -448,9 +452,10 @@ namespace {
         for (int i = 0; i < detections.size(); i++)
         {
             const Detection& detection = detections[i];
-            out << QString("Detection %1: timeUtc=%2 peakAmplitude=%3 peakPowerDB=%4 backgroundPowerDB=%5 durationS=%6 centerFrequencyHz=%7 frequencySpanHz=%8 frequencyDriftHz=%9 sampleRate=%10\n")
+            out << QString("Detection %1: timeUtc=%2 displayTimeUtc=%3 peakAmplitude=%4 peakPowerDB=%5 backgroundPowerDB=%6 durationS=%7 centerFrequencyHz=%8 frequencySpanHz=%9 frequencyDriftHz=%10 sampleRate=%11\n")
                 .arg(i + 1)
                 .arg(detection.dateTimeUtc.toString(Qt::ISODateWithMs))
+                .arg(detection.displayDateTimeUtc.toString(Qt::ISODateWithMs))
                 .arg(detection.peakAmplitude, 0, 'f', 6)
                 .arg(detection.peakPowerDB, 0, 'f', 2)
                 .arg(detection.backgroundPowerDB, 0, 'f', 2)

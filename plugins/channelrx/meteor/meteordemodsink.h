@@ -168,23 +168,41 @@ private:
         QDateTime m_dateTimeUtc;
         quint64 m_startSample;
         quint64 m_endSample;
+        bool m_hasDisplaySamples;
+        quint64 m_displayStartSample;
+        quint64 m_displayEndSample;
         double m_peakPower;
         double m_backgroundPower;
         double m_durationS;
         double m_centerFrequency;
         double m_frequencySpan;
         double m_frequencyDrift;
+        double m_reportFrequencySpan;
+        double m_duplicateFrequencySpan;
+        bool m_hasRobustFrequency;
+        double m_robustCenterFrequency;
+        double m_robustFrequencySpan;
+        double m_robustFrequencyDrift;
 
         PulseReport() :
             m_valid(false),
             m_startSample(0),
             m_endSample(0),
+            m_hasDisplaySamples(false),
+            m_displayStartSample(0),
+            m_displayEndSample(0),
             m_peakPower(0.0),
             m_backgroundPower(1e-20),
             m_durationS(0.0),
             m_centerFrequency(0.0),
             m_frequencySpan(0.0),
-            m_frequencyDrift(0.0)
+            m_frequencyDrift(0.0),
+            m_reportFrequencySpan(0.0),
+            m_duplicateFrequencySpan(0.0),
+            m_hasRobustFrequency(false),
+            m_robustCenterFrequency(0.0),
+            m_robustFrequencySpan(0.0),
+            m_robustFrequencyDrift(0.0)
         {}
     };
 
@@ -233,6 +251,9 @@ private:
         double m_maxContrastDB;
         double m_maxPeakRatio;
         std::vector<double> m_trackFrequencies;
+        std::vector<double> m_trackLowFrequencies;
+        std::vector<double> m_trackHighFrequencies;
+        std::vector<double> m_trackBandwidths;
         std::vector<quint64> m_trackSamples;
         std::vector<double> m_trackStrengths;
 
@@ -250,6 +271,78 @@ private:
             m_weightSum(0.0),
             m_maxContrastDB(0.0),
             m_maxPeakRatio(0.0)
+        {}
+    };
+
+    struct SpectralCandidate {
+        bool m_valid;
+        quint64 m_startSample;
+        quint64 m_endSample;
+        quint64 m_peakSample;
+        quint64 m_displayStartSample;
+        quint64 m_displayEndSample;
+        double m_durationS;
+        double m_centerFrequency;
+        double m_frequencySpan;
+        double m_frequencyDrift;
+        double m_robustCenterFrequency;
+        double m_robustFrequencySpan;
+        double m_robustFrequencyDrift;
+        double m_reportFrequencySpan;
+        double m_sweepScore;
+        double m_peakAboveBackgroundDB;
+        double m_acceptanceScore;
+        double m_acceptanceThreshold;
+        int m_frameCount;
+        bool m_durationOK;
+        bool m_enoughFrames;
+        bool m_smoothSweepRejected;
+        bool m_longDriftRejected;
+        bool m_sweepRejected;
+        bool m_strongLineOK;
+        bool m_boundedBandOK;
+        bool m_spectralEvidenceOK;
+        bool m_insideUsableBandwidth;
+        bool m_duplicate;
+        bool m_scoreOK;
+        bool m_accepted;
+        const char *m_classification;
+        const char *m_rejectionReason;
+
+        SpectralCandidate() :
+            m_valid(false),
+            m_startSample(0),
+            m_endSample(0),
+            m_peakSample(0),
+            m_displayStartSample(0),
+            m_displayEndSample(0),
+            m_durationS(0.0),
+            m_centerFrequency(0.0),
+            m_frequencySpan(0.0),
+            m_frequencyDrift(0.0),
+            m_robustCenterFrequency(0.0),
+            m_robustFrequencySpan(0.0),
+            m_robustFrequencyDrift(0.0),
+            m_reportFrequencySpan(0.0),
+            m_sweepScore(0.0),
+            m_peakAboveBackgroundDB(0.0),
+            m_acceptanceScore(0.0),
+            m_acceptanceThreshold(4.0),
+            m_frameCount(0),
+            m_durationOK(false),
+            m_enoughFrames(false),
+            m_smoothSweepRejected(false),
+            m_longDriftRejected(false),
+            m_sweepRejected(false),
+            m_strongLineOK(false),
+            m_boundedBandOK(false),
+            m_spectralEvidenceOK(false),
+            m_insideUsableBandwidth(false),
+            m_duplicate(false),
+            m_scoreOK(false),
+            m_accepted(false),
+            m_classification("invalid"),
+            m_rejectionReason("invalid")
         {}
     };
 
@@ -328,6 +421,21 @@ private:
     void updateSpectralEvents(const std::vector<SpectralBand>& bands, quint64 frameCenterSample);
     void updateSpectralEvent(SpectralEvent& event, const SpectralBand& band, quint64 frameCenterSample);
     void finishSpectralEvent(const SpectralEvent& event);
+    SpectralCandidate buildSpectralCandidate(const SpectralEvent& event) const;
+    void classifySpectralCandidate(SpectralCandidate& candidate) const;
+    double scoreSpectralCandidate(const SpectralCandidate& candidate) const;
+    static double weightedQuantile(
+        const std::vector<double>& values,
+        const std::vector<double>& weights,
+        double quantile,
+        double fallback);
+    static double weightedQuantile(
+        const std::vector<double>& values,
+        const std::vector<double>& weights,
+        int begin,
+        int end,
+        double quantile,
+        double fallback);
     double estimateSpectralEventDurationSamples(const SpectralEvent& event, double& startSample) const;
     bool isDuplicateDetection(quint64 startSample, quint64 endSample) const;
     bool isDuplicateDetection(quint64 startSample, quint64 endSample, double centerFrequency, double frequencySpan) const;
@@ -335,6 +443,7 @@ private:
     void rememberDetection(quint64 startSample, quint64 endSample, double centerFrequency, double frequencySpan);
     void pruneRecentDetections();
     void emitOrDeferSpectralReport(const PulseReport& report);
+    PulseReport reportWithRobustFrequency(const PulseReport& report) const;
     void finishPendingSpectralReportsForPulse(
         quint64 pulseEndSample,
         bool usePulseEnvelope,

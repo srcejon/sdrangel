@@ -23,6 +23,7 @@
 
 #include <QByteArray>
 #include <QImage>
+#include <QMutex>
 #include <QString>
 
 struct AVCodecContext;
@@ -57,7 +58,7 @@ public:
     [[nodiscard]] qint64 durationMs() const { return m_durationMs; }
     [[nodiscard]] double frameRate() const { return m_frameRate; }
     [[nodiscard]] qint64 audioDecodedPositionMs() const { return m_audioDecodedPositionMs; }
-    [[nodiscard]] int pendingAudioBytes() const { return m_pendingAudioPcm.size(); }
+    [[nodiscard]] int pendingAudioBytes() const;
     int takePendingAudio(QByteArray& pcmS16Stereo, int maxSampleFrames);
     [[nodiscard]] int pendingVideoFrameCount() const { return static_cast<int>(m_pendingVideoFrames.size()); }
     [[nodiscard]] int pendingVideoPacketCount() const { return static_cast<int>(m_pendingVideoPackets.size()); }
@@ -124,6 +125,7 @@ private:
     double m_audioPaceRemainderFrames = 0.0;
     qint64 m_audioDecodedPositionMs = -1;
     QByteArray m_pendingAudioPcm;
+    mutable QMutex m_pendingAudioMutex;
     bool m_eof = false;
     bool m_videoDraining = false;
     bool m_audioDraining = false;
@@ -150,6 +152,8 @@ private:
     [[nodiscard]] bool convertFrameToImage(const AVFrame *frame, QImage& image, QString& errorMessage);
     void trimLivePendingAudio();
     void takePacedAudio(QByteArray& pcmS16Stereo);
+    void clearPendingAudio();
+    void appendPendingAudio(const QByteArray& pcmS16Stereo);
     void clearPendingVideoPackets();
     void closeAudioDecoder();
 };

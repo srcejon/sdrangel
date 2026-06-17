@@ -23,6 +23,7 @@
 
 #include <QElapsedTimer>
 #include <QDebug>
+#include <QMutexLocker>
 #include <QStringList>
 #include <QUrl>
 
@@ -288,7 +289,7 @@ void CameraVideoFileDecoder::close()
     m_audioDraining = false;
     m_urlSource = false;
     m_audioDecodedPositionMs = -1;
-    m_pendingAudioPcm.clear();
+    clearPendingAudio();
     m_pendingVideoFrames.clear();
     m_debugStats = DebugStats();
 }
@@ -300,6 +301,28 @@ void CameraVideoFileDecoder::setAudioPaceFrameRate(double frameRate)
         m_audioPaceRemainderFrames = 0.0;
     }
     m_audioPaceFrameRate = clampedFrameRate;
+}
+
+int CameraVideoFileDecoder::pendingAudioBytes() const
+{
+    QMutexLocker locker(&m_pendingAudioMutex);
+    return m_pendingAudioPcm.size();
+}
+
+void CameraVideoFileDecoder::clearPendingAudio()
+{
+    QMutexLocker locker(&m_pendingAudioMutex);
+    m_pendingAudioPcm.clear();
+}
+
+void CameraVideoFileDecoder::appendPendingAudio(const QByteArray& pcmS16Stereo)
+{
+    if (pcmS16Stereo.isEmpty()) {
+        return;
+    }
+
+    QMutexLocker locker(&m_pendingAudioMutex);
+    m_pendingAudioPcm.append(pcmS16Stereo);
 }
 
 void CameraVideoFileDecoder::seek(qint64 positionMs)
@@ -325,7 +348,7 @@ void CameraVideoFileDecoder::seek(qint64 positionMs)
     m_eof = false;
     m_videoDraining = false;
     m_audioDraining = false;
-    m_pendingAudioPcm.clear();
+    clearPendingAudio();
     m_audioPaceRemainderFrames = 0.0;
     m_pendingVideoFrames.clear();
 #else
@@ -489,7 +512,7 @@ bool CameraVideoFileDecoder::readNextFrameAtOrAfter(
 
         if (image.isNull() || (positionMs < 0) || (positionMs + toleranceMs >= targetPositionMs))
         {
-            m_pendingAudioPcm.clear();
+            clearPendingAudio();
             m_audioPaceRemainderFrames = 0.0;
             m_audioDecodedPositionMs = -1;
             return true;
@@ -861,9 +884,7 @@ bool CameraVideoFileDecoder::finishFrameAudio(
     if (!readAheadAudio(decodedAudio, videoPositionMs, errorMessage)) {
         return false;
     }
-    if (!decodedAudio.isEmpty()) {
-        m_pendingAudioPcm.append(decodedAudio);
-    }
+    appendPendingAudio(decodedAudio);
     takePacedAudio(pcmS16Stereo);
     trimLivePendingAudio();
     return true;
@@ -901,13 +922,13 @@ bool CameraVideoFileDecoder::readAheadAudio(QByteArray& pcmS16Stereo, qint64 vid
     int packetsRead = 0;
 
     auto needsAudio = [&]() {
-        if (m_urlSource && ((m_pendingAudioPcm.size() + pcmS16Stereo.size()) < targetAudioBytes)) {
+        if (m_urlSource && ((pendingAudioBytes() + pcmS16Stereo.size()) < targetAudioBytes)) {
             return true;
         }
         if ((targetAudioPositionMs >= 0) && (m_audioDecodedPositionMs >= targetAudioPositionMs)) {
             return false;
         }
-        return (m_pendingAudioPcm.size() + pcmS16Stereo.size()) < targetAudioBytes;
+        return (pendingAudioBytes() + pcmS16Stereo.size()) < targetAudioBytes;
     };
 
     const size_t maxPendingVideoPackets = m_urlSource ? m_maxPendingStreamVideoPackets : m_maxPendingVideoPackets;
@@ -1133,7 +1154,7 @@ void CameraVideoFileDecoder::trimLivePendingAudio()
     static constexpr int bytesPerSampleFrame = 4;
     static constexpr int maxLivePendingAudioMs = 750;
 
-    if (!m_urlSource || (m_outputSampleRate <= 0) || m_pendingAudioPcm.isEmpty()) {
+    if (!m_urlSource || (m_outputSampleRate <= 0) || (pendingAudioBytes() <= 0)) {
         return;
     }
 
@@ -1141,16 +1162,20 @@ void CameraVideoFileDecoder::trimLivePendingAudio()
         bytesPerSampleFrame,
         static_cast<int>((static_cast<qint64>(m_outputSampleRate) * maxLivePendingAudioMs * bytesPerSampleFrame) / 1000));
 
-    if (m_pendingAudioPcm.size() <= maxBytes) {
-        return;
-    }
+    int dropBytes = 0;
+    {
+        QMutexLocker locker(&m_pendingAudioMutex);
+        if (m_pendingAudioPcm.size() <= maxBytes) {
+            return;
+        }
 
-    const int dropBytes = ((m_pendingAudioPcm.size() - maxBytes) / bytesPerSampleFrame) * bytesPerSampleFrame;
-    if (dropBytes <= 0) {
-        return;
-    }
+        dropBytes = ((m_pendingAudioPcm.size() - maxBytes) / bytesPerSampleFrame) * bytesPerSampleFrame;
+        if (dropBytes <= 0) {
+            return;
+        }
 
-    m_pendingAudioPcm.remove(0, dropBytes);
+        m_pendingAudioPcm.remove(0, dropBytes);
+    }
     m_debugStats.m_droppedPendingAudioBytes += static_cast<quint64>(dropBytes);
     m_debugStats.m_droppedPendingAudioFrames += static_cast<quint64>(dropBytes / bytesPerSampleFrame);
 #endif
@@ -1161,19 +1186,27 @@ int CameraVideoFileDecoder::takePendingAudio(QByteArray& pcmS16Stereo, int maxSa
     static constexpr int bytesPerSampleFrame = 4;
     pcmS16Stereo.clear();
 #ifdef CAMERA_FFMPEG_STREAMING
-    if ((maxSampleFrames <= 0) || m_pendingAudioPcm.isEmpty()) {
+    if (maxSampleFrames <= 0) {
         return 0;
     }
 
     const int maxBytes = maxSampleFrames * bytesPerSampleFrame;
-    const int byteCount = std::min(maxBytes, static_cast<int>(m_pendingAudioPcm.size()));
-    const int alignedByteCount = (byteCount / bytesPerSampleFrame) * bytesPerSampleFrame;
-    if (alignedByteCount <= 0) {
-        return 0;
-    }
+    int alignedByteCount = 0;
+    {
+        QMutexLocker locker(&m_pendingAudioMutex);
+        if (m_pendingAudioPcm.isEmpty()) {
+            return 0;
+        }
 
-    pcmS16Stereo = m_pendingAudioPcm.left(alignedByteCount);
-    m_pendingAudioPcm.remove(0, alignedByteCount);
+        const int byteCount = std::min(maxBytes, static_cast<int>(m_pendingAudioPcm.size()));
+        alignedByteCount = (byteCount / bytesPerSampleFrame) * bytesPerSampleFrame;
+        if (alignedByteCount <= 0) {
+            return 0;
+        }
+
+        pcmS16Stereo = m_pendingAudioPcm.left(alignedByteCount);
+        m_pendingAudioPcm.remove(0, alignedByteCount);
+    }
     return alignedByteCount / bytesPerSampleFrame;
 #else
     Q_UNUSED(maxSampleFrames)
@@ -1186,7 +1219,7 @@ void CameraVideoFileDecoder::takePacedAudio(QByteArray& pcmS16Stereo)
     pcmS16Stereo.clear();
 #ifdef CAMERA_FFMPEG_STREAMING
     static constexpr int bytesPerSampleFrame = 4;
-    if (m_pendingAudioPcm.isEmpty() || (m_outputSampleRate <= 0)) {
+    if ((m_outputSampleRate <= 0) || (pendingAudioBytes() <= 0)) {
         return;
     }
 
@@ -1196,15 +1229,19 @@ void CameraVideoFileDecoder::takePacedAudio(QByteArray& pcmS16Stereo)
     const int targetFrames = std::max(1, static_cast<int>(availableTargetFrames));
     m_audioPaceRemainderFrames = availableTargetFrames - static_cast<double>(targetFrames);
     const int targetBytes = targetFrames * bytesPerSampleFrame;
-    const int byteCount = std::min(targetBytes, static_cast<int>(m_pendingAudioPcm.size()));
+    int byteCount = 0;
+    {
+        QMutexLocker locker(&m_pendingAudioMutex);
+        byteCount = std::min(targetBytes, static_cast<int>(m_pendingAudioPcm.size()));
+        pcmS16Stereo = m_pendingAudioPcm.left(byteCount);
+        m_pendingAudioPcm.remove(0, byteCount);
+    }
     ++m_debugStats.m_pacedAudioCalls;
     m_debugStats.m_pacedAudioTargetFrames += static_cast<quint64>(targetFrames);
     m_debugStats.m_pacedAudioOutputFrames += static_cast<quint64>(byteCount / bytesPerSampleFrame);
     if (byteCount < targetBytes) {
         ++m_debugStats.m_pacedAudioShortCalls;
     }
-    pcmS16Stereo = m_pendingAudioPcm.left(byteCount);
-    m_pendingAudioPcm.remove(0, byteCount);
 #endif
 }
 

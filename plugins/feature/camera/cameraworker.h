@@ -27,14 +27,8 @@
 #include <QImage>
 #include <QDateTime>
 #include <QByteArray>
-#include <QElapsedTimer>
-#include <QMutex>
 #include <QRecursiveMutex>
-#include <QWaitCondition>
-#include <atomic>
-#include <deque>
 #include <memory>
-#include <thread>
 
 #include <opencv2/core/core.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
@@ -48,10 +42,10 @@
 #include "cameraalpacacontroller.h"
 #include "cameraasicontroller.h"
 #include "camerainfo.h"
+#include "cameramediaplaybackstate.h"
 #include "camerapipelineframe.h"
 #include "cameraqtaudiocontroller.h"
 #include "camerasettings.h"
-#include "cameravideofiledecoder.h"
 
 class QNetworkAccessManager;
 class QNetworkReply;
@@ -627,99 +621,7 @@ private:
     bool m_capturing;
     quint64 m_captureEpoch;
     QTimer m_captureTimer;
-    std::unique_ptr<CameraVideoFileDecoder> m_videoFileDecoder;
-    double m_videoFileFrameRate = 25.0;
-    qint64 m_videoFilePositionMs;
-    qint64 m_videoFileDurationMs;
-    bool m_videoFilePlaying;
-    QElapsedTimer m_videoFilePlaybackClock;
-    quint64 m_videoFilePlaybackTick = 0;
-    qint64 m_videoFilePlaybackBasePositionMs = -1;
-    qint64 m_videoFileLastFramePtsMs = -1;
-    qint64 m_videoFileLastDecodeMs = 0;
-    quint64 m_videoFileFrameSubmitGeneration = 0;
-    struct DelayedVideoFileFrame
-    {
-        CameraPipelineFramePtr m_frame;
-        qint64 m_dueMs = 0;
-        quint64 m_captureEpoch = 0;
-        quint64 m_generation = 0;
-    };
-    QTimer m_videoFileDelayedSubmitTimer;
-    QElapsedTimer m_videoFileDelayedSubmitClock;
-    QVector<DelayedVideoFileFrame> m_delayedVideoFileFrames;
-    QTimer m_streamFrameRetryTimer;
-    CameraPipelineFramePtr m_pendingStreamFrame;
-    quint64 m_pendingStreamFrameGeneration = 0;
-    struct DecodedVideoFileFrame
-    {
-        QImage m_image;
-        qint64 m_positionMs = -1;
-        QByteArray m_pcmS16Stereo;
-        int m_audioSampleRate = 0;
-        qint64 m_decodeMs = 0;
-        bool m_eof = false;
-        QString m_errorMessage;
-    };
-    std::thread m_videoFileDecodeThread;
-    std::atomic_bool m_videoFileDecodeThreadStop { false };
-    std::atomic<quint64> m_videoFileDecodeDroppedFrames { 0 };
-    mutable QMutex m_videoFileDecodedFramesMutex;
-    QWaitCondition m_videoFileDecodedFramesAvailable;
-    QWaitCondition m_videoFileDecodedFramesNotFull;
-    std::deque<DecodedVideoFileFrame> m_videoFileDecodedFrames;
-    QByteArray m_videoFileSkippedAudio;
-    int m_videoFileSkippedAudioSampleRate = 0;
-    CameraVideoFileDecoder::DebugStats m_videoFileDecodeStatsSnapshot;
-    mutable QMutex m_videoFileDecodeStatsMutex;
-    qint64 m_videoFileDecodeAudioPositionMs = -1;
-    int m_videoFileDecodePendingAudioBytes = 0;
-    int m_videoFileDecodePendingVideoFrames = 0;
-    int m_videoFileDecodePendingVideoPackets = 0;
-    static constexpr size_t m_maxDecodedStreamFrames = 4;
-    QElapsedTimer m_videoFileStatsTimer;
-    QElapsedTimer m_videoFileTickTimer;
-    quint64 m_videoFileStatsFrames = 0;
-    quint64 m_videoFileStatsEmptyAudioFrames = 0;
-    quint64 m_videoFileStatsMonitorExtraAudioFrames = 0;
-    qint64 m_videoFileStatsDecodeMsTotal = 0;
-    qint64 m_videoFileStatsDecodeMsMax = 0;
-    qint64 m_videoFileStatsTickDeltaMsTotal = 0;
-    qint64 m_videoFileStatsTickDeltaMsMax = 0;
-    qint64 m_videoFileStatsPositionDeltaMsTotal = 0;
-    qint64 m_videoFileStatsPositionDeltaMsMin = 0;
-    qint64 m_videoFileStatsPositionDeltaMsMax = 0;
-    qint64 m_videoFileStatsLastPositionMs = -1;
-    quint64 m_videoFileStatsAudioBytes = 0;
-    quint64 m_videoFileStatsDroppedLateFrames = 0;
-    quint64 m_videoFileStatsDroppedPipelineFrames = 0;
-    qint64 m_videoFileStatsVideoLateMsTotal = 0;
-    qint64 m_videoFileStatsVideoLateMsMax = 0;
-    quint64 m_videoFileStatsLastDroppedAudioFrames = 0;
-    quint64 m_videoFileStatsLastAudioUnderflows = 0;
-    quint64 m_videoFileStatsLastDecoderReadAheadCalls = 0;
-    quint64 m_videoFileStatsLastDecoderReadAheadPackets = 0;
-    quint64 m_videoFileStatsLastDecoderReadAheadVideoPackets = 0;
-    quint64 m_videoFileStatsLastDecoderReadAheadAudioPackets = 0;
-    quint64 m_videoFileStatsLastDecoderReadAheadOtherPackets = 0;
-    quint64 m_videoFileStatsLastDecoderInputVideoPackets = 0;
-    quint64 m_videoFileStatsLastDecoderInputAudioPackets = 0;
-    quint64 m_videoFileStatsLastDecoderInputOtherPackets = 0;
-    quint64 m_videoFileStatsLastDecoderEagain = 0;
-    quint64 m_videoFileStatsLastDecoderQueuedFrames = 0;
-    quint64 m_videoFileStatsLastDecoderParkedVideoPackets = 0;
-    quint64 m_videoFileStatsLastDecoderPacketCapHits = 0;
-    quint64 m_videoFileStatsLastDecoderAudioBytes = 0;
-    quint64 m_videoFileStatsLastDecoderAudioFrames = 0;
-    quint64 m_videoFileStatsLastDecoderPacedAudioCalls = 0;
-    quint64 m_videoFileStatsLastDecoderPacedAudioTargetFrames = 0;
-    quint64 m_videoFileStatsLastDecoderPacedAudioOutputFrames = 0;
-    quint64 m_videoFileStatsLastDecoderPacedAudioShortCalls = 0;
-    quint64 m_videoFileStatsLastDecoderDroppedPendingAudioBytes = 0;
-    quint64 m_videoFileStatsLastDecoderDroppedPendingAudioFrames = 0;
-    quint64 m_videoFileStatsLastDecoderAudioTimestampJumps = 0;
-    quint64 m_videoFileStatsLastDecoderConvertFrames = 0;
-    quint64 m_videoFileStatsLastDecoderConvertMs = 0;
+    CameraMediaPlaybackState m_mediaPlayback;
     QNetworkAccessManager *m_networkManager;
     CameraFinder *m_cameraFinder;
     int m_stackFrameIndex;
@@ -794,9 +696,9 @@ private:
     void startVideoFileDecodeThread();
     void stopVideoFileDecodeThread();
     void clearDecodedVideoFileFrames();
-    void stashSkippedVideoFileAudio(const DecodedVideoFileFrame& frame);
-    void queueDecodedVideoFileFrame(DecodedVideoFileFrame&& frame);
-    bool takeDecodedVideoFileFrame(DecodedVideoFileFrame& frame);
+    void stashSkippedVideoFileAudio(const CameraMediaPlaybackState::DecodedFrame& frame);
+    void queueDecodedVideoFileFrame(CameraMediaPlaybackState::DecodedFrame&& frame);
+    bool takeDecodedVideoFileFrame(CameraMediaPlaybackState::DecodedFrame& frame);
     bool readQueuedVideoFileFrame(bool submitAudio);
     CameraVideoFileDecoder::DebugStats videoFileDecoderStatsSnapshot() const;
     void submitVideoFileAudio(const QByteArray& pcmS16Stereo, int audioSampleRate);

@@ -13,6 +13,7 @@ set(camera_SOURCES
     cameraframestacker.cpp
     cameraimageutils.cpp
     cameraimageprocessor.cpp
+    cameramediaplaybackstate.cpp
     cameraffmpegaudio.cpp
     camerarecorder.cpp
     cameravideowriter.cpp
@@ -43,6 +44,7 @@ set(camera_HEADERS
     cameraframestacker.h
     cameraimageutils.h
     cameraimageprocessor.h
+    cameramediaplaybackstate.h
     cameraffmpegaudio.h
     camerarecorder.h
     cameravideowriter.h

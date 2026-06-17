@@ -1812,9 +1812,10 @@ void CameraWorker::queueDecodedVideoFileFrame(CameraMediaPlaybackState::DecodedF
         return;
     }
 
+    const bool wasEmpty = m_mediaPlayback.m_decodedFrames.empty();
     m_mediaPlayback.m_decodedFrames.push_back(std::move(frame));
     m_mediaPlayback.m_decodedFramesAvailable.wakeAll();
-    if (!m_mediaPlayback.m_decodeFrameWakeQueued.exchange(true)) {
+    if (wasEmpty && !m_mediaPlayback.m_decodeFrameWakeQueued.exchange(true)) {
         QMetaObject::invokeMethod(this, "captureTick", Qt::QueuedConnection);
     }
 }
@@ -1944,17 +1945,10 @@ bool CameraWorker::readQueuedVideoFileFrame(bool submitAudio)
     if (m_settings.isStreamCamera())
     {
         m_mediaPlayback.m_decodeFrameWakeQueued.store(false);
-        static constexpr qint64 maxEarlyReleaseMs = 2;
-        static constexpr qint64 maxRetryDelayMs = 50;
-
         int queuedFrames = 0;
-        qint64 nextFramePositionMs = -1;
         {
             QMutexLocker locker(&m_mediaPlayback.m_decodedFramesMutex);
             queuedFrames = static_cast<int>(m_mediaPlayback.m_decodedFrames.size());
-            if (queuedFrames > 0) {
-                nextFramePositionMs = m_mediaPlayback.m_decodedFrames.front().m_positionMs;
-            }
             m_mediaPlayback.m_decodedFramesNotFull.wakeAll();
         }
 
@@ -1970,16 +1964,6 @@ bool CameraWorker::readQueuedVideoFileFrame(bool submitAudio)
             return false;
         }
 
-        if ((m_mediaPlayback.m_basePositionMs >= 0) && (nextFramePositionMs >= 0))
-        {
-            const qint64 earlyMs = nextFramePositionMs - videoFilePlaybackClockMs();
-            if (earlyMs > maxEarlyReleaseMs)
-            {
-                m_captureTimer.setSingleShot(true);
-                m_captureTimer.start(static_cast<int>(qBound<qint64>(1, earlyMs, maxRetryDelayMs)));
-                return false;
-            }
-        }
     }
 
     CameraMediaPlaybackState::DecodedFrame decodedFrame;

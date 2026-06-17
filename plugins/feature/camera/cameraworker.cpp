@@ -1109,7 +1109,12 @@ void CameraWorker::applySettings(const CameraSettings& settings, const QList<QSt
     if (!recapture && m_capturing && m_settings.isFfmpegMediaSource()
         && (captureCadenceChanged || settingsKeys.contains("videoPlaybackRate")))
     {
-        if (m_mediaPlayback.m_playing) {
+        if (m_mediaPlayback.m_playing && m_settings.isStreamCamera() && m_mediaPlayback.m_decoder)
+        {
+            m_mediaPlayback.m_decoder->setAudioPaceFrameRate(qMax(1.0, m_mediaPlayback.m_frameRate) * qMax(0.1, m_settings.m_videoPlaybackRate));
+        }
+        else if (m_mediaPlayback.m_playing)
+        {
             m_captureTimer.start(videoFileFrameIntervalMs());
         }
     }
@@ -1866,6 +1871,101 @@ CameraVideoFileDecoder::DebugStats CameraWorker::videoFileDecoderStatsSnapshot()
     return m_mediaPlayback.m_decoder ? m_mediaPlayback.m_decoder->debugStats() : CameraVideoFileDecoder::DebugStats();
 }
 
+qint64 CameraWorker::updateVideoFilePlaybackPosition(
+    qint64 decodedPositionMs,
+    qint64 decodeMs,
+    bool repairTimestampDiscontinuities,
+    bool resetClockOnLargeDrift)
+{
+    qint64 positionMs = decodedPositionMs;
+
+    if (positionMs >= 0)
+    {
+        if (repairTimestampDiscontinuities && (m_mediaPlayback.m_lastFramePtsMs >= 0))
+        {
+            const qint64 frameIntervalMs = videoFileFrameIntervalMs();
+            const qint64 positionDeltaMs = positionMs - m_mediaPlayback.m_lastFramePtsMs;
+            if ((positionDeltaMs <= 0) || (positionDeltaMs > frameIntervalMs * 3)) {
+                positionMs = m_mediaPlayback.m_lastFramePtsMs + frameIntervalMs;
+            }
+        }
+        m_mediaPlayback.m_positionMs = positionMs;
+    }
+    else
+    {
+        m_mediaPlayback.m_positionMs += videoFileFrameIntervalMs();
+    }
+
+    m_mediaPlayback.m_lastDecodeMs = decodeMs;
+    m_mediaPlayback.m_lastFramePtsMs = m_mediaPlayback.m_positionMs;
+    if (m_mediaPlayback.m_basePositionMs < 0)
+    {
+        m_mediaPlayback.m_basePositionMs = m_mediaPlayback.m_positionMs;
+        if (!m_mediaPlayback.m_clock.isValid()) {
+            m_mediaPlayback.m_clock.start();
+        } else {
+            m_mediaPlayback.m_clock.restart();
+        }
+    }
+
+    qint64 videoLateMs = videoFilePlaybackClockMs() - m_mediaPlayback.m_positionMs;
+    if (resetClockOnLargeDrift && (std::abs(videoLateMs) > 150))
+    {
+        m_mediaPlayback.m_basePositionMs = m_mediaPlayback.m_positionMs;
+        if (!m_mediaPlayback.m_clock.isValid()) {
+            m_mediaPlayback.m_clock.start();
+        } else {
+            m_mediaPlayback.m_clock.restart();
+        }
+        m_mediaPlayback.m_tick = 1;
+        videoLateMs = 0;
+    }
+    m_mediaPlayback.m_statsVideoLateMsTotal += videoLateMs;
+    m_mediaPlayback.m_statsVideoLateMsMax = std::max(m_mediaPlayback.m_statsVideoLateMsMax, videoLateMs);
+    return m_mediaPlayback.m_positionMs;
+}
+
+void CameraWorker::submitDecodedVideoFileFrame(
+    const QImage& image,
+    qint64 decodedPositionMs,
+    qint64 decodeMs,
+    const QByteArray& pcmS16Stereo,
+    int audioSampleRate,
+    bool submitAudio,
+    bool updateStats,
+    bool applyPlaybackOffset,
+    bool repairTimestampDiscontinuities,
+    bool resetClockOnLargeDrift)
+{
+    const qint64 playbackPositionMs = updateVideoFilePlaybackPosition(
+        decodedPositionMs,
+        decodeMs,
+        repairTimestampDiscontinuities,
+        resetClockOnLargeDrift);
+
+    if (submitAudio && !pcmS16Stereo.isEmpty()) {
+        submitVideoFileAudio(pcmS16Stereo, audioSampleRate);
+    }
+
+    if (updateStats) {
+        updateVideoFilePlaybackStats(decodeMs, playbackPositionMs, pcmS16Stereo.size());
+    }
+
+    if (m_framePreprocessor)
+    {
+        CameraPipelineFramePtr frame(new CameraPipelineFrame);
+        frame->m_image = image;
+        populateFrameExposureMetadata(*frame);
+        frame->m_captureEpoch = m_captureEpoch;
+        frame->m_pipelineInputWallClockMs = QDateTime::currentMSecsSinceEpoch();
+        frame->m_playbackPositionMs = playbackPositionMs;
+        frame->m_playbackFrameRate = qMax(1.0, m_mediaPlayback.m_frameRate) * qMax(0.1, m_settings.m_videoPlaybackRate);
+        submitVideoFileFrame(frame, applyPlaybackOffset);
+    }
+
+    reportVideoFilePlaybackToGUI();
+}
+
 bool CameraWorker::readQueuedVideoFileFrame(bool submitAudio)
 {
     CameraMediaPlaybackState::DecodedFrame decodedFrame;
@@ -1889,73 +1989,17 @@ bool CameraWorker::readQueuedVideoFileFrame(bool submitAudio)
         return true;
     }
 
-    qint64 positionMs = decodedFrame.m_positionMs;
-    if (positionMs >= 0)
-    {
-        if (m_mediaPlayback.m_lastFramePtsMs >= 0)
-        {
-            const qint64 frameIntervalMs = videoFileFrameIntervalMs();
-            const qint64 positionDeltaMs = positionMs - m_mediaPlayback.m_lastFramePtsMs;
-            if ((positionDeltaMs <= 0) || (positionDeltaMs > frameIntervalMs * 3)) {
-                positionMs = m_mediaPlayback.m_lastFramePtsMs + frameIntervalMs;
-            }
-        }
-        m_mediaPlayback.m_positionMs = positionMs;
-    }
-    else
-    {
-        m_mediaPlayback.m_positionMs += videoFileFrameIntervalMs();
-    }
-
-    m_mediaPlayback.m_lastDecodeMs = 0;
-    m_mediaPlayback.m_lastFramePtsMs = m_mediaPlayback.m_positionMs;
-    if (m_mediaPlayback.m_basePositionMs < 0)
-    {
-        m_mediaPlayback.m_basePositionMs = m_mediaPlayback.m_positionMs;
-        if (!m_mediaPlayback.m_clock.isValid()) {
-            m_mediaPlayback.m_clock.start();
-        } else {
-            m_mediaPlayback.m_clock.restart();
-        }
-    }
-
-    qint64 videoLateMs = videoFilePlaybackClockMs() - m_mediaPlayback.m_positionMs;
-    if (std::abs(videoLateMs) > 150)
-    {
-        m_mediaPlayback.m_basePositionMs = m_mediaPlayback.m_positionMs;
-        if (!m_mediaPlayback.m_clock.isValid()) {
-            m_mediaPlayback.m_clock.start();
-        } else {
-            m_mediaPlayback.m_clock.restart();
-        }
-        m_mediaPlayback.m_tick = 1;
-        videoLateMs = 0;
-    }
-    m_mediaPlayback.m_statsVideoLateMsTotal += videoLateMs;
-    m_mediaPlayback.m_statsVideoLateMsMax = std::max(m_mediaPlayback.m_statsVideoLateMsMax, videoLateMs);
-
-    if (submitAudio && !decodedFrame.m_pcmS16Stereo.isEmpty()) {
-        submitVideoFileAudio(decodedFrame.m_pcmS16Stereo, decodedFrame.m_audioSampleRate);
-    }
-
-    updateVideoFilePlaybackStats(
+    submitDecodedVideoFileFrame(
+        decodedFrame.m_image,
+        decodedFrame.m_positionMs,
         decodedFrame.m_decodeMs,
-        m_mediaPlayback.m_positionMs,
-        decodedFrame.m_pcmS16Stereo.size());
-
-    if (m_framePreprocessor)
-    {
-        CameraPipelineFramePtr frame(new CameraPipelineFrame);
-        frame->m_image = decodedFrame.m_image;
-        populateFrameExposureMetadata(*frame);
-        frame->m_captureEpoch = m_captureEpoch;
-        frame->m_pipelineInputWallClockMs = QDateTime::currentMSecsSinceEpoch();
-        frame->m_playbackPositionMs = m_mediaPlayback.m_positionMs;
-        frame->m_playbackFrameRate = qMax(1.0, m_mediaPlayback.m_frameRate) * qMax(0.1, m_settings.m_videoPlaybackRate);
-        submitVideoFileFrame(frame, submitAudio);
-    }
-
-    reportVideoFilePlaybackToGUI();
+        decodedFrame.m_pcmS16Stereo,
+        decodedFrame.m_audioSampleRate,
+        submitAudio,
+        true,
+        submitAudio,
+        true,
+        true);
     return true;
 }
 
@@ -2054,69 +2098,17 @@ bool CameraWorker::readVideoFileFrame(bool submitAudio, qint64 minimumPositionMs
         return true;
     }
 
-    if (positionMs >= 0)
-    {
-        if (m_settings.isStreamCamera() && (m_mediaPlayback.m_lastFramePtsMs >= 0))
-        {
-            const qint64 frameIntervalMs = videoFileFrameIntervalMs();
-            const qint64 positionDeltaMs = positionMs - m_mediaPlayback.m_lastFramePtsMs;
-            if ((positionDeltaMs <= 0) || (positionDeltaMs > frameIntervalMs * 3)) {
-                positionMs = m_mediaPlayback.m_lastFramePtsMs + frameIntervalMs;
-            }
-        }
-        m_mediaPlayback.m_positionMs = positionMs;
-    }
-    else
-    {
-        m_mediaPlayback.m_positionMs += videoFileFrameIntervalMs();
-    }
-    m_mediaPlayback.m_lastDecodeMs = decodeMs;
-    m_mediaPlayback.m_lastFramePtsMs = m_mediaPlayback.m_positionMs;
-    if (m_mediaPlayback.m_basePositionMs < 0)
-    {
-        m_mediaPlayback.m_basePositionMs = m_mediaPlayback.m_positionMs;
-        if (!m_mediaPlayback.m_clock.isValid()) {
-            m_mediaPlayback.m_clock.start();
-        } else {
-            m_mediaPlayback.m_clock.restart();
-        }
-    }
-    videoLateMs = videoFilePlaybackClockMs() - m_mediaPlayback.m_positionMs;
-    if (m_settings.isStreamCamera() && (std::abs(videoLateMs) > 150))
-    {
-        m_mediaPlayback.m_basePositionMs = m_mediaPlayback.m_positionMs;
-        if (!m_mediaPlayback.m_clock.isValid()) {
-            m_mediaPlayback.m_clock.start();
-        } else {
-            m_mediaPlayback.m_clock.restart();
-        }
-        m_mediaPlayback.m_tick = 1;
-        videoLateMs = 0;
-    }
-    m_mediaPlayback.m_statsVideoLateMsTotal += videoLateMs;
-    m_mediaPlayback.m_statsVideoLateMsMax = std::max(m_mediaPlayback.m_statsVideoLateMsMax, videoLateMs);
-
-    if (submitAudio && !pcmS16Stereo.isEmpty()) {
-        submitVideoFileAudio(pcmS16Stereo, audioSampleRate);
-    }
-
-    if (minimumPositionMs < 0) {
-        updateVideoFilePlaybackStats(decodeMs, m_mediaPlayback.m_positionMs, pcmS16Stereo.size());
-    }
-
-    if (m_framePreprocessor)
-    {
-        CameraPipelineFramePtr frame(new CameraPipelineFrame);
-        frame->m_image = image;
-        populateFrameExposureMetadata(*frame);
-        frame->m_captureEpoch = m_captureEpoch;
-        frame->m_pipelineInputWallClockMs = QDateTime::currentMSecsSinceEpoch();
-        frame->m_playbackPositionMs = m_mediaPlayback.m_positionMs;
-        frame->m_playbackFrameRate = qMax(1.0, m_mediaPlayback.m_frameRate) * qMax(0.1, m_settings.m_videoPlaybackRate);
-        submitVideoFileFrame(frame, submitAudio && (minimumPositionMs < 0));
-    }
-
-    reportVideoFilePlaybackToGUI();
+    submitDecodedVideoFileFrame(
+        image,
+        positionMs,
+        decodeMs,
+        pcmS16Stereo,
+        audioSampleRate,
+        submitAudio,
+        minimumPositionMs < 0,
+        submitAudio && (minimumPositionMs < 0),
+        m_settings.isStreamCamera(),
+        m_settings.isStreamCamera());
     return true;
 }
 

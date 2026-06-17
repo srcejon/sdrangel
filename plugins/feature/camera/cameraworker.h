@@ -701,6 +701,18 @@ private:
     bool takeDecodedVideoFileFrame(CameraMediaPlaybackState::DecodedFrame& frame);
     bool readQueuedVideoFileFrame(bool submitAudio);
     CameraVideoFileDecoder::DebugStats videoFileDecoderStatsSnapshot() const;
+    qint64 updateVideoFilePlaybackPosition(qint64 decodedPositionMs, qint64 decodeMs, bool repairTimestampDiscontinuities, bool resetClockOnLargeDrift);
+    void submitDecodedVideoFileFrame(
+        const QImage& image,
+        qint64 decodedPositionMs,
+        qint64 decodeMs,
+        const QByteArray& pcmS16Stereo,
+        int audioSampleRate,
+        bool submitAudio,
+        bool updateStats,
+        bool applyPlaybackOffset,
+        bool repairTimestampDiscontinuities,
+        bool resetClockOnLargeDrift);
     void submitVideoFileAudio(const QByteArray& pcmS16Stereo, int audioSampleRate);
     bool readVideoFileFrame(bool submitAudio = true, qint64 minimumPositionMs = -1);
     void seekVideoFile(qint64 positionMs, bool displayFrame);

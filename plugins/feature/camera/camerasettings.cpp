@@ -185,7 +185,7 @@ void CameraSettings::resetToDefaults()
     m_streamUrl.clear();
     m_imageFileCameraPaths.clear();
     m_streamUrlHistory.clear();
-    m_streamInputBufferSizeKiB = 1024;
+    m_streamInputBufferSizeKiB = 0;
     m_videoFileName = "camera.mp4";
     m_recordRawFits = false;
     m_recordCalibratedMedia = true;
@@ -1133,7 +1133,7 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readString(259, &streamUrlHistoryJson, "");
         m_streamUrlHistory = deserializeStringList(streamUrlHistoryJson);
         d.readString(260, &m_streamUrl, "");
-        d.readS32(262, &m_streamInputBufferSizeKiB, 1024);
+        d.readS32(262, &m_streamInputBufferSizeKiB, 0);
         if (isStreamCamera() && m_streamUrl.isEmpty()) {
             m_streamUrl = m_videoFileCameraPath;
         }

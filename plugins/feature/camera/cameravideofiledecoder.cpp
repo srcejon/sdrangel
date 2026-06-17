@@ -118,7 +118,7 @@ bool CameraVideoFileDecoder::open(
     const QString scheme = QUrl(fileName).scheme().toLower();
     m_urlSource = scheme.size() > 1;
     const bool rtspSource = scheme == QLatin1String("rtsp");
-    const int streamBufferSizeBytes = qBound(64, streamBufferSizeKiB, 65536) * 1024;
+    const int streamBufferSizeBytes = qBound(0, streamBufferSizeKiB, 65536) * 1024;
     const QByteArray streamBufferSizeBytesText = QByteArray::number(streamBufferSizeBytes);
     QStringList openErrors;
 
@@ -136,7 +136,9 @@ bool CameraVideoFileDecoder::open(
             av_dict_set(&options, "analyzeduration", "10000000", 0);
             av_dict_set(&options, "probesize", "5000000", 0);
             av_dict_set(&options, "rw_timeout", "5000000", 0);
-            av_dict_set(&options, "buffer_size", streamBufferSizeBytesText.constData(), 0);
+            if (streamBufferSizeBytes > 0) {
+                av_dict_set(&options, "buffer_size", streamBufferSizeBytesText.constData(), 0);
+            }
             if ((scheme == QLatin1String("http")) || (scheme == QLatin1String("https"))) {
                 av_dict_set(&options, "flv_ignore_prevtag", "1", 0);
             }

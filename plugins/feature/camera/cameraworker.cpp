@@ -26,6 +26,7 @@
 #include <QColor>
 #include <QDebug>
 #include <QDateTime>
+#include <QMetaObject>
 #include <QNetworkAccessManager>
 
 #include "maincore.h"
@@ -1359,8 +1360,8 @@ void CameraWorker::captureTick()
 
     if (m_settings.isFfmpegMediaSource())
     {
-        readVideoFileFrame();
-        if (m_capturing && m_videoFilePlaying) {
+        const bool frameRead = readVideoFileFrame();
+        if (m_capturing && m_videoFilePlaying && (!m_settings.isStreamCamera() || !frameRead)) {
             scheduleNextVideoFileTick();
         }
         return;
@@ -1715,7 +1716,33 @@ void CameraWorker::clearDecodedVideoFileFrames()
 {
     QMutexLocker locker(&m_videoFileDecodedFramesMutex);
     m_videoFileDecodedFrames.clear();
+    m_videoFileSkippedAudio.clear();
+    m_videoFileSkippedAudioSampleRate = 0;
     m_videoFileDecodedFramesNotFull.wakeAll();
+}
+
+void CameraWorker::stashSkippedVideoFileAudio(const DecodedVideoFileFrame& frame)
+{
+    if (frame.m_pcmS16Stereo.isEmpty() || (frame.m_audioSampleRate <= 0)) {
+        return;
+    }
+
+    if ((m_videoFileSkippedAudioSampleRate != 0) && (m_videoFileSkippedAudioSampleRate != frame.m_audioSampleRate))
+    {
+        m_videoFileSkippedAudio.clear();
+        m_videoFileSkippedAudioSampleRate = 0;
+    }
+
+    m_videoFileSkippedAudioSampleRate = frame.m_audioSampleRate;
+    m_videoFileSkippedAudio.append(frame.m_pcmS16Stereo);
+
+    const int bytesPerSampleFrame = 4;
+    const int maxBytes = frame.m_audioSampleRate * bytesPerSampleFrame * 2;
+    if (m_videoFileSkippedAudio.size() > maxBytes)
+    {
+        const int keepBytes = (maxBytes / bytesPerSampleFrame) * bytesPerSampleFrame;
+        m_videoFileSkippedAudio = m_videoFileSkippedAudio.right(keepBytes);
+    }
 }
 
 void CameraWorker::queueDecodedVideoFileFrame(DecodedVideoFileFrame&& frame)
@@ -1723,11 +1750,13 @@ void CameraWorker::queueDecodedVideoFileFrame(DecodedVideoFileFrame&& frame)
     QMutexLocker locker(&m_videoFileDecodedFramesMutex);
     while (!m_videoFileDecodedFrames.empty() && (m_videoFileDecodedFrames.size() >= m_maxDecodedStreamFrames))
     {
+        stashSkippedVideoFileAudio(m_videoFileDecodedFrames.front());
         m_videoFileDecodedFrames.pop_front();
         ++m_videoFileDecodeDroppedFrames;
     }
     m_videoFileDecodedFrames.push_back(std::move(frame));
     m_videoFileDecodedFramesAvailable.wakeAll();
+    QMetaObject::invokeMethod(this, "captureTick", Qt::QueuedConnection);
 }
 
 bool CameraWorker::takeDecodedVideoFileFrame(DecodedVideoFileFrame& frame)
@@ -1738,8 +1767,11 @@ bool CameraWorker::takeDecodedVideoFileFrame(DecodedVideoFileFrame& frame)
     }
 
     const size_t skippedFrames = m_videoFileDecodedFrames.size() - 1;
-    while (m_videoFileDecodedFrames.size() > 1) {
+    while (m_videoFileDecodedFrames.size() > 1)
+    {
+        DecodedVideoFileFrame skippedFrame = std::move(m_videoFileDecodedFrames.front());
         m_videoFileDecodedFrames.pop_front();
+        stashSkippedVideoFileAudio(skippedFrame);
     }
     if (skippedFrames > 0) {
         m_videoFileDecodeDroppedFrames.fetch_add(static_cast<quint64>(skippedFrames));
@@ -1747,6 +1779,14 @@ bool CameraWorker::takeDecodedVideoFileFrame(DecodedVideoFileFrame& frame)
 
     frame = std::move(m_videoFileDecodedFrames.front());
     m_videoFileDecodedFrames.pop_front();
+    if (!m_videoFileSkippedAudio.isEmpty()
+        && ((frame.m_audioSampleRate <= 0) || (frame.m_audioSampleRate == m_videoFileSkippedAudioSampleRate)))
+    {
+        frame.m_audioSampleRate = m_videoFileSkippedAudioSampleRate;
+        frame.m_pcmS16Stereo.prepend(m_videoFileSkippedAudio);
+        m_videoFileSkippedAudio.clear();
+        m_videoFileSkippedAudioSampleRate = 0;
+    }
     m_videoFileDecodedFramesNotFull.wakeAll();
     return true;
 }
@@ -1854,16 +1894,15 @@ bool CameraWorker::readQueuedVideoFileFrame(bool submitAudio)
     return true;
 }
 
-void CameraWorker::readVideoFileFrame(bool submitAudio, qint64 minimumPositionMs)
+bool CameraWorker::readVideoFileFrame(bool submitAudio, qint64 minimumPositionMs)
 {
     if (!m_capturing || !m_settings.isFfmpegMediaSource() || !m_videoFileDecoder) {
-        return;
+        return false;
     }
 
     if (m_settings.isStreamCamera() && (minimumPositionMs < 0))
     {
-        readQueuedVideoFileFrame(submitAudio);
-        return;
+        return readQueuedVideoFileFrame(submitAudio);
     }
 
     m_videoFileDecoder->setAudioPaceFrameRate(
@@ -1933,7 +1972,7 @@ void CameraWorker::readVideoFileFrame(bool submitAudio, qint64 minimumPositionMs
             m_settings.isStreamCamera() ? tr("Stream decode failed") : tr("Video file decode failed"),
             errorMessage);
         setVideoFilePlaying(false);
-        return;
+        return true;
     }
 
     if (image.isNull())
@@ -1947,7 +1986,7 @@ void CameraWorker::readVideoFileFrame(bool submitAudio, qint64 minimumPositionMs
         {
             setVideoFilePlaying(false);
         }
-        return;
+        return true;
     }
 
     if (positionMs >= 0)
@@ -2012,6 +2051,7 @@ void CameraWorker::readVideoFileFrame(bool submitAudio, qint64 minimumPositionMs
     }
 
     reportVideoFilePlaybackToGUI();
+    return true;
 }
 
 void CameraWorker::submitVideoFileAudio(const QByteArray& pcmS16Stereo, int audioSampleRate)

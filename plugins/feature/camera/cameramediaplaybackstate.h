@@ -87,23 +87,22 @@ public:
 
     std::thread m_decodeThread;
     std::atomic_bool m_decodeThreadStop { false };
+    std::atomic_bool m_decodeFrameWakeQueued { false };
     std::atomic<quint64> m_decodeDroppedFrames { 0 };
+    std::atomic<quint64> m_decodeDroppedSinceLastSubmit { 0 };
     mutable QMutex m_decodedFramesMutex;
     QWaitCondition m_decodedFramesAvailable;
     QWaitCondition m_decodedFramesNotFull;
     std::deque<DecodedFrame> m_decodedFrames;
-    QByteArray m_skippedAudio;
-    int m_skippedAudioSampleRate = 0;
     CameraVideoFileDecoder::DebugStats m_decodeStatsSnapshot;
     mutable QMutex m_decodeStatsMutex;
     qint64 m_decodeAudioPositionMs = -1;
     int m_decodePendingAudioBytes = 0;
     int m_decodePendingVideoFrames = 0;
     int m_decodePendingVideoPackets = 0;
-    // 4K stream decode can occasionally stall for 150-250 ms. Keep enough
-    // decoded frames to absorb that jitter without letting memory run away.
-    static constexpr size_t m_streamInitialBufferFrames = 5;
-    static constexpr size_t m_maxDecodedStreamFrames = 8;
+    // Keep live streams close to real time; audio is the main jitter buffer.
+    static constexpr size_t m_streamInitialBufferFrames = 3;
+    static constexpr size_t m_maxDecodedStreamFrames = 4;
 
     QElapsedTimer m_statsTimer;
     QElapsedTimer m_tickTimer;

@@ -1773,6 +1773,9 @@ void CameraWorker::startVideoFileDecodeThread()
 void CameraWorker::stopVideoFileDecodeThread()
 {
     m_mediaPlayback.m_decodeThreadStop.store(true);
+    if (m_mediaPlayback.m_decodeThread.joinable() && m_mediaPlayback.m_decoder) {
+        m_mediaPlayback.m_decoder->requestAbort();
+    }
     m_mediaPlayback.m_decodedFramesNotFull.wakeAll();
     m_mediaPlayback.m_decodedFramesAvailable.wakeAll();
     if (m_mediaPlayback.m_decodeThread.joinable()) {
@@ -1788,33 +1791,8 @@ void CameraWorker::clearDecodedVideoFileFrames()
 {
     QMutexLocker locker(&m_mediaPlayback.m_decodedFramesMutex);
     m_mediaPlayback.m_decodedFrames.clear();
-    m_mediaPlayback.m_skippedAudio.clear();
-    m_mediaPlayback.m_skippedAudioSampleRate = 0;
+    m_mediaPlayback.m_decodeFrameWakeQueued.store(false);
     m_mediaPlayback.m_decodedFramesNotFull.wakeAll();
-}
-
-void CameraWorker::stashSkippedVideoFileAudio(const CameraMediaPlaybackState::DecodedFrame& frame)
-{
-    if (frame.m_pcmS16Stereo.isEmpty() || (frame.m_audioSampleRate <= 0)) {
-        return;
-    }
-
-    if ((m_mediaPlayback.m_skippedAudioSampleRate != 0) && (m_mediaPlayback.m_skippedAudioSampleRate != frame.m_audioSampleRate))
-    {
-        m_mediaPlayback.m_skippedAudio.clear();
-        m_mediaPlayback.m_skippedAudioSampleRate = 0;
-    }
-
-    m_mediaPlayback.m_skippedAudioSampleRate = frame.m_audioSampleRate;
-    m_mediaPlayback.m_skippedAudio.append(frame.m_pcmS16Stereo);
-
-    const int bytesPerSampleFrame = 4;
-    const int maxBytes = frame.m_audioSampleRate * bytesPerSampleFrame * 2;
-    if (m_mediaPlayback.m_skippedAudio.size() > maxBytes)
-    {
-        const int keepBytes = (maxBytes / bytesPerSampleFrame) * bytesPerSampleFrame;
-        m_mediaPlayback.m_skippedAudio = m_mediaPlayback.m_skippedAudio.right(keepBytes);
-    }
 }
 
 void CameraWorker::queueDecodedVideoFileFrame(CameraMediaPlaybackState::DecodedFrame&& frame)
@@ -1822,13 +1800,15 @@ void CameraWorker::queueDecodedVideoFileFrame(CameraMediaPlaybackState::DecodedF
     QMutexLocker locker(&m_mediaPlayback.m_decodedFramesMutex);
     while (!m_mediaPlayback.m_decodedFrames.empty() && (m_mediaPlayback.m_decodedFrames.size() >= CameraMediaPlaybackState::m_maxDecodedStreamFrames))
     {
-        stashSkippedVideoFileAudio(m_mediaPlayback.m_decodedFrames.front());
         m_mediaPlayback.m_decodedFrames.pop_front();
         ++m_mediaPlayback.m_decodeDroppedFrames;
+        ++m_mediaPlayback.m_decodeDroppedSinceLastSubmit;
     }
     m_mediaPlayback.m_decodedFrames.push_back(std::move(frame));
     m_mediaPlayback.m_decodedFramesAvailable.wakeAll();
-    QMetaObject::invokeMethod(this, "captureTick", Qt::QueuedConnection);
+    if (!m_mediaPlayback.m_decodeFrameWakeQueued.exchange(true)) {
+        QMetaObject::invokeMethod(this, "captureTick", Qt::QueuedConnection);
+    }
 }
 
 bool CameraWorker::takeDecodedVideoFileFrame(CameraMediaPlaybackState::DecodedFrame& frame)
@@ -1840,14 +1820,6 @@ bool CameraWorker::takeDecodedVideoFileFrame(CameraMediaPlaybackState::DecodedFr
 
     frame = std::move(m_mediaPlayback.m_decodedFrames.front());
     m_mediaPlayback.m_decodedFrames.pop_front();
-    if (!m_mediaPlayback.m_skippedAudio.isEmpty()
-        && ((frame.m_audioSampleRate <= 0) || (frame.m_audioSampleRate == m_mediaPlayback.m_skippedAudioSampleRate)))
-    {
-        frame.m_audioSampleRate = m_mediaPlayback.m_skippedAudioSampleRate;
-        frame.m_pcmS16Stereo.prepend(m_mediaPlayback.m_skippedAudio);
-        m_mediaPlayback.m_skippedAudio.clear();
-        m_mediaPlayback.m_skippedAudioSampleRate = 0;
-    }
     m_mediaPlayback.m_decodedFramesNotFull.wakeAll();
     return true;
 }
@@ -1870,6 +1842,7 @@ qint64 CameraWorker::updateVideoFilePlaybackPosition(
     bool resetClockOnLargeDrift)
 {
     qint64 positionMs = decodedPositionMs;
+    const bool droppedStreamFrames = m_mediaPlayback.m_decodeDroppedSinceLastSubmit.exchange(0) > 0;
 
     if (positionMs >= 0)
     {
@@ -1877,7 +1850,7 @@ qint64 CameraWorker::updateVideoFilePlaybackPosition(
         {
             const qint64 frameIntervalMs = videoFileFrameIntervalMs();
             const qint64 positionDeltaMs = positionMs - m_mediaPlayback.m_lastFramePtsMs;
-            if ((positionDeltaMs <= 0) || (positionDeltaMs > frameIntervalMs * 3)) {
+            if ((positionDeltaMs <= 0) || ((positionDeltaMs > frameIntervalMs * 3) && !droppedStreamFrames)) {
                 positionMs = m_mediaPlayback.m_lastFramePtsMs + frameIntervalMs;
             }
         }
@@ -1935,7 +1908,7 @@ void CameraWorker::submitDecodedVideoFileFrame(
         repairTimestampDiscontinuities,
         resetClockOnLargeDrift);
 
-    if (submitAudio && !pcmS16Stereo.isEmpty()) {
+    if (submitAudio && (!pcmS16Stereo.isEmpty() || m_settings.isStreamCamera())) {
         submitVideoFileAudio(pcmS16Stereo, audioSampleRate);
     }
 
@@ -1962,17 +1935,39 @@ bool CameraWorker::readQueuedVideoFileFrame(bool submitAudio)
 {
     if (m_settings.isStreamCamera())
     {
+        m_mediaPlayback.m_decodeFrameWakeQueued.store(false);
         static constexpr qint64 maxEarlyReleaseMs = 2;
         static constexpr qint64 maxRetryDelayMs = 50;
+        static constexpr qint64 maxQueuedFrameLateMs = 250;
 
         int queuedFrames = 0;
         qint64 nextFramePositionMs = -1;
         {
             QMutexLocker locker(&m_mediaPlayback.m_decodedFramesMutex);
+            if (m_mediaPlayback.m_basePositionMs >= 0)
+            {
+                const qint64 playbackClockMs = videoFilePlaybackClockMs();
+                while (m_mediaPlayback.m_decodedFrames.size() > 1)
+                {
+                    const qint64 queuedPositionMs = m_mediaPlayback.m_decodedFrames.front().m_positionMs;
+                    if ((queuedPositionMs < 0) || ((playbackClockMs - queuedPositionMs) <= maxQueuedFrameLateMs)) {
+                        break;
+                    }
+
+                    m_mediaPlayback.m_decodedFrames.pop_front();
+                    ++m_mediaPlayback.m_decodeDroppedFrames;
+                    ++m_mediaPlayback.m_decodeDroppedSinceLastSubmit;
+                }
+                if (m_mediaPlayback.m_decodedFrames.empty()) {
+                    m_mediaPlayback.m_decodedFramesNotFull.wakeAll();
+                    return false;
+                }
+            }
             queuedFrames = static_cast<int>(m_mediaPlayback.m_decodedFrames.size());
             if (queuedFrames > 0) {
                 nextFramePositionMs = m_mediaPlayback.m_decodedFrames.front().m_positionMs;
             }
+            m_mediaPlayback.m_decodedFramesNotFull.wakeAll();
         }
 
         if (queuedFrames <= 0) {
@@ -2099,7 +2094,7 @@ bool CameraWorker::readVideoFileFrame(bool submitAudio, qint64 minimumPositionMs
             break;
         }
 
-        if (submitAudio && !pcmS16Stereo.isEmpty()) {
+        if (submitAudio && (!pcmS16Stereo.isEmpty() || m_settings.isStreamCamera())) {
             submitVideoFileAudio(pcmS16Stereo, audioSampleRate);
         }
         ++droppedLateFrames;
@@ -2146,7 +2141,7 @@ bool CameraWorker::readVideoFileFrame(bool submitAudio, qint64 minimumPositionMs
 void CameraWorker::submitVideoFileAudio(const QByteArray& pcmS16Stereo, int audioSampleRate)
 {
     static constexpr int bytesPerSampleFrame = 4;
-    if (pcmS16Stereo.isEmpty() || (audioSampleRate <= 0)) {
+    if (audioSampleRate <= 0) {
         return;
     }
 
@@ -2159,7 +2154,7 @@ void CameraWorker::submitVideoFileAudio(const QByteArray& pcmS16Stereo, int audi
         {
             const int neededFrames = targetFillFrames - static_cast<int>(currentFill);
             const int maxExtraFrames = m_settings.isStreamCamera()
-                ? neededFrames
+                ? std::max(1, audioSampleRate / 20)
                 : audioSampleRate / 2;
             QByteArray extraAudio;
             const int extraFrames = m_mediaPlayback.m_decoder->takePendingAudio(extraAudio, std::min(neededFrames, maxExtraFrames));
@@ -2171,8 +2166,13 @@ void CameraWorker::submitVideoFileAudio(const QByteArray& pcmS16Stereo, int audi
         }
     }
 
+    if (monitorAudio.isEmpty()) {
+        return;
+    }
     m_qtAudio.submitMonitorPcmSamples(monitorAudio, audioSampleRate);
-    m_qtAudio.submitRecordingPcmSamples(pcmS16Stereo.left((pcmS16Stereo.size() / bytesPerSampleFrame) * bytesPerSampleFrame), audioSampleRate);
+    if (!pcmS16Stereo.isEmpty()) {
+        m_qtAudio.submitRecordingPcmSamples(pcmS16Stereo.left((pcmS16Stereo.size() / bytesPerSampleFrame) * bytesPerSampleFrame), audioSampleRate);
+    }
 }
 
 void CameraWorker::seekVideoFile(qint64 positionMs, bool displayFrame)
@@ -2323,6 +2323,7 @@ void CameraWorker::resetVideoFilePlaybackStats()
     m_mediaPlayback.m_statsVideoLateMsTotal = 0;
     m_mediaPlayback.m_statsVideoLateMsMax = 0;
     m_mediaPlayback.m_decodeDroppedFrames.store(0);
+    m_mediaPlayback.m_decodeDroppedSinceLastSubmit.store(0);
     m_mediaPlayback.m_statsLastDroppedAudioFrames = m_qtAudio.monitorDroppedFrames();
     m_mediaPlayback.m_statsLastAudioUnderflows = m_qtAudio.monitorUnderflows();
 

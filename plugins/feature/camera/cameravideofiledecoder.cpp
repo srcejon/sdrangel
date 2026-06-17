@@ -43,6 +43,18 @@ extern "C" {
 }
 #endif
 
+namespace {
+
+#ifdef CAMERA_FFMPEG_STREAMING
+int cameraVideoFileDecoderInterruptCallback(void *opaque)
+{
+    CameraVideoFileDecoder *decoder = static_cast<CameraVideoFileDecoder*>(opaque);
+    return decoder ? (decoder->abortRequested() ? 1 : 0) : 0;
+}
+#endif
+
+}
+
 CameraVideoFileDecoder::CameraVideoFileDecoder()
 {
 }
@@ -66,6 +78,7 @@ bool CameraVideoFileDecoder::open(const QString& fileName, QString& errorMessage
     return false;
 #else
     close();
+    m_abortRequested.store(false);
     m_outputSampleRate = std::max(1000, outputSampleRate);
 
     const QByteArray fileNameUtf8 = fileName.toUtf8();
@@ -106,6 +119,16 @@ bool CameraVideoFileDecoder::open(const QString& fileName, QString& errorMessage
         qDebug() << "CameraVideoFileDecoder: opening media source" << fileName
                  << "scheme" << scheme
                  << "rtspTransport" << (rtspSource ? transportName : QStringLiteral("n/a"));
+        m_formatContext = avformat_alloc_context();
+        if (!m_formatContext)
+        {
+            av_dict_free(&options);
+            openErrors.append(QStringLiteral("%1: cannot allocate FFmpeg format context").arg(transportName));
+            return false;
+        }
+        m_formatContext->interrupt_callback.callback = cameraVideoFileDecoderInterruptCallback;
+        m_formatContext->interrupt_callback.opaque = this;
+
         int ret = avformat_open_input(&m_formatContext, fileNameUtf8.constData(), nullptr, &options);
         av_dict_free(&options);
         if (ret < 0)
@@ -117,6 +140,7 @@ bool CameraVideoFileDecoder::open(const QString& fileName, QString& errorMessage
                        << "elapsedMs" << openTimer.elapsed()
                        << error;
             openErrors.append(QStringLiteral("%1: %2").arg(transportName, error));
+            avformat_close_input(&m_formatContext);
             return false;
         }
 
@@ -254,6 +278,7 @@ bool CameraVideoFileDecoder::open(const QString& fileName, QString& errorMessage
 void CameraVideoFileDecoder::close()
 {
 #ifdef CAMERA_FFMPEG_STREAMING
+    requestAbort();
     if (m_swsContext)
     {
         sws_freeContext(m_swsContext);
@@ -292,6 +317,11 @@ void CameraVideoFileDecoder::close()
     clearPendingAudio();
     m_pendingVideoFrames.clear();
     m_debugStats = DebugStats();
+}
+
+void CameraVideoFileDecoder::requestAbort()
+{
+    m_abortRequested.store(true);
 }
 
 void CameraVideoFileDecoder::setAudioPaceFrameRate(double frameRate)

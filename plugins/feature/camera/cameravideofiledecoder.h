@@ -19,6 +19,7 @@
 #ifndef INCLUDE_FEATURE_CAMERA_VIDEO_FILE_DECODER_H_
 #define INCLUDE_FEATURE_CAMERA_VIDEO_FILE_DECODER_H_
 
+#include <atomic>
 #include <deque>
 
 #include <QByteArray>
@@ -40,7 +41,9 @@ public:
     ~CameraVideoFileDecoder();
 
     [[nodiscard]] bool isOpen() const;
+    [[nodiscard]] bool abortRequested() const { return m_abortRequested.load(); }
     [[nodiscard]] bool open(const QString& fileName, QString& errorMessage, int outputSampleRate = 48000);
+    void requestAbort();
     void close();
     void seek(qint64 positionMs);
     void setAudioPaceFrameRate(double frameRate);
@@ -102,7 +105,7 @@ private:
     };
 
     static constexpr size_t m_maxPendingVideoFrames = 3;
-    static constexpr size_t m_maxPendingStreamVideoFrames = 4;
+    static constexpr size_t m_maxPendingStreamVideoFrames = 2;
     static constexpr size_t m_maxPendingVideoPackets = 30;
     // Keep a modest packet cushion for live streams; the monitor FIFO provides
     // the main audio jitter buffer, so excessive packet parking makes video lag.
@@ -130,6 +133,7 @@ private:
     bool m_videoDraining = false;
     bool m_audioDraining = false;
     bool m_urlSource = false;
+    std::atomic_bool m_abortRequested { false };
     std::deque<AVPacket*> m_pendingVideoPackets;
     std::deque<PendingVideoFrame> m_pendingVideoFrames;
     DebugStats m_debugStats;

@@ -696,7 +696,6 @@ private:
     void startVideoFileDecodeThread();
     void stopVideoFileDecodeThread();
     void clearDecodedVideoFileFrames();
-    void stashSkippedVideoFileAudio(const CameraMediaPlaybackState::DecodedFrame& frame);
     void queueDecodedVideoFileFrame(CameraMediaPlaybackState::DecodedFrame&& frame);
     bool takeDecodedVideoFileFrame(CameraMediaPlaybackState::DecodedFrame& frame);
     bool readQueuedVideoFileFrame(bool submitAudio);

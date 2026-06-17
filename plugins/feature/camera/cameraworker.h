@@ -665,6 +665,8 @@ private:
     QWaitCondition m_videoFileDecodedFramesAvailable;
     QWaitCondition m_videoFileDecodedFramesNotFull;
     std::deque<DecodedVideoFileFrame> m_videoFileDecodedFrames;
+    QByteArray m_videoFileSkippedAudio;
+    int m_videoFileSkippedAudioSampleRate = 0;
     CameraVideoFileDecoder::DebugStats m_videoFileDecodeStatsSnapshot;
     mutable QMutex m_videoFileDecodeStatsMutex;
     qint64 m_videoFileDecodeAudioPositionMs = -1;
@@ -786,12 +788,13 @@ private:
     void startVideoFileDecodeThread();
     void stopVideoFileDecodeThread();
     void clearDecodedVideoFileFrames();
+    void stashSkippedVideoFileAudio(const DecodedVideoFileFrame& frame);
     void queueDecodedVideoFileFrame(DecodedVideoFileFrame&& frame);
     bool takeDecodedVideoFileFrame(DecodedVideoFileFrame& frame);
     bool readQueuedVideoFileFrame(bool submitAudio);
     CameraVideoFileDecoder::DebugStats videoFileDecoderStatsSnapshot() const;
     void submitVideoFileAudio(const QByteArray& pcmS16Stereo, int audioSampleRate);
-    void readVideoFileFrame(bool submitAudio = true, qint64 minimumPositionMs = -1);
+    bool readVideoFileFrame(bool submitAudio = true, qint64 minimumPositionMs = -1);
     void seekVideoFile(qint64 positionMs, bool displayFrame);
     void stepVideoFile(int direction);
     double videoFileExactFrameIntervalMs() const;

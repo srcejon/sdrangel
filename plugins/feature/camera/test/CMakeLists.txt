@@ -119,3 +119,25 @@ if(WIN32)
         endif()
     endif()
 endif()
+
+if(OpenCV_cudaarithm_FOUND AND OpenCV_cudaimgproc_FOUND AND OpenCV_cudawarping_FOUND AND OpenCV_cudafilters_FOUND)
+    add_executable(featurecamera_hdr_tests EXCLUDE_FROM_ALL
+        camerahdrtests.cpp
+        ../camerahdrfusion.cpp
+    )
+
+    target_compile_definitions(featurecamera_hdr_tests PRIVATE
+        CAMERA_HDR_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
+        CAMERA_OPENCV_CUDA_STACKING
+    )
+
+    target_include_directories(featurecamera_hdr_tests PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/..
+        ${OpenCV_INCLUDE_DIRS}
+    )
+
+    target_link_libraries(featurecamera_hdr_tests PRIVATE
+        Qt::Core
+        ${camera_OpenCV_LIBS}
+    )
+endif()

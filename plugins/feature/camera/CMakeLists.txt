@@ -10,6 +10,7 @@ set(camera_SOURCES
     cameradiffdetector.cpp
     cameraframepreprocessor.cpp
     cameraframealigner.cpp
+    camerahdrfusion.cpp
     cameraframestacker.cpp
     cameraimageutils.cpp
     cameraimageprocessor.cpp
@@ -41,6 +42,7 @@ set(camera_HEADERS
     cameradiffdetector.h
     cameraframepreprocessor.h
     cameraframealigner.h
+    camerahdrfusion.h
     cameraframestacker.h
     cameraimageutils.h
     cameraimageprocessor.h

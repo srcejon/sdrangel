@@ -35,28 +35,12 @@
 
 #include "util/profiler.h"
 #include "camera.h"
+#include "camerahdrfusion.h"
 #include "cameraframestacker.h"
 #include "cameraimageutils.h"
 #include "cameraimageprocessor.h"
 
 MESSAGE_CLASS_DEFINITION(CameraFrameStacker::MsgDeleteStackFrame, Message)
-
-#ifdef CAMERA_OPENCV_CUDA_STACKING
-static cv::cuda::GpuMat sizeMatchedPyramidExpansion(const cv::cuda::GpuMat& expandedGpu, const cv::Size& targetSize, cv::cuda::Stream& stream)
-{
-    if (expandedGpu.size() == targetSize) {
-        return expandedGpu;
-    }
-
-    if ((expandedGpu.cols >= targetSize.width) && (expandedGpu.rows >= targetSize.height)) {
-        return expandedGpu(cv::Rect(0, 0, targetSize.width, targetSize.height));
-    }
-
-    cv::cuda::GpuMat resizedGpu;
-    cv::cuda::resize(expandedGpu, resizedGpu, targetSize, 0.0, 0.0, cv::INTER_LINEAR, stream);
-    return resizedGpu;
-}
-#endif
 
 CameraFrameStacker::CameraFrameStacker() :
     m_nextStage(nullptr),
@@ -293,186 +277,26 @@ bool CameraFrameStacker::applyMertensFusionCuda(const std::vector<const HdrFrame
         return false;
     }
 
-    try
+    std::vector<cv::Mat> rgbFrames;
+    rgbFrames.reserve(sortedSamples.size());
+    for (const HdrFrameSample *sample : sortedSamples)
     {
-        const cv::Size frameSize = sortedSamples.front()->m_frameMat.size();
-        std::vector<cv::cuda::GpuMat> frameFloatGpu;
-        frameFloatGpu.reserve(sortedSamples.size());
-
-        if (!m_cudaHdrLaplacianFilter) {
-            m_cudaHdrLaplacianFilter = cv::cuda::createLaplacianFilter(CV_32FC1, CV_32FC1, 1);
+        if (!sample) {
+            return false;
         }
-
-        std::vector<cv::Size> pyramidSizes;
-        pyramidSizes.push_back(frameSize);
-        while ((pyramidSizes.size() < 8) && (std::min(pyramidSizes.back().width, pyramidSizes.back().height) > 32))
-        {
-            const cv::Size previousSize = pyramidSizes.back();
-            const cv::Size nextSize(std::max(1, (previousSize.width + 1) / 2), std::max(1, (previousSize.height + 1) / 2));
-            if (nextSize == previousSize) {
-                break;
-            }
-            pyramidSizes.push_back(nextSize);
-        }
-        const int pyramidLevels = static_cast<int>(pyramidSizes.size());
-
-        std::vector<std::vector<cv::cuda::GpuMat>> weightPyramids(sortedSamples.size());
-        std::vector<cv::cuda::GpuMat> weightSumPyramids;
-        weightSumPyramids.reserve(pyramidLevels);
-        for (const cv::Size& pyramidSize : pyramidSizes) {
-            weightSumPyramids.emplace_back(pyramidSize, CV_32FC1, cv::Scalar::all(1.0e-12));
-        }
-
-        for (size_t sampleIndex = 0; sampleIndex < sortedSamples.size(); ++sampleIndex)
-        {
-            const HdrFrameSample *sample = sortedSamples[sampleIndex];
-            if (!sample || sample->m_frameMat.empty()
-                || (sample->m_frameMat.size() != frameSize)
-                || (sample->m_frameMat.channels() != 3))
-            {
-                return false;
-            }
-
-            cv::cuda::GpuMat uploadedGpu;
-            uploadedGpu.upload(sample->m_frameMat, m_cudaStackingStream);
-
-            cv::cuda::GpuMat floatGpu;
-            if (sample->m_frameMat.depth() == CV_16U) {
-                uploadedGpu.convertTo(floatGpu, CV_32FC3, 1.0 / 65535.0, 0.0, m_cudaStackingStream);
-            } else if (sample->m_frameMat.depth() == CV_8U) {
-                uploadedGpu.convertTo(floatGpu, CV_32FC3, 1.0 / 255.0, 0.0, m_cudaStackingStream);
-            } else {
-                uploadedGpu.convertTo(floatGpu, CV_32FC3, 1.0, 0.0, m_cudaStackingStream);
-            }
-
-            std::vector<cv::cuda::GpuMat> channels;
-            cv::cuda::split(floatGpu, channels, m_cudaStackingStream);
-            if (channels.size() != 3) {
-                return false;
-            }
-
-            cv::cuda::GpuMat grayGpu;
-            cv::cuda::cvtColor(floatGpu, grayGpu, cv::COLOR_RGB2GRAY, 0, m_cudaStackingStream);
-
-            cv::cuda::GpuMat contrastGpu;
-            m_cudaHdrLaplacianFilter->apply(grayGpu, contrastGpu, m_cudaStackingStream);
-            cv::cuda::abs(contrastGpu, contrastGpu, m_cudaStackingStream);
-            cv::cuda::add(contrastGpu, cv::Scalar::all(1.0e-6), contrastGpu, cv::noArray(), -1, m_cudaStackingStream);
-
-            cv::cuda::GpuMat meanGpu;
-            cv::cuda::add(channels[0], channels[1], meanGpu, cv::noArray(), -1, m_cudaStackingStream);
-            cv::cuda::add(meanGpu, channels[2], meanGpu, cv::noArray(), -1, m_cudaStackingStream);
-            meanGpu.convertTo(meanGpu, CV_32FC1, 1.0 / 3.0, 0.0, m_cudaStackingStream);
-
-            cv::cuda::GpuMat saturationGpu(frameSize, CV_32FC1, cv::Scalar::all(0.0));
-            cv::cuda::GpuMat tempGpu;
-            for (const cv::cuda::GpuMat& channel : channels)
-            {
-                cv::cuda::subtract(channel, meanGpu, tempGpu, cv::noArray(), -1, m_cudaStackingStream);
-                cv::cuda::multiply(tempGpu, tempGpu, tempGpu, 1.0, -1, m_cudaStackingStream);
-                cv::cuda::add(saturationGpu, tempGpu, saturationGpu, cv::noArray(), -1, m_cudaStackingStream);
-            }
-            saturationGpu.convertTo(saturationGpu, CV_32FC1, 1.0 / 3.0, 0.0, m_cudaStackingStream);
-            cv::cuda::sqrt(saturationGpu, saturationGpu, m_cudaStackingStream);
-            cv::cuda::add(saturationGpu, cv::Scalar::all(1.0e-6), saturationGpu, cv::noArray(), -1, m_cudaStackingStream);
-
-            cv::cuda::GpuMat weight;
-            cv::cuda::multiply(contrastGpu, saturationGpu, weight, 1.0, -1, m_cudaStackingStream);
-            cv::cuda::add(weight, cv::Scalar::all(1.0e-6), weight, cv::noArray(), -1, m_cudaStackingStream);
-
-            frameFloatGpu.push_back(floatGpu);
-
-            weightPyramids[sampleIndex].resize(pyramidLevels);
-            weightPyramids[sampleIndex][0] = weight;
-            cv::cuda::add(weightSumPyramids[0], weight, weightSumPyramids[0], cv::noArray(), -1, m_cudaStackingStream);
-
-            for (int level = 1; level < pyramidLevels; ++level)
-            {
-                cv::cuda::pyrDown(
-                    weightPyramids[sampleIndex][level - 1],
-                    weightPyramids[sampleIndex][level],
-                    m_cudaStackingStream);
-                cv::cuda::add(weightSumPyramids[static_cast<size_t>(level)], weightPyramids[sampleIndex][level],
-                    weightSumPyramids[static_cast<size_t>(level)], cv::noArray(), -1, m_cudaStackingStream);
-            }
-        }
-
-        std::vector<cv::cuda::GpuMat> fusedPyramid;
-        fusedPyramid.reserve(pyramidLevels);
-        for (const cv::Size& pyramidSize : pyramidSizes) {
-            fusedPyramid.emplace_back(pyramidSize, CV_32FC3, cv::Scalar::all(0.0));
-        }
-
-        for (size_t frameIndex = 0; frameIndex < frameFloatGpu.size(); ++frameIndex)
-        {
-            std::vector<cv::cuda::GpuMat> imageGaussianPyramid(pyramidLevels);
-            imageGaussianPyramid[0] = frameFloatGpu[frameIndex];
-            for (int level = 1; level < pyramidLevels; ++level)
-            {
-                cv::cuda::pyrDown(
-                    imageGaussianPyramid[static_cast<size_t>(level - 1)],
-                    imageGaussianPyramid[static_cast<size_t>(level)],
-                    m_cudaStackingStream);
-            }
-
-            for (int level = 0; level < pyramidLevels; ++level)
-            {
-                cv::cuda::GpuMat laplacianGpu;
-                if (level == pyramidLevels - 1)
-                {
-                    laplacianGpu = imageGaussianPyramid[static_cast<size_t>(level)];
-                }
-                else
-                {
-                    cv::cuda::GpuMat expandedGpu;
-                    cv::cuda::pyrUp(
-                        imageGaussianPyramid[static_cast<size_t>(level + 1)],
-                        expandedGpu,
-                        m_cudaStackingStream);
-                    expandedGpu = sizeMatchedPyramidExpansion(expandedGpu, pyramidSizes[static_cast<size_t>(level)], m_cudaStackingStream);
-                    cv::cuda::subtract(imageGaussianPyramid[static_cast<size_t>(level)], expandedGpu, laplacianGpu, cv::noArray(), -1, m_cudaStackingStream);
-                }
-
-                cv::cuda::GpuMat normalizedWeight;
-                cv::cuda::divide(
-                    weightPyramids[frameIndex][static_cast<size_t>(level)],
-                    weightSumPyramids[static_cast<size_t>(level)],
-                    normalizedWeight,
-                    1.0,
-                    -1,
-                    m_cudaStackingStream);
-
-                std::vector<cv::cuda::GpuMat> laplacianChannels;
-                cv::cuda::split(laplacianGpu, laplacianChannels, m_cudaStackingStream);
-                for (cv::cuda::GpuMat& channel : laplacianChannels) {
-                    cv::cuda::multiply(channel, normalizedWeight, channel, 1.0, -1, m_cudaStackingStream);
-                }
-                cv::cuda::GpuMat weightedLaplacian;
-                cv::cuda::merge(laplacianChannels, weightedLaplacian, m_cudaStackingStream);
-                cv::cuda::add(fusedPyramid[static_cast<size_t>(level)], weightedLaplacian,
-                    fusedPyramid[static_cast<size_t>(level)], cv::noArray(), -1, m_cudaStackingStream);
-            }
-        }
-
-        cv::cuda::GpuMat outputGpu = fusedPyramid.back();
-        for (int level = pyramidLevels - 2; level >= 0; --level)
-        {
-            cv::cuda::GpuMat expandedGpu;
-            cv::cuda::pyrUp(outputGpu, expandedGpu, m_cudaStackingStream);
-            outputGpu = sizeMatchedPyramidExpansion(expandedGpu, pyramidSizes[static_cast<size_t>(level)], m_cudaStackingStream);
-            cv::cuda::add(outputGpu, fusedPyramid[static_cast<size_t>(level)], outputGpu, cv::noArray(), -1, m_cudaStackingStream);
-        }
-
-        outputGpu.download(tonemappedRgb, m_cudaStackingStream);
-        m_cudaStackingStream.waitForCompletion();
-        return !tonemappedRgb.empty() && (tonemappedRgb.type() == CV_32FC3);
-    }
-    catch (const cv::Exception& error)
-    {
-        qWarning() << "CameraFrameStacker: CUDA Mertens exposure fusion failed; falling back to CPU:" << error.what();
+        rgbFrames.push_back(sample->m_frameMat);
     }
 
-    return false;
+    QString errorMessage;
+    if (!CameraHdrFusion::mergeMertensCudaRgb(rgbFrames, tonemappedRgb, m_cudaStackingStream, m_cudaHdrLaplacianFilter, &errorMessage))
+    {
+        if (!errorMessage.isEmpty()) {
+            qWarning() << "CameraFrameStacker: CUDA Mertens exposure fusion failed; falling back to CPU:" << errorMessage;
+        }
+        return false;
+    }
+
+    return true;
 }
 #endif
 

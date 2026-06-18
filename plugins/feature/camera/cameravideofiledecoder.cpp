@@ -963,6 +963,14 @@ bool CameraVideoFileDecoder::finishFrameAudio(
 #else
     ++m_debugStats.m_finishAudioCalls;
     CameraScopedTiming finishAudioTiming(m_debugStats.m_finishAudioMs, m_debugStats.m_finishAudioMaxMs);
+    if (m_urlSource)
+    {
+        appendPendingAudio(decodedAudio);
+        const int maxFrames = m_outputSampleRate > 0 ? m_outputSampleRate : 48000;
+        takePendingAudio(pcmS16Stereo, maxFrames);
+        trimLivePendingAudio();
+        return true;
+    }
     if (!readAheadAudio(decodedAudio, videoPositionMs, errorMessage)) {
         return false;
     }

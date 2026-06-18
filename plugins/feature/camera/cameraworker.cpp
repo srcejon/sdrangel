@@ -1369,9 +1369,16 @@ void CameraWorker::captureTick()
             return;
         }
         const bool frameRead = readVideoFileFrame();
+        if (m_settings.isStreamCamera() && !frameRead && (m_mediaPlayback.m_basePositionMs >= 0))
+        {
+            const int audioSampleRate = streamPlaybackAudioSampleRate();
+            if (audioSampleRate > 0) {
+                submitVideoFileAudio(QByteArray(), audioSampleRate);
+            }
+        }
         if (m_capturing
             && videoFilePlaybackIsPlaying()
-            && (!m_settings.isStreamCamera() || frameRead))
+            && (m_settings.isStreamCamera() || frameRead))
         {
             scheduleNextVideoFileTick();
         }
@@ -1505,11 +1512,7 @@ void CameraWorker::setVideoFilePlaying(bool playing)
         }
         m_captureTimer.setSingleShot(true);
         resetVideoFilePlaybackSchedule();
-        if (m_settings.isStreamCamera()) {
-            m_captureTimer.stop();
-        } else {
-            scheduleNextVideoFileTick();
-        }
+        scheduleNextVideoFileTick();
     }
     else
     {

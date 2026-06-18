@@ -370,7 +370,7 @@ bool CameraHdrFusion::mergeDebevecCudaRgb(
     {
         const cv::Size frameSize = rgbFramesGpu.front().size();
         cv::cuda::GpuMat numerator(frameSize, CV_32FC3, cv::Scalar::all(0.0));
-        cv::cuda::GpuMat denominator(frameSize, CV_32FC3, cv::Scalar::all(1.0e-6));
+        cv::cuda::GpuMat denominator(frameSize, CV_32FC1, cv::Scalar::all(1.0e-6));
 
         std::vector<float> sortedExposureTimes = exposureTimesSeconds;
         std::sort(sortedExposureTimes.begin(), sortedExposureTimes.end());
@@ -396,14 +396,21 @@ bool CameraHdrFusion::mergeDebevecCudaRgb(
                 uploadedGpu.convertTo(floatGpu, CV_32FC3, 1.0, 0.0, stream);
             }
 
+            cv::cuda::GpuMat grayGpu;
+            cv::cuda::cvtColor(floatGpu, grayGpu, cv::COLOR_RGB2GRAY, 0, stream);
+
             cv::cuda::GpuMat weightGpu;
-            cv::cuda::subtract(floatGpu, cv::Scalar::all(0.5), weightGpu, cv::noArray(), -1, stream);
+            cv::cuda::subtract(grayGpu, cv::Scalar::all(0.5), weightGpu, cv::noArray(), -1, stream);
             cv::cuda::abs(weightGpu, weightGpu, stream);
-            weightGpu.convertTo(weightGpu, CV_32FC3, -2.0, 1.0, stream);
+            weightGpu.convertTo(weightGpu, CV_32FC1, -2.0, 1.0, stream);
             cv::cuda::max(weightGpu, cv::Scalar::all(1.0e-4), weightGpu, stream);
 
+            cv::cuda::GpuMat weightRgbGpu;
+            std::vector<cv::cuda::GpuMat> weightChannels(3, weightGpu);
+            cv::cuda::merge(weightChannels, weightRgbGpu, stream);
+
             cv::cuda::GpuMat weightedRadianceGpu;
-            cv::cuda::multiply(floatGpu, weightGpu, weightedRadianceGpu, 1.0, -1, stream);
+            cv::cuda::multiply(floatGpu, weightRgbGpu, weightedRadianceGpu, 1.0, -1, stream);
             weightedRadianceGpu.convertTo(
                 weightedRadianceGpu,
                 CV_32FC3,
@@ -416,7 +423,10 @@ bool CameraHdrFusion::mergeDebevecCudaRgb(
         }
 
         cv::cuda::GpuMat radianceGpu;
-        cv::cuda::divide(numerator, denominator, radianceGpu, 1.0, -1, stream);
+        cv::cuda::GpuMat denominatorRgbGpu;
+        std::vector<cv::cuda::GpuMat> denominatorChannels(3, denominator);
+        cv::cuda::merge(denominatorChannels, denominatorRgbGpu, stream);
+        cv::cuda::divide(numerator, denominatorRgbGpu, radianceGpu, 1.0, -1, stream);
         radianceGpu.convertTo(radianceGpu, CV_32FC3, referenceExposure, 0.0, stream);
 
         cv::cuda::GpuMat denominatorToneGpu;

@@ -58,6 +58,21 @@ struct TimingStats
     double m_avgMs = 0.0;
 };
 
+struct ArtifactMetrics
+{
+    int m_brightPixels = 0;
+    double m_brightToDarkFraction = 0.0;
+    double m_pinkFraction = 0.0;
+};
+
+struct HdrTestCase
+{
+    QString m_name;
+    QString m_firstImage;
+    QString m_secondImage;
+    bool m_failOnDebevecArtifacts = false;
+};
+
 TimingStats measureTiming(int iterations, const std::function<bool()>& fn)
 {
     TimingStats stats;
@@ -146,6 +161,48 @@ DifferenceMetrics compareImages(const cv::Mat& a, const cv::Mat& b)
     return metrics;
 }
 
+ArtifactMetrics detectDebevecArtifacts(const cv::Mat& cpuRgb, const cv::Mat& cudaRgb)
+{
+    ArtifactMetrics metrics;
+    if (cpuRgb.empty() || cudaRgb.empty() || (cpuRgb.size() != cudaRgb.size())) {
+        return metrics;
+    }
+
+    int brightToDark = 0;
+    int pink = 0;
+    for (int y = 0; y < cpuRgb.rows; ++y)
+    {
+        const cv::Vec3b *cpuLine = cpuRgb.ptr<cv::Vec3b>(y);
+        const cv::Vec3b *cudaLine = cudaRgb.ptr<cv::Vec3b>(y);
+        for (int x = 0; x < cpuRgb.cols; ++x)
+        {
+            const cv::Vec3b& cpuPixel = cpuLine[x];
+            const cv::Vec3b& cudaPixel = cudaLine[x];
+            const int cpuLuma = (77 * cpuPixel[0] + 150 * cpuPixel[1] + 29 * cpuPixel[2]) >> 8;
+            const int cudaLuma = (77 * cudaPixel[0] + 150 * cudaPixel[1] + 29 * cudaPixel[2]) >> 8;
+
+            if (cpuLuma > 200)
+            {
+                ++metrics.m_brightPixels;
+                if (cudaLuma < 60) {
+                    ++brightToDark;
+                }
+            }
+
+            const int minRedBlue = std::min<int>(cudaPixel[0], cudaPixel[2]);
+            if ((minRedBlue > 130) && (cudaPixel[1] + 45 < minRedBlue) && (cpuLuma > 100)) {
+                ++pink;
+            }
+        }
+    }
+
+    if (metrics.m_brightPixels > 0) {
+        metrics.m_brightToDarkFraction = static_cast<double>(brightToDark) / static_cast<double>(metrics.m_brightPixels);
+    }
+    metrics.m_pinkFraction = static_cast<double>(pink) / static_cast<double>(cpuRgb.total());
+    return metrics;
+}
+
 bool writeRgbImage(const QString& fileName, const cv::Mat& rgb)
 {
     cv::Mat bgr;
@@ -153,29 +210,30 @@ bool writeRgbImage(const QString& fileName, const cv::Mat& rgb)
     return cv::imwrite(fileName.toStdString(), bgr);
 }
 
-bool runHdrComparison(const QString& dataDir, const QString& outputDir)
+bool runHdrComparison(const QString& dataDir, const QString& outputDir, const HdrTestCase& testCase)
 {
     const int timingIterations = 5;
-    const QString hdr1Name = QDir(dataDir).filePath(QStringLiteral("images/hdr1.jpg"));
-    const QString hdr2Name = QDir(dataDir).filePath(QStringLiteral("images/hdr2.jpg"));
+    const QString hdr1Name = QDir(dataDir).filePath(QStringLiteral("images/%1").arg(testCase.m_firstImage));
+    const QString hdr2Name = QDir(dataDir).filePath(QStringLiteral("images/%1").arg(testCase.m_secondImage));
+    const QString caseOutputDir = QDir(outputDir).filePath(testCase.m_name);
 
     cv::Mat hdr1Bgr = cv::imread(hdr1Name.toStdString(), cv::IMREAD_COLOR);
     cv::Mat hdr2Bgr = cv::imread(hdr2Name.toStdString(), cv::IMREAD_COLOR);
     if (hdr1Bgr.empty() || hdr2Bgr.empty())
     {
-        std::cerr << "FAIL: cannot read HDR test images: "
+        std::cerr << "FAIL " << testCase.m_name.toStdString() << ": cannot read HDR test images: "
                   << hdr1Name.toStdString() << " "
                   << hdr2Name.toStdString() << "\n";
         return false;
     }
     if (hdr1Bgr.size() != hdr2Bgr.size())
     {
-        std::cerr << "FAIL: HDR test images have different sizes\n";
+        std::cerr << "FAIL " << testCase.m_name.toStdString() << ": HDR test images have different sizes\n";
         return false;
     }
     if (cv::cuda::getCudaEnabledDeviceCount() <= 0)
     {
-        std::cerr << "FAIL: OpenCV CUDA device is not available\n";
+        std::cerr << "FAIL " << testCase.m_name.toStdString() << ": OpenCV CUDA device is not available\n";
         return false;
     }
 
@@ -203,7 +261,7 @@ bool runHdrComparison(const QString& dataDir, const QString& outputDir)
     QString errorMessage;
     if (!CameraHdrFusion::mergeMertensCudaRgb(rgbFrames, cudaRgb, stream, laplacianFilter, &errorMessage))
     {
-        std::cerr << "FAIL: CUDA Mertens fusion failed: " << errorMessage.toStdString() << "\n";
+        std::cerr << "FAIL " << testCase.m_name.toStdString() << ": CUDA Mertens fusion failed: " << errorMessage.toStdString() << "\n";
         return false;
     }
     const TimingStats cudaTiming = measureTiming(timingIterations, [&]() {
@@ -224,7 +282,7 @@ bool runHdrComparison(const QString& dataDir, const QString& outputDir)
     QString preUploadedErrorMessage;
     if (!CameraHdrFusion::mergeMertensCudaRgb(rgbFramesGpu, preUploadedCudaRgb, stream, laplacianFilter, &preUploadedErrorMessage))
     {
-        std::cerr << "FAIL: CUDA Mertens fusion with pre-uploaded frames failed: "
+        std::cerr << "FAIL " << testCase.m_name.toStdString() << ": CUDA Mertens fusion with pre-uploaded frames failed: "
                   << preUploadedErrorMessage.toStdString() << "\n";
         return false;
     }
@@ -239,15 +297,16 @@ bool runHdrComparison(const QString& dataDir, const QString& outputDir)
     const cv::Mat cuda8u = floatRgbTo8u(cudaRgb);
     const DifferenceMetrics metrics = compareImages(cpu8u, cuda8u);
 
-    QDir().mkpath(outputDir);
-    writeRgbImage(QDir(outputDir).filePath(QStringLiteral("hdr-cpu.jpg")), cpu8u);
-    writeRgbImage(QDir(outputDir).filePath(QStringLiteral("hdr-cuda.jpg")), cuda8u);
+    QDir().mkpath(caseOutputDir);
+    writeRgbImage(QDir(caseOutputDir).filePath(QStringLiteral("hdr-cpu.jpg")), cpu8u);
+    writeRgbImage(QDir(caseOutputDir).filePath(QStringLiteral("hdr-cuda.jpg")), cuda8u);
 
     cv::Mat diff;
     cv::absdiff(cpu8u, cuda8u, diff);
-    writeRgbImage(QDir(outputDir).filePath(QStringLiteral("hdr-diff.jpg")), diff);
+    writeRgbImage(QDir(caseOutputDir).filePath(QStringLiteral("hdr-diff.jpg")), diff);
 
     std::cout << "HDR CPU/CUDA comparison"
+              << " case=" << testCase.m_name.toStdString()
               << " meanAbs=" << metrics.m_meanAbs
               << " rmse=" << metrics.m_rmse
               << " p99Abs=" << metrics.m_p99Abs
@@ -264,12 +323,12 @@ bool runHdrComparison(const QString& dataDir, const QString& outputDir)
               << " speedupGpuInputMin=" << (cudaGpuInputTiming.m_minMs > 0.0 ? cpuTiming.m_minMs / cudaGpuInputTiming.m_minMs : 0.0)
               << " speedupGpuInputAvg=" << (cudaGpuInputTiming.m_avgMs > 0.0 ? cpuTiming.m_avgMs / cudaGpuInputTiming.m_avgMs : 0.0)
               << " iterations=" << timingIterations
-              << " outputDir=" << outputDir.toStdString()
+              << " outputDir=" << caseOutputDir.toStdString()
               << "\n";
 
     if ((metrics.m_meanAbs > 3.0) || (metrics.m_rmse > 7.0) || (metrics.m_p99Abs > 30.0) || (metrics.m_badFraction > 0.02))
     {
-        std::cerr << "FAIL: CUDA HDR output differs too much from CPU output\n";
+        std::cerr << "FAIL " << testCase.m_name.toStdString() << ": CUDA HDR output differs too much from CPU output\n";
         return false;
     }
 
@@ -297,7 +356,7 @@ bool runHdrComparison(const QString& dataDir, const QString& outputDir)
     QString debevecErrorMessage;
     if (!CameraHdrFusion::mergeDebevecCudaRgb(rgbFramesGpu, exposureTimesSeconds, cudaDebevecGpu, stream, &debevecErrorMessage))
     {
-        std::cerr << "FAIL: CUDA Debevec fusion failed: " << debevecErrorMessage.toStdString() << "\n";
+        std::cerr << "FAIL " << testCase.m_name.toStdString() << ": CUDA Debevec fusion failed: " << debevecErrorMessage.toStdString() << "\n";
         return false;
     }
     cv::Mat cudaDebevecRgb;
@@ -313,15 +372,24 @@ bool runHdrComparison(const QString& dataDir, const QString& outputDir)
     const cv::Mat cpuDebevec8u = floatRgbTo8u(cpuDebevecRgb);
     const cv::Mat cudaDebevec8u = floatRgbTo8u(cudaDebevecRgb);
     const DifferenceMetrics debevecMetrics = compareImages(cpuDebevec8u, cudaDebevec8u);
-    writeRgbImage(QDir(outputDir).filePath(QStringLiteral("hdr-debevec-cpu.jpg")), cpuDebevec8u);
-    writeRgbImage(QDir(outputDir).filePath(QStringLiteral("hdr-debevec-cuda.jpg")), cudaDebevec8u);
+    const ArtifactMetrics debevecArtifactMetrics = detectDebevecArtifacts(cpuDebevec8u, cudaDebevec8u);
+    writeRgbImage(QDir(caseOutputDir).filePath(QStringLiteral("hdr-debevec-cpu.jpg")), cpuDebevec8u);
+    writeRgbImage(QDir(caseOutputDir).filePath(QStringLiteral("hdr-debevec-cuda.jpg")), cudaDebevec8u);
+
+    cv::Mat debevecDiff;
+    cv::absdiff(cpuDebevec8u, cudaDebevec8u, debevecDiff);
+    writeRgbImage(QDir(caseOutputDir).filePath(QStringLiteral("hdr-debevec-diff.jpg")), debevecDiff);
 
     std::cout << "Debevec CPU/CUDA diagnostic"
+              << " case=" << testCase.m_name.toStdString()
               << " meanAbs=" << debevecMetrics.m_meanAbs
               << " rmse=" << debevecMetrics.m_rmse
               << " p99Abs=" << debevecMetrics.m_p99Abs
               << " maxAbs=" << debevecMetrics.m_maxAbs
               << " badFraction=" << debevecMetrics.m_badFraction
+              << " brightPixels=" << debevecArtifactMetrics.m_brightPixels
+              << " brightToDarkFraction=" << debevecArtifactMetrics.m_brightToDarkFraction
+              << " pinkFraction=" << debevecArtifactMetrics.m_pinkFraction
               << " cpuMinMs=" << cpuDebevecTiming.m_minMs
               << " cpuAvgMs=" << cpuDebevecTiming.m_avgMs
               << " cudaGpuInputMinMs=" << cudaDebevecTiming.m_minMs
@@ -331,8 +399,34 @@ bool runHdrComparison(const QString& dataDir, const QString& outputDir)
               << " iterations=" << timingIterations
               << "\n";
 
-    std::cout << "PASS: CUDA HDR output is close to CPU output\n";
+    if (testCase.m_failOnDebevecArtifacts
+        && ((debevecArtifactMetrics.m_brightToDarkFraction > 0.001)
+            || (debevecArtifactMetrics.m_pinkFraction > 0.001)
+            || (debevecMetrics.m_p99Abs > 30.0)
+            || (debevecMetrics.m_maxAbs > 96)
+            || (debevecMetrics.m_badFraction > 0.005)))
+    {
+        std::cerr << "FAIL " << testCase.m_name.toStdString()
+                  << ": CUDA Debevec output has bright-area black/pink artifacts\n";
+        return false;
+    }
+
+    std::cout << "PASS " << testCase.m_name.toStdString() << ": CUDA HDR outputs are usable\n";
     return true;
+}
+
+bool runHdrComparisons(const QString& dataDir, const QString& outputDir)
+{
+    const std::vector<HdrTestCase> testCases = {
+        {QStringLiteral("hdr1-hdr2"), QStringLiteral("hdr1.jpg"), QStringLiteral("hdr2.jpg"), false},
+        {QStringLiteral("hdr3-hdr4"), QStringLiteral("hdr3.jpg"), QStringLiteral("hdr4.jpg"), true}
+    };
+
+    bool ok = true;
+    for (const HdrTestCase& testCase : testCases) {
+        ok = runHdrComparison(dataDir, outputDir, testCase) && ok;
+    }
+    return ok;
 }
 }
 
@@ -343,5 +437,5 @@ int main(int argc, char *argv[])
     const QString outputDir = argc > 2
         ? QString::fromLocal8Bit(argv[2])
         : QDir(QStringLiteral(CAMERA_HDR_TEST_DATA_DIR)).filePath(QStringLiteral("hdr-test-output"));
-    return runHdrComparison(dataDir, outputDir) ? 0 : 1;
+    return runHdrComparisons(dataDir, outputDir) ? 0 : 1;
 }

@@ -38,7 +38,7 @@ sp = src[col["starPositions"]]
 aname, ax, ay = sp.split(":")
 ax, ay = float(ax), float(ay)
 
-def row_for(image_rel, *, star_positions=None, roll=None, expected_roll=None, expected_roll_tol=None, stars=None):
+def row_for(image_rel, *, star_positions=None, roll=None, expected_roll=None, expected_roll_tol=None, stars=None, startmode=None):
     r = list(src)
     r[col["image"]] = image_rel
     if star_positions is not None: r[col["starPositions"]] = star_positions
@@ -46,6 +46,7 @@ def row_for(image_rel, *, star_positions=None, roll=None, expected_roll=None, ex
     if expected_roll is not None:  r[col["expectedRoll"]] = f"{expected_roll:.4f}"
     if expected_roll_tol is not None: r[col["expectedRollTolerance"]] = f"{expected_roll_tol:.4f}"
     if stars is not None:          r[col["stars"]] = stars
+    if startmode is not None:      r[col["plateSolveStartMode"]] = str(startmode)
     return r
 
 meta_rows = []
@@ -96,6 +97,14 @@ blobs = cv2.GaussianBlur(blobs, (0, 0), 1.5)
 cv2.imwrite(os.path.join(OUTDIR, "neg-blobs.jpg"), blobs)
 neg_rows.append(row_for("images-robustness/neg-blobs.jpg"))
 
+# Blind-mode negatives: the same garbage at startMode 1 (FoV-known blind) and 0 (fully blind),
+# which exercise the more permissive blind acceptance gates (guided-mode rejection is the easy
+# case). Must also yield solved=false.
+neg_blind_rows = []
+for img in ("images-robustness/neg-noise.jpg", "images-robustness/neg-blobs.jpg"):
+    for mode in (1, 0):
+        neg_blind_rows.append(row_for(img, startmode=mode))
+
 def write_csv(path, rows_):
     with open(path, "w", newline="") as f:
         w = csv.writer(f, quoting=csv.QUOTE_MINIMAL)
@@ -105,5 +114,7 @@ def write_csv(path, rows_):
 
 write_csv(os.path.join(HERE, "robustness-meta.csv"), meta_rows)
 write_csv(os.path.join(HERE, "robustness-neg.csv"), neg_rows)
-print(f"wrote {len(meta_rows)} metamorphic rows, {len(neg_rows)} negative rows")
-print("metamorphic: expect ALL PASS;  negative: expect ALL solved=false")
+write_csv(os.path.join(HERE, "robustness-neg-blind.csv"), neg_blind_rows)
+print(f"wrote {len(meta_rows)} metamorphic rows, {len(neg_rows)} guided-negative rows, "
+      f"{len(neg_blind_rows)} blind-negative rows")
+print("metamorphic: expect ALL PASS;  negatives (guided + blind): expect ALL solved=false")

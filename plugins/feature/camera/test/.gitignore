@@ -1,2 +1,7 @@
 star-test-output/
 vs-profile/
+
+# Synthetic test cases — generated on demand by synthetic_testcases.py, not committed
+star-tests-synthetic*.csv
+images-synthetic*/
+synth-*.log

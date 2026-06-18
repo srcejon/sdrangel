@@ -185,7 +185,7 @@ void CameraSettings::resetToDefaults()
     m_streamUrl.clear();
     m_imageFileCameraPaths.clear();
     m_streamUrlHistory.clear();
-    m_streamInputBufferSizeKiB = 0;
+    m_streamBufferingSeconds = 1.0;
     m_videoFileName = "camera.mp4";
     m_recordRawFits = false;
     m_recordCalibratedMedia = true;
@@ -665,7 +665,7 @@ QByteArray CameraSettings::serialize() const
     s.writeBool(258, m_recordFilteredMedia);
     s.writeString(259, serializeStringList(m_streamUrlHistory));
     s.writeString(260, m_streamUrl);
-    s.writeS32(262, m_streamInputBufferSizeKiB);
+    s.writeDouble(262, m_streamBufferingSeconds);
 
     return s.final();
 }
@@ -1133,7 +1133,7 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readString(259, &streamUrlHistoryJson, "");
         m_streamUrlHistory = deserializeStringList(streamUrlHistoryJson);
         d.readString(260, &m_streamUrl, "");
-        d.readS32(262, &m_streamInputBufferSizeKiB, 0);
+        d.readDouble(262, &m_streamBufferingSeconds, 1.0);
         if (isStreamCamera() && m_streamUrl.isEmpty()) {
             m_streamUrl = m_videoFileCameraPath;
         }
@@ -1190,10 +1190,10 @@ bool CameraSettings::deserialize(const QByteArray& data)
             m_minVideoPlaybackAudioOffsetMs,
             m_videoPlaybackAudioOffsetMs,
             m_maxVideoPlaybackAudioOffsetMs);
-        m_streamInputBufferSizeKiB = qBound(
-            m_minStreamInputBufferSizeKiB,
-            m_streamInputBufferSizeKiB,
-            m_maxStreamInputBufferSizeKiB);
+        m_streamBufferingSeconds = qBound(
+            m_minStreamBufferingSeconds,
+            m_streamBufferingSeconds,
+            m_maxStreamBufferingSeconds);
         m_latitude = qBound(m_minLatitude, m_latitude, m_maxLatitude);
         m_longitude = qBound(m_minLongitude, m_longitude, m_maxLongitude);
         m_altitude = qBound(m_minAltitude, m_altitude, m_maxAltitude);
@@ -1416,11 +1416,11 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     if (settingsKeys.contains("streamUrlHistory")) {
         m_streamUrlHistory = settings.m_streamUrlHistory;
     }
-    if (settingsKeys.contains("streamInputBufferSizeKiB")) {
-        m_streamInputBufferSizeKiB = qBound(
-            m_minStreamInputBufferSizeKiB,
-            settings.m_streamInputBufferSizeKiB,
-            m_maxStreamInputBufferSizeKiB);
+    if (settingsKeys.contains("streamBufferingSeconds")) {
+        m_streamBufferingSeconds = qBound(
+            m_minStreamBufferingSeconds,
+            settings.m_streamBufferingSeconds,
+            m_maxStreamBufferingSeconds);
     }
     if (settingsKeys.contains("videoLoop")) {
         m_videoLoop = settings.m_videoLoop;
@@ -2200,8 +2200,8 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     if (settingsKeys.contains("streamUrlHistory") || force) {
         ostr << " m_streamUrlHistory: " << m_streamUrlHistory.join('|').toStdString();
     }
-    if (settingsKeys.contains("streamInputBufferSizeKiB") || force) {
-        ostr << " m_streamInputBufferSizeKiB: " << m_streamInputBufferSizeKiB;
+    if (settingsKeys.contains("streamBufferingSeconds") || force) {
+        ostr << " m_streamBufferingSeconds: " << m_streamBufferingSeconds;
     }
     if (settingsKeys.contains("videoLoop") || force) {
         ostr << " m_videoLoop: " << m_videoLoop;

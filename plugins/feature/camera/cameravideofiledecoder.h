@@ -45,8 +45,7 @@ public:
     [[nodiscard]] bool open(
         const QString& fileName,
         QString& errorMessage,
-        int outputSampleRate = 48000,
-        int streamBufferSizeKiB = 1024);
+        int outputSampleRate = 48000);
     void requestAbort();
     void close();
     void seek(qint64 positionMs);

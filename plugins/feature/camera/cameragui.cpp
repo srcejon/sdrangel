@@ -1646,7 +1646,7 @@ void CameraGUI::displaySettings()
     settingsUI()->videoCodecCombo->setCurrentIndex(static_cast<int>(m_settings.m_videoCodec));
     updateVideoRecordBitrateCombo();
     settingsUI()->videoHwAccelerationCheck->setChecked(m_settings.m_videoHwAcceleration);
-    settingsUI()->streamInputBufferSizeSpin->setValue(m_settings.m_streamInputBufferSizeKiB);
+    settingsUI()->streamBufferingSecondsSpin->setValue(m_settings.m_streamBufferingSeconds);
     settingsUI()->videoPreRecordBufferSpin->setValue(m_settings.m_videoPreRecordBufferSeconds);
     settingsUI()->imageRecordLimitSpin->setValue(m_settings.m_imageRecordLimit);
     settingsUI()->videoRecordLimitSpin->setValue(m_settings.m_videoRecordLimitSeconds);
@@ -2431,7 +2431,7 @@ void CameraGUI::makeUIConnections()
         QObject::connect(settingsUI()->videoRecordBitrateCombo->lineEdit(), &QLineEdit::editingFinished, this, &CameraGUI::on_videoRecordBitrateCombo_editingFinished);
     }
     QObject::connect(settingsUI()->videoHwAccelerationCheck, &QCheckBox::toggled, this, &CameraGUI::on_videoHwAccelerationCheck_toggled);
-    QObject::connect(settingsUI()->streamInputBufferSizeSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_streamInputBufferSizeSpin_valueChanged);
+    QObject::connect(settingsUI()->streamBufferingSecondsSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_streamBufferingSecondsSpin_valueChanged);
     QObject::connect(settingsUI()->videoPreRecordBufferSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_videoPreRecordBufferSpin_valueChanged);
     QObject::connect(settingsUI()->imageRecordLimitSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_imageRecordLimitSpin_valueChanged);
     QObject::connect(settingsUI()->videoRecordLimitSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_videoRecordLimitSpin_valueChanged);
@@ -6000,10 +6000,10 @@ void CameraGUI::on_videoHwAccelerationCheck_toggled(bool checked)
     applySetting("videoHwAcceleration");
 }
 
-void CameraGUI::on_streamInputBufferSizeSpin_valueChanged(int value)
+void CameraGUI::on_streamBufferingSecondsSpin_valueChanged(double value)
 {
-    m_settings.m_streamInputBufferSizeKiB = value;
-    applySetting("streamInputBufferSizeKiB");
+    m_settings.m_streamBufferingSeconds = value;
+    applySetting("streamBufferingSeconds");
 }
 
 void CameraGUI::on_videoPreRecordBufferSpin_valueChanged(int value)

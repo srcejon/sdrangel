@@ -1441,8 +1441,7 @@ bool CameraWorker::openVideoFileDecoder()
     if (!m_mediaPlayback.m_decoder->open(
         mediaSourcePath,
         errorMessage,
-        audioOutputSampleRate,
-        m_settings.m_streamInputBufferSizeKiB))
+        audioOutputSampleRate))
     {
         qWarning() << "CameraWorker: FFmpeg media source open failed"
                    << mediaSourcePath
@@ -1471,6 +1470,7 @@ bool CameraWorker::openVideoFileDecoder()
              << mediaSourcePath
              << "durationMs" << m_mediaPlayback.m_durationMs
              << "fps" << m_mediaPlayback.m_frameRate
+             << "streamBufferingSeconds" << (m_settings.isStreamCamera() ? m_settings.m_streamBufferingSeconds : 0.0)
              << "streamInitialFrames" << (m_settings.isStreamCamera() ? streamInitialBufferFrameCount() : 0)
              << "streamMaxFrames" << (m_settings.isStreamCamera() ? maxDecodedStreamFrameCount() : 0);
     return true;
@@ -1745,8 +1745,11 @@ void CameraWorker::startVideoFileDecodeThread()
         return;
     }
 
+    const int minBufferedFrames = streamInitialBufferFrameCount();
+    const int maxBufferedFrames = maxDecodedStreamFrameCount();
+    const double playbackFrameRate = qMax(1.0, m_mediaPlayback.m_frameRate) * qMax(0.1, m_settings.m_videoPlaybackRate);
     m_mediaPlayback.m_decodeThreadStop.store(false);
-    m_mediaPlayback.m_decodeThread = std::thread([this]()
+    m_mediaPlayback.m_decodeThread = std::thread([this, minBufferedFrames, maxBufferedFrames, playbackFrameRate]()
     {
         int consecutiveReadErrors = 0;
         static constexpr int maxConsecutiveReadErrors = 25;
@@ -1787,7 +1790,7 @@ void CameraWorker::startVideoFileDecodeThread()
                     continue;
                 }
                 decodedFrame.m_errorMessage = errorMessage;
-                queueDecodedVideoFileFrame(std::move(decodedFrame));
+                queueDecodedVideoFileFrame(std::move(decodedFrame), minBufferedFrames, maxBufferedFrames, playbackFrameRate);
                 break;
             }
             consecutiveReadErrors = 0;
@@ -1795,11 +1798,11 @@ void CameraWorker::startVideoFileDecodeThread()
             if (decodedFrame.m_image.isNull())
             {
                 decodedFrame.m_eof = true;
-                queueDecodedVideoFileFrame(std::move(decodedFrame));
+                queueDecodedVideoFileFrame(std::move(decodedFrame), minBufferedFrames, maxBufferedFrames, playbackFrameRate);
                 break;
             }
 
-            queueDecodedVideoFileFrame(std::move(decodedFrame));
+            queueDecodedVideoFileFrame(std::move(decodedFrame), minBufferedFrames, maxBufferedFrames, playbackFrameRate);
         }
     });
 }
@@ -1843,13 +1846,14 @@ void CameraWorker::setVideoFilePlaybackPlayingState(bool playing)
     m_mediaPlayback.m_decodedFramesNotFull.wakeAll();
 }
 
-void CameraWorker::queueDecodedVideoFileFrame(CameraMediaPlaybackState::DecodedFrame&& frame)
+void CameraWorker::queueDecodedVideoFileFrame(
+    CameraMediaPlaybackState::DecodedFrame&& frame,
+    int minBufferedFrames,
+    int maxBufferedFrames,
+    double playbackFrameRate)
 {
     QMutexLocker locker(&m_mediaPlayback.m_decodedFramesMutex);
-    const bool streamPlayback = m_settings.isStreamCamera();
-    while (!streamPlayback
-        && (m_mediaPlayback.m_decodedFrames.size() >= static_cast<size_t>(maxDecodedStreamFrameCount(frame.m_image)))
-        && !m_mediaPlayback.m_decodeThreadStop.load())
+    while (!m_mediaPlayback.m_playing && !m_mediaPlayback.m_decodeThreadStop.load())
     {
         m_mediaPlayback.m_decodedFramesNotFull.wait(&m_mediaPlayback.m_decodedFramesMutex, 20);
     }
@@ -1858,60 +1862,44 @@ void CameraWorker::queueDecodedVideoFileFrame(CameraMediaPlaybackState::DecodedF
         return;
     }
 
-    if (streamPlayback)
+    int droppedFrames = 0;
+    qint64 firstDroppedPositionMs = -1;
+    qint64 nextKeptPositionMs = -1;
+    const int maxDecodedFrames = limitDecodedStreamFrameCountForImage(
+        frame.m_image,
+        qMax(minBufferedFrames, maxBufferedFrames));
+    while (m_mediaPlayback.m_playing
+        && (m_mediaPlayback.m_decodedFrames.size() >= static_cast<size_t>(maxDecodedFrames)))
     {
-        bool pausedWhileWaiting = false;
-        while (!m_mediaPlayback.m_playing && !m_mediaPlayback.m_decodeThreadStop.load())
-        {
-            pausedWhileWaiting = true;
-            m_mediaPlayback.m_decodedFramesNotFull.wait(&m_mediaPlayback.m_decodedFramesMutex, 20);
+        if ((firstDroppedPositionMs < 0) && (m_mediaPlayback.m_decodedFrames.front().m_positionMs >= 0)) {
+            firstDroppedPositionMs = m_mediaPlayback.m_decodedFrames.front().m_positionMs;
         }
-
-        if (m_mediaPlayback.m_decodeThreadStop.load()) {
-            return;
-        }
-        if (pausedWhileWaiting) {
-            return;
-        }
-
-        int droppedFrames = 0;
-        qint64 firstDroppedPositionMs = -1;
-        qint64 nextKeptPositionMs = -1;
-        const int maxDecodedFrames = maxDecodedStreamFrameCount(frame.m_image);
-        while (m_mediaPlayback.m_playing
-            && (m_mediaPlayback.m_decodedFrames.size() >= static_cast<size_t>(maxDecodedFrames)))
-        {
-            if ((firstDroppedPositionMs < 0) && (m_mediaPlayback.m_decodedFrames.front().m_positionMs >= 0)) {
-                firstDroppedPositionMs = m_mediaPlayback.m_decodedFrames.front().m_positionMs;
-            }
-            m_mediaPlayback.m_decodedFrames.pop_front();
-            m_mediaPlayback.m_decodeDroppedFrames.fetch_add(1);
-            m_mediaPlayback.m_decodeDroppedSinceLastSubmit.fetch_add(1);
-            ++droppedFrames;
-        }
-        if (droppedFrames > 0)
-        {
-            const int audioSampleRate = streamPlaybackAudioSampleRate();
-            if (audioSampleRate > 0)
-            {
-                if (!m_mediaPlayback.m_decodedFrames.empty()) {
-                    nextKeptPositionMs = m_mediaPlayback.m_decodedFrames.front().m_positionMs;
-                } else {
-                    nextKeptPositionMs = frame.m_positionMs;
-                }
-
-                if ((firstDroppedPositionMs >= 0) && (nextKeptPositionMs > firstDroppedPositionMs)) {
-                    dropTimedStreamPlaybackAudio(nextKeptPositionMs - firstDroppedPositionMs, audioSampleRate);
-                } else {
-                    const double playbackFrameRate = qMax(1.0, m_mediaPlayback.m_frameRate) * qMax(0.1, m_settings.m_videoPlaybackRate);
-                    dropPacedStreamPlaybackAudio(droppedFrames, audioSampleRate, playbackFrameRate);
-                }
-            }
-        }
-
-        appendStreamPlaybackAudio(frame.m_pcmS16Stereo, frame.m_audioSampleRate);
-        frame.m_pcmS16Stereo.clear();
+        m_mediaPlayback.m_decodedFrames.pop_front();
+        m_mediaPlayback.m_decodeDroppedFrames.fetch_add(1);
+        m_mediaPlayback.m_decodeDroppedSinceLastSubmit.fetch_add(1);
+        ++droppedFrames;
     }
+    if (droppedFrames > 0)
+    {
+        const int audioSampleRate = streamPlaybackAudioSampleRate();
+        if (audioSampleRate > 0)
+        {
+            if (!m_mediaPlayback.m_decodedFrames.empty()) {
+                nextKeptPositionMs = m_mediaPlayback.m_decodedFrames.front().m_positionMs;
+            } else {
+                nextKeptPositionMs = frame.m_positionMs;
+            }
+
+            if ((firstDroppedPositionMs >= 0) && (nextKeptPositionMs > firstDroppedPositionMs)) {
+                dropTimedStreamPlaybackAudio(nextKeptPositionMs - firstDroppedPositionMs, audioSampleRate);
+            } else {
+                dropPacedStreamPlaybackAudio(droppedFrames, audioSampleRate, playbackFrameRate);
+            }
+        }
+    }
+
+    appendStreamPlaybackAudio(frame.m_pcmS16Stereo, frame.m_audioSampleRate);
+    frame.m_pcmS16Stereo.clear();
 
     const bool wasEmpty = m_mediaPlayback.m_decodedFrames.empty();
     m_mediaPlayback.m_decodedFrames.push_back(std::move(frame));
@@ -2105,8 +2093,11 @@ int CameraWorker::streamPlaybackAudioSampleRate() const
 int CameraWorker::streamInitialBufferFrameCount() const
 {
     const double frameRate = qMax(1.0, m_mediaPlayback.m_frameRate);
-    const int frameCount = static_cast<int>(std::ceil(
-        frameRate * static_cast<double>(CameraMediaPlaybackState::m_streamInitialBufferMs) / 1000.0));
+    const double bufferingSeconds = qBound(
+        CameraSettings::m_minStreamBufferingSeconds,
+        m_settings.m_streamBufferingSeconds,
+        CameraSettings::m_maxStreamBufferingSeconds);
+    const int frameCount = static_cast<int>(std::ceil(frameRate * bufferingSeconds));
     return qMax(CameraMediaPlaybackState::m_minDecodedStreamFrames, frameCount);
 }
 
@@ -2119,10 +2110,19 @@ int CameraWorker::decodedStreamFrameQueueDepth() const
 int CameraWorker::maxDecodedStreamFrameCount(const QImage& frameImage) const
 {
     const double frameRate = qMax(1.0, m_mediaPlayback.m_frameRate);
-    const int timeFrameCount = static_cast<int>(std::ceil(
-        frameRate * static_cast<double>(CameraMediaPlaybackState::m_maxDecodedStreamBufferMs) / 1000.0));
-    int maxFrameCount = qMax(CameraMediaPlaybackState::m_minDecodedStreamFrames, timeFrameCount);
+    const double bufferingSeconds = qBound(
+        CameraSettings::m_minStreamBufferingSeconds,
+        m_settings.m_streamBufferingSeconds,
+        CameraSettings::m_maxStreamBufferingSeconds);
+    const int timeFrameCount = static_cast<int>(std::ceil(frameRate * bufferingSeconds * 2.0));
+    return limitDecodedStreamFrameCountForImage(
+        frameImage,
+        qMax(CameraMediaPlaybackState::m_minDecodedStreamFrames, timeFrameCount));
+}
 
+int CameraWorker::limitDecodedStreamFrameCountForImage(const QImage& frameImage, int frameCount)
+{
+    int maxFrameCount = qMax(CameraMediaPlaybackState::m_minDecodedStreamFrames, frameCount);
     if (!frameImage.isNull())
     {
         const qsizetype frameBytes = qMax<qsizetype>(
@@ -2134,7 +2134,7 @@ int CameraWorker::maxDecodedStreamFrameCount(const QImage& frameImage) const
         maxFrameCount = qMin(maxFrameCount, memoryFrameCount);
     }
 
-    return qMax(maxFrameCount, streamInitialBufferFrameCount());
+    return qMax(CameraMediaPlaybackState::m_minDecodedStreamFrames, maxFrameCount);
 }
 
 CameraVideoFileDecoder::DebugStats CameraWorker::videoFileDecoderStatsSnapshot() const

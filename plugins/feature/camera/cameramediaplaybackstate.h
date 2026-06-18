@@ -110,8 +110,6 @@ public:
     bool m_streamRebuffering = false;
     // Keep enough live video headroom to absorb stream jitter without letting
     // normal network stalls create unbounded preview latency.
-    static constexpr int m_streamInitialBufferMs = 750;
-    static constexpr int m_maxDecodedStreamBufferMs = 1500;
     static constexpr qsizetype m_maxDecodedStreamBufferBytes = 768LL * 1024LL * 1024LL;
     static constexpr int m_minDecodedStreamFrames = 6;
 

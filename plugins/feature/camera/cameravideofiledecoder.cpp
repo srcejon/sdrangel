@@ -98,13 +98,11 @@ bool CameraVideoFileDecoder::isOpen() const
 bool CameraVideoFileDecoder::open(
     const QString& fileName,
     QString& errorMessage,
-    int outputSampleRate,
-    int streamBufferSizeKiB)
+    int outputSampleRate)
 {
 #ifndef CAMERA_FFMPEG_STREAMING
     Q_UNUSED(fileName)
     Q_UNUSED(outputSampleRate)
-    Q_UNUSED(streamBufferSizeKiB)
     errorMessage = QStringLiteral("FFmpeg support is not available in this build");
     return false;
 #else
@@ -118,8 +116,6 @@ bool CameraVideoFileDecoder::open(
     const QString scheme = QUrl(fileName).scheme().toLower();
     m_urlSource = scheme.size() > 1;
     const bool rtspSource = scheme == QLatin1String("rtsp");
-    const int streamBufferSizeBytes = qBound(0, streamBufferSizeKiB, 65536) * 1024;
-    const QByteArray streamBufferSizeBytesText = QByteArray::number(streamBufferSizeBytes);
     QStringList openErrors;
 
     const auto openInput = [&](const char *rtspTransport) -> bool
@@ -136,9 +132,6 @@ bool CameraVideoFileDecoder::open(
             av_dict_set(&options, "analyzeduration", "10000000", 0);
             av_dict_set(&options, "probesize", "5000000", 0);
             av_dict_set(&options, "rw_timeout", "5000000", 0);
-            if (streamBufferSizeBytes > 0) {
-                av_dict_set(&options, "buffer_size", streamBufferSizeBytesText.constData(), 0);
-            }
             if ((scheme == QLatin1String("http")) || (scheme == QLatin1String("https"))) {
                 av_dict_set(&options, "flv_ignore_prevtag", "1", 0);
             }
@@ -154,8 +147,7 @@ bool CameraVideoFileDecoder::open(
 
         qDebug() << "CameraVideoFileDecoder: opening media source" << fileName
                  << "scheme" << scheme
-                 << "rtspTransport" << (rtspSource ? transportName : QStringLiteral("n/a"))
-                 << "inputBufferBytes" << (scheme.isEmpty() ? 0 : streamBufferSizeBytes);
+                 << "rtspTransport" << (rtspSource ? transportName : QStringLiteral("n/a"));
         m_formatContext = avformat_alloc_context();
         if (!m_formatContext)
         {

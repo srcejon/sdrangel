@@ -507,7 +507,7 @@ private slots:
     void on_videoRecordBitrateCombo_activated(int index);
     void on_videoRecordBitrateCombo_editingFinished();
     void on_videoHwAccelerationCheck_toggled(bool checked);
-    void on_streamInputBufferSizeSpin_valueChanged(int value);
+    void on_streamBufferingSecondsSpin_valueChanged(double value);
     void on_videoPreRecordBufferSpin_valueChanged(int value);
     void on_imageRecordLimitSpin_valueChanged(int value);
     void on_videoRecordLimitSpin_valueChanged(int value);

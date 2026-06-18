@@ -903,16 +903,16 @@ public:
              ADSBAircraftDetectedEvent,  // Data: ICAO=123456,type=B737
              ADSBAircraftLostEvent,
              ADSBNotificationEvent,      // When a notification is generated for an ADSB aircraft
-             AISShipDetectedEvent,       // From feature, rather than demod
+             AISShipDetectedEvent,       // Data: mmsi=123456 From feature, rather than demod
              AISShipLostEvent,
              StarRiseEvent,              // Data: name=Sun,azimuth=1234.4,elevation=0.4
              StarSetEvent,
-             MeteorScatterEvent,         // Data: power=4.3 duration=3.4
+             MeteorScatterEvent,         // Data: power=4.3,duration=3.4
              CameraObjectDetectedEvent,  // Data: class=person
              CameraObjectLostEvent,
-             CameraMotionDetectedEvent,
+             CameraMotionDetectedEvent,  // Data: boxes=10,x=5,y=20,width=100,height=50 (first box only)
              CameraMotionStoppedEvent,
-             CameraObjectInViewEvent,    // For objects from other features / channels
+             CameraObjectInViewEvent,    // Data: name="Map name",label="Same as map label",x=120,y=23,azimuth=23.1,elevation=34.5 For map items from other features / channels
              CameraObjectOutOfViewEvent,
              PacketReceivedEvent,        // Data: data=deadbeef
              SquelchOpenEvent,           // AM/NFM/WFM - No Data
@@ -920,8 +920,6 @@ public:
              CTCSSEvent,                 // Data: freqeuncy=67.0
              DCSEvent,                   // Data: code=032
          };
-
-         // Allow matching on regexp of data? So data can be structured?
 
          const QObject *getPipeSource() const { return m_pipeSource; }
          const QDateTime &getDateTime() const { return m_dateTime; }

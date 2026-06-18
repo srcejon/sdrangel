@@ -709,6 +709,7 @@ private:
     int streamPlaybackAudioBytes() const;
     int streamPlaybackAudioSampleRate() const;
     int streamInitialBufferFrameCount() const;
+    int decodedStreamFrameQueueDepth() const;
     int maxDecodedStreamFrameCount(const QImage& frameImage = QImage()) const;
     bool readQueuedVideoFileFrame(bool submitAudio);
     CameraVideoFileDecoder::DebugStats videoFileDecoderStatsSnapshot() const;

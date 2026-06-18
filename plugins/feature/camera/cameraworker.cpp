@@ -1369,7 +1369,14 @@ void CameraWorker::captureTick()
             return;
         }
         const bool frameRead = readVideoFileFrame();
-        if (m_settings.isStreamCamera() && !frameRead && (m_mediaPlayback.m_basePositionMs >= 0))
+        // Don't top up the audio monitor while rebuffering: video is held to
+        // refill its cushion, so pumping audio ahead here would push audio ~one
+        // buffer-depth in front of video and break A/V sync (audio cannot resync
+        // afterwards because the per-frame pacing never re-establishes).
+        if (m_settings.isStreamCamera()
+            && !frameRead
+            && (m_mediaPlayback.m_basePositionMs >= 0)
+            && !m_mediaPlayback.m_streamRebuffering)
         {
             const int audioSampleRate = streamPlaybackAudioSampleRate();
             if (audioSampleRate > 0) {
@@ -2103,6 +2110,12 @@ int CameraWorker::streamInitialBufferFrameCount() const
     return qMax(CameraMediaPlaybackState::m_minDecodedStreamFrames, frameCount);
 }
 
+int CameraWorker::decodedStreamFrameQueueDepth() const
+{
+    QMutexLocker locker(&m_mediaPlayback.m_decodedFramesMutex);
+    return static_cast<int>(m_mediaPlayback.m_decodedFrames.size());
+}
+
 int CameraWorker::maxDecodedStreamFrameCount(const QImage& frameImage) const
 {
     const double frameRate = qMax(1.0, m_mediaPlayback.m_frameRate);
@@ -2247,18 +2260,30 @@ bool CameraWorker::readQueuedVideoFileFrame(bool submitAudio)
             m_mediaPlayback.m_decodedFramesNotFull.wakeAll();
         }
 
+        // (Re)buffer a cushion of frames before presenting: at startup
+        // (basePositionMs < 0) and again whenever a network stall drains the
+        // queue mid-playback. Without rebuffering, an empty queue makes the decode
+        // thread wake captureTick on every arriving frame (see
+        // queueDecodedVideoFileFrame), so frames are presented at the producer's
+        // bursty rate, the buffer never refills, and the downstream post-processor
+        // drops frames continuously. Holding here lets the fill servo regain
+        // control once the cushion is rebuilt.
+        const int rebufferTarget = streamInitialBufferFrameCount();
         if (queuedFrames <= 0) {
+            if (m_mediaPlayback.m_basePositionMs >= 0) {
+                m_mediaPlayback.m_streamRebuffering = true;
+            }
             return false;
         }
 
-        if ((m_mediaPlayback.m_basePositionMs < 0)
-            && (queuedFrames < streamInitialBufferFrameCount()))
+        const bool buffering = (m_mediaPlayback.m_basePositionMs < 0) || m_mediaPlayback.m_streamRebuffering;
+        if (buffering && (queuedFrames < rebufferTarget))
         {
             m_captureTimer.setSingleShot(true);
             m_captureTimer.start(qMax(1, videoFileFrameIntervalMs() / 2));
             return false;
         }
-
+        m_mediaPlayback.m_streamRebuffering = false;
     }
 
     CameraMediaPlaybackState::DecodedFrame decodedFrame;
@@ -2432,8 +2457,17 @@ void CameraWorker::submitVideoFileAudio(const QByteArray& pcmS16Stereo, int audi
         if (currentFill < static_cast<uint32_t>(targetFillFrames))
         {
             const int neededFrames = targetFillFrames - static_cast<int>(currentFill);
+            // For streams, cap the per-call top-up to a couple of video frames'
+            // worth of audio. A large burst (the old sampleRate/5 ≈ 200 ms) lets a
+            // post-stall recovery pull a whole buffer of not-yet-shown frames'
+            // audio into the monitor at once, leaving audio running ~1 s ahead of
+            // video with the per-frame buffer permanently drained. A small cap
+            // recovers the monitor gradually while keeping audio within ~2 frames
+            // of video.
+            const double playbackFrameRate = qMax(1.0, m_mediaPlayback.m_frameRate) * qMax(0.1, m_settings.m_videoPlaybackRate);
+            const int audioFramesPerVideoFrame = std::max(1, static_cast<int>(audioSampleRate / playbackFrameRate));
             const int maxExtraFrames = m_settings.isStreamCamera()
-                ? std::max(1, audioSampleRate / 5)
+                ? (2 * audioFramesPerVideoFrame)
                 : audioSampleRate / 2;
             QByteArray extraAudio;
             const int extraFrames = m_settings.isStreamCamera()
@@ -2513,12 +2547,40 @@ void CameraWorker::resetVideoFilePlaybackSchedule()
     m_mediaPlayback.m_basePositionMs = -1;
     m_mediaPlayback.m_lastFramePtsMs = -1;
     m_mediaPlayback.m_lastDecodeMs = 0;
+    m_mediaPlayback.m_streamRebuffering = false;
     m_mediaPlayback.m_tickTimer.restart();
 }
 
 qint64 CameraWorker::videoFilePlaybackClockMs() const
 {
     static constexpr int bytesPerSampleFrame = 4;
+    if (m_settings.isStreamCamera()
+        && m_mediaPlayback.m_decoder
+        && (m_qtAudio.monitorSampleRate() > 0))
+    {
+        // Slave stream video to the audio device clock. Audio is consumed at the
+        // sound card's true rate, so deriving the playback clock from the audio
+        // playback position paces video to the real content rate instead of the
+        // reported frame rate (which is slightly inaccurate and otherwise slowly
+        // drains the video jitter buffer). The decode thread owns the decoder, so
+        // read its snapshotted audio position rather than the decoder directly.
+        qint64 audioDecodedPositionMs;
+        qint64 decoderPendingAudioBytes;
+        {
+            QMutexLocker statsLocker(&m_mediaPlayback.m_decodeStatsMutex);
+            audioDecodedPositionMs = m_mediaPlayback.m_decodeAudioPositionMs;
+            decoderPendingAudioBytes = m_mediaPlayback.m_decodePendingAudioBytes;
+        }
+        if (audioDecodedPositionMs >= 0)
+        {
+            const qint64 queuedAudioFrames =
+                static_cast<qint64>((decoderPendingAudioBytes + streamPlaybackAudioBytes()) / bytesPerSampleFrame)
+                + static_cast<qint64>(m_qtAudio.monitorPlaybackClockFill());
+            const qint64 queuedAudioMs = static_cast<qint64>(
+                (static_cast<double>(queuedAudioFrames) * 1000.0 / static_cast<double>(m_qtAudio.monitorSampleRate())) + 0.5);
+            return audioDecodedPositionMs - queuedAudioMs;
+        }
+    }
     if (!m_settings.isStreamCamera()
         && m_mediaPlayback.m_decoder
         && (m_mediaPlayback.m_decoder->audioDecodedPositionMs() >= 0)
@@ -2555,11 +2617,27 @@ void CameraWorker::scheduleNextVideoFileTick()
     qint64 delayMs = static_cast<qint64>(std::llround(intervalMs));
     if ((m_mediaPlayback.m_basePositionMs >= 0) && (m_mediaPlayback.m_lastFramePtsMs >= 0))
     {
-        const qint64 nextFramePtsMs = m_mediaPlayback.m_lastFramePtsMs + static_cast<qint64>(std::llround(intervalMs));
-        delayMs = nextFramePtsMs - videoFilePlaybackClockMs();
         if (m_settings.isStreamCamera()) {
-            delayMs = qBound<qint64>(1, delayMs, static_cast<qint64>(std::llround(intervalMs)));
+            // Buffer-fill servo: hold the decoded-frame queue near a target depth
+            // so the present rate tracks the true producer (content) rate. Present
+            // a touch faster when over-full and a touch slower when under-full;
+            // since fill is the integral of (produce - consume), holding it
+            // constant forces consumer rate == producer rate. This avoids both
+            // buffer drain (underrun) and overflow (dropped frames) without
+            // depending on the reported frame rate, and naturally refills after a
+            // network stall. Pacing video to an absolute audio/PTS clock instead
+            // does not regulate fill, so the queue rides a rail and drops frames.
+            const int fill = decodedStreamFrameQueueDepth();
+            const int target = streamInitialBufferFrameCount();
+            const double slackMs = qMax(5.0, intervalMs * 0.25);
+            const double gainMsPerFrame = qMax(0.5, intervalMs * 0.05);
+            const double adjustedMs = intervalMs - static_cast<double>(fill - target) * gainMsPerFrame;
+            delayMs = static_cast<qint64>(std::llround(
+                qBound(intervalMs - slackMs, adjustedMs, intervalMs + slackMs)));
+            delayMs = qMax<qint64>(1, delayMs);
         } else {
+            const qint64 nextFramePtsMs = m_mediaPlayback.m_lastFramePtsMs + static_cast<qint64>(std::llround(intervalMs));
+            delayMs = nextFramePtsMs - videoFilePlaybackClockMs();
             delayMs -= m_mediaPlayback.m_lastDecodeMs;
             delayMs = qMax<qint64>(1, delayMs);
         }

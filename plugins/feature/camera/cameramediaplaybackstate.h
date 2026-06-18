@@ -105,6 +105,9 @@ public:
     int m_streamAudioSampleRate = 0;
     double m_streamAudioPaceRemainderFrames = 0.0;
     quint64 m_streamAudioDroppedFrames = 0;
+    // True while presentation is paused to (re)build the decoded-frame cushion,
+    // at startup and after a stall drains the queue mid-playback.
+    bool m_streamRebuffering = false;
     // Keep enough live video headroom to absorb stream jitter without letting
     // normal network stalls create unbounded preview latency.
     static constexpr int m_streamInitialBufferMs = 750;

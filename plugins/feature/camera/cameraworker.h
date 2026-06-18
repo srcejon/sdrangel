@@ -708,6 +708,8 @@ private:
     int dropTimedStreamPlaybackAudio(qint64 durationMs, int audioSampleRate);
     int streamPlaybackAudioBytes() const;
     int streamPlaybackAudioSampleRate() const;
+    int streamInitialBufferFrameCount() const;
+    int maxDecodedStreamFrameCount(const QImage& frameImage = QImage()) const;
     bool readQueuedVideoFileFrame(bool submitAudio);
     CameraVideoFileDecoder::DebugStats videoFileDecoderStatsSnapshot() const;
     qint64 updateVideoFilePlaybackPosition(qint64 decodedPositionMs, qint64 decodeMs, bool repairTimestampDiscontinuities, bool resetClockOnLargeDrift);

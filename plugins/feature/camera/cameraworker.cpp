@@ -1463,7 +1463,9 @@ bool CameraWorker::openVideoFileDecoder()
     qDebug() << "CameraWorker: FFmpeg media source opened"
              << mediaSourcePath
              << "durationMs" << m_mediaPlayback.m_durationMs
-             << "fps" << m_mediaPlayback.m_frameRate;
+             << "fps" << m_mediaPlayback.m_frameRate
+             << "streamInitialFrames" << (m_settings.isStreamCamera() ? streamInitialBufferFrameCount() : 0)
+             << "streamMaxFrames" << (m_settings.isStreamCamera() ? maxDecodedStreamFrameCount() : 0);
     return true;
 }
 
@@ -1839,7 +1841,7 @@ void CameraWorker::queueDecodedVideoFileFrame(CameraMediaPlaybackState::DecodedF
     QMutexLocker locker(&m_mediaPlayback.m_decodedFramesMutex);
     const bool streamPlayback = m_settings.isStreamCamera();
     while (!streamPlayback
-        && (m_mediaPlayback.m_decodedFrames.size() >= CameraMediaPlaybackState::m_maxDecodedStreamFrames)
+        && (m_mediaPlayback.m_decodedFrames.size() >= static_cast<size_t>(maxDecodedStreamFrameCount(frame.m_image)))
         && !m_mediaPlayback.m_decodeThreadStop.load())
     {
         m_mediaPlayback.m_decodedFramesNotFull.wait(&m_mediaPlayback.m_decodedFramesMutex, 20);
@@ -1868,8 +1870,9 @@ void CameraWorker::queueDecodedVideoFileFrame(CameraMediaPlaybackState::DecodedF
         int droppedFrames = 0;
         qint64 firstDroppedPositionMs = -1;
         qint64 nextKeptPositionMs = -1;
+        const int maxDecodedFrames = maxDecodedStreamFrameCount(frame.m_image);
         while (m_mediaPlayback.m_playing
-            && (m_mediaPlayback.m_decodedFrames.size() >= CameraMediaPlaybackState::m_maxDecodedStreamFrames))
+            && (m_mediaPlayback.m_decodedFrames.size() >= static_cast<size_t>(maxDecodedFrames)))
         {
             if ((firstDroppedPositionMs < 0) && (m_mediaPlayback.m_decodedFrames.front().m_positionMs >= 0)) {
                 firstDroppedPositionMs = m_mediaPlayback.m_decodedFrames.front().m_positionMs;
@@ -2092,6 +2095,35 @@ int CameraWorker::streamPlaybackAudioSampleRate() const
     return m_mediaPlayback.m_streamAudioSampleRate;
 }
 
+int CameraWorker::streamInitialBufferFrameCount() const
+{
+    const double frameRate = qMax(1.0, m_mediaPlayback.m_frameRate);
+    const int frameCount = static_cast<int>(std::ceil(
+        frameRate * static_cast<double>(CameraMediaPlaybackState::m_streamInitialBufferMs) / 1000.0));
+    return qMax(CameraMediaPlaybackState::m_minDecodedStreamFrames, frameCount);
+}
+
+int CameraWorker::maxDecodedStreamFrameCount(const QImage& frameImage) const
+{
+    const double frameRate = qMax(1.0, m_mediaPlayback.m_frameRate);
+    const int timeFrameCount = static_cast<int>(std::ceil(
+        frameRate * static_cast<double>(CameraMediaPlaybackState::m_maxDecodedStreamBufferMs) / 1000.0));
+    int maxFrameCount = qMax(CameraMediaPlaybackState::m_minDecodedStreamFrames, timeFrameCount);
+
+    if (!frameImage.isNull())
+    {
+        const qsizetype frameBytes = qMax<qsizetype>(
+            1,
+            static_cast<qsizetype>(frameImage.bytesPerLine()) * static_cast<qsizetype>(frameImage.height()));
+        const int memoryFrameCount = static_cast<int>(qMax<qsizetype>(
+            CameraMediaPlaybackState::m_minDecodedStreamFrames,
+            CameraMediaPlaybackState::m_maxDecodedStreamBufferBytes / frameBytes));
+        maxFrameCount = qMin(maxFrameCount, memoryFrameCount);
+    }
+
+    return qMax(maxFrameCount, streamInitialBufferFrameCount());
+}
+
 CameraVideoFileDecoder::DebugStats CameraWorker::videoFileDecoderStatsSnapshot() const
 {
     if (m_settings.isStreamCamera())
@@ -2220,7 +2252,7 @@ bool CameraWorker::readQueuedVideoFileFrame(bool submitAudio)
         }
 
         if ((m_mediaPlayback.m_basePositionMs < 0)
-            && (queuedFrames < static_cast<int>(CameraMediaPlaybackState::m_streamInitialBufferFrames)))
+            && (queuedFrames < streamInitialBufferFrameCount()))
         {
             m_captureTimer.setSingleShot(true);
             m_captureTimer.start(qMax(1, videoFileFrameIntervalMs() / 2));

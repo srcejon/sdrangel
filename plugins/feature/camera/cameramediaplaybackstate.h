@@ -105,10 +105,12 @@ public:
     int m_streamAudioSampleRate = 0;
     double m_streamAudioPaceRemainderFrames = 0.0;
     quint64 m_streamAudioDroppedFrames = 0;
-    // Keep enough live video headroom to read interleaved audio packets without
-    // letting normal stream jitter create unbounded preview latency.
-    static constexpr size_t m_streamInitialBufferFrames = 4;
-    static constexpr size_t m_maxDecodedStreamFrames = 6;
+    // Keep enough live video headroom to absorb stream jitter without letting
+    // normal network stalls create unbounded preview latency.
+    static constexpr int m_streamInitialBufferMs = 750;
+    static constexpr int m_maxDecodedStreamBufferMs = 1500;
+    static constexpr qsizetype m_maxDecodedStreamBufferBytes = 768LL * 1024LL * 1024LL;
+    static constexpr int m_minDecodedStreamFrames = 6;
 
     QElapsedTimer m_statsTimer;
     QElapsedTimer m_tickTimer;

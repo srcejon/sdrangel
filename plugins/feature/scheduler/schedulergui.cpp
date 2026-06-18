@@ -214,10 +214,10 @@ SchedulerGUI::SchedulerGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Fea
     ui->dateUntil->setMinimumDate(noDateUntil());
     ui->dateUntil->setSpecialValueText(tr("None"));
     ui->time->setDisplayFormat(QStringLiteral("HH:mm:ss"));
-    ui->command->setToolTip(tr("Detached command. Supports ${rule}, ${trigger}, ${dateTime}, ${event}, ${source} and ${data}."));
-    ui->speech->setToolTip(tr("Text to speak. Supports ${rule}, ${trigger}, ${dateTime}, ${event}, ${source} and ${data}."));
+    ui->command->setToolTip(tr("Detached command. Supports ${rule}, ${trigger}, ${dateTime}, ${event}, ${source}, ${data} and ${data.name}."));
+    ui->speech->setToolTip(tr("Text to speak. Supports ${rule}, ${trigger}, ${dateTime}, ${event}, ${source}, ${data} and ${data.name}."));
     ui->eventSource->setToolTip(tr("Optional event source. Leave empty to match all producers on the event pipe."));
-    ui->eventDataRegex->setToolTip(tr("Optional regular expression matched against the event data string."));
+    ui->eventDataRegex->setToolTip(eventDataRegexToolTip(true));
     ui->eventCount->setToolTip(tr("Number of matching events required before actions are triggered."));
 
     m_settings.setRollupState(&m_rollupState);
@@ -1661,9 +1661,32 @@ void SchedulerGUI::updateRegexState()
     const bool valid = !eventRule || regex.isEmpty() || QRegularExpression(regex).isValid();
 
     ui->eventDataRegex->setStyleSheet(valid ? QString() : QStringLiteral("QLineEdit { background-color: rgb(120, 40, 40); }"));
-    ui->eventDataRegex->setToolTip(valid
-        ? tr("Optional regular expression matched against the event data string.")
-        : tr("Invalid regular expression. The rule will not be applied until this is fixed."));
+    ui->eventDataRegex->setToolTip(eventDataRegexToolTip(valid));
+}
+
+QString SchedulerGUI::eventDataRegexToolTip(bool valid) const
+{
+    QString tooltip;
+
+    if (!valid) {
+        tooltip += tr("Invalid regular expression. The rule will not be applied until this is fixed.\n\n");
+    }
+
+    tooltip += tr(
+        "Optional regular expression matched against the raw event data string.\n"
+        "Most event payloads use comma-separated name=value fields, for example:\n"
+        "name=ISS\n"
+        "ICAO=123456,type=B737\n"
+        "class=person\n"
+        "boxes=10,x=5,y=20,width=100,height=50\n"
+        "name=\"Map name\",label=\"Same as map label\",x=120,y=23,azimuth=23.1,elevation=34.5\n"
+        "Some events have no data.\n\n"
+        "Field regex examples:\n"
+        "  (^|.*,)?ICAO=123456(,.*|$)    exact ICAO field match\n"
+        "  (^|.*,)?boxes=([1-9][0-9]*)(,.*|$)    motion with one or more boxes\n"
+        "  (^|.*,)?class=person(,.*|$)    detected object class is person");
+
+    return tooltip;
 }
 
 void SchedulerGUI::selectRule(int row)

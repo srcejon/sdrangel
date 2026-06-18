@@ -623,6 +623,7 @@ void Scheduler::handleEvent(const MainCore::MsgEvent& eventMessage)
         context.m_eventName = eventTypeName(context.m_eventType);
         context.m_source = sourceId;
         context.m_data = eventMessage.getData();
+        context.m_dataFields = parseEventDataFields(context.m_data);
 
         const int eventCount = qMax(1, rule.m_eventCount);
         int& matchedCount = m_eventMatchCounts[rule.m_id];
@@ -1065,6 +1066,25 @@ QString Scheduler::substitute(const QString& text, const SchedulerSettings::Sche
     result.replace(QStringLiteral("${dateTime}"), context.m_dateTime.toString(Qt::ISODateWithMs));
     result.replace(QStringLiteral("${event}"), context.m_eventName);
     result.replace(QStringLiteral("${source}"), context.m_source);
+
+    static const QRegularExpression dataFieldPattern(QStringLiteral(R"(\$\{data\.([^}]+)\})"));
+    QRegularExpressionMatchIterator iterator = dataFieldPattern.globalMatch(result);
+    QString substituted;
+    int previousEnd = 0;
+
+    while (iterator.hasNext())
+    {
+        const QRegularExpressionMatch match = iterator.next();
+        substituted += result.mid(previousEnd, match.capturedStart() - previousEnd);
+        substituted += context.m_dataFields.value(match.captured(1));
+        previousEnd = match.capturedEnd();
+    }
+
+    if (previousEnd > 0) {
+        substituted += result.mid(previousEnd);
+        result = substituted;
+    }
+
     result.replace(QStringLiteral("${data}"), context.m_data);
     return result;
 }
@@ -1145,6 +1165,30 @@ bool Scheduler::parseFrequency(const QString& text, double& frequencyInHz)
 
     frequencyInHz = value;
     return true;
+}
+
+QMap<QString, QString> Scheduler::parseEventDataFields(const QString& data)
+{
+    QMap<QString, QString> fields;
+    const QStringList entries = data.split(',', Qt::SkipEmptyParts);
+
+    for (const QString& entry : entries)
+    {
+        const int separator = entry.indexOf('=');
+        if (separator <= 0) {
+            continue;
+        }
+
+        const QString name = entry.left(separator).trimmed();
+        if (name.isEmpty()) {
+            continue;
+        }
+
+        const QString value = entry.mid(separator + 1).trimmed();
+        fields.insert(name, value);
+    }
+
+    return fields;
 }
 
 bool Scheduler::patchDeviceSetting(int deviceSetIndex, const SchedulerSettings::SettingValue& setting)

@@ -116,6 +116,7 @@ private:
         QString m_eventName;
         QString m_source;
         QString m_data;
+        QMap<QString, QString> m_dataFields;
     };
 
     SchedulerSettings m_settings;
@@ -148,6 +149,7 @@ private:
     static QString schedulerDateTimeToString(const QDateTime& dateTime);
     static QByteArray ruleState(const SchedulerSettings::ScheduleRule& rule);
     static bool parseFrequency(const QString& text, double& frequencyInHz);
+    static QMap<QString, QString> parseEventDataFields(const QString& data);
     static bool patchDeviceSetting(int deviceSetIndex, const SchedulerSettings::SettingValue& setting);
     static bool patchChannelSetting(int deviceSetIndex, int channelIndex, const SchedulerSettings::SettingValue& setting);
     static bool patchFeatureSetting(int featureSetIndex, int featureIndex, const SchedulerSettings::SettingValue& setting);

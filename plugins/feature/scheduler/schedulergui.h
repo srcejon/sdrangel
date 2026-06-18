@@ -156,6 +156,7 @@ private:
     void updateEventDelayLimit();
     void updateDurationLimit();
     void updateRegexState();
+    QString eventDataRegexToolTip(bool valid) const;
     QString eventCountText(const SchedulerSettings::ScheduleRule& rule) const;
     void selectRule(int row);
     void selectDeviceAction(int row);

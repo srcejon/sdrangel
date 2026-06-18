@@ -8,4 +8,4 @@ Time rules can also have an optional duration. When set, actions that start acqu
 
 Event rules match `MainCore::MsgEvent` messages by event type, optional source channel/feature, optional data regular expression, and optional delay in seconds or minutes. Delayed actions re-check that the rule still exists and is enabled before they run.
 
-Actions can load device-set presets, override center frequency, start or stop acquisition, start or stop file sinks, start or stop features, run a detached command, or speak text when text-to-speech support is available. Command and speech fields support `${rule}`, `${trigger}`, `${dateTime}`, `${event}`, `${source}`, and `${data}` substitutions.
+Actions can load device-set presets, override center frequency, start or stop acquisition, start or stop file sinks, start or stop features, run a detached command, or speak text when text-to-speech support is available. Command and speech fields support `${rule}`, `${trigger}`, `${dateTime}`, `${event}`, `${source}`, `${data}`, and `${data.name}` substitutions. Event data field substitutions parse comma-separated `name=value` pairs from the event data string.

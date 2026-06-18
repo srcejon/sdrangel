@@ -85,7 +85,13 @@ private:
     void resetFilePlaybackAudioOffset();
     [[nodiscard]] int filePlaybackMonitorTargetFillForOffsetMs() const;
     [[nodiscard]] int filePlaybackMonitorJitterForOffsetMs() const;
-    static int streamPlaybackMonitorTargetFillMs() { return 850; }
+    // Keep the live monitor cushion modest. A large target made the worker's
+    // top-up endlessly pull *future* audio into the monitor (it could never
+    // sustain 850 ms from the per-frame feed), so audio played ahead of video and
+    // ratcheted further ahead on every stall. A small target lets the per-frame
+    // submission hold the monitor, so the top-up rarely fires, and the monitor's
+    // own overflow drain (target + jitter) becomes a hard cap on the audio lead.
+    static int streamPlaybackMonitorTargetFillMs() { return 250; }
     static int streamPlaybackMonitorJitterMs() { return 150; }
     static int filePlaybackMonitorJitterMs() { return 80; }
     void applyFilePlaybackAudioOffset(QByteArray& pcmS16Stereo, int sampleRate);

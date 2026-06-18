@@ -989,10 +989,11 @@ bool CameraVideoFileDecoder::readAheadAudio(QByteArray& pcmS16Stereo, qint64 vid
     ++m_debugStats.m_readAheadCalls;
     static constexpr qint64 audioLeadMs = 50;
     static constexpr int bytesPerSampleFrame = 4;
-    // Keep a small decoder-side cushion; the monitor FIFO is the main live
-    // jitter buffer. Large per-frame read-ahead can block video on av_read_frame.
-    static constexpr int streamTargetAudioMs = 250;
-    static constexpr qint64 streamReadAheadBudgetMs = 12;
+    // Keep enough decoder-side audio to refill the live monitor FIFO after
+    // network/muxer jitter. This runs on the stream decode thread, so it can
+    // spend longer here than the GUI playback tick path could.
+    static constexpr int streamTargetAudioMs = 850;
+    static constexpr qint64 streamReadAheadBudgetMs = 50;
     const int maxPacketsRead = m_urlSource ? 96 : 32;
     const int frameAudioFrames = static_cast<int>((m_outputSampleRate / std::max(1.0, m_frameRate)) + 0.5);
     const int targetAudioFrames = m_urlSource
@@ -1023,8 +1024,7 @@ bool CameraVideoFileDecoder::readAheadAudio(QByteArray& pcmS16Stereo, qint64 vid
     while (needsAudio()
         && !m_eof
         && (packetsRead < maxPacketsRead)
-        && (m_pendingVideoPackets.size() < maxPendingVideoPackets)
-        && (!m_urlSource || (m_pendingVideoFrames.size() < maxPendingVideoFrames)))
+        && (m_pendingVideoPackets.size() < maxPendingVideoPackets))
     {
         int ret;
         {
@@ -1095,21 +1095,36 @@ bool CameraVideoFileDecoder::readAheadAudio(QByteArray& pcmS16Stereo, qint64 vid
 
             if (m_urlSource)
             {
-                const bool sent = sendVideoPacket(m_packet, errorMessage);
-                av_packet_unref(m_packet);
-                if (!sent) {
-                    return false;
+                if (m_pendingVideoFrames.size() < maxPendingVideoFrames)
+                {
+                    const bool sent = sendVideoPacket(m_packet, errorMessage);
+                    av_packet_unref(m_packet);
+                    if (!sent) {
+                        return false;
+                    }
+                    if (!queueOneDecodedVideoFrame(errorMessage)) {
+                        return false;
+                    }
                 }
-                if (!queueOneDecodedVideoFrame(errorMessage)) {
-                    return false;
+                else
+                {
+                    AVPacket *parkedPacket = av_packet_clone(m_packet);
+                    av_packet_unref(m_packet);
+                    if (!parkedPacket)
+                    {
+                        errorMessage = QStringLiteral("Cannot allocate parked stream video packet");
+                        return false;
+                    }
+                    m_pendingVideoPackets.push_back(parkedPacket);
+                    ++m_debugStats.m_parkedVideoPackets;
                 }
                 ++packetsRead;
-                if (!needsAudio() || (m_pendingVideoFrames.size() >= maxPendingVideoFrames)) {
+                if (!needsAudio() || (m_pendingVideoPackets.size() >= maxPendingVideoPackets)) {
                     return true;
                 }
                 if (readAheadBudgetTimer.isValid()
                     && (readAheadBudgetTimer.elapsed() >= streamReadAheadBudgetMs)
-                    && ((pendingAudioBytes() + pcmS16Stereo.size()) >= (frameAudioFrames * bytesPerSampleFrame)))
+                    && ((pendingAudioBytes() + pcmS16Stereo.size()) >= targetAudioBytes))
                 {
                     return true;
                 }
@@ -1137,7 +1152,7 @@ bool CameraVideoFileDecoder::readAheadAudio(QByteArray& pcmS16Stereo, qint64 vid
         if (m_urlSource
             && readAheadBudgetTimer.isValid()
             && (readAheadBudgetTimer.elapsed() >= streamReadAheadBudgetMs)
-            && ((pendingAudioBytes() + pcmS16Stereo.size()) >= (frameAudioFrames * bytesPerSampleFrame)))
+            && ((pendingAudioBytes() + pcmS16Stereo.size()) >= targetAudioBytes))
         {
             return true;
         }

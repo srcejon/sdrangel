@@ -29,6 +29,13 @@ void CameraMediaPlaybackState::resetClosed()
     m_decoder.reset();
     m_decodeFrameWakeQueued.store(false);
     m_decodeDroppedSinceLastSubmit.store(0);
+    {
+        QMutexLocker locker(&m_streamAudioMutex);
+        m_streamAudioPcmS16Stereo.clear();
+        m_streamAudioSampleRate = 0;
+        m_streamAudioPaceRemainderFrames = 0.0;
+        m_streamAudioDroppedFrames = 0;
+    }
     m_frameRate = 25.0;
     m_positionMs = 0;
     m_durationMs = 0;
@@ -40,6 +47,11 @@ void CameraMediaPlaybackState::resetClock()
 {
     m_decodeFrameWakeQueued.store(false);
     m_decodeDroppedSinceLastSubmit.store(0);
+    {
+        QMutexLocker locker(&m_streamAudioMutex);
+        m_streamAudioPcmS16Stereo.clear();
+        m_streamAudioPaceRemainderFrames = 0.0;
+    }
     m_clock.invalidate();
     m_tick = 0;
     m_basePositionMs = -1;

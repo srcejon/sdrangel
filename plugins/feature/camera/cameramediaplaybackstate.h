@@ -100,6 +100,11 @@ public:
     int m_decodePendingAudioBytes = 0;
     int m_decodePendingVideoFrames = 0;
     int m_decodePendingVideoPackets = 0;
+    mutable QMutex m_streamAudioMutex;
+    QByteArray m_streamAudioPcmS16Stereo;
+    int m_streamAudioSampleRate = 0;
+    double m_streamAudioPaceRemainderFrames = 0.0;
+    quint64 m_streamAudioDroppedFrames = 0;
     // Keep enough live video headroom to read interleaved audio packets without
     // letting normal stream jitter create unbounded preview latency.
     static constexpr size_t m_streamInitialBufferFrames = 4;
@@ -125,6 +130,7 @@ public:
     qint64 m_statsVideoLateMsMax = 0;
     quint64 m_statsLastDroppedAudioFrames = 0;
     quint64 m_statsLastAudioUnderflows = 0;
+    quint64 m_statsLastStreamAudioDroppedFrames = 0;
     quint64 m_statsLastDecoderReadAheadCalls = 0;
     quint64 m_statsLastDecoderReadAheadPackets = 0;
     quint64 m_statsLastDecoderReadAheadVideoPackets = 0;

@@ -696,8 +696,18 @@ private:
     void startVideoFileDecodeThread();
     void stopVideoFileDecodeThread();
     void clearDecodedVideoFileFrames();
+    bool videoFilePlaybackIsPlaying() const;
+    void setVideoFilePlaybackPlayingState(bool playing);
     void queueDecodedVideoFileFrame(CameraMediaPlaybackState::DecodedFrame&& frame);
     bool takeDecodedVideoFileFrame(CameraMediaPlaybackState::DecodedFrame& frame);
+    void clearStreamPlaybackAudio();
+    void appendStreamPlaybackAudio(const QByteArray& pcmS16Stereo, int audioSampleRate);
+    int takeStreamPlaybackAudio(QByteArray& pcmS16Stereo, int audioSampleRate, int maxSampleFrames);
+    int takePacedStreamPlaybackAudio(QByteArray& pcmS16Stereo, int audioSampleRate, double playbackFrameRate);
+    int dropPacedStreamPlaybackAudio(int droppedVideoFrames, int audioSampleRate, double playbackFrameRate);
+    int dropTimedStreamPlaybackAudio(qint64 durationMs, int audioSampleRate);
+    int streamPlaybackAudioBytes() const;
+    int streamPlaybackAudioSampleRate() const;
     bool readQueuedVideoFileFrame(bool submitAudio);
     CameraVideoFileDecoder::DebugStats videoFileDecoderStatsSnapshot() const;
     qint64 updateVideoFilePlaybackPosition(qint64 decodedPositionMs, qint64 decodeMs, bool repairTimestampDiscontinuities, bool resetClockOnLargeDrift);

@@ -1931,3 +1931,134 @@ Total ≈ 5-7 working days.
 in the `.cpp`. Splitting it (private header + themed TUs: catalog I/O, projection,
 search, acceptance, Siril network, orchestration) is a behaviour-preserving structural
 task, deferred.
+
+## Seed-engine unification — ABANDONED after measure-first probes (2026-06-16)
+
+**Outcome: do NOT unify the seed engines onto one geometric-hash core.** The plan below was
+explored through P1 (parameterise the quad engine — done, validated) and then two measure-first
+probes that refuted the single-core premise. P1 was reverted; the engines stay as they are.
+
+**Why (the probes):**
+1. *Can the existing n=4 vector engine serve the narrow-guided regime?* Ran it additively in
+   narrow-guided (`SDRANGEL_CAMERA_PLATE_SOLVER_NARROW_QUAD_PROBE`, since reverted): recovered
+   **0 of 23** brighttriangle-unique RAND2 cases — `vectorQuadCodeMatches=0`.
+2. *Is that because it's quads, or the bright-pool restriction?* (good question — tested it.)
+   Swept the pool sizes on a narrow case: codeMatches stayed 0 at catPool 24/40/80 and only
+   reached **4** at catPool=150 — where the catalogue index exploded to **20.3 million** quads
+   (C(k,4) is quartic) and it *still* didn't solve. So quads *can* match (not a geometry limit),
+   but the blind bright-pool mechanism doesn't scale to a deep field: it needs the SAME 4 stars
+   in both top-K pools, and "brightest-K by detection flux" != "brightest-K by catalogue
+   magnitude" once the catalogue is far deeper than what's detected (narrow telescope deep
+   exposure: 302 detections vs a 256k-star Gaia mag-13 catalogue).
+
+**The structural conclusion:** the guided-narrow and blind-wide regimes need *different* seeding
+strategies — direction-project-and-match (uses the trusted Az/El; what brightTriangle does) vs
+blind quad-hash (all-sky; what vectorQuad does). brightPair and brightTriangle exist precisely
+because the blind vector-quad core returns codeMatches=0 in their regimes (fisheye distortion /
+deep-narrow pool mismatch). Forcing them onto the vector core means either an infeasible pool, a
+big prebuilt-index project, or reimplementing the direction-using approach they already are. The
+real, validated seed-layer simplification was deleting `blindquad` (zero marginal). The remaining
+four engines are regime-specialised, not redundant — KEEP THEM.
+
+*(The plan below is retained for reference / in case a prebuilt deep index is ever pursued.)*
+
+### Motivation
+After the 2026-06-16 ablation (across REAL + fisheye + wide + narrow corpora, see
+`test/seed-ablation.ps1`) the seed layer is: `buildVectorQuadBlindSeeds` (quad, blind),
+`buildBrightPairSeeds` (pair, wide-blind), `buildBrightGuidedAnchorTriangleSeeds` +
+`buildBrightGuidedTriangleSeeds` (triangle, guided), with `buildBlindTriangleSeeds`
+retained only as a shared subroutine. `blindquad` was deleted (zero marginal). The
+remaining four are NOT redundant — each occupies a distinct cell of two axes:
+
+| engine | primitive N | search mode | why it can't just be quads |
+| --- | --- | --- | --- |
+| vectorQuadBlind | 4 | blind (all-sky) | — (the modern baseline) |
+| brightPair | 2 | blind, wide | quad vector codes break under fisheye distortion (measured `codeMatches=0`); a 2-star angular code + magnitude prior survives |
+| brightGuided(Anchor)Triangle | 3 | guided (cone around trusted Az/El) | quads would re-solve all-sky and discard the direction prior |
+
+So the engines are points in **{N: 2,3,4} × {mode: guided, blind}**, differing also in
+**pool** (bright-K vs all) and **FoV** (known/scale-aware vs swept/scale-free). The goal:
+collapse them onto ONE parameterized geometric-hash engine, removing duplicated code and
+threshold surface without losing any regime. This does NOT touch the acceptance layer
+(the ~145 reject gates) — that is a separate consolidation.
+
+### Reusable core that already exists (from the vector-quad work)
+- `unprojectPixelToVector` (cameraplatesolver.cpp ~3459) — pixel → camera-frame ray.
+- `buildVectorQuadCode` (~4227) + `struct QuadVectorCode` (~4211) — rotation-invariant
+  code via "most-separated pair = basis, gnomonic-project at centroid". Currently fixed
+  at `std::array<SkyVector,4>` but the construction generalizes to any N.
+- `CatalogQuadCodeIndex` / `CatalogQuadCodeEntry` (~7138) with `queryEpsilonBall` and a
+  `brightPoolLimit` param — the kd-tree code index.
+- N-vector Wahba pose solver (completed task #1) — already takes N correspondences.
+
+### Target design: one `buildGeometricHashSeeds(params)` engine
+Parameter struct:
+- `int n` ∈ {2,3,4} — group size.
+- `int catalogBrightPool`, `int detectionBrightPool` — 0 = all, else brightest-K.
+- `enum mode { Blind, Guided }` — Guided restricts the catalog index (and detection
+  candidates) to a cone around the trusted Az/El; Blind uses the all-sky index.
+- `bool fovKnown` — scale-aware code (uses the AB great-circle angle) vs scale-free +
+  external FoV sweep.
+- `bool useMagnitudePrior` — weight/verify matches by brightness consistency (the term
+  that makes low-N discriminative; currently brightPair-only).
+- existing `codeEpsilon`, `maxVerified`, `minMatches`.
+
+Then the current engines become presets:
+- vectorQuad = {n:4, blind, bright-pool 24/16, fovKnown or swept, mag:off}
+- brightPair = {n:2, blind, bright-pool, fovKnown, mag:ON}
+- brightGuidedTriangle = {n:3, guided, bright-pool, mag:ON}
+…and new useful combos (guided quad, blind triangle) become free.
+
+### Key technical work
+1. **Generalize the code function** `buildVectorQuadCode` → `buildVectorCode(span<SkyVector,n>)`.
+   - n=4: current quad code (must stay byte-identical for the parity gate).
+   - n=3: similarity-invariant triangle code (most-separated pair as basis, 1 remaining
+     projected point → 2-D code; or the proven ratio code).
+   - n=2: code = AB great-circle angle only (1-D) — geometrically ambiguous, so REQUIRES
+     the magnitude prior to be discriminative.
+2. **Generalize the index** to store n-dependent code dimensionality.
+3. **Magnitude prior** as a first-class term in match scoring + verification — this is the
+   single most important new piece: it is what lets n=2/3 disambiguate and what makes the
+   engine distortion-robust at low n (the measured reason brightPair beats quads on fisheye).
+4. **Guided candidate restriction** — build the index over (or filter to) a cone around the
+   trusted direction; subsumes the bright-anchor-triangle behaviour and is far cheaper than
+   all-sky in guided mode.
+5. **Regime → params policy** (replaces the current hard-coded engine selection in
+   `searchBestPose` ~19340-19460): wide/fisheye-blind → try n=2 (robust) then escalate;
+   narrow-guided → n=3 guided; FoV-known low-distortion → n=4. Keep the FoV sweep wrapper
+   for mode 0.
+
+### Migration — incremental, each phase gated on the 434-case baseline + ablation parity
+Baseline to hold: REAL 48 · FISHEYE 56 · WIDE 27 · RAND 83 · RAND2 148 (and per-engine
+marginal-contribution parity via `seed-ablation.ps1`).
+- **P0+P1 [DONE then REVERTED 2026-06-16]** Parameterised the quad engine into
+  `GeometricHashSeedParams` + `buildGeometricHashSeeds`; validated exact parity (REAL 48 / FISHEYE 56 /
+  WIDE 27 / RAND 83 / RAND2 148). REVERTED after the P2 probes refuted the single-core premise (see
+  Outcome above) — left aspirational scaffolding (a params struct only ever holding n=4) with no
+  purpose. Seed layer returned to the clean blindquad-deleted state.
+- **P2+ NOT PURSUED** — see Outcome above.
+- **P2** Add n=3 + guided restriction + magnitude prior; replace the bright-guided-triangle
+  path. Gate: RAND/RAND2 unchanged (esp. the 24 brighttriangle-unique cases).
+- **P3** Add n=2 + magnitude prior; replace brightPair. Gate: FISHEYE unchanged (esp. the
+  ~10 brightPair-unique cases — the distortion-robustness risk; watch `codeMatches`/verify).
+- **P4** Point all seed call sites at the unified engine via the regime policy; delete the
+  four old functions and the standalone use of `buildBlindTriangleSeeds`. Full-suite +
+  ablation parity.
+- **P5** Fold the per-engine threshold constants into the param struct (the seed-layer
+  portion of the ~93-constant reduction).
+
+### Risks / guardrails
+- **P3 (pairs) is the highest risk:** brightPair's value is distortion-robustness, not
+  geometry; the unified n=2 path must keep the magnitude prior doing the disambiguation or
+  it will regress fisheye (the `codeMatches=0` lesson). Validate FISHEYE every step.
+- **P2 must not perturb narrow** (RAND2 is sensitive; 24 cases ride on guided triangles).
+- Keep each old engine behind a flag until its unified replacement reaches parity →
+  per-phase rollback.
+- Cross-build determinism still applies — prefer match-count / discrete criteria over
+  ULP-sensitive continuous scores in the new verification (see the wide-7/8/9 history).
+
+### Payoff vs non-goals
+Payoff: 4 engines + 1 subroutine → 1 parameterized engine; one code function, one index,
+one verification path; new regime combos for free; smaller seed-layer tuning surface.
+Non-goal: this does not simplify the acceptance gates (downstream); that is the separate
+"single faLogOdds-based accept" idea.

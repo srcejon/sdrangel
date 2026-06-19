@@ -27,6 +27,7 @@
 #include <QAudioFormat>
 #include <list>
 #include <vector>
+#include <atomic>
 #include <stdint.h>
 #include "util/message.h"
 #include "util/messagequeue.h"
@@ -147,6 +148,13 @@ public:
     MessageQueue *getInputMessageQueue() { return &m_inputMessageQueue; }
     void setManagerMessageQueue(MessageQueue *messageQueue) { m_managerMessageQueue = messageQueue; }
 
+    // Audio still queued in the sound device (fed to the QAudioSink but not yet
+    // played) = the output latency the A/V playback clock does not otherwise
+    // account for. Consumers (e.g. the camera feature's video playback) read this
+    // to compensate the audio-vs-video skew. Updated on the audio pull thread in
+    // readData(); the atomic makes it safe to read from any thread.
+    [[nodiscard]] qint64 getSinkLatencyUSecs() const { return m_sinkLatencyUSecs.load(std::memory_order_relaxed); }
+
 private:
 	QRecursiveMutex m_mutex;
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
@@ -170,6 +178,12 @@ private:
 
 	std::list<AudioFifo*> m_audioFifos;
 	std::vector<qint32> m_mixBuffer;
+
+	// Sink-latency tracking: the audio still queued in the device buffer (frames
+	// fed minus frames played), published as a smoothed value from the audio pull
+	// thread (readData) for the A/V playback clock to correct against.
+	std::atomic<qint64> m_framesFedToSink { 0 };
+	std::atomic<qint64> m_sinkLatencyUSecs { 0 };
 
 	QAudioFormat m_audioFormat;
     QString m_deviceName;

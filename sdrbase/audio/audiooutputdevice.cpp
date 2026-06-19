@@ -171,6 +171,9 @@ bool AudioOutputDevice::start(int deviceIndex, int sampleRate)
 
         QIODevice::open(QIODevice::ReadOnly | QIODevice::Unbuffered);
 
+        m_framesFedToSink.store(0, std::memory_order_relaxed);
+        m_sinkLatencyUSecs.store(0, std::memory_order_relaxed);
+
         m_audioOutput->start(this);
 
         if (m_audioOutput->state() != QAudio::ActiveState) {
@@ -489,6 +492,32 @@ qint64 AudioOutputDevice::readData(char* data, qint64 maxLen)
                 m_recordSilenceCount = 0;
             }
         }
+	}
+
+	// Sink-latency instrumentation. This call hands samplesPerBuffer frames to the
+	// device; processedUSecs() reports what it has actually played. The difference
+	// is the audio still sitting in the device buffer = the output latency that is
+	// otherwise unaccounted for in the A/V playback clock.
+	if (m_audioOutput)
+	{
+		const qint64 sampleRate = m_audioFormat.sampleRate();
+		if (sampleRate > 0)
+		{
+			const qint64 fedFrames = m_framesFedToSink.fetch_add(samplesPerBuffer, std::memory_order_relaxed) + samplesPerBuffer;
+			const qint64 fedUSecs = (fedFrames * 1000000LL) / sampleRate;
+			const qint64 processedUSecs = (qint64) m_audioOutput->processedUSecs();
+			qint64 latencyUSecs = fedUSecs - processedUSecs;
+			if (latencyUSecs < 0) {
+				latencyUSecs = 0;
+			}
+			// The instantaneous latency sawtooths by one device-pull chunk between
+			// readData() calls (fed jumps, processed climbs continuously). Publish a
+			// smoothed value (alpha = 1/16) so consumers using this to correct an A/V
+			// clock get a stable mean instead of that per-pull jitter.
+			const qint64 prevEma = m_sinkLatencyUSecs.load(std::memory_order_relaxed);
+			const qint64 emaUSecs = (prevEma <= 0) ? latencyUSecs : ((prevEma * 15 + latencyUSecs) / 16);
+			m_sinkLatencyUSecs.store(emaUSecs, std::memory_order_relaxed);
+		}
 	}
 
 	return samplesPerBuffer * 4;

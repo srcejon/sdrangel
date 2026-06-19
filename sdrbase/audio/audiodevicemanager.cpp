@@ -190,6 +190,15 @@ int AudioDeviceManager::getOutputDeviceIndex(const QString &deviceName) const
     return -1; // system default
 }
 
+qint64 AudioDeviceManager::getOutputDeviceSinkLatencyUSecs(int outputDeviceIndex) const
+{
+    QMap<int, AudioOutputDevice*>::const_iterator it = m_audioOutputs.find(outputDeviceIndex);
+    if ((it == m_audioOutputs.end()) || (it.value() == nullptr)) {
+        return 0;
+    }
+    return it.value()->getSinkLatencyUSecs();
+}
+
 int AudioDeviceManager::getInputDeviceIndex(const QString &deviceName) const
 {
     for (int i = 0; i < AudioDeviceInfo::availableInputDevices().size(); i++)

@@ -106,6 +106,8 @@ public:
     bool getInputDeviceName(int inputDeviceIndex, QString &deviceName) const;
     int getOutputDeviceIndex(const QString &deviceName) const;
     int getInputDeviceIndex(const QString &deviceName) const;
+    //!< Audio still queued in the sound device (output latency, for A/V sync correction), 0 if device not open
+    [[nodiscard]] qint64 getOutputDeviceSinkLatencyUSecs(int outputDeviceIndex) const;
 
     void addAudioSink(AudioFifo* audioFifo, MessageQueue *sampleSinkMessageQueue, int outputDeviceIndex = -1); //!< Add the audio sink
     void removeAudioSink(AudioFifo* audioFifo); //!< Remove the audio sink

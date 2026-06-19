@@ -35,6 +35,7 @@ void CameraMediaPlaybackState::resetClosed()
         m_streamAudioSampleRate = 0;
         m_streamAudioPaceRemainderFrames = 0.0;
         m_streamAudioDroppedFrames = 0;
+        m_streamAudioTrimToTargetPending = false;
     }
     m_frameRate = 25.0;
     m_positionMs = 0;

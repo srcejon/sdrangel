@@ -19,6 +19,8 @@
 #ifndef INCLUDE_FEATURE_CAMERAIMAGEPROCESSOR_H_
 #define INCLUDE_FEATURE_CAMERAIMAGEPROCESSOR_H_
 
+#include <deque>
+
 #include <QObject>
 #include <QMutex>
 
@@ -68,7 +70,11 @@ private:
     CameraSettings::LensProjection m_unwarpSourceProjection;
     double m_unwarpSourceFov;
     QMutex m_frameMutex;
-    CameraPipelineFramePtr m_pendingFrame;
+    // Small bounded backlog of frames waiting to be processed, so an occasional
+    // processing spike is absorbed instead of costing a frame; a sustained
+    // overrun trims the oldest frame so latency stays bounded.
+    static constexpr int m_maxPendingFrames = 3;
+    std::deque<CameraPipelineFramePtr> m_pendingFrames;
 #ifdef CAMERA_OPENCV_CUDA_IMAGE_PROCESSING
     cv::cuda::Stream m_cudaStream;
     cv::cuda::GpuMat m_cudaUnwarpMapX;

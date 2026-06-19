@@ -59,7 +59,6 @@ public:
     void clearMonitorAudio();
     void prefillMonitorAudio(int milliseconds);
     [[nodiscard]] int filePlaybackMonitorPrefillForOffsetMs() const;
-    static int filePlaybackMonitorPrefillMs() { return 120; }
     static int filePlaybackMonitorTargetFillMs() { return 250; }
     [[nodiscard]] int monitorTargetFillFrames(int sampleRate) const;
     void resetMonitorDebugStats();
@@ -67,6 +66,9 @@ public:
     void submitMonitorPcmSamples(const QByteArray& pcmS16Stereo, int sampleRate);
     void submitRecordingPcmSamples(const QByteArray& pcmS16Stereo, int sampleRate);
     int monitorSampleRate() const { return m_sampleRate; }
+    // Debug: audio still queued in the sound device (output latency not otherwise
+    // accounted for in the A/V playback clock). 0 if unavailable.
+    [[nodiscard]] qint64 monitorSinkLatencyUSecs() const;
     uint32_t monitorAudioFill() const { return m_outputAudioFifo.fill(); }
     uint32_t monitorPlaybackClockFill() const;
     uint32_t monitorAudioSize() const { return m_outputAudioFifo.size(); }
@@ -100,10 +102,14 @@ private:
     static int filePlaybackMonitorJitterMs() { return 80; }
     void applyFilePlaybackAudioOffset(QByteArray& pcmS16Stereo, int sampleRate);
 
-    bool m_capturing;
-    bool m_muted;
-    bool m_captureSourceActive;
+    // Set from the GUI thread (start/stop/setMuted) and read from the worker
+    // thread in submitMonitorPcmSamples, so these must be atomic to avoid a
+    // data race (matching m_monitorUnderflows below).
+    std::atomic<bool> m_capturing;
+    std::atomic<bool> m_muted;
+    std::atomic<bool> m_captureSourceActive;
     int m_sampleRate;
+    int m_outputDeviceIndex = -1;
     MessageQueue *m_recordingMessageQueue;
     AudioFifo m_captureAudioFifo;
     AudioFifo m_outputAudioFifo;

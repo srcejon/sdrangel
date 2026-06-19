@@ -145,7 +145,7 @@ bool CameraImageProcessor::handleMessage(const Message& cmd)
             invalidateUnwarpMaps();
         }
         QMutexLocker locker(&m_frameMutex);
-        m_pendingFrame.reset();
+        m_pendingFrames.clear();
         if (!m_captureActive) {
             m_processingFrame = false;
         }
@@ -288,10 +288,14 @@ void CameraImageProcessor::submitFrame(const CameraPipelineFramePtr& frame)
     bool schedule = false;
     {
         QMutexLocker locker(&m_frameMutex);
-        if (m_pendingFrame) {
-            qDebug() << "CameraImageProcessor: Dropping pending frame in favor of new frame";
+        m_pendingFrames.push_back(frame);
+        // Keep only a small cushion. Under sustained overrun (queue full) drop the
+        // oldest frame so latency stays bounded while we keep the most recent ones.
+        while (static_cast<int>(m_pendingFrames.size()) > m_maxPendingFrames)
+        {
+            qDebug() << "CameraImageProcessor: Dropping pending frame, queue full";
+            m_pendingFrames.pop_front();
         }
-        m_pendingFrame = frame;
         if (!m_processingFrame)
         {
             m_processingFrame = true;
@@ -310,14 +314,13 @@ void CameraImageProcessor::processNextFrame()
 
     {
         QMutexLocker locker(&m_frameMutex);
-        frame = m_pendingFrame;
-        m_pendingFrame.reset();
-
-        if (!frame)
+        if (m_pendingFrames.empty())
         {
             m_processingFrame = false;
             return;
         }
+        frame = m_pendingFrames.front();
+        m_pendingFrames.pop_front();
     }
 
     if (Camera::acceptsPipelineFrame(frame, m_captureActive, m_captureEpoch)) {
@@ -327,7 +330,7 @@ void CameraImageProcessor::processNextFrame()
     bool schedule = false;
     {
         QMutexLocker locker(&m_frameMutex);
-        if (m_pendingFrame) {
+        if (!m_pendingFrames.empty()) {
             schedule = true;
         } else {
             m_processingFrame = false;
@@ -1321,6 +1324,34 @@ void CameraImageProcessor::applyCannyEdgeCuda(cv::cuda::GpuMat& bgrGpu, cv::cuda
     PROFILER_STOP(__FUNCTION__);
 }
 
+namespace {
+
+// cv::cuda::transpose only supports element sizes of 1, 4 or 8 bytes, so it
+// rejects CV_8UC3 (elemSize 3) with an assertion (which then forces the whole
+// post-process onto the CPU). Transpose each single-channel plane (elemSize 1)
+// and merge to keep multi-channel rotation on the GPU.
+void cudaTransposeAnyChannels(const cv::cuda::GpuMat& src, cv::cuda::GpuMat& dst, cv::cuda::Stream& stream)
+{
+    const size_t elemSize = src.elemSize();
+    if ((elemSize == 1) || (elemSize == 4) || (elemSize == 8))
+    {
+        cv::cuda::transpose(src, dst, stream);
+        return;
+    }
+
+    std::vector<cv::cuda::GpuMat> channels;
+    cv::cuda::split(src, channels, stream);
+    for (auto& channel : channels)
+    {
+        cv::cuda::GpuMat transposedChannel;
+        cv::cuda::transpose(channel, transposedChannel, stream);
+        channel = transposedChannel;
+    }
+    cv::cuda::merge(channels, dst, stream);
+}
+
+} // namespace
+
 void CameraImageProcessor::applyRotationCuda(cv::cuda::GpuMat& bgrGpu, cv::cuda::Stream& stream)
 {
     PROFILER_START();
@@ -1331,7 +1362,7 @@ void CameraImageProcessor::applyRotationCuda(cv::cuda::GpuMat& bgrGpu, cv::cuda:
     case 90:
     {
         cv::cuda::GpuMat transposedGpu;
-        cv::cuda::transpose(bgrGpu, transposedGpu, stream);
+        cudaTransposeAnyChannels(bgrGpu, transposedGpu, stream);
         cv::cuda::flip(transposedGpu, rotatedGpu, 1, stream);
         bgrGpu = rotatedGpu;
         break;
@@ -1343,7 +1374,7 @@ void CameraImageProcessor::applyRotationCuda(cv::cuda::GpuMat& bgrGpu, cv::cuda:
     case 270:
     {
         cv::cuda::GpuMat transposedGpu;
-        cv::cuda::transpose(bgrGpu, transposedGpu, stream);
+        cudaTransposeAnyChannels(bgrGpu, transposedGpu, stream);
         cv::cuda::flip(transposedGpu, rotatedGpu, 0, stream);
         bgrGpu = rotatedGpu;
         break;

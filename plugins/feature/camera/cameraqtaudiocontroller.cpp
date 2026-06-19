@@ -72,6 +72,7 @@ void CameraQtAudioController::start(const CameraSettings& settings, MessageQueue
     qDebug() << "CameraQtAudioController: starting audio capture: outputDeviceIndex" << outputDeviceIndex
              << "inputDeviceIndex" << inputDeviceIndex;
     audioDeviceManager->addAudioSink(&m_outputAudioFifo, messageQueue, outputDeviceIndex);
+    m_outputDeviceIndex = outputDeviceIndex;
     m_monitorDroppedFrames = 0;
     m_monitorUnderflows.store(0);
     m_monitorDebugStats = MonitorDebugStats();
@@ -110,6 +111,7 @@ int CameraQtAudioController::startFilePlayback(const CameraSettings& settings, M
              << "stream" << m_filePlaybackStreamSource
              << "audioOffsetMs" << m_filePlaybackAudioOffsetMs;
     audioDeviceManager->addAudioSink(&m_outputAudioFifo, messageQueue, outputDeviceIndex);
+    m_outputDeviceIndex = outputDeviceIndex;
     m_capturing = true;
     return m_sampleRate;
 }
@@ -262,17 +264,24 @@ void CameraQtAudioController::submitMonitorPcmSamples(const QByteArray& pcmS16St
 
         const quint8 *monitorData = reinterpret_cast<const quint8*>(monitorPcmS16Stereo.constData())
             + static_cast<qsizetype>(skippedInputFrames) * bytesPerSampleFrame;
-        const uint32_t overflowFrames = fill + static_cast<uint32_t>(monitorFrames) > maxFillFrames
-            ? fill + static_cast<uint32_t>(monitorFrames) - maxFillFrames
-            : 0;
-        if (overflowFrames > 0)
-        {
-            m_outputAudioFifo.drain(overflowFrames);
-            m_monitorDroppedFrames += overflowFrames;
-            m_monitorDebugStats.m_overflowDrainFrames += overflowFrames;
-        }
         if (monitorFrames > 0) {
             m_outputAudioFifo.write(monitorData, static_cast<uint32_t>(monitorFrames));
+        }
+        // Bound the FIFO to maxFillFrames AFTER writing, using a fresh fill()
+        // reading taken immediately before the trim. The audio device thread
+        // drains the FIFO concurrently, so the earlier `fill` snapshot (used for
+        // the before-stats) is stale and computing the overflow from it would
+        // over-drain and discard live audio. Reading fill() here and draining
+        // only the genuine excess is safe: the device can only make fill smaller,
+        // so drain() trims at most the real overflow (and returns the count it
+        // actually removed). Drain trims the oldest (head) frames, keeping the
+        // newest audio we just wrote.
+        const uint32_t fillBeforeTrim = m_outputAudioFifo.fill();
+        if (fillBeforeTrim > maxFillFrames)
+        {
+            const uint32_t drained = m_outputAudioFifo.drain(fillBeforeTrim - maxFillFrames);
+            m_monitorDroppedFrames += drained;
+            m_monitorDebugStats.m_overflowDrainFrames += drained;
         }
         const uint32_t fillAfter = m_outputAudioFifo.fill();
         if ((m_monitorDebugStats.m_submitCalls == 1) || (fillAfter < m_monitorDebugStats.m_minFillAfter)) {
@@ -296,7 +305,13 @@ void CameraQtAudioController::resetFilePlaybackAudioOffset()
 
 int CameraQtAudioController::filePlaybackMonitorPrefillForOffsetMs() const
 {
-    return filePlaybackMonitorPrefillMs();
+    // Prefill the monitor to its steady-state operating level (the target fill the
+    // audio-submit servo holds anyway). The audio device primes its own output
+    // buffer (~bufferSize) at startup; if the monitor is prefilled below that, the
+    // device drains the FIFO to zero before the first ticks refill it, giving a
+    // brief startup underrun. Priming at the target removes that ramp without
+    // changing steady-state A/V latency (the servo governs the fill regardless).
+    return filePlaybackMonitorTargetFillForOffsetMs();
 }
 
 int CameraQtAudioController::filePlaybackMonitorTargetFillForOffsetMs() const
@@ -317,6 +332,15 @@ int CameraQtAudioController::monitorTargetFillFrames(int sampleRate) const
 
     return static_cast<int>(
         (static_cast<qint64>(sampleRate) * filePlaybackMonitorTargetFillForOffsetMs()) / 1000);
+}
+
+qint64 CameraQtAudioController::monitorSinkLatencyUSecs() const
+{
+    AudioDeviceManager *audioDeviceManager = DSPEngine::instance()->getAudioDeviceManager();
+    if (!audioDeviceManager) {
+        return 0;
+    }
+    return audioDeviceManager->getOutputDeviceSinkLatencyUSecs(m_outputDeviceIndex);
 }
 
 uint32_t CameraQtAudioController::monitorPlaybackClockFill() const

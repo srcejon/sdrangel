@@ -1574,9 +1574,21 @@ void CameraWorker::submitVideoFileFrame(const CameraPipelineFramePtr& frame, boo
         return;
     }
 
-    const int videoDelayMs = (applyPlaybackOffset && (m_settings.m_videoPlaybackAudioOffsetMs < 0))
+    // Auto A/V-sync: the audio device output buffer holds ~one bufferSize of audio
+    // that has been submitted but not yet played (monitorSinkLatencyUSecs, ~250 ms),
+    // so without compensation video is presented that much ahead of the audio the
+    // viewer actually hears. Delay the video frames by that latency here (file
+    // playback only - streams are paced by the fill servo and stay in sync without
+    // it). This uses the same delayed-frame path as the manual offset but does NOT
+    // touch the pacing clock, so audio submission to the monitor is unaffected. A
+    // negative manual offset still adds extra video delay on top as a residual trim.
+    const int sinkLatencyMs = (applyPlaybackOffset && !m_settings.isStreamCamera())
+        ? static_cast<int>(m_qtAudio.monitorSinkLatencyUSecs() / 1000)
+        : 0;
+    const int manualVideoDelayMs = (applyPlaybackOffset && (m_settings.m_videoPlaybackAudioOffsetMs < 0))
         ? qBound(0, -m_settings.m_videoPlaybackAudioOffsetMs, -CameraSettings::m_minVideoPlaybackAudioOffsetMs)
         : 0;
+    const int videoDelayMs = qBound(0, sinkLatencyMs + manualVideoDelayMs, -CameraSettings::m_minVideoPlaybackAudioOffsetMs);
 
     if (videoDelayMs <= 0)
     {
@@ -2025,6 +2037,7 @@ void CameraWorker::clearStreamPlaybackAudio()
     m_mediaPlayback.m_streamAudioLastPresentedPositionMs = -1;
     m_mediaPlayback.m_streamAudioResampleRatio = 1.0;
     m_mediaPlayback.m_streamAudioResamplePhase = 0.0;
+    m_mediaPlayback.m_streamAudioTrimToTargetPending = false;
 }
 
 void CameraWorker::appendStreamPlaybackAudio(const QByteArray& pcmS16Stereo, int audioSampleRate)
@@ -2085,10 +2098,30 @@ int CameraWorker::takeResampledStreamPlaybackAudio(QByteArray& pcmS16Stereo, int
     if (m_mediaPlayback.m_streamAudioSampleRate != audioSampleRate) {
         return 0;
     }
-    const int availFrames = m_mediaPlayback.m_streamAudioPcmS16Stereo.size() / bytesPerSampleFrame;
+    int availFrames = m_mediaPlayback.m_streamAudioPcmS16Stereo.size() / bytesPerSampleFrame;
     // Need at least two input frames to interpolate across.
     if (availFrames < 2) {
         return 0;
+    }
+
+    // One-shot trim to target on resume from a (re)buffering phase. The buffer
+    // fills past target while presentation is paused; drop the excess oldest
+    // audio once so playback resumes in-band (within the soft deadband) and the
+    // servo holds steady instead of working off a large startup excursion.
+    // Dropping the oldest samples also tightens the audio lead toward the
+    // intended A/V offset rather than leaving audio running ahead of video.
+    if (m_mediaPlayback.m_streamAudioTrimToTargetPending)
+    {
+        m_mediaPlayback.m_streamAudioTrimToTargetPending = false;
+        const int targetFramesInt = static_cast<int>(
+            qMax(1.0, static_cast<double>(audioSampleRate) * qMax(0.05, targetBufferSeconds)));
+        if (availFrames > targetFramesInt)
+        {
+            const int dropFrames = availFrames - targetFramesInt;
+            m_mediaPlayback.m_streamAudioPcmS16Stereo.remove(0, dropFrames * bytesPerSampleFrame);
+            m_mediaPlayback.m_streamAudioDroppedFrames += static_cast<quint64>(dropFrames);
+            availFrames = targetFramesInt;
+        }
     }
 
     // PI servo on the buffer level → resample ratio. A full buffer (source faster
@@ -2097,13 +2130,28 @@ int CameraWorker::takeResampledStreamPlaybackAudio(QByteArray& pcmS16Stereo, int
     // The integral state (m_streamAudioResampleRatio) converges to the true
     // source/device rate ratio and holds the buffer at target with NO steady-state
     // drift — a proportional-only servo left a small residual that slowly drained
-    // the buffer to underrun over minutes. The proportional term gives fast
-    // transient response; the integral is clamped for anti-windup.
+    // the buffer to underrun over minutes. The proportional term gives transient
+    // response; the integral is clamped for anti-windup.
+    //
+    // SOFT DEADBAND so the audible pitch is steady. The applied ratio IS the
+    // playback speed, so a PI that never stops correcting couples buffer ripple
+    // straight into an audible "wander". A HARD freeze inside the band (zero
+    // correction) removes the ripple but lets the buffer drift unchecked to an
+    // edge and back — a slow ~40 s edge-to-edge limit cycle with ~2.5% pitch
+    // steps. Instead, scale BOTH gains by |err|/deadband (capped at 1): near
+    // target the pull is ~0 (steady pitch, minimal ripple) and firms up smoothly
+    // only as the buffer strays toward the band edge (full gains outside it for
+    // fast recovery). Because a small restoring pull AND the proportional damping
+    // are always present, the buffer SETTLES at target — converging to a constant
+    // ratio instead of cycling — while the integral still nulls steady-state error
+    // (no drift/drain). Continuous in |err|, so no pitch step anywhere.
+    static constexpr double deadband = 0.10;
     const double targetFrames = qMax(1.0, static_cast<double>(audioSampleRate) * qMax(0.05, targetBufferSeconds));
     const double err = (static_cast<double>(availFrames) - targetFrames) / targetFrames;
+    const double gainScale = qMin(1.0, std::abs(err) / deadband);
     m_mediaPlayback.m_streamAudioResampleRatio = qBound(0.90,
-        m_mediaPlayback.m_streamAudioResampleRatio + 0.002 * err, 1.10);
-    const double ratio = qBound(0.88, m_mediaPlayback.m_streamAudioResampleRatio + 0.10 * err, 1.12);
+        m_mediaPlayback.m_streamAudioResampleRatio + 0.002 * gainScale * err, 1.10);
+    const double ratio = qBound(0.88, m_mediaPlayback.m_streamAudioResampleRatio + 0.10 * gainScale * err, 1.12);
 
     const qint16 *in = reinterpret_cast<const qint16*>(m_mediaPlayback.m_streamAudioPcmS16Stereo.constData());
     const double phase = m_mediaPlayback.m_streamAudioResamplePhase;
@@ -2505,6 +2553,16 @@ bool CameraWorker::readQueuedVideoFileFrame(bool submitAudio)
             m_captureTimer.start(qMax(1, videoFileFrameIntervalMs() / 2));
             return false;
         }
+        if (buffering)
+        {
+            // The cushion has been rebuilt and presentation is about to resume.
+            // The stream-audio buffer filled past the resampler's target depth
+            // while we were paused, so flag it for a one-shot trim back to target
+            // (see takeResampledStreamPlaybackAudio) — covers both the initial
+            // startup and any mid-playback rebuffer after a stall.
+            QMutexLocker audioLocker(&m_mediaPlayback.m_streamAudioMutex);
+            m_mediaPlayback.m_streamAudioTrimToTargetPending = true;
+        }
         m_mediaPlayback.m_streamRebuffering = false;
     }
 
@@ -2808,6 +2866,10 @@ qint64 CameraWorker::videoFilePlaybackClockMs() const
             + static_cast<qint64>(m_qtAudio.monitorPlaybackClockFill());
         const qint64 queuedAudioMs = static_cast<qint64>(
             (static_cast<double>(queuedAudioFrames) * 1000.0 / static_cast<double>(m_qtAudio.monitorSampleRate())) + 0.5);
+        // NB: the audio device's own output buffer (~250 ms, see monitorSinkLatencyUSecs)
+        // is deliberately NOT subtracted here. This clock also paces the decode/audio-submit
+        // tick, so shifting it starves the monitor FIFO. The sink-buffer A/V skew is instead
+        // compensated by delaying the video frames in submitVideoFileFrame().
         return m_mediaPlayback.m_decoder->audioDecodedPositionMs() - queuedAudioMs;
     }
 

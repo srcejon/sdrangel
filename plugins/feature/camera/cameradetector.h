@@ -19,6 +19,8 @@
 #ifndef INCLUDE_FEATURE_CAMERADETECTOR_H_
 #define INCLUDE_FEATURE_CAMERADETECTOR_H_
 
+#include <deque>
+
 #include <QObject>
 #include <QMutex>
 
@@ -54,7 +56,11 @@ protected:
     bool m_captureActive;
     quint64 m_captureEpoch = 0;
     QMutex m_frameMutex;
-    CameraPipelineFramePtr m_pendingFrame;
+    // Small bounded backlog of frames waiting to be processed, so an occasional
+    // processing spike is absorbed instead of costing a frame; a sustained
+    // overrun trims the oldest frame so latency stays bounded.
+    static constexpr int m_maxPendingFrames = 3;
+    std::deque<CameraPipelineFramePtr> m_pendingFrames;
     bool m_processingFrame;
 
     virtual bool handleStageMessage(const Message& cmd);

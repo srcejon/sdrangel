@@ -333,6 +333,9 @@ void CameraVideoFileDecoder::close()
         sws_freeContext(m_swsContext);
         m_swsContext = nullptr;
     }
+    m_swsSrcWidth = 0;
+    m_swsSrcHeight = 0;
+    m_swsSrcFormat = -1;
     closeAudioDecoder();
     if (m_videoFrame) {
         av_frame_free(&m_videoFrame);
@@ -358,6 +361,7 @@ void CameraVideoFileDecoder::close()
     m_outputSampleRate = 48000;
     m_audioPaceFrameRate = 0.0;
     m_audioPaceRemainderFrames = 0.0;
+    m_audioPaceFrameRateApplied = 0.0;
     m_eof = false;
     m_videoDraining = false;
     m_audioDraining = false;
@@ -375,11 +379,10 @@ void CameraVideoFileDecoder::requestAbort()
 
 void CameraVideoFileDecoder::setAudioPaceFrameRate(double frameRate)
 {
-    const double clampedFrameRate = std::max(0.0, frameRate);
-    if (std::abs(m_audioPaceFrameRate - clampedFrameRate) > 0.001) {
-        m_audioPaceRemainderFrames = 0.0;
-    }
-    m_audioPaceFrameRate = clampedFrameRate;
+    // Called from the worker thread. Only publish the rate atomically; the decode
+    // thread owns m_audioPaceRemainderFrames and resets it when it observes the
+    // rate change (see takePacedAudio), so the worker never writes the remainder.
+    m_audioPaceFrameRate.store(std::max(0.0, frameRate), std::memory_order_relaxed);
 }
 
 int CameraVideoFileDecoder::pendingAudioBytes() const
@@ -1352,7 +1355,14 @@ void CameraVideoFileDecoder::takePacedAudio(QByteArray& pcmS16Stereo)
         return;
     }
 
-    const double paceFrameRate = m_audioPaceFrameRate > 0.0 ? m_audioPaceFrameRate : m_frameRate;
+    // Load the worker-published rate, and reset the (decode-thread-owned)
+    // remainder here when the rate changes, so the worker never touches it.
+    const double paceRate = m_audioPaceFrameRate.load(std::memory_order_relaxed);
+    if (std::abs(paceRate - m_audioPaceFrameRateApplied) > 0.001) {
+        m_audioPaceRemainderFrames = 0.0;
+        m_audioPaceFrameRateApplied = paceRate;
+    }
+    const double paceFrameRate = paceRate > 0.0 ? paceRate : m_frameRate;
     const double exactTargetFrames = static_cast<double>(m_outputSampleRate) / std::max(1.0, paceFrameRate);
     const double availableTargetFrames = exactTargetFrames + m_audioPaceRemainderFrames;
     const int targetFrames = std::max(1, static_cast<int>(availableTargetFrames));
@@ -1391,13 +1401,18 @@ bool CameraVideoFileDecoder::convertFrameToImage(const AVFrame *frame, QImage& i
         return false;
     }
 
+    // Rebuild against the actual decoded frame's geometry/format (cached in
+    // m_swsSrc*), not the codec context: a mid-stream format change can leave the
+    // codec context already matching the new frame, which would wrongly skip the
+    // rebuild and scale through a stale converter.
     if (!m_swsContext
-        || (m_videoCodecContext->width != frame->width)
-        || (m_videoCodecContext->height != frame->height)
-        || (m_videoCodecContext->pix_fmt != static_cast<AVPixelFormat>(frame->format)))
+        || (m_swsSrcWidth != frame->width)
+        || (m_swsSrcHeight != frame->height)
+        || (m_swsSrcFormat != frame->format))
     {
         if (m_swsContext) {
             sws_freeContext(m_swsContext);
+            m_swsContext = nullptr;
         }
         m_swsContext = sws_getContext(
             frame->width,
@@ -1415,6 +1430,9 @@ bool CameraVideoFileDecoder::convertFrameToImage(const AVFrame *frame, QImage& i
             errorMessage = QStringLiteral("Cannot create video file colour converter");
             return false;
         }
+        m_swsSrcWidth = frame->width;
+        m_swsSrcHeight = frame->height;
+        m_swsSrcFormat = frame->format;
     }
 
     image = QImage(frame->width, frame->height, QImage::Format_RGB888);

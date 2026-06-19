@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>854</width>
-    <height>908</height>
+    <height>906</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -3845,70 +3845,37 @@ li.checked::marker { content: &quot;\2612&quot;; }
          <property name="title">
           <string>Recording</string>
          </property>
-         <layout class="QFormLayout" name="formLayout_2">
+         <layout class="QGridLayout" name="gridLayout_5">
+          <item row="5" column="1">
+           <layout class="QHBoxLayout" name="videoPreRecordBufferLayout">
+            <item>
+             <widget class="QSpinBox" name="videoPreRecordBufferSpin">
+              <property name="toolTip">
+               <string>Seconds of live video frames to keep before recording starts</string>
+              </property>
+              <property name="suffix">
+               <string> s</string>
+              </property>
+              <property name="maximum">
+               <number>60</number>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="videoPreRecordBufferMemoryLabel">
+              <property name="text">
+               <string>0 MB</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </item>
           <item row="0" column="0">
            <widget class="QLabel" name="imagePathLabel">
             <property name="text">
              <string>Image basename</string>
             </property>
            </widget>
-          </item>
-          <item row="0" column="1">
-           <layout class="QHBoxLayout" name="imageSaveLayout">
-            <item>
-             <widget class="QLineEdit" name="imagePathEdit">
-              <property name="toolTip">
-               <string>File basename to use for saved images</string>
-              </property>
-             </widget>
-            </item>
-            <item>
-             <widget class="QToolButton" name="imagePathButton">
-              <property name="toolTip">
-               <string>Specify image file basename using file browser</string>
-              </property>
-              <property name="text">
-               <string/>
-              </property>
-              <property name="icon">
-               <iconset resource="../../../sdrgui/resources/res.qrc">
-                <normaloff>:/load.png</normaloff>:/load.png</iconset>
-              </property>
-             </widget>
-            </item>
-           </layout>
-          </item>
-          <item row="1" column="0">
-           <widget class="QLabel" name="videoPathLabel">
-            <property name="text">
-             <string>Video basename</string>
-            </property>
-           </widget>
-          </item>
-          <item row="1" column="1">
-           <layout class="QHBoxLayout" name="videoSaveLayout">
-            <item>
-             <widget class="QLineEdit" name="videoPathEdit">
-              <property name="toolTip">
-               <string>File basename to use for recorded videos</string>
-              </property>
-             </widget>
-            </item>
-            <item>
-             <widget class="QToolButton" name="videoPathButton">
-              <property name="toolTip">
-               <string>Specify video file basename using file browser</string>
-              </property>
-              <property name="text">
-               <string/>
-              </property>
-              <property name="icon">
-               <iconset resource="../../../sdrgui/resources/res.qrc">
-                <normaloff>:/load.png</normaloff>:/load.png</iconset>
-              </property>
-             </widget>
-            </item>
-           </layout>
           </item>
           <item row="2" column="0">
            <widget class="QLabel" name="recordOutputsLabel">
@@ -3917,7 +3884,88 @@ li.checked::marker { content: &quot;\2612&quot;; }
             </property>
            </widget>
           </item>
-          <item row="2" column="1">
+          <item row="3" column="1">
+           <widget class="QSpinBox" name="imageRecordLimitSpin">
+            <property name="toolTip">
+             <string>Number of image frames to save before image recording is automatically disabled; 0 records until disabled manually</string>
+            </property>
+            <property name="specialValueText">
+             <string>Unlimited</string>
+            </property>
+            <property name="maximum">
+             <number>1000000</number>
+            </property>
+           </widget>
+          </item>
+          <item row="5" column="0">
+           <widget class="QLabel" name="videoPreRecordBufferLabel">
+            <property name="text">
+             <string>Pre-record buffer</string>
+            </property>
+           </widget>
+          </item>
+          <item row="3" column="0">
+           <widget class="QLabel" name="imageRecordLimitLabel">
+            <property name="text">
+             <string>Image limit</string>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="0">
+           <widget class="QLabel" name="videoPathLabel">
+            <property name="text">
+             <string>Video basename</string>
+            </property>
+           </widget>
+          </item>
+          <item row="6" column="0">
+           <widget class="QLabel" name="videoCodecLabel">
+            <property name="text">
+             <string>Codec</string>
+            </property>
+           </widget>
+          </item>
+          <item row="3" column="2">
+           <widget class="QLabel" name="videoRecordLimitLabel">
+            <property name="text">
+             <string>Video limit</string>
+            </property>
+           </widget>
+          </item>
+          <item row="6" column="1">
+           <widget class="QComboBox" name="videoCodecCombo">
+            <property name="toolTip">
+             <string>Codec to use for saved video recordings</string>
+            </property>
+            <item>
+             <property name="text">
+              <string>H.264</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>H.265</string>
+             </property>
+            </item>
+           </widget>
+          </item>
+          <item row="3" column="3">
+           <widget class="QSpinBox" name="videoRecordLimitSpin">
+            <property name="toolTip">
+             <string>Seconds of video to record after recording is enabled before video recording is automatically disabled; 0 records until disabled manually</string>
+            </property>
+            <property name="specialValueText">
+             <string>Unlimited</string>
+            </property>
+            <property name="suffix">
+             <string> s</string>
+            </property>
+            <property name="maximum">
+             <number>86400</number>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="1" colspan="3">
            <layout class="QHBoxLayout" name="recordOutputsLayout">
             <item>
              <widget class="QCheckBox" name="recordRawFitsCheck">
@@ -3961,112 +4009,64 @@ li.checked::marker { content: &quot;\2612&quot;; }
             </item>
            </layout>
           </item>
-          <item row="3" column="0">
-           <widget class="QLabel" name="imageRecordLimitLabel">
-            <property name="text">
-             <string>Image limit</string>
-            </property>
-           </widget>
-          </item>
-          <item row="3" column="1">
-           <widget class="QSpinBox" name="imageRecordLimitSpin">
-            <property name="toolTip">
-             <string>Number of image frames to save before image recording is automatically disabled; 0 records until disabled manually</string>
-            </property>
-            <property name="specialValueText">
-             <string>Unlimited</string>
-            </property>
-            <property name="maximum">
-             <number>1000000</number>
-            </property>
-           </widget>
-          </item>
-          <item row="4" column="0">
-           <widget class="QLabel" name="videoRecordLimitLabel">
-            <property name="text">
-             <string>Video limit</string>
-            </property>
-           </widget>
-          </item>
-          <item row="4" column="1">
-           <widget class="QSpinBox" name="videoRecordLimitSpin">
-            <property name="toolTip">
-             <string>Seconds of video to record after recording is enabled before video recording is automatically disabled; 0 records until disabled manually</string>
-            </property>
-            <property name="specialValueText">
-             <string>Unlimited</string>
-            </property>
-            <property name="suffix">
-             <string> s</string>
-            </property>
-            <property name="maximum">
-             <number>86400</number>
-            </property>
-           </widget>
-          </item>
-          <item row="5" column="0">
-           <widget class="QLabel" name="videoPreRecordBufferLabel">
-            <property name="text">
-             <string>Pre-record buffer</string>
-            </property>
-           </widget>
-          </item>
-          <item row="5" column="1">
-           <layout class="QHBoxLayout" name="videoPreRecordBufferLayout">
+          <item row="0" column="1" colspan="3">
+           <layout class="QHBoxLayout" name="imageSaveLayout">
             <item>
-             <widget class="QSpinBox" name="videoPreRecordBufferSpin">
+             <widget class="QLineEdit" name="imagePathEdit">
               <property name="toolTip">
-               <string>Seconds of live video frames to keep before recording starts</string>
-              </property>
-              <property name="suffix">
-               <string> s</string>
-              </property>
-              <property name="maximum">
-               <number>60</number>
+               <string>File basename to use for saved images</string>
               </property>
              </widget>
             </item>
             <item>
-             <widget class="QLabel" name="videoPreRecordBufferMemoryLabel">
+             <widget class="QToolButton" name="imagePathButton">
+              <property name="toolTip">
+               <string>Specify image file basename using file browser</string>
+              </property>
               <property name="text">
-               <string>0 MB</string>
+               <string/>
+              </property>
+              <property name="icon">
+               <iconset resource="../../../sdrgui/resources/res.qrc">
+                <normaloff>:/load.png</normaloff>:/load.png</iconset>
               </property>
              </widget>
             </item>
            </layout>
           </item>
-          <item row="6" column="0">
-           <widget class="QLabel" name="videoCodecLabel">
-            <property name="text">
-             <string>Codec</string>
-            </property>
-           </widget>
-          </item>
-          <item row="6" column="1">
-           <widget class="QComboBox" name="videoCodecCombo">
-            <property name="toolTip">
-             <string>Codec to use for saved video recordings</string>
-            </property>
+          <item row="1" column="1" colspan="3">
+           <layout class="QHBoxLayout" name="videoSaveLayout">
             <item>
-             <property name="text">
-              <string>H.264</string>
-             </property>
+             <widget class="QLineEdit" name="videoPathEdit">
+              <property name="toolTip">
+               <string>File basename to use for recorded videos</string>
+              </property>
+             </widget>
             </item>
             <item>
-             <property name="text">
-              <string>H.265</string>
-             </property>
+             <widget class="QToolButton" name="videoPathButton">
+              <property name="toolTip">
+               <string>Specify video file basename using file browser</string>
+              </property>
+              <property name="text">
+               <string/>
+              </property>
+              <property name="icon">
+               <iconset resource="../../../sdrgui/resources/res.qrc">
+                <normaloff>:/load.png</normaloff>:/load.png</iconset>
+              </property>
+             </widget>
             </item>
-           </widget>
+           </layout>
           </item>
-          <item row="7" column="0">
+          <item row="6" column="2">
            <widget class="QLabel" name="videoRecordBitrateLabel">
             <property name="text">
              <string>Bitrate</string>
             </property>
            </widget>
           </item>
-          <item row="7" column="1">
+          <item row="6" column="3">
            <widget class="QComboBox" name="videoRecordBitrateCombo">
             <property name="toolTip">
              <string>Saved video bitrate. Select Auto to choose from frame size and rate, select a preset, or enter a custom value such as 8000 Kbps or 8 Mbps.</string>
@@ -4076,14 +4076,14 @@ li.checked::marker { content: &quot;\2612&quot;; }
             </property>
            </widget>
           </item>
-          <item row="8" column="0">
+          <item row="5" column="2">
            <widget class="QLabel" name="videoHwAccelerationLabel">
             <property name="text">
              <string>H/W acceleration</string>
             </property>
            </widget>
           </item>
-          <item row="8" column="1">
+          <item row="5" column="3">
            <widget class="QCheckBox" name="videoHwAccelerationCheck">
             <property name="toolTip">
              <string>Prefer hardware-accelerated video encoding when supported by the backend</string>
@@ -4093,14 +4093,23 @@ li.checked::marker { content: &quot;\2612&quot;; }
             </property>
            </widget>
           </item>
-          <item row="9" column="0">
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <widget class="QGroupBox" name="groupBox_6">
+         <property name="title">
+          <string>Playback</string>
+         </property>
+         <layout class="QFormLayout" name="formLayout_4">
+          <item row="0" column="0">
            <widget class="QLabel" name="streamBufferingSecondsLabel">
             <property name="text">
              <string>Stream buffering</string>
             </property>
            </widget>
           </item>
-          <item row="9" column="1">
+          <item row="0" column="1">
            <widget class="QDoubleSpinBox" name="streamBufferingSecondsSpin">
             <property name="toolTip">
              <string>Decoded media buffering for stream: sources before playback starts or resumes after a stall</string>
@@ -4122,6 +4131,32 @@ li.checked::marker { content: &quot;\2612&quot;; }
             </property>
            </widget>
           </item>
+          <item row="1" column="0">
+           <widget class="QLabel" name="playbackAudioOffsetLabel">
+            <property name="text">
+             <string>Audio sync</string>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="1">
+           <widget class="QSpinBox" name="playbackAudioOffsetSpin">
+            <property name="toolTip">
+             <string>Adjust audio timing for video file playback; negative delays video, positive delays audio</string>
+            </property>
+            <property name="minimum">
+             <number>-2000</number>
+            </property>
+            <property name="maximum">
+             <number>5000</number>
+            </property>
+            <property name="singleStep">
+             <number>10</number>
+            </property>
+            <property name="suffix">
+             <string> ms</string>
+            </property>
+           </widget>
+          </item>
          </layout>
         </widget>
        </item>
@@ -4136,7 +4171,49 @@ li.checked::marker { content: &quot;\2612&quot;; }
          <property name="title">
           <string>Keogram</string>
          </property>
-         <layout class="QFormLayout" name="keogramFormLayout">
+         <layout class="QGridLayout" name="gridLayout_13">
+          <item row="2" column="2">
+           <widget class="QLabel" name="keogramSamplePeriodLabel">
+            <property name="text">
+             <string>Sample period</string>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="1">
+           <widget class="QComboBox" name="keogramDayModeCombo">
+            <item>
+             <property name="text">
+              <string>Midnight to midnight</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>Midday to midday</string>
+             </property>
+            </item>
+           </widget>
+          </item>
+          <item row="1" column="1">
+           <widget class="QComboBox" name="keogramDirectionCombo">
+            <item>
+             <property name="text">
+              <string>Horizontal</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>Vertical</string>
+             </property>
+            </item>
+           </widget>
+          </item>
+          <item row="1" column="0">
+           <widget class="QLabel" name="keogramDirectionLabel">
+            <property name="text">
+             <string>Direction</string>
+            </property>
+           </widget>
+          </item>
           <item row="0" column="0">
            <widget class="QLabel" name="keogramPathLabel">
             <property name="text">
@@ -4144,7 +4221,47 @@ li.checked::marker { content: &quot;\2612&quot;; }
             </property>
            </widget>
           </item>
-          <item row="0" column="1">
+          <item row="2" column="0">
+           <widget class="QLabel" name="keogramDayModeLabel">
+            <property name="text">
+             <string>24h window</string>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="3">
+           <widget class="QSpinBox" name="keogramSamplePeriodSpin">
+            <property name="toolTip">
+             <string>Minutes between keogram samples</string>
+            </property>
+            <property name="suffix">
+             <string> min</string>
+            </property>
+            <property name="minimum">
+             <number>1</number>
+            </property>
+            <property name="maximum">
+             <number>1440</number>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="2">
+           <widget class="QLabel" name="keogramPreviewLabel">
+            <property name="text">
+             <string>Preview</string>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="3">
+           <widget class="QCheckBox" name="keogramPreviewCheck">
+            <property name="toolTip">
+             <string>Show a live keogram preview window</string>
+            </property>
+            <property name="text">
+             <string/>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="1" colspan="3">
            <layout class="QHBoxLayout" name="keogramPathLayout">
             <item>
              <widget class="QLineEdit" name="keogramPathEdit">
@@ -4168,88 +4285,6 @@ li.checked::marker { content: &quot;\2612&quot;; }
              </widget>
             </item>
            </layout>
-          </item>
-          <item row="1" column="0">
-           <widget class="QLabel" name="keogramDirectionLabel">
-            <property name="text">
-             <string>Direction</string>
-            </property>
-           </widget>
-          </item>
-          <item row="1" column="1">
-           <widget class="QComboBox" name="keogramDirectionCombo">
-            <item>
-             <property name="text">
-              <string>Horizontal</string>
-             </property>
-            </item>
-            <item>
-             <property name="text">
-              <string>Vertical</string>
-             </property>
-            </item>
-           </widget>
-          </item>
-          <item row="2" column="0">
-           <widget class="QLabel" name="keogramDayModeLabel">
-            <property name="text">
-             <string>24h window</string>
-            </property>
-           </widget>
-          </item>
-          <item row="2" column="1">
-           <widget class="QComboBox" name="keogramDayModeCombo">
-            <item>
-             <property name="text">
-              <string>Midnight to midnight</string>
-             </property>
-            </item>
-            <item>
-             <property name="text">
-              <string>Midday to midday</string>
-             </property>
-            </item>
-           </widget>
-          </item>
-          <item row="3" column="0">
-           <widget class="QLabel" name="keogramSamplePeriodLabel">
-            <property name="text">
-             <string>Sample period</string>
-            </property>
-           </widget>
-          </item>
-          <item row="3" column="1">
-           <widget class="QSpinBox" name="keogramSamplePeriodSpin">
-            <property name="toolTip">
-             <string>Minutes between keogram samples</string>
-            </property>
-            <property name="suffix">
-             <string> min</string>
-            </property>
-            <property name="minimum">
-             <number>1</number>
-            </property>
-            <property name="maximum">
-             <number>1440</number>
-            </property>
-           </widget>
-          </item>
-          <item row="4" column="0">
-           <widget class="QLabel" name="keogramPreviewLabel">
-            <property name="text">
-             <string>Preview</string>
-            </property>
-           </widget>
-          </item>
-          <item row="4" column="1">
-           <widget class="QCheckBox" name="keogramPreviewCheck">
-            <property name="toolTip">
-             <string>Show a live keogram preview window</string>
-            </property>
-            <property name="text">
-             <string>Show preview</string>
-            </property>
-           </widget>
           </item>
          </layout>
         </widget>
@@ -6923,7 +6958,6 @@ Right-click: toggle continual synchronization from My Position.</string>
   <tabstop>recordPostProcessedMediaCheck</tabstop>
   <tabstop>videoPreRecordBufferSpin</tabstop>
   <tabstop>imageRecordLimitSpin</tabstop>
-  <tabstop>videoRecordLimitSpin</tabstop>
   <tabstop>fpsSpin</tabstop>
   <tabstop>intervalSpin</tabstop>
  </tabstops>

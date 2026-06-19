@@ -69,7 +69,7 @@ bool CameraDetectionStage::handleMessage(const Message& cmd)
         m_captureEpoch = activeMsg.getCaptureEpoch();
         captureActiveChanged(active);
         QMutexLocker locker(&m_frameMutex);
-        m_pendingFrame.reset();
+        m_pendingFrames.clear();
         if (!active) {
             m_processingFrame = false;
         }
@@ -137,10 +137,14 @@ void CameraDetectionStage::submitFrame(const CameraPipelineFramePtr& frame)
     bool schedule = false;
     {
         QMutexLocker locker(&m_frameMutex);
-        if (m_pendingFrame) {
-            qDebug() << "CameraDetectionStage: Dropping pending frame in favor of new frame";
+        m_pendingFrames.push_back(frame);
+        // Keep only a small cushion. Under sustained overrun (queue full) drop the
+        // oldest frame so latency stays bounded while we keep the most recent ones.
+        while (static_cast<int>(m_pendingFrames.size()) > m_maxPendingFrames)
+        {
+            qDebug() << "CameraDetectionStage: Dropping pending frame, queue full";
+            m_pendingFrames.pop_front();
         }
-        m_pendingFrame = frame;
         if (!m_processingFrame)
         {
             m_processingFrame = true;
@@ -159,14 +163,13 @@ void CameraDetectionStage::processNextFrame()
 
     {
         QMutexLocker locker(&m_frameMutex);
-        frame = m_pendingFrame;
-        m_pendingFrame.reset();
-
-        if (!frame)
+        if (m_pendingFrames.empty())
         {
             m_processingFrame = false;
             return;
         }
+        frame = m_pendingFrames.front();
+        m_pendingFrames.pop_front();
     }
 
     if (Camera::acceptsPipelineFrame(frame, m_captureActive, m_captureEpoch)) {
@@ -176,7 +179,7 @@ void CameraDetectionStage::processNextFrame()
     bool schedule = false;
     {
         QMutexLocker locker(&m_frameMutex);
-        if (m_pendingFrame) {
+        if (!m_pendingFrames.empty()) {
             schedule = true;
         } else {
             m_processingFrame = false;

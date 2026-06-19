@@ -688,7 +688,7 @@ bool CameraPostProcessor::handleMessage(const Message& cmd)
         }
         resetPlaybackLatencyStats();
         QMutexLocker locker(&m_frameMutex);
-        m_pendingFrame.reset();
+        m_pendingFrames.clear();
         if (!m_captureActive) {
             m_processingFrame = false;
         }
@@ -923,14 +923,18 @@ void CameraPostProcessor::submitFrame(const CameraPipelineFramePtr& frame)
     bool schedule = false;
     {
         QMutexLocker locker(&m_frameMutex);
-        if (m_pendingFrame)
+        m_pendingFrames.push_back(frame);
+        // Keep only a small cushion. Under sustained overrun (queue full) drop the
+        // oldest frame so latency stays bounded while we keep the most recent ones.
+        while (static_cast<int>(m_pendingFrames.size()) > m_maxPendingFrames)
         {
-            qDebug() << "CameraPostProcessor: Dropping pending frame in favor of new frame";
-            if (m_pendingFrame->m_playbackPositionMs >= 0) {
+            const CameraPipelineFramePtr& dropped = m_pendingFrames.front();
+            qDebug() << "CameraPostProcessor: Dropping pending frame, queue full";
+            if (dropped->m_playbackPositionMs >= 0) {
                 ++m_playbackLatencyStatsDroppedFrames;
             }
+            m_pendingFrames.pop_front();
         }
-        m_pendingFrame = frame;
         if (!m_processingFrame)
         {
             m_processingFrame = true;
@@ -949,14 +953,13 @@ void CameraPostProcessor::processNextFrame()
 
     {
         QMutexLocker locker(&m_frameMutex);
-        frame = m_pendingFrame;
-        m_pendingFrame.reset();
-
-        if (!frame)
+        if (m_pendingFrames.empty())
         {
             m_processingFrame = false;
             return;
         }
+        frame = m_pendingFrames.front();
+        m_pendingFrames.pop_front();
     }
 
     if (Camera::acceptsPipelineFrame(frame, m_captureActive, m_captureEpoch)) {
@@ -966,7 +969,7 @@ void CameraPostProcessor::processNextFrame()
     bool schedule = false;
     {
         QMutexLocker locker(&m_frameMutex);
-        if (m_pendingFrame) {
+        if (!m_pendingFrames.empty()) {
             schedule = true;
         } else {
             m_processingFrame = false;
@@ -1454,6 +1457,227 @@ QString CameraPostProcessor::expandOverlayTextTemplate() const
     return overlayText;
 }
 
+// Render only the grid LINES into a transparent overlay. This is the expensive
+// part (thousands of antialiased trig-projected segments) and is cached by
+// applySkyGridOverlay; the result is re-composited each frame until an input
+// changes. Kept separate from label rendering, which is cheap and per-frame.
+static void renderSkyGridLines(
+    QImage& overlay,
+    const SkyProjector& projector,
+    const CameraSettings& settings,
+    const QDateTime& utcDateTime,
+    bool drawEquatorial,
+    bool drawAltAz)
+{
+    QPainter painter(&overlay);
+    painter.setRenderHint(QPainter::Antialiasing);
+    painter.setClipRect(overlay.rect());
+    const double maxSegment = std::hypot(static_cast<double>(overlay.width()), static_cast<double>(overlay.height())) * 2.0;
+
+    if (drawAltAz)
+    {
+        painter.setPen(QPen(settings.m_altAzGridColor, 1.0));
+
+        for (int altitude = -80; altitude <= 80; altitude += 10)
+        {
+            bool havePrevious = false;
+            QPointF previousPoint;
+            for (double azimuth = 0.0; azimuth <= 360.0 + 1e-6; azimuth += 2.0)
+            {
+                QPointF point;
+                const bool ok = projector.projectAltAz(azimuth, static_cast<double>(altitude), point);
+                if (ok && havePrevious && QLineF(previousPoint, point).length() <= maxSegment) {
+                    painter.drawLine(previousPoint, point);
+                }
+                previousPoint = point;
+                havePrevious = ok;
+            }
+        }
+
+        for (int azimuth = 0; azimuth < 360; azimuth += 15)
+        {
+            bool havePrevious = false;
+            QPointF previousPoint;
+            for (double altitude = -10.0; altitude <= 90.0 + 1e-6; altitude += 2.0)
+            {
+                QPointF point;
+                const bool ok = projector.projectAltAz(static_cast<double>(azimuth), altitude, point);
+                if (ok && havePrevious && QLineF(previousPoint, point).length() <= maxSegment) {
+                    painter.drawLine(previousPoint, point);
+                }
+                previousPoint = point;
+                havePrevious = ok;
+            }
+        }
+    }
+
+    if (drawEquatorial)
+    {
+        painter.setPen(QPen(settings.m_equatorialGridColor, 1.0));
+
+        for (int declination = -80; declination <= 80; declination += 10)
+        {
+            bool havePrevious = false;
+            QPointF previousPoint;
+            for (double rightAscension = 0.0; rightAscension <= 360.0 + 1e-6; rightAscension += 2.0)
+            {
+                double azimuth = 0.0;
+                double elevation = 0.0;
+                QPointF point;
+                const bool ok = equatorialToAltAz(
+                    rightAscension,
+                    static_cast<double>(declination),
+                    settings.m_latitude,
+                    settings.m_longitude,
+                    utcDateTime,
+                    azimuth,
+                    elevation)
+                    && projector.projectAltAz(azimuth, elevation, point);
+
+                if (ok && havePrevious && QLineF(previousPoint, point).length() <= maxSegment) {
+                    painter.drawLine(previousPoint, point);
+                }
+                previousPoint = point;
+                havePrevious = ok;
+            }
+        }
+
+        for (int rightAscension = 0; rightAscension < 360; rightAscension += 15)
+        {
+            bool havePrevious = false;
+            QPointF previousPoint;
+            for (double declination = -80.0; declination <= 80.0 + 1e-6; declination += 2.0)
+            {
+                double azimuth = 0.0;
+                double elevation = 0.0;
+                QPointF point;
+                const bool ok = equatorialToAltAz(
+                    static_cast<double>(rightAscension),
+                    declination,
+                    settings.m_latitude,
+                    settings.m_longitude,
+                    utcDateTime,
+                    azimuth,
+                    elevation)
+                    && projector.projectAltAz(azimuth, elevation, point);
+
+                if (ok && havePrevious && QLineF(previousPoint, point).length() <= maxSegment) {
+                    painter.drawLine(previousPoint, point);
+                }
+                previousPoint = point;
+                havePrevious = ok;
+            }
+        }
+    }
+}
+
+// Render grid LABELS. Cheap (a handful of projected points) and dependent on
+// drawLabels (bake into the image vs. collect for the preview text overlay), so
+// it is always done per-frame rather than cached with the lines.
+static void renderSkyGridLabels(
+    QPainter& painter,
+    const QRect& imageRect,
+    const SkyProjector& projector,
+    const CameraSettings& settings,
+    const QDateTime& utcDateTime,
+    bool drawEquatorial,
+    bool drawAltAz,
+    bool drawLabels,
+    QVector<CameraPostProcessor::PreviewTextLabel> *previewTextLabels,
+    const QFont& font,
+    const QFontMetrics& fontMetrics)
+{
+    if (drawAltAz)
+    {
+        for (int altitude = -80; altitude <= 80; altitude += 10)
+        {
+            QPointF labelPoint;
+            if (projector.projectAltAz(settings.m_azimuth, static_cast<double>(altitude), labelPoint)) {
+                const QString label = formatSignedDegrees(static_cast<double>(altitude));
+                if (drawLabels) {
+                    drawOutlinedLabel(painter, imageRect, labelPoint, label, settings.m_altAzGridColor, fontMetrics);
+                } else {
+                    appendOutlinedPreviewTextLabel(previewTextLabels, label, labelPoint, settings.m_altAzGridColor, font.family(), font.pointSizeF());
+                }
+            }
+        }
+
+        for (int azimuth = 0; azimuth < 360; azimuth += 15)
+        {
+            QPointF labelPoint;
+            bool foundLabelPoint = false;
+            for (double altitude = -10.0; altitude <= 90.0 + 1e-6; altitude += 2.0)
+            {
+                if (projector.projectAltAz(static_cast<double>(azimuth), altitude, labelPoint))
+                {
+                    foundLabelPoint = true;
+                    break;
+                }
+            }
+
+            if (foundLabelPoint) {
+                const QString label = formatAzimuthDegrees(static_cast<double>(azimuth));
+                if (drawLabels) {
+                    drawOutlinedLabel(painter, imageRect, labelPoint, label, settings.m_altAzGridColor, fontMetrics);
+                } else {
+                    appendOutlinedPreviewTextLabel(previewTextLabels, label, labelPoint, settings.m_altAzGridColor, font.family(), font.pointSizeF());
+                }
+            }
+        }
+    }
+
+    if (drawEquatorial)
+    {
+        for (int declination = -80; declination <= 80; declination += 10)
+        {
+            double labelAzimuth = 0.0;
+            double labelElevation = 0.0;
+            QPointF labelPoint;
+            if (equatorialToAltAz(
+                    greenwichMeanSiderealDegrees(utcDateTime) + settings.m_longitude,
+                    static_cast<double>(declination),
+                    settings.m_latitude,
+                    settings.m_longitude,
+                    utcDateTime,
+                    labelAzimuth,
+                    labelElevation)
+                && projector.projectAltAz(labelAzimuth, labelElevation, labelPoint))
+            {
+                const QString label = formatSignedDegrees(static_cast<double>(declination));
+                if (drawLabels) {
+                    drawOutlinedLabel(painter, imageRect, labelPoint, label, settings.m_equatorialGridColor, fontMetrics);
+                } else {
+                    appendOutlinedPreviewTextLabel(previewTextLabels, label, labelPoint, settings.m_equatorialGridColor, font.family(), font.pointSizeF());
+                }
+            }
+        }
+
+        for (int rightAscension = 0; rightAscension < 360; rightAscension += 15)
+        {
+            double labelAzimuth = 0.0;
+            double labelElevation = 0.0;
+            QPointF labelPoint;
+            if (equatorialToAltAz(
+                    static_cast<double>(rightAscension),
+                    std::clamp(static_cast<double>(settings.m_elevation), -60.0, 60.0),
+                    settings.m_latitude,
+                    settings.m_longitude,
+                    utcDateTime,
+                    labelAzimuth,
+                    labelElevation)
+                && projector.projectAltAz(labelAzimuth, labelElevation, labelPoint))
+            {
+                const QString label = formatRightAscensionDegrees(static_cast<double>(rightAscension));
+                if (drawLabels) {
+                    drawOutlinedLabel(painter, imageRect, labelPoint, label, settings.m_equatorialGridColor, fontMetrics);
+                } else {
+                    appendOutlinedPreviewTextLabel(previewTextLabels, label, labelPoint, settings.m_equatorialGridColor, font.family(), font.pointSizeF());
+                }
+            }
+        }
+    }
+}
+
 void CameraPostProcessor::applySkyGridOverlay(QImage& image, bool drawLabels, QVector<PreviewTextLabel> *previewTextLabels) const
 {
     PROFILER_START();
@@ -1470,10 +1694,48 @@ void CameraPostProcessor::applySkyGridOverlay(QImage& image, bool drawLabels, QV
     }
 
     const QDateTime utcDateTime = m_captureDateTime.toUTC();
+
+    // Build the cache signature for the line overlay. The lines depend only on
+    // the image size, grid colours and projection parameters; the equatorial
+    // grid additionally moves with sidereal time, so the observer location and a
+    // 1 s time bucket are folded in (and left zeroed when it is not drawn).
+    SkyGridOverlayCache::Key key;
+    key.m_size = image.size();
+    key.m_drawEquatorial = drawEquatorial;
+    key.m_drawAltAz = drawAltAz;
+    key.m_altAzColor = m_settings.m_altAzGridColor.rgba();
+    key.m_equatorialColor = m_settings.m_equatorialGridColor.rgba();
+    key.m_lensProjection = static_cast<int>(m_settings.m_lensProjection);
+    key.m_azimuth = m_settings.m_azimuth;
+    key.m_elevation = m_settings.m_elevation;
+    key.m_roll = m_settings.m_roll;
+    key.m_fov = m_settings.m_fov;
+    key.m_lensCenterOffsetX = m_settings.m_lensCenterOffsetX;
+    key.m_lensCenterOffsetY = m_settings.m_lensCenterOffsetY;
+    key.m_lensDistortionK1 = m_settings.m_lensDistortionK1;
+    key.m_latitude = drawEquatorial ? static_cast<double>(m_settings.m_latitude) : 0.0;
+    key.m_longitude = drawEquatorial ? static_cast<double>(m_settings.m_longitude) : 0.0;
+    key.m_equatorialTimeBucket = drawEquatorial
+        ? utcDateTime.toMSecsSinceEpoch() / SkyGridOverlayCache::m_equatorialQuantumMs
+        : 0;
+
+    if (!m_skyGridOverlayCache.m_valid || m_skyGridOverlayCache.m_key != key)
+    {
+        QImage overlay(image.size(), QImage::Format_ARGB32_Premultiplied);
+        overlay.fill(Qt::transparent);
+        renderSkyGridLines(overlay, projector, m_settings, utcDateTime, drawEquatorial, drawAltAz);
+        m_skyGridOverlayCache.m_overlay = overlay;
+        m_skyGridOverlayCache.m_key = key;
+        m_skyGridOverlayCache.m_valid = true;
+    }
+
     QPainter painter(&image);
-    painter.setRenderHint(QPainter::Antialiasing);
-    painter.setRenderHint(QPainter::TextAntialiasing);
     painter.setClipRect(image.rect());
+    painter.drawImage(0, 0, m_skyGridOverlayCache.m_overlay);
+
+    // Labels are cheap and depend on drawLabels, so draw them per-frame on top
+    // of the cached lines (either baked into the image or collected for preview).
+    painter.setRenderHint(QPainter::TextAntialiasing);
     QFont font;
     if (!m_settings.m_gridLabelFontFamily.isEmpty()) {
         font.setFamily(m_settings.m_gridLabelFontFamily);
@@ -1481,174 +1743,7 @@ void CameraPostProcessor::applySkyGridOverlay(QImage& image, bool drawLabels, QV
     font.setPointSizeF(m_settings.m_gridLabelFontScale);
     painter.setFont(font);
     const QFontMetrics fontMetrics(font);
-
-    if (drawAltAz)
-    {
-        painter.setPen(QPen(m_settings.m_altAzGridColor, 1.0));
-
-        for (int altitude = -80; altitude <= 80; altitude += 10)
-        {
-            bool havePrevious = false;
-            QPointF previousPoint;
-            for (double azimuth = 0.0; azimuth <= 360.0 + 1e-6; azimuth += 2.0)
-            {
-                QPointF point;
-                const bool ok = projector.projectAltAz(azimuth, static_cast<double>(altitude), point);
-                if (ok && havePrevious && QLineF(previousPoint, point).length() <= std::hypot(static_cast<double>(image.width()), static_cast<double>(image.height())) * 2.0) {
-                    painter.drawLine(previousPoint, point);
-                }
-                previousPoint = point;
-                havePrevious = ok;
-            }
-
-            QPointF labelPoint;
-            if (projector.projectAltAz(m_settings.m_azimuth, static_cast<double>(altitude), labelPoint)) {
-                const QString label = formatSignedDegrees(static_cast<double>(altitude));
-                if (drawLabels) {
-                    drawOutlinedLabel(painter, image.rect(), labelPoint, label, m_settings.m_altAzGridColor, fontMetrics);
-                } else {
-                    appendOutlinedPreviewTextLabel(previewTextLabels, label, labelPoint, m_settings.m_altAzGridColor, font.family(), font.pointSizeF());
-                }
-            }
-        }
-
-        for (int azimuth = 0; azimuth < 360; azimuth += 15)
-        {
-            bool havePrevious = false;
-            QPointF previousPoint;
-            for (double altitude = -10.0; altitude <= 90.0 + 1e-6; altitude += 2.0)
-            {
-                QPointF point;
-                const bool ok = projector.projectAltAz(static_cast<double>(azimuth), altitude, point);
-                if (ok && havePrevious && QLineF(previousPoint, point).length() <= std::hypot(static_cast<double>(image.width()), static_cast<double>(image.height())) * 2.0) {
-                    painter.drawLine(previousPoint, point);
-                }
-                previousPoint = point;
-                havePrevious = ok;
-            }
-
-            QPointF labelPoint;
-            bool foundLabelPoint = false;
-            for (double altitude = -10.0; altitude <= 90.0 + 1e-6; altitude += 2.0)
-            {
-                if (projector.projectAltAz(static_cast<double>(azimuth), altitude, labelPoint))
-                {
-                    foundLabelPoint = true;
-                    break;
-                }
-            }
-
-            if (foundLabelPoint) {
-                const QString label = formatAzimuthDegrees(static_cast<double>(azimuth));
-                if (drawLabels) {
-                    drawOutlinedLabel(painter, image.rect(), labelPoint, label, m_settings.m_altAzGridColor, fontMetrics);
-                } else {
-                    appendOutlinedPreviewTextLabel(previewTextLabels, label, labelPoint, m_settings.m_altAzGridColor, font.family(), font.pointSizeF());
-                }
-            }
-        }
-    }
-
-    if (drawEquatorial)
-    {
-        painter.setPen(QPen(m_settings.m_equatorialGridColor, 1.0));
-
-        for (int declination = -80; declination <= 80; declination += 10)
-        {
-            bool havePrevious = false;
-            QPointF previousPoint;
-            for (double rightAscension = 0.0; rightAscension <= 360.0 + 1e-6; rightAscension += 2.0)
-            {
-                double azimuth = 0.0;
-                double elevation = 0.0;
-                QPointF point;
-                const bool ok = equatorialToAltAz(
-                    rightAscension,
-                    static_cast<double>(declination),
-                    m_settings.m_latitude,
-                    m_settings.m_longitude,
-                    utcDateTime,
-                    azimuth,
-                    elevation)
-                    && projector.projectAltAz(azimuth, elevation, point);
-
-                if (ok && havePrevious && QLineF(previousPoint, point).length() <= std::hypot(static_cast<double>(image.width()), static_cast<double>(image.height())) * 2.0) {
-                    painter.drawLine(previousPoint, point);
-                }
-                previousPoint = point;
-                havePrevious = ok;
-            }
-
-            double labelAzimuth = 0.0;
-            double labelElevation = 0.0;
-            QPointF labelPoint;
-            if (equatorialToAltAz(
-                    greenwichMeanSiderealDegrees(utcDateTime) + m_settings.m_longitude,
-                    static_cast<double>(declination),
-                    m_settings.m_latitude,
-                    m_settings.m_longitude,
-                    utcDateTime,
-                    labelAzimuth,
-                    labelElevation)
-                && projector.projectAltAz(labelAzimuth, labelElevation, labelPoint))
-            {
-                const QString label = formatSignedDegrees(static_cast<double>(declination));
-                if (drawLabels) {
-                    drawOutlinedLabel(painter, image.rect(), labelPoint, label, m_settings.m_equatorialGridColor, fontMetrics);
-                } else {
-                    appendOutlinedPreviewTextLabel(previewTextLabels, label, labelPoint, m_settings.m_equatorialGridColor, font.family(), font.pointSizeF());
-                }
-            }
-        }
-
-        for (int rightAscension = 0; rightAscension < 360; rightAscension += 15)
-        {
-            bool havePrevious = false;
-            QPointF previousPoint;
-            for (double declination = -80.0; declination <= 80.0 + 1e-6; declination += 2.0)
-            {
-                double azimuth = 0.0;
-                double elevation = 0.0;
-                QPointF point;
-                const bool ok = equatorialToAltAz(
-                    static_cast<double>(rightAscension),
-                    declination,
-                    m_settings.m_latitude,
-                    m_settings.m_longitude,
-                    utcDateTime,
-                    azimuth,
-                    elevation)
-                    && projector.projectAltAz(azimuth, elevation, point);
-
-                if (ok && havePrevious && QLineF(previousPoint, point).length() <= std::hypot(static_cast<double>(image.width()), static_cast<double>(image.height())) * 2.0) {
-                    painter.drawLine(previousPoint, point);
-                }
-                previousPoint = point;
-                havePrevious = ok;
-            }
-
-            double labelAzimuth = 0.0;
-            double labelElevation = 0.0;
-            QPointF labelPoint;
-            if (equatorialToAltAz(
-                    static_cast<double>(rightAscension),
-                    std::clamp(static_cast<double>(m_settings.m_elevation), -60.0, 60.0),
-                    m_settings.m_latitude,
-                    m_settings.m_longitude,
-                    utcDateTime,
-                    labelAzimuth,
-                    labelElevation)
-                && projector.projectAltAz(labelAzimuth, labelElevation, labelPoint))
-            {
-                const QString label = formatRightAscensionDegrees(static_cast<double>(rightAscension));
-                if (drawLabels) {
-                    drawOutlinedLabel(painter, image.rect(), labelPoint, label, m_settings.m_equatorialGridColor, fontMetrics);
-                } else {
-                    appendOutlinedPreviewTextLabel(previewTextLabels, label, labelPoint, m_settings.m_equatorialGridColor, font.family(), font.pointSizeF());
-                }
-            }
-        }
-    }
+    renderSkyGridLabels(painter, image.rect(), projector, m_settings, utcDateTime, drawEquatorial, drawAltAz, drawLabels, previewTextLabels, font, fontMetrics);
 
     PROFILER_STOP(__FUNCTION__);
 }

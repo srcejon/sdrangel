@@ -146,14 +146,27 @@ private:
     AVFrame *m_audioFrame = nullptr;
     AVPacket *m_packet = nullptr;
     SwsContext *m_swsContext = nullptr;
+    // Source geometry/format the current m_swsContext was built for. The
+    // converter is rebuilt when a decoded frame's actual width/height/format
+    // differs from these (NOT from the codec context, which may already match
+    // after a mid-stream change and would skip a needed rebuild). -1 = none.
+    int m_swsSrcWidth = 0;
+    int m_swsSrcHeight = 0;
+    int m_swsSrcFormat = -1;
     SwrContext *m_resampler = nullptr;
     int m_videoStreamIndex = -1;
     int m_audioStreamIndex = -1;
     qint64 m_durationMs = 0;
     double m_frameRate = 25.0;
     int m_outputSampleRate = 48000;
-    double m_audioPaceFrameRate = 0.0;
+    // Published from the worker thread (setAudioPaceFrameRate) while the decode
+    // thread reads it in takePacedAudio, so it must be atomic. m_audioPaceRemainderFrames
+    // is owned solely by the decode thread; a rate change is detected there by
+    // comparing against m_audioPaceFrameRateApplied, so the remainder is never
+    // written cross-thread.
+    std::atomic<double> m_audioPaceFrameRate { 0.0 };
     double m_audioPaceRemainderFrames = 0.0;
+    double m_audioPaceFrameRateApplied = 0.0;
     qint64 m_audioDecodedPositionMs = -1;
     QByteArray m_pendingAudioPcm;
     mutable QMutex m_pendingAudioMutex;

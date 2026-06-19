@@ -20,6 +20,7 @@
 #define INCLUDE_FEATURE_CAMERAPOSTPROCESSOR_H_
 
 #include <QObject>
+#include <deque>
 #include <limits>
 #include <QHash>
 #include <QMutex>
@@ -258,6 +259,65 @@ private:
         QVector<TrackPoint> m_track;
     };
 
+    // Cache for the (expensive) sky-grid line overlay. The grid is thousands of
+    // antialiased trig-projected segments that are identical frame-to-frame
+    // unless the projection/observer parameters change, so the lines are rendered
+    // once into a transparent overlay and re-composited each frame. Only accessed
+    // from the post-processor worker thread, so it needs no locking.
+    struct SkyGridOverlayCache
+    {
+        // Quantise the equatorial grid's sidereal-time dependence so the cached
+        // overlay is reused for a whole second instead of being re-rendered every
+        // frame. The grid moves ~0.004 deg/frame at 30 fps, so a 1 s bucket is
+        // visually indistinguishable while removing the per-frame render cost.
+        static constexpr qint64 m_equatorialQuantumMs = 1000;
+
+        struct Key
+        {
+            QSize m_size;
+            bool m_drawEquatorial = false;
+            bool m_drawAltAz = false;
+            QRgb m_altAzColor = 0;
+            QRgb m_equatorialColor = 0;
+            int m_lensProjection = 0;
+            double m_azimuth = 0.0;
+            double m_elevation = 0.0;
+            double m_roll = 0.0;
+            double m_fov = 0.0;
+            double m_lensCenterOffsetX = 0.0;
+            double m_lensCenterOffsetY = 0.0;
+            double m_lensDistortionK1 = 0.0;
+            double m_latitude = 0.0;
+            double m_longitude = 0.0;
+            qint64 m_equatorialTimeBucket = 0;
+
+            bool operator==(const Key& other) const
+            {
+                return m_size == other.m_size
+                    && m_drawEquatorial == other.m_drawEquatorial
+                    && m_drawAltAz == other.m_drawAltAz
+                    && m_altAzColor == other.m_altAzColor
+                    && m_equatorialColor == other.m_equatorialColor
+                    && m_lensProjection == other.m_lensProjection
+                    && m_azimuth == other.m_azimuth
+                    && m_elevation == other.m_elevation
+                    && m_roll == other.m_roll
+                    && m_fov == other.m_fov
+                    && m_lensCenterOffsetX == other.m_lensCenterOffsetX
+                    && m_lensCenterOffsetY == other.m_lensCenterOffsetY
+                    && m_lensDistortionK1 == other.m_lensDistortionK1
+                    && m_latitude == other.m_latitude
+                    && m_longitude == other.m_longitude
+                    && m_equatorialTimeBucket == other.m_equatorialTimeBucket;
+            }
+            bool operator!=(const Key& other) const { return !(*this == other); }
+        };
+
+        QImage m_overlay;
+        Key m_key;
+        bool m_valid = false;
+    };
+
     MessageQueue m_inputMessageQueue;
     MessageQueue *m_msgQueueToGUI;
     MessageQueue *m_nextStageQueue;
@@ -282,7 +342,13 @@ private:
     QHash<QString, QPointF> m_trackedObjectHeatMapLastPoints;
     bool m_trackedObjectHeatMapSkipSeed = false;
     QMutex m_frameMutex;
-    CameraPipelineFramePtr m_pendingFrame;
+    // Small bounded backlog of frames waiting to be post-processed. The processor
+    // averages well under the frame interval, so a short queue lets an occasional
+    // processing spike (e.g. the once-per-second equatorial grid re-render) be
+    // absorbed instead of costing a frame; a sustained overrun still trims the
+    // oldest frame so latency stays bounded.
+    static constexpr int m_maxPendingFrames = 3;
+    std::deque<CameraPipelineFramePtr> m_pendingFrames;
     bool m_processingFrame;
     qint64 m_playbackLatencyStatsStartMs = 0;
     quint64 m_playbackLatencyStatsFrames = 0;
@@ -290,6 +356,7 @@ private:
     qint64 m_playbackLatencyStatsTotalMs = 0;
     qint64 m_playbackLatencyStatsMaxMs = 0;
     qint64 m_playbackLatencyStatsLastPositionMs = -1;
+    mutable SkyGridOverlayCache m_skyGridOverlayCache;
     bool handleMessage(const Message& cmd);
     void applySettings(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force = false);
     void saveCurrentImage();

@@ -129,6 +129,13 @@ public:
     double m_streamAudioResampleRatio = 1.0;
     double m_streamAudioResamplePhase = 0.0;
     quint64 m_streamAudioDroppedFrames = 0;
+    // Set when a (re)buffering phase ends so the next resampler call trims the
+    // stream-audio buffer back to its target depth. While presentation is paused
+    // to rebuild the cushion the decoder keeps appending audio, so the buffer
+    // sits well above target when playback resumes; trimming it once on resume
+    // lets the soft-deadband servo start in-band instead of riding out a large
+    // startup excursion.
+    bool m_streamAudioTrimToTargetPending = false;
     // True while presentation is paused to (re)build the decoded-frame cushion,
     // at startup and after a stall drains the queue mid-playback.
     bool m_streamRebuffering = false;

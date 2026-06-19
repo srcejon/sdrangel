@@ -90,6 +90,14 @@ public:
     std::atomic_bool m_decodeFrameWakeQueued { false };
     std::atomic<quint64> m_decodeDroppedFrames { 0 };
     std::atomic<quint64> m_decodeDroppedSinceLastSubmit { 0 };
+    // Monotonic count of real frames the decode thread has produced. The worker
+    // thread watches it to detect a frozen decode (stuck inside readNextFrame on a
+    // desynced live stream, which never surfaces as a read error) and forces a
+    // reopen. m_decodeReopening guards the watchdog from firing mid-reopen.
+    std::atomic<quint64> m_decodeFramesProduced { 0 };
+    std::atomic_bool m_decodeReopening { false };
+    quint64 m_streamWatchdogLastProduced = 0;
+    QElapsedTimer m_streamWatchdogClock;
     mutable QMutex m_decodedFramesMutex;
     QWaitCondition m_decodedFramesAvailable;
     QWaitCondition m_decodedFramesNotFull;
@@ -104,13 +112,26 @@ public:
     QByteArray m_streamAudioPcmS16Stereo;
     int m_streamAudioSampleRate = 0;
     double m_streamAudioPaceRemainderFrames = 0.0;
+    QElapsedTimer m_streamAudioPaceClock;
+    // Content position (frame PTS, ms) of the last video frame whose audio was
+    // pulled to the monitor. Audio is paced by the advance of the presented video
+    // frame's position rather than wall-clock time, so it follows the video
+    // timeline exactly and self-corrects after a stall/rebuffer instead of
+    // accumulating a permanent lead. -1 until the first frame is presented.
+    qint64 m_streamAudioLastPresentedPositionMs = -1;
+    // Adaptive resampler state for matching the source's audio content rate to the
+    // sound-card output rate. The ratio is servoed to hold the stream-audio buffer
+    // at a fixed depth, so audio is consumed at the producer's content rate (kept
+    // in sync with the fill-servo-paced video) while the monitor is fed at the
+    // device rate. This absorbs the source-vs-soundcard clock difference smoothly
+    // (no overflow-drain clicks). m_streamAudioResamplePhase is the carried
+    // fractional input position for inter-call continuity.
+    double m_streamAudioResampleRatio = 1.0;
+    double m_streamAudioResamplePhase = 0.0;
     quint64 m_streamAudioDroppedFrames = 0;
     // True while presentation is paused to (re)build the decoded-frame cushion,
     // at startup and after a stall drains the queue mid-playback.
     bool m_streamRebuffering = false;
-    // Keep enough live video headroom to absorb stream jitter without letting
-    // normal network stalls create unbounded preview latency.
-    static constexpr qsizetype m_maxDecodedStreamBufferBytes = 768LL * 1024LL * 1024LL;
     static constexpr int m_minDecodedStreamFrames = 6;
 
     QElapsedTimer m_statsTimer;

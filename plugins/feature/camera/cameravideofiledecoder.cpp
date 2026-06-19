@@ -134,12 +134,32 @@ bool CameraVideoFileDecoder::open(
             av_dict_set(&options, "rw_timeout", "5000000", 0);
             if ((scheme == QLatin1String("http")) || (scheme == QLatin1String("https"))) {
                 av_dict_set(&options, "flv_ignore_prevtag", "1", 0);
+                // NB: do NOT enable FFmpeg's byte-level `reconnect`/`reconnect_streamed`
+                // here. For a live FLV-over-HTTP stream the server restarts the FLV
+                // stream (fresh `FLV\x01` header) on a re-GET, and FFmpeg splices it
+                // mid-stream, so the flv demuxer never re-aligns (manifests as
+                // "Audio codec (f) is not implemented" / "Invalid NAL unit size" /
+                // "Error splitting the input into NAL units") and never recovers.
+                // Recovery from a dropped connection is handled by fully reopening
+                // the decoder in the worker decode thread, which re-reads the FLV
+                // header cleanly from the current live edge.
             }
         }
         if (rtspSource)
         {
-            av_dict_set(&options, "timeout", "5000000", 0);
+            // Do NOT set the RTSP demuxer's `timeout` option here. For the RTSP
+            // demuxer `timeout` is the *incoming-connection* (listen) timeout and
+            // it implies rtsp_flags=listen, i.e. it puts FFmpeg into RTSP SERVER
+            // mode waiting for a client to connect to us. That breaks pulling
+            // from a server like MediaMTX: the demuxer rejects the server's
+            // responses as a client would never see them ("Unexpected command in
+            // Idle State DESCRIBE" / "RTSP: Unexpected Command") and the open
+            // blocks for ~2 min then fails with "Protocol not found". The
+            // client-side socket I/O timeout is `stimeout` (microseconds), which
+            // does NOT imply listen. prefer_tcp keeps us a TCP client even on the
+            // auto/fallback attempt.
             av_dict_set(&options, "stimeout", "5000000", 0);
+            av_dict_set(&options, "rtsp_flags", "prefer_tcp", 0);
             if (rtspTransport && rtspTransport[0] != '\0') {
                 av_dict_set(&options, "rtsp_transport", rtspTransport, 0);
             }

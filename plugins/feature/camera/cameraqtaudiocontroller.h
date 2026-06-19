@@ -85,14 +85,18 @@ private:
     void resetFilePlaybackAudioOffset();
     [[nodiscard]] int filePlaybackMonitorTargetFillForOffsetMs() const;
     [[nodiscard]] int filePlaybackMonitorJitterForOffsetMs() const;
-    // Keep the live monitor cushion modest. A large target made the worker's
-    // top-up endlessly pull *future* audio into the monitor (it could never
-    // sustain 850 ms from the per-frame feed), so audio played ahead of video and
-    // ratcheted further ahead on every stall. A small target lets the per-frame
-    // submission hold the monitor, so the top-up rarely fires, and the monitor's
-    // own overflow drain (target + jitter) becomes a hard cap on the audio lead.
-    static int streamPlaybackMonitorTargetFillMs() { return 250; }
-    static int streamPlaybackMonitorJitterMs() { return 150; }
+    // Keep the live monitor cushion small. It only needs to absorb per-tick
+    // jitter (~33 ms presentation interval, a few ms of scheduling slop) so the
+    // FIFO never drains to zero between submissions. The cushion is fixed pipeline
+    // latency: audio sits this far ahead of its matching video, so a large value
+    // (the old 850/250 ms) is an audible lip-sync offset. ~120 ms is enough to
+    // stop underruns while keeping the audio-ahead near the video pipeline latency
+    // (~16 ms), so A/V look in sync without needing a compensating audio offset.
+    // (Network stalls longer than this are ridden out by the video decode buffer,
+    // not the monitor; the monitor can't paper over a multi-hundred-ms stall
+    // without adding that much latency to every frame.)
+    static int streamPlaybackMonitorTargetFillMs() { return 120; }
+    static int streamPlaybackMonitorJitterMs() { return 80; }
     static int filePlaybackMonitorJitterMs() { return 80; }
     void applyFilePlaybackAudioOffset(QByteArray& pcmS16Stereo, int sampleRate);
 

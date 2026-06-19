@@ -139,8 +139,12 @@ void CameraQtAudioController::setMuted(bool muted)
 {
     m_muted = muted;
     if (m_muted) {
+        // Drop the live-capture path, but DO NOT clear the monitor (output)
+        // FIFO: it now keeps flowing with silence while muted (see
+        // submitMonitorPcmSamples). Clearing it would make the resampler servo
+        // gulp ~1s out of the stream-audio buffer in one tick to refill, which
+        // dips the ratio and reintroduces the post-unmute pitch artifact.
         m_captureAudioFifo.clear();
-        m_outputAudioFifo.clear();
     }
 }
 
@@ -204,10 +208,19 @@ void CameraQtAudioController::submitMonitorPcmSamples(const QByteArray& pcmS16St
         return;
     }
 
-    if (!m_muted && m_capturing)
+    if (m_capturing)
     {
         QByteArray monitorPcmS16Stereo = pcmS16Stereo;
-        if (!m_captureSourceActive) {
+        if (m_muted) {
+            // Output silence while muted, but keep filling the monitor FIFO so
+            // the pipeline (and the worker's stream-audio resampler servo that
+            // tops it up) keeps running. Skipping submission entirely lets the
+            // device drain the FIFO to 0; the buffer-depth servo then sees a
+            // perpetually starved monitor, over-drains the stream-audio buffer
+            // and winds the resample ratio down to its floor, which plays back
+            // at a lowered pitch for ~1s after unmute while the ratio recovers.
+            monitorPcmS16Stereo.fill('\0');
+        } else if (!m_captureSourceActive) {
             applyFilePlaybackAudioOffset(monitorPcmS16Stereo, sampleRate);
         }
 

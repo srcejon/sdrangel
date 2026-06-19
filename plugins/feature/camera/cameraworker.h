@@ -695,6 +695,10 @@ private:
     void releaseDelayedVideoFileFrames();
     void startVideoFileDecodeThread();
     void stopVideoFileDecodeThread();
+    // Called from the decode thread to recover a live stream after a persistent
+    // read failure by reopening the source from the current live edge. Returns
+    // true once reopened, false if it gave up or a stop was requested.
+    bool reopenStreamVideoFileDecoder(const QString& mediaSourcePath, int audioOutputSampleRate, double playbackFrameRate);
     void clearDecodedVideoFileFrames();
     bool videoFilePlaybackIsPlaying() const;
     void setVideoFilePlaybackPlayingState(bool playing);
@@ -707,15 +711,21 @@ private:
     void clearStreamPlaybackAudio();
     void appendStreamPlaybackAudio(const QByteArray& pcmS16Stereo, int audioSampleRate);
     int takeStreamPlaybackAudio(QByteArray& pcmS16Stereo, int audioSampleRate, int maxSampleFrames);
-    int takePacedStreamPlaybackAudio(QByteArray& pcmS16Stereo, int audioSampleRate, double playbackFrameRate);
+    int takePacedStreamPlaybackAudio(QByteArray& pcmS16Stereo, int audioSampleRate, double playbackFrameRate, qint64 framePositionMs);
+    // Pull up to maxOutputFrames of monitor audio, linear-resampling the stream
+    // buffer by a ratio servoed to hold the buffer near targetBufferSeconds. Keeps
+    // audio consumption at the producer's content rate (synced to video) while
+    // emitting at the device sample rate, so the source/soundcard clock mismatch
+    // is absorbed smoothly instead of overflow-drained (clicks).
+    int takeResampledStreamPlaybackAudio(QByteArray& pcmS16Stereo, int audioSampleRate, int maxOutputFrames, double targetBufferSeconds);
+    void submitResampledStreamAudio();
     int dropPacedStreamPlaybackAudio(int droppedVideoFrames, int audioSampleRate, double playbackFrameRate);
     int dropTimedStreamPlaybackAudio(qint64 durationMs, int audioSampleRate);
     int streamPlaybackAudioBytes() const;
     int streamPlaybackAudioSampleRate() const;
     int streamInitialBufferFrameCount() const;
     int decodedStreamFrameQueueDepth() const;
-    int maxDecodedStreamFrameCount(const QImage& frameImage = QImage()) const;
-    static int limitDecodedStreamFrameCountForImage(const QImage& frameImage, int frameCount);
+    int maxDecodedStreamFrameCount() const;
     bool readQueuedVideoFileFrame(bool submitAudio);
     CameraVideoFileDecoder::DebugStats videoFileDecoderStatsSnapshot() const;
     qint64 updateVideoFilePlaybackPosition(qint64 decodedPositionMs, qint64 decodeMs, bool repairTimestampDiscontinuities, bool resetClockOnLargeDrift);

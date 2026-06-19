@@ -437,7 +437,9 @@ COCO class list: https://raw.githubusercontent.com/amikelive/coco-labels/refs/he
 
 <h2>Optional Prerequisites</h2>
 
-ASCOM Platform:
+<h3>ASCOM Platform</h3>
+
+The ASCOM Platform is required for Alpaca telescope and camera support. It can be downloaded from:
 
 https://ascom-standards.org/Downloads/Index.htm
 
@@ -462,6 +464,41 @@ Full details of the API can be found in the Swagger documentation. Here is a qui
 To start capturing:
 
     curl -X POST "http://127.0.0.1:8091/sdrangel/featureset/feature/0/run"
+
+<h2>Dev notes</h2>
+
+To stream an mp4 via http:
+
+    ffmpeg -re -i test.mp4 -c copy -f mpegts -listen 1 "http://127.0.0.1:8080"
+    http://127.0.0.1:8080
+
+TCP/MPEG-TS:
+
+    ffmpeg -re -i test.mp4 -c copy -f mpegts -listen 1 tcp://127.0.0.1:8080
+    tcp://127.0.0.1:8080
+
+UDP/MPEG-TS:
+
+    ffmpeg -re -i test.mp4 -c copy -f mpegts "udp://127.0.0.1:1234?pkt_size=1316"
+    udp://@127.0.0.1:1234?buffer_size=67108864
+
+RTP/MPEG-TS:
+
+    ffmpeg -re -i test.mp4 -c copy -f rtp_mpegts "rtp://127.0.0.1:1234"
+    rtp://127.0.0.1:1234?buffer_size=67108864&reorder_queue_size=5000&max_delay=500000
+
+RTSP (struggles with very high bitrate):
+    
+    in mediamtx.yml set writeQueueSize: 16384
+    mediamtx 
+    ffmpeg -re -i test.mp4 -c copy -rtsp_transport tcp -f rtsp rtsp://127.0.0.1:8554/live
+    rtsp://127.0.0.1:8554/live
+
+RTMP:
+    
+    mediamtx 
+    ffmpeg -re -i test.mp4 -c copy -f flv rtmp://127.0.0.1:1935/live
+    rtmp://127.0.0.1:1935/live
 
 <h2>Attribution</h2>
 

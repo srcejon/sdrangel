@@ -38,6 +38,7 @@
 #include "availablechannelorfeaturehandler.h"
 #include "camerapipelineframe.h"
 #include "camerasettings.h"
+#include "cameraimagepool.h"
 
 class Weather;
 namespace SWGSDRangel {
@@ -325,6 +326,11 @@ private:
     AvailableChannelOrFeatureHandler m_availableChannelOrFeatureHandler;
     CameraSettings m_settings;
     CameraPipelineFrame m_lastFrame;
+    // Recycles the full-frame overlay-composite buffers produced every frame in
+    // processNewFrame/applyPostProcessing (the RGB32 convert target and the
+    // preview deep-copy). Used only on the post-processor thread; cross-thread
+    // release (the GUI holds the preview) is handled by CameraImagePool.
+    CameraImagePool m_overlayImagePool;
     QDateTime m_captureDateTime;
     bool m_captureActive = false;
     quint64 m_captureEpoch = 0;

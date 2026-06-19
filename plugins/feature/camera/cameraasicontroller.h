@@ -25,6 +25,7 @@
 
 #include "camerapipelineframe.h"
 #include "camerasettings.h"
+#include "cameraimagepool.h"
 
 #ifdef ASICAMERA_FOUND
 #include <ASICamera2.h>
@@ -158,6 +159,12 @@ private:
     int m_frameWidth;
     int m_frameHeight;
     QVector<uchar> m_frameBuffer;
+    // Recycles the per-frame QImage backing buffers produced in frameToImage
+    // (Grayscale8/16 and RGB888 for sustained high-res capture). mutable because
+    // frameToImage is const but the pool is a cache. Released-on-last-copy and
+    // refcounted, so it is safe even though the produced image is handed to the
+    // pipeline on another thread (see CameraImagePool).
+    mutable CameraImagePool m_imagePool;
     double m_lastCcdTemperature;
     bool m_lastCcdTemperatureValid;
     qint64 m_lastCaptureTimeMs;

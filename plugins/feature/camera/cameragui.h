@@ -48,6 +48,7 @@
 #include "camerasettings.h"
 #include "camerapostprocessor.h"
 #include "cameraworker.h"
+#include "cameraimagepool.h"
 #include "gui/httpdownloadmanagergui.h"
 
 class PluginAPI;
@@ -95,8 +96,30 @@ public:
 
 signals:
     void frameAvailable(const QImage& image);
+
+private:
+    // Recycles the per-frame QImage backing buffer, instead of .copy() allocating
+    // one for every presented frame.
+    CameraImagePool m_imagePool;
 };
 #endif
+
+/// Scene item that paints a QImage directly (via QPainter::drawImage) instead of
+/// going through a per-frame QPixmap::fromImage conversion. That conversion was
+/// the dominant always-on host allocation at 4K (~700 MB/s); painting the image
+/// directly lets the (already pooled) decoder buffer upload straight to a GPU
+/// texture under the OpenGL viewport, with no per-frame host allocation.
+class CameraImageGraphicsItem : public QGraphicsItem
+{
+public:
+    void setImage(const QImage& image);
+    const QImage& image() const { return m_image; }
+    QRectF boundingRect() const override { return QRectF(m_image.rect()); }
+    void paint(QPainter *painter, const QStyleOptionGraphicsItem *option, QWidget *widget) override;
+
+private:
+    QImage m_image;
+};
 
 class CameraGUI : public FeatureGUI {
     Q_OBJECT
@@ -238,7 +261,7 @@ private:
     bool m_asiRaw8Supported;
     QHash<QString, FrameRateOptions> m_qtFrameRateOptionsByResolution;
     QGraphicsScene *m_imageScene;         ///< Scene used by the QGraphicsView image display
-    QGraphicsPixmapItem *m_imagePixmapItem; ///< Pixmap item holding the camera frame
+    CameraImageGraphicsItem *m_imagePixmapItem; ///< Scene item holding the camera frame
     QList<QGraphicsItem *> m_previewOverlayItems;
     QList<QGraphicsRectItem *> m_motionExclusionRectItems;
     QGraphicsRectItem *m_detectionRoiRectItem = nullptr;
@@ -257,6 +280,9 @@ private:
     QMediaCaptureSession *m_captureSession;
     QVideoFrame m_pendingQtVideoFrame;
     bool m_processingQtVideoFrame = false;
+    // Recycles the per-frame QImage backing buffers for direct (non-YUV) Qt
+    // camera frames, instead of frame.toImage() allocating one each frame.
+    CameraImagePool m_qtImagePool;
 #else
     QCamera *m_qtCamera;
     QCameraImageCapture *m_imageCapture;

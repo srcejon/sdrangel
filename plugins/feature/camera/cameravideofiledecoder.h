@@ -27,6 +27,8 @@
 #include <QMutex>
 #include <QString>
 
+#include "cameraimagepool.h"
+
 struct AVCodecContext;
 struct AVFormatContext;
 struct AVFrame;
@@ -177,6 +179,10 @@ private:
     std::atomic_bool m_abortRequested { false };
     std::deque<AVPacket*> m_pendingVideoPackets;
     std::deque<PendingVideoFrame> m_pendingVideoFrames;
+    // Recycles the per-frame RGB888 backing buffers produced in
+    // convertFrameToImage, cutting malloc/page-fault churn at frame rate. Sized
+    // for the in-flight frame count (≤4 stream pending + worker/pipeline copies).
+    CameraImagePool m_imagePool { 8 };
     DebugStats m_debugStats;
 
     [[nodiscard]] bool openVideoDecoder(QString& errorMessage);

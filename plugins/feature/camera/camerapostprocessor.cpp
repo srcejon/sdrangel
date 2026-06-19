@@ -1001,7 +1001,21 @@ void CameraPostProcessor::processNewFrame(const CameraPipelineFramePtr& frame)
     const QImage preview = applyPostProcessing(*frame, false, &previewTextLabels, &previewRectItems, &trackedObjects);
     if (!previewTextLabels.isEmpty() || !previewRectItems.isEmpty())
     {
-        QImage processed = preview.copy();
+        // Pooled deep copy of the preview so the rect/text items are drawn onto a
+        // separate buffer from the one sent to the GUI (recycled, not malloc'd
+        // per frame). Source composition reproduces copy()'s exact pixels.
+        QImage processed = m_overlayImagePool.acquire(preview.width(), preview.height(), preview.format());
+        if (!processed.isNull())
+        {
+            QPainter painter(&processed);
+            painter.setCompositionMode(QPainter::CompositionMode_Source);
+            painter.drawImage(0, 0, preview);
+            painter.end();
+        }
+        else
+        {
+            processed = preview.copy();
+        }
         applyPreviewRectItems(processed, previewRectItems);
         applyPreviewTextLabels(processed, previewTextLabels);
         frame->m_postProcessedImage = processed;
@@ -2078,7 +2092,23 @@ QImage CameraPostProcessor::applyPostProcessing(const CameraPipelineFrame& frame
         return input;
     }
 
-    QImage result = input.convertToFormat(QImage::Format_RGB32);
+    // Convert into a pooled RGB32 buffer (recycled across frames) instead of
+    // letting convertToFormat allocate a fresh ~33 MB @4K buffer every frame.
+    // CompositionMode_Source makes the blit a straight format-converting copy
+    // (the pooled buffer's prior contents are fully overwritten), identical to
+    // convertToFormat's result; the overlays are then painted onto it as before.
+    QImage result = m_overlayImagePool.acquire(input.width(), input.height(), QImage::Format_RGB32);
+    if (!result.isNull())
+    {
+        QPainter painter(&result);
+        painter.setCompositionMode(QPainter::CompositionMode_Source);
+        painter.drawImage(0, 0, input);
+        painter.end();
+    }
+    else
+    {
+        result = input.convertToFormat(QImage::Format_RGB32);
+    }
     if (!frame.m_motionBoxes.isEmpty()) { applyMotionOverlay(result, frame.m_motionBoxes, drawPreviewText, previewRectItems); }
     if (m_settings.m_yoloEnabled && !frame.m_detections.isEmpty()) { applyDetectionOverlay(result, frame.m_detections, drawPreviewText, previewTextLabels, previewRectItems); }
     if (needsSpectrumOverlay) { applySpectrumOverlay(result); }

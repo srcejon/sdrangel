@@ -23,6 +23,31 @@
 #include <opencv2/imgproc.hpp>
 
 #include "cameraimageutils.h"
+#include "cameraimagepool.h"
+
+namespace {
+
+// Recycle the full-resolution QImage backing buffers produced by the two central
+// cv::Mat -> QImage bridges below. These run once per frame per pipeline stage
+// (preprocessor, aligner, stacker, image processor, every detector) and are the
+// dominant per-frame host allocation on the always-on path, so reusing the
+// buffers is the biggest single cut to the per-frame page-fault churn that hurts
+// slower machines. The pool is thread_local: each pipeline stage runs on its own
+// thread, so every thread gets a contention-free pool that naturally holds that
+// stage's frame size/format. The produced image is often released on another
+// thread (GUI/worker) — CameraImagePool's intrusive-refcounted state makes that
+// cross-thread release (and thread exit while an image is still in flight) safe.
+QImage acquirePooledImage(int width, int height, QImage::Format format)
+{
+    thread_local CameraImagePool pool(8);
+    QImage image = pool.acquire(width, height, format);
+    if (image.isNull()) {
+        image = QImage(width, height, format);
+    }
+    return image;
+}
+
+}
 
 const QImage& CameraImageUtils::ensureRgb888(const QImage& image, QImage& convertedImage)
 {
@@ -43,7 +68,7 @@ cv::Mat CameraImageUtils::wrapRgb888Image(const QImage& image)
 
 QImage CameraImageUtils::convertBgrToRgbImage(const cv::Mat& bgrMat)
 {
-    QImage result(bgrMat.cols, bgrMat.rows, QImage::Format_RGB888);
+    QImage result = acquirePooledImage(bgrMat.cols, bgrMat.rows, QImage::Format_RGB888);
     cv::Mat rgbMat(result.height(), result.width(), CV_8UC3,
                    result.bits(),
                    static_cast<size_t>(result.bytesPerLine()));
@@ -112,14 +137,14 @@ QImage CameraImageUtils::workingMatToImage(const cv::Mat& frameMat)
     {
         if (frameMat.depth() == CV_16U)
         {
-            QImage image(frameMat.cols, frameMat.rows, QImage::Format_Grayscale16);
+            QImage image = acquirePooledImage(frameMat.cols, frameMat.rows, QImage::Format_Grayscale16);
             for (int row = 0; row < frameMat.rows; ++row) {
                 std::memcpy(image.scanLine(row), frameMat.ptr(row), static_cast<size_t>(frameMat.cols * sizeof(quint16)));
             }
             return image;
         }
 
-        QImage image(frameMat.cols, frameMat.rows, QImage::Format_Grayscale8);
+        QImage image = acquirePooledImage(frameMat.cols, frameMat.rows, QImage::Format_Grayscale8);
         for (int row = 0; row < frameMat.rows; ++row) {
             std::memcpy(image.scanLine(row), frameMat.ptr(row), static_cast<size_t>(frameMat.cols));
         }
@@ -128,7 +153,7 @@ QImage CameraImageUtils::workingMatToImage(const cv::Mat& frameMat)
 
     if (frameMat.depth() == CV_16U)
     {
-        QImage image(frameMat.cols, frameMat.rows, QImage::Format_RGBA64);
+        QImage image = acquirePooledImage(frameMat.cols, frameMat.rows, QImage::Format_RGBA64);
         for (int y = 0; y < frameMat.rows; ++y)
         {
             const cv::Vec<uint16_t, 3> *inputLine = frameMat.ptr<cv::Vec<uint16_t, 3>>(y);
@@ -141,7 +166,7 @@ QImage CameraImageUtils::workingMatToImage(const cv::Mat& frameMat)
         return image;
     }
 
-    QImage image(frameMat.cols, frameMat.rows, QImage::Format_RGB888);
+    QImage image = acquirePooledImage(frameMat.cols, frameMat.rows, QImage::Format_RGB888);
     for (int row = 0; row < frameMat.rows; ++row) {
         std::memcpy(image.scanLine(row), frameMat.ptr(row), static_cast<size_t>(frameMat.cols * 3));
     }

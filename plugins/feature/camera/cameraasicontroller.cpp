@@ -804,13 +804,33 @@ QImage CameraAsiController::frameToImage(const QImage& fallbackImage, CameraPipe
 
     if (m_imageType == ASI_IMG_RGB24)
     {
-        QImage image(m_frameBuffer.constData(), m_frameWidth, m_frameHeight, m_frameWidth * 3, QImage::Format_RGB888);
-        return image.rgbSwapped();
+        // ASI RGB24 is BGR; swap into a pooled RGB888 buffer (replaces the
+        // alloc-and-swap that rgbSwapped() would do).
+        QImage image = m_imagePool.acquire(m_frameWidth, m_frameHeight, QImage::Format_RGB888);
+        if (image.isNull()) {
+            return fallbackImage;
+        }
+        const uchar *src = reinterpret_cast<const uchar*>(m_frameBuffer.constData());
+        for (int y = 0; y < m_frameHeight; ++y)
+        {
+            const uchar *s = src + static_cast<size_t>(y) * m_frameWidth * 3;
+            uchar *d = image.scanLine(y);
+            for (int x = 0; x < m_frameWidth; ++x)
+            {
+                d[3 * x + 0] = s[3 * x + 2];
+                d[3 * x + 1] = s[3 * x + 1];
+                d[3 * x + 2] = s[3 * x + 0];
+            }
+        }
+        return image;
     }
 
     if (m_imageType == ASI_IMG_Y8 || (!m_colorCamera && m_imageType == ASI_IMG_RAW8))
     {
-        QImage image(m_frameWidth, m_frameHeight, QImage::Format_Grayscale8);
+        QImage image = m_imagePool.acquire(m_frameWidth, m_frameHeight, QImage::Format_Grayscale8);
+        if (image.isNull()) {
+            return fallbackImage;
+        }
         for (int y = 0; y < m_frameHeight; ++y) {
             std::memcpy(image.scanLine(y), m_frameBuffer.constData() + (y * m_frameWidth), static_cast<size_t>(m_frameWidth));
         }
@@ -824,7 +844,10 @@ QImage CameraAsiController::frameToImage(const QImage& fallbackImage, CameraPipe
 
         if (!m_colorCamera)
         {
-            QImage image(m_frameWidth, m_frameHeight, QImage::Format_Grayscale16);
+            QImage image = m_imagePool.acquire(m_frameWidth, m_frameHeight, QImage::Format_Grayscale16);
+            if (image.isNull()) {
+                return fallbackImage;
+            }
             for (int y = 0; y < m_frameHeight; ++y) {
                 std::memcpy(image.scanLine(y), raw16.ptr(y), static_cast<size_t>(m_frameWidth * sizeof(quint16)));
             }
@@ -835,7 +858,10 @@ QImage CameraAsiController::frameToImage(const QImage& fallbackImage, CameraPipe
             *bayerPattern = bayerToPipelinePattern(m_bayerPattern);
         }
 
-        QImage image(m_frameWidth, m_frameHeight, QImage::Format_Grayscale16);
+        QImage image = m_imagePool.acquire(m_frameWidth, m_frameHeight, QImage::Format_Grayscale16);
+        if (image.isNull()) {
+            return fallbackImage;
+        }
         for (int y = 0; y < m_frameHeight; ++y) {
             std::memcpy(image.scanLine(y), raw16.ptr(y), static_cast<size_t>(m_frameWidth * sizeof(quint16)));
         }
@@ -848,7 +874,10 @@ QImage CameraAsiController::frameToImage(const QImage& fallbackImage, CameraPipe
 
     if (!m_colorCamera)
     {
-        QImage image(m_frameWidth, m_frameHeight, QImage::Format_Grayscale8);
+        QImage image = m_imagePool.acquire(m_frameWidth, m_frameHeight, QImage::Format_Grayscale8);
+        if (image.isNull()) {
+            return fallbackImage;
+        }
         for (int y = 0; y < m_frameHeight; ++y) {
             std::memcpy(image.scanLine(y), rawMat.ptr(y), static_cast<size_t>(m_frameWidth));
         }
@@ -859,7 +888,10 @@ QImage CameraAsiController::frameToImage(const QImage& fallbackImage, CameraPipe
         *bayerPattern = bayerToPipelinePattern(m_bayerPattern);
     }
 
-    QImage image(m_frameWidth, m_frameHeight, QImage::Format_Grayscale8);
+    QImage image = m_imagePool.acquire(m_frameWidth, m_frameHeight, QImage::Format_Grayscale8);
+    if (image.isNull()) {
+        return fallbackImage;
+    }
     for (int y = 0; y < m_frameHeight; ++y) {
         std::memcpy(image.scanLine(y), rawMat.ptr(y), static_cast<size_t>(m_frameWidth));
     }

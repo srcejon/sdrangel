@@ -369,6 +369,10 @@ void CameraVideoFileDecoder::close()
     m_audioDecodedPositionMs = -1;
     clearPendingAudio();
     m_pendingVideoFrames.clear();
+    // Release pooled free buffers (frames still held downstream return their own
+    // buffers when their last copy dies; the pool state outlives this via its
+    // refcount). Prevents one source's free list lingering into the next.
+    m_imagePool.clear();
     m_debugStats = DebugStats();
 }
 
@@ -1435,7 +1439,7 @@ bool CameraVideoFileDecoder::convertFrameToImage(const AVFrame *frame, QImage& i
         m_swsSrcFormat = frame->format;
     }
 
-    image = QImage(frame->width, frame->height, QImage::Format_RGB888);
+    image = m_imagePool.acquire(frame->width, frame->height, QImage::Format_RGB888);
     if (image.isNull())
     {
         errorMessage = QStringLiteral("Cannot allocate decoded video file image");

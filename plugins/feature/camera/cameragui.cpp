@@ -19,6 +19,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstring>
 #include <limits>
 
 #include <QAction>
@@ -73,7 +74,9 @@
 #include <QImageCapture>
 #include <QMediaCaptureSession>
 #include <QMediaDevices>
+#include <QOpenGLWidget>
 #include <QVideoFrame>
+#include <QVideoFrameFormat>
 #include <QVideoSink>
 #else
 #include <QAbstractVideoBuffer>
@@ -111,6 +114,14 @@
 #include "camerasettingsdialog.h"
 #include "cameraworker.h"
 #include "cameragui.h"
+
+// Render the preview through an OpenGL viewport (GPU scaling) instead of the
+// default raster viewport (CPU scaling). This is the default: it removes most of
+// the per-frame display fault churn on HD/4K sources. The GL viewport forces a
+// full-scene re-render + texture upload on the GUI thread per frame; if that ever
+// proves problematic on a given system/driver (the direct-draw image item works
+// with both), set this to 0 to fall back to the raster viewport.
+#define CAMERA_PREVIEW_USE_OPENGL 1
 
 namespace {
 
@@ -1011,8 +1022,20 @@ CameraGUI::CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *
 
     // Set up the QGraphicsView for camera preview
     m_imageScene = new QGraphicsScene(this);
-    m_imagePixmapItem = m_imageScene->addPixmap(QPixmap());
+    m_imagePixmapItem = new CameraImageGraphicsItem();
+    m_imageScene->addItem(m_imagePixmapItem);
     ui->imageView->setScene(m_imageScene);
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0) && CAMERA_PREVIEW_USE_OPENGL
+    // Render the preview through an OpenGL viewport so scaling the (up to 4K)
+    // pixmap down to the widget runs on the GPU. The default raster viewport
+    // smooth-scales the whole frame on the CPU every frame, which was ~40% of the
+    // per-frame page-fault churn on HD/4K sources — the dominant display cost on
+    // slower machines. Must precede the viewport()->installEventFilter() below so
+    // the filter (wheel-zoom / click-inspect) lands on the new GL viewport.
+    // (Toggle with CAMERA_PREVIEW_USE_OPENGL — see top of file.)
+    ui->imageView->setViewport(new QOpenGLWidget());
+    ui->imageView->setViewportUpdateMode(QGraphicsView::FullViewportUpdate);
+#endif
     ui->imageView->setDragMode(QGraphicsView::ScrollHandDrag);
     ui->imageView->setTransformationAnchor(QGraphicsView::AnchorUnderMouse);
     ui->imageView->setRenderHint(QPainter::Antialiasing, true);
@@ -2033,6 +2056,24 @@ void CameraGUI::populateAlpacaAccessoryCombos()
     }
 }
 
+void CameraImageGraphicsItem::setImage(const QImage& image)
+{
+    if (m_image.size() != image.size()) {
+        prepareGeometryChange();
+    }
+    m_image = image;
+    update();
+}
+
+void CameraImageGraphicsItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *option, QWidget *widget)
+{
+    Q_UNUSED(option)
+    Q_UNUSED(widget)
+    if (!m_image.isNull()) {
+        painter->drawImage(0, 0, m_image);
+    }
+}
+
 void CameraGUI::updateImageWidget()
 {
     if (m_lastImage.isNull() || !m_imagePixmapItem)
@@ -2041,9 +2082,9 @@ void CameraGUI::updateImageWidget()
         return;
     }
 
-    const QPixmap pixmap = QPixmap::fromImage(m_lastImage);
-    m_imagePixmapItem->setPixmap(pixmap);
-    m_imageScene->setSceneRect(pixmap.rect());
+    // Paint the (pooled) frame directly — no per-frame QPixmap::fromImage alloc.
+    m_imagePixmapItem->setImage(m_lastImage);
+    m_imageScene->setSceneRect(QRectF(m_lastImage.rect()));
     updatePreviewOverlayItems();
 
     // Fit the image in the view (preserving aspect ratio) only when no zoom has been applied
@@ -3624,13 +3665,26 @@ bool CameraVideoSurface::present(const QVideoFrame& frame)
 
     if (imageFormat != QImage::Format_Invalid)
     {
-        image = QImage(
+        // Copy the mapped frame into a pooled buffer instead of .copy() allocating
+        // a fresh one each frame.
+        const QImage view(
             mutableFrame.bits(),
             mutableFrame.width(),
             mutableFrame.height(),
             mutableFrame.bytesPerLine(),
-            imageFormat
-        ).copy();
+            imageFormat);
+        image = m_imagePool.acquire(view.width(), view.height(), imageFormat);
+        if (!image.isNull())
+        {
+            const int bytesPerLine = qMin(static_cast<int>(image.bytesPerLine()), static_cast<int>(view.bytesPerLine()));
+            for (int y = 0; y < view.height(); ++y) {
+                std::memcpy(image.scanLine(y), view.scanLine(y), static_cast<size_t>(bytesPerLine));
+            }
+        }
+        else
+        {
+            image = view.copy();
+        }
     }
 
     mutableFrame.unmap();
@@ -4239,7 +4293,36 @@ void CameraGUI::processPendingQtVideoFrame()
         return;
     }
 
-    const QImage image = frame.toImage();
+    // Pool the backing buffer for frames whose pixel format maps directly to a
+    // single-plane QImage format (RGB/BGR families): copy the mapped frame into a
+    // pooled buffer instead of frame.toImage() allocating one per frame. Formats
+    // needing conversion (YUV/planar) fall back to toImage(), which we can't pool
+    // without reimplementing Qt's colour conversion.
+    QImage image;
+    {
+        QVideoFrame mapped(frame);
+        if (mapped.map(QVideoFrame::ReadOnly))
+        {
+            const QImage::Format fmt = QVideoFrameFormat::imageFormatFromPixelFormat(mapped.pixelFormat());
+            if ((fmt != QImage::Format_Invalid) && (mapped.planeCount() == 1))
+            {
+                const QImage view(mapped.bits(0), mapped.width(), mapped.height(),
+                    mapped.bytesPerLine(0), fmt);
+                image = m_qtImagePool.acquire(view.width(), view.height(), fmt);
+                if (!image.isNull())
+                {
+                    const int bytesPerLine = qMin(static_cast<int>(image.bytesPerLine()), static_cast<int>(view.bytesPerLine()));
+                    for (int y = 0; y < view.height(); ++y) {
+                        std::memcpy(image.scanLine(y), view.scanLine(y), static_cast<size_t>(bytesPerLine));
+                    }
+                }
+            }
+            mapped.unmap();
+        }
+    }
+    if (image.isNull()) {
+        image = frame.toImage();
+    }
     submitQtImageFrame(image);
 
     if (m_pendingQtVideoFrame.isValid()) {
@@ -8481,7 +8564,7 @@ void CameraGUI::on_zoomOutButton_clicked()
 void CameraGUI::on_fitInViewButton_clicked()
 {
     ui->imageView->resetTransform();
-    if (m_imagePixmapItem && !m_imagePixmapItem->pixmap().isNull()) {
+    if (m_imagePixmapItem && !m_imagePixmapItem->image().isNull()) {
         ui->imageView->fitInView(m_imagePixmapItem, Qt::KeepAspectRatio);
     }
 }

@@ -13,6 +13,7 @@ set(camera_SOURCES
     camerahdrfusion.cpp
     cameraframestacker.cpp
     cameraimageutils.cpp
+    cameraimagepool.cpp
     cameraimageprocessor.cpp
     cameramediaplaybackstate.cpp
     cameraffmpegaudio.cpp
@@ -45,6 +46,7 @@ set(camera_HEADERS
     camerahdrfusion.h
     cameraframestacker.h
     cameraimageutils.h
+    cameraimagepool.h
     cameraimageprocessor.h
     cameramediaplaybackstate.h
     cameraffmpegaudio.h
@@ -108,6 +110,12 @@ endif()
 
 if(Qt${QT_DEFAULT_MAJOR_VERSION}TextToSpeech_FOUND)
     list(APPEND TARGET_LIB Qt::TextToSpeech)
+endif()
+
+# OpenGL viewport for the preview QGraphicsView (cameragui.cpp). Qt6 split
+# QOpenGLWidget into its own module; only needed for the GUI build.
+if(NOT SERVER_MODE AND Qt6_FOUND)
+    list(APPEND TARGET_LIB Qt::OpenGLWidgets)
 endif()
 
 set(camera_OpenCV_LIBS ${OpenCV_LIBS})

@@ -63,7 +63,6 @@ public:
 
     void resetClosed();
     void resetClock();
-    void resetDecodeSnapshot();
 
     std::unique_ptr<CameraVideoFileDecoder> m_decoder;
     double m_frameRate = 25.0;
@@ -88,7 +87,6 @@ public:
     std::thread m_decodeThread;
     std::atomic_bool m_decodeThreadStop { false };
     std::atomic_bool m_decodeFrameWakeQueued { false };
-    std::atomic<quint64> m_decodeDroppedFrames { 0 };
     std::atomic<quint64> m_decodeDroppedSinceLastSubmit { 0 };
     // Monotonic count of real frames the decode thread has produced. The worker
     // thread watches it to detect a frozen decode (stuck inside readNextFrame on a
@@ -102,8 +100,10 @@ public:
     QWaitCondition m_decodedFramesAvailable;
     QWaitCondition m_decodedFramesNotFull;
     std::deque<DecodedFrame> m_decodedFrames;
-    CameraVideoFileDecoder::DebugStats m_decodeStatsSnapshot;
-    mutable QMutex m_decodeStatsMutex;
+    // Snapshot of decoder pending-buffer state, written by the decode thread and
+    // read by the worker thread (to derive the audio-slaved playback clock), so
+    // the worker never touches the decoder (owned by the decode thread) directly.
+    mutable QMutex m_decodeSnapshotMutex;
     qint64 m_decodeAudioPositionMs = -1;
     int m_decodePendingAudioBytes = 0;
     int m_decodePendingVideoFrames = 0;
@@ -128,7 +128,6 @@ public:
     // fractional input position for inter-call continuity.
     double m_streamAudioResampleRatio = 1.0;
     double m_streamAudioResamplePhase = 0.0;
-    quint64 m_streamAudioDroppedFrames = 0;
     // Set when a (re)buffering phase ends so the next resampler call trims the
     // stream-audio buffer back to its target depth. While presentation is paused
     // to rebuild the cushion the decoder keeps appending audio, so the buffer
@@ -140,65 +139,6 @@ public:
     // at startup and after a stall drains the queue mid-playback.
     bool m_streamRebuffering = false;
     static constexpr int m_minDecodedStreamFrames = 6;
-
-    QElapsedTimer m_statsTimer;
-    QElapsedTimer m_tickTimer;
-    quint64 m_statsFrames = 0;
-    quint64 m_statsEmptyAudioFrames = 0;
-    quint64 m_statsMonitorExtraAudioFrames = 0;
-    qint64 m_statsDecodeMsTotal = 0;
-    qint64 m_statsDecodeMsMax = 0;
-    qint64 m_statsTickDeltaMsTotal = 0;
-    qint64 m_statsTickDeltaMsMax = 0;
-    qint64 m_statsPositionDeltaMsTotal = 0;
-    qint64 m_statsPositionDeltaMsMin = 0;
-    qint64 m_statsPositionDeltaMsMax = 0;
-    qint64 m_statsLastPositionMs = -1;
-    quint64 m_statsAudioBytes = 0;
-    quint64 m_statsDroppedLateFrames = 0;
-    quint64 m_statsDroppedPipelineFrames = 0;
-    qint64 m_statsVideoLateMsTotal = 0;
-    qint64 m_statsVideoLateMsMax = 0;
-    quint64 m_statsLastDroppedAudioFrames = 0;
-    quint64 m_statsLastAudioUnderflows = 0;
-    quint64 m_statsLastStreamAudioDroppedFrames = 0;
-    quint64 m_statsLastDecoderReadAheadCalls = 0;
-    quint64 m_statsLastDecoderReadAheadPackets = 0;
-    quint64 m_statsLastDecoderReadAheadVideoPackets = 0;
-    quint64 m_statsLastDecoderReadAheadAudioPackets = 0;
-    quint64 m_statsLastDecoderReadAheadOtherPackets = 0;
-    quint64 m_statsLastDecoderInputVideoPackets = 0;
-    quint64 m_statsLastDecoderInputAudioPackets = 0;
-    quint64 m_statsLastDecoderInputOtherPackets = 0;
-    quint64 m_statsLastDecoderEagain = 0;
-    quint64 m_statsLastDecoderQueuedFrames = 0;
-    quint64 m_statsLastDecoderParkedVideoPackets = 0;
-    quint64 m_statsLastDecoderPacketCapHits = 0;
-    quint64 m_statsLastDecoderAudioBytes = 0;
-    quint64 m_statsLastDecoderAudioFrames = 0;
-    quint64 m_statsLastDecoderPacedAudioCalls = 0;
-    quint64 m_statsLastDecoderPacedAudioTargetFrames = 0;
-    quint64 m_statsLastDecoderPacedAudioOutputFrames = 0;
-    quint64 m_statsLastDecoderPacedAudioShortCalls = 0;
-    quint64 m_statsLastDecoderDroppedPendingAudioBytes = 0;
-    quint64 m_statsLastDecoderDroppedPendingAudioFrames = 0;
-    quint64 m_statsLastDecoderAudioTimestampJumps = 0;
-    quint64 m_statsLastDecoderReadFrameCalls = 0;
-    quint64 m_statsLastDecoderReadFrameMs = 0;
-    quint64 m_statsLastDecoderMainReadPackets = 0;
-    quint64 m_statsLastDecoderMainReadMs = 0;
-    quint64 m_statsLastDecoderSendVideoPackets = 0;
-    quint64 m_statsLastDecoderSendVideoMs = 0;
-    quint64 m_statsLastDecoderReceiveVideoCalls = 0;
-    quint64 m_statsLastDecoderReceiveVideoMs = 0;
-    quint64 m_statsLastDecoderFinishAudioCalls = 0;
-    quint64 m_statsLastDecoderFinishAudioMs = 0;
-    quint64 m_statsLastDecoderReadAheadAudioMs = 0;
-    quint64 m_statsLastDecoderReadAheadReadMs = 0;
-    quint64 m_statsLastDecoderSendAudioPackets = 0;
-    quint64 m_statsLastDecoderSendAudioMs = 0;
-    quint64 m_statsLastDecoderConvertFrames = 0;
-    quint64 m_statsLastDecoderConvertMs = 0;
 };
 
 #endif // INCLUDE_FEATURE_CAMERA_MEDIA_PLAYBACK_STATE_H_

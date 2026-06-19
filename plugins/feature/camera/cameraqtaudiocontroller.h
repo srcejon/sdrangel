@@ -35,18 +35,6 @@ class CameraQtAudioController : public QObject
 {
     Q_OBJECT
 public:
-    struct MonitorDebugStats
-    {
-        quint64 m_submitCalls = 0;
-        quint64 m_submittedFrames = 0;
-        quint64 m_silenceFrames = 0;
-        quint64 m_overflowDrainFrames = 0;
-        quint64 m_minFillBefore = 0;
-        quint64 m_maxFillBefore = 0;
-        quint64 m_minFillAfter = 0;
-        quint64 m_maxFillAfter = 0;
-    };
-
     explicit CameraQtAudioController(QObject *parent = nullptr);
 
     bool isCapturing() const { return m_capturing; }
@@ -61,20 +49,17 @@ public:
     [[nodiscard]] int filePlaybackMonitorPrefillForOffsetMs() const;
     static int filePlaybackMonitorTargetFillMs() { return 250; }
     [[nodiscard]] int monitorTargetFillFrames(int sampleRate) const;
-    void resetMonitorDebugStats();
     void submitPcmSamples(const QByteArray& pcmS16Stereo, int sampleRate);
     void submitMonitorPcmSamples(const QByteArray& pcmS16Stereo, int sampleRate);
     void submitRecordingPcmSamples(const QByteArray& pcmS16Stereo, int sampleRate);
     int monitorSampleRate() const { return m_sampleRate; }
-    // Debug: audio still queued in the sound device (output latency not otherwise
-    // accounted for in the A/V playback clock). 0 if unavailable.
+    // Audio still queued in the sound device (output latency not otherwise
+    // accounted for in the A/V playback clock); used to compensate the video-vs-
+    // audio skew in file playback. 0 if unavailable.
     [[nodiscard]] qint64 monitorSinkLatencyUSecs() const;
     uint32_t monitorAudioFill() const { return m_outputAudioFifo.fill(); }
     uint32_t monitorPlaybackClockFill() const;
     uint32_t monitorAudioSize() const { return m_outputAudioFifo.size(); }
-    quint64 monitorDroppedFrames() const { return m_monitorDroppedFrames; }
-    quint64 monitorUnderflows() const { return m_monitorUnderflows.load(); }
-    const MonitorDebugStats& monitorDebugStats() const { return m_monitorDebugStats; }
 
 private slots:
     void onCaptureAudioDataReady();
@@ -104,7 +89,7 @@ private:
 
     // Set from the GUI thread (start/stop/setMuted) and read from the worker
     // thread in submitMonitorPcmSamples, so these must be atomic to avoid a
-    // data race (matching m_monitorUnderflows below).
+    // data race.
     std::atomic<bool> m_capturing;
     std::atomic<bool> m_muted;
     std::atomic<bool> m_captureSourceActive;
@@ -117,9 +102,6 @@ private:
     int m_filePlaybackAudioOffsetMs;
     int m_filePlaybackAudioOffsetRemainingFrames;
     bool m_filePlaybackStreamSource = false;
-    quint64 m_monitorDroppedFrames;
-    std::atomic<quint64> m_monitorUnderflows;
-    MonitorDebugStats m_monitorDebugStats;
 };
 
 #endif // INCLUDE_FEATURE_CAMERAQTAUDIOCONTROLLER_H_

@@ -34,7 +34,6 @@ void CameraMediaPlaybackState::resetClosed()
         m_streamAudioPcmS16Stereo.clear();
         m_streamAudioSampleRate = 0;
         m_streamAudioPaceRemainderFrames = 0.0;
-        m_streamAudioDroppedFrames = 0;
         m_streamAudioTrimToTargetPending = false;
     }
     m_frameRate = 25.0;
@@ -58,14 +57,4 @@ void CameraMediaPlaybackState::resetClock()
     m_basePositionMs = -1;
     m_lastFramePtsMs = -1;
     m_lastDecodeMs = 0;
-}
-
-void CameraMediaPlaybackState::resetDecodeSnapshot()
-{
-    QMutexLocker locker(&m_decodeStatsMutex);
-    m_decodeStatsSnapshot = CameraVideoFileDecoder::DebugStats();
-    m_decodeAudioPositionMs = -1;
-    m_decodePendingAudioBytes = 0;
-    m_decodePendingVideoFrames = 0;
-    m_decodePendingVideoPackets = 0;
 }

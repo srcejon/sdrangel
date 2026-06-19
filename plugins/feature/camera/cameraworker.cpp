@@ -1496,7 +1496,6 @@ bool CameraWorker::openVideoFileDecoder()
     m_mediaPlayback.m_durationMs = m_mediaPlayback.m_decoder->durationMs();
     m_mediaPlayback.m_frameRate = m_mediaPlayback.m_decoder->frameRate();
     setVideoFilePlaybackPlayingState(false);
-    resetVideoFilePlaybackStats();
     if (m_settings.isStreamCamera()) {
         m_mediaPlayback.m_decoder->setAudioPaceFrameRate(qMax(1.0, m_mediaPlayback.m_frameRate) * qMax(0.1, m_settings.m_videoPlaybackRate));
         startVideoFileDecodeThread();
@@ -1519,7 +1518,6 @@ void CameraWorker::closeVideoFileDecoder()
     clearPendingStreamVideoFileFrame();
     clearDelayedVideoFileFrames();
     m_mediaPlayback.resetClosed();
-    resetVideoFilePlaybackStats();
     if (m_settings.isFfmpegMediaSource()) {
         m_qtAudio.stop();
     }
@@ -1552,9 +1550,6 @@ void CameraWorker::setVideoFilePlaying(bool playing)
     }
     if (playing)
     {
-        if (!m_mediaPlayback.m_statsTimer.isValid()) {
-            resetVideoFilePlaybackStats();
-        }
         m_captureTimer.setSingleShot(true);
         resetVideoFilePlaybackSchedule();
         scheduleNextVideoFileTick();
@@ -1648,9 +1643,6 @@ bool CameraWorker::submitOrQueueStreamVideoFileFrame(const CameraPipelineFramePt
 
     if (m_framePreprocessor->wouldReplacePendingFrame())
     {
-        if (m_mediaPlayback.m_pendingStreamFrame) {
-            ++m_mediaPlayback.m_statsDroppedPipelineFrames;
-        }
         m_mediaPlayback.m_pendingStreamFrame = frame;
         m_mediaPlayback.m_pendingStreamFrameGeneration = m_mediaPlayback.m_frameSubmitGeneration;
         if (!m_mediaPlayback.m_streamFrameRetryTimer.isActive()) {
@@ -1661,7 +1653,6 @@ bool CameraWorker::submitOrQueueStreamVideoFileFrame(const CameraPipelineFramePt
 
     if (m_mediaPlayback.m_pendingStreamFrame)
     {
-        ++m_mediaPlayback.m_statsDroppedPipelineFrames;
         m_mediaPlayback.m_pendingStreamFrame.clear();
         m_mediaPlayback.m_pendingStreamFrameGeneration = 0;
     }
@@ -1773,7 +1764,6 @@ void CameraWorker::releaseDelayedVideoFileFrames()
     {
         if (m_settings.isStreamCamera() && m_framePreprocessor->wouldReplacePendingFrame())
         {
-            ++m_mediaPlayback.m_statsDroppedPipelineFrames;
             scheduleDelayedVideoFileFrameSubmit();
             return;
         }
@@ -1821,8 +1811,7 @@ void CameraWorker::startVideoFileDecodeThread()
             decodedFrame.m_decodeMs = decodeTimer.elapsed();
 
             {
-                QMutexLocker locker(&m_mediaPlayback.m_decodeStatsMutex);
-                m_mediaPlayback.m_decodeStatsSnapshot = m_mediaPlayback.m_decoder->debugStats();
+                QMutexLocker locker(&m_mediaPlayback.m_decodeSnapshotMutex);
                 m_mediaPlayback.m_decodeAudioPositionMs = m_mediaPlayback.m_decoder->audioDecodedPositionMs();
                 m_mediaPlayback.m_decodePendingAudioBytes = m_mediaPlayback.m_decoder->pendingAudioBytes();
                 m_mediaPlayback.m_decodePendingVideoFrames = m_mediaPlayback.m_decoder->pendingVideoFrameCount();
@@ -1929,7 +1918,13 @@ void CameraWorker::stopVideoFileDecodeThread()
     clearDecodedVideoFileFrames();
     clearStreamPlaybackAudio();
 
-    m_mediaPlayback.resetDecodeSnapshot();
+    {
+        QMutexLocker snapshotLocker(&m_mediaPlayback.m_decodeSnapshotMutex);
+        m_mediaPlayback.m_decodeAudioPositionMs = -1;
+        m_mediaPlayback.m_decodePendingAudioBytes = 0;
+        m_mediaPlayback.m_decodePendingVideoFrames = 0;
+        m_mediaPlayback.m_decodePendingVideoPackets = 0;
+    }
 }
 
 void CameraWorker::clearDecodedVideoFileFrames()
@@ -1980,7 +1975,6 @@ void CameraWorker::queueDecodedVideoFileFrame(
             firstDroppedPositionMs = m_mediaPlayback.m_decodedFrames.front().m_positionMs;
         }
         m_mediaPlayback.m_decodedFrames.pop_front();
-        m_mediaPlayback.m_decodeDroppedFrames.fetch_add(1);
         m_mediaPlayback.m_decodeDroppedSinceLastSubmit.fetch_add(1);
         ++droppedFrames;
     }
@@ -2081,7 +2075,6 @@ void CameraWorker::appendStreamPlaybackAudio(const QByteArray& pcmS16Stereo, int
         if (dropBytes > 0)
         {
             m_mediaPlayback.m_streamAudioPcmS16Stereo.remove(0, dropBytes);
-            m_mediaPlayback.m_streamAudioDroppedFrames += static_cast<quint64>(dropBytes / bytesPerSampleFrame);
         }
     }
 }
@@ -2119,7 +2112,6 @@ int CameraWorker::takeResampledStreamPlaybackAudio(QByteArray& pcmS16Stereo, int
         {
             const int dropFrames = availFrames - targetFramesInt;
             m_mediaPlayback.m_streamAudioPcmS16Stereo.remove(0, dropFrames * bytesPerSampleFrame);
-            m_mediaPlayback.m_streamAudioDroppedFrames += static_cast<quint64>(dropFrames);
             availFrames = targetFramesInt;
         }
     }
@@ -2334,7 +2326,6 @@ int CameraWorker::dropPacedStreamPlaybackAudio(int droppedVideoFrames, int audio
     }
 
     m_mediaPlayback.m_streamAudioPcmS16Stereo.remove(0, dropBytes);
-    m_mediaPlayback.m_streamAudioDroppedFrames += static_cast<quint64>(dropBytes / bytesPerSampleFrame);
     return dropBytes / bytesPerSampleFrame;
 }
 
@@ -2363,7 +2354,6 @@ int CameraWorker::dropTimedStreamPlaybackAudio(qint64 durationMs, int audioSampl
     }
 
     m_mediaPlayback.m_streamAudioPcmS16Stereo.remove(0, dropBytes);
-    m_mediaPlayback.m_streamAudioDroppedFrames += static_cast<quint64>(dropBytes / bytesPerSampleFrame);
     return dropBytes / bytesPerSampleFrame;
 }
 
@@ -2405,17 +2395,6 @@ int CameraWorker::maxDecodedStreamFrameCount() const
         CameraSettings::m_maxStreamBufferingSeconds);
     const int timeFrameCount = static_cast<int>(std::ceil(frameRate * bufferingSeconds * 2.0));
     return qMax(CameraMediaPlaybackState::m_minDecodedStreamFrames, timeFrameCount);
-}
-
-CameraVideoFileDecoder::DebugStats CameraWorker::videoFileDecoderStatsSnapshot() const
-{
-    if (m_settings.isStreamCamera())
-    {
-        QMutexLocker locker(&m_mediaPlayback.m_decodeStatsMutex);
-        return m_mediaPlayback.m_decodeStatsSnapshot;
-    }
-
-    return m_mediaPlayback.m_decoder ? m_mediaPlayback.m_decoder->debugStats() : CameraVideoFileDecoder::DebugStats();
 }
 
 qint64 CameraWorker::updateVideoFilePlaybackPosition(
@@ -2468,8 +2447,6 @@ qint64 CameraWorker::updateVideoFilePlaybackPosition(
         m_mediaPlayback.m_tick = 1;
         videoLateMs = 0;
     }
-    m_mediaPlayback.m_statsVideoLateMsTotal += videoLateMs;
-    m_mediaPlayback.m_statsVideoLateMsMax = std::max(m_mediaPlayback.m_statsVideoLateMsMax, videoLateMs);
     return m_mediaPlayback.m_positionMs;
 }
 
@@ -2495,9 +2472,7 @@ void CameraWorker::submitDecodedVideoFileFrame(
         submitVideoFileAudio(pcmS16Stereo, audioSampleRate);
     }
 
-    if (updateStats) {
-        updateVideoFilePlaybackStats(decodeMs, playbackPositionMs, pcmS16Stereo.size());
-    }
+    Q_UNUSED(updateStats);
 
     if (m_framePreprocessor)
     {
@@ -2683,7 +2658,6 @@ bool CameraWorker::readVideoFileFrame(bool submitAudio, qint64 minimumPositionMs
             submitVideoFileAudio(pcmS16Stereo, audioSampleRate);
         }
         ++droppedLateFrames;
-        ++m_mediaPlayback.m_statsDroppedLateFrames;
     }
     if (!readOk)
     {
@@ -2751,7 +2725,6 @@ void CameraWorker::submitVideoFileAudio(const QByteArray& pcmS16Stereo, int audi
             if (extraFrames > 0)
             {
                 monitorAudio.append(extraAudio);
-                m_mediaPlayback.m_statsMonitorExtraAudioFrames += static_cast<quint64>(extraFrames);
             }
         }
     }
@@ -2823,7 +2796,6 @@ void CameraWorker::resetVideoFilePlaybackSchedule()
     m_mediaPlayback.m_lastFramePtsMs = -1;
     m_mediaPlayback.m_lastDecodeMs = 0;
     m_mediaPlayback.m_streamRebuffering = false;
-    m_mediaPlayback.m_tickTimer.restart();
 }
 
 qint64 CameraWorker::videoFilePlaybackClockMs() const
@@ -2842,7 +2814,7 @@ qint64 CameraWorker::videoFilePlaybackClockMs() const
         qint64 audioDecodedPositionMs;
         qint64 decoderPendingAudioBytes;
         {
-            QMutexLocker statsLocker(&m_mediaPlayback.m_decodeStatsMutex);
+            QMutexLocker snapshotLocker(&m_mediaPlayback.m_decodeSnapshotMutex);
             audioDecodedPositionMs = m_mediaPlayback.m_decodeAudioPositionMs;
             decoderPendingAudioBytes = m_mediaPlayback.m_decodePendingAudioBytes;
         }
@@ -2939,475 +2911,6 @@ void CameraWorker::scheduleNextVideoFileTick()
     const int timerDelayMs = static_cast<int>(qMin<qint64>(std::numeric_limits<int>::max(), delayMs));
     m_captureTimer.setSingleShot(true);
     m_captureTimer.start(timerDelayMs);
-}
-
-void CameraWorker::resetVideoFilePlaybackStats()
-{
-    m_mediaPlayback.m_statsTimer.invalidate();
-    m_mediaPlayback.m_tickTimer.invalidate();
-    m_mediaPlayback.m_statsFrames = 0;
-    m_mediaPlayback.m_statsEmptyAudioFrames = 0;
-    m_mediaPlayback.m_statsMonitorExtraAudioFrames = 0;
-    m_mediaPlayback.m_statsDecodeMsTotal = 0;
-    m_mediaPlayback.m_statsDecodeMsMax = 0;
-    m_mediaPlayback.m_statsTickDeltaMsTotal = 0;
-    m_mediaPlayback.m_statsTickDeltaMsMax = 0;
-    m_mediaPlayback.m_statsPositionDeltaMsTotal = 0;
-    m_mediaPlayback.m_statsPositionDeltaMsMin = 0;
-    m_mediaPlayback.m_statsPositionDeltaMsMax = 0;
-    m_mediaPlayback.m_statsLastPositionMs = -1;
-    m_mediaPlayback.m_statsAudioBytes = 0;
-    m_mediaPlayback.m_statsDroppedLateFrames = 0;
-    m_mediaPlayback.m_statsDroppedPipelineFrames = 0;
-    m_mediaPlayback.m_statsVideoLateMsTotal = 0;
-    m_mediaPlayback.m_statsVideoLateMsMax = 0;
-    m_mediaPlayback.m_decodeDroppedFrames.store(0);
-    m_mediaPlayback.m_decodeDroppedSinceLastSubmit.store(0);
-    m_mediaPlayback.m_statsLastDroppedAudioFrames = m_qtAudio.monitorDroppedFrames();
-    m_mediaPlayback.m_statsLastAudioUnderflows = m_qtAudio.monitorUnderflows();
-    {
-        QMutexLocker locker(&m_mediaPlayback.m_streamAudioMutex);
-        m_mediaPlayback.m_statsLastStreamAudioDroppedFrames = m_mediaPlayback.m_streamAudioDroppedFrames;
-    }
-
-    if (m_mediaPlayback.m_decoder)
-    {
-        const CameraVideoFileDecoder::DebugStats stats = videoFileDecoderStatsSnapshot();
-        m_mediaPlayback.m_statsLastDecoderReadAheadCalls = stats.m_readAheadCalls;
-        m_mediaPlayback.m_statsLastDecoderReadAheadPackets = stats.m_readAheadPackets;
-        m_mediaPlayback.m_statsLastDecoderReadAheadVideoPackets = stats.m_readAheadVideoPackets;
-        m_mediaPlayback.m_statsLastDecoderReadAheadAudioPackets = stats.m_readAheadAudioPackets;
-        m_mediaPlayback.m_statsLastDecoderReadAheadOtherPackets = stats.m_readAheadOtherPackets;
-        m_mediaPlayback.m_statsLastDecoderInputVideoPackets = stats.m_inputVideoPackets;
-        m_mediaPlayback.m_statsLastDecoderInputAudioPackets = stats.m_inputAudioPackets;
-        m_mediaPlayback.m_statsLastDecoderInputOtherPackets = stats.m_inputOtherPackets;
-        m_mediaPlayback.m_statsLastDecoderEagain = stats.m_sendVideoPacketEagain;
-        m_mediaPlayback.m_statsLastDecoderQueuedFrames = stats.m_queuedVideoFrames;
-        m_mediaPlayback.m_statsLastDecoderParkedVideoPackets = stats.m_parkedVideoPackets;
-        m_mediaPlayback.m_statsLastDecoderPacketCapHits = stats.m_readAheadPacketCapHits;
-        m_mediaPlayback.m_statsLastDecoderAudioBytes = stats.m_audioBytes;
-        m_mediaPlayback.m_statsLastDecoderAudioFrames = stats.m_audioFrames;
-        m_mediaPlayback.m_statsLastDecoderPacedAudioCalls = stats.m_pacedAudioCalls;
-        m_mediaPlayback.m_statsLastDecoderPacedAudioTargetFrames = stats.m_pacedAudioTargetFrames;
-        m_mediaPlayback.m_statsLastDecoderPacedAudioOutputFrames = stats.m_pacedAudioOutputFrames;
-        m_mediaPlayback.m_statsLastDecoderPacedAudioShortCalls = stats.m_pacedAudioShortCalls;
-        m_mediaPlayback.m_statsLastDecoderDroppedPendingAudioBytes = stats.m_droppedPendingAudioBytes;
-        m_mediaPlayback.m_statsLastDecoderDroppedPendingAudioFrames = stats.m_droppedPendingAudioFrames;
-        m_mediaPlayback.m_statsLastDecoderAudioTimestampJumps = stats.m_audioTimestampJumps;
-        m_mediaPlayback.m_statsLastDecoderReadFrameCalls = stats.m_readFrameCalls;
-        m_mediaPlayback.m_statsLastDecoderReadFrameMs = stats.m_readFrameMs;
-        m_mediaPlayback.m_statsLastDecoderMainReadPackets = stats.m_mainReadPackets;
-        m_mediaPlayback.m_statsLastDecoderMainReadMs = stats.m_mainReadMs;
-        m_mediaPlayback.m_statsLastDecoderSendVideoPackets = stats.m_sendVideoPackets;
-        m_mediaPlayback.m_statsLastDecoderSendVideoMs = stats.m_sendVideoMs;
-        m_mediaPlayback.m_statsLastDecoderReceiveVideoCalls = stats.m_receiveVideoCalls;
-        m_mediaPlayback.m_statsLastDecoderReceiveVideoMs = stats.m_receiveVideoMs;
-        m_mediaPlayback.m_statsLastDecoderFinishAudioCalls = stats.m_finishAudioCalls;
-        m_mediaPlayback.m_statsLastDecoderFinishAudioMs = stats.m_finishAudioMs;
-        m_mediaPlayback.m_statsLastDecoderReadAheadAudioMs = stats.m_readAheadAudioMs;
-        m_mediaPlayback.m_statsLastDecoderReadAheadReadMs = stats.m_readAheadReadMs;
-        m_mediaPlayback.m_statsLastDecoderSendAudioPackets = stats.m_sendAudioPackets;
-        m_mediaPlayback.m_statsLastDecoderSendAudioMs = stats.m_sendAudioMs;
-        m_mediaPlayback.m_statsLastDecoderConvertFrames = stats.m_videoConvertFrames;
-        m_mediaPlayback.m_statsLastDecoderConvertMs = stats.m_videoConvertMs;
-    }
-    else
-    {
-        m_mediaPlayback.m_statsLastDecoderReadAheadCalls = 0;
-        m_mediaPlayback.m_statsLastDecoderReadAheadPackets = 0;
-        m_mediaPlayback.m_statsLastDecoderReadAheadVideoPackets = 0;
-        m_mediaPlayback.m_statsLastDecoderReadAheadAudioPackets = 0;
-        m_mediaPlayback.m_statsLastDecoderReadAheadOtherPackets = 0;
-        m_mediaPlayback.m_statsLastDecoderInputVideoPackets = 0;
-        m_mediaPlayback.m_statsLastDecoderInputAudioPackets = 0;
-        m_mediaPlayback.m_statsLastDecoderInputOtherPackets = 0;
-        m_mediaPlayback.m_statsLastDecoderEagain = 0;
-        m_mediaPlayback.m_statsLastDecoderQueuedFrames = 0;
-        m_mediaPlayback.m_statsLastDecoderParkedVideoPackets = 0;
-        m_mediaPlayback.m_statsLastDecoderPacketCapHits = 0;
-        m_mediaPlayback.m_statsLastDecoderAudioBytes = 0;
-        m_mediaPlayback.m_statsLastDecoderAudioFrames = 0;
-        m_mediaPlayback.m_statsLastDecoderPacedAudioCalls = 0;
-        m_mediaPlayback.m_statsLastDecoderPacedAudioTargetFrames = 0;
-        m_mediaPlayback.m_statsLastDecoderPacedAudioOutputFrames = 0;
-        m_mediaPlayback.m_statsLastDecoderPacedAudioShortCalls = 0;
-        m_mediaPlayback.m_statsLastDecoderDroppedPendingAudioBytes = 0;
-        m_mediaPlayback.m_statsLastDecoderDroppedPendingAudioFrames = 0;
-        m_mediaPlayback.m_statsLastDecoderAudioTimestampJumps = 0;
-        m_mediaPlayback.m_statsLastDecoderReadFrameCalls = 0;
-        m_mediaPlayback.m_statsLastDecoderReadFrameMs = 0;
-        m_mediaPlayback.m_statsLastDecoderMainReadPackets = 0;
-        m_mediaPlayback.m_statsLastDecoderMainReadMs = 0;
-        m_mediaPlayback.m_statsLastDecoderSendVideoPackets = 0;
-        m_mediaPlayback.m_statsLastDecoderSendVideoMs = 0;
-        m_mediaPlayback.m_statsLastDecoderReceiveVideoCalls = 0;
-        m_mediaPlayback.m_statsLastDecoderReceiveVideoMs = 0;
-        m_mediaPlayback.m_statsLastDecoderFinishAudioCalls = 0;
-        m_mediaPlayback.m_statsLastDecoderFinishAudioMs = 0;
-        m_mediaPlayback.m_statsLastDecoderReadAheadAudioMs = 0;
-        m_mediaPlayback.m_statsLastDecoderReadAheadReadMs = 0;
-        m_mediaPlayback.m_statsLastDecoderSendAudioPackets = 0;
-        m_mediaPlayback.m_statsLastDecoderSendAudioMs = 0;
-        m_mediaPlayback.m_statsLastDecoderConvertFrames = 0;
-        m_mediaPlayback.m_statsLastDecoderConvertMs = 0;
-    }
-    m_qtAudio.resetMonitorDebugStats();
-}
-
-void CameraWorker::updateVideoFilePlaybackStats(qint64 decodeMs, qint64 positionMs, qsizetype audioBytes)
-{
-    if (!m_mediaPlayback.m_statsTimer.isValid()) {
-        m_mediaPlayback.m_statsTimer.start();
-    }
-
-    if (m_mediaPlayback.m_tickTimer.isValid())
-    {
-        const qint64 tickDeltaMs = m_mediaPlayback.m_tickTimer.restart();
-        m_mediaPlayback.m_statsTickDeltaMsTotal += tickDeltaMs;
-        m_mediaPlayback.m_statsTickDeltaMsMax = std::max(m_mediaPlayback.m_statsTickDeltaMsMax, tickDeltaMs);
-    }
-    else
-    {
-        m_mediaPlayback.m_tickTimer.start();
-    }
-
-    ++m_mediaPlayback.m_statsFrames;
-    m_mediaPlayback.m_statsDecodeMsTotal += decodeMs;
-    m_mediaPlayback.m_statsDecodeMsMax = std::max(m_mediaPlayback.m_statsDecodeMsMax, decodeMs);
-    m_mediaPlayback.m_statsAudioBytes += static_cast<quint64>(std::max<qsizetype>(0, audioBytes));
-    if (audioBytes <= 0) {
-        ++m_mediaPlayback.m_statsEmptyAudioFrames;
-    }
-
-    if ((positionMs >= 0) && (m_mediaPlayback.m_statsLastPositionMs >= 0))
-    {
-        const qint64 deltaMs = positionMs - m_mediaPlayback.m_statsLastPositionMs;
-        m_mediaPlayback.m_statsPositionDeltaMsTotal += deltaMs;
-        if (m_mediaPlayback.m_statsPositionDeltaMsMin == 0) {
-            m_mediaPlayback.m_statsPositionDeltaMsMin = deltaMs;
-        } else {
-            m_mediaPlayback.m_statsPositionDeltaMsMin = std::min(m_mediaPlayback.m_statsPositionDeltaMsMin, deltaMs);
-        }
-        m_mediaPlayback.m_statsPositionDeltaMsMax = std::max(m_mediaPlayback.m_statsPositionDeltaMsMax, deltaMs);
-    }
-    if (positionMs >= 0) {
-        m_mediaPlayback.m_statsLastPositionMs = positionMs;
-    }
-
-    maybeReportVideoFilePlaybackStats();
-}
-
-void CameraWorker::maybeReportVideoFilePlaybackStats()
-{
-    if (!m_mediaPlayback.m_statsTimer.isValid() || (m_mediaPlayback.m_statsTimer.elapsed() < 2000) || (m_mediaPlayback.m_statsFrames == 0)) {
-        return;
-    }
-
-    const double frames = static_cast<double>(m_mediaPlayback.m_statsFrames);
-    const double avgDecodeMs = static_cast<double>(m_mediaPlayback.m_statsDecodeMsTotal) / frames;
-    const double avgTickDeltaMs = static_cast<double>(m_mediaPlayback.m_statsTickDeltaMsTotal) / frames;
-    const double avgPositionDeltaMs = m_mediaPlayback.m_statsFrames > 1
-        ? static_cast<double>(m_mediaPlayback.m_statsPositionDeltaMsTotal) / static_cast<double>(m_mediaPlayback.m_statsFrames - 1)
-        : 0.0;
-    const double avgVideoLateMs = m_mediaPlayback.m_statsFrames > 0
-        ? static_cast<double>(m_mediaPlayback.m_statsVideoLateMsTotal) / static_cast<double>(m_mediaPlayback.m_statsFrames)
-        : 0.0;
-    const quint64 droppedAudioFrames = m_qtAudio.monitorDroppedFrames();
-    const quint64 droppedAudioDelta = droppedAudioFrames - m_mediaPlayback.m_statsLastDroppedAudioFrames;
-    const quint64 audioUnderflows = m_qtAudio.monitorUnderflows();
-    const quint64 audioUnderflowDelta = audioUnderflows - m_mediaPlayback.m_statsLastAudioUnderflows;
-    const quint64 droppedDecodeQueueFrames = m_mediaPlayback.m_decodeDroppedFrames.exchange(0);
-    int pendingFrames = 0;
-    int pendingPackets = 0;
-    qint64 audioLeadMs = 0;
-    int pendingAudioBytes = 0;
-    int decoderPendingAudioBytes = 0;
-    int streamBufferAudioBytes = 0;
-    double streamResampleRatio = 1.0;
-    quint64 streamAudioDroppedFrames = 0;
-    if (m_mediaPlayback.m_decoder)
-    {
-        if (m_settings.isStreamCamera())
-        {
-            QMutexLocker queueLocker(&m_mediaPlayback.m_decodedFramesMutex);
-            pendingFrames = static_cast<int>(m_mediaPlayback.m_decodedFrames.size());
-            queueLocker.unlock();
-            QMutexLocker statsLocker(&m_mediaPlayback.m_decodeStatsMutex);
-            pendingFrames += m_mediaPlayback.m_decodePendingVideoFrames;
-            pendingPackets = m_mediaPlayback.m_decodePendingVideoPackets;
-            decoderPendingAudioBytes = m_mediaPlayback.m_decodePendingAudioBytes;
-            streamBufferAudioBytes = streamPlaybackAudioBytes();
-            pendingAudioBytes = decoderPendingAudioBytes + streamBufferAudioBytes;
-            streamResampleRatio = m_mediaPlayback.m_streamAudioResampleRatio;
-            audioLeadMs = m_mediaPlayback.m_decodeAudioPositionMs - m_mediaPlayback.m_positionMs;
-            QMutexLocker audioLocker(&m_mediaPlayback.m_streamAudioMutex);
-            streamAudioDroppedFrames = m_mediaPlayback.m_streamAudioDroppedFrames - m_mediaPlayback.m_statsLastStreamAudioDroppedFrames;
-            m_mediaPlayback.m_statsLastStreamAudioDroppedFrames = m_mediaPlayback.m_streamAudioDroppedFrames;
-        }
-        else
-        {
-            pendingFrames = m_mediaPlayback.m_decoder->pendingVideoFrameCount();
-            pendingPackets = m_mediaPlayback.m_decoder->pendingVideoPacketCount();
-            audioLeadMs = m_mediaPlayback.m_decoder->audioDecodedPositionMs() - m_mediaPlayback.m_positionMs;
-            pendingAudioBytes = m_mediaPlayback.m_decoder->pendingAudioBytes();
-        }
-    }
-    const qint64 playbackClockMs = videoFilePlaybackClockMs();
-
-    quint64 readAheadCalls = 0;
-    quint64 readAheadPackets = 0;
-    quint64 readAheadVideoPackets = 0;
-    quint64 readAheadAudioPackets = 0;
-    quint64 readAheadOtherPackets = 0;
-    quint64 inputVideoPackets = 0;
-    quint64 inputAudioPackets = 0;
-    quint64 inputOtherPackets = 0;
-    quint64 decoderEagain = 0;
-    quint64 queuedFrames = 0;
-    quint64 parkedVideoPackets = 0;
-    quint64 packetCapHits = 0;
-    quint64 decoderAudioBytes = 0;
-    quint64 decoderAudioFrames = 0;
-    quint64 pacedAudioCalls = 0;
-    quint64 pacedAudioTargetFrames = 0;
-    quint64 pacedAudioOutputFrames = 0;
-    quint64 pacedAudioShortCalls = 0;
-    quint64 droppedPendingAudioBytes = 0;
-    quint64 droppedPendingAudioFrames = 0;
-    quint64 audioTimestampJumps = 0;
-    qint64 audioTimestampJumpMaxAbsMs = 0;
-    quint64 readFrameCalls = 0;
-    quint64 readFrameMs = 0;
-    qint64 readFrameMaxMs = 0;
-    quint64 mainReadPackets = 0;
-    quint64 mainReadMs = 0;
-    qint64 mainReadMaxMs = 0;
-    quint64 sendVideoPackets = 0;
-    quint64 sendVideoMs = 0;
-    qint64 sendVideoMaxMs = 0;
-    quint64 receiveVideoCalls = 0;
-    quint64 receiveVideoMs = 0;
-    qint64 receiveVideoMaxMs = 0;
-    quint64 finishAudioCalls = 0;
-    quint64 finishAudioMs = 0;
-    qint64 finishAudioMaxMs = 0;
-    quint64 readAheadAudioMs = 0;
-    qint64 readAheadAudioMaxMs = 0;
-    quint64 readAheadReadMs = 0;
-    qint64 readAheadReadMaxMs = 0;
-    quint64 sendAudioPackets = 0;
-    quint64 sendAudioMs = 0;
-    qint64 sendAudioMaxMs = 0;
-    quint64 convertFrames = 0;
-    quint64 convertMs = 0;
-    qint64 convertMaxMs = 0;
-    int avioBufferSize = 0;
-    int avioBufferFill = 0;
-    qint64 avioBytesRead = 0;
-    if (m_mediaPlayback.m_decoder)
-    {
-        const CameraVideoFileDecoder::DebugStats stats = videoFileDecoderStatsSnapshot();
-        readAheadCalls = stats.m_readAheadCalls - m_mediaPlayback.m_statsLastDecoderReadAheadCalls;
-        readAheadPackets = stats.m_readAheadPackets - m_mediaPlayback.m_statsLastDecoderReadAheadPackets;
-        readAheadVideoPackets = stats.m_readAheadVideoPackets - m_mediaPlayback.m_statsLastDecoderReadAheadVideoPackets;
-        readAheadAudioPackets = stats.m_readAheadAudioPackets - m_mediaPlayback.m_statsLastDecoderReadAheadAudioPackets;
-        readAheadOtherPackets = stats.m_readAheadOtherPackets - m_mediaPlayback.m_statsLastDecoderReadAheadOtherPackets;
-        inputVideoPackets = stats.m_inputVideoPackets - m_mediaPlayback.m_statsLastDecoderInputVideoPackets;
-        inputAudioPackets = stats.m_inputAudioPackets - m_mediaPlayback.m_statsLastDecoderInputAudioPackets;
-        inputOtherPackets = stats.m_inputOtherPackets - m_mediaPlayback.m_statsLastDecoderInputOtherPackets;
-        decoderEagain = stats.m_sendVideoPacketEagain - m_mediaPlayback.m_statsLastDecoderEagain;
-        queuedFrames = stats.m_queuedVideoFrames - m_mediaPlayback.m_statsLastDecoderQueuedFrames;
-        parkedVideoPackets = stats.m_parkedVideoPackets - m_mediaPlayback.m_statsLastDecoderParkedVideoPackets;
-        packetCapHits = stats.m_readAheadPacketCapHits - m_mediaPlayback.m_statsLastDecoderPacketCapHits;
-        decoderAudioBytes = stats.m_audioBytes - m_mediaPlayback.m_statsLastDecoderAudioBytes;
-        decoderAudioFrames = stats.m_audioFrames - m_mediaPlayback.m_statsLastDecoderAudioFrames;
-        pacedAudioCalls = stats.m_pacedAudioCalls - m_mediaPlayback.m_statsLastDecoderPacedAudioCalls;
-        pacedAudioTargetFrames = stats.m_pacedAudioTargetFrames - m_mediaPlayback.m_statsLastDecoderPacedAudioTargetFrames;
-        pacedAudioOutputFrames = stats.m_pacedAudioOutputFrames - m_mediaPlayback.m_statsLastDecoderPacedAudioOutputFrames;
-        pacedAudioShortCalls = stats.m_pacedAudioShortCalls - m_mediaPlayback.m_statsLastDecoderPacedAudioShortCalls;
-        droppedPendingAudioBytes = stats.m_droppedPendingAudioBytes - m_mediaPlayback.m_statsLastDecoderDroppedPendingAudioBytes;
-        droppedPendingAudioFrames = stats.m_droppedPendingAudioFrames - m_mediaPlayback.m_statsLastDecoderDroppedPendingAudioFrames;
-        audioTimestampJumps = stats.m_audioTimestampJumps - m_mediaPlayback.m_statsLastDecoderAudioTimestampJumps;
-        audioTimestampJumpMaxAbsMs = audioTimestampJumps > 0 ? stats.m_audioTimestampJumpMaxAbsMs : 0;
-        readFrameCalls = stats.m_readFrameCalls - m_mediaPlayback.m_statsLastDecoderReadFrameCalls;
-        readFrameMs = stats.m_readFrameMs - m_mediaPlayback.m_statsLastDecoderReadFrameMs;
-        readFrameMaxMs = stats.m_readFrameMaxMs;
-        mainReadPackets = stats.m_mainReadPackets - m_mediaPlayback.m_statsLastDecoderMainReadPackets;
-        mainReadMs = stats.m_mainReadMs - m_mediaPlayback.m_statsLastDecoderMainReadMs;
-        mainReadMaxMs = stats.m_mainReadMaxMs;
-        sendVideoPackets = stats.m_sendVideoPackets - m_mediaPlayback.m_statsLastDecoderSendVideoPackets;
-        sendVideoMs = stats.m_sendVideoMs - m_mediaPlayback.m_statsLastDecoderSendVideoMs;
-        sendVideoMaxMs = stats.m_sendVideoMaxMs;
-        receiveVideoCalls = stats.m_receiveVideoCalls - m_mediaPlayback.m_statsLastDecoderReceiveVideoCalls;
-        receiveVideoMs = stats.m_receiveVideoMs - m_mediaPlayback.m_statsLastDecoderReceiveVideoMs;
-        receiveVideoMaxMs = stats.m_receiveVideoMaxMs;
-        finishAudioCalls = stats.m_finishAudioCalls - m_mediaPlayback.m_statsLastDecoderFinishAudioCalls;
-        finishAudioMs = stats.m_finishAudioMs - m_mediaPlayback.m_statsLastDecoderFinishAudioMs;
-        finishAudioMaxMs = stats.m_finishAudioMaxMs;
-        readAheadAudioMs = stats.m_readAheadAudioMs - m_mediaPlayback.m_statsLastDecoderReadAheadAudioMs;
-        readAheadAudioMaxMs = stats.m_readAheadAudioMaxMs;
-        readAheadReadMs = stats.m_readAheadReadMs - m_mediaPlayback.m_statsLastDecoderReadAheadReadMs;
-        readAheadReadMaxMs = stats.m_readAheadReadMaxMs;
-        sendAudioPackets = stats.m_sendAudioPackets - m_mediaPlayback.m_statsLastDecoderSendAudioPackets;
-        sendAudioMs = stats.m_sendAudioMs - m_mediaPlayback.m_statsLastDecoderSendAudioMs;
-        sendAudioMaxMs = stats.m_sendAudioMaxMs;
-        convertFrames = stats.m_videoConvertFrames - m_mediaPlayback.m_statsLastDecoderConvertFrames;
-        convertMs = stats.m_videoConvertMs - m_mediaPlayback.m_statsLastDecoderConvertMs;
-        convertMaxMs = stats.m_videoConvertMaxMs;
-        avioBufferSize = stats.m_avioBufferSize;
-        avioBufferFill = stats.m_avioBufferFill;
-        avioBytesRead = stats.m_avioBytesRead;
-        m_mediaPlayback.m_statsLastDecoderReadAheadCalls = stats.m_readAheadCalls;
-        m_mediaPlayback.m_statsLastDecoderReadAheadPackets = stats.m_readAheadPackets;
-        m_mediaPlayback.m_statsLastDecoderReadAheadVideoPackets = stats.m_readAheadVideoPackets;
-        m_mediaPlayback.m_statsLastDecoderReadAheadAudioPackets = stats.m_readAheadAudioPackets;
-        m_mediaPlayback.m_statsLastDecoderReadAheadOtherPackets = stats.m_readAheadOtherPackets;
-        m_mediaPlayback.m_statsLastDecoderInputVideoPackets = stats.m_inputVideoPackets;
-        m_mediaPlayback.m_statsLastDecoderInputAudioPackets = stats.m_inputAudioPackets;
-        m_mediaPlayback.m_statsLastDecoderInputOtherPackets = stats.m_inputOtherPackets;
-        m_mediaPlayback.m_statsLastDecoderEagain = stats.m_sendVideoPacketEagain;
-        m_mediaPlayback.m_statsLastDecoderQueuedFrames = stats.m_queuedVideoFrames;
-        m_mediaPlayback.m_statsLastDecoderParkedVideoPackets = stats.m_parkedVideoPackets;
-        m_mediaPlayback.m_statsLastDecoderPacketCapHits = stats.m_readAheadPacketCapHits;
-        m_mediaPlayback.m_statsLastDecoderAudioBytes = stats.m_audioBytes;
-        m_mediaPlayback.m_statsLastDecoderAudioFrames = stats.m_audioFrames;
-        m_mediaPlayback.m_statsLastDecoderPacedAudioCalls = stats.m_pacedAudioCalls;
-        m_mediaPlayback.m_statsLastDecoderPacedAudioTargetFrames = stats.m_pacedAudioTargetFrames;
-        m_mediaPlayback.m_statsLastDecoderPacedAudioOutputFrames = stats.m_pacedAudioOutputFrames;
-        m_mediaPlayback.m_statsLastDecoderPacedAudioShortCalls = stats.m_pacedAudioShortCalls;
-        m_mediaPlayback.m_statsLastDecoderDroppedPendingAudioBytes = stats.m_droppedPendingAudioBytes;
-        m_mediaPlayback.m_statsLastDecoderDroppedPendingAudioFrames = stats.m_droppedPendingAudioFrames;
-        m_mediaPlayback.m_statsLastDecoderAudioTimestampJumps = stats.m_audioTimestampJumps;
-        m_mediaPlayback.m_statsLastDecoderReadFrameCalls = stats.m_readFrameCalls;
-        m_mediaPlayback.m_statsLastDecoderReadFrameMs = stats.m_readFrameMs;
-        m_mediaPlayback.m_statsLastDecoderMainReadPackets = stats.m_mainReadPackets;
-        m_mediaPlayback.m_statsLastDecoderMainReadMs = stats.m_mainReadMs;
-        m_mediaPlayback.m_statsLastDecoderSendVideoPackets = stats.m_sendVideoPackets;
-        m_mediaPlayback.m_statsLastDecoderSendVideoMs = stats.m_sendVideoMs;
-        m_mediaPlayback.m_statsLastDecoderReceiveVideoCalls = stats.m_receiveVideoCalls;
-        m_mediaPlayback.m_statsLastDecoderReceiveVideoMs = stats.m_receiveVideoMs;
-        m_mediaPlayback.m_statsLastDecoderFinishAudioCalls = stats.m_finishAudioCalls;
-        m_mediaPlayback.m_statsLastDecoderFinishAudioMs = stats.m_finishAudioMs;
-        m_mediaPlayback.m_statsLastDecoderReadAheadAudioMs = stats.m_readAheadAudioMs;
-        m_mediaPlayback.m_statsLastDecoderReadAheadReadMs = stats.m_readAheadReadMs;
-        m_mediaPlayback.m_statsLastDecoderSendAudioPackets = stats.m_sendAudioPackets;
-        m_mediaPlayback.m_statsLastDecoderSendAudioMs = stats.m_sendAudioMs;
-        m_mediaPlayback.m_statsLastDecoderConvertFrames = stats.m_videoConvertFrames;
-        m_mediaPlayback.m_statsLastDecoderConvertMs = stats.m_videoConvertMs;
-    }
-    const CameraQtAudioController::MonitorDebugStats& monitorStats = m_qtAudio.monitorDebugStats();
-    const auto averageMs = [](quint64 totalMs, quint64 count) -> double {
-        return count > 0 ? static_cast<double>(totalMs) / static_cast<double>(count) : 0.0;
-    };
-    const double readFrameAvgMs = averageMs(readFrameMs, readFrameCalls);
-    const double mainReadAvgMs = averageMs(mainReadMs, mainReadPackets);
-    const double sendVideoAvgMs = averageMs(sendVideoMs, sendVideoPackets);
-    const double receiveVideoAvgMs = averageMs(receiveVideoMs, receiveVideoCalls);
-    const double finishAudioAvgMs = averageMs(finishAudioMs, finishAudioCalls);
-    const double readAheadAudioAvgMs = averageMs(readAheadAudioMs, readAheadCalls);
-    const double readAheadReadAvgMs = averageMs(readAheadReadMs, readAheadPackets);
-    const double sendAudioAvgMs = averageMs(sendAudioMs, sendAudioPackets);
-    const double convertAvgMs = convertFrames > 0
-        ? static_cast<double>(convertMs) / static_cast<double>(convertFrames)
-        : 0.0;
-
-    qDebug() << "CameraWorker: video playback stats"
-             << "frames" << m_mediaPlayback.m_statsFrames
-             << "timerMs" << videoFileFrameIntervalMs()
-             << "timerExactMs" << videoFileExactFrameIntervalMs()
-             << "fps" << (m_mediaPlayback.m_decoder ? m_mediaPlayback.m_frameRate : 0.0)
-             << "rate" << m_settings.m_videoPlaybackRate
-             << "decodeAvgMs" << avgDecodeMs
-             << "decodeMaxMs" << m_mediaPlayback.m_statsDecodeMsMax
-             << "readFrameAvgMaxMs" << readFrameAvgMs << readFrameMaxMs
-             << "mainReadAvgMaxMs" << mainReadAvgMs << mainReadMaxMs
-             << "sendVideoAvgMaxMs" << sendVideoAvgMs << sendVideoMaxMs
-             << "receiveVideoAvgMaxMs" << receiveVideoAvgMs << receiveVideoMaxMs
-             << "finishAudioAvgMaxMs" << finishAudioAvgMs << finishAudioMaxMs
-             << "readAheadAudioAvgMaxMs" << readAheadAudioAvgMs << readAheadAudioMaxMs
-             << "readAheadReadAvgMaxMs" << readAheadReadAvgMs << readAheadReadMaxMs
-             << "sendAudioAvgMaxMs" << sendAudioAvgMs << sendAudioMaxMs
-             << "convertAvgMs" << convertAvgMs
-             << "convertMaxMs" << convertMaxMs
-             << "tickAvgMs" << avgTickDeltaMs
-             << "tickMaxMs" << m_mediaPlayback.m_statsTickDeltaMsMax
-             << "posDeltaAvgMs" << avgPositionDeltaMs
-             << "posDeltaMinMaxMs" << m_mediaPlayback.m_statsPositionDeltaMsMin << m_mediaPlayback.m_statsPositionDeltaMsMax
-             << "videoLateAvgMs" << avgVideoLateMs
-             << "videoLateMaxMs" << m_mediaPlayback.m_statsVideoLateMsMax
-             << "droppedLateVideoFrames" << m_mediaPlayback.m_statsDroppedLateFrames
-             << "droppedDecodeQueueFrames" << droppedDecodeQueueFrames
-             << "droppedPipelineVideoFrames" << m_mediaPlayback.m_statsDroppedPipelineFrames
-             << "playbackClockMs" << playbackClockMs
-             << "audioBytes" << m_mediaPlayback.m_statsAudioBytes
-             << "emptyAudioFrames" << m_mediaPlayback.m_statsEmptyAudioFrames
-             << "monitorExtraAudioFrames" << m_mediaPlayback.m_statsMonitorExtraAudioFrames
-             << "monitorFill" << m_qtAudio.monitorAudioFill() << "/" << m_qtAudio.monitorAudioSize()
-             << "monitorDroppedFrames" << droppedAudioDelta
-             << "monitorUnderflows" << audioUnderflowDelta
-             << "monitorSubmitCalls" << monitorStats.m_submitCalls
-             << "monitorSubmittedFrames" << monitorStats.m_submittedFrames
-             << "monitorSilenceFrames" << monitorStats.m_silenceFrames
-             << "monitorOverflowDrainFrames" << monitorStats.m_overflowDrainFrames
-             << "monitorFillBeforeMinMax" << monitorStats.m_minFillBefore << monitorStats.m_maxFillBefore
-             << "monitorFillAfterMinMax" << monitorStats.m_minFillAfter << monitorStats.m_maxFillAfter
-             << "audioLeadMs" << audioLeadMs
-             << "pendingAudioBytes" << pendingAudioBytes
-             << "decoderPendingAudioBytes" << decoderPendingAudioBytes
-             << "streamBufferAudioBytes" << streamBufferAudioBytes
-             << "streamResampleRatio" << streamResampleRatio
-             << "streamAudioDroppedFrames" << streamAudioDroppedFrames
-             << "pacedAudioCalls" << pacedAudioCalls
-             << "pacedAudioTargetFrames" << pacedAudioTargetFrames
-             << "pacedAudioOutputFrames" << pacedAudioOutputFrames
-             << "pacedAudioShortCalls" << pacedAudioShortCalls
-             << "droppedPendingAudioBytes" << droppedPendingAudioBytes
-             << "droppedPendingAudioFrames" << droppedPendingAudioFrames
-             << "audioTimestampJumps" << audioTimestampJumps
-             << "audioTimestampJumpMaxAbsMs" << audioTimestampJumpMaxAbsMs
-             << "pendingVideoFrames" << pendingFrames
-             << "pendingVideoPackets" << pendingPackets
-             << "readAheadCalls" << readAheadCalls
-             << "readAheadPackets" << readAheadPackets
-             << "readAheadVideoPackets" << readAheadVideoPackets
-             << "readAheadAudioPackets" << readAheadAudioPackets
-             << "readAheadOtherPackets" << readAheadOtherPackets
-             << "mainReadPackets" << mainReadPackets
-             << "sendVideoPackets" << sendVideoPackets
-             << "receiveVideoCalls" << receiveVideoCalls
-             << "finishAudioCalls" << finishAudioCalls
-             << "sendAudioPackets" << sendAudioPackets
-             << "inputVideoPackets" << inputVideoPackets
-             << "inputAudioPackets" << inputAudioPackets
-             << "inputOtherPackets" << inputOtherPackets
-             << "decoderEagain" << decoderEagain
-             << "queuedVideoFrames" << queuedFrames
-             << "parkedVideoPackets" << parkedVideoPackets
-             << "packetCapHits" << packetCapHits
-             << "decoderAudioBytes" << decoderAudioBytes
-             << "decoderAudioFrames" << decoderAudioFrames
-             << "avioBufferFillSize" << avioBufferFill << avioBufferSize
-             << "avioBytesRead" << avioBytesRead;
-
-    m_mediaPlayback.m_statsFrames = 0;
-    m_mediaPlayback.m_statsEmptyAudioFrames = 0;
-    m_mediaPlayback.m_statsMonitorExtraAudioFrames = 0;
-    m_mediaPlayback.m_statsDecodeMsTotal = 0;
-    m_mediaPlayback.m_statsDecodeMsMax = 0;
-    m_mediaPlayback.m_statsTickDeltaMsTotal = 0;
-    m_mediaPlayback.m_statsTickDeltaMsMax = 0;
-    m_mediaPlayback.m_statsPositionDeltaMsTotal = 0;
-    m_mediaPlayback.m_statsPositionDeltaMsMin = 0;
-    m_mediaPlayback.m_statsPositionDeltaMsMax = 0;
-    m_mediaPlayback.m_statsAudioBytes = 0;
-    m_mediaPlayback.m_statsDroppedLateFrames = 0;
-    m_mediaPlayback.m_statsDroppedPipelineFrames = 0;
-    m_mediaPlayback.m_statsVideoLateMsTotal = 0;
-    m_mediaPlayback.m_statsVideoLateMsMax = 0;
-    m_mediaPlayback.m_statsLastDroppedAudioFrames = droppedAudioFrames;
-    m_mediaPlayback.m_statsLastAudioUnderflows = audioUnderflows;
-    m_qtAudio.resetMonitorDebugStats();
-    m_mediaPlayback.m_statsTimer.restart();
 }
 
 void CameraWorker::reportVideoFilePlaybackToGUI() const

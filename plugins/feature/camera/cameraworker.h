@@ -727,7 +727,6 @@ private:
     int decodedStreamFrameQueueDepth() const;
     int maxDecodedStreamFrameCount() const;
     bool readQueuedVideoFileFrame(bool submitAudio);
-    CameraVideoFileDecoder::DebugStats videoFileDecoderStatsSnapshot() const;
     qint64 updateVideoFilePlaybackPosition(qint64 decodedPositionMs, qint64 decodeMs, bool repairTimestampDiscontinuities, bool resetClockOnLargeDrift);
     void submitDecodedVideoFileFrame(
         const QImage& image,
@@ -749,9 +748,6 @@ private:
     void resetVideoFilePlaybackSchedule();
     qint64 videoFilePlaybackClockMs() const;
     void scheduleNextVideoFileTick();
-    void resetVideoFilePlaybackStats();
-    void updateVideoFilePlaybackStats(qint64 decodeMs, qint64 positionMs, qsizetype audioBytes);
-    void maybeReportVideoFilePlaybackStats();
     void reportVideoFilePlaybackToGUI() const;
     QImage createPlaceholderFrame() const;
     void reportAlpacaCameraInfoToGUI(const CameraAlpacaController::CapabilitiesReport& report);

@@ -356,19 +356,11 @@ private:
     static constexpr int m_maxPendingFrames = 3;
     std::deque<CameraPipelineFramePtr> m_pendingFrames;
     bool m_processingFrame;
-    qint64 m_playbackLatencyStatsStartMs = 0;
-    quint64 m_playbackLatencyStatsFrames = 0;
-    quint64 m_playbackLatencyStatsDroppedFrames = 0;
-    qint64 m_playbackLatencyStatsTotalMs = 0;
-    qint64 m_playbackLatencyStatsMaxMs = 0;
-    qint64 m_playbackLatencyStatsLastPositionMs = -1;
     mutable SkyGridOverlayCache m_skyGridOverlayCache;
     bool handleMessage(const Message& cmd);
     void applySettings(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force = false);
     void saveCurrentImage();
     void processNewFrame(const CameraPipelineFramePtr& frame);
-    void resetPlaybackLatencyStats();
-    void updatePlaybackLatencyStats(const CameraPipelineFrame& frame, qint64 latencyMs);
     [[nodiscard]] QImage applyPostProcessing(
         const CameraPipelineFrame& frame,
         bool drawPreviewText = true,

@@ -71,62 +71,6 @@ public:
     [[nodiscard]] int pendingVideoFrameCount() const { return static_cast<int>(m_pendingVideoFrames.size()); }
     [[nodiscard]] int pendingVideoPacketCount() const { return static_cast<int>(m_pendingVideoPackets.size()); }
 
-    struct DebugStats
-    {
-        quint64 m_readAheadCalls = 0;
-        quint64 m_readAheadPackets = 0;
-        quint64 m_readAheadVideoPackets = 0;
-        quint64 m_readAheadAudioPackets = 0;
-        quint64 m_readAheadOtherPackets = 0;
-        quint64 m_inputVideoPackets = 0;
-        quint64 m_inputAudioPackets = 0;
-        quint64 m_inputOtherPackets = 0;
-        quint64 m_sendVideoPacketEagain = 0;
-        quint64 m_queuedVideoFrames = 0;
-        quint64 m_parkedVideoPackets = 0;
-        quint64 m_readAheadPacketCapHits = 0;
-        quint64 m_audioBytes = 0;
-        quint64 m_audioFrames = 0;
-        quint64 m_pacedAudioCalls = 0;
-        quint64 m_pacedAudioTargetFrames = 0;
-        quint64 m_pacedAudioOutputFrames = 0;
-        quint64 m_pacedAudioShortCalls = 0;
-        quint64 m_droppedPendingAudioBytes = 0;
-        quint64 m_droppedPendingAudioFrames = 0;
-        quint64 m_audioTimestampJumps = 0;
-        qint64 m_audioTimestampJumpMaxAbsMs = 0;
-        quint64 m_readFrameCalls = 0;
-        quint64 m_readFrameMs = 0;
-        qint64 m_readFrameMaxMs = 0;
-        quint64 m_mainReadPackets = 0;
-        quint64 m_mainReadMs = 0;
-        qint64 m_mainReadMaxMs = 0;
-        quint64 m_sendVideoPackets = 0;
-        quint64 m_sendVideoMs = 0;
-        qint64 m_sendVideoMaxMs = 0;
-        quint64 m_receiveVideoCalls = 0;
-        quint64 m_receiveVideoMs = 0;
-        qint64 m_receiveVideoMaxMs = 0;
-        quint64 m_finishAudioCalls = 0;
-        quint64 m_finishAudioMs = 0;
-        qint64 m_finishAudioMaxMs = 0;
-        quint64 m_readAheadAudioMs = 0;
-        qint64 m_readAheadAudioMaxMs = 0;
-        quint64 m_readAheadReadMs = 0;
-        qint64 m_readAheadReadMaxMs = 0;
-        quint64 m_sendAudioPackets = 0;
-        quint64 m_sendAudioMs = 0;
-        qint64 m_sendAudioMaxMs = 0;
-        quint64 m_videoConvertFrames = 0;
-        quint64 m_videoConvertMs = 0;
-        qint64 m_videoConvertMaxMs = 0;
-        int m_avioBufferSize = 0;
-        int m_avioBufferFill = 0;
-        qint64 m_avioBytesRead = 0;
-    };
-
-    [[nodiscard]] const DebugStats& debugStats() const { return m_debugStats; }
-
 private:
     struct PendingVideoFrame
     {
@@ -183,7 +127,6 @@ private:
     // convertFrameToImage, cutting malloc/page-fault churn at frame rate. Sized
     // for the in-flight frame count (≤4 stream pending + worker/pipeline copies).
     CameraImagePool m_imagePool { 8 };
-    DebugStats m_debugStats;
 
     [[nodiscard]] bool openVideoDecoder(QString& errorMessage);
     [[nodiscard]] bool openAudioDecoder(QString& errorMessage);
@@ -205,7 +148,6 @@ private:
     void takePacedAudio(QByteArray& pcmS16Stereo);
     void clearPendingAudio();
     void appendPendingAudio(const QByteArray& pcmS16Stereo);
-    void updateAvioDebugStats();
     void clearPendingVideoPackets();
     void closeAudioDecoder();
 };

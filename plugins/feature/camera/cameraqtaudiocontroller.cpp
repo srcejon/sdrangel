@@ -42,9 +42,7 @@ CameraQtAudioController::CameraQtAudioController(QObject *parent) :
     m_recordingMessageQueue(nullptr),
     m_filePlaybackAudioOffsetMs(0),
     m_filePlaybackAudioOffsetRemainingFrames(0),
-    m_filePlaybackStreamSource(false),
-    m_monitorDroppedFrames(0),
-    m_monitorUnderflows(0)
+    m_filePlaybackStreamSource(false)
 {
     // Audio FIFO: stereo 16-bit PCM at 48 kHz; keep enough decoded file audio to absorb timer jitter.
     static constexpr int audioFifoFrames = 48000 * 2;
@@ -52,9 +50,6 @@ CameraQtAudioController::CameraQtAudioController(QObject *parent) :
     m_captureAudioFifo.setSize(audioFifoFrames);
     m_outputAudioFifo.setSize(audioFifoFrames);
     m_audioTransferBuffer.resize(audioFifoFrames * bytesPerSampleFrame);
-    QObject::connect(&m_outputAudioFifo, &AudioFifo::underflow, this, [this]() {
-        ++m_monitorUnderflows;
-    });
 }
 
 void CameraQtAudioController::start(const CameraSettings& settings, MessageQueue *messageQueue)
@@ -73,9 +68,6 @@ void CameraQtAudioController::start(const CameraSettings& settings, MessageQueue
              << "inputDeviceIndex" << inputDeviceIndex;
     audioDeviceManager->addAudioSink(&m_outputAudioFifo, messageQueue, outputDeviceIndex);
     m_outputDeviceIndex = outputDeviceIndex;
-    m_monitorDroppedFrames = 0;
-    m_monitorUnderflows.store(0);
-    m_monitorDebugStats = MonitorDebugStats();
     QObject::connect(&m_captureAudioFifo, &AudioFifo::dataReady, this, &CameraQtAudioController::onCaptureAudioDataReady);
     audioDeviceManager->addAudioSource(&m_captureAudioFifo, messageQueue, inputDeviceIndex);
     m_muted = settings.m_audioMute;
@@ -91,9 +83,6 @@ int CameraQtAudioController::startFilePlayback(const CameraSettings& settings, M
     AudioDeviceManager *audioDeviceManager = DSPEngine::instance()->getAudioDeviceManager();
     const int outputDeviceIndex = audioDeviceManager->getOutputDeviceIndex(settings.m_audioDeviceName);
     const int outputSampleRate = audioDeviceManager->getOutputSampleRate(outputDeviceIndex);
-    m_monitorDroppedFrames = 0;
-    m_monitorUnderflows.store(0);
-    m_monitorDebugStats = MonitorDebugStats();
     m_muted = settings.m_audioMute;
     m_sampleRate = outputSampleRate > 0 ? outputSampleRate : AudioDeviceManager::m_defaultAudioSampleRate;
     m_filePlaybackAudioOffsetMs = qBound(
@@ -189,12 +178,6 @@ void CameraQtAudioController::prefillMonitorAudio(int milliseconds)
     silence.resize(static_cast<qsizetype>(prefillFrames) * bytesPerSampleFrame);
     silence.fill(0);
     m_outputAudioFifo.write(reinterpret_cast<const quint8*>(silence.constData()), prefillFrames);
-    m_monitorDebugStats.m_silenceFrames += prefillFrames;
-}
-
-void CameraQtAudioController::resetMonitorDebugStats()
-{
-    m_monitorDebugStats = MonitorDebugStats();
 }
 
 void CameraQtAudioController::submitPcmSamples(const QByteArray& pcmS16Stereo, int sampleRate)
@@ -237,17 +220,6 @@ void CameraQtAudioController::submitMonitorPcmSamples(const QByteArray& pcmS16St
             fifoSize,
             static_cast<uint32_t>(std::max(m_sampleRate / 2, monitorFrames * 4)));
         const int skippedInputFrames = sampleFrames - monitorFrames;
-        if (skippedInputFrames > 0) {
-            m_monitorDroppedFrames += static_cast<quint64>(skippedInputFrames);
-        }
-        ++m_monitorDebugStats.m_submitCalls;
-        m_monitorDebugStats.m_submittedFrames += static_cast<quint64>(monitorFrames);
-
-        uint32_t fill = m_outputAudioFifo.fill();
-        if ((m_monitorDebugStats.m_submitCalls == 1) || (fill < m_monitorDebugStats.m_minFillBefore)) {
-            m_monitorDebugStats.m_minFillBefore = fill;
-        }
-        m_monitorDebugStats.m_maxFillBefore = std::max<quint64>(m_monitorDebugStats.m_maxFillBefore, fill);
 
         if (!m_captureSourceActive)
         {
@@ -279,15 +251,8 @@ void CameraQtAudioController::submitMonitorPcmSamples(const QByteArray& pcmS16St
         const uint32_t fillBeforeTrim = m_outputAudioFifo.fill();
         if (fillBeforeTrim > maxFillFrames)
         {
-            const uint32_t drained = m_outputAudioFifo.drain(fillBeforeTrim - maxFillFrames);
-            m_monitorDroppedFrames += drained;
-            m_monitorDebugStats.m_overflowDrainFrames += drained;
+            m_outputAudioFifo.drain(fillBeforeTrim - maxFillFrames);
         }
-        const uint32_t fillAfter = m_outputAudioFifo.fill();
-        if ((m_monitorDebugStats.m_submitCalls == 1) || (fillAfter < m_monitorDebugStats.m_minFillAfter)) {
-            m_monitorDebugStats.m_minFillAfter = fillAfter;
-        }
-        m_monitorDebugStats.m_maxFillAfter = std::max<quint64>(m_monitorDebugStats.m_maxFillAfter, fillAfter);
     }
 }
 
@@ -370,7 +335,6 @@ void CameraQtAudioController::applyFilePlaybackAudioOffset(QByteArray& pcmS16Ste
         silence.resize(static_cast<qsizetype>(m_filePlaybackAudioOffsetRemainingFrames) * bytesPerSampleFrame);
         silence.fill(0);
         pcmS16Stereo.prepend(silence);
-        m_monitorDebugStats.m_silenceFrames += static_cast<quint64>(m_filePlaybackAudioOffsetRemainingFrames);
         m_filePlaybackAudioOffsetRemainingFrames = 0;
     }
 }

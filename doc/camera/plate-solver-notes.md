@@ -2156,3 +2156,93 @@ is empirically confirmed, and removed one at a time against the full suite + a G
 **Not done — WS1b** (decision-boundary margins + deterministic tie-breaks): the second half of WS1, a
 separate moderate-risk change that generalises the match-count-grid lesson. Not required to close the
 independent-compilation divergence class, which WS1a handles structurally.
+
+## WS3 — acceptance-gate ablation, pass 1 (2026-06-19)
+
+**Measure-first finding (faLogOdds is NOT a viable single gate).** Extracted `verify.faLogOddsMilli`
+for every passing REAL case: true-accept faLogOdds spans **1.5 → 1204** (stars-narrow-3 = 1.5 total /
+0.05 per match; stars-wide-1 = 10.4; dense m31/c11/cluster-m7 = 476/769/798; max 1204). The notes'
+documented wrong-pose rejections score 45–143, so true accepts (down to 1.5) overlap rejects (up to
+143) — any single faLogOdds threshold either rejects sparse/faint correct solves or accepts
+contaminated poses. The plan's literal WS3 step-1 ("make faLogOdds the primary gate replacing the 145
+sites") is therefore **not viable** with the current per-match-sum metric (it scores *whether* bright
+stars match, not their geometric configuration, and under-credits sparse/faint correct solves). WS3
+reframed to **gate ablation** (find & delete redundant gates), the same method that retired blindquad.
+
+**Instrumentation (kept, inert by default):** `gateAblationDisabled(token)` helper +
+`SDRANGEL_CAMERA_PLATE_SOLVER_DISABLE_GATE` env hook (mirrors the seed-ablation pattern), wiring the
+7 direction-seed acceptance gates in `directionSeedAcceptanceFor` so each can be neutralised to its
+permissive value. Confirmed inert: REAL 48/48 with the env unset. Harness: `test/gateablate.ps1`
+(env-driven, no rebuilds); results `test/gateablate-results.csv`.
+
+**Pass-1 result (baseline REAL 48 · RAND2 148 · 6 obvious-garbage negatives):**
+
+| gate (disabled → permissive) | REAL | RAND2 | neg FP | verdict |
+|---|---|---|---|---|
+| overwhelmingFaint | 48 | 148 | – | inert (no deciding vote) |
+| sparsePair | 48 | 148 | – | inert |
+| highConfSparseAnchors | 48 | 148 | – | inert |
+| fov | 48 | 148 | – | inert |
+| residual | 48 | 148 | – | inert |
+| **weakBrightSupport** | 43 (−5) | 120 (−28) | – | **load-bearing** |
+| **brightnessConsistency** | 47 (−ngc-2403) | 148 | **neg-blobs** | **load-bearing** |
+
+- **weakBrightSupport is overloaded** — it is also the *trigger* for the dense-match polish +
+  bright-anchor rescue (their precondition is `weakBrightSupport==true`). Forcing it false disables
+  those rescues, collapsing 33 cases (narrow-1/3/4, m51-2, c11 + 28 RAND2). It cannot be simplified
+  without first untangling the rescue trigger from the reject signal.
+- **brightnessConsistency** forced-permissive prematurely accepts a *wrong* pose for ngc-2403
+  (bypassing the rescue that finds the right one) and lets garbage (neg-blobs) through — a genuine
+  false-positive protector.
+- **5 of 7 gates cast no deciding vote** on the trustworthy corpus → strong support for the WS3
+  over-determination thesis (much hand-tuned acceptance is redundant). **But not yet safe to delete:**
+  the negative suite is only 6 obvious-garbage cases (thin false-positive coverage) and there is no
+  fisheye/wide-blind regime in this pass. The 3 accept-bypasses (overwhelmingFaint/sparsePair/
+  highConfSparseAnchors) can only tighten acceptance (no FP risk) but were built for faint/sparse
+  fields; the 2 reject gates (fov/residual) being deletable rests on the thin negative coverage.
+
+**Pass-2 (2026-06-19): strengthened coverage reclassified `residual`.** Re-ablated the 5 inert gates
+against FISHEYE-mode4 (guided wide-fisheye, baseline 42/50) + 2 near-boundary negatives (real narrow
+fields pointed 30 deg off truth, `test/star-tests-nearboundary-neg.csv`, both `solved=false` at
+baseline) + the 6 garbage negatives. Harness `test/gateablate2.ps1`; results
+`test/gateablate2-results.csv`. Result: **`residual` is load-bearing** — disabling it makes the
+near-boundary negative `stars-narrow-6` a false positive (accepted at the wrong 30-deg-off pose), and
+adds a fisheye false-solve (FISH4 solvedTrue 48->49). The garbage-only negatives of pass 1 missed
+this; one plausible-but-wrong negative caught it. The other 4 (overwhelmingFaint, sparsePair,
+highConfSparseAnchors, fov) stayed fully inert across FISH4 + all 8 negatives.
+
+Lesson: "inert on corpus" is fragile evidence — a single near-boundary negative flipped `residual`.
+This raises the bar for the remaining 4 and means a near-boundary negative *suite* (not 2 cases) is
+the right long-term FP oracle.
+
+**Side finding (noted, not chased):** the near-boundary probe showed the solver accepts a *wrong*
+pose for rich bright fields at a 30-deg seed error (narrow-8 solved=true at the offset az, caught by
+the harness as FAIL; narrow-9 solved=true and slipped through as PASS via a weak named-anchor oracle).
+This is the documented coincidental-contamination class at an unrealistic seed error (gates are
+calibrated for ~1 deg); narrow-9's PASS also hints some corpus PASS verdicts are weakly validated.
+
+**Joint-disable check (2026-06-19):** disabling all 4 still-inert gates *simultaneously*
+(`overwhelmingFaint,sparsePair,highConfSparseAnchors,fov`) across REAL + RAND2 + FISHEYE-mode4 + all 8
+negatives was **fully inert** (REAL 48, RAND2 148, FISH4 42, zero new false positives) — so the 3
+accept-bypasses are *jointly* redundant (no faint field rides on their OR), and even `fov` casts no
+deciding vote on this coverage.
+
+**Deletion landed (2026-06-19):** removed the `overwhelmingFaint`, `sparsePair`, and
+`highConfSparseAnchors` accept-bypass branches from `directionSeedAcceptanceFor`, and deleted the
+now-orphaned `hasOverwhelmingFaintGuidedSupport` member function (it was used only in that lambda;
+`isAcceptableSparseGuidedPairFinalPass` and `hasHighConfidenceSparseGuidedAnchors` are retained — they
+are still used in the rescue/recenter/roll-alias paths). Re-validated behaviour-neutral: **REAL 48 ·
+RAND2 148 · FISHEYE-mode4 42 · zero false positives** across near-boundary + garbage negatives.
+
+**Kept (load-bearing):** `weakBrightSupport` (also the rescue/polish trigger), `brightnessConsistency`
+(rejects wrong poses + garbage), `residual` (the near-boundary FP protector). **Kept (deferred):**
+`fov` — a *reject* gate; the `residual` lesson (one near-boundary negative reclassified it) means
+reject gates need failure-mode-specific adversarial coverage before removal, and the current negatives
+do not vary FoV. Removing `fov` awaits a wrong-FoV negative suite.
+
+**Net WS3 pass-1 result:** the direction-seed acceptance decision dropped from 7 gate terms to 4, with
+one helper function deleted and no behaviour change on any corpus. The `gateAblationDisabled` hook +
+`SDRANGEL_CAMERA_PLATE_SOLVER_DISABLE_GATE` env var are retained as standing infrastructure (inert by
+default) for the next ablation pass (roll-alias / blind / elevation acceptance paths, and `fov` once a
+wrong-FoV negative suite exists). Harnesses: `test/gateablate.ps1`, `test/gateablate2.ps1`,
+`test/star-tests-nearboundary-neg.csv` (untracked local tooling, like the seed-ablation scripts).

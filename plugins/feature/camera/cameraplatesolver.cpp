@@ -13696,6 +13696,26 @@ bool hasNamedBrightAnchorCertifiedPose(const CameraSettings& settings,
 // sigma is tied to the geometric match radius (r/4) rather than a tuned setting: a
 // real match is expected well inside the match disk. The only free knob this exposes
 // to an eventual accept decision is a single log-odds threshold.
+// Ablation harness hook (WS3 acceptance-layer consolidation): SDRANGEL_CAMERA_PLATE_SOLVER_DISABLE_GATE
+// is a comma-separated list of acceptance-gate tokens to neutralise (force each to its permissive /
+// non-rejecting value), so the marginal contribution of every accept/reject gate to the corpus +
+// negative suites can be measured one at a time, exactly like the seed-engine ablation. Inert unless
+// the env var is set (read once, cached). See doc/camera/plate-solver-notes.md "WS3".
+static bool gateAblationDisabled(const char* token)
+{
+    static const QString disabled = qEnvironmentVariable("SDRANGEL_CAMERA_PLATE_SOLVER_DISABLE_GATE");
+    if (disabled.isEmpty()) {
+        return false;
+    }
+    const QStringList tokens = disabled.split(QLatin1Char(','), Qt::SkipEmptyParts);
+    for (const QString& t : tokens) {
+        if (t.trimmed().compare(QLatin1String(token), Qt::CaseInsensitive) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
 static double poseFalseAlarmLogOdds(const PlateSolveCatalogContext& catalogContext,
                                     const FinalMatchPassEvaluation& finalPass,
                                     const QSize& imageSize,
@@ -13792,31 +13812,11 @@ static double poseFalseAlarmLogOdds(const PlateSolveCatalogContext& catalogConte
     return logOdds;
 }
 
-// A narrow guided-direction final pass with many matches at sub-pixel RMS is a true
-// alignment by overwhelming statistical evidence (cf. poseFalseAlarmLogOdds): scores of
-// catalog stars cannot land sub-pixel on detections by chance. Such a pose is genuinely
-// solved even when the field carries NO bright/saturated anchors — faint Milky-Way or
-// high-galactic-latitude fields legitimately lack them, and the bright-anchor support
-// gates then wrongly reject an otherwise perfect solve (surfaced by the synthetic random
-// corpus: 9/38 zero-jitter failures were correct fits at rms 0.15-0.30 with 55-89 matches).
-// Used to bypass the *brightness* acceptance gates only; the FoV and direction-seed
-// quality gates still apply.
-bool hasOverwhelmingFaintGuidedSupport(const CameraSettings& settings,
-                                       const FinalMatchPassEvaluation& finalPass)
-{
-    if (!finalPass.projectorValid || (!isNarrowField(settings))) {
-        return false;
-    }
-    const int matchCount = finalPass.finalMatches.size();
-    const double rms = finalPass.rmsErrorPixels;
-    const double maxErr = finalPass.maxErrorPixels;
-    const int strongFloor = std::max(settings.m_plateSolveMinMatches + 20, 30);
-    const double tightRms = std::min(1.5, static_cast<double>(settings.m_plateSolveFinalMatchRadius) * 0.12);
-    const double maxErrCap = std::max(6.0, static_cast<double>(settings.m_plateSolveFinalMatchRadius) * 0.5);
-    return (matchCount >= strongFloor)
-        && std::isfinite(rms) && (rms <= tightRms)
-        && std::isfinite(maxErr) && (maxErr <= maxErrCap);
-}
+// (WS3 2026-06-19) hasOverwhelmingFaintGuidedSupport was removed: it bypassed the brightness
+// acceptance gates for faint anchor-less fields, but ablation showed it casts no deciding vote on
+// REAL + RAND2 (the faint synthetic regime) + FISHEYE + negatives, even jointly with the other two
+// accept-bypasses. If a real faint/high-galactic-latitude field is later wrongly rejected for weak
+// bright support, this is the bypass to reinstate (git history / doc/camera/plate-solver-notes.md).
 
 bool hasWeakNarrowGuidedBrightSupport(const CameraSettings& settings,
                                       const FinalMatchPassEvaluation& finalPass)
@@ -22951,27 +22951,27 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
     auto directionSeedAcceptanceFor = [&](const FinalMatchPassEvaluation& pass) -> DirectionSeedAcceptance
     {
         DirectionSeedAcceptance acceptance;
-        const bool overwhelmingFaint = useStartDirection
-            && hasOverwhelmingFaintGuidedSupport(settings, pass);
-        const bool sparsePairAccepted = isAcceptableSparseGuidedPairFinalPass(
-            settings, catalogContext, starDetections, pass);
+        // WS3 (2026-06-19): the overwhelmingFaint / sparsePair / highConfSparseAnchors accept-bypasses
+        // were removed from this decision after ablation proved them jointly inert across REAL + RAND2
+        // + FISHEYE-mode4 + near-boundary/garbage negatives (zero pass-drops, zero false positives;
+        // see doc/camera/plate-solver-notes.md "WS3"). The remaining gates keep their ablation hooks
+        // (SDRANGEL_CAMERA_PLATE_SOLVER_DISABLE_GATE) for future measurement; all are inert when unset.
         acceptance.weakBrightSupport = useStartDirection
-            && !sparsePairAccepted
-            && !overwhelmingFaint
-            && !hasHighConfidenceSparseGuidedAnchors(settings, pass)
+            && !gateAblationDisabled("weakBrightSupport")
             && hasWeakNarrowGuidedBrightSupport(settings, pass);
-        acceptance.fovAccepted = isAcceptableNarrowGuidedFov(settings, pass.pose.fovDegrees);
+        acceptance.fovAccepted = gateAblationDisabled("fov")
+            || isAcceptableNarrowGuidedFov(settings, pass.pose.fovDegrees);
         acceptance.acceptable = !useStartDirection
-            || sparsePairAccepted
             || (!acceptance.weakBrightSupport
                 && acceptance.fovAccepted
-                && isAcceptableDirectionSeedSolve(
-                    settings,
-                    starDetections,
-                    pass.finalMatches,
-                    pass.rmsErrorPixels,
-                    pass.maxErrorPixels)
-                && (overwhelmingFaint
+                && (gateAblationDisabled("residual")
+                    || isAcceptableDirectionSeedSolve(
+                        settings,
+                        starDetections,
+                        pass.finalMatches,
+                        pass.rmsErrorPixels,
+                        pass.maxErrorPixels))
+                && (gateAblationDisabled("brightnessConsistency")
                     || hasAcceptableGuidedFinalBrightnessConsistency(settings, pass)));
         return acceptance;
     };

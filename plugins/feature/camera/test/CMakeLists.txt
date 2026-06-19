@@ -3,10 +3,12 @@ set(camera_star_tests_SOURCES
     ../cameradetector.cpp
     ../cameraimageutils.cpp
     ../camerastardetector.cpp
-    ../cameraplatesolver.cpp
     ../camerasettings.cpp
     ../cameraicons.qrc
 )
+# WS1a: cameraplatesolver.cpp is NOT compiled here. It comes from the camera_platesolver static
+# library (defined in ../CMakeLists.txt) which the featurecamera plugin also links, so the harness
+# runs the byte-identical solver object that ships in the GUI -- no cross-build ULP divergence.
 
 set(camera_star_tests_HEADERS
     ../cameradetector.h
@@ -36,6 +38,7 @@ target_include_directories(featurecamera_star_tests PRIVATE
 )
 
 target_link_libraries(featurecamera_star_tests PRIVATE
+    camera_platesolver
     Qt::Core
     Qt::Gui
     Qt::Network

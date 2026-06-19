@@ -2062,3 +2062,97 @@ Payoff: 4 engines + 1 subroutine → 1 parameterized engine; one code function, 
 one verification path; new regime combos for free; smaller seed-layer tuning surface.
 Non-goal: this does not simplify the acceptance gates (downstream); that is the separate
 "single faLogOdds-based accept" idea.
+
+## WS0 — threshold inventory + sensitivity sweep (2026-06-18, in the worktree)
+
+**WS0a (inventory).** Of the 87 `k*` declarations in `cameraplatesolver.cpp`, **34 are genuine
+decision/tuning thresholds** (the overfit surface); the rest are infrastructure (Siril catalog
+I/O + healpix sizing ~389-422, parallelism/cache limits 539-573/5750/5819, URLs/paths, `kPi`,
+debug log flags, `kVisibleAltitudeFloor`, catalog-query radii). NB the 34 named constants are
+**not** the ~145 bare-literal accept/reject sites — those inline literals are a deeper,
+un-named overfit surface this sweep does not touch.
+
+**WS0b (sensitivity sweep, REAL corpus).** Harness `test/ksweep.ps1` (untracked local tooling,
+like seed-ablation.ps1): perturbs each of the 34 constants ±10% (±1 for small int caps) in-source,
+incrementally rebuilds (~12s/rebuild) and re-runs the REAL suite vs the 48/48 baseline; results in
+`test/ksweep-results.csv`. Zero-refactor (pristine backup restored after every iteration; tree
+verified clean after). Baseline is all-pass, so any flip = a real case going PASS→FAIL, exposing a
+margin. Two harness gotchas hit + fixed (recorded in [[camera-star-tests-run-procedure]]): a `.ps1`
+em-dash that PS5.1 reads (no-BOM→ANSI) as U+201D `”` = a string delimiter (parser desync); and
+`$ErrorActionPreference='Stop'` turning vcvars/cmake/exe **native stderr** into a terminating
+NativeCommandError (use `Continue` + explicit exe-mtime/matchCount checks).
+
+**Result: 28/34 constants are robust** (≥10% margin both directions, zero flips) — corroborates the
+2026-06-16 metamorphic/negative finding that the solver is not broadly overfit at the named-constant
+level. **6 constants are tight in ≥1 direction:**
+
+| constant | direction | #flips | case(s) |
+|---|---|---|---|
+| kMaxDetectionsForSolve | −10 (96→86) | 1 | galaxy-m51-1 (m51@14) |
+| kGeometricSupportCap | −10 (8→7) | 1 | galaxy-m101-1 (m101@15) |
+| kRetrySearchRadiusDegrees | −10 (12→10.8) | 1 | stars-narrow-7 |
+| kRetrySearchRadiusDegrees | +10 (12→13.2) | 2 | stars-narrow-3, cluster-m3-1 |
+| kWideFovBrightFirstPassMaxMagnitude | +10 (5→5.5) | 2 | stars-wide-1, stars-wide-2 |
+| kNarrowGuidedBrightCatalogMaxMagnitude | +10 (12→13.2) | 2 | galaxy-m101-1, pollux |
+
+**Reading the map:**
+- **Cleanest fitted-to-one-image smell** (exactly one case, one-sided): `kMaxDetectionsForSolve` (−)
+  and `kGeometricSupportCap` (−). Each guards a single fragile case.
+- **Most fragile / most over-tuned:** `kRetrySearchRadiusDegrees` — flips in **both** directions;
+  12.0 sits in a narrow valley wedged between stars-narrow-7 (needs ≥~11) and
+  stars-narrow-3 + cluster-m3-1 (need ≤~13). Three distinct real cases ride on this one constant.
+- The two **catalog-magnitude caps** are one-sided (raising loses cases): principled asymmetry
+  (deeper catalog → more faint contamination/aliasing), so the +flip is expected behaviour, but the
+  upward headroom is <10%.
+- The knife-edge cases (m51@14, m101@15, narrow-3, narrow-7) are exactly the historically hard-won
+  solves — they needed tuning to pass, so they sit near boundaries. Expected, not alarming.
+- **Caveat:** REAL-only — cannot see flips that manifest only in the synthetic/wide/fisheye corpora,
+  and does not probe the ~145 bare-literal accept sites. "28/34 robust" is therefore a partial map
+  that *localizes* fragility, not a clean bill of health for the whole tuning surface.
+
+**WS3 implication:** the acceptance-layer consolidation should prioritise the gates fed by the 6
+tight constants — above all `kRetrySearchRadiusDegrees` (the retry/recenter search radius, 3 cases
+balanced on it) and the two catalog-magnitude caps — replacing the hand-tuned boundary with a
+principled criterion (the `poseFalseAlarmLogOdds`-driven gate). To extend the map before WS3, re-run
+`ksweep.ps1` pointed at RAND2/FISHEYE (change `$csv`), and add a pass over the bare-literal accept
+sites (the un-named surface).
+
+## WS1a — harness links the shipped solver object (2026-06-18, DONE)
+
+**Change:** `cameraplatesolver.cpp` is now compiled exactly ONCE into a static library
+`camera_platesolver` (`plugins/feature/camera/CMakeLists.txt`) with `INTERPROCEDURAL_OPTIMIZATION OFF`.
+Both the `featurecamera` plugin and the `featurecamera_star_tests` harness link that same object
+(`test/CMakeLists.txt` no longer compiles `../cameraplatesolver.cpp`). The harness now exercises
+byte-identical solver machine code to the shipped GUI plugin — the structural fix for the cross-build
+(DLL-vs-EXE) ULP divergence in the wide-7/8/9 saga, replacing the "two independent compilations of the
+same TU" with "one object linked into both binaries."
+
+**Why it's safe (verified by grep, not assumed):** `cameraplatesolver.cpp` has zero feature-define
+`#ifdef` (no `CAMERA_OPENCV_CUDA_*`/FFmpeg) and never references the CUDA-layout-sensitive types
+(`CameraPipelineFrame`, `CameraStarDetector`, `cv::cuda`/`GpuMat` — all grep-count 0). Its public
+interface — `solve(const CameraSettings&, QSize, QDateTime, QVector<CameraPipelineStarDetection>&)
+-> CameraPlateSolveResult` — uses only ABI-stable types: `CameraPipelineStarDetection`
+(camerapipelineframe.h lines 69-92, NO CUDA `#ifdef`; only the unrelated `CameraPipelineFrame` struct
+at 168+ is CUDA-conditional) and `CameraSettings` (no CUDA `#ifdef`). So one compilation is correct
+for both consumers regardless of their own CUDA/FFmpeg define sets; no ODR hazard at the boundary.
+
+**Why LTCG-off is essential:** with `/GL` on, the lib's object is IL and final codegen happens at
+*each* consumer's link → DLL and EXE would re-diverge. `/GL` off makes the `.obj` final machine code,
+so identical bytes land in both. (`CMAKE_INTERPROCEDURAL_OPTIMIZATION` is global ON via
+`cmake/Modules/CompilerOptions.cmake:6`; the per-target OFF property overrides it. Trig is CRT calls
+to the same shared ucrtbase in both binaries, so results match once the surrounding code is identical.)
+
+**Validated:** configure clean; static lib + plugin DLL + harness all build (no LTCG/LNK link
+warnings); REAL suite **48/48, zero regressions** — the LTCG-off solver codegen did not flip any case.
+Files touched: `plugins/feature/camera/CMakeLists.txt`, `plugins/feature/camera/test/CMakeLists.txt`
+(both tracked; uncommitted pending Jon's go-ahead).
+
+**Still to confirm — needs the GUI (cannot run here):** rebuild/restart sdrangel so it loads the new
+`featurecamera.dll`, then re-test wide-7/8/9 in mode 3. GUI and harness now share the exact object, so
+their verdicts must match. **Once confirmed, the wide-7/8/9 band-aids (seed-anchored grid, Az/El pin,
+clamped free-pp polish) become candidate WS1 follow-on simplifications** — but only after GUI==harness
+is empirically confirmed, and removed one at a time against the full suite + a GUI re-test.
+
+**Not done — WS1b** (decision-boundary margins + deterministic tie-breaks): the second half of WS1, a
+separate moderate-risk change that generalises the match-count-grid lesson. Not required to close the
+independent-compilation divergence class, which WS1a handles structurally.

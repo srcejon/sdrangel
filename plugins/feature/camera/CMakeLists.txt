@@ -22,7 +22,6 @@ set(camera_SOURCES
     cameravideowriter.cpp
     cameravideofiledecoder.cpp
     camerayoutubestreamer.cpp
-    cameraplatesolver.cpp
     camerapostprocessor.cpp
     camerafinder.cpp
     cameraqtaudiocontroller.cpp
@@ -130,6 +129,38 @@ if(NOT OpenCV_ximgproc_FOUND)
     list(REMOVE_ITEM camera_OpenCV_LIBS opencv_ximgproc)
 endif()
 
+# WS1a (cross-build determinism): compile the plate solver exactly ONCE into a static library
+# linked by BOTH the featurecamera plugin and the featurecamera_star_tests harness. Linking the
+# same final-code object into both binaries makes the harness exercise byte-identical solver
+# machine code as the shipped plugin, eliminating the cross-build (DLL vs EXE) ULP divergence that
+# flipped marginal wide-fisheye solves (see doc/camera/plate-solver-notes.md, the wide-7/8/9 saga).
+# LTCG is disabled here so the .obj carries final codegen rather than IL that would be re-generated
+# (and could re-diverge) at each consuming target's link. cameraplatesolver.cpp is
+# feature-define-insensitive (no CAMERA_OPENCV_CUDA_*/FFmpeg #ifdef) and its public interface uses
+# only ABI-stable types (CameraSettings, CameraPipelineStarDetection, CameraPlateSolveResult), so a
+# single compilation is safe for both consumers regardless of their own CUDA/FFmpeg define sets.
+add_library(camera_platesolver STATIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/cameraplatesolver.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/cameraplatesolver.h
+)
+set_target_properties(camera_platesolver PROPERTIES INTERPROCEDURAL_OPTIMIZATION OFF)
+target_include_directories(camera_platesolver PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_SOURCE_DIR}/sdrbase
+    ${CMAKE_SOURCE_DIR}/swagger/sdrangel/code/qt5/client
+    ${OpenCV_INCLUDE_DIRS}
+    ${ZLIB_INCLUDE_DIRS}
+    ${ZLIB_INCLUDE_DIR}
+)
+target_link_libraries(camera_platesolver PUBLIC
+    Qt::Core
+    Qt::Gui
+    Qt::Network
+    sdrbase
+    ${camera_OpenCV_LIBS}
+    ${ZLIB_LIBRARIES}
+)
+
 if(NOT Qt6_FOUND)
     add_library(${TARGET_NAME} ${camera_SOURCES})
 else()
@@ -221,6 +252,7 @@ if(NOT BUILD_SHARED_LIBS)
 endif()
 
 target_link_libraries(${TARGET_NAME} PRIVATE
+    camera_platesolver
     Qt::Core
     Qt::Network
     Qt::Gui

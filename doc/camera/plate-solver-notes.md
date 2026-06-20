@@ -2147,11 +2147,24 @@ warnings); REAL suite **48/48, zero regressions** — the LTCG-off solver codege
 Files touched: `plugins/feature/camera/CMakeLists.txt`, `plugins/feature/camera/test/CMakeLists.txt`
 (both tracked; uncommitted pending Jon's go-ahead).
 
-**Still to confirm — needs the GUI (cannot run here):** rebuild/restart sdrangel so it loads the new
-`featurecamera.dll`, then re-test wide-7/8/9 in mode 3. GUI and harness now share the exact object, so
-their verdicts must match. **Once confirmed, the wide-7/8/9 band-aids (seed-anchored grid, Az/El pin,
-clamped free-pp polish) become candidate WS1 follow-on simplifications** — but only after GUI==harness
-is empirically confirmed, and removed one at a time against the full suite + a GUI re-test.
+**GUI CONFIRMED for wide-7 (2026-06-20).** Rebuilt sdrangel.exe + featurecamera.dll in the worktree
+(full build, 121 plugins; a near-empty single-plugin build crashed on launch). wide-7 mode 3 now
+**solves in the GUI** at Az=52 / El=88 / Roll=94 / FoV=159 (log winner Az=52.2182 El=88.819 Roll=94.37
+FoV=159.847 Cx=-41.41 Cy=-34.95 K1=-0.1033, 94 matches, RMS 0.87, 8/8 bright, BrightMagErr=0) — the
+correct off-centre-pp pose, identical to the harness. Previously the GUI landed in a wrong basin (best
+on-direction RMS ~16.5 > gate) and rejected. WS1a's shared-object fix is therefore **empirically
+confirmed: GUI == harness.**
+
+**ALL THREE CONFIRMED in the GUI (2026-06-20).** wide-7 = Az 52/El 88/Roll 94/FoV 159 (221 matched),
+wide-8 = 52/88/94/159 (208 matched), wide-9 = 53/88/94/159 (206 matched) — all the correct pose, all
+previously GUI-failing. **WS1 (cross-build ULP divergence) is fully validated end-to-end.** (GUI match
+counts run a little above the harness's 165-206 because the GUI's live-detection set + the hot-pixel/
+label-recovery passes label a few more real stars; the pose is the same.)
+
+**Now unblocked — WS1 follow-on:** the wide-7/8/9 band-aids (seed-anchored grid, Az/El pin, clamped
+free-pp polish) were added to force GUI==harness when the two compiled the solver independently. With
+WS1a making that identity structural, they are candidate simplifications — remove one at a time against
+the full suite + a GUI re-test of wide-7/8/9.
 
 **Not done — WS1b** (decision-boundary margins + deterministic tie-breaks): the second half of WS1, a
 separate moderate-risk change that generalises the match-count-grid lesson. Not required to close the

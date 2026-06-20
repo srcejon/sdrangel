@@ -28,6 +28,14 @@ class QListWidget;
 class QListWidgetItem;
 class QPushButton;
 
+/**
+ * \brief Dialog for assembling and ordering a sequence of image files to play back as a camera source.
+ *
+ * Lets the user build an ordered list of image files (add/remove/reorder) that will be used as a
+ * synthetic camera input, with a live preview of the selected file. The resulting ordered list is
+ * retrieved via fileNames(). loadPreviewImage() is a static helper that loads a single image for
+ * preview thumbnails.
+ */
 class CameraFileSequenceDialog : public QDialog
 {
     Q_OBJECT

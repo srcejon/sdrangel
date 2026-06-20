@@ -121,6 +121,20 @@ private:
     QImage m_image;
 };
 
+/**
+ * \brief Main feature GUI for the camera feature.
+ *
+ * The top-level FeatureGUI for the camera feature: it presents the live image/video display
+ * (via a QGraphicsScene and CameraImageGraphicsItem), drives the settings dialog, and exposes the
+ * full set of capture, image-processing, detection (motion / YOLO / star), plate-solving, recording,
+ * streaming and overlay controls. It owns the Qt-side camera capture pipeline (QCamera / image
+ * capture / video sink or, on Qt5, a CameraVideoSurface), serialises and restores CameraSettings,
+ * and communicates with the camera worker/feature through message queues.
+ *
+ * \note GUI-thread class. Qt camera objects are deliberately created and torn down here on the GUI
+ *       thread because cleaning them up on the worker thread can hang. Incoming worker messages are
+ *       delivered via m_inputMessageQueue and handled in handleMessage().
+ */
 class CameraGUI : public FeatureGUI {
     Q_OBJECT
 

@@ -40,6 +40,29 @@
 
 class CameraDetectionStage;
 
+/**
+ * \brief Pipeline stage that applies the user-configured image adjustments to each frame.
+ *
+ * Final processing stage of the camera pipeline: takes the (preprocessed/aligned/stacked)
+ * frame and applies the configured chain of adjustments — lens unwarp, white balance,
+ * histogram stretch, greyscale, saturation, gamma, blur, sharpen, edge detection, flip,
+ * rotation, brightness/contrast and colour inversion — then forwards the result to the
+ * detection stage. It also computes the histogram data shown in the GUI.
+ *
+ * \note Runs as a QObject moved onto its own worker thread; frames arrive via
+ *       submitFrame()/the input message queue and are processed in processNextFrame()
+ *       on that thread. A small bounded backlog (m_maxPendingFrames) absorbs occasional
+ *       processing spikes; sustained overruns trim the oldest pending frame to keep
+ *       latency bounded.
+ * \note Two interchangeable processing paths exist: a CPU path (applyImageProcessingCpu)
+ *       and, when built with CAMERA_OPENCV_CUDA_IMAGE_PROCESSING and a CUDA device is
+ *       available, an OpenCV-CUDA path (applyImageProcessingCuda). The CUDA path caches
+ *       device-side filters/lookup tables and unwarp maps that are invalidated on the
+ *       relevant settings changes.
+ * \note Frames are reference-counted (CameraPipelineFramePtr); ownership of submitted
+ *       frames is shared and the stage does not retain frames beyond processing apart
+ *       from the cached last-input frame used to re-emit on settings changes.
+ */
 class CameraImageProcessor : public QObject
 {
     Q_OBJECT

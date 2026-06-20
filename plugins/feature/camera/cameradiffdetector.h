@@ -27,6 +27,22 @@
 
 #include "cameradetector.h"
 
+/**
+ * \brief Detection stage that builds a frame-to-frame difference mask.
+ *
+ * Compares each frame's detection ROI against the previously seen frame, thresholds the
+ * difference and applies morphological open/dilation/close to produce a change mask that is
+ * written back into the frame (and optionally accumulated over a short history of recent masks)
+ * before forwarding. This highlights regions that changed between consecutive frames; exclusion
+ * rectangles are honoured as in the other stages.
+ *
+ * \note Derives from CameraDetectionStage and runs on its own QThread; see that base class for
+ *       threading, frame-backlog and ROI/exclusion handling.
+ * \note Keeps the last input frame and a bounded deque of recent diff masks as internal state.
+ *       This state (and its CUDA counterpart) is reset when capture (re)starts or when the
+ *       diff/ROI settings change, so masks are never computed across an epoch or geometry change.
+ *       CUDA paths are compiled in only when CAMERA_OPENCV_CUDA_DETECTION is defined.
+ */
 class CameraDiffDetector : public CameraDetectionStage
 {
     Q_OBJECT

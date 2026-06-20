@@ -39,6 +39,29 @@ class CameraPostProcessor;
 class CameraVideoWriter;
 class CameraYouTubeStreamer;
 
+/**
+ * \brief Pipeline stage that records camera output to video/image files and
+ *        streams it to YouTube.
+ *
+ * Receives processed pipeline frames (submitFrame) and audio (via MsgAudioSamples
+ * on its input message queue), then drives the recording outputs: one or more
+ * CameraVideoWriter instances (for the calibrated/filtered/post-processed image
+ * variants), per-frame image files (FITS for raw), a rolling keogram, and an
+ * optional CameraYouTubeStreamer. It maintains a pre-record ring buffer so a
+ * recording can include frames captured just before it was armed, and buffers
+ * pending audio to mux against the video. Settings/control arrive as Messages;
+ * state and the keogram are reported back via the GUI/feature message queues.
+ *
+ * \note Runs on its own dedicated recorder thread (moved there in Camera setup,
+ *       started via startWork). Cross-thread input arrives through
+ *       m_inputMessageQueue (handleInputMessages slot) and submitFrame, which
+ *       appends to m_pendingFrames under m_frameMutex; actual processing happens
+ *       on the recorder thread in processNextFrames.
+ * \warning The pre-record and pending-audio buffers are byte-capped; the video
+ *          output queue is frame-capped. When a cap is exceeded frames are
+ *          dropped (m_droppedOutputFrames) rather than allowed to grow without
+ *          bound.
+ */
 class CameraRecorder : public QObject
 {
     Q_OBJECT

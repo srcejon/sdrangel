@@ -33,6 +33,22 @@
 
 class Camera;
 
+/**
+ * \brief Detection stage that runs YOLO object detection and tracks detected objects.
+ *
+ * Runs a YOLO model over the detection ROI (tiling large frames), decoding and NMS-filtering
+ * the raw outputs into CameraPipelineFrame::m_detections. Inference uses either the OpenCV DNN
+ * backend (m_yoloNet, with a selectable backend/target) or, when CAMERA_TENSORRT_YOLO is
+ * defined, the faster batched CameraYoloTensorRt engine. Detections are then turned into a
+ * per-class appearance/disappearance history (with debounce deadlines) reported to the GUI, and
+ * the first detection can be forwarded to the feature as an azimuth/elevation target.
+ *
+ * \note Derives from CameraDetectionStage and runs on its own QThread; see that base class for
+ *       threading, frame-backlog and ROI/exclusion handling.
+ * \note Holds a back-pointer to the owning Camera plus message queues to the GUI and feature.
+ *       The DNN net/target and the TensorRT engine are loaded/rebuilt lazily when the model,
+ *       labels or target settings change; ignored class names are filtered out of results.
+ */
 class CameraObjectDetector : public CameraDetectionStage
 {
     Q_OBJECT

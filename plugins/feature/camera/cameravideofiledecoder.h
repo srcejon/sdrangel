@@ -37,6 +37,34 @@ struct AVPacket;
 struct SwrContext;
 struct SwsContext;
 
+/**
+ * \brief FFmpeg-based decoder for video files and live network streams.
+ *
+ * Wraps libav* to demux/decode a media source (a local file, or an
+ * http/rtsp/rtmp live stream) into RGB888 QImages and interleaved S16 stereo
+ * PCM resampled to a fixed output rate. Video frames are colour-converted via
+ * an SwsContext that is lazily (re)built when the source geometry/format
+ * changes mid-stream; audio is resampled via an SwrContext. Pending decoded
+ * video frames/packets and decoded audio are staged in internal queues so the
+ * caller can read frame-by-frame and pull audio paced to the video rate.
+ *
+ * \note Intended to run on a single decode thread that drives open()/seek()/
+ *       readNextFrame()/close(). The pending-audio staging buffer is guarded by
+ *       m_pendingAudioMutex (takePendingAudio/pendingAudioBytes may be called
+ *       from another thread). m_audioPaceFrameRate is atomic because it is set
+ *       from the worker thread (setAudioPaceFrameRate) while the decode thread
+ *       reads it; the pace remainder is decode-thread-owned only.
+ * \note m_abortRequested is atomic: requestAbort() can be called from another
+ *       thread to unblock a decode stuck in FFmpeg I/O (notably a stalled live
+ *       stream); the decode thread polls it via abortRequested().
+ * \note Decoded QImages share recycled RGB888 backing buffers from the internal
+ *       CameraImagePool, so a returned QImage's pixels are only valid until the
+ *       pool reuses that buffer; downstream consumers must copy if they retain
+ *       it beyond the pool's in-flight window.
+ * \warning For live sources the decoder caps its pending-audio staging buffer
+ *          (setMaxLivePendingAudioMs) so deep buffering happens downstream
+ *          rather than here; see trimLivePendingAudio.
+ */
 class CameraVideoFileDecoder
 {
 public:

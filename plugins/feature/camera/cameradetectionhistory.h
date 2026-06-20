@@ -27,6 +27,14 @@
 class QTableWidget;
 class QPushButton;
 
+/**
+ * \brief Dialog listing the history of detected objects with first/last seen times and confidence.
+ *
+ * Displays a table of CameraDetectionHistoryEntry records (label, first-detected and disappeared
+ * timestamps, playback positions/frame numbers and peak confidence). The history can be refreshed
+ * via updateHistory() and exported to CSV. Double-clicking a row emits detectionActivated() so the
+ * GUI can seek to that detection, and a clear button emits clearHistoryRequested().
+ */
 class CameraDetectionHistory : public QDialog
 {
     Q_OBJECT

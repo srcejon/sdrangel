@@ -21,26 +21,34 @@
 
 #include <QImage>
 
-// Recycling pool of QImage backing buffers, to cut the per-frame malloc + page
-// fault churn of allocating a fresh image for every decoded video frame (~25 MB
-// at 4K, ~6 MB at 1080p, allocated/freed at frame rate). A 4K30 source faults in
-// essentially every one of the image's ~6000 pages every frame because the heap
-// does not hand back warm committed pages; a warm free list avoids that.
-//
-// Design: acquire() hands back a QImage backed by a pool-owned buffer via the
-// external-data QImage constructor, registering a cleanup callback. QImage uses
-// implicit sharing, so the callback fires when the LAST copy of the image is
-// destroyed — anywhere, on any thread — and returns the buffer to the free list
-// with zero changes to the downstream pipeline (display/detection/recording just
-// see an ordinary QImage). Because the decoded image flows far downstream and a
-// held copy can outlive the pool/decoder, the shared free list lives in a heap
-// CameraImagePoolState carrying an intrusive refcount (the pool's own ref plus
-// one per outstanding image); the state is deleted only when the last ref drops,
-// so a cleanup firing after decoder teardown is safe (no use-after-free).
-//
-// The class itself is plain Qt (no FFmpeg dependency) so any per-frame producer
-// can own an instance; only one source is active at a time, so each producer's
-// pool naturally holds buffers of that source's size/format.
+/**
+ * \brief Recycling pool of QImage backing buffers for per-frame video decoding.
+ *
+ * Recycling pool of QImage backing buffers, to cut the per-frame malloc + page
+ * fault churn of allocating a fresh image for every decoded video frame (~25 MB
+ * at 4K, ~6 MB at 1080p, allocated/freed at frame rate). A 4K30 source faults in
+ * essentially every one of the image's ~6000 pages every frame because the heap
+ * does not hand back warm committed pages; a warm free list avoids that.
+ *
+ * Design: acquire() hands back a QImage backed by a pool-owned buffer via the
+ * external-data QImage constructor, registering a cleanup callback. QImage uses
+ * implicit sharing, so the callback fires when the LAST copy of the image is
+ * destroyed — anywhere, on any thread — and returns the buffer to the free list
+ * with zero changes to the downstream pipeline (display/detection/recording just
+ * see an ordinary QImage). Because the decoded image flows far downstream and a
+ * held copy can outlive the pool/decoder, the shared free list lives in a heap
+ * CameraImagePoolState carrying an intrusive refcount (the pool's own ref plus
+ * one per outstanding image); the state is deleted only when the last ref drops,
+ * so a cleanup firing after decoder teardown is safe (no use-after-free).
+ *
+ * The class itself is plain Qt (no FFmpeg dependency) so any per-frame producer
+ * can own an instance; only one source is active at a time, so each producer's
+ * pool naturally holds buffers of that source's size/format.
+ *
+ * \note The buffer-return cleanup callback can fire on any thread (wherever the last
+ *       image copy is destroyed); the shared state's refcount keeps it alive past
+ *       pool/decoder teardown so that is safe.
+ */
 
 struct CameraImagePoolState;
 

@@ -46,6 +46,17 @@ using CameraSettingsLineSeries = QLineSeries;
 using CameraSettingsValueAxis = QValueAxis;
 #endif
 
+/**
+ * \brief Dialog hosting the camera's detailed settings UI and a live CCD-temperature chart.
+ *
+ * Wraps the generated Ui::CameraSettingsDialog (the large multi-page settings form) and adds a
+ * QtCharts line chart that plots CCD temperature over time. appendTemperatureSample() feeds new
+ * samples into the chart, clearCameraStatus() resets the status display, and
+ * shrinkToVisibleContent() compacts the dialog to its currently visible controls.
+ *
+ * \note The owning CameraGUI accesses the underlying UI directly via getUI(); this dialog is a thin
+ *       container around that form plus the temperature chart.
+ */
 class CameraSettingsDialog : public QDialog
 {
     Q_OBJECT

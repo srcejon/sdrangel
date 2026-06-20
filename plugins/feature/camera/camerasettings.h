@@ -32,6 +32,29 @@
 
 class Serializable;
 
+/**
+ * \brief Complete, serializable configuration for the Camera feature and its pipeline.
+ *
+ * CameraSettings is the single value-type aggregate that holds every user-configurable
+ * option for the camera feature: source selection (Qt webcam, ZWO ASI, ASCOM Alpaca,
+ * video file, image sequence or network stream), capture cadence/exposure, stacking and
+ * alignment, image post-processing, motion/star/object/diff detection, plate solving,
+ * recording/keogram/YouTube output, sky overlays, and reverse-API settings. A copy is
+ * embedded in Camera, CameraWorker, each pipeline stage and CameraWebAPIAdapter; changes
+ * propagate as MsgConfigureCamera carrying the settings plus a key list of changed fields.
+ *
+ * The struct also defines the enums for those options, validation bounds as static
+ * constexpr members, and helper accessors (camera-protocol predicates such as
+ * isAsiCamera()/isStreamCamera(), HDR exposure helpers, capture-interval conversions).
+ *
+ * \note Plain value type: it owns no pipeline objects (m_rollupState is a non-owned
+ *       Serializable pointer set via setRollupState()). It is copied freely between
+ *       threads, so it must stay cheap and self-contained.
+ * \note serialize()/deserialize() define the persisted format and the WebAPI mapping;
+ *       keep field changes in sync with those and with applySettings()/the changed-key
+ *       lists used by MsgConfigureCamera.
+ * \see Camera, CameraWorker, Camera::MsgConfigureCamera
+ */
 struct CameraSettings
 {
     enum CaptureMode

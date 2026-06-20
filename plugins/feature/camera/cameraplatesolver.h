@@ -33,6 +33,15 @@
 #include "camerapipelineframe.h"
 #include "camerasettings.h"
 
+/**
+ * \brief Outcome of a plate-solve attempt: the recovered pointing solution plus match diagnostics.
+ *
+ * Holds whether a solution was found and, if so, the telescope pointing it implies — azimuth,
+ * elevation, roll and field of view, together with lens centre offset and distortion (k1). Also
+ * carries rich diagnostics: how many detected/catalog stars were considered and matched, RMS/max
+ * residual errors, the catalog source used, a human-readable failure reason and match/profile
+ * summaries, and several internal quality/consistency scores used to grade and accept a solve.
+ */
 struct CameraPlateSolveResult
 {
     bool m_solved = false;
@@ -67,6 +76,22 @@ struct CameraPlateSolveResult
 class QNetworkAccessManager;
 class QNetworkReply;
 
+/**
+ * \brief Solves telescope pointing (az/el/roll/FOV) from detected stars against a star catalog.
+ *
+ * Given a set of detected stars, the image size, a capture timestamp and the current CameraSettings
+ * (observer location, lens model, search hints, magnitude limits, etc.), solve() matches the stars
+ * to a star catalog and recovers the camera's pointing and field of view, returning a
+ * CameraPlateSolveResult. Catalogs include locally imported data and the Siril SPCC service; Siril
+ * range/index downloads are cached across solve() calls so repeated solves on the same sky area do
+ * not re-download.
+ *
+ * \note A QObject so it can own a QNetworkAccessManager and run nested event loops for Siril
+ *       requests, but solve() is CPU-bound and is normally invoked on the star-detector thread.
+ * \note Cancellation is cooperative and thread-safe via atomics: requestCancellation() can be set
+ *       from the feature thread while a solve runs, and requestNetworkCancellation() aborts a Siril
+ *       HTTP request blocking inside a nested loop.exec() (safe to call during event processing).
+ */
 class CameraPlateSolver : public QObject
 {
 public:

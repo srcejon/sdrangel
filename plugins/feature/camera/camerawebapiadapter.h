@@ -22,6 +22,19 @@
 #include "feature/featurewebapiadapter.h"
 #include "camerasettings.h"
 
+/**
+ * \brief Lightweight REST/WebAPI bridge for the Camera feature's settings.
+ *
+ * CameraWebAPIAdapter lets the camera feature's settings be read and written over the
+ * SDRangel WebAPI without instantiating a full Camera feature (e.g. for offline settings
+ * import/export). It holds its own CameraSettings instance and delegates serialization,
+ * deserialization and SWG formatting to that object and to the static Camera::webapi*
+ * helpers, so the on-the-wire format stays identical to the live feature.
+ *
+ * \note This adapter is standalone state: it does not drive the capture pipeline and is
+ *       not connected to a running Camera; it only holds and converts settings.
+ * \see Camera, CameraSettings, FeatureWebAPIAdapter
+ */
 class CameraWebAPIAdapter : public FeatureWebAPIAdapter {
 public:
     CameraWebAPIAdapter() = default;

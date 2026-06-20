@@ -29,6 +29,21 @@
 
 class Camera;
 
+/**
+ * \brief Detection stage that flags moving regions using background subtraction.
+ *
+ * Runs an OpenCV background subtractor (MOG2/KNN, optionally CUDA-accelerated) over the
+ * detection ROI of each frame, applies morphological open/close to clean the foreground mask,
+ * and emits the resulting motion bounding boxes into CameraPipelineFrame::m_motionBoxes before
+ * forwarding the frame. Boxes that fall in exclusion rectangles are suppressed, and persistence
+ * /confirmation counters debounce transient detections so noise does not produce spurious motion.
+ *
+ * \note Derives from CameraDetectionStage and runs on its own QThread; see that base class for
+ *       threading, frame-backlog and ROI/exclusion-mask behaviour.
+ * \note Holds a back-pointer to the owning Camera. The background subtractor and CUDA filters
+ *       are rebuilt when the relevant settings change; CUDA paths are compiled in only when
+ *       CAMERA_OPENCV_CUDA_MOTION_DETECTION is defined.
+ */
 class CameraMotionDetector : public CameraDetectionStage
 {
     Q_OBJECT

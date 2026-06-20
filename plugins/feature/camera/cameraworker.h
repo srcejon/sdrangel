@@ -54,6 +54,32 @@ class CameraPostProcessor;
 class CameraFramePreprocessor;
 class CameraFinder;
 
+/**
+ * \brief Capture orchestrator that acquires frames from the selected source and feeds the pipeline.
+ *
+ * CameraWorker is the head of the camera feature: it owns the device controllers and drives
+ * frame acquisition for whichever source CameraSettings selects -- Qt webcams, ZWO ASI cameras
+ * (via CameraAsiController), ASCOM Alpaca cameras/focusers/filter wheels (via
+ * CameraAlpacaController), and FFmpeg-based video file / image-sequence / network-stream
+ * playback (via CameraMediaPlaybackController, with audio through CameraQtAudioController). It
+ * runs a capture timer/cadence, handles exposure bracketing for HDR stacking, software auto
+ * exposure/gain and auto focus, device discovery (CameraFinder / available-device tracking),
+ * and a status poll timer. Each acquired CameraPipelineFrame is handed to the first pipeline
+ * stage (the frame preprocessor) via submitFrame; the rest of the chain is owned by Camera.
+ *
+ * The numerous nested Msg* classes are this object's message protocol: inbound commands
+ * (MsgStartStop, MsgRefreshCameraList, MsgStartAutoFocus, MsgVideoFileControl) and outbound
+ * reports to the GUI/feature (camera/Alpaca/ASI capability lists, playback position, auto
+ * exposure/focus and Alpaca status updates).
+ *
+ * \note Runs on its own dedicated QThread (created and started by Camera). It runs
+ *       continuously, even when not capturing, so capabilities can be queried; interact with
+ *       it only through getInputMessageQueue() and the configured outbound queues.
+ * \warning Member declaration order is significant: m_qtAudio is declared before m_playback
+ *          so the audio controller outlives the playback controller during teardown -- the
+ *          playback decode thread may still submit audio while it shuts down. Do not reorder.
+ * \see Camera, CameraSettings, CameraPipelineFrame, CameraMediaPlaybackController
+ */
 class CameraWorker : public QObject
 {
     Q_OBJECT

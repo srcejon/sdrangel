@@ -30,6 +30,19 @@ class QNetworkAccessManager;
 class QTimer;
 class QUdpSocket;
 
+/**
+ * \brief Discovers connected cameras (and Alpaca accessories) and reports them to the GUI.
+ *
+ * Enumerates available cameras from multiple backends — Qt Multimedia cameras, ZWO ASI cameras
+ * (when the SDK is present) and ASCOM Alpaca devices — and reports the combined list, along with
+ * discovered Alpaca focusers and filter wheels, back to the GUI message queue. Alpaca devices are
+ * located both via configured host/port and via UDP broadcast discovery on the Alpaca discovery
+ * port, then queried over HTTP for their configured device lists.
+ *
+ * \note A QObject that uses asynchronous UDP discovery and HTTP queries; reportCameraList() kicks
+ *       off discovery and the result is delivered later through the GUI MessageQueue, not returned
+ *       synchronously. A request id guards against overlapping/stale discovery rounds.
+ */
 class CameraFinder : public QObject
 {
     Q_OBJECT

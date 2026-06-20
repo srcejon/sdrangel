@@ -33,6 +33,25 @@ struct AVFrame;
 struct AVPacket;
 struct SwsContext;
 
+/**
+ * \brief FFmpeg RTMP streamer that pushes camera frames + audio to YouTube.
+ *
+ * Wraps libav* to open an RTMP/FLV output to YouTube's ingest endpoint (built
+ * from the Settings url + stream key), encode successive QImages (converted via
+ * an SwsContext) and interleaved S16 stereo audio (resampled via the embedded
+ * PcmS16StereoResampler), and mux them to the live target. Unlike the file
+ * writer it is wall-clock paced: a QElapsedTimer drives output frame timing, and
+ * silent audio frames are emitted to keep the audio timeline continuous when no
+ * real audio is available, since RTMP needs a steady A/V cadence. close() flushes
+ * the encoders and tears down the connection.
+ *
+ * \note Single-threaded: open()/writeFrame()/writePcmS16Stereo()/close() are
+ *       called in sequence from the owning thread (the recorder thread). Holds
+ *       raw FFmpeg contexts freed in close()/the destructor.
+ * \warning The stream URL embeds the secret stream key; only the redacted form
+ *          (redactedStreamTargetUrl) should ever be logged. In a build without
+ *          CAMERA_FFMPEG_STREAMING the streamer is inert and reports an error.
+ */
 class CameraYouTubeStreamer
 {
 public:

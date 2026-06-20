@@ -35,6 +35,24 @@
 class QNetworkReply;
 class QNetworkAccessManager;
 
+/**
+ * \brief Talks to ASCOM Alpaca cameras, focusers and filter wheels over HTTP.
+ *
+ * Drives the Alpaca REST API for the camera device (connect, query capabilities, set binning/
+ * subframe/gain/offset/readout-mode parameters, start/abort exposures, poll for image-ready and
+ * fetch the image array) as well as the associated focuser and filter-wheel devices. Image arrays
+ * are decoded either from the binary ImageBytes protocol or from JSON, producing a QImage with an
+ * optional Bayer pattern. Maintains Alpaca client/transaction ids, cached last-applied parameters,
+ * connection state for each device and the last error/timing information.
+ *
+ * \note Asynchronous and callback-driven: most methods take a QNetworkAccessManager plus
+ *       std::function continuations (onSuccess/onFailure/reportStatus) that run when the HTTP reply
+ *       arrives. Because connecting can be in flight, requests are queued via the
+ *       run*WhenConnected() helpers and replayed once the device reports connected.
+ * \note This class does not own the QNetworkAccessManager; the caller supplies it on each call.
+ * \note Most state is public so the owning worker can inspect/manipulate it directly; treat it as
+ *       an implementation companion to the camera worker rather than an encapsulated API.
+ */
 class CameraAlpacaController
 {
 public:

@@ -38,6 +38,27 @@
 
 class CameraFrameStacker;
 
+/**
+ * \brief Pipeline stage that registers each frame to a fixed reference so frames can be stacked.
+ *
+ * Sits between preprocessing and stacking: computes a geometric transform that aligns each
+ * incoming frame to a single fixed reference (the unaligned first frame of the current
+ * sequence) and warps the frame accordingly. Alignment uses either phase correlation
+ * (translation) or star-centroid matching (affine), depending on settings. The aligned
+ * frame is forwarded to the stacker.
+ *
+ * \note Runs as a QObject on its own worker thread; frames arrive via submitFrame()/the
+ *       input message queue and are processed in processNextFrame(). A bounded pending
+ *       deque is used, with frame-order preservation and oldest-frame dropping on overrun.
+ * \note A single fixed reference (m_alignmentReference) is kept rather than a rolling deque
+ *       of warped outputs: this avoids accumulating registration error and the
+ *       discontinuity caused when the reference would otherwise jump to a previously-warped
+ *       frame. The reference is reset on capture start, on settings changes that invalidate
+ *       the source, and when frame geometry changes.
+ * \note Warping runs on the CPU (warpFrameAffine) or, when built with
+ *       CAMERA_OPENCV_CUDA_STACKING and a CUDA device is available, on the GPU
+ *       (warpFrameAffineCuda).
+ */
 class CameraFrameAligner : public QObject
 {
     Q_OBJECT

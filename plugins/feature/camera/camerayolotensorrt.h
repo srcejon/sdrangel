@@ -26,6 +26,20 @@
 #include <QString>
 #include <opencv2/core.hpp>
 
+/**
+ * \brief Optional NVIDIA TensorRT backend for batched YOLO inference.
+ *
+ * Wraps the TensorRT runtime used by CameraObjectDetector when CAMERA_TENSORRT_YOLO is enabled.
+ * ensureLoaded() builds (or loads a cached) serialized engine from an ONNX model for a given
+ * input size, max batch and FP16 mode, and infer() runs a batch of letterboxed images through
+ * that engine, returning the raw output tensors for the detector to decode. A progress callback
+ * reports engine-build activity so the GUI can surface the (potentially slow) conversion.
+ *
+ * \note All TensorRT/CUDA details are hidden behind a private Impl (pImpl); when built without
+ *       CAMERA_TENSORRT_YOLO the class is an empty stub. This is a plain helper, not a QObject,
+ *       and is owned directly by CameraObjectDetector, so it shares that detector's thread
+ *       affinity and is not safe to call concurrently from multiple threads.
+ */
 class CameraYoloTensorRt
 {
 public:

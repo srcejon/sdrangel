@@ -30,6 +30,22 @@
 #include <opencv2/cudafilters.hpp>
 #endif
 
+/**
+ * \brief Stateless helpers that fuse multiple exposures into one tone-mapped HDR image.
+ *
+ * Provides the HDR exposure-fusion routines used by the frame stacker's HDR mode. Mertens
+ * fusion (mergeMertensCudaRgb) blends a set of equally-weighted exposures by local
+ * contrast/saturation/well-exposedness without needing exposure times; Debevec fusion
+ * (mergeDebevecCudaRgb) recovers a radiance map from frames with known exposure times and
+ * tone-maps it. Overloads accept inputs either as host cv::Mat or device cv::cuda::GpuMat
+ * and likewise return either, so the caller can keep data on the GPU across stages.
+ *
+ * \note All members are static; the class is never instantiated.
+ * \note These routines are only compiled when built with CAMERA_OPENCV_CUDA_STACKING and
+ *       run on the GPU using OpenCV-CUDA; the caller supplies the cv::cuda::Stream and a
+ *       reusable Laplacian filter for the Mertens pyramid. Failures are reported via the
+ *       return value and the optional errorMessage out-parameter.
+ */
 class CameraHdrFusion
 {
 public:

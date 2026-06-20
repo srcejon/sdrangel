@@ -33,6 +33,25 @@ struct AVFrame;
 struct AVPacket;
 struct SwsContext;
 
+/**
+ * \brief FFmpeg muxer/encoder that writes camera frames + audio to a video file.
+ *
+ * Wraps libav* to open an output container (codec/bitrate/fps/audio from
+ * Settings, with optional hardware encoding) sized to the first frame, then
+ * encodes successive QImages (converted to the encoder pixel format via an
+ * SwsContext) and interleaved S16 stereo PCM (resampled to the encoder's audio
+ * rate via the embedded PcmS16StereoResampler) into the muxed file. Frame
+ * timestamps can be driven explicitly (timestampMs) or derived from a fixed
+ * frame duration. close() flushes the encoders and finalises the container.
+ *
+ * \note Single-threaded: open()/writeFrame()/writePcmS16Stereo()/close() are
+ *       meant to be called in sequence from one thread (the recorder thread that
+ *       owns the writer). The instance is non-reentrant and holds raw FFmpeg
+ *       contexts freed in close()/the destructor.
+ * \warning In a build without CAMERA_FFMPEG_STREAMING the writer is inert; the
+ *          open/write methods report an error via errorMessage instead of
+ *          producing output.
+ */
 class CameraVideoWriter
 {
 public:

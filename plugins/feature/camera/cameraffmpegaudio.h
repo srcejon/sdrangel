@@ -24,6 +24,24 @@
 
 struct SwrContext;
 
+/**
+ * \brief FFmpeg audio decode/resample helpers for the camera feature.
+ *
+ * A small utility facade over libswresample for converting interleaved S16
+ * stereo PCM between sample rates, plus an avErrorString() helper. The nested
+ * PcmS16StereoResampler holds a persistent SwrContext for streaming use: it
+ * keeps resampler state (and any carried fractional samples) across successive
+ * resample() calls so a continuous stream stays click-free, with flush() to
+ * drain trailing samples and reset() to start over. The static
+ * resamplePcmS16Stereo() is a stateless one-shot convenience for an isolated
+ * buffer.
+ *
+ * \note When the build lacks CAMERA_FFMPEG_STREAMING, the resample/flush methods
+ *       fail with an explanatory errorMessage rather than doing any work.
+ * \warning PcmS16StereoResampler is non-copyable and owns its SwrContext; it is
+ *          not internally synchronised, so confine each instance to one thread
+ *          (the owning encoder/writer typically holds its own).
+ */
 class CameraFFmpegAudio
 {
 public:

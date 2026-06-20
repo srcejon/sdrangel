@@ -51,6 +51,18 @@ namespace CameraProtocol
     }
 }
 
+/**
+ * \brief Describes one discoverable camera/playback source for the feature's device list.
+ *
+ * CameraInfo is a small value record produced by camera enumeration (Qt webcams, ZWO ASI,
+ * ASCOM Alpaca discovery, and the file/stream playback pseudo-sources) and reported to the
+ * GUI via CameraWorker::MsgReportCameraList for the user to choose from. The selected
+ * entry's protocol/id (and host/port for Alpaca) is what gets stored into CameraSettings.
+ *
+ * \note m_host and m_port are only meaningful for the Alpaca protocol; the
+ *       CameraProtocol namespace helpers classify protocol strings.
+ * \see CameraProtocol, AlpacaDeviceInfo, CameraWorker::MsgReportCameraList
+ */
 struct CameraInfo
 {
     QString m_protocol;     // "qt", "asi", "alpaca", "video", "images" or "stream"
@@ -60,6 +72,16 @@ struct CameraInfo
     quint16 m_port = 0;     // alpaca only
 };
 
+/**
+ * \brief Describes one ASCOM Alpaca device (camera, focuser or filter wheel) found by discovery.
+ *
+ * AlpacaDeviceInfo is the value record returned by Alpaca network discovery, identifying a
+ * device by its type, numeric device id and network endpoint. The worker collects these and
+ * reports focuser/filter-wheel lists to the GUI via CameraWorker::MsgReportAlpacaDeviceList
+ * so the user can pick which Alpaca accessories the feature should connect to.
+ *
+ * \see CameraInfo, CameraWorker::MsgReportAlpacaDeviceList
+ */
 struct AlpacaDeviceInfo
 {
     QString m_type;         // e.g. "camera", "focuser", "filterwheel"

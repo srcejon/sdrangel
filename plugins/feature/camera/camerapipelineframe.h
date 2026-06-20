@@ -38,6 +38,14 @@
 #include <opencv2/core/cuda.hpp>
 #endif
 
+/**
+ * \brief A single object detection (bounding box, class label, confidence).
+ *
+ * Produced by CameraObjectDetector (YOLO/TensorRT backend) and stored in
+ * CameraPipelineFrame::m_detections as it flows down the pipeline. The box is in
+ * full-frame image pixel coordinates; the label is the resolved class name and
+ * the score is the detector confidence.
+ */
 struct CameraPipelineDetection
 {
     QRect m_box;
@@ -45,6 +53,13 @@ struct CameraPipelineDetection
     float m_score;
 };
 
+/**
+ * \brief A named target being tracked across frames, with optional sky coordinates.
+ *
+ * Lightweight value type used to carry a tracked object's identity, label, image
+ * position and (when a plate solve is available) its derived azimuth/elevation. Pure
+ * data with no behaviour; copied freely through the pipeline and to the GUI.
+ */
 struct CameraPipelineTrackedObject
 {
     QString m_name;
@@ -54,6 +69,15 @@ struct CameraPipelineTrackedObject
     double m_elevation = 0.0;
 };
 
+/**
+ * \brief Per-channel RGB histogram bins for a frame.
+ *
+ * Holds the red/green/blue bin counts computed during image processing and is
+ * attached to CameraPipelineFrame::m_histogramData for display in the GUI.
+ *
+ * \note isValid() requires non-empty bins with matching sizes across all three
+ *       channels; consumers should check it before reading the bins.
+ */
 struct CameraHistogramData
 {
     QVector<float> m_redBins;
@@ -66,6 +90,18 @@ struct CameraHistogramData
     }
 };
 
+/**
+ * \brief One detected star with its photometric, morphological and catalog-match data.
+ *
+ * Produced by CameraStarDetector and stored in CameraPipelineFrame::m_starDetections.
+ * Carries the measured centroid and shape metrics (flux, SNR, FWHM, roundness, etc.) used
+ * to score and filter candidates, plus quality flags (saturation, hot-pixel suspicion). When
+ * the plate solver matches the star against a catalog, the catalog fields (label, magnitude,
+ * RA/Dec, spectral type), the projected position and m_solved are populated.
+ *
+ * \note Catalog RA/Dec default to NaN until a match is made; check m_solved before relying
+ *       on the catalog fields or m_projectedCenter.
+ */
 struct CameraPipelineStarDetection
 {
     QPointF m_center;
@@ -91,6 +127,17 @@ struct CameraPipelineStarDetection
     bool m_solved = false;
 };
 
+/**
+ * \brief Result of a plate-solve attempt for a frame: pointing, geometry and diagnostics.
+ *
+ * Filled in by the plate solver (driven from CameraStarDetector) and attached to
+ * CameraPipelineFrame::m_plateSolve. When m_solved is true it gives the derived camera
+ * pointing (azimuth/elevation/roll), field of view, optical-centre offset and distortion,
+ * along with match-quality counts and RMS/max residuals. When solving fails, m_failureReason
+ * explains why; the diagnostic summary strings are intended for the GUI/status display.
+ *
+ * \note Treat the geometry/pointing fields as meaningful only when m_solved is true.
+ */
 struct CameraPipelinePlateSolve
 {
     bool m_solved = false;
@@ -115,6 +162,14 @@ struct CameraPipelinePlateSolve
     int m_requiredMatches = 0;
 };
 
+/**
+ * \brief Bookkeeping for the frame-stacking stage: counts and alignment outcome.
+ *
+ * Attached to CameraPipelineFrame::m_stack to describe how the (possibly stacked) frame was
+ * produced: how many frames were combined, how many were queued/dropped/rejected, and whether
+ * star-based alignment was attempted and accepted. The alignment fields (response, shift,
+ * matched stars, reject reason) record why a contributing frame was kept or discarded.
+ */
 struct CameraPipelineStacking
 {
     int m_count = 1;
@@ -130,6 +185,26 @@ struct CameraPipelineStacking
     QString m_rejectReason;
 };
 
+/**
+ * \brief The unit of data flowing through the camera processing pipeline.
+ *
+ * Carries everything about one captured (or played-back) frame as it travels from image
+ * processing through stacking, the detection stages (motion/star/object/diff), plate solving
+ * and recording. Holds the image(s) in their various forms (processed, unprocessed, raw input,
+ * post-processed) plus capture metadata (timestamps, exposure, HDR/playback info, Bayer
+ * pattern) and the accumulated detection/solve/stack results. When built with OpenCV CUDA
+ * support it also caches GPU-resident BGR/grayscale mats so successive GPU stages can avoid
+ * re-uploading; the cache helpers lazily materialise a CPU QImage on demand.
+ *
+ * \note Frames are passed by CameraPipelineFramePtr (a QSharedPointer) between pipeline stages,
+ *       each running on its own QThread. A frame may be referenced concurrently, so stages
+ *       generally treat received frames as shared/read-mostly and mutate only their own added
+ *       fields; do not assume exclusive ownership unless the refcount guarantees it.
+ * \warning The CUDA mat cache (m_cudaBgrImage/m_cudaGrayImage) and the CPU QImage are kept in
+ *          sync only via the provided helpers (ensureCpuImageFromCuda, clearCudaCache,
+ *          clearCpuImage); clear or rebuild caches through these rather than touching the
+ *          members directly.
+ */
 struct CameraPipelineFrame
 {
     enum BayerPattern
@@ -298,6 +373,13 @@ struct CameraPipelineFrame
     }
 };
 
+/**
+ * \brief Shared-ownership handle to a CameraPipelineFrame passed between pipeline stages.
+ *
+ * Pipeline stages and message queues hold frames via this QSharedPointer; the frame is
+ * destroyed when the last stage/consumer releases it. Passing by this pointer avoids deep
+ * copies of the image data as frames are forwarded down the chain.
+ */
 using CameraPipelineFramePtr = QSharedPointer<CameraPipelineFrame>;
 
 #endif // INCLUDE_FEATURE_CAMERAPIPELINEFRAME_H_

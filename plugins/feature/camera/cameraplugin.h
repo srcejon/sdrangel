@@ -25,6 +25,18 @@
 class FeatureGUI;
 class WebAPIAdapterInterface;
 
+/**
+ * \brief PluginInterface implementation that registers the Camera feature with SDRangel.
+ *
+ * CameraPlugin is the entry point that the SDRangel plugin manager loads. It advertises
+ * the feature via its PluginDescriptor, registers it under Camera::m_featureIdURI during
+ * initPlugin(), and acts as a factory for the feature's collaborators: the Camera Feature
+ * object, the CameraGUI (non-server builds only), and the CameraWebAPIAdapter.
+ *
+ * \note A single CameraPlugin instance is created by the plugin framework; the factory
+ *       methods are const and produce new objects owned by their callers.
+ * \see Camera, CameraGUI, CameraWebAPIAdapter
+ */
 class CameraPlugin : public QObject, PluginInterface {
     Q_OBJECT
     Q_INTERFACES(PluginInterface)

@@ -27,6 +27,17 @@ inline QRecursiveMutex& cameraAsiSdkMutex()
     return mutex;
 }
 
+/**
+ * \brief Scoped (RAII) lock guarding the process-global ZWO ASI SDK.
+ *
+ * The ASICamera2 SDK keeps global per-process state and is not safe to call concurrently from
+ * multiple threads. This locker acquires a single shared QRecursiveMutex (cameraAsiSdkMutex()) on
+ * construction and releases it on destruction, so any block of SDK calls can be serialised simply
+ * by declaring a CameraAsiSdkLocker at the top of the scope.
+ *
+ * \note The underlying mutex is recursive, so nested locks on the same thread are permitted.
+ * \note Non-copyable and non-movable; intended purely as a stack guard.
+ */
 class CameraAsiSdkLocker
 {
 public:

@@ -31,6 +31,28 @@
 class AudioDeviceManager;
 class MessageQueue;
 
+/**
+ * \brief Manages the camera feature's Qt audio I/O: monitor output, microphone
+ *        capture, and the audio path to recording.
+ *
+ * Owns two AudioFifos registered with SDRangel's AudioDeviceManager: an output
+ * FIFO (m_outputAudioFifo) driving the sound device (the playback "monitor"),
+ * and a capture FIFO (m_captureAudioFifo) for the input device. PCM is handled
+ * as interleaved S16 stereo. submitMonitorPcmSamples feeds the monitor (with an
+ * optional file-playback audio offset applied), submitRecordingPcmSamples
+ * forwards audio to the recorder, and the monitor fill/latency accessors let the
+ * playback controller slave video to the audio device clock. Has distinct
+ * live-capture (start) and file/stream-playback (startFilePlayback) modes.
+ *
+ * \note Lives on the worker thread alongside CameraMediaPlaybackController. The
+ *       capture/mute/source-active flags (m_capturing, m_muted,
+ *       m_captureSourceActive) are std::atomic because they are set from the GUI
+ *       thread (start/stop/setMuted) but read from the worker thread in the
+ *       submit path.
+ * \note The monitor cushion is deliberately small (~120 ms for streams) so audio
+ *       sits only a little ahead of its matching video; a large cushion would be
+ *       an audible lip-sync offset rather than just jitter absorption.
+ */
 class CameraQtAudioController : public QObject
 {
     Q_OBJECT

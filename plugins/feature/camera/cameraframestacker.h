@@ -38,6 +38,26 @@
 
 class CameraImageProcessor;
 
+/**
+ * \brief Pipeline stage that accumulates/averages aligned frames (and performs HDR fusion).
+ *
+ * Combines the stream of aligned frames into a single output image. It maintains a rolling
+ * history of recent frames and a running accumulator to produce an averaged stack,
+ * assesses per-frame quality (mean, std-dev, Laplacian variance, black/saturated fraction)
+ * to reject poor or mis-aligned frames, builds the history thumbnail tiles shown in the
+ * GUI, and supports HDR exposure fusion (Mertens / Debevec) over a set of differently
+ * exposed samples. The combined image is forwarded to the image processor.
+ *
+ * \note Runs as a QObject on its own worker thread; frames arrive via submitFrame()/the
+ *       input message queue and are processed in processNextFrame(). A bounded pending
+ *       deque is used, with frame-order preservation and oldest-frame dropping on overrun.
+ * \note Stacking and HDR fusion run on the CPU or, when built with
+ *       CAMERA_OPENCV_CUDA_STACKING and a CUDA device is available, on the GPU (the
+ *       m_cuda* accumulator, filters and fusion helpers). The CUDA accumulator is rebuilt
+ *       when the stack history changes in ways the incremental add/subtract cannot track.
+ * \note MsgDeleteStackFrame lets the GUI remove a specific frame from the current stack,
+ *       which forces the accumulator/history to be recomputed.
+ */
 class CameraFrameStacker : public QObject
 {
     Q_OBJECT

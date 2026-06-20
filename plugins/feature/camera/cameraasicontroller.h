@@ -31,6 +31,25 @@
 #include <ASICamera2.h>
 #endif
 
+/**
+ * \brief Wraps the ZWO ASI camera SDK (ASICamera2) for opening, configuring and capturing frames.
+ *
+ * Encapsulates the stateful ASICamera2 C API behind a higher-level interface: opening/closing a
+ * camera by id, querying its capabilities (sensor size, gain/offset/exposure ranges, cooler, USB
+ * bandwidth, supported image types), applying CameraSettings, and capturing either single exposure
+ * frames or continuous video frames. Captured raw buffers are converted to QImage via frameToImage(),
+ * with optional Bayer-pattern reporting for colour sensors. Tracks the last error, CCD temperature
+ * and capture timing for status reporting, plus a "continuous capture" generation counter used to
+ * cancel stale scheduled captures.
+ *
+ * \note The whole class (and most of its members) only exists when the SDK is present
+ *       (\c ASICAMERA_FOUND); otherwise it compiles to an empty shell.
+ * \note Not thread-safe and holds no internal locking. The ASICamera2 SDK is process-global, so
+ *       callers must serialise access to it with CameraAsiSdkLocker around SDK calls.
+ * \note frameToImage() is const but uses a mutable CameraImagePool to recycle per-frame backing
+ *       buffers; the pool is refcounted and release-on-last-copy, so handing the produced image to
+ *       another (pipeline) thread is safe.
+ */
 class CameraAsiController
 {
 public:

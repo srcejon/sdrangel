@@ -33,6 +33,26 @@
 #include "camerapipelineframe.h"
 #include "camerasettings.h"
 
+/**
+ * \brief Base class for a detection stage in the camera processing pipeline.
+ *
+ * Each concrete detector (motion/star/object/diff) derives from this and implements
+ * processNewFrame() to analyse a CameraPipelineFramePtr, then calls forwardFrame() to pass it
+ * to the next stage. The base class provides the plumbing common to all stages: an input
+ * MessageQueue, settings handling, capture-active gating, a bounded backlog of pending frames,
+ * and shared helpers for resolving the detection ROI, building/caching the exclusion mask and
+ * converting between QImage and OpenCV BGR/RGB mats.
+ *
+ * \note A stage is a QObject that lives on its own QThread; frames arrive as queued messages
+ *       and are dispatched to processNewFrame() one at a time via processNextFrame(). The
+ *       pending-frame deque is bounded to m_maxPendingFrames and protected by m_frameMutex;
+ *       under sustained overrun the oldest frame is dropped to keep latency bounded.
+ * \note Stages are chained with setNextStage()/setNextStageInputMessageQueue(); frames are only
+ *       forwarded while capture is active and the frame's capture epoch matches the current one.
+ * \warning Subclasses must override the pure-virtual processNewFrame(); applySettings(),
+ *          captureActiveChanged() and handleStageMessage() may be overridden but should call the
+ *          base implementation where appropriate.
+ */
 class CameraDetectionStage : public QObject
 {
     Q_OBJECT

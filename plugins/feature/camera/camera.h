@@ -48,6 +48,28 @@ namespace SWGSDRangel {
     class SWGFeatureActions;
 }
 
+/**
+ * \brief SDRangel Feature that drives the camera capture and image-processing pipeline.
+ *
+ * Camera is the top-level Feature object for the camera plugin. It owns the whole
+ * processing chain and the capture orchestrator: a CameraWorker plus a sequence of
+ * QObject stages (frame preprocessor -> frame aligner -> frame stacker -> image
+ * processor -> motion/star/object/diff detectors -> recorder, with a continuously
+ * running post-processor). Each stage lives on its own dedicated QThread and frames
+ * flow down the chain as CameraPipelineFramePtr passed via per-stage message queues.
+ * The class handles configuration (CameraSettings), start/stop, serialization, and the
+ * REST/WebAPI surface (settings/report/actions/run), and routes GUI-bound reports.
+ *
+ * \note The Camera object itself lives on the main thread; every owned pipeline stage
+ *       runs on its own QThread and communicates only through message queues, so cross-
+ *       thread access goes through those queues rather than direct calls.
+ * \note Threads are torn down (quit/wait) in the destructor; each stage QObject is
+ *       deleteLater-ed when its thread finishes, so do not delete stages directly.
+ * \note m_captureEpoch tags frames for the current capture session; acceptsPipelineFrame
+ *       and the discardQueuedProcessFrames* helpers use it to drop stale frames from a
+ *       previous capture run. Manual-preview frames bypass the epoch check.
+ * \see CameraWorker, CameraSettings, CameraPlugin, CameraWebAPIAdapter
+ */
 class Camera : public Feature
 {
     Q_OBJECT

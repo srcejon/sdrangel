@@ -38,6 +38,31 @@
 class QObject;
 class QThread;
 
+/**
+ * \brief Plain state container shared between the decode thread and the worker
+ *        thread for camera video/stream playback.
+ *
+ * Holds everything CameraMediaPlaybackController needs to drive playback: the
+ * owned CameraVideoFileDecoder, the playback clock/position bookkeeping, the
+ * present/delayed-submit/stream-retry timers, the decoded-frame and stream-audio
+ * queues, and the adaptive stream-audio resampler servo state. It has no logic
+ * of its own beyond resetClosed()/resetClock(); the controller mutates it.
+ *
+ * \note This struct is the boundary between two threads. The decode thread
+ *       produces into m_decodedFrames (guarded by m_decodedFramesMutex, with
+ *       m_decodedFramesAvailable/NotFull wait conditions) and into the decoder
+ *       pending-state snapshot (guarded by m_decodeSnapshotMutex); the worker
+ *       thread consumes both. The stream-audio buffer is guarded by
+ *       m_streamAudioMutex. Cross-thread flags (m_decodeThreadStop,
+ *       m_decodeFramesProduced, m_decodeReopening, m_streamReopenResetPending,
+ *       etc.) are atomics.
+ * \warning Fields are split by ownership: the schedule/clock/delayed-frame state
+ *          (m_clock, m_basePositionMs, m_delayedFrames, rebuffering flags) is
+ *          worker-owned and must not be written from the decode thread — the
+ *          decode thread signals the worker via m_streamReopenResetPending
+ *          instead of touching that state directly. The per-field inline
+ *          comments document each item's threading contract.
+ */
 class CameraMediaPlaybackState
 {
 public:

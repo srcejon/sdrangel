@@ -25,6 +25,20 @@
 
 #include "camerapipelineframe.h"
 
+/**
+ * \brief Stateless helpers for converting between QImage and OpenCV cv::Mat in the camera pipeline.
+ *
+ * Collects the static conversion utilities shared across the pipeline stages: wrapping an
+ * RGB888 QImage as a cv::Mat without copying, converting BGR cv::Mat back to a QImage,
+ * producing a working cv::Mat from an arbitrary QImage (tracking whether the input was
+ * high bit depth), turning a working cv::Mat back into a QImage, and debayering a raw
+ * single-channel cv::Mat for a given Bayer pattern.
+ *
+ * \note All members are static; the class is never instantiated.
+ * \warning wrapRgb888Image() returns a cv::Mat that aliases the QImage's pixel buffer
+ *          (no copy). The cv::Mat is only valid while the source QImage outlives it and
+ *          is not detached/modified.
+ */
 class CameraImageUtils
 {
 public:

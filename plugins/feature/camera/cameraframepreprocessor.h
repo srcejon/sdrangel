@@ -35,6 +35,26 @@
 
 class CameraFrameAligner;
 
+/**
+ * \brief First pipeline stage: debayers raw frames and applies dark/flat/bias calibration.
+ *
+ * Turns an incoming raw/captured frame into a usable image: debayers raw single-channel
+ * frames according to their Bayer pattern and applies the configured master calibration
+ * frames (dark, flat, bias) loaded from FITS files. It may also materialise the
+ * unprocessed and raw-input images that downstream stages and the GUI need, then forwards
+ * the result to the frame aligner.
+ *
+ * \note Runs as a QObject on its own worker thread; frames arrive via submitFrame()/the
+ *       input message queue and are processed in processNextFrame(). A bounded pending
+ *       deque is used, with frame-order preservation and oldest-frame dropping on overrun.
+ * \note Calibration is performed on the CPU (applyCalibration) or, when built with
+ *       CAMERA_OPENCV_CUDA_IMAGE_PROCESSING and a CUDA device is available, on the GPU
+ *       (applyCalibrationCuda). The CUDA path caches uploaded calibration frames keyed by
+ *       source size/type/channels; these caches are invalidated when the calibration
+ *       frames are reloaded.
+ * \warning Calibration frames are validated against the expected frame geometry; a size
+ *          mismatch disables that calibration term rather than corrupting the frame.
+ */
 class CameraFramePreprocessor : public QObject
 {
     Q_OBJECT

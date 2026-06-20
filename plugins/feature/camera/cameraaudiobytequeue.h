@@ -23,19 +23,23 @@
 
 #include <QByteArray>
 
-// FIFO byte buffer for the stream / decoder audio path. Consuming from the front
-// advances a read offset (O(1)) instead of memmoving the remainder on every take
-// — QByteArray::remove(0, n) is an O(n) memmove, and these buffers are drained
-// once per present tick / decoded frame under a lock. The live region
-// [m_head, end) stays contiguous, so callers can still reinterpret_cast
-// constData() for the resampler's inter-sample interpolation. The front shift is
-// amortized: a single compaction memmove happens only once the dead prefix grows
-// at least as large as the live data, which bounds the backing storage to ~2x the
-// live bytes and shifts each byte at most once per drain cycle.
-//
-// Not internally synchronized — callers hold their existing audio mutex (the
-// stream-audio mutex / the decoder pending-audio mutex), exactly as for the
-// QByteArray it replaces.
+/**
+ * \brief Read-offset FIFO byte buffer for the stream / decoder PCM audio path.
+ *
+ * FIFO byte buffer for the stream / decoder audio path. Consuming from the front
+ * advances a read offset (O(1)) instead of memmoving the remainder on every take
+ * — QByteArray::remove(0, n) is an O(n) memmove, and these buffers are drained
+ * once per present tick / decoded frame under a lock. The live region
+ * [m_head, end) stays contiguous, so callers can still reinterpret_cast
+ * constData() for the resampler's inter-sample interpolation. The front shift is
+ * amortized: a single compaction memmove happens only once the dead prefix grows
+ * at least as large as the live data, which bounds the backing storage to ~2x the
+ * live bytes and shifts each byte at most once per drain cycle.
+ *
+ * \warning Not internally synchronized — callers hold their existing audio mutex (the
+ *          stream-audio mutex / the decoder pending-audio mutex), exactly as for the
+ *          QByteArray it replaces.
+ */
 class CameraAudioByteQueue
 {
 public:

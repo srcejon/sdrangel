@@ -26,6 +26,22 @@
 #include "cameradetector.h"
 #include "cameraplatesolver.h"
 
+/**
+ * \brief Detection stage that finds stars and drives plate solving.
+ *
+ * Extracts a luminance image (preserving native 16-bit precision where available), removes the
+ * background to leave a residual, thresholds and centroids star candidates, and measures their
+ * photometry/morphology into CameraPipelineFrame::m_starDetections. It then hands the detections
+ * to an owned CameraPlateSolver to recover the camera pointing/geometry, writing the outcome
+ * into CameraPipelineFrame::m_plateSolve before forwarding the frame.
+ *
+ * \note Derives from CameraDetectionStage and runs on its own QThread; see that base class for
+ *       threading, frame-backlog and ROI/exclusion handling.
+ * \note Plate solving can be long-running; status (solving/idle) is reported to the GUI via
+ *       MsgReportPlateSolveStatus on m_msgQueueToGUI, and an in-progress solve can be cancelled
+ *       with requestPlateSolveCancellation(). CUDA preprocessing is compiled in only when
+ *       CAMERA_OPENCV_CUDA_DETECTION is defined.
+ */
 class CameraStarDetector : public CameraDetectionStage
 {
     Q_OBJECT

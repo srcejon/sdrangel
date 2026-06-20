@@ -22,6 +22,14 @@
 #include <QDateTime>
 #include <QString>
 
+/**
+ * \brief One row of detection history: a labelled object with its appearance window and confidence.
+ *
+ * Plain data record describing a single tracked/detected object over its lifetime: the class label,
+ * when it was first detected and when it disappeared, the corresponding video playback positions and
+ * frame numbers (first and last), and the peak detection confidence observed. Used by
+ * CameraDetectionHistory and passed in detectionActivated() to seek back to a detection.
+ */
 struct CameraDetectionHistoryEntry
 {
     QString m_label;

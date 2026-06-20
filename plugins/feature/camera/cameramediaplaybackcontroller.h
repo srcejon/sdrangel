@@ -33,13 +33,28 @@ class QImage;
 class CameraQtAudioController;
 class MessageQueue;
 
-// Owns all video/stream media-playback logic for the camera feature. Created on
-// (and lives on) the worker thread, mirroring CameraQtAudioController's affinity.
-// It owns the CameraMediaPlaybackState (m_state) and its own present QTimer
-// (m_presentTimer) — the playback present cadence no longer borrows the worker's
-// capture timer (which the worker keeps for ASI/Alpaca capture). A background
-// decode thread (started by startVideoFileDecodeThread) wakes the present path by
-// queuing presentTick() onto this object across threads, so presentTick is a slot.
+/**
+ * \brief Owns all video/stream media-playback logic for the camera feature.
+ *
+ * Created on (and lives on) the worker thread, mirroring
+ * CameraQtAudioController's affinity. It owns the CameraMediaPlaybackState
+ * (m_state) and its own present QTimer (m_presentTimer) — the playback present
+ * cadence no longer borrows the worker's capture timer (which the worker keeps
+ * for ASI/Alpaca capture). A background decode thread (started by
+ * startVideoFileDecodeThread) wakes the present path by queuing presentTick()
+ * onto this object across threads, so presentTick is a slot.
+ *
+ * \note Slaves video presentation to the audio device clock (via the audio
+ *       controller's monitor FIFO), runs an adaptive stream-audio resampler
+ *       servo to absorb the source-vs-soundcard clock difference, and handles
+ *       live-stream stall/reopen recovery.
+ * \note Per-frame collaborator hooks back into the worker are kept as
+ *       std::function callbacks (Callbacks), not signals, so the submit/exposure
+ *       path stays a direct synchronous call on the worker thread.
+ * \warning The decode thread runs in the background; cross-thread coordination
+ *          goes through m_state's mutex-/atomic-guarded fields. The schedule and
+ *          clock state in m_state is worker-owned — see CameraMediaPlaybackState.
+ */
 class CameraMediaPlaybackController : public QObject
 {
     Q_OBJECT

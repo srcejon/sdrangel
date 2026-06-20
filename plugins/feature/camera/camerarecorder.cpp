@@ -813,7 +813,10 @@ bool CameraRecorder::saveRawFits(const QString& fileName,
     if (frame.m_captureDateTime.isValid()) {
         headers.insert(QStringLiteral("DATE-OBS"), frame.m_captureDateTime.toUTC());
     }
-    headers.insert(QStringLiteral("EXPTIME"), m_settings.m_exposureTimeMs / 1000.0);
+    const double exposureTimeMs = (std::isfinite(frame.m_exposureTimeMs) && (frame.m_exposureTimeMs > 0.0))
+        ? frame.m_exposureTimeMs
+        : m_settings.m_exposureTimeMs;
+    headers.insert(QStringLiteral("EXPTIME"), exposureTimeMs / 1000.0);
     headers.insert(QStringLiteral("GAIN"), m_settings.m_cameraGain);
     headers.insert(QStringLiteral("OFFSET"), m_settings.m_cameraOffset);
     headers.insert(QStringLiteral("XBINNING"), m_settings.m_cameraBinX);

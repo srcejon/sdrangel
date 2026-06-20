@@ -124,6 +124,55 @@ bool imageToFitsBytes(const QImage& image, QByteArray& bytes, int& bitsPerPixel,
         return bytes.size() == imageBytes;
     }
 
+    if ((image.format() == QImage::Format_RGBX64)
+        || (image.format() == QImage::Format_RGBA64)
+        || (image.format() == QImage::Format_RGBA64_Premultiplied))
+    {
+        const QImage rgb64 = image.convertToFormat(QImage::Format_RGBA64);
+        bitsPerPixel = 16;
+        channels = 3;
+        const int bytesPerPixel = bitsPerPixel / 8;
+        qsizetype planeBytes = 0;
+        qsizetype imageBytes = 0;
+        if (!checkedFitsByteCount(rgb64.width(), rgb64.height(), bytesPerPixel, planeBytes)
+            || !checkedFitsByteCount(rgb64.width(), rgb64.height(), bytesPerPixel * channels, imageBytes))
+        {
+            qWarning() << "CameraRecorder: RGB16 FITS image is too large to save"
+                       << rgb64.width() << "x" << rgb64.height()
+                       << "channels" << channels;
+            return false;
+        }
+
+        bytes.clear();
+        bytes.resize(imageBytes);
+        if (bytes.size() != imageBytes) {
+            return false;
+        }
+
+        uchar *dst = reinterpret_cast<uchar*>(bytes.data());
+        for (int y = 0; y < rgb64.height(); ++y)
+        {
+            const QRgba64 *row = reinterpret_cast<const QRgba64*>(rgb64.constScanLine(y));
+            for (int x = 0; x < rgb64.width(); ++x)
+            {
+                const qsizetype pixelOffset = (static_cast<qsizetype>(y) * rgb64.width() + x) * bytesPerPixel;
+                const quint16 values[3] = {
+                    row[x].red(),
+                    row[x].green(),
+                    row[x].blue()
+                };
+                for (int channel = 0; channel < channels; ++channel)
+                {
+                    uchar *pixel = dst + (static_cast<qsizetype>(channel) * planeBytes) + pixelOffset;
+                    pixel[0] = static_cast<uchar>(values[channel] & 0xff);
+                    pixel[1] = static_cast<uchar>((values[channel] >> 8) & 0xff);
+                }
+            }
+        }
+
+        return true;
+    }
+
     const QImage rgb = image.convertToFormat(QImage::Format_RGB888);
     bitsPerPixel = 8;
     channels = 3;

@@ -1838,7 +1838,8 @@ bool CameraFrameStacker::applyFrameStacking(CameraPipelineFrame& inputFrame, QIm
 
     m_stackAccumulator.release();
 
-    QImage stackedImage(alignedFrameMat.cols, alignedFrameMat.rows, QImage::Format_RGB888);
+    const int stackedOutputType = highBitDepthInput ? CV_16UC3 : CV_8UC3;
+    cv::Mat stackedMat(alignedFrameMat.rows, alignedFrameMat.cols, stackedOutputType);
     const size_t frameCount = m_stackFrameHistory.size();
     constexpr double sigmaThreshold = 2.0;
     const bool medianStacking = m_settings.m_stackMethod == CameraSettings::StackMethodMedian;
@@ -1856,7 +1857,12 @@ bool CameraFrameStacker::applyFrameStacking(CameraPipelineFrame& inputFrame, QIm
 
             for (int row = range.start; row < range.end; ++row)
             {
-                uchar *output = stackedImage.scanLine(row);
+                cv::Vec<uint16_t, 3> *output16 = highBitDepthInput
+                    ? stackedMat.ptr<cv::Vec<uint16_t, 3>>(row)
+                    : nullptr;
+                cv::Vec3b *output8 = highBitDepthInput
+                    ? nullptr
+                    : stackedMat.ptr<cv::Vec3b>(row);
 
                 for (int col = 0; col < alignedFrameMat.cols; ++col)
                 {
@@ -1887,10 +1893,11 @@ bool CameraFrameStacker::applyFrameStacking(CameraPipelineFrame& inputFrame, QIm
                         {
                             std::vector<int>& samples = medianSamples[channel];
                             std::nth_element(samples.begin(), samples.begin() + static_cast<std::ptrdiff_t>(medianIndex), samples.end());
-                            const int outputValue = highBitDepthInput
-                                ? static_cast<int>(std::lround((samples[medianIndex] * 255.0) / 65535.0))
-                                : samples[medianIndex];
-                            output[col * 3 + channel] = static_cast<uchar>(qBound(0, outputValue, 255));
+                            if (highBitDepthInput) {
+                                output16[col][channel] = static_cast<uint16_t>(qBound(0, samples[medianIndex], 65535));
+                            } else {
+                                output8[col][channel] = static_cast<uchar>(qBound(0, samples[medianIndex], 255));
+                            }
                         }
                         continue;
                     }
@@ -1972,10 +1979,11 @@ bool CameraFrameStacker::applyFrameStacking(CameraPipelineFrame& inputFrame, QIm
                         const int channelValue = clippedCount[channel] > 0
                             ? static_cast<int>(std::lround(clippedSum[channel] / static_cast<double>(clippedCount[channel])))
                             : static_cast<int>(std::lround(mean[channel]));
-                        const int outputValue = highBitDepthInput
-                            ? static_cast<int>(std::lround((channelValue * 255.0) / 65535.0))
-                            : channelValue;
-                        output[col * 3 + channel] = static_cast<uchar>(qBound(0, outputValue, 255));
+                        if (highBitDepthInput) {
+                            output16[col][channel] = static_cast<uint16_t>(qBound(0, channelValue, 65535));
+                        } else {
+                            output8[col][channel] = static_cast<uchar>(qBound(0, channelValue, 255));
+                        }
                     }
                 }
             }
@@ -1985,10 +1993,7 @@ bool CameraFrameStacker::applyFrameStacking(CameraPipelineFrame& inputFrame, QIm
 #ifdef CAMERA_OPENCV_CUDA_STACKING
     if (useCudaStacking && (m_settings.m_stackDisplayMode == CameraSettings::StackDisplayStacked))
     {
-        cv::Mat stackedRgbMat(stackedImage.height(), stackedImage.width(), CV_8UC3,
-                              stackedImage.bits(),
-                              static_cast<size_t>(stackedImage.bytesPerLine()));
-        if (setCudaBgrOutputFromRgbMat(inputFrame, stackedRgbMat))
+        if (setCudaBgrOutputFromRgbMat(inputFrame, stackedMat))
         {
             m_lastStackedImage = QImage();
             outputImage = QImage();
@@ -1997,6 +2002,7 @@ bool CameraFrameStacker::applyFrameStacking(CameraPipelineFrame& inputFrame, QIm
         }
     }
 #endif
+    const QImage stackedImage = workingMatToImage(stackedMat);
     m_lastStackedImage = stackedImage;
     if (!renderStackDisplayImage(stackedImage, outputImage)) {
         outputImage = stackedImage;

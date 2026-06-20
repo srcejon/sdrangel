@@ -394,6 +394,12 @@ void CameraImageProcessor::processNewFrame(const CameraPipelineFramePtr& frame)
 
 void CameraImageProcessor::storeLastInputFrame(const CameraPipelineFrame& frame)
 {
+    // Shallow-cache the INPUT fields (no QImage::copy / GpuMat::copyTo) so caching
+    // is free per frame; the buffers are shared, which is safe because processing
+    // is out-of-place (QImage is copy-on-write; the CUDA path writes new GpuMats —
+    // see applyImageProcessingCuda). Only input fields are kept (outputs are
+    // regenerated on re-process). This list and createFrameFromLastInput() must
+    // stay in sync with CameraPipelineFrame's input fields if new ones are added.
     LastInputFrame cachedFrame;
     cachedFrame.m_image = frame.m_image;
     cachedFrame.m_unprocessedImage = frame.m_unprocessedImage;
@@ -419,6 +425,8 @@ void CameraImageProcessor::storeLastInputFrame(const CameraPipelineFrame& frame)
 
 CameraPipelineFramePtr CameraImageProcessor::createFrameFromLastInput() const
 {
+    // Rebuilds an input frame from the cache for re-processing on a settings
+    // change. Mirror of storeLastInputFrame() — keep both field lists in sync.
     CameraPipelineFramePtr frame(new CameraPipelineFrame);
     frame->m_image = m_lastInputFrame.m_image;
     frame->m_unprocessedImage = m_lastInputFrame.m_unprocessedImage;
@@ -768,6 +776,12 @@ void CameraImageProcessor::applyImageProcessingCuda(CameraPipelineFrame& frame)
         cv::cuda::GpuMat bgrGpu;
         if (frame.hasCudaBgrImage())
         {
+            // NB: this shares device memory with frame.m_cudaBgrImage, which
+            // storeLastInputFrame() has also shallow-cached in m_lastInputFrame
+            // (GpuMat has no copy-on-write). Every processing step below MUST be
+            // out-of-place (write a new GpuMat, then reassign bgrGpu) — an in-place
+            // op(bgrGpu, bgrGpu) would corrupt the cached input and only show up as
+            // artifacts when re-processing after a settings change.
             bgrGpu = frame.m_cudaBgrImage;
         }
         else

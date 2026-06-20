@@ -106,6 +106,39 @@ CameraImageProcessor::CameraImageProcessor() :
 
 CameraImageProcessor::~CameraImageProcessor() = default;
 
+void CameraImageProcessor::LastInputFrame::clear()
+{
+    m_image = QImage();
+    m_unprocessedImage = QImage();
+    m_rawInputImage = QImage();
+    m_captureDateTime = QDateTime();
+    m_captureEpoch = 0;
+    m_pipelineInputWallClockMs = 0;
+    m_playbackPositionMs = -1;
+    m_playbackFrameNumber = -1;
+    m_playbackFrameRate = 0.0;
+    m_exposureTimeMs = 0.0;
+    m_hdrExposureIndex = -1;
+    m_hdrExposureCount = 0;
+    m_stack = CameraPipelineStacking();
+    m_bayerPattern = CameraPipelineFrame::BayerNone;
+    m_rawInputBayerPattern = CameraPipelineFrame::BayerNone;
+#ifdef CAMERA_OPENCV_CUDA_IMAGE_PROCESSING
+    m_cudaBgrImage.release();
+    m_cudaGrayImage.release();
+#endif
+}
+
+bool CameraImageProcessor::LastInputFrame::hasImageData() const
+{
+    return !m_image.isNull()
+#ifdef CAMERA_OPENCV_CUDA_IMAGE_PROCESSING
+        || !m_cudaBgrImage.empty()
+        || !m_cudaGrayImage.empty()
+#endif
+        ;
+}
+
 void CameraImageProcessor::startWork()
 {
     QObject::connect(&m_inputMessageQueue, &MessageQueue::messageEnqueued, this, &CameraImageProcessor::handleInputMessages);
@@ -139,7 +172,7 @@ bool CameraImageProcessor::handleMessage(const Message& cmd)
         m_captureEpoch = activeMsg.getCaptureEpoch();
         if (m_captureActive)
         {
-            m_lastInputFrame = CameraPipelineFrame();
+            m_lastInputFrame.clear();
             m_autoWhiteBalanceGains = cv::Vec3d(1.0, 1.0, 1.0);
             m_autoWhiteBalanceInitialized = false;
             invalidateUnwarpMaps();
@@ -222,7 +255,7 @@ void CameraImageProcessor::applySettings(const CameraSettings& settings, const Q
     }
 
     if (sourceChanged) {
-        m_lastInputFrame = CameraPipelineFrame();
+        m_lastInputFrame.clear();
         invalidateUnwarpMaps();
     }
 
@@ -270,8 +303,7 @@ void CameraImageProcessor::applySettings(const CameraSettings& settings, const Q
 #endif
 
     if (imageProcessingChanged && m_lastInputFrame.hasImageData()) {
-        CameraPipelineFramePtr frame(new CameraPipelineFrame(m_lastInputFrame));
-        frame->m_manualPreviewFrame = true;
+        CameraPipelineFramePtr frame = createFrameFromLastInput();
         submitFrame(frame);
     }
 }
@@ -362,25 +394,53 @@ void CameraImageProcessor::processNewFrame(const CameraPipelineFramePtr& frame)
 
 void CameraImageProcessor::storeLastInputFrame(const CameraPipelineFrame& frame)
 {
-    CameraPipelineFrame cachedFrame = frame;
-    if (!frame.m_image.isNull()) {
-        cachedFrame.m_image = frame.m_image.copy();
-    }
-    if (!frame.m_unprocessedImage.isNull()) {
-        cachedFrame.m_unprocessedImage = frame.m_unprocessedImage.copy();
-    }
+    LastInputFrame cachedFrame;
+    cachedFrame.m_image = frame.m_image;
+    cachedFrame.m_unprocessedImage = frame.m_unprocessedImage;
+    cachedFrame.m_rawInputImage = frame.m_rawInputImage;
+    cachedFrame.m_captureDateTime = frame.m_captureDateTime;
+    cachedFrame.m_captureEpoch = frame.m_captureEpoch;
+    cachedFrame.m_pipelineInputWallClockMs = frame.m_pipelineInputWallClockMs;
+    cachedFrame.m_playbackPositionMs = frame.m_playbackPositionMs;
+    cachedFrame.m_playbackFrameNumber = frame.m_playbackFrameNumber;
+    cachedFrame.m_playbackFrameRate = frame.m_playbackFrameRate;
+    cachedFrame.m_exposureTimeMs = frame.m_exposureTimeMs;
+    cachedFrame.m_hdrExposureIndex = frame.m_hdrExposureIndex;
+    cachedFrame.m_hdrExposureCount = frame.m_hdrExposureCount;
+    cachedFrame.m_stack = frame.m_stack;
+    cachedFrame.m_bayerPattern = frame.m_bayerPattern;
+    cachedFrame.m_rawInputBayerPattern = frame.m_rawInputBayerPattern;
 #ifdef CAMERA_OPENCV_CUDA_IMAGE_PROCESSING
-    cachedFrame.m_cudaBgrImage.release();
-    cachedFrame.m_cudaGrayImage.release();
-    if (!frame.m_cudaBgrImage.empty()) {
-        frame.m_cudaBgrImage.copyTo(cachedFrame.m_cudaBgrImage, m_cudaStream);
-    }
-    if (!frame.m_cudaGrayImage.empty()) {
-        frame.m_cudaGrayImage.copyTo(cachedFrame.m_cudaGrayImage, m_cudaStream);
-    }
-    m_cudaStream.waitForCompletion();
+    cachedFrame.m_cudaBgrImage = frame.m_cudaBgrImage;
+    cachedFrame.m_cudaGrayImage = frame.m_cudaGrayImage;
 #endif
     m_lastInputFrame = cachedFrame;
+}
+
+CameraPipelineFramePtr CameraImageProcessor::createFrameFromLastInput() const
+{
+    CameraPipelineFramePtr frame(new CameraPipelineFrame);
+    frame->m_image = m_lastInputFrame.m_image;
+    frame->m_unprocessedImage = m_lastInputFrame.m_unprocessedImage;
+    frame->m_rawInputImage = m_lastInputFrame.m_rawInputImage;
+    frame->m_captureDateTime = m_lastInputFrame.m_captureDateTime;
+    frame->m_captureEpoch = m_lastInputFrame.m_captureEpoch;
+    frame->m_pipelineInputWallClockMs = m_lastInputFrame.m_pipelineInputWallClockMs;
+    frame->m_manualPreviewFrame = true;
+    frame->m_playbackPositionMs = m_lastInputFrame.m_playbackPositionMs;
+    frame->m_playbackFrameNumber = m_lastInputFrame.m_playbackFrameNumber;
+    frame->m_playbackFrameRate = m_lastInputFrame.m_playbackFrameRate;
+    frame->m_exposureTimeMs = m_lastInputFrame.m_exposureTimeMs;
+    frame->m_hdrExposureIndex = m_lastInputFrame.m_hdrExposureIndex;
+    frame->m_hdrExposureCount = m_lastInputFrame.m_hdrExposureCount;
+    frame->m_stack = m_lastInputFrame.m_stack;
+    frame->m_bayerPattern = m_lastInputFrame.m_bayerPattern;
+    frame->m_rawInputBayerPattern = m_lastInputFrame.m_rawInputBayerPattern;
+#ifdef CAMERA_OPENCV_CUDA_IMAGE_PROCESSING
+    frame->m_cudaBgrImage = m_lastInputFrame.m_cudaBgrImage;
+    frame->m_cudaGrayImage = m_lastInputFrame.m_cudaGrayImage;
+#endif
+    return frame;
 }
 
 CameraHistogramData CameraImageProcessor::computeHistogramData(const CameraPipelineFrame& frame)
@@ -765,10 +825,15 @@ void CameraImageProcessor::applyImageProcessingCuda(CameraPipelineFrame& frame)
         }
         if (needsBrightContrast) {
             const double brightnessScale = maxValueForDepth(bgrGpu.depth()) / 255.0;
-            bgrGpu.convertTo(bgrGpu, -1, m_settings.m_contrast, m_settings.m_brightness * brightnessScale, m_cudaStream);
+            cv::cuda::GpuMat adjustedGpu;
+            bgrGpu.convertTo(adjustedGpu, -1, m_settings.m_contrast, m_settings.m_brightness * brightnessScale, m_cudaStream);
+            bgrGpu = adjustedGpu;
         }
-        if (m_settings.m_invertColors) {
-            cv::cuda::bitwise_not(bgrGpu, bgrGpu, cv::noArray(), m_cudaStream);
+        if (m_settings.m_invertColors)
+        {
+            cv::cuda::GpuMat invertedGpu;
+            cv::cuda::bitwise_not(bgrGpu, invertedGpu, cv::noArray(), m_cudaStream);
+            bgrGpu = invertedGpu;
         }
 
         m_cudaStream.waitForCompletion();
@@ -862,7 +927,9 @@ void CameraImageProcessor::applyWhiteBalanceCuda(cv::cuda::GpuMat& bgrGpu, cv::c
         channels[0].convertTo(channels[0], -1, gains[0], 0.0, stream);
         channels[1].convertTo(channels[1], -1, gains[1], 0.0, stream);
         channels[2].convertTo(channels[2], -1, gains[2], 0.0, stream);
-        cv::cuda::merge(channels, bgrGpu, stream);
+        cv::cuda::GpuMat balancedGpu;
+        cv::cuda::merge(channels, balancedGpu, stream);
+        bgrGpu = balancedGpu;
     }
     else
     {
@@ -895,7 +962,9 @@ void CameraImageProcessor::applyWhiteBalanceCuda(cv::cuda::GpuMat& bgrGpu, cv::c
             balancedFloatGpu.convertTo(channels[channel], channels[channel].type(), 1.0, 0.0, stream);
         }
 
-        cv::cuda::merge(channels, bgrGpu, stream);
+        cv::cuda::GpuMat balancedGpu;
+        cv::cuda::merge(channels, balancedGpu, stream);
+        bgrGpu = balancedGpu;
     }
 
     PROFILER_STOP(__FUNCTION__);
@@ -927,7 +996,9 @@ void CameraImageProcessor::applyHistogramStretchCuda(cv::cuda::GpuMat& bgrGpu, c
         labChannels[0] = equalizedL;
 
         cv::cuda::merge(labChannels, labGpu, stream);
-        cv::cuda::cvtColor(labGpu, bgrGpu, cv::COLOR_Lab2BGR, 0, stream);
+        cv::cuda::GpuMat equalizedBgrGpu;
+        cv::cuda::cvtColor(labGpu, equalizedBgrGpu, cv::COLOR_Lab2BGR, 0, stream);
+        bgrGpu = equalizedBgrGpu;
         PROFILER_STOP(__FUNCTION__);
         return;
     }
@@ -988,7 +1059,9 @@ void CameraImageProcessor::applyHistogramStretchCuda(cv::cuda::GpuMat& bgrGpu, c
 
         cv::cuda::threshold(stretchedFloatGpu, stretchedFloatGpu, 0.0, 0.0, cv::THRESH_TOZERO, stream);
         cv::cuda::threshold(stretchedFloatGpu, stretchedFloatGpu, 1.0, 1.0, cv::THRESH_TRUNC, stream);
-        stretchedFloatGpu.convertTo(bgrGpu, matTypeForDepthAndChannels(bgrGpu.depth(), bgrGpu.channels()), maxValue, 0.0, stream);
+        cv::cuda::GpuMat stretchedOutputGpu;
+        stretchedFloatGpu.convertTo(stretchedOutputGpu, matTypeForDepthAndChannels(bgrGpu.depth(), bgrGpu.channels()), maxValue, 0.0, stream);
+        bgrGpu = stretchedOutputGpu;
         PROFILER_STOP(__FUNCTION__);
         return;
     }
@@ -1053,7 +1126,9 @@ void CameraImageProcessor::applyGreyscaleCuda(cv::cuda::GpuMat& bgrGpu, cv::cuda
 
     cv::cuda::GpuMat grayGpu;
     cv::cuda::cvtColor(bgrGpu, grayGpu, cv::COLOR_BGR2GRAY, 0, stream);
-    cv::cuda::cvtColor(grayGpu, bgrGpu, cv::COLOR_GRAY2BGR, 0, stream);
+    cv::cuda::GpuMat grayBgrGpu;
+    cv::cuda::cvtColor(grayGpu, grayBgrGpu, cv::COLOR_GRAY2BGR, 0, stream);
+    bgrGpu = grayBgrGpu;
 
     PROFILER_STOP(__FUNCTION__);
 }
@@ -1077,7 +1152,9 @@ void CameraImageProcessor::applySaturationCuda(cv::cuda::GpuMat& bgrGpu, cv::cud
         cv::cuda::threshold(channels[1], channels[1], 0.0, 0.0, cv::THRESH_TOZERO, stream);
         cv::cuda::merge(channels, hsvGpu, stream);
         cv::cuda::cvtColor(hsvGpu, bgrFloatGpu, cv::COLOR_HSV2BGR, 0, stream);
-        bgrFloatGpu.convertTo(bgrGpu, matTypeForDepthAndChannels(bgrGpu.depth(), bgrGpu.channels()), maxValue, 0.0, stream);
+        cv::cuda::GpuMat saturatedGpu;
+        bgrFloatGpu.convertTo(saturatedGpu, matTypeForDepthAndChannels(bgrGpu.depth(), bgrGpu.channels()), maxValue, 0.0, stream);
+        bgrGpu = saturatedGpu;
         PROFILER_STOP(__FUNCTION__);
         return;
     }
@@ -1088,7 +1165,9 @@ void CameraImageProcessor::applySaturationCuda(cv::cuda::GpuMat& bgrGpu, cv::cud
     cv::cuda::split(hsvGpu, channels, stream);
     channels[1].convertTo(channels[1], -1, m_settings.m_saturation, 0.0, stream);
     cv::cuda::merge(channels, hsvGpu, stream);
-    cv::cuda::cvtColor(hsvGpu, bgrGpu, cv::COLOR_HSV2BGR, 0, stream);
+    cv::cuda::GpuMat saturatedGpu;
+    cv::cuda::cvtColor(hsvGpu, saturatedGpu, cv::COLOR_HSV2BGR, 0, stream);
+    bgrGpu = saturatedGpu;
 
     PROFILER_STOP(__FUNCTION__);
 }
@@ -1103,7 +1182,9 @@ void CameraImageProcessor::applyGammaCuda(cv::cuda::GpuMat& bgrGpu, cv::cuda::St
         cv::cuda::GpuMat gammaFloatGpu;
         bgrGpu.convertTo(gammaFloatGpu, CV_32FC3, 1.0 / maxValue, 0.0, stream);
         cv::cuda::pow(gammaFloatGpu, m_settings.m_gamma, gammaFloatGpu, stream);
-        gammaFloatGpu.convertTo(bgrGpu, matTypeForDepthAndChannels(bgrGpu.depth(), bgrGpu.channels()), maxValue, 0.0, stream);
+        cv::cuda::GpuMat gammaGpu;
+        gammaFloatGpu.convertTo(gammaGpu, matTypeForDepthAndChannels(bgrGpu.depth(), bgrGpu.channels()), maxValue, 0.0, stream);
+        bgrGpu = gammaGpu;
         PROFILER_STOP(__FUNCTION__);
         return;
     }
@@ -1171,7 +1252,9 @@ void CameraImageProcessor::applyMedianBlurCuda(cv::cuda::GpuMat& bgrGpu, cv::cud
         m_cudaMedianBlurFilter->apply(channel, filteredChannel, stream);
         channel = filteredChannel;
     }
-    cv::cuda::merge(channels, bgrGpu, stream);
+    cv::cuda::GpuMat filteredGpu;
+    cv::cuda::merge(channels, filteredGpu, stream);
+    bgrGpu = filteredGpu;
 
     PROFILER_STOP(__FUNCTION__);
 }
@@ -1222,7 +1305,9 @@ void CameraImageProcessor::applySharpenCuda(cv::cuda::GpuMat& bgrGpu, cv::cuda::
         m_cudaSharpenBlurType = bgrGpu.type();
     }
     m_cudaSharpenBlurFilter->apply(bgrGpu, blurredGpu, stream);
-    cv::cuda::addWeighted(bgrGpu, 1.0 + m_settings.m_sharpen, blurredGpu, -m_settings.m_sharpen, 0.0, bgrGpu, -1, stream);
+    cv::cuda::GpuMat sharpenedGpu;
+    cv::cuda::addWeighted(bgrGpu, 1.0 + m_settings.m_sharpen, blurredGpu, -m_settings.m_sharpen, 0.0, sharpenedGpu, -1, stream);
+    bgrGpu = sharpenedGpu;
 
     PROFILER_STOP(__FUNCTION__);
 }
@@ -1278,7 +1363,9 @@ void CameraImageProcessor::applySobelEdgeCuda(cv::cuda::GpuMat& bgrGpu, cv::cuda
     if (m_settings.m_edgeDisplayMode == CameraSettings::EdgeDisplayEdgesOnly) {
         bgrGpu = edgesBgr;
     } else {
-        cv::cuda::addWeighted(bgrGpu, 1.0, edgesBgr, m_settings.m_sobelEdge, 0.0, bgrGpu, -1, stream);
+        cv::cuda::GpuMat overlayGpu;
+        cv::cuda::addWeighted(bgrGpu, 1.0, edgesBgr, m_settings.m_sobelEdge, 0.0, overlayGpu, -1, stream);
+        bgrGpu = overlayGpu;
     }
 
     PROFILER_STOP(__FUNCTION__);
@@ -1318,7 +1405,9 @@ void CameraImageProcessor::applyCannyEdgeCuda(cv::cuda::GpuMat& bgrGpu, cv::cuda
     if (m_settings.m_edgeDisplayMode == CameraSettings::EdgeDisplayEdgesOnly) {
         bgrGpu = edgesBgr;
     } else {
-        cv::cuda::addWeighted(bgrGpu, 1.0, edgesBgr, m_settings.m_cannyEdge, 0.0, bgrGpu, -1, stream);
+        cv::cuda::GpuMat overlayGpu;
+        cv::cuda::addWeighted(bgrGpu, 1.0, edgesBgr, m_settings.m_cannyEdge, 0.0, overlayGpu, -1, stream);
+        bgrGpu = overlayGpu;
     }
 
     PROFILER_STOP(__FUNCTION__);

@@ -56,12 +56,38 @@ public:
     void setNextStage(CameraDetectionStage *nextStage) { m_nextStage = nextStage; }
 
 private:
+    struct LastInputFrame
+    {
+        QImage m_image;
+        QImage m_unprocessedImage;
+        QImage m_rawInputImage;
+        QDateTime m_captureDateTime;
+        quint64 m_captureEpoch = 0;
+        qint64 m_pipelineInputWallClockMs = 0;
+        qint64 m_playbackPositionMs = -1;
+        int m_playbackFrameNumber = -1;
+        double m_playbackFrameRate = 0.0;
+        double m_exposureTimeMs = 0.0;
+        int m_hdrExposureIndex = -1;
+        int m_hdrExposureCount = 0;
+        CameraPipelineStacking m_stack;
+        CameraPipelineFrame::BayerPattern m_bayerPattern = CameraPipelineFrame::BayerNone;
+        CameraPipelineFrame::BayerPattern m_rawInputBayerPattern = CameraPipelineFrame::BayerNone;
+#ifdef CAMERA_OPENCV_CUDA_IMAGE_PROCESSING
+        cv::cuda::GpuMat m_cudaBgrImage;
+        cv::cuda::GpuMat m_cudaGrayImage;
+#endif
+
+        void clear();
+        [[nodiscard]] bool hasImageData() const;
+    };
+
     MessageQueue m_inputMessageQueue;
     CameraDetectionStage *m_nextStage;
     CameraSettings m_settings;
     bool m_captureActive;
     quint64 m_captureEpoch = 0;
-    CameraPipelineFrame m_lastInputFrame;
+    LastInputFrame m_lastInputFrame;
     cv::Vec3d m_autoWhiteBalanceGains;
     bool m_autoWhiteBalanceInitialized;
     cv::Mat m_unwarpMapX;
@@ -109,6 +135,7 @@ private:
     void applySettings(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force = false);
     void processNewFrame(const CameraPipelineFramePtr& frame);
     void storeLastInputFrame(const CameraPipelineFrame& frame);
+    [[nodiscard]] CameraPipelineFramePtr createFrameFromLastInput() const;
     void applyImageProcessing(CameraPipelineFrame& frame);
     void applyImageProcessingCpu(CameraPipelineFrame& frame);
 #ifdef CAMERA_OPENCV_CUDA_IMAGE_PROCESSING

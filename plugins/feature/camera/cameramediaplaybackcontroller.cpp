@@ -1151,7 +1151,6 @@ void CameraMediaPlaybackController::submitDecodedVideoFileFrame(
     const QByteArray& pcmS16Stereo,
     int audioSampleRate,
     bool submitAudio,
-    bool updateStats,
     bool applyPlaybackOffset,
     bool repairTimestampDiscontinuities,
     bool resetClockOnLargeDrift)
@@ -1165,8 +1164,6 @@ void CameraMediaPlaybackController::submitDecodedVideoFileFrame(
     if (submitAudio && (!pcmS16Stereo.isEmpty() || m_settings->isStreamCamera())) {
         submitVideoFileAudio(pcmS16Stereo, audioSampleRate);
     }
-
-    Q_UNUSED(updateStats);
 
     if (m_callbacks.submitFrame)
     {
@@ -1287,7 +1284,6 @@ bool CameraMediaPlaybackController::readQueuedVideoFileFrame(bool submitAudio)
         pcmS16Stereo,
         audioSampleRate,
         submitAudio,
-        true,
         submitAudio,
         true,
         true);
@@ -1395,7 +1391,6 @@ bool CameraMediaPlaybackController::readVideoFileFrame(bool submitAudio, qint64 
         pcmS16Stereo,
         audioSampleRate,
         submitAudio,
-        minimumPositionMs < 0,
         submitAudio && (minimumPositionMs < 0),
         m_settings->isStreamCamera(),
         m_settings->isStreamCamera());

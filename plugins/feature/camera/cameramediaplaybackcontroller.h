@@ -152,7 +152,6 @@ private:
         const QByteArray& pcmS16Stereo,
         int audioSampleRate,
         bool submitAudio,
-        bool updateStats,
         bool applyPlaybackOffset,
         bool repairTimestampDiscontinuities,
         bool resetClockOnLargeDrift);

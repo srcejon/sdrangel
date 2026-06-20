@@ -37,7 +37,6 @@
 #include "camerafinder.h"
 #include "cameraframepreprocessor.h"
 #include "camerapostprocessor.h"
-#include "cameravideofiledecoder.h"
 #include "cameraworker.h"
 
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgStartStop, Message)
@@ -1369,14 +1368,9 @@ void CameraWorker::captureTick()
         return;
     }
 
-    if (m_settings.isFfmpegMediaSource())
-    {
-        // All video/stream playback (present tick, A/V sync, stream watchdog) is
-        // owned by the media-playback controller, which paces itself with its own
-        // present timer; the worker just forwards the tick.
-        m_playback.presentTick();
-        return;
-    }
+    // Note: FFmpeg media playback is not handled here — the media-playback
+    // controller paces itself with its own present timer and is never driven by
+    // this capture tick (m_captureTimer is only started for ASI/Alpaca capture).
 
 #ifdef ASICAMERA_FOUND
     if (m_settings.isAsiCamera())

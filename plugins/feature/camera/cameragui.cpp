@@ -115,14 +115,6 @@
 #include "cameraworker.h"
 #include "cameragui.h"
 
-// Render the preview through an OpenGL viewport (GPU scaling) instead of the
-// default raster viewport (CPU scaling). This is the default: it removes most of
-// the per-frame display fault churn on HD/4K sources. The GL viewport forces a
-// full-scene re-render + texture upload on the GUI thread per frame; if that ever
-// proves problematic on a given system/driver (the direct-draw image item works
-// with both), set this to 0 to fall back to the raster viewport.
-#define CAMERA_PREVIEW_USE_OPENGL 1
-
 namespace {
 
 enum AutoExposureGainControl
@@ -1025,14 +1017,13 @@ CameraGUI::CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *
     m_imagePixmapItem = new CameraImageGraphicsItem();
     m_imageScene->addItem(m_imagePixmapItem);
     ui->imageView->setScene(m_imageScene);
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0) && CAMERA_PREVIEW_USE_OPENGL
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     // Render the preview through an OpenGL viewport so scaling the (up to 4K)
     // pixmap down to the widget runs on the GPU. The default raster viewport
     // smooth-scales the whole frame on the CPU every frame, which was ~40% of the
     // per-frame page-fault churn on HD/4K sources — the dominant display cost on
     // slower machines. Must precede the viewport()->installEventFilter() below so
     // the filter (wheel-zoom / click-inspect) lands on the new GL viewport.
-    // (Toggle with CAMERA_PREVIEW_USE_OPENGL — see top of file.)
     ui->imageView->setViewport(new QOpenGLWidget());
     ui->imageView->setViewportUpdateMode(QGraphicsView::FullViewportUpdate);
 #endif

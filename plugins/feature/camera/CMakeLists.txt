@@ -53,6 +53,7 @@ set(camera_HEADERS
     cameramediaplaybackstate.h
     cameramediaplaybackcontroller.h
     cameraffmpegaudio.h
+    cameraffmpegcompat.h
     camerarecorder.h
     cameravideowriter.h
     cameravideofiledecoder.h

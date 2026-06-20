@@ -28,6 +28,8 @@
 #include <QPainter>
 #include <QStringList>
 
+#include "cameraffmpegcompat.h"
+
 #ifdef CAMERA_FFMPEG_STREAMING
 extern "C" {
 #include <libavcodec/avcodec.h>
@@ -521,8 +523,7 @@ bool CameraVideoWriter::openAudioStream(QString& warningMessage)
     m_audioCodecContext->sample_rate = kCameraVideoWriterAudioSampleRate;
     m_audioCodecContext->sample_fmt = codec->sample_fmts ? codec->sample_fmts[0] : AV_SAMPLE_FMT_FLTP;
     m_audioCodecContext->bit_rate = 128000;
-    m_audioCodecContext->channel_layout = AV_CH_LAYOUT_STEREO;
-    m_audioCodecContext->channels = 2;
+    cameraFFmpegSetStereoChannelLayout(m_audioCodecContext);
     m_audioCodecContext->time_base = AVRational{1, m_audioCodecContext->sample_rate};
 
     if (m_formatContext->oformat->flags & AVFMT_GLOBALHEADER) {
@@ -547,7 +548,15 @@ bool CameraVideoWriter::openAudioStream(QString& warningMessage)
         return false;
     }
     m_audioFrame->format = m_audioCodecContext->sample_fmt;
-    m_audioFrame->channel_layout = m_audioCodecContext->channel_layout;
+    ret = cameraFFmpegSetFrameChannelLayoutFromContext(m_audioFrame, m_audioCodecContext);
+    if (ret < 0)
+    {
+        warningMessage = QStringLiteral("Cannot set audio frame channel layout: %1").arg(avErrorString(ret));
+        av_frame_free(&m_audioFrame);
+        avcodec_free_context(&m_audioCodecContext);
+        m_audioStreamIndex = -1;
+        return false;
+    }
     m_audioFrame->sample_rate = m_audioCodecContext->sample_rate;
     m_audioFrame->nb_samples = m_audioCodecContext->frame_size > 0 ? m_audioCodecContext->frame_size : 1024;
 

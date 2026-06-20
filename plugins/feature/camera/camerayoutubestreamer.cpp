@@ -26,6 +26,8 @@
 #include <QPainter>
 #include <QUrl>
 
+#include "cameraffmpegcompat.h"
+
 #ifdef CAMERA_FFMPEG_STREAMING
 extern "C" {
 #include <libavcodec/avcodec.h>
@@ -346,8 +348,7 @@ bool CameraYouTubeStreamer::openAudioStream(QString& errorMessage)
     m_audioCodecContext->sample_rate = kCameraYouTubeAudioSampleRate;
     m_audioCodecContext->sample_fmt = codec->sample_fmts ? codec->sample_fmts[0] : AV_SAMPLE_FMT_FLTP;
     m_audioCodecContext->bit_rate = 128000;
-    m_audioCodecContext->channel_layout = AV_CH_LAYOUT_STEREO;
-    m_audioCodecContext->channels = 2;
+    cameraFFmpegSetStereoChannelLayout(m_audioCodecContext);
     m_audioCodecContext->time_base = AVRational{1, m_audioCodecContext->sample_rate};
 
     if (m_formatContext->oformat->flags & AVFMT_GLOBALHEADER) {
@@ -368,7 +369,12 @@ bool CameraYouTubeStreamer::openAudioStream(QString& errorMessage)
         return false;
     }
     m_audioFrame->format = m_audioCodecContext->sample_fmt;
-    m_audioFrame->channel_layout = m_audioCodecContext->channel_layout;
+    ret = cameraFFmpegSetFrameChannelLayoutFromContext(m_audioFrame, m_audioCodecContext);
+    if (ret < 0)
+    {
+        errorMessage = QStringLiteral("Cannot set YouTube stream audio channel layout: %1").arg(avErrorString(ret));
+        return false;
+    }
     m_audioFrame->sample_rate = m_audioCodecContext->sample_rate;
     m_audioFrame->nb_samples = m_audioCodecContext->frame_size > 0 ? m_audioCodecContext->frame_size : 1024;
 
@@ -624,7 +630,7 @@ bool CameraYouTubeStreamer::encodeAndWriteSilentAudioFrame(QString& errorMessage
         m_audioFrame->data,
         0,
         m_audioFrame->nb_samples,
-        m_audioCodecContext->channels,
+        cameraFFmpegCodecContextChannels(m_audioCodecContext),
         m_audioCodecContext->sample_fmt);
     if (ret < 0)
     {

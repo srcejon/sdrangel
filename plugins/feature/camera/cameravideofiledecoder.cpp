@@ -28,12 +28,12 @@
 #include <QUrl>
 
 #include "cameraffmpegaudio.h"
+#include "cameraffmpegcompat.h"
 
 #ifdef CAMERA_FFMPEG_STREAMING
 extern "C" {
 #include <libavcodec/avcodec.h>
 #include <libavformat/avformat.h>
-#include <libavutil/channel_layout.h>
 #include <libavutil/avutil.h>
 #include <libavutil/imgutils.h>
 #include <libavutil/opt.h>
@@ -208,7 +208,7 @@ bool CameraVideoFileDecoder::open(
                          : QString::number(codecParameters ? codecParameters->codec_id : AV_CODEC_ID_NONE))
                      << "timeBase" << (stream ? stream->time_base.num : 0) << "/" << (stream ? stream->time_base.den : 0)
                      << "sampleRate" << (codecParameters ? codecParameters->sample_rate : 0)
-                     << "channels" << (codecParameters ? codecParameters->channels : 0)
+                     << "channels" << cameraFFmpegCodecParametersChannels(codecParameters)
                      << "size" << (codecParameters ? codecParameters->width : 0) << "x" << (codecParameters ? codecParameters->height : 0);
         }
         return true;
@@ -688,7 +688,7 @@ bool CameraVideoFileDecoder::openAudioDecoderForStream(int streamIndex, QString&
              << m_audioStreamIndex
              << "codec" << (codec && codec->name ? QString::fromLatin1(codec->name) : QString())
              << "sampleRate" << m_audioCodecContext->sample_rate
-             << "channels" << m_audioCodecContext->channels
+             << "channels" << cameraFFmpegCodecContextChannels(m_audioCodecContext)
              << "sampleFormat" << av_get_sample_fmt_name(m_audioCodecContext->sample_fmt)
              << "timeBase" << stream->time_base.num << "/" << stream->time_base.den;
 
@@ -729,10 +729,8 @@ bool CameraVideoFileDecoder::isCompatibleAudioStream(int streamIndex) const
     const AVCodecParameters *codecParameters = m_formatContext->streams[streamIndex]->codecpar;
     return (codecParameters->codec_id == m_audioCodecContext->codec_id)
         && (codecParameters->sample_rate == m_audioCodecContext->sample_rate)
-        && (codecParameters->channels == m_audioCodecContext->channels)
-        && ((codecParameters->channel_layout == 0)
-            || (m_audioCodecContext->channel_layout == 0)
-            || (codecParameters->channel_layout == m_audioCodecContext->channel_layout));
+        && (cameraFFmpegCodecParametersChannels(codecParameters) == cameraFFmpegCodecContextChannels(m_audioCodecContext))
+        && cameraFFmpegCodecParametersContextChannelLayoutCompatible(codecParameters, m_audioCodecContext);
 #endif
 }
 
@@ -775,26 +773,14 @@ bool CameraVideoFileDecoder::openResampler(QString& errorMessage)
     Q_UNUSED(errorMessage)
     return false;
 #else
-    const int64_t inputChannelLayout = m_audioCodecContext->channel_layout != 0
-        ? m_audioCodecContext->channel_layout
-        : av_get_default_channel_layout(m_audioCodecContext->channels);
-    m_resampler = swr_alloc_set_opts(
-        nullptr,
-        AV_CH_LAYOUT_STEREO,
-        AV_SAMPLE_FMT_S16,
-        m_outputSampleRate,
-        inputChannelLayout,
-        m_audioCodecContext->sample_fmt,
-        m_audioCodecContext->sample_rate,
-        0,
-        nullptr);
-    if (!m_resampler)
+    int ret = cameraFFmpegAllocStereoS16Resampler(&m_resampler, m_audioCodecContext, m_outputSampleRate);
+    if ((ret < 0) || !m_resampler)
     {
-        errorMessage = QStringLiteral("Cannot allocate video file audio resampler");
+        errorMessage = QStringLiteral("Cannot allocate video file audio resampler: %1").arg(CameraFFmpegAudio::avErrorString(ret));
         return false;
     }
 
-    const int ret = swr_init(m_resampler);
+    ret = swr_init(m_resampler);
     if (ret < 0)
     {
         errorMessage = QStringLiteral("Cannot initialise video file audio resampler: %1").arg(CameraFFmpegAudio::avErrorString(ret));

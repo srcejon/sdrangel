@@ -17,10 +17,10 @@
 ///////////////////////////////////////////////////////////////////////////////////
 
 #include "cameraffmpegaudio.h"
+#include "cameraffmpegcompat.h"
 
 #ifdef CAMERA_FFMPEG_STREAMING
 extern "C" {
-#include <libavutil/channel_layout.h>
 #include <libavutil/error.h>
 #include <libavutil/samplefmt.h>
 #include <libswresample/swresample.h>
@@ -80,23 +80,14 @@ bool CameraFFmpegAudio::PcmS16StereoResampler::resample(const QByteArray& input,
     if (!m_context || (m_inputSampleRate != inputSampleRate) || (m_outputSampleRate != outputSampleRate))
     {
         reset();
-        m_context = swr_alloc_set_opts(
-            nullptr,
-            AV_CH_LAYOUT_STEREO,
-            AV_SAMPLE_FMT_S16,
-            outputSampleRate,
-            AV_CH_LAYOUT_STEREO,
-            AV_SAMPLE_FMT_S16,
-            inputSampleRate,
-            0,
-            nullptr);
-        if (!m_context)
+        int ret = cameraFFmpegAllocS16StereoRateResampler(&m_context, inputSampleRate, outputSampleRate);
+        if ((ret < 0) || !m_context)
         {
-            errorMessage = QStringLiteral("Cannot allocate audio resampler");
+            errorMessage = QStringLiteral("Cannot allocate audio resampler: %1").arg(avErrorString(ret));
             return false;
         }
 
-        const int ret = swr_init(m_context);
+        ret = swr_init(m_context);
         if (ret < 0)
         {
             errorMessage = QStringLiteral("Cannot initialise audio resampler: %1").arg(avErrorString(ret));

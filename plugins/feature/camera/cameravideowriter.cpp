@@ -19,6 +19,7 @@
 #include "cameravideowriter.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstring>
 
@@ -206,7 +207,7 @@ bool CameraVideoWriter::open(const Settings& settings, const QImage& firstFrame,
     }
     m_streamIndex = stream->index;
 
-    const auto tryOpenEncoder = [&](const AVCodec *candidateCodec, QString& openError) -> bool
+    const auto tryOpenEncoder = [&](const AVCodec *candidateCodec, const char *nvencPreset, QString& openError) -> bool
     {
         m_codecContext = avcodec_alloc_context3(candidateCodec);
         if (!m_codecContext)
@@ -245,7 +246,21 @@ bool CameraVideoWriter::open(const Settings& settings, const QImage& firstFrame,
 
         const QString encoderName = QString::fromLatin1(candidateCodec->name);
         const bool nvencEncoder = encoderName.contains(QStringLiteral("nvenc"), Qt::CaseInsensitive);
-        if (!nvencEncoder)
+        if (nvencEncoder)
+        {
+            if (nvencPreset && *nvencPreset)
+            {
+                const int presetRet = av_opt_set(m_codecContext->priv_data, "preset", nvencPreset, 0);
+                if (presetRet < 0)
+                {
+                    openError = QStringLiteral("Cannot set %1 encoder %2 preset %3: %4")
+                        .arg(codecName(settings.m_codec), encoderName, QString::fromLatin1(nvencPreset), avErrorString(presetRet));
+                    avcodec_free_context(&m_codecContext);
+                    return false;
+                }
+            }
+        }
+        else
         {
             av_opt_set(m_codecContext->priv_data, "preset", "veryfast", 0);
             if (settings.m_bitrateKbps > 0) {
@@ -256,8 +271,11 @@ bool CameraVideoWriter::open(const Settings& settings, const QImage& firstFrame,
         const int openRet = avcodec_open2(m_codecContext, candidateCodec, nullptr);
         if (openRet < 0)
         {
-            openError = QStringLiteral("Cannot open %1 encoder %2: %3")
-                .arg(codecName(settings.m_codec), encoderName, avErrorString(openRet));
+            openError = nvencEncoder && nvencPreset && *nvencPreset
+                ? QStringLiteral("Cannot open %1 encoder %2 preset %3: %4")
+                    .arg(codecName(settings.m_codec), encoderName, QString::fromLatin1(nvencPreset), avErrorString(openRet))
+                : QStringLiteral("Cannot open %1 encoder %2: %3")
+                    .arg(codecName(settings.m_codec), encoderName, avErrorString(openRet));
             avcodec_free_context(&m_codecContext);
             return false;
         }
@@ -266,7 +284,44 @@ bool CameraVideoWriter::open(const Settings& settings, const QImage& firstFrame,
     };
 
     QString openError;
-    if (!tryOpenEncoder(codec, openError))
+    const QString selectedEncoderName = QString::fromLatin1(codec->name);
+    const bool selectedHardwareEncoder = selectedEncoderName.contains(QStringLiteral("nvenc"), Qt::CaseInsensitive);
+    bool encoderOpen = false;
+    if (selectedHardwareEncoder)
+    {
+        static constexpr std::array<const char*, 10> kNvencPresetFallbacks = {{
+            // Newer FFmpeg/NVENC presets. Older FFmpeg builds reject these at
+            // av_opt_set(), so keep the legacy names below as fallbacks.
+            "p4",
+            "p3",
+            "p2",
+            "p1",
+            "p5",
+            "p6",
+            // Legacy FFmpeg/NVENC presets.
+            "default",
+            "fast",
+            "hp",
+            "hq"
+        }};
+        for (const char *preset : kNvencPresetFallbacks)
+        {
+            if (tryOpenEncoder(codec, preset, openError))
+            {
+                qDebug() << "CameraVideoWriter: opened NVENC encoder"
+                         << selectedEncoderName
+                         << "preset" << preset;
+                encoderOpen = true;
+                break;
+            }
+        }
+    }
+    else
+    {
+        encoderOpen = tryOpenEncoder(codec, nullptr, openError);
+    }
+
+    if (!encoderOpen)
     {
         const QString failedEncoderName = QString::fromLatin1(codec->name);
         const bool failedHardwareEncoder = failedEncoderName.contains(QStringLiteral("nvenc"), Qt::CaseInsensitive);
@@ -274,7 +329,7 @@ bool CameraVideoWriter::open(const Settings& settings, const QImage& firstFrame,
         if (softwareCodec && (softwareCodec != codec))
         {
             qWarning() << "CameraVideoWriter: hardware encoder failed, retrying software encoder:" << openError;
-            if (!tryOpenEncoder(softwareCodec, openError))
+            if (!tryOpenEncoder(softwareCodec, nullptr, openError))
             {
                 errorMessage = openError;
                 close();

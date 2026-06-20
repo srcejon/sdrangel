@@ -42,7 +42,7 @@
 #include "cameraalpacacontroller.h"
 #include "cameraasicontroller.h"
 #include "camerainfo.h"
-#include "cameramediaplaybackstate.h"
+#include "cameramediaplaybackcontroller.h"
 #include "camerapipelineframe.h"
 #include "cameraqtaudiocontroller.h"
 #include "camerasettings.h"
@@ -621,7 +621,6 @@ private:
     bool m_capturing;
     quint64 m_captureEpoch;
     QTimer m_captureTimer;
-    CameraMediaPlaybackState m_mediaPlayback;
     QNetworkAccessManager *m_networkManager;
     CameraFinder *m_cameraFinder;
     int m_stackFrameIndex;
@@ -648,6 +647,10 @@ private:
     } m_autoFocus;
     CameraAlpacaController m_alpaca;
     CameraQtAudioController m_qtAudio;
+    // Declared AFTER m_qtAudio so it destructs FIRST: the decode thread it owns can
+    // submit audio to m_qtAudio during teardown, so the audio controller must
+    // outlive the playback controller.
+    CameraMediaPlaybackController m_playback;
     QTimer m_statusTimer;   // polls camerastate + ccdtemperature
     QObject *m_spectrumPipeSource; ///< Cached pointer to the DeviceAPI of the selected spectrum device
 #ifdef ASICAMERA_FOUND
@@ -683,70 +686,6 @@ private:
     void reportAutoFocusToGUI(const QString& status, bool active, int position, double score, int stepIndex, int stepCount) const;
     void startCapture();
     void stopCapture();
-    bool openVideoFileDecoder();
-    void closeVideoFileDecoder();
-    void setVideoFilePlaying(bool playing);
-    void submitVideoFileFrame(const CameraPipelineFramePtr& frame, bool applyPlaybackOffset);
-    bool submitOrQueueStreamVideoFileFrame(const CameraPipelineFramePtr& frame);
-    void clearPendingStreamVideoFileFrame();
-    void releasePendingStreamVideoFileFrame();
-    void clearDelayedVideoFileFrames();
-    void scheduleDelayedVideoFileFrameSubmit();
-    void releaseDelayedVideoFileFrames();
-    void startVideoFileDecodeThread();
-    void stopVideoFileDecodeThread();
-    // Called from the decode thread to recover a live stream after a persistent
-    // read failure by reopening the source from the current live edge. Returns
-    // true once reopened, false if it gave up or a stop was requested.
-    bool reopenStreamVideoFileDecoder(const QString& mediaSourcePath, int audioOutputSampleRate, double playbackFrameRate);
-    void clearDecodedVideoFileFrames();
-    bool videoFilePlaybackIsPlaying() const;
-    void setVideoFilePlaybackPlayingState(bool playing);
-    void queueDecodedVideoFileFrame(
-        CameraMediaPlaybackState::DecodedFrame&& frame,
-        int minBufferedFrames,
-        int maxBufferedFrames,
-        double playbackFrameRate);
-    bool takeDecodedVideoFileFrame(CameraMediaPlaybackState::DecodedFrame& frame);
-    void clearStreamPlaybackAudio();
-    void appendStreamPlaybackAudio(const QByteArray& pcmS16Stereo, int audioSampleRate);
-    // Pull up to maxOutputFrames of monitor audio, linear-resampling the stream
-    // buffer by a ratio servoed to hold the buffer near targetBufferSeconds. Keeps
-    // audio consumption at the producer's content rate (synced to video) while
-    // emitting at the device sample rate, so the source/soundcard clock mismatch
-    // is absorbed smoothly instead of overflow-drained (clicks).
-    int takeResampledStreamPlaybackAudio(QByteArray& pcmS16Stereo, int audioSampleRate, int maxOutputFrames, double targetBufferSeconds);
-    void submitResampledStreamAudio();
-    int dropPacedStreamPlaybackAudio(int droppedVideoFrames, int audioSampleRate, double playbackFrameRate);
-    int dropTimedStreamPlaybackAudio(qint64 durationMs, int audioSampleRate);
-    int streamPlaybackAudioBytes() const;
-    int streamPlaybackAudioSampleRate() const;
-    int streamInitialBufferFrameCount() const;
-    int decodedStreamFrameQueueDepth() const;
-    int maxDecodedStreamFrameCount() const;
-    bool readQueuedVideoFileFrame(bool submitAudio);
-    qint64 updateVideoFilePlaybackPosition(qint64 decodedPositionMs, qint64 decodeMs, bool repairTimestampDiscontinuities, bool resetClockOnLargeDrift);
-    void submitDecodedVideoFileFrame(
-        const QImage& image,
-        qint64 decodedPositionMs,
-        qint64 decodeMs,
-        const QByteArray& pcmS16Stereo,
-        int audioSampleRate,
-        bool submitAudio,
-        bool updateStats,
-        bool applyPlaybackOffset,
-        bool repairTimestampDiscontinuities,
-        bool resetClockOnLargeDrift);
-    void submitVideoFileAudio(const QByteArray& pcmS16Stereo, int audioSampleRate);
-    bool readVideoFileFrame(bool submitAudio = true, qint64 minimumPositionMs = -1);
-    void seekVideoFile(qint64 positionMs, bool displayFrame);
-    void stepVideoFile(int direction);
-    double videoFileExactFrameIntervalMs() const;
-    int videoFileFrameIntervalMs() const;
-    void resetVideoFilePlaybackSchedule();
-    qint64 videoFilePlaybackClockMs() const;
-    void scheduleNextVideoFileTick();
-    void reportVideoFilePlaybackToGUI() const;
     QImage createPlaceholderFrame() const;
     void reportAlpacaCameraInfoToGUI(const CameraAlpacaController::CapabilitiesReport& report);
     void reportAlpacaStatusToGUI(int cameraState = -1, double ccdTemperature = NAN, bool ccdTemperatureValid = false);
@@ -794,6 +733,9 @@ private slots:
     void statusTick();
     void onAvailableDevicesChanged(const QStringList& renameFrom, const QStringList& renameTo,
                                    const QStringList& removed, const QStringList& added);
+    // Outbound media-playback reports/errors from CameraMediaPlaybackController.
+    void onPlaybackReport(qint64 positionMs, qint64 durationMs, bool playing, bool open);
+    void onPlaybackError(const QString& errorKey, const QString& title, const QString& errorMessage);
 };
 
 #endif // INCLUDE_FEATURE_CAMERAWORKER_H_

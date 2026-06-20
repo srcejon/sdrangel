@@ -52,6 +52,11 @@ public:
     void close();
     void seek(qint64 positionMs);
     void setAudioPaceFrameRate(double frameRate);
+    // Cap on the decoder-side pending-audio staging buffer for live sources (see
+    // trimLivePendingAudio). Defaults to 1200 ms; the controller raises it to track
+    // streamBufferingSeconds so a deep buffer setting isn't undercut by the decoder
+    // trimming audio before it reaches the (larger) downstream stream-audio buffer.
+    void setMaxLivePendingAudioMs(int ms) { m_maxLivePendingAudioMs = ms < 1 ? 1 : ms; }
     [[nodiscard]] bool readNextFrame(
         QImage& image,
         qint64& positionMs,
@@ -105,6 +110,9 @@ private:
     qint64 m_durationMs = 0;
     double m_frameRate = 25.0;
     int m_outputSampleRate = 48000;
+    // Cap (ms) on the live-source pending-audio staging buffer; settable so it can
+    // track the controller's streamBufferingSeconds (see setMaxLivePendingAudioMs).
+    int m_maxLivePendingAudioMs = 1200;
     // Published from the worker thread (setAudioPaceFrameRate) while the decode
     // thread reads it in takePacedAudio, so it must be atomic. m_audioPaceRemainderFrames
     // is owned solely by the decode thread; a rate change is detected there by

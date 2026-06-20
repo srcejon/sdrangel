@@ -271,6 +271,10 @@ bool CameraMediaPlaybackController::openVideoFileDecoder()
     setVideoFilePlaybackPlayingState(false);
     if (m_settings->isStreamCamera()) {
         m_state.m_decoder->setAudioPaceFrameRate(qMax(1.0, m_state.m_frameRate) * qMax(0.1, m_settings->m_videoPlaybackRate));
+        // Let the decoder's live pending-audio cap track the buffering setting so a
+        // deep buffer isn't undercut by the decoder trimming audio before it reaches
+        // the (larger) downstream stream-audio buffer.
+        m_state.m_decoder->setMaxLivePendingAudioMs(qMax(1200, static_cast<int>(m_settings->m_streamBufferingSeconds * 1000.0)));
         startVideoFileDecodeThread();
     }
     reportVideoFilePlaybackToGUI();
@@ -659,6 +663,7 @@ bool CameraMediaPlaybackController::reopenStreamVideoFileDecoder(const QString& 
         if (m_state.m_decoder->open(mediaSourcePath, errorMessage, audioOutputSampleRate))
         {
             m_state.m_decoder->setAudioPaceFrameRate(playbackFrameRate);
+            m_state.m_decoder->setMaxLivePendingAudioMs(qMax(1200, static_cast<int>(m_settings->m_streamBufferingSeconds * 1000.0)));
             // Drop stale pre-failure state so nothing from before the stall plays
             // against the new live edge: clear the stale audio AND the already
             // decoded video frames still queued (both safe from this thread — the

@@ -964,8 +964,10 @@ bool CameraVideoFileDecoder::readAheadAudio(QByteArray& pcmS16Stereo, qint64 vid
 
     static constexpr qint64 audioLeadMs = 50;
     static constexpr int bytesPerSampleFrame = 4;
-    // Keep a small decoder-side cushion; the monitor FIFO is the main live
-    // jitter buffer. Large per-frame read-ahead can block video on av_read_frame.
+    // Keep a small decoder-side read-ahead cushion: the controller's stream-audio
+    // buffer (sized by streamBufferingSeconds) is the main live jitter buffer, so
+    // this only needs enough decoded audio to hand back alongside each video frame.
+    // Large per-frame read-ahead can block video on av_read_frame.
     static constexpr int streamTargetAudioMs = 250;
     static constexpr qint64 streamReadAheadBudgetMs = 12;
     const int maxPacketsRead = m_urlSource ? 96 : 32;
@@ -1205,7 +1207,6 @@ void CameraVideoFileDecoder::trimLivePendingAudio()
 {
 #ifdef CAMERA_FFMPEG_STREAMING
     static constexpr int bytesPerSampleFrame = 4;
-    static constexpr int maxLivePendingAudioMs = 1200;
 
     if (!m_urlSource || (m_outputSampleRate <= 0) || (pendingAudioBytes() <= 0)) {
         return;
@@ -1213,7 +1214,7 @@ void CameraVideoFileDecoder::trimLivePendingAudio()
 
     const int maxBytes = std::max(
         bytesPerSampleFrame,
-        static_cast<int>((static_cast<qint64>(m_outputSampleRate) * maxLivePendingAudioMs * bytesPerSampleFrame) / 1000));
+        static_cast<int>((static_cast<qint64>(m_outputSampleRate) * m_maxLivePendingAudioMs * bytesPerSampleFrame) / 1000));
 
     int dropBytes = 0;
     {

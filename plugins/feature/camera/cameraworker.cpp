@@ -1886,9 +1886,16 @@ bool CameraWorker::reopenStreamVideoFileDecoder(const QString& mediaSourcePath, 
         if (m_mediaPlayback.m_decoder->open(mediaSourcePath, errorMessage, audioOutputSampleRate))
         {
             m_mediaPlayback.m_decoder->setAudioPaceFrameRate(playbackFrameRate);
-            // Drop stale pre-failure audio so it can't play against the new live
-            // edge; presentation rebuffers the cushion naturally once frames flow.
+            // Drop stale pre-failure state so nothing from before the stall plays
+            // against the new live edge: clear the stale audio AND the already
+            // decoded video frames still queued (both safe from this thread — the
+            // decoded-frame queue is mutex-guarded). The emptied queue makes the
+            // worker rebuffer the cushion naturally. The worker-owned playback
+            // schedule (clock/rebuffer/pending/delayed frames) can't be touched
+            // from here, so flag it for the worker to reset on its next tick.
             clearStreamPlaybackAudio();
+            clearDecodedVideoFileFrames();
+            m_mediaPlayback.m_streamReopenResetPending.store(true);
             qDebug() << "CameraWorker: stream decoder reopened after read failure"
                      << mediaSourcePath << "attempt" << (attempt + 1);
             return true;
@@ -1915,6 +1922,7 @@ void CameraWorker::stopVideoFileDecodeThread()
         m_mediaPlayback.m_decodeThread.join();
     }
     m_mediaPlayback.m_decodeThreadStop.store(false);
+    m_mediaPlayback.m_streamReopenResetPending.store(false);
     clearDecodedVideoFileFrames();
     clearStreamPlaybackAudio();
 
@@ -2027,8 +2035,6 @@ void CameraWorker::clearStreamPlaybackAudio()
     m_mediaPlayback.m_streamAudioPcmS16Stereo.clear();
     m_mediaPlayback.m_streamAudioSampleRate = 0;
     m_mediaPlayback.m_streamAudioPaceRemainderFrames = 0.0;
-    m_mediaPlayback.m_streamAudioPaceClock.invalidate();
-    m_mediaPlayback.m_streamAudioLastPresentedPositionMs = -1;
     m_mediaPlayback.m_streamAudioResampleRatio = 1.0;
     m_mediaPlayback.m_streamAudioResamplePhase = 0.0;
     m_mediaPlayback.m_streamAudioTrimToTargetPending = false;
@@ -2214,91 +2220,6 @@ void CameraWorker::submitResampledStreamAudio()
     }
     m_qtAudio.submitMonitorPcmSamples(audio, audioSampleRate);
     m_qtAudio.submitRecordingPcmSamples(audio.left((audio.size() / bytesPerSampleFrame) * bytesPerSampleFrame), audioSampleRate);
-}
-
-int CameraWorker::takeStreamPlaybackAudio(QByteArray& pcmS16Stereo, int audioSampleRate, int maxSampleFrames)
-{
-    static constexpr int bytesPerSampleFrame = 4;
-    pcmS16Stereo.clear();
-    if ((audioSampleRate <= 0) || (maxSampleFrames <= 0)) {
-        return 0;
-    }
-
-    QMutexLocker locker(&m_mediaPlayback.m_streamAudioMutex);
-    if ((m_mediaPlayback.m_streamAudioSampleRate != audioSampleRate) || m_mediaPlayback.m_streamAudioPcmS16Stereo.isEmpty()) {
-        return 0;
-    }
-
-    const int requestedBytes = maxSampleFrames * bytesPerSampleFrame;
-    const int takeBytes = qMin(
-        requestedBytes,
-        (m_mediaPlayback.m_streamAudioPcmS16Stereo.size() / bytesPerSampleFrame) * bytesPerSampleFrame);
-    if (takeBytes <= 0) {
-        return 0;
-    }
-
-    pcmS16Stereo = m_mediaPlayback.m_streamAudioPcmS16Stereo.left(takeBytes);
-    m_mediaPlayback.m_streamAudioPcmS16Stereo.remove(0, takeBytes);
-    return takeBytes / bytesPerSampleFrame;
-}
-
-int CameraWorker::takePacedStreamPlaybackAudio(QByteArray& pcmS16Stereo, int audioSampleRate, double playbackFrameRate, qint64 framePositionMs)
-{
-    static constexpr int bytesPerSampleFrame = 4;
-    pcmS16Stereo.clear();
-    if ((audioSampleRate <= 0) || (playbackFrameRate <= 0.0)) {
-        return 0;
-    }
-
-    QMutexLocker locker(&m_mediaPlayback.m_streamAudioMutex);
-    if ((m_mediaPlayback.m_streamAudioSampleRate != audioSampleRate) || m_mediaPlayback.m_streamAudioPcmS16Stereo.isEmpty()) {
-        return 0;
-    }
-
-    // Pace the audio pull by the *content-position advance* of the presented video
-    // frame, not by wall-clock time. The audio decoded alongside each video frame
-    // is appended to the stream buffer in order, so pulling exactly the audio
-    // between the previous shown frame's position and this one keeps audio locked
-    // to the video timeline frame-for-frame. Wall-clock pacing (the previous
-    // approach) ties audio to real time while video is paced by the decode-buffer
-    // fill servo: the two share no timeline, so every stall/jitter event nudged
-    // audio ahead of video with no path back and the lead accumulated over
-    // minutes. Position pacing self-corrects across stalls and rebuffers (when
-    // presentation resumes on a contiguous frame the delta is one frame again),
-    // leaving only the small sound-card-vs-source clock residual, which the
-    // monitor cushion absorbs.
-    const double nominalFrames = static_cast<double>(audioSampleRate) / playbackFrameRate;
-    double targetFramesExact;
-    const qint64 lastPositionMs = m_mediaPlayback.m_streamAudioLastPresentedPositionMs;
-    if ((framePositionMs >= 0) && (lastPositionMs >= 0) && (framePositionMs >= lastPositionMs))
-    {
-        const double advanceFrames = static_cast<double>(audioSampleRate) * static_cast<double>(framePositionMs - lastPositionMs) / 1000.0;
-        // Clamp so a position discontinuity (dropped frames, post-rebuffer jump)
-        // can't trigger a huge catch-up pull that would gallop the audio.
-        targetFramesExact = qBound(0.0, advanceFrames, nominalFrames * 4.0);
-    }
-    else
-    {
-        // First frame, or a non-monotonic position: pull one nominal frame.
-        targetFramesExact = nominalFrames;
-    }
-    if (framePositionMs >= 0) {
-        m_mediaPlayback.m_streamAudioLastPresentedPositionMs = framePositionMs;
-    }
-    targetFramesExact += m_mediaPlayback.m_streamAudioPaceRemainderFrames;
-    const int targetFrames = qMax(1, static_cast<int>(std::floor(targetFramesExact)));
-    m_mediaPlayback.m_streamAudioPaceRemainderFrames = targetFramesExact - static_cast<double>(targetFrames);
-
-    const int takeBytes = qMin(
-        targetFrames * bytesPerSampleFrame,
-        (m_mediaPlayback.m_streamAudioPcmS16Stereo.size() / bytesPerSampleFrame) * bytesPerSampleFrame);
-    if (takeBytes <= 0) {
-        return 0;
-    }
-
-    pcmS16Stereo = m_mediaPlayback.m_streamAudioPcmS16Stereo.left(takeBytes);
-    m_mediaPlayback.m_streamAudioPcmS16Stereo.remove(0, takeBytes);
-    return takeBytes / bytesPerSampleFrame;
 }
 
 int CameraWorker::dropPacedStreamPlaybackAudio(int droppedVideoFrames, int audioSampleRate, double playbackFrameRate)
@@ -2495,6 +2416,17 @@ bool CameraWorker::readQueuedVideoFileFrame(bool submitAudio)
     {
         if (!videoFilePlaybackIsPlaying()) {
             return false;
+        }
+
+        // The decode thread reopened the stream at a new live edge (and cleared the
+        // stale audio + decoded-frame queue). Reset the worker-owned playback
+        // schedule so presentation restarts cleanly from the live edge instead of
+        // replaying pre-stall clock/pending-frame state against the new audio.
+        if (m_mediaPlayback.m_streamReopenResetPending.exchange(false))
+        {
+            clearPendingStreamVideoFileFrame();
+            clearDelayedVideoFileFrames();
+            resetVideoFilePlaybackSchedule();
         }
 
         m_mediaPlayback.m_decodeFrameWakeQueued.store(false);

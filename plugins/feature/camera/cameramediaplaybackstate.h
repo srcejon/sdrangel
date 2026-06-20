@@ -94,6 +94,12 @@ public:
     // reopen. m_decodeReopening guards the watchdog from firing mid-reopen.
     std::atomic<quint64> m_decodeFramesProduced { 0 };
     std::atomic_bool m_decodeReopening { false };
+    // Set by the decode thread after it reopens a live stream at a new edge (it
+    // has already cleared the stale audio + decoded-frame queue). The worker
+    // thread observes this on its next present tick and resets its own playback
+    // schedule (clock/rebuffer/pending/delayed frames) — that state is worker-
+    // owned and must not be written from the decode thread.
+    std::atomic_bool m_streamReopenResetPending { false };
     quint64 m_streamWatchdogLastProduced = 0;
     QElapsedTimer m_streamWatchdogClock;
     mutable QMutex m_decodedFramesMutex;
@@ -111,14 +117,10 @@ public:
     mutable QMutex m_streamAudioMutex;
     QByteArray m_streamAudioPcmS16Stereo;
     int m_streamAudioSampleRate = 0;
+    // Carried fractional-sample remainder for the audio-drop helpers
+    // (dropPaced/dropTimedStreamPlaybackAudio), which discard the stream audio
+    // matching dropped video frames so A/V stay aligned.
     double m_streamAudioPaceRemainderFrames = 0.0;
-    QElapsedTimer m_streamAudioPaceClock;
-    // Content position (frame PTS, ms) of the last video frame whose audio was
-    // pulled to the monitor. Audio is paced by the advance of the presented video
-    // frame's position rather than wall-clock time, so it follows the video
-    // timeline exactly and self-corrects after a stall/rebuffer instead of
-    // accumulating a permanent lead. -1 until the first frame is presented.
-    qint64 m_streamAudioLastPresentedPositionMs = -1;
     // Adaptive resampler state for matching the source's audio content rate to the
     // sound-card output rate. The ratio is servoed to hold the stream-audio buffer
     // at a fixed depth, so audio is consumed at the producer's content rate (kept

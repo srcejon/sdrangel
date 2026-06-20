@@ -710,8 +710,6 @@ private:
     bool takeDecodedVideoFileFrame(CameraMediaPlaybackState::DecodedFrame& frame);
     void clearStreamPlaybackAudio();
     void appendStreamPlaybackAudio(const QByteArray& pcmS16Stereo, int audioSampleRate);
-    int takeStreamPlaybackAudio(QByteArray& pcmS16Stereo, int audioSampleRate, int maxSampleFrames);
-    int takePacedStreamPlaybackAudio(QByteArray& pcmS16Stereo, int audioSampleRate, double playbackFrameRate, qint64 framePositionMs);
     // Pull up to maxOutputFrames of monitor audio, linear-resampling the stream
     // buffer by a ratio servoed to hold the buffer near targetBufferSeconds. Keeps
     // audio consumption at the producer's content rate (synced to video) while

@@ -27,6 +27,7 @@
 #include <QMutex>
 #include <QString>
 
+#include "cameraaudiobytequeue.h"
 #include "cameraimagepool.h"
 
 struct AVCodecContext;
@@ -122,7 +123,7 @@ private:
     double m_audioPaceRemainderFrames = 0.0;
     double m_audioPaceFrameRateApplied = 0.0;
     qint64 m_audioDecodedPositionMs = -1;
-    QByteArray m_pendingAudioPcm;
+    CameraAudioByteQueue m_pendingAudioPcm;
     mutable QMutex m_pendingAudioMutex;
     bool m_eof = false;
     bool m_videoDraining = false;

@@ -32,6 +32,7 @@
 #include <QVector>
 #include <QWaitCondition>
 
+#include "cameraaudiobytequeue.h"
 #include "camerapipelineframe.h"
 #include "cameravideofiledecoder.h"
 
@@ -115,7 +116,7 @@ public:
     int m_decodePendingVideoFrames = 0;
     int m_decodePendingVideoPackets = 0;
     mutable QMutex m_streamAudioMutex;
-    QByteArray m_streamAudioPcmS16Stereo;
+    CameraAudioByteQueue m_streamAudioPcmS16Stereo;
     int m_streamAudioSampleRate = 0;
     // Carried fractional-sample remainder for the audio-drop helpers
     // (dropPaced/dropTimedStreamPlaybackAudio), which discard the stream audio

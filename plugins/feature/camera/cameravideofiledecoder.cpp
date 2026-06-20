@@ -1228,7 +1228,7 @@ void CameraVideoFileDecoder::trimLivePendingAudio()
             return;
         }
 
-        m_pendingAudioPcm.remove(0, dropBytes);
+        m_pendingAudioPcm.consume(dropBytes);
     }
 #endif
 }
@@ -1257,7 +1257,7 @@ int CameraVideoFileDecoder::takePendingAudio(QByteArray& pcmS16Stereo, int maxSa
         }
 
         pcmS16Stereo = m_pendingAudioPcm.left(alignedByteCount);
-        m_pendingAudioPcm.remove(0, alignedByteCount);
+        m_pendingAudioPcm.consume(alignedByteCount);
     }
     return alignedByteCount / bytesPerSampleFrame;
 #else
@@ -1293,7 +1293,7 @@ void CameraVideoFileDecoder::takePacedAudio(QByteArray& pcmS16Stereo)
         QMutexLocker locker(&m_pendingAudioMutex);
         byteCount = std::min(targetBytes, static_cast<int>(m_pendingAudioPcm.size()));
         pcmS16Stereo = m_pendingAudioPcm.left(byteCount);
-        m_pendingAudioPcm.remove(0, byteCount);
+        m_pendingAudioPcm.consume(byteCount);
     }
 #endif
 }

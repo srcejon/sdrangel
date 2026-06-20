@@ -858,7 +858,7 @@ void CameraMediaPlaybackController::appendStreamPlaybackAudio(const QByteArray& 
         const int dropBytes = ((m_state.m_streamAudioPcmS16Stereo.size() - maxBufferedBytes) / bytesPerSampleFrame) * bytesPerSampleFrame;
         if (dropBytes > 0)
         {
-            m_state.m_streamAudioPcmS16Stereo.remove(0, dropBytes);
+            m_state.m_streamAudioPcmS16Stereo.consume(dropBytes);
         }
     }
 }
@@ -895,7 +895,7 @@ int CameraMediaPlaybackController::takeResampledStreamPlaybackAudio(QByteArray& 
         if (availFrames > targetFramesInt)
         {
             const int dropFrames = availFrames - targetFramesInt;
-            m_state.m_streamAudioPcmS16Stereo.remove(0, dropFrames * bytesPerSampleFrame);
+            m_state.m_streamAudioPcmS16Stereo.consume(dropFrames * bytesPerSampleFrame);
             availFrames = targetFramesInt;
         }
     }
@@ -957,7 +957,7 @@ int CameraMediaPlaybackController::takeResampledStreamPlaybackAudio(QByteArray& 
     const double endPos = phase + static_cast<double>(produced) * ratio;
     const int consumed = static_cast<int>(std::floor(endPos));
     if (consumed > 0) {
-        m_state.m_streamAudioPcmS16Stereo.remove(0, consumed * bytesPerSampleFrame);
+        m_state.m_streamAudioPcmS16Stereo.consume(consumed * bytesPerSampleFrame);
         m_state.m_streamAudioResamplePhase = endPos - static_cast<double>(consumed);
     } else {
         m_state.m_streamAudioResamplePhase = endPos;
@@ -1024,7 +1024,7 @@ int CameraMediaPlaybackController::dropPacedStreamPlaybackAudio(int droppedVideo
         return 0;
     }
 
-    m_state.m_streamAudioPcmS16Stereo.remove(0, dropBytes);
+    m_state.m_streamAudioPcmS16Stereo.consume(dropBytes);
     return dropBytes / bytesPerSampleFrame;
 }
 
@@ -1052,7 +1052,7 @@ int CameraMediaPlaybackController::dropTimedStreamPlaybackAudio(qint64 durationM
         return 0;
     }
 
-    m_state.m_streamAudioPcmS16Stereo.remove(0, dropBytes);
+    m_state.m_streamAudioPcmS16Stereo.consume(dropBytes);
     return dropBytes / bytesPerSampleFrame;
 }
 

@@ -48,6 +48,7 @@ set(camera_HEADERS
     cameraframestacker.h
     cameraimageutils.h
     cameraimagepool.h
+    cameraaudiobytequeue.h
     cameraimageprocessor.h
     cameramediaplaybackstate.h
     cameramediaplaybackcontroller.h

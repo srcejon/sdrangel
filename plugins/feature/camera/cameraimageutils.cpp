@@ -19,6 +19,7 @@
 #include <cstring>
 
 #include <QColor>
+#include <QThreadStorage>
 
 #include <opencv2/imgproc.hpp>
 
@@ -32,15 +33,16 @@ namespace {
 // (preprocessor, aligner, stacker, image processor, every detector) and are the
 // dominant per-frame host allocation on the always-on path, so reusing the
 // buffers is the biggest single cut to the per-frame page-fault churn that hurts
-// slower machines. The pool is thread_local: each pipeline stage runs on its own
-// thread, so every thread gets a contention-free pool that naturally holds that
-// stage's frame size/format. The produced image is often released on another
-// thread (GUI/worker) — CameraImagePool's intrusive-refcounted state makes that
+// slower machines. The pool is per-thread (QThreadStorage): each pipeline stage
+// runs on its own thread, so every thread gets a contention-free pool that
+// naturally holds that stage's frame size/format, and the pool is destroyed when
+// that QThread exits. The produced image is often released on another thread
+// (GUI/worker) — CameraImagePool's intrusive-refcounted state makes that
 // cross-thread release (and thread exit while an image is still in flight) safe.
 QImage acquirePooledImage(int width, int height, QImage::Format format)
 {
-    thread_local CameraImagePool pool(8);
-    QImage image = pool.acquire(width, height, format);
+    static QThreadStorage<CameraImagePool> pool;
+    QImage image = pool.localData().acquire(width, height, format);
     if (image.isNull()) {
         image = QImage(width, height, format);
     }

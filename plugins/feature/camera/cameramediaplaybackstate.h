@@ -22,7 +22,6 @@
 #include <atomic>
 #include <deque>
 #include <memory>
-#include <thread>
 
 #include <QByteArray>
 #include <QElapsedTimer>
@@ -37,6 +36,7 @@
 #include "cameravideofiledecoder.h"
 
 class QObject;
+class QThread;
 
 class CameraMediaPlaybackState
 {
@@ -85,7 +85,7 @@ public:
     CameraPipelineFramePtr m_pendingStreamFrame;
     quint64 m_pendingStreamFrameGeneration = 0;
 
-    std::thread m_decodeThread;
+    QThread* m_decodeThread = nullptr;
     std::atomic_bool m_decodeThreadStop { false };
     std::atomic_bool m_decodeFrameWakeQueued { false };
     std::atomic<quint64> m_decodeDroppedSinceLastSubmit { 0 };

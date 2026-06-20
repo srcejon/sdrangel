@@ -17,7 +17,6 @@
 ///////////////////////////////////////////////////////////////////////////////////
 
 #include <algorithm>
-#include <chrono>
 #include <cmath>
 #include <limits>
 
@@ -27,6 +26,7 @@
 #include <QElapsedTimer>
 #include <QImage>
 #include <QMetaObject>
+#include <QThread>
 
 #include "cameraqtaudiocontroller.h"
 #include "cameravideofiledecoder.h"
@@ -569,7 +569,7 @@ void CameraMediaPlaybackController::startVideoFileDecodeThread()
     m_state.m_streamWatchdogLastProduced = m_state.m_decodeFramesProduced.load();
     m_state.m_decodeReopening.store(false);
     m_state.m_decodeThreadStop.store(false);
-    m_state.m_decodeThread = std::thread([this, minBufferedFrames, maxBufferedFrames, playbackFrameRate, mediaSourcePath, audioOutputSampleRate]()
+    m_state.m_decodeThread = QThread::create([this, minBufferedFrames, maxBufferedFrames, playbackFrameRate, mediaSourcePath, audioOutputSampleRate]()
     {
         int consecutiveReadErrors = 0;
         static constexpr int maxConsecutiveReadErrors = 25;
@@ -605,7 +605,7 @@ void CameraMediaPlaybackController::startVideoFileDecodeThread()
                                    << consecutiveReadErrors
                                    << errorMessage;
                     }
-                    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+                    QThread::msleep(20);
                     continue;
                 }
                 // Persistent read failure on a live stream. Rather than ending
@@ -635,6 +635,7 @@ void CameraMediaPlaybackController::startVideoFileDecodeThread()
             queueDecodedVideoFileFrame(std::move(decodedFrame), minBufferedFrames, maxBufferedFrames, playbackFrameRate);
         }
     });
+    m_state.m_decodeThread->start();
 }
 
 bool CameraMediaPlaybackController::reopenStreamVideoFileDecoder(const QString& mediaSourcePath, int audioOutputSampleRate, double playbackFrameRate)
@@ -682,7 +683,7 @@ bool CameraMediaPlaybackController::reopenStreamVideoFileDecoder(const QString& 
         qWarning() << "CameraWorker: stream decoder reopen failed"
                    << mediaSourcePath << "attempt" << (attempt + 1) << errorMessage;
         for (int i = 0; (i < 25) && !m_state.m_decodeThreadStop.load(); ++i) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(20));
+            QThread::msleep(20);
         }
     }
     return false;
@@ -691,13 +692,15 @@ bool CameraMediaPlaybackController::reopenStreamVideoFileDecoder(const QString& 
 void CameraMediaPlaybackController::stopVideoFileDecodeThread()
 {
     m_state.m_decodeThreadStop.store(true);
-    if (m_state.m_decodeThread.joinable() && m_state.m_decoder) {
+    if (m_state.m_decodeThread && m_state.m_decoder) {
         m_state.m_decoder->requestAbort();
     }
     m_state.m_decodedFramesNotFull.wakeAll();
     m_state.m_decodedFramesAvailable.wakeAll();
-    if (m_state.m_decodeThread.joinable()) {
-        m_state.m_decodeThread.join();
+    if (m_state.m_decodeThread) {
+        m_state.m_decodeThread->wait();
+        delete m_state.m_decodeThread;
+        m_state.m_decodeThread = nullptr;
     }
     m_state.m_decodeThreadStop.store(false);
     m_state.m_streamReopenResetPending.store(false);

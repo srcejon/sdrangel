@@ -2298,3 +2298,39 @@ pass-2 removed 1 more bypass term. The substantive gates (`weakBrightSupport`+re
 load-bearing. Remaining ablation targets: `fov` and `elevationSeed` (both need failure-mode-specific
 negatives), and the blind/fov acceptance path (mode 0/1, wide-2 regime). Harness `test/gateablate3.ps1`
 + `test/gateablate4.ps1` (untracked).
+
+## WS3 pass-3 — bright-support internals firing analysis (2026-06-21)
+
+`hasWeakNarrowGuidedBrightSupport` is a ~13-sub-condition thicket. Rather than blindly ablate each
+(high-risk: it is the load-bearing rescue trigger), used its own `logBrightSupportDecision` logging
+(`SDRANGEL_CAMERA_PLATE_SOLVER_DEBUG_SPARSE=1` + `QT_LOGGING_RULES=*.debug=true`) to count which
+sub-conditions actually fire, across REAL + RAND2 + FISHEYE-mode4. Findings:
+
+- **The gate is narrow-only.** It early-returns for `!isNarrowField` (fov > 5 deg), so **FISHEYE-mode4
+  (wide) never enters it** (0 log lines from 50 cases). Wide-fisheye-guided acceptance runs entirely
+  through `hasAcceptableGuidedFinalBrightnessConsistency` + the residual gates instead.
+- **Dominant firing sub-conditions** (REAL+RAND2): `poorNoRollSeedRadialSupport` (by far the most),
+  `brightProjected>=10 & matched<5`, `seedProjectedBright>=4 unmatched`, `brightDetections>=12 &
+  matched<3`, `brightProjected>=4 & matched<2`; plus the general-compound `weakBrightMagnitude` /
+  `weakSeedRadial` on REAL. These are load-bearing.
+- **Provably-dead removed:** `strongBrightDetectionSupportWideFisheye` (the wide waiver on
+  `weakBrightProjected`) -- always false, because reaching it requires `isNarrowField` (fov<=5) and a
+  direction-seeded (non-blind) solve, while `isWidePlateSolveContext` needs fov>=30 or blind. The two
+  predicates are mutually exclusive here. The notes' 2026-06-15 wide-fisheye hardening lives in the
+  `hasAcceptableGuidedFinalBrightnessConsistency` copy; this one was dead (likely since the
+  `!isNarrowField` early-return). Removed; behaviour-neutral (REAL 48, FISH4 42).
+- **Never-fired-but-NOT-removed** (kept, deliberately): the `useSeedProjectedBrightGate`-gated
+  branches (that gate is off for every corpus case, but on for other configs), the magnitude-cap
+  branches (`brightDetectionMagnitudeError>2.25/2.35`), `brightCatalogShapeMismatch`, the rarer
+  `brightProjected>=6 & matched<3` overlap, and the general `seedProjectedBright>=6/>=10` floors. Each
+  was added for a specific documented case and "never fires on this corpus" is the same fragile
+  signal that `residual` flipped on -- removing them needs config-specific coverage (e.g. a
+  `useSeedProjectedBrightGate`-on corpus), not available here.
+
+**WS3 status: gate pruning at its safe floor.** Removed across 3 passes: 3 accept-bypass branches +
+1 helper (pass-1), 1 bypass term (pass-2), 1 dead waiver (pass-3). The substantive gates
+(`weakBrightSupport` + its dominant sub-conditions, `brightnessConsistency`, `residual`, `rollAlias`,
+`strongDense`, `namedAnchorCert`) are all load-bearing. Remaining (deferred, need failure-mode-specific
+coverage, not blind tuning): `fov` + `elevationSeed` (cheap narrow/mode-2 safety checks, structurally
+inert on this corpus), the `useSeedProjectedBrightGate` branches, and the blind/fov accept path
+(mode 0/1). Plus the latent unbounded roll-recovery retry (only reachable with `rollAlias` disabled).

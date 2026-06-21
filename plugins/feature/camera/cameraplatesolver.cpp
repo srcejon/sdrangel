@@ -14005,22 +14005,16 @@ bool hasWeakNarrowGuidedBrightSupport(const CameraSettings& settings,
         && (finalPass.matchedBrightDetections < 2)
         && !projectedBrightSupportCanOverrideDetectedBright;
     const bool weakSeedRadial = poorNoRollSeedRadialSupport && !denseFinalEvidenceOverridesSeedRadial;
-    // In a wide fisheye the brightest catalogue stars in the queried region routinely
-    // project beyond the image circle / to the heavily-distorted rim and so are never
-    // detected, leaving brightProjected unmatched even for a pixel-perfect pose (e.g.
-    // synth-fisheye-027/047 guided solves: brightDetections 8/8, magSupport ~100-155,
-    // rms 1-3 px, yet brightProjected 0/8). When the matched bright *detections* are
-    // numerous and photometrically consistent the pose is corroborated independently of
-    // the projected-bright stars, so don't treat unmatched bright-projected as "weak".
-    // Gated to wide fisheye, so narrow guided solves are unaffected.
-    const bool strongBrightDetectionSupportWideFisheye =
-        isWidePlateSolveContext(settings)
-        && (finalPass.matchedBrightDetections >= 6)
-        && (finalPass.brightDetectionMagnitudeError <= 1.5);
+    // (WS3 2026-06-21) Removed the strongBrightDetectionSupportWideFisheye waiver that used to gate
+    // weakBrightProjected: it was provably dead here. This function early-returns for !isNarrowField
+    // (fov > 5 deg), and reaching this point also requires a direction-seeded (non-blind) solve, so
+    // isWidePlateSolveContext -- which needs fov >= 30 deg or blind mode -- is always false at this
+    // point, making the waiver always false. Firing analysis confirmed 0 fires across REAL+RAND2 and
+    // FISH4 (wide fisheye) never enters this narrow-only function. The live wide-fisheye
+    // bright-projected waiver is in hasAcceptableGuidedFinalBrightnessConsistency.
     const bool weakBrightProjected =
         (finalPass.brightProjectedStars >= 5)
-        && (finalPass.matchedBrightProjectedStars < 2)
-        && !strongBrightDetectionSupportWideFisheye;
+        && (finalPass.matchedBrightProjectedStars < 2);
     const bool weakBrightMagnitude =
         (finalPass.brightDetections >= 6) && (finalPass.brightDetectionMagnitudeError > 2.35);
     const bool weak = weakBrightDetections || weakSeedRadial || weakBrightProjected || weakBrightMagnitude;

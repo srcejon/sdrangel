@@ -910,6 +910,9 @@ CameraSettings:
     audioMute:
       description: "Silence captured camera audio (1 for yes, 0 for no)"
       type: integer
+    audioPreviewVolume:
+      description: "Audio preview volume in percent (0 to 100)"
+      type: integer
     audioDeviceName:
       description: "Name of the audio output device (empty = system default)"
       type: string

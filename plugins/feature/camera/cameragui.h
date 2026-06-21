@@ -747,6 +747,7 @@ private slots:
     void on_zoomOutButton_clicked();
     void on_fitInViewButton_clicked();
     void on_audioMute_toggled(bool checked);
+    void on_audioPreviewVolumeDial_valueChanged(int value);
     void audioSelect(const QPoint& p);
     void on_whiteBalanceCombo_currentIndexChanged(int index);
     void on_exposureCompSpin_valueChanged(double value);

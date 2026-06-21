@@ -385,6 +385,7 @@ void CameraSettings::resetToDefaults()
     m_yoloIgnoredClassNames.clear();
     m_yoloDnnTarget = CPU;
     m_audioMute = true;
+    m_audioPreviewVolume = 100;
     m_audioDeviceName.clear();
     m_whiteBalanceMode = 0;
     m_exposureCompensation = 0.0;
@@ -575,6 +576,7 @@ QByteArray CameraSettings::serialize() const
     s.writeDouble(166, m_yoloNmsThreshold);
     s.writeU32(167, m_yoloBoxColor.rgba());
     s.writeS32(169, m_yoloDnnTarget);
+    s.writeS32(170, m_audioPreviewVolume);
     s.writeBool(171, m_audioMute);
     s.writeString(172, m_audioDeviceName);
     s.writeS32(173, m_whiteBalanceMode);
@@ -1084,6 +1086,8 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readS32(169, (qint32 *) &m_yoloDnnTarget, (qint32) CPU);
 
         d.readBool(171, &m_audioMute, true);
+        d.readS32(170, &m_audioPreviewVolume, 100);
+        m_audioPreviewVolume = qBound(0, m_audioPreviewVolume, 100);
         d.readString(172, &m_audioDeviceName, "");
         d.readS32(173, &m_whiteBalanceMode, 0);
         m_whiteBalanceMode = std::max(m_minNonNegative, m_whiteBalanceMode);
@@ -2002,6 +2006,9 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     if (settingsKeys.contains("audioMute")) {
         m_audioMute = settings.m_audioMute;
     }
+    if (settingsKeys.contains("audioPreviewVolume")) {
+        m_audioPreviewVolume = qBound(0, settings.m_audioPreviewVolume, 100);
+    }
     if (settingsKeys.contains("audioDeviceName")) {
         m_audioDeviceName = settings.m_audioDeviceName;
     }
@@ -2751,6 +2758,9 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("audioMute") || force) {
         ostr << " m_audioMute: " << m_audioMute;
+    }
+    if (settingsKeys.contains("audioPreviewVolume") || force) {
+        ostr << " m_audioPreviewVolume: " << m_audioPreviewVolume;
     }
     if (settingsKeys.contains("audioDeviceName") || force) {
         ostr << " m_audioDeviceName: " << m_audioDeviceName.toStdString();

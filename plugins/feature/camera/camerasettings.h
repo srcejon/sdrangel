@@ -603,6 +603,7 @@ struct CameraSettings
 
     // Audio settings (Qt camera only)
     bool   m_audioMute;          ///< When true, captured camera audio is silenced
+    int    m_audioPreviewVolume; ///< Preview audio volume in percent: 0..100
     QString m_audioDeviceName;   ///< Name of the audio output device (empty = system default)
 
     // Qt camera image-control settings

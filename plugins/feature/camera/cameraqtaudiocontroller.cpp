@@ -38,6 +38,7 @@ CameraQtAudioController::CameraQtAudioController(QObject *parent) :
     m_capturing(false),
     m_muted(false),
     m_captureSourceActive(false),
+    m_previewVolumePercent(100),
     m_sampleRate(AudioDeviceManager::m_defaultAudioSampleRate),
     m_recordingMessageQueue(nullptr),
     m_filePlaybackAudioOffsetMs(0),
@@ -71,6 +72,7 @@ void CameraQtAudioController::start(const CameraSettings& settings, MessageQueue
     QObject::connect(&m_captureAudioFifo, &AudioFifo::dataReady, this, &CameraQtAudioController::onCaptureAudioDataReady);
     audioDeviceManager->addAudioSource(&m_captureAudioFifo, messageQueue, inputDeviceIndex);
     m_muted = settings.m_audioMute;
+    m_previewVolumePercent = qBound(0, settings.m_audioPreviewVolume, 100);
     m_sampleRate = outputSampleRate > 0 ? outputSampleRate : AudioDeviceManager::m_defaultAudioSampleRate;
     m_captureSourceActive = true;
     m_capturing = true;
@@ -84,6 +86,7 @@ int CameraQtAudioController::startFilePlayback(const CameraSettings& settings, M
     const int outputDeviceIndex = audioDeviceManager->getOutputDeviceIndex(settings.m_audioDeviceName);
     const int outputSampleRate = audioDeviceManager->getOutputSampleRate(outputDeviceIndex);
     m_muted = settings.m_audioMute;
+    m_previewVolumePercent = qBound(0, settings.m_audioPreviewVolume, 100);
     m_sampleRate = outputSampleRate > 0 ? outputSampleRate : AudioDeviceManager::m_defaultAudioSampleRate;
     m_filePlaybackAudioOffsetMs = qBound(
         CameraSettings::m_minVideoPlaybackAudioOffsetMs,
@@ -137,6 +140,11 @@ void CameraQtAudioController::setMuted(bool muted)
         // dips the ratio and reintroduces the post-unmute pitch artifact.
         m_captureAudioFifo.clear();
     }
+}
+
+void CameraQtAudioController::setPreviewVolume(int volumePercent)
+{
+    m_previewVolumePercent = qBound(0, volumePercent, 100);
 }
 
 void CameraQtAudioController::setFilePlaybackAudioOffsetMs(int offsetMs)
@@ -208,6 +216,7 @@ void CameraQtAudioController::submitMonitorPcmSamples(const QByteArray& pcmS16St
         } else if (!m_captureSourceActive) {
             applyFilePlaybackAudioOffset(monitorPcmS16Stereo, sampleRate);
         }
+        applyPreviewVolume(monitorPcmS16Stereo);
 
         const int sampleFrames = monitorPcmS16Stereo.size() / bytesPerSampleFrame;
         if (sampleFrames <= 0) {
@@ -336,6 +345,28 @@ void CameraQtAudioController::applyFilePlaybackAudioOffset(QByteArray& pcmS16Ste
         silence.fill(0);
         pcmS16Stereo.prepend(silence);
         m_filePlaybackAudioOffsetRemainingFrames = 0;
+    }
+}
+
+void CameraQtAudioController::applyPreviewVolume(QByteArray& pcmS16Stereo) const
+{
+    const int volumePercent = m_previewVolumePercent.load();
+
+    if (volumePercent >= 100) {
+        return;
+    }
+
+    if (volumePercent <= 0)
+    {
+        pcmS16Stereo.fill('\0');
+        return;
+    }
+
+    qint16 *samples = reinterpret_cast<qint16*>(pcmS16Stereo.data());
+    const int sampleCount = pcmS16Stereo.size() / static_cast<int>(sizeof(qint16));
+
+    for (int i = 0; i < sampleCount; ++i) {
+        samples[i] = static_cast<qint16>((static_cast<int>(samples[i]) * volumePercent) / 100);
     }
 }
 
@@ -525,8 +556,12 @@ void CameraQtAudioController::onCaptureAudioDataReady()
 
     while ((nbRead = m_captureAudioFifo.read(m_audioTransferBuffer.data(), m_audioTransferBuffer.size() / bytesPerSampleFrame)) != 0)
     {
-        if (!m_muted) {
-            m_outputAudioFifo.write(m_audioTransferBuffer.data(), nbRead);
+        if (!m_muted)
+        {
+            const int byteCount = static_cast<int>(nbRead) * bytesPerSampleFrame;
+            QByteArray monitorPcmS16Stereo(reinterpret_cast<const char*>(m_audioTransferBuffer.constData()), byteCount);
+            applyPreviewVolume(monitorPcmS16Stereo);
+            m_outputAudioFifo.write(reinterpret_cast<const quint8*>(monitorPcmS16Stereo.constData()), nbRead);
         }
 
         if (m_recordingMessageQueue)

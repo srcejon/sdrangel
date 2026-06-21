@@ -31,6 +31,7 @@
 #include <QDateTime>
 #include <QDateTimeEdit>
 #include <QDesktopServices>
+#include <QDial>
 #include <QDialog>
 #include <QDir>
 #include <QDoubleSpinBox>
@@ -1904,6 +1905,11 @@ void CameraGUI::displaySettings()
     }
     updateColorButton(settingsUI()->yoloBoxColorButton, m_settings.m_yoloBoxColor);
     ui->audioMute->setChecked(m_settings.m_audioMute);
+    {
+        const QSignalBlocker audioPreviewVolumeBlocker(ui->audioPreviewVolumeDial);
+        ui->audioPreviewVolumeDial->setValue(m_settings.m_audioPreviewVolume);
+        ui->audioPreviewVolumeDial->setToolTip(tr("Audio preview volume: %1%").arg(m_settings.m_audioPreviewVolume));
+    }
 
     // White balance (select by stored mode integer)
     {
@@ -2688,6 +2694,7 @@ void CameraGUI::makeUIConnections()
     QObject::connect(ui->zoomOutButton, &QToolButton::clicked, this, &CameraGUI::on_zoomOutButton_clicked);
     QObject::connect(ui->fitInViewButton, &QToolButton::clicked, this, &CameraGUI::on_fitInViewButton_clicked);
     QObject::connect(ui->audioMute, &QToolButton::toggled, this, &CameraGUI::on_audioMute_toggled);
+    QObject::connect(ui->audioPreviewVolumeDial, &QDial::valueChanged, this, &CameraGUI::on_audioPreviewVolumeDial_valueChanged);
     QObject::connect(settingsUI()->whiteBalanceCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_whiteBalanceCombo_currentIndexChanged);
     QObject::connect(settingsUI()->exposureCompSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_exposureCompSpin_valueChanged);
     QObject::connect(settingsUI()->focusModeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_focusModeCombo_currentIndexChanged);
@@ -2944,7 +2951,7 @@ void CameraGUI::updateVideoFileControls()
         ui->playbackRateSpin->setSuffix(imageSequenceSelected ? tr(" fps") : QString());
         ui->playbackRateSpin->setToolTip(imageSequenceSelected
             ? tr("Image sequence playback frames per second")
-            : (streamSelected ? tr("Stream playback rate") : tr("Video playback rate")));
+            : tr("Video playback rate"));
     }
     ui->browseVideoFileButton->setToolTip(imageSequenceSelected
         ? tr("Edit image sequence files")
@@ -2956,7 +2963,7 @@ void CameraGUI::updateVideoFileControls()
     setVisibleEnabled(ui->stepForwardVideo, fileCameraSelected && !streamSelected, hasVideoFile);
     setVisibleEnabled(ui->playPauseVideo, fileCameraSelected, hasVideoFile);
     setVisibleEnabled(ui->loopVideo, fileCameraSelected && !streamSelected, hasVideoFile);
-    setVisibleEnabled(ui->playbackRateSpin, fileCameraSelected, hasVideoFile);
+    setVisibleEnabled(ui->playbackRateSpin, fileCameraSelected && !streamSelected, hasVideoFile);
     setVisibleEnabled(ui->playbackPositionSlider, fileCameraSelected, hasPlaybackPosition);
     setVisibleEnabled(ui->playbackPositionLabel, fileCameraSelected, hasPlaybackPosition);
     ui->videoLine->setVisible(fileCameraSelected);
@@ -4520,6 +4527,7 @@ void CameraGUI::updateCameraSettingsVisibility()
     settingsUI()->tabWidget->setTabEnabled(0, !fileCamera);
     settingsUI()->tabWidget->setTabEnabled(1, sharedHardwareCamera);
     ui->audioMute->setVisible(qtCamera || m_settings.isFfmpegMediaSource());
+    ui->audioPreviewVolumeDial->setVisible(qtCamera || m_settings.isFfmpegMediaSource());
 
     // Qt-camera-only controls
     settingsUI()->exposureLabel->setVisible(!fileCamera);
@@ -8564,6 +8572,13 @@ void CameraGUI::on_audioMute_toggled(bool checked)
 {
     m_settings.m_audioMute = checked;
     applySetting("audioMute");
+}
+
+void CameraGUI::on_audioPreviewVolumeDial_valueChanged(int value)
+{
+    m_settings.m_audioPreviewVolume = value;
+    ui->audioPreviewVolumeDial->setToolTip(tr("Audio preview volume: %1%").arg(value));
+    applySetting("audioPreviewVolume");
 }
 
 void CameraGUI::audioSelect(const QPoint& p)

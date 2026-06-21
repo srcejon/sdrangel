@@ -65,6 +65,7 @@ public:
     int startFilePlayback(const CameraSettings& settings, MessageQueue *messageQueue);
     void stop();
     void setMuted(bool muted);
+    void setPreviewVolume(int volumePercent);
     void setFilePlaybackAudioOffsetMs(int offsetMs);
     void clearMonitorAudio();
     void prefillMonitorAudio(int milliseconds);
@@ -108,6 +109,7 @@ private:
     static int streamPlaybackMonitorJitterMs() { return 80; }
     static int filePlaybackMonitorJitterMs() { return 80; }
     void applyFilePlaybackAudioOffset(QByteArray& pcmS16Stereo, int sampleRate);
+    void applyPreviewVolume(QByteArray& pcmS16Stereo) const;
 
     // Set from the GUI thread (start/stop/setMuted) and read from the worker
     // thread in submitMonitorPcmSamples, so these must be atomic to avoid a
@@ -115,6 +117,7 @@ private:
     std::atomic<bool> m_capturing;
     std::atomic<bool> m_muted;
     std::atomic<bool> m_captureSourceActive;
+    std::atomic<int> m_previewVolumePercent;
     int m_sampleRate;
     int m_outputDeviceIndex = -1;
     MessageQueue *m_recordingMessageQueue;

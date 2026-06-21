@@ -279,6 +279,7 @@ bool CameraRecorder::handleMessage(const Message& cmd)
         // Re-anchor the A/V-sync alignment for the new capture session.
         m_recordAudioLeadRefVideoMs = -1;
         m_recordAudioFirstChunkMs = -1;
+        m_recordAudioLeadLogged = false;
         if (m_captureActive) {
             resetRecordingLimits();
         } else {
@@ -608,9 +609,19 @@ void CameraRecorder::processNewFrame(const CameraPipelineFramePtr& frame)
         if ((m_recordAudioLeadRefVideoMs < 0) && (frame->m_playbackPositionMs >= 0)) {
             m_recordAudioLeadRefVideoMs = frame->m_playbackPositionMs;
         }
-        const int audioLeadMs = ((m_recordAudioLeadRefVideoMs >= 0) && (m_recordAudioFirstChunkMs >= 0))
-            ? static_cast<int>(qMax<qint64>(0, m_recordAudioFirstChunkMs - m_recordAudioLeadRefVideoMs))
+        const qint64 rawLeadMs = ((m_recordAudioLeadRefVideoMs >= 0) && (m_recordAudioFirstChunkMs >= 0))
+            ? (m_recordAudioFirstChunkMs - m_recordAudioLeadRefVideoMs)
             : 0;
+        const int audioLeadMs = static_cast<int>(qMax<qint64>(0, rawLeadMs));
+        if (!m_recordAudioLeadLogged && (m_recordAudioLeadRefVideoMs >= 0) && (m_recordAudioFirstChunkMs >= 0)) {
+            m_recordAudioLeadLogged = true;
+            qDebug() << "CameraRecorder: A/V-sync recording audio lead -"
+                     << "firstAudioContentMs" << m_recordAudioFirstChunkMs
+                     << "firstVideoFrameMs" << m_recordAudioLeadRefVideoMs
+                     << "rawLeadMs" << rawLeadMs
+                     << "-> silence prepended(ms)" << audioLeadMs
+                     << "(positive raw = audio leads video; negative = audio lags, not corrected)";
+        }
 
         if (shouldSaveCalibratedMedia() && ensureVideoWriter(m_calibratedVideoWriter, m_settings.m_videoFileName, calibratedImage, QStringLiteral("calibrated"), videoFrameRate)) {
             m_calibratedVideoWriter->setAudioLeadSilenceMs(audioLeadMs);
@@ -880,6 +891,7 @@ void CameraRecorder::closeVideoWriters()
     m_reportedVideoWriterErrorKeys.clear();
     m_recordAudioLeadRefVideoMs = -1;
     m_recordAudioFirstChunkMs = -1;
+    m_recordAudioLeadLogged = false;
 }
 
 void CameraRecorder::closeYouTubeStream()

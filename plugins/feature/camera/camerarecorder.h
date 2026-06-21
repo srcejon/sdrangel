@@ -240,6 +240,7 @@ private:
     // recording in closeVideoWriters().
     qint64 m_recordAudioLeadRefVideoMs = -1;
     qint64 m_recordAudioFirstChunkMs = -1;
+    bool m_recordAudioLeadLogged = false;   // one-shot diagnostic for the measured A/V lead
     std::unique_ptr<CameraYouTubeStreamer> m_youtubeStreamer;
     bool m_youtubeStreamErrorReported;
     QMutex m_frameMutex;

@@ -152,6 +152,7 @@ private:
     QHash<QString, PendingDisappearState> m_pendingDisappearStates;
     QHash<QString, CameraDetectionHistoryEntry> m_activeObjectDetectionHistory;
     QList<CameraDetectionHistoryEntry> m_completedObjectDetectionHistory;
+    CameraPipelineFramePtr m_lastInputFrame;
     void runYoloDetections(const cv::Mat& bgrMat, const cv::Rect& roi, QVector<CameraPipelineDetection>& detections);
     void decodeYoloDetections(const cv::Mat& det, const cv::Rect& tileRect, int padX, int padY, float invScale,
         std::vector<cv::Rect>& boxes, std::vector<float>& scores, std::vector<int>& classIds) const;

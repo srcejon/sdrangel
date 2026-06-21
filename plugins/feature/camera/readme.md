@@ -51,12 +51,12 @@ Starts or stops image capture from the selected camera.
 
 Selects the camera source. A prefix followed by a colon indicates the underlying API used to access the camera:
 
-* qt: Qt Multimedia camera source for most webcams. For Qt6 this uses the FFmpeg backend (which itself uses DirectShow on Windows, V4L2 on Linux and avfoundation on macOS), while for Qt5 it directly uses GStreamer/V4L2 on Linux.
-* alpaca: ASCOM Alpaca camera source, for smart telescopes such as Seestar or Dwarf and many others.
-* asi: ASI camera source, which uses the ASICamera2 library for ZWO ASI cameras.
-* video: Video file source, which can read from MP4, MOV or AVI files.
-* image: Image file source, which can read from PNG, JPEG or FITS files.
-* stream: Streaming camera source, which can read from RTSP, RTMP or HTTP streams.
+* `qt:` Qt Multimedia camera source for most webcams. For Qt6 this uses the FFmpeg backend (which itself uses DirectShow on Windows, V4L2 on Linux and avfoundation on macOS), while for Qt5 it directly uses GStreamer/V4L2 on Linux.
+* `alpaca:` ASCOM Alpaca camera source, for smart telescopes such as Seestar or Dwarf and many others.
+* `asi`: ASI camera source, which uses the ASICamera2 library for ZWO ASI cameras.
+* `video`: Video file source, which can read from MP4, MOV or AVI files.
+* `image`: Image file source, which can read from PNG, JPEG or FITS files.
+* `stream`: Streaming camera source, which can read from RTSP, RTMP or HTTP streams.
 
 <h3>3: Refresh cameras</h3>
 

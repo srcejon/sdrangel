@@ -1441,7 +1441,17 @@ void CameraMediaPlaybackController::submitVideoFileAudio(const QByteArray& pcmS1
         return;
     }
     m_audio->submitMonitorPcmSamples(monitorAudio, audioSampleRate);
-    const QByteArray& recordingAudio = m_settings->isStreamCamera() ? monitorAudio : pcmS16Stereo;
+    // Record exactly what the monitor plays: monitorAudio, NOT pcmS16Stereo. For
+    // file playback monitorAudio also carries the cushion top-up pulled above from
+    // the decoder (extraAudio). That audio is consumed from the decoder's pending
+    // buffer and never reappears in a later frame's pcmS16Stereo, so recording only
+    // pcmS16Stereo drops it: the recorded track ends up shorter than the video and
+    // plays too fast (most visible on heavy 4K playback, where irregular present
+    // ticks drain the monitor and make the top-up frequent and large). For streams
+    // monitorAudio carries no per-frame audio (the resampler in
+    // submitResampledStreamAudio is the single stream recording-audio source), so
+    // this stays a no-op there.
+    const QByteArray& recordingAudio = monitorAudio;
     if (!recordingAudio.isEmpty()) {
         m_audio->submitRecordingPcmSamples(recordingAudio.left((recordingAudio.size() / bytesPerSampleFrame) * bytesPerSampleFrame), audioSampleRate);
     }

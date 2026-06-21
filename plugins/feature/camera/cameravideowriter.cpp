@@ -768,6 +768,7 @@ bool CameraVideoWriter::writePcmS16Stereo(const QByteArray& pcm, int sampleRate,
                 m_audioInputBuffer.append(QByteArray(static_cast<int>(silenceFrames) * bytesPerSampleFrame, 0));
             }
         }
+        qDebug() << "CameraVideoWriter: applied audio lead silence (ms)" << m_audioLeadSilenceMs;
     }
     if (!pcm.isEmpty())
     {

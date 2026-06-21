@@ -279,6 +279,7 @@ bool CameraRecorder::handleMessage(const Message& cmd)
         // Re-anchor the A/V-sync alignment for the new capture session.
         m_recordAudioLeadRefVideoMs = -1;
         m_recordAudioFirstChunkMs = -1;
+        m_recordPreRecordLeadMs = 0;
         m_recordAudioLeadLogged = false;
         if (m_captureActive) {
             resetRecordingLimits();
@@ -609,15 +610,21 @@ void CameraRecorder::processNewFrame(const CameraPipelineFramePtr& frame)
         if ((m_recordAudioLeadRefVideoMs < 0) && (frame->m_playbackPositionMs >= 0)) {
             m_recordAudioLeadRefVideoMs = frame->m_playbackPositionMs;
         }
-        const qint64 rawLeadMs = ((m_recordAudioLeadRefVideoMs >= 0) && (m_recordAudioFirstChunkMs >= 0))
+        // Total audio lead = pipeline/delay gap (first audio content - first live video
+        // content) + the video-only pre-record lead-in (frames flushed ahead with no
+        // audio). Both push the live audio earlier than the live video in the file.
+        const qint64 contentGapMs = ((m_recordAudioLeadRefVideoMs >= 0) && (m_recordAudioFirstChunkMs >= 0))
             ? (m_recordAudioFirstChunkMs - m_recordAudioLeadRefVideoMs)
             : 0;
+        const qint64 rawLeadMs = contentGapMs + m_recordPreRecordLeadMs;
         const int audioLeadMs = static_cast<int>(qMax<qint64>(0, rawLeadMs));
         if (!m_recordAudioLeadLogged && (m_recordAudioLeadRefVideoMs >= 0) && (m_recordAudioFirstChunkMs >= 0)) {
             m_recordAudioLeadLogged = true;
             qDebug() << "CameraRecorder: A/V-sync recording audio lead -"
                      << "firstAudioContentMs" << m_recordAudioFirstChunkMs
                      << "firstVideoFrameMs" << m_recordAudioLeadRefVideoMs
+                     << "contentGapMs" << contentGapMs
+                     << "preRecordLeadMs" << m_recordPreRecordLeadMs
                      << "rawLeadMs" << rawLeadMs
                      << "-> silence prepended(ms)" << audioLeadMs
                      << "(positive raw = audio leads video; negative = audio lags, not corrected)";
@@ -891,6 +898,7 @@ void CameraRecorder::closeVideoWriters()
     m_reportedVideoWriterErrorKeys.clear();
     m_recordAudioLeadRefVideoMs = -1;
     m_recordAudioFirstChunkMs = -1;
+    m_recordPreRecordLeadMs = 0;
     m_recordAudioLeadLogged = false;
 }
 
@@ -1075,6 +1083,13 @@ void CameraRecorder::flushPreRecordFrames(const QImage& currentCalibratedImage, 
             }
         }
     }
+
+    // The flushed pre-record frames are written with frame-index PTS at videoFrameRate
+    // and carry no audio, so they form a video-only lead-in of this many ms at the
+    // front of the file. Record it so the audio lead silence can compensate and keep
+    // the live portion lip-synced.
+    m_recordPreRecordLeadMs = static_cast<qint64>(
+        (static_cast<double>(m_preRecordVideoFrames.size()) / videoFrameRate) * 1000.0 + 0.5);
 
     m_preRecordVideoFrames.clear();
     m_preRecordBufferFlushed = true;

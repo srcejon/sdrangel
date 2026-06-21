@@ -201,7 +201,9 @@ Press the settings button to open the Camera Settings dialog. The dialog contain
 
 <h3>Camera tab</h3>
 
-The Camera tab contains the capture settings for the selected device.
+The Camera tab contains the capture settings for the selected camera. The settings displayed will vary according to camera.
+
+![Camera tab](../../../doc/img/Camera_plugin_camera_tab.png)
 
 <ul>
 <li>Resolution selects the camera capture size.</li>
@@ -236,6 +238,8 @@ The Camera tab contains the capture settings for the selected device.
 
 The Status tab displays read-only information about the current camera and processing pipeline.
 
+![Status tab](../../../doc/img/Camera_plugin_status_tab.png)
+
 <ul>
 <li>Camera name and description identify the selected camera.</li>
 <li>Sensor name and sensor type describe the camera sensor when reported by the device.</li>
@@ -252,6 +256,8 @@ The Status tab displays read-only information about the current camera and proce
 
 The Alpaca tab configures ASCOM Alpaca discovery, API access and auxiliary devices.
 
+![Status tab](../../../doc/img/Camera_plugin_alpaca_tab.png)
+
 <ul>
 <li>Host and port set the Alpaca camera server address.</li>
 <li>Discovery enables Alpaca discovery instead of using only the configured host and port.</li>
@@ -265,6 +271,8 @@ The Alpaca tab configures ASCOM Alpaca discovery, API access and auxiliary devic
 <h3>Cal / Stack tab</h3>
 
 The Cal / Stack tab configures calibration frames and image stacking.
+
+![Cal/Stack tab](../../../doc/img/Camera_plugin_cal_stack_tab.png)
 
 <ul>
 <li>Dark file, Flat file and Bias file set calibration images used before stacking.</li>
@@ -281,7 +289,9 @@ The Cal / Stack tab configures calibration frames and image stacking.
 
 <h3>Colour tab</h3>
 
-The Colour tab controls image post-processing.
+The Colour tab controls image colour adjustment.
+
+![Colour tab](../../../doc/img/Camera_plugin_colour_tab.png)
 
 <ul>
 <li>White Balance selects Off, Auto or Manual post-processing white balance.</li>
@@ -301,9 +311,17 @@ The Colour tab controls image post-processing.
 <li>Reset color settings restores colour, histogram, filter and image post-processing controls to their defaults.</li>
 </ul>
 
+<h3>Filter tab</h3>
+
+The Filter tab controls image filtering and transformation.
+
+![Filter tab](../../../doc/img/Camera_plugin_filter_tab.png)
+
 <h3>Overlay tab</h3>
 
 The Overlay tab controls spectrum, sky grid, tracked-object, date/time and HTML text overlays.
+
+![Overlay tab](../../../doc/img/Camera_plugin_overlay_tab.png)
 
 <ul>
 <li>Spectrum Device Set selects the device set whose spectrum view is overlaid.</li>
@@ -326,6 +344,8 @@ The Overlay tab controls spectrum, sky grid, tracked-object, date/time and HTML 
 
 The Recording tab configures file output.
 
+![Filter tab](../../../doc/img/Camera_plugin_recording_tab.png)
+
 <ul>
 <li>Image filename and browse button set the base filename used when saving images.</li>
 <li>Video filename and browse button set the base filename used when recording video.</li>
@@ -335,7 +355,9 @@ The Recording tab configures file output.
 
 <h3>Detection tab</h3>
 
-The Detection tab contains a common Detection ROI section and sub-tabs for object, motion, star and difference detection.
+The Detection tab contains a common Detection ROI sub-tag and sub-tabs for object, motion, star and difference detection.
+
+![Detection ROI tab](../../../doc/img/Camera_plugin_detection_roi_tab.png)
 
 <ul>
 <li>Detection ROI X, Y, Width and Height define the sub-region used for object detection, motion detection and image differencing. A width or height of 0 uses the full image in that dimension.</li>
@@ -348,6 +370,8 @@ The Detection tab contains a common Detection ROI section and sub-tabs for objec
 
 On the Object Detection sub-tab:
 
+![Object Detection tab](../../../doc/img/Camera_plugin_object_detection_tab.png)
+
 <ul>
 <li>YOLO ONNX model selects the object detection model. The browse button selects a local model file.</li>
 <li>Labels selects the class labels file. The browse button selects a local labels file.</li>
@@ -358,6 +382,8 @@ On the Object Detection sub-tab:
 </ul>
 
 On the Motion Detection sub-tab:
+
+![Motion Detection tab](../../../doc/img/Camera_plugin_motion_detection_tab.png)
 
 <ul>
 <li>Subtractor selects the background subtractor, MOG2 or KNN.</li>
@@ -377,6 +403,8 @@ On the Motion Detection sub-tab:
 
 On the Star Detection sub-tab:
 
+![Star Detection tab](../../../doc/img/Camera_plugin_star_detection_tab.png)
+
 <ul>
 <li>Enable is controlled by the Star detection and plate solving button in the main toolbar.</li>
 <li>Threshold, Background blur, Min area, Max area and Max aspect ratio set star candidate extraction.</li>
@@ -395,6 +423,8 @@ On the Star Detection sub-tab:
 
 On the Difference Detection sub-tab:
 
+![Difference Detection tab](../../../doc/img/Camera_plugin_difference_detection_tab.png)
+
 <ul>
 <li>Threshold sets the pixel difference threshold for the diff mask.</li>
 <li>Dilation sets the diff mask dilation kernel size.</li>
@@ -408,6 +438,8 @@ If a YOLO model or labels entry is an HTTP or HTTPS URL, the file is downloaded 
 <h3>Position tab</h3>
 
 The Position tab configures camera location, pointing, lens model and weather lookup.
+
+![Position tab](../../../doc/img/Camera_plugin_position_tab.png)
 
 <ul>
 <li>Latitude, Longitude and Altitude set the camera position.</li>

@@ -2259,3 +2259,42 @@ one helper function deleted and no behaviour change on any corpus. The `gateAbla
 default) for the next ablation pass (roll-alias / blind / elevation acceptance paths, and `fov` once a
 wrong-FoV negative suite exists). Harnesses: `test/gateablate.ps1`, `test/gateablate2.ps1`,
 `test/star-tests-nearboundary-neg.csv` (untracked local tooling, like the seed-ablation scripts).
+
+## WS3 pass-2 — roll-alias / bright-support-bypass / elevation gates (2026-06-20)
+
+Instrumented 5 more acceptance gates with `gateAblationDisabled` hooks: `rollAlias` (the
+`hasCompetitiveRollAlias` ambiguous-roll *reject* only — the adopt-better-alias path is preserved),
+the two bright-support bypass waivers `highConfTriangle` / `strongDense`, the `namedAnchorCert`
+certificate, and `elevationSeed`. Ablated across REAL + RAND2 + FISHEYE-mode4 + near-boundary +
+garbage negatives (harnesses `test/gateablate3.ps1` un-guarded, then `test/gateablate4.ps1` with a
+per-corpus timeout guard after the rollAlias hang below).
+
+Result:
+
+| gate (disabled) | effect | verdict |
+|---|---|---|
+| `rollAlias` | REAL 48->47 (a wrong roll accepted = FP) **and a RAND2 case went into a non-terminating solve** | **load-bearing** |
+| `strongDense` | REAL 48->47 (drops galaxy-m31) | **load-bearing** |
+| `namedAnchorCert` | REAL 48->47 (drops stars-narrow-7) | **load-bearing** |
+| `elevationSeed` | inert (REAL 48, FISH4 42, negatives clean) | **deferred** (reject gate; no mode-2 wrong-pose negative covers it) |
+| `highConfTriangle` | inert across REAL 48, RAND2 148, FISH4 42, all negatives (even with `strongDense` active) | **removed** |
+
+**`rollAlias` is doubly load-bearing:** beyond rejecting a wrong-roll FP on a REAL case, disabling it
+sent a RAND2 case into a non-terminating solve — the roll-alias reject also *bounds* the expensive
+roll-recovery/retry machinery, and the harness's 120 s per-case timeout did not catch it. (Latent
+robustness gap: that retry path can run unbounded; only reachable with the gate artificially off.)
+This is why `gateablate4.ps1` added a per-corpus timeout guard.
+
+**Deletion landed:** removed the `hasHighConfidenceGuidedTriangleSupport` term from the bright-support
+bypass in `hasWeakNarrowGuidedBrightSupport` (the OR with `hasStrongDenseNarrowGuidedFinalPass`).
+`strongDense` is retained (load-bearing). The `hasHighConfidenceGuidedTriangleSupport` function stays
+(still used by `isAcceptableSparseGuidedPairFinalPass`). The other 4 gate hooks are retained as
+standing infrastructure (inert by default). Re-validated behaviour-neutral: **REAL 48 · RAND2 148 ·
+FISHEYE-mode4 42 · zero false positives.**
+
+**WS3 to date:** pass-1 removed 3 accept-bypass branches + 1 helper from the direction-seed decision;
+pass-2 removed 1 more bypass term. The substantive gates (`weakBrightSupport`+rescue trigger,
+`brightnessConsistency`, `residual`, `rollAlias`, `strongDense`, `namedAnchorCert`) all proved
+load-bearing. Remaining ablation targets: `fov` and `elevationSeed` (both need failure-mode-specific
+negatives), and the blind/fov acceptance path (mode 0/1, wide-2 regime). Harness `test/gateablate3.ps1`
++ `test/gateablate4.ps1` (untracked).

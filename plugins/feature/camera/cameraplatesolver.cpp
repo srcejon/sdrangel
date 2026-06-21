@@ -13849,13 +13849,17 @@ bool hasWeakNarrowGuidedBrightSupport(const CameraSettings& settings,
                  << "isLowMagnitude" << isLowMagnitudeNarrowGuidedSolve(settings);
     };
 
-    if (hasHighConfidenceGuidedTriangleSupport(settings, finalPass)
-        || hasStrongDenseNarrowGuidedFinalPass(settings, finalPass))
+    // WS3 pass-2 (2026-06-20): the hasHighConfidenceGuidedTriangleSupport bypass was removed here --
+    // ablation showed it casts no deciding vote (REAL 48, RAND2 148, FISHEYE-mode4 42, negatives clean)
+    // even with strongDense still active, i.e. every pose it would bypass is already covered.
+    // hasStrongDenseNarrowGuidedFinalPass is retained (load-bearing: disabling it drops galaxy-m31).
+    // The function itself stays -- still used by isAcceptableSparseGuidedPairFinalPass.
+    if (hasStrongDenseNarrowGuidedFinalPass(settings, finalPass) && !gateAblationDisabled("strongDense"))
     {
-        logBrightSupportDecision(false, "high-confidence-triangle-or-strong-dense");
+        logBrightSupportDecision(false, "strong-dense");
         return false;
     }
-    if (hasNamedBrightAnchorCertifiedPose(settings, finalPass))
+    if (hasNamedBrightAnchorCertifiedPose(settings, finalPass) && !gateAblationDisabled("namedAnchorCert"))
     {
         if (debugSparse)
         {
@@ -22844,7 +22848,7 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
     QString rollAmbiguityReason;
     FinalMatchPassEvaluation rollAdoptedAlias;
     const qint64 rollAliasStartMs = solveProfileTimer.elapsed();
-    const bool competitiveRollAlias = hasCompetitiveRollAlias(
+    const bool rollAliasDetected = hasCompetitiveRollAlias(
             settings,
             catalogContext,
             imageSize,
@@ -22854,6 +22858,10 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
             finalMatchRadius,
             &rollAmbiguityReason,
             &rollAdoptedAlias);
+    // WS3 ablation: gateAblationDisabled("rollAlias") suppresses only the ambiguous-roll REJECT.
+    // The function is still called, so the adopt-better-alias path (rollAdoptedAlias, below) is
+    // unaffected by the toggle.
+    const bool competitiveRollAlias = rollAliasDetected && !gateAblationDisabled("rollAlias");
     logSolveProfile("rollAliasCheck", rollAliasStartMs);
     if (competitiveRollAlias)
     {
@@ -23249,6 +23257,7 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
     }
 
     if (useElevationSeedOnly
+        && !gateAblationDisabled("elevationSeed")
         && !isAcceptableElevationSeedSolve(settings, starDetections, finalMatches, result.m_rmsErrorPixels, result.m_maxErrorPixels))
     {
         qDebug() << "CameraPlateSolver: rejecting elevation-seeded solution"

@@ -1000,7 +1000,15 @@ void CameraMediaPlaybackController::submitResampledStreamAudio()
         return;
     }
     m_audio->submitMonitorPcmSamples(audio, audioSampleRate);
-    m_audio->submitRecordingPcmSamples(audio.left((audio.size() / bytesPerSampleFrame) * bytesPerSampleFrame), audioSampleRate);
+    // Anchor the stream recording audio on the playback content timeline (the same
+    // timeline the recorder writes video PTS on). The resampler emits the audio that
+    // is about to play, i.e. the current presented content position; the recorder's
+    // first-audio-vs-first-video gap then captures the residual lead. (DIAGNOSTIC
+    // first cut for streams; refine once the measured gap is known.)
+    m_audio->submitRecordingPcmSamples(
+        audio.left((audio.size() / bytesPerSampleFrame) * bytesPerSampleFrame),
+        audioSampleRate,
+        m_state.m_positionMs);
 }
 
 int CameraMediaPlaybackController::dropPacedStreamPlaybackAudio(int droppedVideoFrames, int audioSampleRate, double playbackFrameRate)

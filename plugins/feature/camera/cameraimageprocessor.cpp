@@ -226,6 +226,7 @@ void CameraImageProcessor::applySettings(const CameraSettings& settings, const Q
     };
     const bool imageProcessingChanged = force || std::any_of(kImageProcessingKeys.cbegin(), kImageProcessingKeys.cend(),
         [&settingsKeys](const QString& k) { return settingsKeys.contains(k); });
+    const bool histogramDataRequested = (force || settingsKeys.contains("histogramVisible")) && settings.m_histogramVisible;
     const bool sourceChanged = force
         || settingsKeys.contains("cameraId")
         || settingsKeys.contains("cameraProtocol")
@@ -302,7 +303,7 @@ void CameraImageProcessor::applySettings(const CameraSettings& settings, const Q
     }
 #endif
 
-    if (imageProcessingChanged && m_lastInputFrame.hasImageData()) {
+    if ((imageProcessingChanged || histogramDataRequested) && m_lastInputFrame.hasImageData()) {
         CameraPipelineFramePtr frame = createFrameFromLastInput();
         submitFrame(frame);
     }

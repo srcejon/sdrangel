@@ -240,6 +240,10 @@ private:
     // recording in closeVideoWriters().
     qint64 m_recordAudioLeadRefVideoMs = -1;
     qint64 m_recordAudioFirstChunkMs = -1;
+    // Duration (ms) of the video-only pre-record lead-in flushed at the front of the
+    // recording. Those frames carry no audio, so this is added to the audio lead
+    // silence to keep the live portion lip-synced. 0 when there is no pre-record.
+    qint64 m_recordPreRecordLeadMs = 0;
     bool m_recordAudioLeadLogged = false;   // one-shot diagnostic for the measured A/V lead
     std::unique_ptr<CameraYouTubeStreamer> m_youtubeStreamer;
     bool m_youtubeStreamErrorReported;

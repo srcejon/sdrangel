@@ -616,7 +616,11 @@ void CameraRecorder::processNewFrame(const CameraPipelineFramePtr& frame)
         const qint64 contentGapMs = ((m_recordAudioLeadRefVideoMs >= 0) && (m_recordAudioFirstChunkMs >= 0))
             ? (m_recordAudioFirstChunkMs - m_recordAudioLeadRefVideoMs)
             : 0;
-        const qint64 rawLeadMs = contentGapMs + m_recordPreRecordLeadMs;
+        // Tuning knob to find the residual offset the content-gap measurement misses
+        // (e.g. the monitor/sink audio buffering). Set CAMERA_RECORD_AUDIO_EXTRA_LEAD_MS
+        // to add extra silence on top of the measured lead; dial it until synced.
+        const int extraLeadMs = qEnvironmentVariableIntValue("CAMERA_RECORD_AUDIO_EXTRA_LEAD_MS");
+        const qint64 rawLeadMs = contentGapMs + m_recordPreRecordLeadMs + extraLeadMs;
         const int audioLeadMs = static_cast<int>(qMax<qint64>(0, rawLeadMs));
         if (!m_recordAudioLeadLogged && (m_recordAudioLeadRefVideoMs >= 0) && (m_recordAudioFirstChunkMs >= 0)) {
             m_recordAudioLeadLogged = true;
@@ -624,6 +628,7 @@ void CameraRecorder::processNewFrame(const CameraPipelineFramePtr& frame)
                      << "firstAudioContentMs" << m_recordAudioFirstChunkMs
                      << "firstVideoFrameMs" << m_recordAudioLeadRefVideoMs
                      << "contentGapMs" << contentGapMs
+                     << "extraLeadMs(env)" << extraLeadMs
                      << "preRecordLeadMs" << m_recordPreRecordLeadMs
                      << "rawLeadMs" << rawLeadMs
                      << "-> silence prepended(ms)" << audioLeadMs

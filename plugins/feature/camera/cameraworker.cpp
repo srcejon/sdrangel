@@ -73,7 +73,8 @@ CameraWorker::CameraWorker() :
     m_spectrumPipeSource(nullptr)
 #ifdef ASICAMERA_FOUND
     ,
-    m_asi()
+    m_asi(),
+    m_asiVideoLastFrameMs(-1)
 #endif
 {
     m_captureTimer.setTimerType(Qt::PreciseTimer);
@@ -1132,6 +1133,8 @@ void CameraWorker::applySettings(const CameraSettings& settings, const QList<QSt
         {
             m_captureTimer.stop();
 #ifdef ASICAMERA_FOUND
+            m_asi.cancelContinuousCapture();
+            resetAsiVideoCadence();
             scheduleNextAsiVideoCapture();
 #endif
         }
@@ -1307,6 +1310,7 @@ void CameraWorker::startCapture()
     else if (m_settings.isAsiCamera())
     {
         invalidateAsiSettings();
+        resetAsiVideoCadence();
         if (m_settings.isIntervalCaptureMode())
         {
             m_captureTimer.start(captureTimerIntervalMs());
@@ -1350,6 +1354,7 @@ void CameraWorker::stopCapture()
 
 #ifdef ASICAMERA_FOUND
     m_asi.cancelContinuousCapture();
+    resetAsiVideoCadence();
     m_asi.stopVideoCapture(m_settings.cameraIdInt());
     if (m_settings.isAsiCamera() && m_settings.isIntervalCaptureMode()) {
         m_asi.stopExposure(m_settings.cameraIdInt());
@@ -1873,15 +1878,36 @@ bool CameraWorker::useAsiContinuousVideoCadence() const
     return m_capturing && m_settings.isAsiCamera() && !m_settings.isIntervalCaptureMode();
 }
 
+int CameraWorker::asiVideoFramePeriodMs() const
+{
+    return std::max(1, static_cast<int>(std::lround(1000.0 / std::max(1, m_settings.m_framesPerSecond))));
+}
+
+void CameraWorker::resetAsiVideoCadence()
+{
+    m_asiVideoCadenceTimer.invalidate();
+    m_asiVideoLastFrameMs = -1;
+}
+
 void CameraWorker::scheduleNextAsiVideoCapture(int delayMs)
 {
     if (!useAsiContinuousVideoCadence() || m_asi.continuousCaptureScheduled()) {
         return;
     }
 
+    int effectiveDelayMs = delayMs;
+    if (effectiveDelayMs < 0)
+    {
+        if (!m_asiVideoCadenceTimer.isValid() || (m_asiVideoLastFrameMs < 0)) {
+            effectiveDelayMs = 0;
+        } else {
+            effectiveDelayMs = std::max<qint64>(0, m_asiVideoLastFrameMs + asiVideoFramePeriodMs() - m_asiVideoCadenceTimer.elapsed());
+        }
+    }
+
     m_asi.markContinuousCaptureScheduled();
     const quint64 generation = m_asi.continuousCaptureGeneration();
-    QTimer::singleShot(std::max(0, delayMs), this, [this, generation]() {
+    QTimer::singleShot(std::max(0, effectiveDelayMs), this, [this, generation]() {
         if (!m_asi.clearContinuousCaptureScheduled(generation)) {
             return;
         }
@@ -1922,9 +1948,13 @@ void CameraWorker::asiCaptureVideoFrame()
             maybeAdjustAutoExposureGain(*frame);
             m_framePreprocessor->submitFrame(frame);
         }
+        if (!m_asiVideoCadenceTimer.isValid()) {
+            m_asiVideoCadenceTimer.start();
+        }
+        m_asiVideoLastFrameMs = m_asiVideoCadenceTimer.elapsed();
     }
 
-    scheduleNextAsiVideoCapture(result == CameraAsiController::CaptureSuccess ? 0 : 10);
+    scheduleNextAsiVideoCapture(result == CameraAsiController::CaptureSuccess ? -1 : 10);
 
     PROFILER_STOP(__FUNCTION__);
 }

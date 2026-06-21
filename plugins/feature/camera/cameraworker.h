@@ -26,6 +26,7 @@
 #include <QTimer>
 #include <QImage>
 #include <QDateTime>
+#include <QElapsedTimer>
 #include <QByteArray>
 #include <QRecursiveMutex>
 #include <memory>
@@ -681,6 +682,8 @@ private:
     QObject *m_spectrumPipeSource; ///< Cached pointer to the DeviceAPI of the selected spectrum device
 #ifdef ASICAMERA_FOUND
     CameraAsiController m_asi;
+    QElapsedTimer m_asiVideoCadenceTimer;
+    qint64 m_asiVideoLastFrameMs;
 #endif
 
     bool handleMessage(const Message& cmd);
@@ -748,7 +751,9 @@ private:
     void asiPollStatus();
     void asiCaptureTick();
     bool useAsiContinuousVideoCadence() const;
-    void scheduleNextAsiVideoCapture(int delayMs = 0);
+    int asiVideoFramePeriodMs() const;
+    void resetAsiVideoCadence();
+    void scheduleNextAsiVideoCapture(int delayMs = -1);
     void invalidateAsiSettings();
 #endif
 

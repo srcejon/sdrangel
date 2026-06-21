@@ -54,9 +54,9 @@ Selects the camera source. A prefix followed by a colon indicates the underlying
 * `qt:` Qt Multimedia camera source for most webcams. For Qt6 this uses the FFmpeg backend (which itself uses DirectShow on Windows, V4L2 on Linux and avfoundation on macOS), while for Qt5 it directly uses GStreamer/V4L2 on Linux.
 * `alpaca:` ASCOM Alpaca camera source, for smart telescopes such as Seestar or Dwarf and many others.
 * `asi`: ASI camera source, which uses the ASICamera2 library for ZWO ASI cameras.
-* `video`: Video file source, which can read from MP4, MOV or AVI files.
-* `image`: Image file source, which can read from PNG, JPEG or FITS files.
-* `stream`: Streaming camera source, which can read from RTSP, RTMP or HTTP streams.
+* `video:` Video file source, which can read from MP4, MOV or AVI files.
+* `images:` Image file source, which can read from PNG, JPEG or FITS files.
+* `stream:` Streaming camera source, which can read from RTSP, RTMP or HTTP streams.
 
 <h3>3: Refresh cameras</h3>
 
@@ -66,9 +66,13 @@ Refreshes the camera list.
 
 Opens the Camera Settings dialog, which contains the camera capture and post-processing settings described later in this section.
 
-<h3>5: Select video file</h3>
+<h3>5: Select video file, image files, or stream URL</h3>
 
-Selects the video file used by the file (video:) camera source.
+Depending on the camera source, selects:
+
+* `video:` a video file to play back, or
+* `images:` a set of image files to display, or
+* `stream:` a streaming URL to display.
 
 <h3>6: Restart video</h3>
 
@@ -89,6 +93,7 @@ Plays or pauses playback of the selected video file.
 <h3>10: Loop video</h3>
 
 When checked, video file playback loops back to the start when the end of the file is reached.
+When unchecked, playback stops at the end of the file.
 
 <h3>11: Playback rate</h3>
 
@@ -96,7 +101,7 @@ Sets the video file playback speed. 1.0 is normal speed.
 
 <h3>12: Playback position</h3>
 
-Seeks within the selected video file. The label to the right of the slider shows the current playback position.
+Seeks within the selected video file or image list. The label to the right of the slider shows the current playback position.
 
 <h3>13: Audio mute</h3>
 
@@ -136,7 +141,7 @@ When checked, streams the captured video to YouTube Live. The YouTube Live URL a
 
 <h3>22: Image stacking</h3>
 
-Enables image stacking using the calibration and stacking settings in the Cal / Stack tab in the Camera Settings dialog.
+Enables image stacking using the stacking settings in the Cal / Stack tab in the Camera Settings dialog.
 
 <h3>23: Invert colours</h3>
 
@@ -146,17 +151,39 @@ Inverts the displayed image colours.
 
 Opens the histogram window for the current image.
 
+![Histogram](../../../doc/img/Camera_plugin_histogram.png)
+
+The histogram shows a count of the number of pixels with a given value, for red, green and blue.
+
 <h3>25: Object detection</h3>
 
-Enables YOLO object detection. A YOLO ONNX model to use must be set in the Object Detection sub-tab in the Camera Settings dialog.
+Check to enables YOLO object detection. This uses an AI model to detect objects such as people or cars within an image, drawing a bounding box around them.
+
+![Object dection](../../../doc/img/Camera_plugin_object_detection.png)
+
+The classes of objects that can be detected depend upon the dataset the AI model has been trained on.
+You use your own YOLO ONNX models or one of several predefined models that can be downloaded.
+The YOLO ONNX model to use must be set in the Object Detection sub-tab in the Camera Settings dialog.
+
+When an object is detected an event will be emitted that can be used by the Scheduler feature to perform user-defined actions.
 
 <h3>26: Object detection history</h3>
 
 Opens the YOLO object detection history dialog.
 
+![Object dection history](../../../doc/img/Camera_plugin_detection_history.png)
+
+The detection history dialog has a table that records the date and time when object detections of each class were first detected and when they disappeared.
+If the source is `video:` or `images:`, the position column will indicate the time within that file. Double clicking a row will seek the video to that time.
+
+Pressing 'Clear history' will clear the detection history.
+Pressing 'Save to CSV' will show a file dialog to select a filename to save the detection history to in CSV format.
+
 <h3>27: Motion detection</h3>
 
-Enables motion detection using the Motion Detection settings in the Camera Settings dialog.
+Cehck to enables motion detection using the Motion Detection settings in the Camera Settings dialog.
+
+![Motion dection](../../../doc/img/Camera_plugin_motion_detection.png)
 
 <h3>28: Difference mask</h3>
 

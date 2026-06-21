@@ -1161,7 +1161,8 @@ void CameraMediaPlaybackController::submitDecodedVideoFileFrame(
     bool submitAudio,
     bool applyPlaybackOffset,
     bool repairTimestampDiscontinuities,
-    bool resetClockOnLargeDrift)
+    bool resetClockOnLargeDrift,
+    qint64 audioPositionMs)
 {
     const qint64 playbackPositionMs = updateVideoFilePlaybackPosition(
         decodedPositionMs,
@@ -1170,10 +1171,12 @@ void CameraMediaPlaybackController::submitDecodedVideoFileFrame(
         resetClockOnLargeDrift);
 
     if (submitAudio && (!pcmS16Stereo.isEmpty() || m_settings->isStreamCamera())) {
-        // Tag the recording audio with this frame's content position so the recorder
-        // can re-align it with the (content-timestamped) video; see
-        // CameraRecorder::appendAudioSamples / setAudioLeadSilenceMs.
-        submitVideoFileAudio(pcmS16Stereo, audioSampleRate, playbackPositionMs);
+        // Tag the recording audio with the audio's OWN source PTS (audioPositionMs)
+        // when the decoder provides it, so the recorder lays it on the source timeline;
+        // it leads the video frame position by the monitor read-ahead. Fall back to the
+        // video position when unknown. See CameraRecorder::appendAudioSamples.
+        const qint64 audioContentMs = (audioPositionMs >= 0) ? audioPositionMs : playbackPositionMs;
+        submitVideoFileAudio(pcmS16Stereo, audioSampleRate, audioContentMs);
     }
 
     if (m_callbacks.submitFrame)
@@ -1395,6 +1398,10 @@ bool CameraMediaPlaybackController::readVideoFileFrame(bool submitAudio, qint64 
         return true;
     }
 
+    // Source PTS of the audio just returned (front of the decoder's pending buffer),
+    // so the recorder can place this audio on the source timeline rather than against
+    // the read-ahead-leading video frame position.
+    const qint64 audioStartMs = m_state.m_decoder ? m_state.m_decoder->lastReturnedAudioStartMs() : -1;
     submitDecodedVideoFileFrame(
         image,
         positionMs,
@@ -1404,7 +1411,8 @@ bool CameraMediaPlaybackController::readVideoFileFrame(bool submitAudio, qint64 
         submitAudio,
         submitAudio && (minimumPositionMs < 0),
         m_settings->isStreamCamera(),
-        m_settings->isStreamCamera());
+        m_settings->isStreamCamera(),
+        audioStartMs);
     return true;
 }
 

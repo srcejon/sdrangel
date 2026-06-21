@@ -600,39 +600,32 @@ void CameraRecorder::processNewFrame(const CameraPipelineFramePtr& frame)
             flushPreRecordFrames(calibratedImage, filteredImage, processedImage, videoFrameRate);
         }
 
-        // A/V-sync: anchor the video side on the first content-timestamped frame, then
-        // (once the first audio chunk's position is known) prepend the audio lead as
-        // silence to each writer so the recorded audio lines up with the video. The
-        // lead is how far the audio (fed to the recorder at presentation time) runs
-        // ahead of the video (which reaches the recorder later, after the sink-latency
-        // video delay + the processing pipeline). File playback only: live capture
-        // feeds contentPositionMs < 0, leaving the lead at 0 (unchanged behaviour).
+        // A/V-sync: place the audio on the source content timeline. The audio chunks
+        // are tagged with their own source PTS (m_recordAudioFirstChunkMs is the first
+        // one), and the video is written at content PTS anchored on the first live
+        // frame. The audio's source PTS leads that first video frame by the read-ahead
+        // the live monitor needs, so prepend that gap as silence; the audio stream is
+        // content-continuous, so anchoring the first sample keeps the rest in sync.
+        // File playback only: live capture feeds contentPositionMs < 0 (lead stays 0).
         if ((m_recordAudioLeadRefVideoMs < 0) && (frame->m_playbackPositionMs >= 0)) {
             m_recordAudioLeadRefVideoMs = frame->m_playbackPositionMs;
         }
-        // Total audio lead = pipeline/delay gap (first audio content - first live video
-        // content) + the video-only pre-record lead-in (frames flushed ahead with no
-        // audio). Both push the live audio earlier than the live video in the file.
+        // Lead = (first audio source PTS - first live video PTS) + the video-only
+        // pre-record lead-in (frames flushed ahead with no audio).
         const qint64 contentGapMs = ((m_recordAudioLeadRefVideoMs >= 0) && (m_recordAudioFirstChunkMs >= 0))
             ? (m_recordAudioFirstChunkMs - m_recordAudioLeadRefVideoMs)
             : 0;
-        // Tuning knob to find the residual offset the content-gap measurement misses
-        // (e.g. the monitor/sink audio buffering). Set CAMERA_RECORD_AUDIO_EXTRA_LEAD_MS
-        // to add extra silence on top of the measured lead; dial it until synced.
-        const int extraLeadMs = qEnvironmentVariableIntValue("CAMERA_RECORD_AUDIO_EXTRA_LEAD_MS");
-        const qint64 rawLeadMs = contentGapMs + m_recordPreRecordLeadMs + extraLeadMs;
+        const qint64 rawLeadMs = contentGapMs + m_recordPreRecordLeadMs;
         const int audioLeadMs = static_cast<int>(qMax<qint64>(0, rawLeadMs));
         if (!m_recordAudioLeadLogged && (m_recordAudioLeadRefVideoMs >= 0) && (m_recordAudioFirstChunkMs >= 0)) {
             m_recordAudioLeadLogged = true;
             qDebug() << "CameraRecorder: A/V-sync recording audio lead -"
-                     << "firstAudioContentMs" << m_recordAudioFirstChunkMs
+                     << "firstAudioSrcPtsMs" << m_recordAudioFirstChunkMs
                      << "firstVideoFrameMs" << m_recordAudioLeadRefVideoMs
                      << "contentGapMs" << contentGapMs
-                     << "extraLeadMs(env)" << extraLeadMs
                      << "preRecordLeadMs" << m_recordPreRecordLeadMs
                      << "rawLeadMs" << rawLeadMs
-                     << "-> silence prepended(ms)" << audioLeadMs
-                     << "(positive raw = audio leads video; negative = audio lags, not corrected)";
+                     << "-> silence prepended(ms)" << audioLeadMs;
         }
 
         if (shouldSaveCalibratedMedia() && ensureVideoWriter(m_calibratedVideoWriter, m_settings.m_videoFileName, calibratedImage, QStringLiteral("calibrated"), videoFrameRate)) {

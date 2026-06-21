@@ -341,6 +341,7 @@ void CameraVideoFileDecoder::close()
     m_audioDraining = false;
     m_urlSource = false;
     m_audioDecodedPositionMs = -1;
+    m_lastReturnedAudioStartMs = -1;
     clearPendingAudio();
     m_pendingVideoFrames.clear();
     // Release pooled free buffers (frames still held downstream return their own
@@ -569,6 +570,7 @@ bool CameraVideoFileDecoder::readNextFrameAtOrAfter(
             clearPendingAudio();
             m_audioPaceRemainderFrames = 0.0;
             m_audioDecodedPositionMs = -1;
+            m_lastReturnedAudioStartMs = -1;
             return true;
         }
     }
@@ -930,6 +932,20 @@ bool CameraVideoFileDecoder::finishFrameAudio(
         return false;
     }
     appendPendingAudio(decodedAudio);
+    // Source position of the audio about to be handed back: takePacedAudio consumes
+    // from the front of the pending buffer, so the first returned sample sits at
+    // (decoded-end - pending-duration). This is the audio's true PTS, which leads the
+    // video position by the read-ahead the monitor needs.
+    if (m_audioDecodedPositionMs >= 0)
+    {
+        const double pendingMs =
+            static_cast<double>(pendingAudioBytes() / 4) * 1000.0 / std::max(1, m_outputSampleRate);
+        m_lastReturnedAudioStartMs = m_audioDecodedPositionMs - static_cast<qint64>(pendingMs + 0.5);
+    }
+    else
+    {
+        m_lastReturnedAudioStartMs = -1;
+    }
     takePacedAudio(pcmS16Stereo);
     trimLivePendingAudio();
     return true;

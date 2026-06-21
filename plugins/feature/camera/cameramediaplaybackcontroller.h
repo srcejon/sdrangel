@@ -169,7 +169,8 @@ private:
         bool submitAudio,
         bool applyPlaybackOffset,
         bool repairTimestampDiscontinuities,
-        bool resetClockOnLargeDrift);
+        bool resetClockOnLargeDrift,
+        qint64 audioPositionMs = -1);
     void submitVideoFileAudio(const QByteArray& pcmS16Stereo, int audioSampleRate, qint64 contentPositionMs = -1);
     bool readVideoFileFrame(bool submitAudio = true, qint64 minimumPositionMs = -1);
     void seekVideoFile(qint64 positionMs, bool displayFrame);

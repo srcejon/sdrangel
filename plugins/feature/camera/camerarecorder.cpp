@@ -267,7 +267,7 @@ bool CameraRecorder::handleMessage(const Message& cmd)
     else if (MsgAudioSamples::match(cmd))
     {
         const MsgAudioSamples& audioMsg = (const MsgAudioSamples&) cmd;
-        appendAudioSamples(audioMsg.getPcmS16Stereo(), audioMsg.getSampleRate());
+        appendAudioSamples(audioMsg.getPcmS16Stereo(), audioMsg.getSampleRate(), audioMsg.getContentPositionMs());
         return true;
     }
     else if (Camera::MsgCaptureActive::match(cmd))
@@ -276,6 +276,9 @@ bool CameraRecorder::handleMessage(const Message& cmd)
         Camera::discardQueuedProcessFrames(m_inputMessageQueue);
         m_captureActive = activeMsg.isActive();
         m_captureEpoch = activeMsg.getCaptureEpoch();
+        // Re-anchor the A/V-sync alignment for the new capture session.
+        m_recordAudioLeadRefVideoMs = -1;
+        m_recordAudioFirstChunkMs = -1;
         if (m_captureActive) {
             resetRecordingLimits();
         } else {
@@ -595,17 +598,34 @@ void CameraRecorder::processNewFrame(const CameraPipelineFramePtr& frame)
             flushPreRecordFrames(calibratedImage, filteredImage, processedImage, videoFrameRate);
         }
 
+        // A/V-sync: anchor the video side on the first content-timestamped frame, then
+        // (once the first audio chunk's position is known) prepend the audio lead as
+        // silence to each writer so the recorded audio lines up with the video. The
+        // lead is how far the audio (fed to the recorder at presentation time) runs
+        // ahead of the video (which reaches the recorder later, after the sink-latency
+        // video delay + the processing pipeline). File playback only: live capture
+        // feeds contentPositionMs < 0, leaving the lead at 0 (unchanged behaviour).
+        if ((m_recordAudioLeadRefVideoMs < 0) && (frame->m_playbackPositionMs >= 0)) {
+            m_recordAudioLeadRefVideoMs = frame->m_playbackPositionMs;
+        }
+        const int audioLeadMs = ((m_recordAudioLeadRefVideoMs >= 0) && (m_recordAudioFirstChunkMs >= 0))
+            ? static_cast<int>(qMax<qint64>(0, m_recordAudioFirstChunkMs - m_recordAudioLeadRefVideoMs))
+            : 0;
+
         if (shouldSaveCalibratedMedia() && ensureVideoWriter(m_calibratedVideoWriter, m_settings.m_videoFileName, calibratedImage, QStringLiteral("calibrated"), videoFrameRate)) {
+            m_calibratedVideoWriter->setAudioLeadSilenceMs(audioLeadMs);
             writePendingAudio(*m_calibratedVideoWriter, QStringLiteral("calibrated"));
             savedVideoFrame = writeVideoFrame(*m_calibratedVideoWriter, calibratedImage, QStringLiteral("calibrated"), frame->m_playbackPositionMs) || savedVideoFrame;
         }
 
         if (shouldSaveFilteredMedia() && ensureVideoWriter(m_filteredVideoWriter, m_settings.m_videoFileName, filteredImage, QStringLiteral("filtered"), videoFrameRate)) {
+            m_filteredVideoWriter->setAudioLeadSilenceMs(audioLeadMs);
             writePendingAudio(*m_filteredVideoWriter, QStringLiteral("filtered"));
             savedVideoFrame = writeVideoFrame(*m_filteredVideoWriter, filteredImage, QStringLiteral("filtered"), frame->m_playbackPositionMs) || savedVideoFrame;
         }
 
         if (shouldSavePostProcessedMedia() && ensureVideoWriter(m_processedVideoWriter, m_settings.m_videoFileName, processedImage, QStringLiteral("post"), videoFrameRate)) {
+            m_processedVideoWriter->setAudioLeadSilenceMs(audioLeadMs);
             writePendingAudio(*m_processedVideoWriter, QStringLiteral("post"));
             savedVideoFrame = writeVideoFrame(*m_processedVideoWriter, processedImage, QStringLiteral("post"), frame->m_playbackPositionMs) || savedVideoFrame;
         }
@@ -677,7 +697,7 @@ void CameraRecorder::resetRecordingLimits()
     m_videoRecordingStartDateTime = m_settings.m_saveVideo ? QDateTime::currentDateTimeUtc() : QDateTime();
 }
 
-void CameraRecorder::appendAudioSamples(const QByteArray& pcmS16Stereo, int sampleRate)
+void CameraRecorder::appendAudioSamples(const QByteArray& pcmS16Stereo, int sampleRate, qint64 contentPositionMs)
 {
     if (pcmS16Stereo.isEmpty() || (sampleRate <= 0)) {
         return;
@@ -686,7 +706,15 @@ void CameraRecorder::appendAudioSamples(const QByteArray& pcmS16Stereo, int samp
     {
         m_pendingAudioChunks.clear();
         m_pendingAudioBytes = 0;
+        m_recordAudioFirstChunkMs = -1;
         return;
+    }
+
+    // Anchor the audio side of the A/V-sync alignment: remember the content position
+    // of the first audio chunk of this recording (file playback only — live capture
+    // passes -1 and is not realigned).
+    if ((m_recordAudioFirstChunkMs < 0) && (contentPositionMs >= 0)) {
+        m_recordAudioFirstChunkMs = contentPositionMs;
     }
 
     AudioChunk chunk;
@@ -850,6 +878,8 @@ void CameraRecorder::closeVideoWriters()
     m_filteredVideoWriterSize = QSize();
     m_processedVideoWriterSize = QSize();
     m_reportedVideoWriterErrorKeys.clear();
+    m_recordAudioLeadRefVideoMs = -1;
+    m_recordAudioFirstChunkMs = -1;
 }
 
 void CameraRecorder::closeYouTubeStream()

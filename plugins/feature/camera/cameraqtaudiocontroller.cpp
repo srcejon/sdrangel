@@ -339,13 +339,13 @@ void CameraQtAudioController::applyFilePlaybackAudioOffset(QByteArray& pcmS16Ste
     }
 }
 
-void CameraQtAudioController::submitRecordingPcmSamples(const QByteArray& pcmS16Stereo, int sampleRate)
+void CameraQtAudioController::submitRecordingPcmSamples(const QByteArray& pcmS16Stereo, int sampleRate, qint64 contentPositionMs)
 {
     if (pcmS16Stereo.isEmpty() || (sampleRate <= 0)) {
         return;
     }
     if (m_recordingMessageQueue) {
-        m_recordingMessageQueue->push(CameraRecorder::MsgAudioSamples::create(pcmS16Stereo, sampleRate));
+        m_recordingMessageQueue->push(CameraRecorder::MsgAudioSamples::create(pcmS16Stereo, sampleRate, contentPositionMs));
     }
 }
 

@@ -73,7 +73,7 @@ public:
     [[nodiscard]] int monitorTargetFillFrames(int sampleRate) const;
     void submitPcmSamples(const QByteArray& pcmS16Stereo, int sampleRate);
     void submitMonitorPcmSamples(const QByteArray& pcmS16Stereo, int sampleRate);
-    void submitRecordingPcmSamples(const QByteArray& pcmS16Stereo, int sampleRate);
+    void submitRecordingPcmSamples(const QByteArray& pcmS16Stereo, int sampleRate, qint64 contentPositionMs = -1);
     int monitorSampleRate() const { return m_sampleRate; }
     // Audio still queued in the sound device (output latency not otherwise
     // accounted for in the A/V playback clock); used to compensate the video-vs-

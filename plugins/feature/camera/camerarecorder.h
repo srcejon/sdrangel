@@ -160,20 +160,26 @@ public:
     public:
         const QByteArray& getPcmS16Stereo() const { return m_pcmS16Stereo; }
         int getSampleRate() const { return m_sampleRate; }
+        // Source content position (ms) this audio belongs to, or -1 for live capture
+        // (no content clock). Used to re-align recorded file-playback audio with the
+        // content-timestamped video; see CameraRecorder::appendAudioSamples.
+        qint64 getContentPositionMs() const { return m_contentPositionMs; }
 
-        static MsgAudioSamples* create(const QByteArray& pcmS16Stereo, int sampleRate)
+        static MsgAudioSamples* create(const QByteArray& pcmS16Stereo, int sampleRate, qint64 contentPositionMs = -1)
         {
-            return new MsgAudioSamples(pcmS16Stereo, sampleRate);
+            return new MsgAudioSamples(pcmS16Stereo, sampleRate, contentPositionMs);
         }
 
     private:
         QByteArray m_pcmS16Stereo;
         int m_sampleRate;
+        qint64 m_contentPositionMs;
 
-        MsgAudioSamples(const QByteArray& pcmS16Stereo, int sampleRate) :
+        MsgAudioSamples(const QByteArray& pcmS16Stereo, int sampleRate, qint64 contentPositionMs) :
             Message(),
             m_pcmS16Stereo(pcmS16Stereo),
-            m_sampleRate(sampleRate)
+            m_sampleRate(sampleRate),
+            m_contentPositionMs(contentPositionMs)
         { }
     };
 
@@ -226,6 +232,14 @@ private:
     int m_keogramLastSampleIndex;
     std::deque<AudioChunk> m_pendingAudioChunks;
     qint64 m_pendingAudioBytes;
+    // A/V-sync alignment for file-playback recording: the content position of the
+    // first recorded video frame and of the first recorded audio chunk. Their
+    // difference is the audio lead (the recorder receives audio at presentation time
+    // but the video frame later, after the sink-latency delay + processing pipeline),
+    // which is prepended as silence to each writer's audio. -1 until known; reset per
+    // recording in closeVideoWriters().
+    qint64 m_recordAudioLeadRefVideoMs = -1;
+    qint64 m_recordAudioFirstChunkMs = -1;
     std::unique_ptr<CameraYouTubeStreamer> m_youtubeStreamer;
     bool m_youtubeStreamErrorReported;
     QMutex m_frameMutex;
@@ -242,7 +256,7 @@ private:
     void setImageRecordingEnabled(bool enabled);
     void resetRecordingLimits();
     void updateRecordingLimitsAfterFrame(bool savedImageFrame, bool savedVideoFrame);
-    void appendAudioSamples(const QByteArray& pcmS16Stereo, int sampleRate);
+    void appendAudioSamples(const QByteArray& pcmS16Stereo, int sampleRate, qint64 contentPositionMs = -1);
     bool writePendingAudio(CameraVideoWriter& writer, const QString& variant);
     void trimPendingAudio();
     [[nodiscard]] static QString createTimestampedOutputFilename(const QString& baseFileName, const QString& variant, const QString& suffixOverride = QString());

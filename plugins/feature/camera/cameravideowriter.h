@@ -78,6 +78,13 @@ public:
     [[nodiscard]] bool open(const Settings& settings, const QImage& firstFrame, QString& errorMessage);
     [[nodiscard]] bool writeFrame(const QImage& image, QString& errorMessage, qint64 timestampMs = -1);
     [[nodiscard]] bool writePcmS16Stereo(const QByteArray& pcm, int sampleRate, QString& errorMessage);
+    // Prepend this many milliseconds of silence to the audio track, once, before the
+    // first real audio samples are written. Used to re-align recorded audio with the
+    // (content-timestamped) video: the recorder feeds audio at presentation time but
+    // the video frames reach it later (sink-latency video delay + processing
+    // pipeline), so the audio otherwise leads the video. Ignored once audio has
+    // started; set it before the first writePcmS16Stereo call.
+    void setAudioLeadSilenceMs(int milliseconds) { if (!m_audioLeadSilenceConsumed) { m_audioLeadSilenceMs = milliseconds > 0 ? milliseconds : 0; } }
     void close();
 
 private:
@@ -99,6 +106,8 @@ private:
     qint64 m_audioFrameIndex = 0;
     bool m_headerWritten = false;
     QByteArray m_audioInputBuffer;
+    int m_audioLeadSilenceMs = 0;
+    bool m_audioLeadSilenceConsumed = false;
 
     [[nodiscard]] static QString avErrorString(int errorCode);
     [[nodiscard]] static QSize evenSize(const QSize& size);

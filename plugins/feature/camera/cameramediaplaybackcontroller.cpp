@@ -1170,7 +1170,10 @@ void CameraMediaPlaybackController::submitDecodedVideoFileFrame(
         resetClockOnLargeDrift);
 
     if (submitAudio && (!pcmS16Stereo.isEmpty() || m_settings->isStreamCamera())) {
-        submitVideoFileAudio(pcmS16Stereo, audioSampleRate);
+        // Tag the recording audio with this frame's content position so the recorder
+        // can re-align it with the (content-timestamped) video; see
+        // CameraRecorder::appendAudioSamples / setAudioLeadSilenceMs.
+        submitVideoFileAudio(pcmS16Stereo, audioSampleRate, playbackPositionMs);
     }
 
     if (m_callbacks.submitFrame)
@@ -1405,7 +1408,7 @@ bool CameraMediaPlaybackController::readVideoFileFrame(bool submitAudio, qint64 
     return true;
 }
 
-void CameraMediaPlaybackController::submitVideoFileAudio(const QByteArray& pcmS16Stereo, int audioSampleRate)
+void CameraMediaPlaybackController::submitVideoFileAudio(const QByteArray& pcmS16Stereo, int audioSampleRate, qint64 contentPositionMs)
 {
     static constexpr int bytesPerSampleFrame = 4;
     if (audioSampleRate <= 0) {
@@ -1453,7 +1456,7 @@ void CameraMediaPlaybackController::submitVideoFileAudio(const QByteArray& pcmS1
     // this stays a no-op there.
     const QByteArray& recordingAudio = monitorAudio;
     if (!recordingAudio.isEmpty()) {
-        m_audio->submitRecordingPcmSamples(recordingAudio.left((recordingAudio.size() / bytesPerSampleFrame) * bytesPerSampleFrame), audioSampleRate);
+        m_audio->submitRecordingPcmSamples(recordingAudio.left((recordingAudio.size() / bytesPerSampleFrame) * bytesPerSampleFrame), audioSampleRate, contentPositionMs);
     }
 }
 

@@ -752,6 +752,23 @@ bool CameraVideoWriter::writePcmS16Stereo(const QByteArray& pcm, int sampleRate,
     if (!m_audioCodecContext || !m_audioFrame) {
         return true;
     }
+    // One-shot A/V-sync padding: emit the requested lead-in silence before any real
+    // audio so the recorded audio starts at the right point on the video timeline
+    // (see setAudioLeadSilenceMs). The buffer holds post-resample data at the
+    // encoder rate, so size the silence at m_audioCodecContext->sample_rate.
+    if (!m_audioLeadSilenceConsumed)
+    {
+        m_audioLeadSilenceConsumed = true;
+        if (m_audioLeadSilenceMs > 0)
+        {
+            const int bytesPerSampleFrame = 4;
+            const qint64 silenceFrames =
+                (static_cast<qint64>(m_audioCodecContext->sample_rate) * m_audioLeadSilenceMs) / 1000;
+            if (silenceFrames > 0) {
+                m_audioInputBuffer.append(QByteArray(static_cast<int>(silenceFrames) * bytesPerSampleFrame, 0));
+            }
+        }
+    }
     if (!pcm.isEmpty())
     {
         QByteArray writerPcm;

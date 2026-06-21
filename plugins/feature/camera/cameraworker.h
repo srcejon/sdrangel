@@ -683,7 +683,7 @@ private:
 #ifdef ASICAMERA_FOUND
     CameraAsiController m_asi;
     QElapsedTimer m_asiVideoCadenceTimer;
-    qint64 m_asiVideoLastFrameMs;
+    qint64 m_asiVideoLastCaptureStartMs;
 #endif
 
     bool handleMessage(const Message& cmd);

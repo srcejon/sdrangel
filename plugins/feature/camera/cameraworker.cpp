@@ -74,7 +74,7 @@ CameraWorker::CameraWorker() :
 #ifdef ASICAMERA_FOUND
     ,
     m_asi(),
-    m_asiVideoLastFrameMs(-1)
+    m_asiVideoLastCaptureStartMs(-1)
 #endif
 {
     m_captureTimer.setTimerType(Qt::PreciseTimer);
@@ -1886,7 +1886,7 @@ int CameraWorker::asiVideoFramePeriodMs() const
 void CameraWorker::resetAsiVideoCadence()
 {
     m_asiVideoCadenceTimer.invalidate();
-    m_asiVideoLastFrameMs = -1;
+    m_asiVideoLastCaptureStartMs = -1;
 }
 
 void CameraWorker::scheduleNextAsiVideoCapture(int delayMs)
@@ -1898,10 +1898,10 @@ void CameraWorker::scheduleNextAsiVideoCapture(int delayMs)
     int effectiveDelayMs = delayMs;
     if (effectiveDelayMs < 0)
     {
-        if (!m_asiVideoCadenceTimer.isValid() || (m_asiVideoLastFrameMs < 0)) {
+        if (!m_asiVideoCadenceTimer.isValid() || (m_asiVideoLastCaptureStartMs < 0)) {
             effectiveDelayMs = 0;
         } else {
-            effectiveDelayMs = std::max<qint64>(0, m_asiVideoLastFrameMs + asiVideoFramePeriodMs() - m_asiVideoCadenceTimer.elapsed());
+            effectiveDelayMs = std::max<qint64>(0, m_asiVideoLastCaptureStartMs + asiVideoFramePeriodMs() - m_asiVideoCadenceTimer.elapsed());
         }
     }
 
@@ -1923,6 +1923,10 @@ void CameraWorker::asiCaptureVideoFrame()
 
     const int cameraId = m_settings.cameraIdInt();
     const int waitMs = std::max(1000, static_cast<int>(std::ceil(currentCaptureExposureTimeMs())) + 500);
+    if (!m_asiVideoCadenceTimer.isValid()) {
+        m_asiVideoCadenceTimer.start();
+    }
+    const qint64 captureStartMs = m_asiVideoCadenceTimer.elapsed();
     const CameraAsiController::CaptureResult result = m_asi.captureVideoFrame(cameraId, waitMs);
 
     if (result == CameraAsiController::CaptureStartFailed)
@@ -1948,10 +1952,7 @@ void CameraWorker::asiCaptureVideoFrame()
             maybeAdjustAutoExposureGain(*frame);
             m_framePreprocessor->submitFrame(frame);
         }
-        if (!m_asiVideoCadenceTimer.isValid()) {
-            m_asiVideoCadenceTimer.start();
-        }
-        m_asiVideoLastFrameMs = m_asiVideoCadenceTimer.elapsed();
+        m_asiVideoLastCaptureStartMs = captureStartMs;
     }
 
     scheduleNextAsiVideoCapture(result == CameraAsiController::CaptureSuccess ? -1 : 10);

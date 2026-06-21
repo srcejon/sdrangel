@@ -1263,6 +1263,7 @@ bool CameraRecorder::ensureVideoWriter(std::unique_ptr<CameraVideoWriter>& write
     writerSettings.m_bitrateKbps = m_settings.m_videoRecordBitrateKbps;
     writerSettings.m_fps = requestedFrameRate;
     writerSettings.m_preferHardwareEncoding = m_settings.m_videoHwAcceleration;
+    writerSettings.m_audioEnabled = m_settings.isQtCamera() || m_settings.isFfmpegMediaSource();
 
     writer.reset(new CameraVideoWriter());
     QString error;

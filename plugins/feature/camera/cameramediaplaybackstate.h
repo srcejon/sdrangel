@@ -119,9 +119,9 @@ public:
     // toward this accurate audio-content position each tick so video tracks what is
     // actually HEARD (not the device's nominal crystal rate, which the resampler
     // compensates for audio but not video — the source of the slow A/V drift).
-    qint64 m_streamClockLastRefMs = 0;
-    // Diagnostic: last PLL error (heard-content reference − free-running clock), ms. Held
-    // near zero means video is locked to the audio actually heard (A/V in sync).
+    // Diagnostic: heard-content reference − synced video clock, ms. Bounded means video is
+    // tracking the audio actually heard (A/V in sync); a steady ramp means the clock slope
+    // (resampler integral) is off.
     qint64 m_streamClockPllOffsetMs = 0;
     quint64 m_frameSubmitGeneration = 0;
 

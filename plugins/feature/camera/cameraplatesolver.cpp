@@ -19860,8 +19860,19 @@ static double plateSolveLmParameterValue(const PlateSolveLmPose& pose, PlateSolv
 // axis and the coordinate parameterization is degenerate.
 static bool rotVecLmEnabled()
 {
-    static const bool enabled = qEnvironmentVariableIsSet("SDRANGEL_CAMERA_PLATE_SOLVER_ROTVEC_LM");
-    return enabled;
+    // WS2: rotation-vector LM orientation is the DEFAULT. Kill-switch
+    // SDRANGEL_CAMERA_PLATE_SOLVER_DISABLE_ROTVEC_LM reverts to the legacy az/el/roll path for A/B.
+    static const bool disabled = qEnvironmentVariableIsSet("SDRANGEL_CAMERA_PLATE_SOLVER_DISABLE_ROTVEC_LM");
+    return !disabled;
+}
+
+// Rot-vec is applied only to DIRECTION-SEEDED (guided) solves. Blind / fov-only solves keep the
+// legacy LM: a global rot-vec default regressed the blind-fisheye corpus (FISHEYE-full 56->51),
+// whereas guided-only keeps the near-zenith payoff (wide-7/8/9 pin retired) and is neutral on
+// REAL/RAND2/WIDE/FISHEYE-full (only the approved guided FISH4 -2 remains).
+static bool rotVecLmActive(const CameraSettings& settings)
+{
+    return rotVecLmEnabled() && plateSolveStartUsesDirection(settings);
 }
 
 // Camera basis from az/el/roll, matching createProjector's exact convention.
@@ -19912,9 +19923,10 @@ static void lmRotateOrientationCameraFrame(double& azimuthDegrees, double& eleva
 static void addPlateSolveLmParameterDelta(const QSize& imageSize,
                                           PlateSolveLmPose& pose,
                                           PlateSolveLmParameter parameter,
-                                          double delta)
+                                          double delta,
+                                          bool useRotVec)
 {
-    const bool rotVec = rotVecLmEnabled();
+    const bool rotVec = useRotVec;
     switch (parameter)
     {
     case PlateSolveLmAzimuth:
@@ -20240,6 +20252,9 @@ Evaluation runPlateSolveLmRefinement(const CameraSettings& settings,
         return seedEvaluation;
     }
 
+    // WS2: rot-vec orientation parameterization, but only for direction-seeded (guided) solves --
+    // blind/fov-only solves keep the legacy coordinate path (a global default regressed blind fisheye).
+    const bool useRotVec = rotVecLmActive(settings);
     const int pairCount = fixedMatches.size();
     if (pairCount < 6)
     {
@@ -20326,14 +20341,14 @@ Evaluation runPlateSolveLmRefinement(const CameraSettings& settings,
             const PlateSolveLmParameter parameter = static_cast<PlateSolveLmParameter>(parameterIndex);
             double step = plateSolveLmFiniteDifferenceStep(pose, parameter);
             PlateSolveLmPose steppedPose = pose;
-            addPlateSolveLmParameterDelta(imageSize, steppedPose, parameter, step);
+            addPlateSolveLmParameterDelta(imageSize, steppedPose, parameter, step, useRotVec);
             // WS2 rot-vec mode: for the orientation params the applied perturbation is a camera-frame
             // ROTATION of `step` degrees, not an az/el/roll coordinate addition. The Jacobian must be
             // taken w.r.t. that rotation angle (which is exactly what the update step applies via
             // addPlateSolveLmParameterDelta), NOT the resulting coordinate change -- the latter is
             // non-linear and degenerates to ~0 near zenith (collapsing the refinement). The legacy
             // coordinate-difference accounting is preserved verbatim when rot-vec mode is off.
-            const bool rotVecOrientation = rotVecLmEnabled()
+            const bool rotVecOrientation = useRotVec
                 && ((parameter == PlateSolveLmAzimuth)
                     || (parameter == PlateSolveLmElevation)
                     || (parameter == PlateSolveLmRoll));
@@ -20355,7 +20370,7 @@ Evaluation runPlateSolveLmRefinement(const CameraSettings& settings,
                 if (std::fabs(appliedStep) < 1e-12)
                 {
                     steppedPose = pose;
-                    addPlateSolveLmParameterDelta(imageSize, steppedPose, parameter, -step);
+                    addPlateSolveLmParameterDelta(imageSize, steppedPose, parameter, -step, useRotVec);
                     appliedStep = parameterDelta(steppedPose);
                 }
                 if (std::fabs(appliedStep) < 1e-12)
@@ -20443,7 +20458,7 @@ Evaluation runPlateSolveLmRefinement(const CameraSettings& settings,
             const PlateSolveLmParameter parameter = static_cast<PlateSolveLmParameter>(activeParametersList[i]);
             const double maxStep = plateSolveLmMaximumStep(imageSize, pose, parameter);
             const double clampedDelta = std::clamp(delta[i], -maxStep, maxStep);
-            addPlateSolveLmParameterDelta(imageSize, proposedPose, parameter, clampedDelta);
+            addPlateSolveLmParameterDelta(imageSize, proposedPose, parameter, clampedDelta, useRotVec);
             maxNormalizedDelta = std::max(maxNormalizedDelta, std::fabs(clampedDelta) / std::max(maxStep, 1e-9));
         }
 
@@ -21829,7 +21844,7 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
                 // ULP basin flip. With the rotation-vector LM the orientation is well-conditioned at
                 // zenith, so the pin is no longer needed there -- let the LM refine Az/El freely. The
                 // pin stays in force on the legacy (rot-vec off) path.
-                const bool lockSeedDirection = isWidePlateSolveContext(settings) && !rotVecLmEnabled();
+                const bool lockSeedDirection = isWidePlateSolveContext(settings) && !rotVecLmActive(settings);
                 const std::array<bool, PlateSolveLmParameterCount> seedActiveParameters = {{
                     !lockSeedDirection,          // PlateSolveLmAzimuth (wide: pinned to entered direction)
                     !lockSeedDirection,          // PlateSolveLmElevation (wide: pinned to entered direction)

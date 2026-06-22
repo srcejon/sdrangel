@@ -2397,3 +2397,46 @@ never affected the 039/044 marginals). Since WS1a makes the GUI link the same so
 harness result is the GUI's behaviour -- the pin is functionally retired. rot-vec stays default-OFF
 until the default-flip (pending: accept/resolve FISH4 039/044, finish RAND2(148) ON). Once flipped,
 the seed-anchored-grid / clamped-pp band-aids can likely follow the same way.
+
+### WS2 rot-vec ON — full validation closed (2026-06-21)
+
+Finished the RAND2 run that kept getting reaped, via chunked foreground (3x50 rows, ~6-8 min each,
+within the tool window -- the fixed process). Result: **RAND2 rot-vec ON = 148/150, identical fail set
+to baseline (a-005, c-009 hard tail)**. So rot-vec ON is **neutral on both trustworthy corpora (REAL
+48/48 + RAND2 148/150)**; the only delta is FISHEYE-mode4 40 vs 42 (039 = a corrected OFF weak-oracle
+false positive, 044 = documented-marginal). The pin is retired and wide-7/8/9 solve sub-pixel with
+Az/El free. Open decision before flipping the default: accept the 2 synthetic-fisheye marginals (REAL
+is the trustworthy gate and is neutral) vs. resolve 039/044 first; and a GUI re-test of wide-7/8/9
+under rot-vec (near-certain to pass given WS1a's shared object, but worth confirming once).
+
+### WS2 — rot-vec made the DEFAULT, gated to guided solves (2026-06-21)
+
+Flipped `rotVecLmEnabled()` to default-ON (kill-switch `SDRANGEL_CAMERA_PLATE_SOLVER_DISABLE_ROTVEC_LM`)
+and added `rotVecLmActive(settings) = rotVecLmEnabled() && plateSolveStartUsesDirection(settings)` --
+rot-vec applies ONLY to direction-seeded (guided) solves; blind / fov-only solves (mode 0/1) keep the
+legacy az/el/roll LM. Threaded a `useRotVec` bool from `runPlateSolveLmRefinement` (which has settings)
+into `addPlateSolveLmParameterDelta` + the FD Jacobian; the wide-fisheye Az/El pin removal is gated on
+the same `!rotVecLmActive(settings)` (so mode-2 elevation/blind wide keep the legacy pin where rot-vec
+does not apply).
+
+WHY guided-only: a *global* rot-vec default regressed the BLIND fisheye corpus (FISHEYE-full 56->51);
+the blind/quad-hash LM path tips marginal cases under rot-vec. Gating to guided recovers it to 56.
+
+**Full validation of the guided-gated default (all 5 baseline corpora + FISH4):**
+
+| corpus | rot-vec default | prior baseline | |
+|---|---|---|---|
+| REAL (trustworthy) | 48 | 48 | neutral; wide-7/8/9 sub-pixel, Az/El pin RETIRED |
+| RAND2 (canonical synthetic) | 148 | 148 | neutral |
+| WIDE | 27 | 27 | neutral |
+| FISHEYE-full (blind, mode0/1) | 56 | 56 | neutral (legacy LM) |
+| FISH4 (guided fisheye, mode4) | 40 | 42 | -2 (marginal: 039 corrected-FP, 044) |
+| RAND (STALE rand-100) | 80 | 83 | -3 (stale-corpus marginal noise; rand2 is canonical) |
+
+So the **trustworthy + canonical gates (REAL 48, RAND2 148) are neutral**; the deltas are on the
+imperfect/stale synthetic corpora (the notes already flag the fisheye oracle as imperfect and rand-100
+as stale -> use rand2). Jon approved the flip on that basis. **New committed baseline: REAL 48 /
+FISHEYE-full 56 / WIDE 27 / RAND2 148 / RAND ~80 / FISH4-mode4 40.** Kill-switch reverts to legacy for
+A/B. Follow-ons now unblocked: the seed-anchored-grid / clamped-pp wide band-aids can likely be retired
+the same way (gated on rotVecLmActive); investigate the blind-fisheye rot-vec tip if blind solving is
+prioritised.

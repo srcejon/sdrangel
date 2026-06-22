@@ -1022,8 +1022,7 @@ static QString formatDeclinationDegrees(double declinationDegrees)
 }
 
 static QString formatGaiaCoordinateLabel(double rightAscensionDegrees,
-                                         double declinationDegrees,
-                                         double magnitude)
+                                         double declinationDegrees)
 {
     constexpr int tenthsPerHour = 60 * 60 * 10;
     constexpr int tenthsPerDay = 24 * tenthsPerHour;
@@ -1055,15 +1054,14 @@ static QString formatGaiaCoordinateLabel(double rightAscensionDegrees,
     }
 
     const QChar declinationSign = declinationDegrees < 0.0 ? QLatin1Char('-') : QLatin1Char('+');
-    return QStringLiteral("Gaia J%1%2%3%4%5%6%7 G%8")
+    return QStringLiteral("Gaia J%1%2%3%4%5%6%7")
         .arg(hours, 2, 10, QLatin1Char('0'))
         .arg(minutes, 2, 10, QLatin1Char('0'))
         .arg(seconds, 4, 'f', 1, QLatin1Char('0'))
         .arg(declinationSign)
         .arg(normalizedDegrees, 2, 10, QLatin1Char('0'))
         .arg(normalizedArcMinutes, 2, 10, QLatin1Char('0'))
-        .arg(arcSeconds, 2, 10, QLatin1Char('0'))
-        .arg(magnitude, 0, 'f', 1);
+        .arg(arcSeconds, 2, 10, QLatin1Char('0'));
 }
 
 static bool isGenericGaiaCatalogName(const QString& name)
@@ -2342,7 +2340,7 @@ QVector<CatalogStar> loadSirilAstroCatalog(const CameraSettings& settings,
                 }
                 seenStars.insert(starKey);
                 stars.append({
-                    formatGaiaCoordinateLabel(starRaDegrees, starDecDegrees, magnitude),
+                    formatGaiaCoordinateLabel(starRaDegrees, starDecDegrees),
                     starRaDegrees,
                     starDecDegrees,
                     magnitude,
@@ -2563,7 +2561,7 @@ QVector<CatalogStar> loadSirilSpccCatalog(const CameraSettings& settings,
                 }
                 seenStars.insert(starKey);
                 stars.append({
-                    formatGaiaCoordinateLabel(starRaDegrees, starDecDegrees, magnitude),
+                    formatGaiaCoordinateLabel(starRaDegrees, starDecDegrees),
                     starRaDegrees,
                     starDecDegrees,
                     magnitude,
@@ -2923,7 +2921,7 @@ static QString catalogDisplayName(const CatalogStar& star)
     // into a different nearby alias's name purely because of how display happened to be
     // invoked for it.
     if (isGenericGaiaCatalogName(star.name)) {
-        return formatGaiaCoordinateLabel(star.rightAscensionDegrees, star.declinationDegrees, star.magnitude);
+        return formatGaiaCoordinateLabel(star.rightAscensionDegrees, star.declinationDegrees);
     }
     return star.name;
 }

@@ -1591,6 +1591,7 @@ void CameraMediaPlaybackController::resetVideoFilePlaybackSchedule()
     m_state.m_basePositionMs = -1;
     m_state.m_lastFramePtsMs = -1;
     m_state.m_lastDecodeMs = 0;
+    m_state.m_presentResidualMs = 0.0;
     m_state.m_streamRebuffering = false;
 }
 
@@ -1683,11 +1684,29 @@ void CameraMediaPlaybackController::scheduleNextVideoFileTick()
             // ever slows when a genuine underrun (cushion exhausted) drops the queue.
             const int fill = decodedStreamFrameQueueDepth();
             const int target = maxDecodedStreamFrameCount();
+            // Deadband: while the cushion is healthy, present at the EXACT content
+            // frame interval and do not micro-adjust. Block-to-accumulate pins the
+            // decoded queue near its cap, so it ticks down a frame or two and back as
+            // the present consumes just ahead of the decode; reacting to that jitter
+            // would modulate the present rate (and, via the audio resampler that
+            // tracks it, the audio pitch) — the audible "wander". Only correct when
+            // fill drifts meaningfully below target, i.e. the cushion is exhausting.
+            const int deadband = qMax(2, target / 4);
             const double slackMs = qMax(5.0, intervalMs * 0.25);
             const double gainMsPerFrame = qMax(0.5, intervalMs * 0.05);
-            const double adjustedMs = intervalMs - static_cast<double>(fill - target) * gainMsPerFrame;
-            delayMs = static_cast<qint64>(std::llround(
-                qBound(intervalMs - slackMs, adjustedMs, intervalMs + slackMs)));
+            double adjustedMs;
+            if (fill >= target - deadband) {
+                adjustedMs = intervalMs;
+            } else {
+                adjustedMs = qBound(intervalMs - slackMs,
+                    intervalMs - static_cast<double>(fill - target) * gainMsPerFrame,
+                    intervalMs + slackMs);
+            }
+            // Carry the sub-millisecond residual so the integer timer averages the
+            // exact interval (33.33 ms, not a rounded 33 ms that drifts ~1% fast).
+            m_state.m_presentResidualMs += adjustedMs;
+            delayMs = static_cast<qint64>(std::floor(m_state.m_presentResidualMs));
+            m_state.m_presentResidualMs -= static_cast<double>(delayMs);
             delayMs = qMax<qint64>(1, delayMs);
         } else {
             const qint64 nextFramePtsMs = m_state.m_lastFramePtsMs + static_cast<qint64>(std::llround(intervalMs));

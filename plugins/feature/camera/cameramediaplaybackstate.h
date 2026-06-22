@@ -100,6 +100,11 @@ public:
     qint64 m_basePositionMs = -1;
     qint64 m_lastFramePtsMs = -1;
     qint64 m_lastDecodeMs = 0;
+    // Sub-millisecond residual carried between stream present ticks so the integer
+    // QTimer averages the exact content frame interval (e.g. 33.33 ms at 30 fps)
+    // instead of rounding to 33 ms and drifting ~1% fast — a drift the audio
+    // resampler would otherwise track as slow pitch wander.
+    double m_presentResidualMs = 0.0;
     quint64 m_frameSubmitGeneration = 0;
 
     QTimer m_delayedSubmitTimer;

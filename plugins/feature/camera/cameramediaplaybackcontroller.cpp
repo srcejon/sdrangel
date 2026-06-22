@@ -951,25 +951,22 @@ int CameraMediaPlaybackController::takeResampledStreamPlaybackAudio(QByteArray& 
     // are always present, the buffer SETTLES at target — converging to a constant
     // ratio instead of cycling — while the integral still nulls steady-state error
     // (no drift/drain). Continuous in |err|, so no pitch step anywhere.
-    static constexpr double deadband = 0.10;
     const double targetFrames = qMax(1.0, static_cast<double>(audioSampleRate) * qMax(0.05, targetBufferSeconds));
     const double err = (static_cast<double>(availFrames) - targetFrames) / targetFrames;
-    const double gainScale = qMin(1.0, std::abs(err) / deadband);
-    // Two limits that must differ:
-    //   * The INTEGRAL converges to the true source/soundcard CLOCK ratio (crystal
-    //     mismatch, up to a few %). It MUST be free to reach it — otherwise the buffer
-    //     is forced off target to make up the difference via the proportional term, and
-    //     any residual clock offset slowly runs the audio away from the video (measured:
-    //     integral railed at its 0.99 floor, buffer parked low, sync drifting). It is
-    //     inaudible: it IS the correct playback rate. Clamp it wide (±3%).
-    //   * The PROPORTIONAL term is the transient buffer correction and IS audible as
-    //     pitch wander. Clamp IT tight (±1.5%) around the integral.
-    // So steady-state pitch = the correct (inaudible) clock compensation, while the
-    // audible excursion stays ≤1.5%. Gentle gains so it converges without overshoot.
-    m_state.m_streamAudioResampleRatio = qBound(0.97,
-        m_state.m_streamAudioResampleRatio + 0.0008 * gainScale * err, 1.03);
-    const double proportional = qBound(-0.015, 0.05 * gainScale * err, 0.015);
-    const double ratio = qBound(0.94, m_state.m_streamAudioResampleRatio + proportional, 1.06);
+    // Audio is the MASTER clock now: video is slaved to the audio playback position
+    // (see scheduleNextVideoFileTick), so the present rate no longer drives this buffer.
+    // It is fed and drained at the device rate and only drifts with the small
+    // source-content-vs-soundcard-crystal difference. So the resampler just needs a slow,
+    // well-damped PI that converges to the true clock ratio and HOLDS it (steady,
+    // inaudible pitch) — no soft-deadband gainScale (it caused a limit cycle), no tight
+    // artificial clamps that starved the integral. The INTEGRAL is the steady-state clock
+    // ratio (free, ±5%, inaudible — it is the correct rate); the PROPORTIONAL is a small
+    // transient correction bounded to keep audible excursions ≤2%. Gains chosen for ~unity
+    // damping so it settles instead of oscillating.
+    m_state.m_streamAudioResampleRatio = qBound(0.95,
+        m_state.m_streamAudioResampleRatio + 0.0004 * err, 1.05);
+    const double proportional = qBound(-0.02, 0.03 * err, 0.02);
+    const double ratio = qBound(0.93, m_state.m_streamAudioResampleRatio + proportional, 1.07);
 
     // Diagnostic: measure the wander = the swing of the applied audio ratio (pitch).
     {
@@ -1725,63 +1722,23 @@ void CameraMediaPlaybackController::scheduleNextVideoFileTick()
     qint64 delayMs = static_cast<qint64>(std::llround(intervalMs));
     if ((m_state.m_basePositionMs >= 0) && (m_state.m_lastFramePtsMs >= 0))
     {
-        if (m_settings->isStreamCamera()) {
-            // Buffer-fill servo: hold the decoded-frame queue near a target depth
-            // so the present rate tracks the true producer (content) rate. Present
-            // a touch slower when under-full; since fill is the integral of
-            // (produce - consume), holding it constant forces consumer rate ==
-            // producer rate. This avoids buffer drain (underrun) without depending
-            // on the reported frame rate, and naturally refills after a stall.
-            //
-            // Regulate the TOTAL buffered depth — decoded queue + compressed read-ahead
-            // — toward the playback cushion. The decode thread blocks (rather than
-            // drops) when the decoded queue is full, so the cushion really lives in the
-            // cheap bitstream read-ahead; and with the read-ahead cap decoupled (large,
-            // so the reader never backpressures the source) the read no longer bounds
-            // latency. So the present must: hold the total near the cushion target, and
-            // gently catch up if a source burst grows it past target.
-            //
-            // A symmetric deadband keeps the present at the EXACT content interval while
-            // the total is near target — no micro-adjustment, so the audio resampler
-            // (which tracks the present rate) has nothing to chase and there is no pitch
-            // wander. The gentle gain only engages on a real drift (cushion exhausting,
-            // or latency growing after a burst).
-            //
-            // CRITICAL: keep the present-rate excursion tiny. The audio buffer is fed
-            // at the present rate (the decode is gated by present consumption), and the
-            // resampler must consume at that same rate, so any present-rate change shows
-            // up DIRECTLY as audio pitch. Measured: a wide ±25% excursion drove the
-            // resampler into a ±12% pitch limit cycle ("wander"). Bound the present to
-            // ~±1.5% — inaudible, still enough to null source/device clock drift and
-            // slowly recentre the buffer. Genuine source stalls are absorbed by the
-            // cushion and, if it empties, a brief rebuffer — NOT by audibly slewing the
-            // present rate.
-            const int fill = decodedStreamFrameQueueDepth()
-                + (m_state.m_decoder ? m_state.m_decoder->readAheadVideoPacketCount() : 0);
-            const int target = streamBufferingCushionFrameCount();
-            const int deadband = qMax(3, target / 5);
-            const double slackMs = qMax(0.5, intervalMs * 0.015);
-            const double gainMsPerFrame = qMax(0.05, intervalMs * 0.004);
-            double adjustedMs;
-            if (qAbs(fill - target) <= deadband) {
-                adjustedMs = intervalMs;
-            } else {
-                adjustedMs = qBound(intervalMs - slackMs,
-                    intervalMs - static_cast<double>(fill - target) * gainMsPerFrame,
-                    intervalMs + slackMs);
-            }
-            // Carry the sub-millisecond residual so the integer timer averages the
-            // exact interval (33.33 ms, not a rounded 33 ms that drifts ~1% fast).
-            m_state.m_presentResidualMs += adjustedMs;
-            delayMs = static_cast<qint64>(std::floor(m_state.m_presentResidualMs));
-            m_state.m_presentResidualMs -= static_cast<double>(delayMs);
-            delayMs = qMax<qint64>(1, delayMs);
-        } else {
-            const qint64 nextFramePtsMs = m_state.m_lastFramePtsMs + static_cast<qint64>(std::llround(intervalMs));
-            delayMs = nextFramePtsMs - videoFilePlaybackClockMs();
-            delayMs -= m_state.m_lastDecodeMs;
-            delayMs = qMax<qint64>(1, delayMs);
-        }
+        // Single master clock = the audio playback (sound-card) clock, for BOTH file and
+        // stream sources. videoFilePlaybackClockMs() returns the content position
+        // currently being heard (derived from the audio device for streams); present
+        // each frame when that clock reaches its PTS. So the present rate IS the physical
+        // device rate — steady, with nothing for the audio resampler to chase (no pitch
+        // wander) and no second servo to hand-tune against a particular source.
+        //
+        // Source-vs-device clock drift is absorbed by the bitstream cushion, not by
+        // slewing the present: if the source runs slow the cushion drains to a brief
+        // rebuffer; if fast it backs up in the (cheap, block-to-accumulate) packet queue.
+        // The previous stream-only buffer-fill servo tracked the SOURCE rate instead,
+        // which wobbled the present rate and dragged the audio pitch with it — the
+        // measured limit-cycle "wander".
+        const qint64 nextFramePtsMs = m_state.m_lastFramePtsMs + static_cast<qint64>(std::llround(intervalMs));
+        delayMs = nextFramePtsMs - videoFilePlaybackClockMs();
+        delayMs -= m_state.m_lastDecodeMs;
+        delayMs = qMax<qint64>(1, delayMs);
     }
     else
     {

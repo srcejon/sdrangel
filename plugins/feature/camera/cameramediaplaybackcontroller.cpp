@@ -959,6 +959,37 @@ int CameraMediaPlaybackController::takeResampledStreamPlaybackAudio(QByteArray& 
         m_state.m_streamAudioResampleRatio + 0.002 * gainScale * err, 1.10);
     const double ratio = qBound(0.88, m_state.m_streamAudioResampleRatio + 0.10 * gainScale * err, 1.12);
 
+    // Diagnostic: measure the wander = the swing of the applied audio ratio (pitch).
+    {
+        if (!m_state.m_audioWanderClock.isValid()) {
+            m_state.m_audioWanderClock.start();
+        }
+        m_state.m_audioWanderRatioMin = qMin(m_state.m_audioWanderRatioMin, ratio);
+        m_state.m_audioWanderRatioMax = qMax(m_state.m_audioWanderRatioMax, ratio);
+        m_state.m_audioWanderRatioSum += ratio;
+        m_state.m_audioWanderFillMsSum += 1000.0 * static_cast<double>(availFrames) / static_cast<double>(audioSampleRate);
+        ++m_state.m_audioWanderCount;
+        if (m_state.m_audioWanderClock.elapsed() >= 1000)
+        {
+            const double n = qMax(1, m_state.m_audioWanderCount);
+            const double avg = m_state.m_audioWanderRatioSum / n;
+            qDebug().nospace()
+                << "CameraMediaPlayback: audio wander - ratio avg " << QString::number(avg, 'f', 4)
+                << " min " << QString::number(m_state.m_audioWanderRatioMin, 'f', 4)
+                << " max " << QString::number(m_state.m_audioWanderRatioMax, 'f', 4)
+                << " swing " << QString::number((m_state.m_audioWanderRatioMax - m_state.m_audioWanderRatioMin) * 100.0, 'f', 2) << "%"
+                << " (pitch " << QString::number((avg - 1.0) * 100.0, 'f', 2) << "%)"
+                << " bufFillMs " << QString::number(m_state.m_audioWanderFillMsSum / n, 'f', 0)
+                << " integral " << QString::number(m_state.m_streamAudioResampleRatio, 'f', 4);
+            m_state.m_audioWanderRatioMin = 2.0;
+            m_state.m_audioWanderRatioMax = 0.0;
+            m_state.m_audioWanderRatioSum = 0.0;
+            m_state.m_audioWanderFillMsSum = 0.0;
+            m_state.m_audioWanderCount = 0;
+            m_state.m_audioWanderClock.restart();
+        }
+    }
+
     const qint16 *in = reinterpret_cast<const qint16*>(m_state.m_streamAudioPcmS16Stereo.constData());
     const double phase = m_state.m_streamAudioResamplePhase;
     pcmS16Stereo.reserve(maxOutputFrames * bytesPerSampleFrame);

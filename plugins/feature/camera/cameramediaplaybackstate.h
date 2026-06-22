@@ -161,6 +161,15 @@ public:
     // fractional input position for inter-call continuity.
     double m_streamAudioResampleRatio = 1.0;
     double m_streamAudioResamplePhase = 0.0;
+    // Diagnostic: per-second stats of the applied resample ratio (= audio playback
+    // pitch) and audio buffer fill, so the "wander" (ratio swing) can be measured
+    // rather than judged by ear.
+    QElapsedTimer m_audioWanderClock;
+    double m_audioWanderRatioMin = 2.0;
+    double m_audioWanderRatioMax = 0.0;
+    double m_audioWanderRatioSum = 0.0;
+    double m_audioWanderFillMsSum = 0.0;
+    int m_audioWanderCount = 0;
     // Set when a (re)buffering phase ends so the next resampler call trims the
     // stream-audio buffer back to its target depth. While presentation is paused
     // to rebuild the cushion the decoder keeps appending audio, so the buffer

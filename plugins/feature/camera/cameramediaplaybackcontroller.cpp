@@ -1773,28 +1773,26 @@ void CameraMediaPlaybackController::scheduleNextVideoFileTick()
     }
 
     qint64 delayMs = static_cast<qint64>(std::llround(intervalMs));
-    if ((m_state.m_basePositionMs >= 0) && (m_state.m_lastFramePtsMs >= 0))
+    if (!m_settings->isStreamCamera() && (m_state.m_basePositionMs >= 0) && (m_state.m_lastFramePtsMs >= 0))
     {
-        // Single master clock = the audio playback clock, for BOTH file and stream sources.
-        // Present each frame when videoFilePlaybackClockMs() (the audio position currently
-        // being heard) reaches its PTS. For streams that clock is the audio-heard position
-        // (see videoFilePlaybackClockMs); video follows audio and late frames are dropped in
-        // readQueuedVideoFileFrame.
+        // FILES: present each frame when videoFilePlaybackClockMs() (the audio position being
+        // heard) reaches its PTS. The file decode is not source-rate-limited and has no
+        // resampler, so pacing the present off the audio clock is safe here.
         const qint64 nextFramePtsMs = m_state.m_lastFramePtsMs + static_cast<qint64>(std::llround(intervalMs));
         delayMs = nextFramePtsMs - videoFilePlaybackClockMs();
         delayMs -= m_state.m_lastDecodeMs;
         delayMs = qMax<qint64>(1, delayMs);
-        // Bound the wait for streams: the audio-heard clock STALLS on a feed underrun (the
-        // audio queue empties so it stops advancing). Without a cap the present would wait
-        // ever longer and deadlock against the decode (the original audio-master collapse).
-        // Capping at ~2 frames means a stall instead drains the decoded queue within a few
-        // ticks and trips a clean rebuffer, which re-syncs on resume.
-        if (m_settings->isStreamCamera()) {
-            delayMs = qMin<qint64>(delayMs, static_cast<qint64>(std::llround(2.0 * intervalMs)));
-        }
     }
     else
     {
+        // STREAMS (always) + file startup: pace the present off a STEADY wall clock at the
+        // nominal frame rate, NOT the audio clock. This is the crucial decoupling — the
+        // present also feeds the decode (block-to-accumulate), so if it tracked the audio
+        // clock the feed would move with the resampler's ratio and the resampler would lose
+        // authority over its own buffer (which drained to empty → clicks / -2% pitch runaway
+        // at 60 fps). Feeding at a fixed rate lets the resampler servo the buffer normally;
+        // A/V sync is handled in the DISPLAY by dropping late frames (readQueuedVideoFileFrame)
+        // — the ffplay split of decode-feed (steady) vs display-timing (follows audio).
         quint64 tick = m_state.m_tick > 0 ? m_state.m_tick : 1;
         const qint64 elapsedMs = m_state.m_clock.elapsed();
         qint64 targetMs = static_cast<qint64>(std::llround(static_cast<double>(tick) * intervalMs));

@@ -1721,10 +1721,23 @@ void CameraMediaPlaybackController::anchorStreamPlaybackClock()
     // free-runs on the device. Re-anchoring on each rebuffer resume re-aligns content to
     // the device after a stall (the device kept playing silence while we refilled).
     m_state.m_streamClockAnchored = false;            // force the decode-derived path
-    const qint64 contentMs = videoFilePlaybackClockMs();
+    qint64 contentMs = videoFilePlaybackClockMs();
+    // The decode-derived position is the content at the device's INPUT: it subtracts the
+    // app-side queues (pending + stream buffer + monitor FIFO) but NOT the sound device's
+    // own output buffer (~250 ms, monitorSinkLatencyUSecs). That buffer holds audio fed
+    // but not yet heard, so without subtracting it the anchor — and the video slaved to
+    // it — leads the audio actually at the speaker. The file path delays video by the
+    // same amount in submitVideoFileFrame; do the equivalent here on the clock.
+    const qint64 decodeDerivedMs = contentMs;
+    const qint64 sinkLatencyMs = m_audio->monitorSinkLatencyUSecs() / 1000;
+    contentMs -= sinkLatencyMs;
     m_state.m_streamClockAnchorContentMs = contentMs;
     m_state.m_streamClockAnchorProcessedUSecs = m_audio->monitorProcessedUSecs();
     m_state.m_streamClockAnchored = true;
+    qDebug() << "CameraMediaPlayback: stream clock anchored - contentMs" << contentMs
+             << "(decodeDerived" << decodeDerivedMs << "- sinkLatencyMs" << sinkLatencyMs << ")"
+             << "processedUSecs" << m_state.m_streamClockAnchorProcessedUSecs
+             << "basePositionMs" << m_state.m_basePositionMs;
 }
 
 void CameraMediaPlaybackController::scheduleNextVideoFileTick()

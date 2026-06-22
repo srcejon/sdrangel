@@ -113,6 +113,10 @@ public:
     // (sws_scale + QImage); m_lastFrameAudioUSecs = finishFrameAudio.
     [[nodiscard]] qint64 lastConvertUSecs() const { return m_lastConvertUSecs; }
     [[nodiscard]] qint64 lastFrameAudioUSecs() const { return m_lastFrameAudioUSecs; }
+    // Diagnostic: current compressed-bitstream read-ahead depth (video packets
+    // buffered). ~0 means the decode path is waiting on the network (server-paced);
+    // ~cap means the buffer is full and decode is the bottleneck.
+    [[nodiscard]] int readAheadVideoPacketCount() const;
     [[nodiscard]] int pendingAudioBytes() const;
     int takePendingAudio(QByteArray& pcmS16Stereo, int maxSampleFrames);
     [[nodiscard]] int pendingVideoFrameCount() const { return static_cast<int>(m_pendingVideoFrames.size()); }

@@ -487,6 +487,12 @@ void CameraVideoFileDecoder::stopReadAhead()
 #endif
 }
 
+int CameraVideoFileDecoder::readAheadVideoPacketCount() const
+{
+    QMutexLocker locker(&m_readAheadMutex);
+    return m_readAheadVideoCount;
+}
+
 int CameraVideoFileDecoder::takeReadAheadPacket(AVPacket *pkt)
 {
 #ifdef CAMERA_FFMPEG_STREAMING

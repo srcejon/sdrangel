@@ -612,7 +612,8 @@ void CameraMediaPlaybackController::startVideoFileDecodeThread()
                              << "total" << (paceLogTotalUs / n / 1000.0)
                              << "convert" << (paceLogConvertUs / n / 1000.0)
                              << "audio" << (paceLogAudioUs / n / 1000.0)
-                             << "read+decode" << ((paceLogTotalUs - paceLogConvertUs - paceLogAudioUs) / n / 1000.0);
+                             << "read+decode" << ((paceLogTotalUs - paceLogConvertUs - paceLogAudioUs) / n / 1000.0)
+                             << "bitstreamPkts" << m_state.m_decoder->readAheadVideoPacketCount();
                     paceLogFrames = 0;
                     paceLogTotalUs = 0;
                     paceLogConvertUs = 0;
@@ -1274,7 +1275,18 @@ bool CameraMediaPlaybackController::readQueuedVideoFileFrame(bool submitAudio)
         // bursty rate, the buffer never refills, and the downstream post-processor
         // drops frames continuously. Holding here lets the fill servo regain
         // control once the cushion is rebuilt.
-        const int rebufferTarget = streamInitialBufferFrameCount();
+        // Startup builds the full initial cushion; a mid-playback underrun resumes on
+        // a much smaller cushion (~0.12 s). During a server-side slow patch (the
+        // source delivering below real time) the queue keeps dipping to empty, and
+        // waiting for the full initial count on every dip turns brief stutters into
+        // long, repeatedly-thrashing freezes. A few frames is enough for the fill
+        // servo to regain control, so playback rides the rough patch like a player
+        // holding the last frame rather than hard-freezing.
+        const bool initialBuffering = (m_state.m_basePositionMs < 0);
+        const int rebufferTarget = initialBuffering
+            ? streamInitialBufferFrameCount()
+            : qMax(CameraMediaPlaybackState::m_minDecodedStreamFrames / 2,
+                   static_cast<int>(std::ceil(qMax(1.0, m_state.m_frameRate) * 0.12)));
         if (queuedFrames <= 0) {
             if (m_state.m_basePositionMs >= 0) {
                 if (!m_state.m_streamRebuffering) {

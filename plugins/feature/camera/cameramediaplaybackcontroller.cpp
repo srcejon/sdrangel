@@ -1054,13 +1054,22 @@ void CameraMediaPlaybackController::submitResampledStreamAudio()
     if (need <= 0) {
         return;
     }
-    // Hold the audio buffer at (video buffering − monitor cushion) so the total
-    // audio latency (this buffer + the ~120 ms monitor FIFO) matches the video
-    // jitter-buffer latency and A/V stay lip-synced. Any residual offset is
+    // Hold the audio buffer so total audio latency (this buffer + the ~120 ms monitor
+    // FIFO) matches the VIDEO latency after the shared bitstream cushion — i.e. the
+    // decoded-frame queue depth — so A/V stay lip-synced.
+    //
+    // The playback cushion now lives in the compressed bitstream read-ahead, which is
+    // shared by audio and video (both ride it as undecoded packets). So the audio side
+    // only needs to match the DECODED video queue (the post-bitstream video latency),
+    // NOT the whole streamBufferingSeconds. Targeting the full buffering here
+    // over-delayed the audio (sync error) and forced the resampler to stretch the
+    // buffer to a level it cannot reach, railing the pitch. Any residual offset is
     // trimmable with the playback audio offset setting.
     const double monitorCushionSeconds =
         static_cast<double>(m_audio->monitorTargetFillFrames(audioSampleRate)) / static_cast<double>(audioSampleRate);
-    const double targetBufferSeconds = qMax(0.25, m_settings->m_streamBufferingSeconds - monitorCushionSeconds);
+    const double decodedQueueSeconds =
+        static_cast<double>(maxDecodedStreamFrameCount()) / qMax(1.0, m_state.m_frameRate);
+    const double targetBufferSeconds = qMax(0.15, decodedQueueSeconds - monitorCushionSeconds);
     QByteArray audio;
     const int got = takeResampledStreamPlaybackAudio(audio, audioSampleRate, need, targetBufferSeconds);
     if (got <= 0) {

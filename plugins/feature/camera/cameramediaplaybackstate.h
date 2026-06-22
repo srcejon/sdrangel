@@ -105,6 +105,15 @@ public:
     // instead of rounding to 33 ms and drifting ~1% fast — a drift the audio
     // resampler would otherwise track as slow pitch wander.
     double m_presentResidualMs = 0.0;
+    // Free-running stream playback clock anchor. The playback clock is
+    // content_anchor + (deviceProcessedUSecs - processedAnchor), i.e. it advances with
+    // the sound card's physically-played audio (which keeps running through a feed
+    // underrun), NOT with the decoder. Anchored to the decode-derived content position
+    // at playback start and on each rebuffer resume; the resampler keeps content
+    // playing at the device rate so the mapping stays 1:1 between re-anchors.
+    bool m_streamClockAnchored = false;
+    qint64 m_streamClockAnchorContentMs = 0;
+    qint64 m_streamClockAnchorProcessedUSecs = 0;
     quint64 m_frameSubmitGeneration = 0;
 
     QTimer m_delayedSubmitTimer;

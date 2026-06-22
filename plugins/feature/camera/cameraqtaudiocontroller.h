@@ -80,6 +80,9 @@ public:
     // accounted for in the A/V playback clock); used to compensate the video-vs-
     // audio skew in file playback. 0 if unavailable.
     [[nodiscard]] qint64 monitorSinkLatencyUSecs() const;
+    // Free-running device playback clock (us of audio the sound card has played). Keeps
+    // advancing through a feed underrun, so an A/V clock slaved to it does not stall.
+    [[nodiscard]] qint64 monitorProcessedUSecs() const;
     uint32_t monitorAudioFill() const { return m_outputAudioFifo.fill(); }
     uint32_t monitorPlaybackClockFill() const;
     uint32_t monitorAudioSize() const { return m_outputAudioFifo.size(); }

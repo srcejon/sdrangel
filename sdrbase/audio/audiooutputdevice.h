@@ -155,6 +155,14 @@ public:
     // readData(); the atomic makes it safe to read from any thread.
     [[nodiscard]] qint64 getSinkLatencyUSecs() const { return m_sinkLatencyUSecs.load(std::memory_order_relaxed); }
 
+    // Total audio the device has actually PLAYED since the sink started, in
+    // microseconds (QAudioSink::processedUSecs). This is a free-running clock at the
+    // sound card's true rate — it keeps advancing even through a feed underrun (the
+    // device plays silence), unlike any decode-derived position. Consumers slave an
+    // A/V playback clock to it so video tracks the physical device, not the decoder.
+    // Updated on the audio pull thread; atomic so it is safe to read from any thread.
+    [[nodiscard]] qint64 getProcessedUSecs() const { return m_processedUSecs.load(std::memory_order_relaxed); }
+
 private:
 	QRecursiveMutex m_mutex;
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
@@ -184,6 +192,9 @@ private:
 	// thread (readData) for the A/V playback clock to correct against.
 	std::atomic<qint64> m_framesFedToSink { 0 };
 	std::atomic<qint64> m_sinkLatencyUSecs { 0 };
+	// Free-running device playback clock (QAudioSink::processedUSecs), published from
+	// the audio pull thread for A/V sync. See getProcessedUSecs().
+	std::atomic<qint64> m_processedUSecs { 0 };
 
 	QAudioFormat m_audioFormat;
     QString m_deviceName;

@@ -184,6 +184,7 @@ private:
     int videoFileFrameIntervalMs() const;
     void resetVideoFilePlaybackSchedule();
     qint64 videoFilePlaybackClockMs() const;
+    void anchorStreamPlaybackClock();
     void scheduleNextVideoFileTick();
     void reportVideoFilePlaybackToGUI();
 

@@ -506,6 +506,9 @@ qint64 AudioOutputDevice::readData(char* data, qint64 maxLen)
 			const qint64 fedFrames = m_framesFedToSink.fetch_add(samplesPerBuffer, std::memory_order_relaxed) + samplesPerBuffer;
 			const qint64 fedUSecs = (fedFrames * 1000000LL) / sampleRate;
 			const qint64 processedUSecs = (qint64) m_audioOutput->processedUSecs();
+			// Publish the free-running device playback clock for A/V sync (see
+			// getProcessedUSecs); read on the worker thread.
+			m_processedUSecs.store(processedUSecs, std::memory_order_relaxed);
 			qint64 latencyUSecs = fedUSecs - processedUSecs;
 			if (latencyUSecs < 0) {
 				latencyUSecs = 0;

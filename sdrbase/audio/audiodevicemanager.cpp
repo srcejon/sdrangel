@@ -199,6 +199,15 @@ qint64 AudioDeviceManager::getOutputDeviceSinkLatencyUSecs(int outputDeviceIndex
     return it.value()->getSinkLatencyUSecs();
 }
 
+qint64 AudioDeviceManager::getOutputDeviceProcessedUSecs(int outputDeviceIndex) const
+{
+    QMap<int, AudioOutputDevice*>::const_iterator it = m_audioOutputs.find(outputDeviceIndex);
+    if ((it == m_audioOutputs.end()) || (it.value() == nullptr)) {
+        return 0;
+    }
+    return it.value()->getProcessedUSecs();
+}
+
 int AudioDeviceManager::getInputDeviceIndex(const QString &deviceName) const
 {
     for (int i = 0; i < AudioDeviceInfo::availableInputDevices().size(); i++)

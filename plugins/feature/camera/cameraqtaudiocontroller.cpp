@@ -317,6 +317,15 @@ qint64 CameraQtAudioController::monitorSinkLatencyUSecs() const
     return audioDeviceManager->getOutputDeviceSinkLatencyUSecs(m_outputDeviceIndex);
 }
 
+qint64 CameraQtAudioController::monitorProcessedUSecs() const
+{
+    AudioDeviceManager *audioDeviceManager = DSPEngine::instance()->getAudioDeviceManager();
+    if (!audioDeviceManager) {
+        return 0;
+    }
+    return audioDeviceManager->getOutputDeviceProcessedUSecs(m_outputDeviceIndex);
+}
+
 uint32_t CameraQtAudioController::monitorPlaybackClockFill() const
 {
     const uint32_t fill = m_outputAudioFifo.fill();

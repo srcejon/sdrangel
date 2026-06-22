@@ -105,6 +105,11 @@ public:
     // paired video frame's position by the monitor read-ahead — use it (not the video
     // position) to place recorded audio on the source timeline. -1 if unknown.
     [[nodiscard]] qint64 lastReturnedAudioStartMs() const { return m_lastReturnedAudioStartMs; }
+    // Per-frame timing of the most recent readNextFrame() stages (microseconds),
+    // for diagnosing decode throughput. m_lastConvertUSecs = colour conversion
+    // (sws_scale + QImage); m_lastFrameAudioUSecs = finishFrameAudio.
+    [[nodiscard]] qint64 lastConvertUSecs() const { return m_lastConvertUSecs; }
+    [[nodiscard]] qint64 lastFrameAudioUSecs() const { return m_lastFrameAudioUSecs; }
     [[nodiscard]] int pendingAudioBytes() const;
     int takePendingAudio(QByteArray& pcmS16Stereo, int maxSampleFrames);
     [[nodiscard]] int pendingVideoFrameCount() const { return static_cast<int>(m_pendingVideoFrames.size()); }
@@ -157,6 +162,8 @@ private:
     double m_audioPaceFrameRateApplied = 0.0;
     qint64 m_audioDecodedPositionMs = -1;
     qint64 m_lastReturnedAudioStartMs = -1;
+    qint64 m_lastConvertUSecs = 0;
+    qint64 m_lastFrameAudioUSecs = 0;
     CameraAudioByteQueue m_pendingAudioPcm;
     mutable QMutex m_pendingAudioMutex;
     bool m_eof = false;

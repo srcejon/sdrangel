@@ -840,7 +840,10 @@ bool CameraVideoFileDecoder::receiveVideoFrame(QImage& image, qint64& positionMs
         if (bestTimestamp != AV_NOPTS_VALUE) {
             positionMs = av_rescale_q(bestTimestamp, m_formatContext->streams[m_videoStreamIndex]->time_base, AVRational{1, 1000});
         }
+        QElapsedTimer convertTimer;
+        convertTimer.start();
         const bool ok = convertFrameToImage(m_videoFrame, image, errorMessage);
+        m_lastConvertUSecs = convertTimer.nsecsElapsed() / 1000;
         av_frame_unref(m_videoFrame);
         return ok;
     }
@@ -920,12 +923,15 @@ bool CameraVideoFileDecoder::finishFrameAudio(
     errorMessage = QStringLiteral("FFmpeg support is not available in this build");
     return false;
 #else
+    QElapsedTimer audioTimer;
+    audioTimer.start();
     if (m_urlSource)
     {
         appendPendingAudio(decodedAudio);
         const int maxFrames = m_outputSampleRate > 0 ? m_outputSampleRate : 48000;
         takePendingAudio(pcmS16Stereo, maxFrames);
         trimLivePendingAudio();
+        m_lastFrameAudioUSecs = audioTimer.nsecsElapsed() / 1000;
         return true;
     }
     if (!readAheadAudio(decodedAudio, videoPositionMs, errorMessage)) {
@@ -948,6 +954,7 @@ bool CameraVideoFileDecoder::finishFrameAudio(
     }
     takePacedAudio(pcmS16Stereo);
     trimLivePendingAudio();
+    m_lastFrameAudioUSecs = audioTimer.nsecsElapsed() / 1000;
     return true;
 #endif
 }

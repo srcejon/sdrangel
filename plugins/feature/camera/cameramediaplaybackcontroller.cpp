@@ -573,6 +573,13 @@ void CameraMediaPlaybackController::startVideoFileDecodeThread()
     {
         int consecutiveReadErrors = 0;
         static constexpr int maxConsecutiveReadErrors = 25;
+        // Per-second decode-stage timing accumulators (diagnostic).
+        QElapsedTimer paceLogClock;
+        paceLogClock.start();
+        int paceLogFrames = 0;
+        qint64 paceLogTotalUs = 0;
+        qint64 paceLogConvertUs = 0;
+        qint64 paceLogAudioUs = 0;
         while (!m_state.m_decodeThreadStop.load())
         {
             CameraMediaPlaybackState::DecodedFrame decodedFrame;
@@ -586,6 +593,30 @@ void CameraMediaPlaybackController::startVideoFileDecodeThread()
                 decodedFrame.m_audioSampleRate,
                 errorMessage);
             decodedFrame.m_decodeMs = decodeTimer.elapsed();
+            const qint64 frameTotalUs = decodeTimer.nsecsElapsed() / 1000;
+            const qint64 frameConvertUs = m_state.m_decoder->lastConvertUSecs();
+            const qint64 frameAudioUs = m_state.m_decoder->lastFrameAudioUSecs();
+            if (readOk && !decodedFrame.m_image.isNull())
+            {
+                ++paceLogFrames;
+                paceLogTotalUs += frameTotalUs;
+                paceLogConvertUs += frameConvertUs;
+                paceLogAudioUs += frameAudioUs;
+                if (paceLogClock.elapsed() >= 1000)
+                {
+                    const double n = std::max(1, paceLogFrames);
+                    qDebug() << "CameraMediaPlayback: decode stage timing (avg ms/frame) - frames/s" << paceLogFrames
+                             << "total" << (paceLogTotalUs / n / 1000.0)
+                             << "convert" << (paceLogConvertUs / n / 1000.0)
+                             << "audio" << (paceLogAudioUs / n / 1000.0)
+                             << "read+decode" << ((paceLogTotalUs - paceLogConvertUs - paceLogAudioUs) / n / 1000.0);
+                    paceLogFrames = 0;
+                    paceLogTotalUs = 0;
+                    paceLogConvertUs = 0;
+                    paceLogAudioUs = 0;
+                    paceLogClock.restart();
+                }
+            }
 
             {
                 QMutexLocker locker(&m_state.m_decodeSnapshotMutex);

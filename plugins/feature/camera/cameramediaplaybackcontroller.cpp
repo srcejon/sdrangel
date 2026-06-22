@@ -791,37 +791,26 @@ void CameraMediaPlaybackController::queueDecodedVideoFileFrame(
         return;
     }
 
-    int droppedFrames = 0;
-    qint64 firstDroppedPositionMs = -1;
-    qint64 nextKeptPositionMs = -1;
+    // Hold the playback cushion in the cheap compressed bitstream read-ahead rather
+    // than by dropping decoded frames. When the decoded queue is full, BLOCK the
+    // decode so the read-ahead thread accumulates packets (the cushion) instead of
+    // decoding frames only to drop them at the live edge. This is what makes the
+    // bitstream buffer pay off on a real-time-paced source (e.g. ffmpeg -re): the
+    // source can't be read ahead, so the only way to build a cushion is to hold a few
+    // seconds of (cheap, undecoded) bitstream and play behind the live edge. Without
+    // this, the queue caps at maxDecodedFrames, the read-ahead never fills, and any
+    // momentary client slowdown starves playback and backs the source up. The source
+    // simply waits while we hold (it is not sending ahead of real time), so nothing is
+    // lost; for a buffered stream this latency is exactly what we want.
     const int maxDecodedFrames = qMax(minBufferedFrames, maxBufferedFrames);
     while (m_state.m_playing
+        && !m_state.m_decodeThreadStop.load()
         && (m_state.m_decodedFrames.size() >= static_cast<size_t>(maxDecodedFrames)))
     {
-        if ((firstDroppedPositionMs < 0) && (m_state.m_decodedFrames.front().m_positionMs >= 0)) {
-            firstDroppedPositionMs = m_state.m_decodedFrames.front().m_positionMs;
-        }
-        m_state.m_decodedFrames.pop_front();
-        m_state.m_decodeDroppedSinceLastSubmit.fetch_add(1);
-        ++droppedFrames;
+        m_state.m_decodedFramesNotFull.wait(&m_state.m_decodedFramesMutex, 20);
     }
-    if (droppedFrames > 0)
-    {
-        const int audioSampleRate = streamPlaybackAudioSampleRate();
-        if (audioSampleRate > 0)
-        {
-            if (!m_state.m_decodedFrames.empty()) {
-                nextKeptPositionMs = m_state.m_decodedFrames.front().m_positionMs;
-            } else {
-                nextKeptPositionMs = frame.m_positionMs;
-            }
-
-            if ((firstDroppedPositionMs >= 0) && (nextKeptPositionMs > firstDroppedPositionMs)) {
-                dropTimedStreamPlaybackAudio(nextKeptPositionMs - firstDroppedPositionMs, audioSampleRate);
-            } else {
-                dropPacedStreamPlaybackAudio(droppedFrames, audioSampleRate, playbackFrameRate);
-            }
-        }
+    if (m_state.m_decodeThreadStop.load()) {
+        return;
     }
 
     appendStreamPlaybackAudio(frame.m_pcmS16Stereo, frame.m_audioSampleRate);

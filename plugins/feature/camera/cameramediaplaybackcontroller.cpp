@@ -1134,6 +1134,17 @@ int CameraMediaPlaybackController::maxDecodedStreamFrameCount() const
     return qMax(2 * CameraMediaPlaybackState::m_minDecodedStreamFrames, frameCount);
 }
 
+int CameraMediaPlaybackController::streamBufferingCushionFrameCount() const
+{
+    const double frameRate = qMax(1.0, m_state.m_frameRate);
+    const double bufferingSeconds = qBound(
+        CameraSettings::m_minStreamBufferingSeconds,
+        m_settings->m_streamBufferingSeconds,
+        CameraSettings::m_maxStreamBufferingSeconds);
+    const int frameCount = static_cast<int>(std::ceil(frameRate * bufferingSeconds));
+    return qMax(CameraMediaPlaybackState::m_minDecodedStreamFrames, frameCount);
+}
+
 qint64 CameraMediaPlaybackController::updateVideoFilePlaybackPosition(
     qint64 decodedPositionMs,
     qint64 decodeMs,
@@ -1278,10 +1289,7 @@ bool CameraMediaPlaybackController::readQueuedVideoFileFrame(bool submitAudio)
         if (initialBuffering)
         {
             bufferedFrames += m_state.m_decoder->readAheadVideoPacketCount();
-            rebufferTarget = static_cast<int>(std::ceil(qMax(1.0, m_state.m_frameRate)
-                * qBound(CameraSettings::m_minStreamBufferingSeconds,
-                         m_settings->m_streamBufferingSeconds,
-                         CameraSettings::m_maxStreamBufferingSeconds)));
+            rebufferTarget = streamBufferingCushionFrameCount();
         }
         else
         {
@@ -1673,29 +1681,27 @@ void CameraMediaPlaybackController::scheduleNextVideoFileTick()
             // producer rate. This avoids buffer drain (underrun) without depending
             // on the reported frame rate, and naturally refills after a stall.
             //
-            // The target is the decoded queue's CAP, because the decode thread blocks
-            // (rather than drops) when that queue is full, pinning it there and
-            // holding the real playback cushion in the cheap bitstream read-ahead
-            // (see queueDecodedVideoFileFrame). Targeting a lower depth would make the
-            // servo read the pinned-full queue as "over-full" and present faster than
-            // real time to drain it — which also drains the bitstream cushion the
-            // decode is feeding from, defeating the buffering. With target == cap,
-            // fill <= target always, so the present is bounded at real time and only
-            // ever slows when a genuine underrun (cushion exhausted) drops the queue.
-            const int fill = decodedStreamFrameQueueDepth();
-            const int target = maxDecodedStreamFrameCount();
-            // Deadband: while the cushion is healthy, present at the EXACT content
-            // frame interval and do not micro-adjust. Block-to-accumulate pins the
-            // decoded queue near its cap, so it ticks down a frame or two and back as
-            // the present consumes just ahead of the decode; reacting to that jitter
-            // would modulate the present rate (and, via the audio resampler that
-            // tracks it, the audio pitch) — the audible "wander". Only correct when
-            // fill drifts meaningfully below target, i.e. the cushion is exhausting.
-            const int deadband = qMax(2, target / 4);
+            // Regulate the TOTAL buffered depth — decoded queue + compressed read-ahead
+            // — toward the playback cushion. The decode thread blocks (rather than
+            // drops) when the decoded queue is full, so the cushion really lives in the
+            // cheap bitstream read-ahead; and with the read-ahead cap decoupled (large,
+            // so the reader never backpressures the source) the read no longer bounds
+            // latency. So the present must: hold the total near the cushion target, and
+            // gently catch up if a source burst grows it past target.
+            //
+            // A symmetric deadband keeps the present at the EXACT content interval while
+            // the total is near target — no micro-adjustment, so the audio resampler
+            // (which tracks the present rate) has nothing to chase and there is no pitch
+            // wander. The gentle gain only engages on a real drift (cushion exhausting,
+            // or latency growing after a burst).
+            const int fill = decodedStreamFrameQueueDepth()
+                + (m_state.m_decoder ? m_state.m_decoder->readAheadVideoPacketCount() : 0);
+            const int target = streamBufferingCushionFrameCount();
+            const int deadband = qMax(3, target / 5);
             const double slackMs = qMax(5.0, intervalMs * 0.25);
-            const double gainMsPerFrame = qMax(0.5, intervalMs * 0.05);
+            const double gainMsPerFrame = qMax(0.3, intervalMs * 0.02);
             double adjustedMs;
-            if (fill >= target - deadband) {
+            if (qAbs(fill - target) <= deadband) {
                 adjustedMs = intervalMs;
             } else {
                 adjustedMs = qBound(intervalMs - slackMs,

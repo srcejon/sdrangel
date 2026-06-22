@@ -156,6 +156,11 @@ private:
     int streamPlaybackAudioBytes() const;
     int streamPlaybackAudioSampleRate() const;
     int streamInitialBufferFrameCount() const;
+    // Target playback cushion (frames) = streamBufferingSeconds of content. This is the
+    // total buffered depth (decoded queue + compressed read-ahead) the present holds,
+    // and the gate that starts playback. The read-ahead cap is much larger (headroom,
+    // so the reader never backpressures the source); this is the latency/jitter knob.
+    int streamBufferingCushionFrameCount() const;
     int decodedStreamFrameQueueDepth() const;
     int maxDecodedStreamFrameCount() const;
     bool readQueuedVideoFileFrame(bool submitAudio);

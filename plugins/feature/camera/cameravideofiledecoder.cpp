@@ -312,12 +312,23 @@ bool CameraVideoFileDecoder::open(
         m_audioTimeBaseDen = audioStream->time_base.den > 0 ? audioStream->time_base.den : 1;
     }
 
-    // Live/URL sources: buffer the compressed bitstream ahead (≈ readAheadSeconds of
-    // video, KB-sized) so network jitter stalls only the read thread, not decode/
-    // present. File sources keep reading synchronously inside readNextFrame.
+    // Live/URL sources: buffer the compressed bitstream ahead (KB-sized) so network
+    // jitter stalls only the read thread, not decode/present. File sources keep
+    // reading synchronously inside readNextFrame.
+    //
+    // The read-ahead cap is intentionally MUCH larger than the playback cushion
+    // (readAheadSeconds, enforced downstream by the present gate). If the cap equalled
+    // the cushion, the reader would block on a full queue as soon as the cushion is
+    // built and stop draining the socket — which backpressures a real-time source
+    // (e.g. ffmpeg -re), stalling its sender and causing the very delivery hiccups the
+    // cushion is meant to ride. With generous headroom the reader is paced by the
+    // source's own delivery (av_read_frame), not by a full-queue block, so the socket
+    // is always drained. A real-time source can't deliver past its live edge, so this
+    // headroom costs only a few hundred KB and does not add latency.
     if (m_urlSource)
     {
-        m_readAheadCapVideoPackets = std::max(8, static_cast<int>(readAheadSeconds * m_frameRate + 0.5));
+        const int cushionPackets = std::max(8, static_cast<int>(readAheadSeconds * m_frameRate + 0.5));
+        m_readAheadCapVideoPackets = std::max(cushionPackets * 4, cushionPackets + 120);
         startReadAhead();
     }
 
@@ -460,9 +471,10 @@ void CameraVideoFileDecoder::startReadAhead()
         }
     });
     m_readThread->start();
-    qDebug() << "CameraVideoFileDecoder: bitstream read-ahead started, cap"
+    qDebug() << "CameraVideoFileDecoder: bitstream read-ahead started, headroom cap"
              << m_readAheadCapVideoPackets << "video packets ("
-             << QString::number(m_readAheadCapVideoPackets / qMax(1.0, m_frameRate), 'f', 2) << "s )";
+             << QString::number(m_readAheadCapVideoPackets / qMax(1.0, m_frameRate), 'f', 2)
+             << "s ); playback cushion set by present gate";
 #endif
 }
 

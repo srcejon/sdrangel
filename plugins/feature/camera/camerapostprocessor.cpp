@@ -175,6 +175,13 @@ static QString formatSolvedStarLabel(const CameraSettings& settings, const Camer
     if (!detection.m_solved || detection.m_label.isEmpty()) {
         return QString();
     }
+    // "Hide synthetic names": skip stars whose only name is the synthesized Gaia coordinate label
+    // (catalogDisplayName routes generic Gaia stars through formatGaiaCoordinateLabel, which always
+    // emits "Gaia J<coords>"); real catalogue names (HIP/HD/proper names) are kept.
+    if (settings.m_plateSolveLabelHideSyntheticNames
+        && detection.m_label.trimmed().startsWith(QStringLiteral("Gaia "), Qt::CaseInsensitive)) {
+        return QString();
+    }
 
     QString label = detection.m_label;
     if (settings.m_plateSolveLabelMode >= CameraSettings::PlateSolveLabelNameMagnitude) {
@@ -1190,8 +1197,11 @@ void CameraPostProcessor::applyStarOverlay(QImage& image, const QVector<CameraPi
         QPen pen(starColor);
         pen.setWidth(1);
         painter.setPen(pen);
-        const QRectF box(detection.m_center.x() - 3.0, detection.m_center.y() - 3.0, 6.0, 6.0);
-        painter.drawRect(box);
+        if (m_settings.m_showStarDetectionBoxes)
+        {
+            const QRectF box(detection.m_center.x() - 3.0, detection.m_center.y() - 3.0, 6.0, 6.0);
+            painter.drawRect(box);
+        }
 
         if (detection.m_solved && !detection.m_projectedCenter.isNull())
         {

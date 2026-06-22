@@ -1854,6 +1854,8 @@ void CameraGUI::displaySettings()
     updateColorButton(settingsUI()->constellationColorButton, m_settings.m_constellationColor);
     updateColorButton(settingsUI()->trackObjectColorButton, m_settings.m_trackObjectColor);
     updateColorButton(settingsUI()->starColorButton, m_settings.m_starColor);
+    settingsUI()->showStarDetectionBoxesCheck->setChecked(m_settings.m_showStarDetectionBoxes);
+    settingsUI()->hideSyntheticNamesCheck->setChecked(m_settings.m_plateSolveLabelHideSyntheticNames);
     updateColorButton(settingsUI()->overlayTextColorButton, m_settings.m_overlayTextColor);
     updateColorButton(settingsUI()->motionBoxColorButton, m_settings.m_motionBoxColor);
     ui->spectrumOverlayButton->setChecked(m_settings.m_overlaySpectrum);
@@ -2646,6 +2648,8 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->starDebugViewCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_starDebugViewCombo_currentIndexChanged);
     QObject::connect(settingsUI()->plateSolveLabelModeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_plateSolveLabelModeCombo_currentIndexChanged);
     QObject::connect(settingsUI()->starColorButton, &QToolButton::clicked, this, &CameraGUI::on_starColorButton_clicked);
+    QObject::connect(settingsUI()->showStarDetectionBoxesCheck, &QCheckBox::toggled, this, &CameraGUI::on_showStarDetectionBoxesCheck_toggled);
+    QObject::connect(settingsUI()->hideSyntheticNamesCheck, &QCheckBox::toggled, this, &CameraGUI::on_hideSyntheticNamesCheck_toggled);
     QObject::connect(settingsUI()->plateSolveMaxMagnitudeSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_plateSolveMaxMagnitudeSpin_valueChanged);
     QObject::connect(settingsUI()->plateSolveMinMatchesSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_plateSolveMinMatchesSpin_valueChanged);
     QObject::connect(settingsUI()->plateSolveMatchRadiusSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_plateSolveMatchRadiusSpin_valueChanged);
@@ -7599,6 +7603,18 @@ void CameraGUI::on_detectionRoiShowButton_toggled(bool checked)
     applySetting("showDetectionRoi");
 }
 
+void CameraGUI::on_showStarDetectionBoxesCheck_toggled(bool checked)
+{
+    m_settings.m_showStarDetectionBoxes = checked;
+    applySetting("showStarDetectionBoxes");
+}
+
+void CameraGUI::on_hideSyntheticNamesCheck_toggled(bool checked)
+{
+    m_settings.m_plateSolveLabelHideSyntheticNames = checked;
+    applySetting("plateSolveLabelHideSyntheticNames");
+}
+
 void CameraGUI::on_detectionRoiDrawButton_clicked()
 {
     setDetectionRoiDrawMode(true);
@@ -7639,6 +7655,8 @@ void CameraGUI::on_detectionResetDefaultsButton_clicked()
     m_settings.m_detectionRoiWidth = defaults.m_detectionRoiWidth;
     m_settings.m_detectionRoiHeight = defaults.m_detectionRoiHeight;
     m_settings.m_showDetectionRoi = defaults.m_showDetectionRoi;
+    m_settings.m_showStarDetectionBoxes = defaults.m_showStarDetectionBoxes;
+    m_settings.m_plateSolveLabelHideSyntheticNames = defaults.m_plateSolveLabelHideSyntheticNames;
 
     m_settings.m_motionDetect = defaults.m_motionDetect;
     m_settings.m_motionBackgroundSubtractor = defaults.m_motionBackgroundSubtractor;
@@ -7698,6 +7716,8 @@ void CameraGUI::on_detectionResetDefaultsButton_clicked()
         "detectionRoiWidth",
         "detectionRoiHeight",
         "showDetectionRoi",
+        "showStarDetectionBoxes",
+        "plateSolveLabelHideSyntheticNames",
         "motionDetect",
         "motionBackgroundSubtractor",
         "motionMaskView",

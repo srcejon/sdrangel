@@ -6046,6 +6046,26 @@ car</string>
                 </property>
                </widget>
               </item>
+              <item row="9" column="0" colspan="2">
+               <widget class="QCheckBox" name="showStarDetectionBoxesCheck">
+                <property name="toolTip">
+                 <string>Draw a box marker around each detected star on the preview</string>
+                </property>
+                <property name="text">
+                 <string>Show detection boxes</string>
+                </property>
+               </widget>
+              </item>
+              <item row="9" column="2" colspan="2">
+               <widget class="QCheckBox" name="hideSyntheticNamesCheck">
+                <property name="toolTip">
+                 <string>Don't label stars that only have a synthetic Gaia coordinate name (Gaia Jhhmmss...); keep stars with a real catalogue name</string>
+                </property>
+                <property name="text">
+                 <string>Hide synthetic names</string>
+                </property>
+               </widget>
+              </item>
              </layout>
             </widget>
            </item>

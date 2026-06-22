@@ -560,6 +560,7 @@ struct CameraSettings
     double m_starMaxAspectRatio; ///< Maximum accepted blob aspect ratio
     StarDebugView m_starDebugView; ///< Optional debug view of star detection stages
     QColor m_starColor;         ///< Overlay colour for detected stars
+    bool   m_showStarDetectionBoxes; ///< Draw the small box marker around each detected star on the preview
     bool   m_plateSolve;        ///< Attempt to identify detected stars from a built-in bright-star catalog
     double m_plateSolveMaxMagnitude; ///< Faintest catalog star to consider during plate solving
     int    m_plateSolveMinMatches; ///< Minimum matches required for a successful solve
@@ -569,6 +570,7 @@ struct CameraSettings
     double m_plateSolveFovTolerance; ///< How well the entered FoV is known, as a percentage of FoV. 0 = exact (pin to the entered FoV); larger lets the solver refine the FoV away from the seed (for un-calibrated wide/fisheye lenses)
     PlateSolveStartMode m_plateSolveStartMode; ///< Which current camera settings should be used as starting inputs for plate solving
     PlateSolveLabelMode m_plateSolveLabelMode; ///< Which catalog metadata should be shown for solved stars
+    bool   m_plateSolveLabelHideSyntheticNames; ///< Skip labels for stars that only have a synthetic Gaia coordinate name (keep real catalogue names)
     bool   m_plateSolveUseCaptureDateTime; ///< Use the frame capture date/time for plate solving instead of a fixed timestamp
     QDateTime m_plateSolveDateTime; ///< User-specified date/time for plate solving recorded media
     bool   m_plateSolveDateTimeUtc; ///< Treat the user-specified plate solve date/time as UTC instead of local time

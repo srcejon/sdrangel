@@ -362,6 +362,8 @@ void CameraSettings::resetToDefaults()
     m_plateSolveFovTolerance = 3.0;
     m_plateSolveStartMode = PlateSolveStartFovAzElRoll;
     m_plateSolveLabelMode = PlateSolveLabelName;
+    m_plateSolveLabelHideSyntheticNames = false;
+    m_showStarDetectionBoxes = true;
     m_plateSolveUseCaptureDateTime = true;
     m_plateSolveDateTime = QDateTime::currentDateTime();
     m_plateSolveDateTimeUtc = false;
@@ -668,6 +670,8 @@ QByteArray CameraSettings::serialize() const
     s.writeString(259, serializeStringList(m_streamUrlHistory));
     s.writeString(260, m_streamUrl);
     s.writeDouble(262, m_streamBufferingSeconds);
+    s.writeBool(263, m_showStarDetectionBoxes);
+    s.writeBool(264, m_plateSolveLabelHideSyntheticNames);
 
     return s.final();
 }
@@ -1138,6 +1142,8 @@ bool CameraSettings::deserialize(const QByteArray& data)
         m_streamUrlHistory = deserializeStringList(streamUrlHistoryJson);
         d.readString(260, &m_streamUrl, "");
         d.readDouble(262, &m_streamBufferingSeconds, 1.0);
+        d.readBool(263, &m_showStarDetectionBoxes, true);
+        d.readBool(264, &m_plateSolveLabelHideSyntheticNames, false);
         if (isStreamCamera() && m_streamUrl.isEmpty()) {
             m_streamUrl = m_videoFileCameraPath;
         }
@@ -1741,6 +1747,9 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     if (settingsKeys.contains("showDetectionRoi")) {
         m_showDetectionRoi = settings.m_showDetectionRoi;
     }
+    if (settingsKeys.contains("showStarDetectionBoxes")) {
+        m_showStarDetectionBoxes = settings.m_showStarDetectionBoxes;
+    }
     if (settingsKeys.contains("motionDetect")) {
         m_motionDetect = settings.m_motionDetect;
     }
@@ -1846,6 +1855,9 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     }
     if (settingsKeys.contains("plateSolveLabelMode")) {
         m_plateSolveLabelMode = settings.m_plateSolveLabelMode;
+    }
+    if (settingsKeys.contains("plateSolveLabelHideSyntheticNames")) {
+        m_plateSolveLabelHideSyntheticNames = settings.m_plateSolveLabelHideSyntheticNames;
     }
     if (settingsKeys.contains("plateSolveUseCaptureDateTime")) {
         m_plateSolveUseCaptureDateTime = settings.m_plateSolveUseCaptureDateTime;
@@ -2513,6 +2525,9 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     if (settingsKeys.contains("showDetectionRoi") || force) {
         ostr << " m_showDetectionRoi: " << m_showDetectionRoi;
     }
+    if (settingsKeys.contains("showStarDetectionBoxes") || force) {
+        ostr << " m_showStarDetectionBoxes: " << m_showStarDetectionBoxes;
+    }
     if (settingsKeys.contains("motionDetect") || force) {
         ostr << " m_motionDetect: " << m_motionDetect;
     }
@@ -2620,6 +2635,9 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("plateSolveLabelMode") || force) {
         ostr << " m_plateSolveLabelMode: " << static_cast<int>(m_plateSolveLabelMode);
+    }
+    if (settingsKeys.contains("plateSolveLabelHideSyntheticNames") || force) {
+        ostr << " m_plateSolveLabelHideSyntheticNames: " << m_plateSolveLabelHideSyntheticNames;
     }
     if (settingsKeys.contains("plateSolveApplyMode") || force) {
         ostr << " m_plateSolveApplyMode: " << static_cast<int>(m_plateSolveApplyMode);

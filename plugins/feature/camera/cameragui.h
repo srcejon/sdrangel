@@ -679,6 +679,8 @@ private slots:
     void on_detectionRoiWidthSpin_valueChanged(int value);
     void on_detectionRoiHeightSpin_valueChanged(int value);
     void on_detectionRoiShowButton_toggled(bool checked);
+    void on_showStarDetectionBoxesCheck_toggled(bool checked);
+    void on_hideSyntheticNamesCheck_toggled(bool checked);
     void on_detectionRoiDrawButton_clicked();
     void on_detectionRoiDeleteButton_clicked();
     void on_detectionResetDefaultsButton_clicked();

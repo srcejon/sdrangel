@@ -114,6 +114,11 @@ public:
     bool m_streamClockAnchored = false;
     qint64 m_streamClockAnchorContentMs = 0;
     qint64 m_streamClockAnchorProcessedUSecs = 0;
+    // Slow, clamped, deadbanded phase correction (ms) added to the device-rate clock to null
+    // the residual crystal drift between video (device rate) and audio (resampled to source
+    // rate). Constrained so it can't perturb the present rate enough to couple into the
+    // resampler buffer servo. Reset to 0 at each (re)anchor. See updateStreamPlaybackClock.
+    double m_streamClockTrimMs = 0.0;
     // Last audio-content-heard reference (decode-derived − sink latency) the PLL locked
     // to. The free-running clock advances on the device (no stall), but is slowly nudged
     // toward this accurate audio-content position each tick so video tracks what is

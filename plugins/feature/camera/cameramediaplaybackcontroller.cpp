@@ -1657,12 +1657,11 @@ qint64 CameraMediaPlaybackController::videoFilePlaybackClockMs() const
         && (m_audio->monitorSampleRate() > 0))
     {
         // Free-running device clock: once anchored, advance the playback clock with the
-        // sound card's physically-played audio (monitorProcessedUSecs), SCALED by the
-        // resampler integral so it runs at the audio content rate (see below). It keeps
-        // running through a feed underrun (the device plays silence), so the present never
-        // stalls waiting on a decode-derived position — which previously deadlocked
-        // present<->decode (block-to-accumulate) into a runaway slowdown. Anchored at start
-        // and each rebuffer resume.
+        // sound card's physically-played audio (monitorProcessedUSecs), plus a slow phase
+        // trim toward the audio heard (see below). It keeps running through a feed underrun
+        // (the device plays silence), so the present never stalls waiting on a decode-derived
+        // position — which previously deadlocked present<->decode (block-to-accumulate) into
+        // a runaway slowdown. Anchored at start and each rebuffer resume.
         if (m_state.m_streamClockAnchored)
         {
             const qint64 processedUSecs = m_audio->monitorProcessedUSecs();
@@ -1675,14 +1674,16 @@ qint64 CameraMediaPlaybackController::videoFilePlaybackClockMs() const
             if (processedUSecs >= m_state.m_streamClockAnchorProcessedUSecs)
             {
                 const double rate = qMax(0.1, m_settings->m_videoPlaybackRate);
-                // Slope scaled by the resampler integral so the clock advances at the audio
-                // CONTENT rate (crystal-compensated), keeping video in sync with audio. See
-                // updateStreamPlaybackClock, which commits this once per tick (so a changing
-                // integral never steps the clock); here we only interpolate within a tick.
-                const double contentRatio = m_state.m_streamAudioResampleRatio;
+                // Slope 1 on the device clock: the decode is then fed at the device rate, so
+                // the resampler integral stays pinned to the true source/soundcard crystal
+                // ratio and the audio buffer is stable. m_streamClockTrimMs is a slow,
+                // clamped, deadbanded phase correction toward the audio actually heard that
+                // nulls the residual crystal drift WITHOUT perturbing the present rate enough
+                // to couple into the buffer servo (see updateStreamPlaybackClock).
                 return m_state.m_streamClockAnchorContentMs
                     + static_cast<qint64>(std::llround(
-                        static_cast<double>(processedUSecs - m_state.m_streamClockAnchorProcessedUSecs) / 1000.0 * rate * contentRatio));
+                        static_cast<double>(processedUSecs - m_state.m_streamClockAnchorProcessedUSecs) / 1000.0 * rate))
+                    + static_cast<qint64>(std::llround(m_state.m_streamClockTrimMs));
             }
         }
         // Not yet anchored — decode-derived content position (audio decoded minus
@@ -1754,6 +1755,7 @@ void CameraMediaPlaybackController::anchorStreamPlaybackClock()
     contentMs -= sinkLatencyMs;
     m_state.m_streamClockAnchorContentMs = contentMs;
     m_state.m_streamClockAnchorProcessedUSecs = m_audio->monitorProcessedUSecs();
+    m_state.m_streamClockTrimMs = 0.0;   // anchor sets the offset; trim restarts from zero
     m_state.m_streamClockAnchored = true;
     qDebug() << "CameraMediaPlayback: stream clock anchored - contentMs" << contentMs
              << "(decodeDerived" << decodeDerivedMs << "- sinkLatencyMs" << sinkLatencyMs << ")"
@@ -1796,45 +1798,40 @@ qint64 CameraMediaPlaybackController::streamDecodeDerivedContentMs() const
 
 void CameraMediaPlaybackController::updateStreamPlaybackClock()
 {
-    // Make the video clock advance at the audio CONTENT rate (for A/V sync) without coupling
-    // into the resampler's audio-buffer servo.
+    // Slow phase trim that keeps the video (on the device clock) aligned with the audio
+    // actually heard, without coupling into the resampler's audio-buffer servo.
     //
-    // The clock base is the device's physically-played time (monitorProcessedUSecs) so it
-    // never stalls through a feed underrun. But the device runs at the sound card's NOMINAL
-    // crystal rate, while the resampler plays audio content at the SOURCE rate (it
-    // compensates the crystal for audio, not video) — so video on the raw device clock
-    // drifts from audio by the crystal offset (the slow A/V desync).
+    // The video clock runs on the device at slope 1 (videoFilePlaybackClockMs). That keeps
+    // the decode fed at the device rate, so the resampler integral stays pinned to the true
+    // source/soundcard crystal ratio and the audio buffer is stable. The only residual is the
+    // small crystal drift: video at the device rate vs audio resampled to the source rate.
     //
-    // Correct it by scaling the clock's slope by the resampler INTEGRAL — the smooth, slow
-    // estimate of the source/soundcard crystal ratio. Crucially NOT by the instantaneous
-    // "heard" position nor by the applied ratio (integral + proportional): the present also
-    // feeds the decode (block-to-accumulate), so tying the present rate to anything that
-    // moves with the audio BUFFER level creates positive feedback — when the resampler lowers
-    // its ratio to refill a low buffer, the feed drops with it and the buffer runs away to
-    // empty (the click/underrun seen with the fast PLL reference). The integral moves slowly
-    // enough that the resampler's proportional term keeps full authority over the buffer.
-    //
-    // Commit the clock once per tick (advance the content anchor by THIS tick's device time
-    // scaled by the integral, then reset the origin). Committing each tick keeps the clock
-    // continuous when the integral changes — no jumps.
+    // Null it with a trim toward the heard-content reference, but heavily constrained so it
+    // can NEVER perturb the present rate enough to feed back into the buffer servo — the
+    // mistake that drained the buffer to clicks when the present chased the (buffer-coupled)
+    // heard position directly. Two guards: (1) a deadband — do nothing within ~1 frame, so
+    // the clock free-runs and the trim only engages on real accumulated drift; (2) a hard
+    // per-tick clamp of ~0.06 ms (~1.8 ms/s at 30 fps = ~0.18% rate, an order of magnitude
+    // below the resampler's ±1.5% proportional authority), so the resampler always dominates
+    // the buffer. Net effect: A/V offset is bounded to ~1 frame, corrected by trims too small
+    // and too rare to destabilise anything.
     if (!m_settings->isStreamCamera() || !m_state.m_decoder || !m_state.m_streamClockAnchored) {
         return;
     }
-    const qint64 processedUSecs = m_audio->monitorProcessedUSecs();
-    if (processedUSecs >= m_state.m_streamClockAnchorProcessedUSecs) {
-        const double rate = qMax(0.1, m_settings->m_videoPlaybackRate);
-        const double contentRatio = m_state.m_streamAudioResampleRatio;   // crystal-comp slope
-        m_state.m_streamClockAnchorContentMs += static_cast<qint64>(std::llround(
-            static_cast<double>(processedUSecs - m_state.m_streamClockAnchorProcessedUSecs)
-            / 1000.0 * rate * contentRatio));
-    }
-    m_state.m_streamClockAnchorProcessedUSecs = processedUSecs;
-    // Diagnostic only: how far the synced clock sits from the audio actually heard (not fed
-    // back into the clock). Held bounded = locked; a steady ramp = the integral slope is off.
     const qint64 ref = streamDecodeDerivedContentMs();
-    if (ref != std::numeric_limits<qint64>::min()) {
-        m_state.m_streamClockPllOffsetMs = ref - m_state.m_streamClockAnchorContentMs;
+    if (ref == std::numeric_limits<qint64>::min()) {
+        return;                          // no audio content (e.g. video-only stream)
     }
+    const qint64 offsetMs = ref - videoFilePlaybackClockMs();
+    m_state.m_streamClockPllOffsetMs = offsetMs;   // diagnostic
+    constexpr qint64 deadbandMs = 30;              // ~1 frame; trim only beyond real drift
+    if (qAbs(offsetMs) <= deadbandMs) {
+        return;
+    }
+    const double beyondBand = static_cast<double>(
+        (offsetMs > 0) ? (offsetMs - deadbandMs) : (offsetMs + deadbandMs));
+    const double step = qBound(-0.06, 0.02 * beyondBand, 0.06);
+    m_state.m_streamClockTrimMs += step;
 }
 
 void CameraMediaPlaybackController::scheduleNextVideoFileTick()

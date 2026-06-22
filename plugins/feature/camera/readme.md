@@ -3,7 +3,7 @@
 <h2>Introduction</h2>
 
 The Camera feature plugin allows SDRangel to capture images and video from cameras and telescopes.
-This is to support multimode observations, such as combing radio and optical observations of meteors, but can also be used for observing remote radio equipment or conditions.
+This is to support multimode observations, such as combing radio and optical observations of meteors or aircraft, but can also be used for observing remote radio equipment or conditions.
 
 The Camera plugin supports images and video from:
 
@@ -181,21 +181,46 @@ Pressing 'Save to CSV' will show a file dialog to select a filename to save the 
 
 <h3>27: Motion detection</h3>
 
-Check to enable motion detection using the Motion Detection settings in the Camera Settings dialog.
+Check to enable motion detection, which highlights parts of the image that are moving by drawing a bounding box around them. This can be used to detect aircraft, satellites, meteors, wildlife or people, without needing an AI model.
 
 ![Motion dection](../../../doc/img/Camera_plugin_motion_detection.png)
+
+Motion detection works by building up a statistical model of the static background of the scene from recent frames. Each new frame is compared against this background model, and pixels that differ significantly are classified as foreground (moving). The foreground pixels are grouped together into bounding boxes that are drawn on the image. Because the background is continually relearned, slow changes such as the sun moving across the sky or gradual changes in lighting are absorbed into the background and do not trigger detection, while faster moving objects do.
+
+As the background model is learnt over time, motion detection is generally not reliable for the first few seconds of capture, until the model has stabilised. Detection also restarts whenever capture is started or the motion settings are changed.
+
+How sensitive the detection is, and how it deals with noise and small or brief movements, is controlled by the settings on the Motion Detection sub-tab in the Camera Settings dialog. In particular:
+
+When motion is detected, an event is emitted that can be used by the Scheduler feature to perform user-defined actions, such as starting a recording or running a command. A second event is emitted when the motion stops.
 
 <h3>28: Difference mask</h3>
 
 Enables display of differences from previous images using the Difference Detection settings.
+There are settings to control how large the difference must be and how many differences there should be in a region for it to be visible, and how much to dilate the region so nearby similar pixels are also visible.
+
+In this image, difference detection shows a satellite flare, while hiding background stars:
+
+![Difference dection](../../../doc/img/Camera_plugin_difference_detection.png)
 
 <h3>29: Star detection and plate solving</h3>
 
-Enables star detection and plate solving using the Star Detection settings.
+Enables star detection and plate solving.
+This can be used to display labels showing star names, or to work out the direction a camera is pointing.
+Plate solving can be used for both wide-angle all-sky cameras and narrow field-of-view telescopes:
+
+![Narrow FoV](../../../doc/img/Camera_plugin_plate_solve_narrow.png)
+
+![Wide FoV](../../../doc/img/Camera_plugin_plate_solve_wide.png)
+
+![Plate solving result](../../../doc/img/Camera_plugin_plate_solve_result.png)
 
 <h3>30: Item overlay</h3>
 
-Overlays ADS-B, AIS, satellite and star tracker tracked items on the camera image using the Position and ADS-B / Satellite / Star Tracker overlay settings.
+Overlays ADS-B, AIS, satellite, star tracker and other items sent to the Map feature on the camera image.
+
+![ADS-B overlay](../../../doc/img/Camera_plugin_adsb_overlay.png)
+
+For this to work, the position and direction of the camera must be set in the Camera Settings dialog.
 
 <h3>31: Date/time overlay</h3>
 
@@ -205,17 +230,27 @@ Overlays the configured date and time string on the image.
 
 Overlays the configured HTML on the image.
 
+![HTML overlay](../../../doc/img/Camera_plugin_html_overlay.png)
+
+FIXME variable substituions.
+
 <h3>33: Spectrum overlay</h3>
 
 Overlays a spectrum view from a selected SDRangel device set on the image.
+
+![Spectrum overlay](../../../doc/img/Camera_plugin_spectrum_overlay.png)
 
 <h3>34: Azimuthal grid overlay</h3>
 
 Overlays the azimuth/elevation sky grid.
 
+![Azimuthal grid overlay](../../../doc/img/Camera_plugin_azimuthal_grid.png)
+
 <h3>35: Equatorial grid overlay</h3>
 
-Overlays the right ascension/declination sky grid.
+Overlays the right ascension/declination equatorial sky grid.
+
+![Equatorial grid overlay](../../../doc/img/Camera_plugin_equatorial_grid.png)
 
 <h3>36: Constellation overlay</h3>
 

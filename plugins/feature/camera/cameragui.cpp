@@ -6564,6 +6564,12 @@ void CameraGUI::updatePlateSolveDateTimeEdit()
 
     QSignalBlocker dateTimeBlocker(settingsUI()->plateSolveDateTimeEdit);
     QSignalBlocker utcBlocker(settingsUI()->plateSolveDateTimeUtcButton);
+    // Display the edit in the same time spec as the UTC button, so a UTC-stored value shows its UTC
+    // wall clock (not the local-shifted one). Without this the edit defaults to Qt::LocalTime and a
+    // UTC instant is shown shifted by the local offset -- e.g. 21:53:53Z displayed as 22:53:53 (BST),
+    // which made "21:53:53 + UTC checked" actually store 20:53:53Z.
+    settingsUI()->plateSolveDateTimeEdit->setTimeSpec(
+        m_settings.m_plateSolveDateTimeUtc ? Qt::UTC : Qt::LocalTime);
     settingsUI()->plateSolveDateTimeEdit->setDateTime(dateTime);
     const bool customDateTime = !m_settings.m_plateSolveUseCaptureDateTime;
     settingsUI()->plateSolveDateTimeEdit->setEnabled(customDateTime);
@@ -7955,7 +7961,12 @@ void CameraGUI::on_plateSolveDateTimeUtcButton_toggled(bool checked)
         : QDateTime::currentDateTime();
 
     m_settings.m_plateSolveDateTimeUtc = checked;
-    m_settings.m_plateSolveDateTime = checked ? dateTime.toUTC() : dateTime.toLocalTime();
+    // Reinterpret the displayed wall clock in the new spec (keep the same hh:mm:ss), matching
+    // on_plateSolveDateTimeEdit_dateTimeChanged. The UTC button declares whether the entered time
+    // IS UTC; it must NOT convert (toUTC would shift 21:53:53 local -> 20:53:53Z and silently change
+    // the time the user typed).
+    m_settings.m_plateSolveDateTime = QDateTime(
+        dateTime.date(), dateTime.time(), checked ? Qt::UTC : Qt::LocalTime);
     updatePlateSolveDateTimeEdit();
     applySettings({"plateSolveDateTimeUtc", "plateSolveDateTime"});
 }

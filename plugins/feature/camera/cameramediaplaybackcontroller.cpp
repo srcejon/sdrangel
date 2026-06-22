@@ -1664,11 +1664,20 @@ qint64 CameraMediaPlaybackController::videoFilePlaybackClockMs() const
         // between re-anchors (set at start and each rebuffer resume).
         if (m_state.m_streamClockAnchored)
         {
-            const double rate = qMax(0.1, m_settings->m_videoPlaybackRate);
             const qint64 processedUSecs = m_audio->monitorProcessedUSecs();
-            return m_state.m_streamClockAnchorContentMs
-                + static_cast<qint64>(std::llround(
-                    static_cast<double>(processedUSecs - m_state.m_streamClockAnchorProcessedUSecs) / 1000.0 * rate));
+            // Guard against the device clock running backwards: the QAudioSink is shared
+            // per physical device, so another feature reconfiguring it (device/sample-rate
+            // change) restarts it and resets processedUSecs to 0. A negative delta would
+            // jump the clock backwards and freeze the present. If that happens, fall
+            // through to the decode-derived clock (still valid; unaffected by the device
+            // reset); the next rebuffer resume re-anchors against the new device clock.
+            if (processedUSecs >= m_state.m_streamClockAnchorProcessedUSecs)
+            {
+                const double rate = qMax(0.1, m_settings->m_videoPlaybackRate);
+                return m_state.m_streamClockAnchorContentMs
+                    + static_cast<qint64>(std::llround(
+                        static_cast<double>(processedUSecs - m_state.m_streamClockAnchorProcessedUSecs) / 1000.0 * rate));
+            }
         }
         // Not yet anchored — decode-derived content position (audio decoded minus
         // still-queued = the content currently being heard), used to seed the anchor.

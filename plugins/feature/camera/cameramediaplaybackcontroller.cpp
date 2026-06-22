@@ -930,46 +930,26 @@ int CameraMediaPlaybackController::takeResampledStreamPlaybackAudio(QByteArray& 
         }
     }
 
-    // PI servo on the buffer level → resample ratio. A full buffer (source faster
-    // than the device) raises the ratio so we consume input faster (audio rises
-    // slightly in pitch to match); an empty buffer lowers it (audio stretches).
-    // The integral state (m_streamAudioResampleRatio) converges to the true
-    // source/device rate ratio and holds the buffer at target with NO steady-state
-    // drift — a proportional-only servo left a small residual that slowly drained
-    // the buffer to underrun over minutes. The proportional term gives transient
-    // response; the integral is clamped for anti-windup.
+    // Slow PI drift-corrector. Video is slaved to the free-running device clock (see
+    // scheduleNextVideoFileTick / videoFilePlaybackClockMs), so the decode runs at the
+    // device rate and this buffer is fed and drained at the device rate — it only moves
+    // with the slow source-vs-soundcard CLOCK drift, plus a transient bump each time a
+    // source stall drains it and the decode catch-up refills it.
     //
-    // SOFT DEADBAND so the audible pitch is steady. The applied ratio IS the
-    // playback speed, so a PI that never stops correcting couples buffer ripple
-    // straight into an audible "wander". A HARD freeze inside the band (zero
-    // correction) removes the ripple but lets the buffer drift unchecked to an
-    // edge and back — a slow ~40 s edge-to-edge limit cycle with ~2.5% pitch
-    // steps. Instead, scale BOTH gains by |err|/deadband (capped at 1): near
-    // target the pull is ~0 (steady pitch, minimal ripple) and firms up smoothly
-    // only as the buffer strays toward the band edge (full gains outside it for
-    // fast recovery). Because a small restoring pull AND the proportional damping
-    // are always present, the buffer SETTLES at target — converging to a constant
-    // ratio instead of cycling — while the integral still nulls steady-state error
-    // (no drift/drain). Continuous in |err|, so no pitch step anywhere.
-    static constexpr double deadband = 0.10;
+    // So: a SLOW, ~unity-damped PI that converges to the true clock ratio and HOLDS it
+    // (steady, inaudible pitch). No soft-deadband gainScale (it limit-cycles), no tight
+    // integral clamp (it starves the integral and parks the buffer off target, drifting
+    // sync). The INTEGRAL is the steady-state clock ratio (free, ±5%, inaudible — it is
+    // the correct rate); the PROPORTIONAL is a small bounded transient (≤1.5%). Because
+    // the gains are gentle and the decode does the bulk of a post-stall refill, the
+    // resampler rides out a stall with a small brief dip instead of an integral-windup
+    // swing.
     const double targetFrames = qMax(1.0, static_cast<double>(audioSampleRate) * qMax(0.05, targetBufferSeconds));
     const double err = (static_cast<double>(availFrames) - targetFrames) / targetFrames;
-    const double gainScale = qMin(1.0, std::abs(err) / deadband);
-    // Two limits that must differ:
-    //   * The INTEGRAL converges to the true source/soundcard CLOCK ratio (crystal
-    //     mismatch, up to a few %). It MUST be free to reach it — otherwise the buffer
-    //     is forced off target to make up the difference via the proportional term, and
-    //     any residual clock offset slowly runs the audio away from the video (measured:
-    //     integral railed at its 0.99 floor, buffer parked low, sync drifting). It is
-    //     inaudible: it IS the correct playback rate. Clamp it wide (±3%).
-    //   * The PROPORTIONAL term is the transient buffer correction and IS audible as
-    //     pitch wander. Clamp IT tight (±1.5%) around the integral.
-    // So steady-state pitch = the correct (inaudible) clock compensation, while the
-    // audible excursion stays ≤1.5%. Gentle gains so it converges without overshoot.
-    m_state.m_streamAudioResampleRatio = qBound(0.97,
-        m_state.m_streamAudioResampleRatio + 0.0008 * gainScale * err, 1.03);
-    const double proportional = qBound(-0.015, 0.05 * gainScale * err, 0.015);
-    const double ratio = qBound(0.94, m_state.m_streamAudioResampleRatio + proportional, 1.06);
+    m_state.m_streamAudioResampleRatio = qBound(0.95,
+        m_state.m_streamAudioResampleRatio + 0.0004 * err, 1.05);
+    const double proportional = qBound(-0.015, 0.03 * err, 0.015);
+    const double ratio = qBound(0.93, m_state.m_streamAudioResampleRatio + proportional, 1.07);
 
     // Diagnostic: measure the wander = the swing of the applied audio ratio (pitch).
     {

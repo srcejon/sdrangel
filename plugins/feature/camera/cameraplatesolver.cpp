@@ -21825,7 +21825,11 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
                 // beats the lens-less degenerate alias the broad search would otherwise settle on.
                 // Narrow guided solves have no such degeneracy and DO need precise Az/El here
                 // (locking regressed galaxy-m51-2), so the lock is wide-only.
-                const bool lockSeedDirection = isWidePlateSolveContext(settings);
+                // WS2 payoff: the wide-fisheye Az/El pin is a band-aid for the near-zenith Az<->Roll
+                // ULP basin flip. With the rotation-vector LM the orientation is well-conditioned at
+                // zenith, so the pin is no longer needed there -- let the LM refine Az/El freely. The
+                // pin stays in force on the legacy (rot-vec off) path.
+                const bool lockSeedDirection = isWidePlateSolveContext(settings) && !rotVecLmEnabled();
                 const std::array<bool, PlateSolveLmParameterCount> seedActiveParameters = {{
                     !lockSeedDirection,          // PlateSolveLmAzimuth (wide: pinned to entered direction)
                     !lockSeedDirection,          // PlateSolveLmElevation (wide: pinned to entered direction)

@@ -2383,3 +2383,17 @@ Default-OFF keeps the committed behaviour safe at 48/48.
 **Process note:** long (~20 min) `run_in_background` corpus runs get reaped by the environment (overnight
 sleep / idle) -- run fast corpora (REAL ~3 min, FISH4 ~30 s) foreground (synchronous, no reap) and
 poll/chunk the long ones instead of passively waiting on one detached run.
+
+### WS2 payoff — Az/El pin retired under rot-vec (2026-06-21)
+
+Gated the wide-fisheye Az/El pin on `!rotVecLmEnabled()` (`lockSeedDirection =
+isWidePlateSolveContext(settings) && !rotVecLmEnabled()`, cameraplatesolver.cpp ~21828): with the
+rotation-vector LM the orientation is well-conditioned at zenith, so the pin (a band-aid for the
+Az<->Roll ULP basin flip) is dropped on the rot-vec path; the legacy (rot-vec off) path keeps it.
+Validated (rot-vec ON, pin removed): **REAL 48/48 with wide-7/8/9 solving at the correct sub-pixel
+poses with Az/El FREE** -- wide-7 Az=52.25/El=88.82/Roll=94.40/rms0.95/221, wide-8
+52.90/88.80/95.06/rms1.05/207, wide-9 53.50/88.80/94.77/rms0.95/205. FISH4 unchanged at 40 (the pin
+never affected the 039/044 marginals). Since WS1a makes the GUI link the same solver object, this
+harness result is the GUI's behaviour -- the pin is functionally retired. rot-vec stays default-OFF
+until the default-flip (pending: accept/resolve FISH4 039/044, finish RAND2(148) ON). Once flipped,
+the seed-anchored-grid / clamped-pp band-aids can likely follow the same way.

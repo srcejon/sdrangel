@@ -674,6 +674,7 @@ bool CameraGUI::handleMessage(const Message& message)
         settingsUI()->pipelineFpsLabel->setText(
             m_lastPipelineFps > 0.0 ? QString::number(m_lastPipelineFps, 'f', 1) : "-");
         updateVideoPreRecordBufferMemoryLabel();
+        updateScaleControls();
         m_lastPlateSolved = report.isPlateSolved();
         m_lastPlateSolvedMatches = report.getPlateSolvedMatches();
         m_lastPlateSolveDetectedStarsConsidered = report.getPlateSolveDetectedStarsConsidered();
@@ -3123,13 +3124,64 @@ void CameraGUI::updateHdrStackingControls()
 
 void CameraGUI::updateScaleControls()
 {
+    if (!m_settingsDialog) {
+        return;
+    }
+
     const bool enabled = m_settings.m_scaleEnabled;
     settingsUI()->scaleWidthLabel->setEnabled(enabled);
     settingsUI()->scaleWidthSpin->setEnabled(enabled);
+    settingsUI()->scaleOutputWidthLabel->setEnabled(enabled);
     settingsUI()->scaleHeightLabel->setEnabled(enabled);
     settingsUI()->scaleHeightSpin->setEnabled(enabled);
+    settingsUI()->scaleOutputHeightLabel->setEnabled(enabled);
     settingsUI()->scaleKeepAspectRatioLabel->setEnabled(enabled);
     settingsUI()->scaleKeepAspectRatioCheck->setEnabled(enabled);
+
+    int inputWidth = m_settings.m_cameraNumX > 0 ? m_settings.m_cameraNumX : m_settings.m_resolutionWidth;
+    int inputHeight = m_settings.m_cameraNumY > 0 ? m_settings.m_cameraNumY : m_settings.m_resolutionHeight;
+    if ((inputWidth <= 0 || inputHeight <= 0) && !m_settings.m_scaleEnabled && !m_lastImage.isNull())
+    {
+        inputWidth = m_lastImage.width();
+        inputHeight = m_lastImage.height();
+    }
+
+    QSize outputSize;
+    if ((inputWidth > 0) && (inputHeight > 0))
+    {
+        outputSize = QSize(inputWidth, inputHeight);
+        if (m_settings.m_scaleEnabled && (m_settings.m_scaleWidth > 0) && (m_settings.m_scaleHeight > 0))
+        {
+            if (m_settings.m_scaleKeepAspectRatio)
+            {
+                const double scale = std::min(
+                    static_cast<double>(m_settings.m_scaleWidth) / static_cast<double>(inputWidth),
+                    static_cast<double>(m_settings.m_scaleHeight) / static_cast<double>(inputHeight));
+                outputSize = QSize(
+                    std::max(1, static_cast<int>(std::lround(static_cast<double>(inputWidth) * scale))),
+                    std::max(1, static_cast<int>(std::lround(static_cast<double>(inputHeight) * scale))));
+            }
+            else
+            {
+                outputSize = QSize(m_settings.m_scaleWidth, m_settings.m_scaleHeight);
+            }
+        }
+    }
+    else if (m_settings.m_scaleEnabled && (m_settings.m_scaleWidth > 0) && (m_settings.m_scaleHeight > 0) && !m_settings.m_scaleKeepAspectRatio)
+    {
+        outputSize = QSize(m_settings.m_scaleWidth, m_settings.m_scaleHeight);
+    }
+
+    if (outputSize.isValid())
+    {
+        settingsUI()->scaleOutputWidthLabel->setText(tr("Output: %1 px").arg(outputSize.width()));
+        settingsUI()->scaleOutputHeightLabel->setText(tr("Output: %1 px").arg(outputSize.height()));
+    }
+    else
+    {
+        settingsUI()->scaleOutputWidthLabel->setText(tr("Output: -"));
+        settingsUI()->scaleOutputHeightLabel->setText(tr("Output: -"));
+    }
 }
 
 bool CameraGUI::isHdrStackingActiveForQt() const
@@ -5405,6 +5457,7 @@ void CameraGUI::on_resolutionCombo_currentIndexChanged(int index)
             m_settings.m_resolutionHeight = height;
             updateFrameRateControlForResolution(settingsUI()->resolutionCombo->currentText());
             updateVideoPreRecordBufferMemoryLabel();
+            updateScaleControls();
             applySettings({"resolutionWidth", "resolutionHeight", "framesPerSecond"});
         }
     }
@@ -5630,6 +5683,7 @@ void CameraGUI::on_cameraBinXSpin_valueChanged(int value)
 {
     m_settings.m_cameraBinX = value;
     updateCameraSubframeControls();
+    updateScaleControls();
     applySettings({"cameraBinX", "cameraNumX", "cameraStartX"});
 }
 
@@ -5637,6 +5691,7 @@ void CameraGUI::on_cameraBinYSpin_valueChanged(int value)
 {
     m_settings.m_cameraBinY = value;
     updateCameraSubframeControls();
+    updateScaleControls();
     applySettings({"cameraBinY", "cameraNumY", "cameraStartY"});
 }
 
@@ -5644,6 +5699,7 @@ void CameraGUI::on_cameraNumXSpin_valueChanged(int value)
 {
     m_settings.m_cameraNumX = value;
     updateCameraSubframeControls();
+    updateScaleControls();
     applySettings({"cameraNumX", "cameraStartX"});
 }
 
@@ -5651,6 +5707,7 @@ void CameraGUI::on_cameraNumYSpin_valueChanged(int value)
 {
     m_settings.m_cameraNumY = value;
     updateCameraSubframeControls();
+    updateScaleControls();
     applySettings({"cameraNumY", "cameraStartY"});
 }
 
@@ -6228,18 +6285,21 @@ void CameraGUI::on_scaleEnabledCheck_toggled(bool checked)
 void CameraGUI::on_scaleWidthSpin_valueChanged(int value)
 {
     m_settings.m_scaleWidth = value;
+    updateScaleControls();
     applySetting("scaleWidth");
 }
 
 void CameraGUI::on_scaleHeightSpin_valueChanged(int value)
 {
     m_settings.m_scaleHeight = value;
+    updateScaleControls();
     applySetting("scaleHeight");
 }
 
 void CameraGUI::on_scaleKeepAspectRatioCheck_toggled(bool checked)
 {
     m_settings.m_scaleKeepAspectRatio = checked;
+    updateScaleControls();
     applySetting("scaleKeepAspectRatio");
 }
 

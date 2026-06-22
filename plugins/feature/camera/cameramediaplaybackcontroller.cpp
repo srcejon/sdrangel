@@ -955,9 +955,18 @@ int CameraMediaPlaybackController::takeResampledStreamPlaybackAudio(QByteArray& 
     const double targetFrames = qMax(1.0, static_cast<double>(audioSampleRate) * qMax(0.05, targetBufferSeconds));
     const double err = (static_cast<double>(availFrames) - targetFrames) / targetFrames;
     const double gainScale = qMin(1.0, std::abs(err) / deadband);
-    m_state.m_streamAudioResampleRatio = qBound(0.90,
-        m_state.m_streamAudioResampleRatio + 0.002 * gainScale * err, 1.10);
-    const double ratio = qBound(0.88, m_state.m_streamAudioResampleRatio + 0.10 * gainScale * err, 1.12);
+    // TIGHT pitch authority. The applied ratio IS the audio pitch, so a servo with a
+    // wide clamp (the old ±12%) regulates the ~1.9 s buffer by audibly slewing pitch,
+    // and with integral windup it limit-cycles (measured: pitch walking its ±12%
+    // rails over ~40 s — the "wander"). The buffer is huge relative to the produce-
+    // rate variation (the present rate is held to ~±1.5%), so it can absorb that with
+    // almost no pitch change. Cap the applied pitch to ~±2% and the steady-state
+    // integral (the true source/soundcard clock ratio, <0.5% drift) to ±1%; gentler
+    // gains so it converges instead of overshooting. A genuine underrun is handled by
+    // a brief rebuffer (+ the on-resume trim), NOT by a big pitch dive.
+    m_state.m_streamAudioResampleRatio = qBound(0.990,
+        m_state.m_streamAudioResampleRatio + 0.001 * gainScale * err, 1.010);
+    const double ratio = qBound(0.980, m_state.m_streamAudioResampleRatio + 0.05 * gainScale * err, 1.020);
 
     // Diagnostic: measure the wander = the swing of the applied audio ratio (pitch).
     {

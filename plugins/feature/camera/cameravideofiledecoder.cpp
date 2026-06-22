@@ -584,38 +584,86 @@ bool CameraVideoFileDecoder::openVideoDecoder(QString& errorMessage)
     return false;
 #else
     AVStream *stream = m_formatContext->streams[m_videoStreamIndex];
-    const AVCodec *codec = avcodec_find_decoder(stream->codecpar->codec_id);
+    const AVCodecID codecId = stream->codecpar->codec_id;
+
+    // Prefer an NVIDIA NVDEC/CUVID hardware decoder when available: software 1080p
+    // H.264 decode is ~24 ms/frame here, marginal for 30 fps live streams. The CUVID
+    // decoders decode on the GPU and return NV12 system-memory frames, so no extra
+    // hw-frame handling is needed (convertFrameToImage rebuilds its sws converter for
+    // the frame's format). Fall back to software if the hw decoder is absent (an
+    // FFmpeg build without cuvid) or fails to open (unsupported profile/stream).
+    const char *hwDecoderName = nullptr;
+    if (codecId == AV_CODEC_ID_H264) {
+        hwDecoderName = "h264_cuvid";
+    } else if (codecId == AV_CODEC_ID_HEVC) {
+        hwDecoderName = "hevc_cuvid";
+    }
+
+    bool usingHardware = false;
+    const AVCodec *codec = nullptr;
+    if (hwDecoderName) {
+        codec = avcodec_find_decoder_by_name(hwDecoderName);
+        usingHardware = (codec != nullptr);
+    }
+    if (!codec) {
+        codec = avcodec_find_decoder(codecId);
+    }
     if (!codec)
     {
         errorMessage = QStringLiteral("No decoder is available for the video file stream");
         return false;
     }
 
-    m_videoCodecContext = avcodec_alloc_context3(codec);
-    if (!m_videoCodecContext)
+    for (;;)
     {
-        errorMessage = QStringLiteral("Cannot allocate video file decoder context");
-        return false;
-    }
+        m_videoCodecContext = avcodec_alloc_context3(codec);
+        if (!m_videoCodecContext)
+        {
+            errorMessage = QStringLiteral("Cannot allocate video file decoder context");
+            return false;
+        }
 
-    int ret = avcodec_parameters_to_context(m_videoCodecContext, stream->codecpar);
-    if (ret < 0)
-    {
-        errorMessage = QStringLiteral("Cannot copy video file decoder parameters: %1").arg(CameraFFmpegAudio::avErrorString(ret));
-        return false;
-    }
+        int ret = avcodec_parameters_to_context(m_videoCodecContext, stream->codecpar);
+        if (ret < 0)
+        {
+            errorMessage = QStringLiteral("Cannot copy video file decoder parameters: %1").arg(CameraFFmpegAudio::avErrorString(ret));
+            avcodec_free_context(&m_videoCodecContext);
+            return false;
+        }
 
-    m_videoCodecContext->thread_count = 0;
-    m_videoCodecContext->thread_type = FF_THREAD_FRAME | FF_THREAD_SLICE;
+        // Threading applies to the software decoder only; CUVID runs on the GPU.
+        if (!usingHardware)
+        {
+            m_videoCodecContext->thread_count = 0;
+            m_videoCodecContext->thread_type = FF_THREAD_FRAME | FF_THREAD_SLICE;
+        }
 
-    ret = avcodec_open2(m_videoCodecContext, codec, nullptr);
-    if (ret < 0)
-    {
+        ret = avcodec_open2(m_videoCodecContext, codec, nullptr);
+        if (ret >= 0)
+        {
+            qDebug() << "CameraVideoFileDecoder: video decoder" << codec->name
+                     << (usingHardware ? "(NVDEC hardware)" : "(software)");
+            return true;
+        }
+
+        avcodec_free_context(&m_videoCodecContext);
+        if (usingHardware)
+        {
+            qWarning() << "CameraVideoFileDecoder: hardware decoder" << hwDecoderName
+                       << "failed to open; falling back to software:"
+                       << CameraFFmpegAudio::avErrorString(ret);
+            codec = avcodec_find_decoder(codecId);
+            usingHardware = false;
+            if (!codec)
+            {
+                errorMessage = QStringLiteral("No decoder is available for the video file stream");
+                return false;
+            }
+            continue;
+        }
         errorMessage = QStringLiteral("Cannot open video file decoder: %1").arg(CameraFFmpegAudio::avErrorString(ret));
         return false;
     }
-
-    return true;
 #endif
 }
 

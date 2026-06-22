@@ -82,6 +82,16 @@ void CameraDiffDetector::applySettings(const CameraSettings& settings, const QLi
 
     CameraDetectionStage::applySettings(settings, settingsKeys, force);
 
+    if (!m_captureActive
+        && settingsKeys.contains("diffMask")
+        && !m_settings.m_diffMask
+        && m_lastInputFrame.hasImageData())
+    {
+        CameraPipelineFramePtr frame(new CameraPipelineFrame(m_lastInputFrame));
+        frame->m_manualPreviewFrame = true;
+        submitFrame(frame);
+    }
+
     if (force
         || settingsKeys.contains("diffMask")
         || settingsKeys.contains("diffThreshold")

@@ -224,6 +224,10 @@ void CameraSettings::resetToDefaults()
     m_stackDisplayMode = StackDisplayStacked;
     m_stackDisplayFrameIndex = 0;
     m_stackRejectBadFrames = false;
+    m_scaleEnabled = false;
+    m_scaleWidth = 0;
+    m_scaleHeight = 0;
+    m_scaleKeepAspectRatio = true;
     m_stackDarkFileName.clear();
     m_stackFlatFileName.clear();
     m_stackBiasFileName.clear();
@@ -672,6 +676,10 @@ QByteArray CameraSettings::serialize() const
     s.writeDouble(262, m_streamBufferingSeconds);
     s.writeBool(263, m_showStarDetectionBoxes);
     s.writeBool(264, m_plateSolveLabelHideSyntheticNames);
+    s.writeBool(265, m_scaleEnabled);
+    s.writeS32(266, m_scaleWidth);
+    s.writeS32(267, m_scaleHeight);
+    s.writeBool(268, m_scaleKeepAspectRatio);
 
     return s.final();
 }
@@ -1144,6 +1152,10 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readDouble(262, &m_streamBufferingSeconds, 1.0);
         d.readBool(263, &m_showStarDetectionBoxes, true);
         d.readBool(264, &m_plateSolveLabelHideSyntheticNames, false);
+        d.readBool(265, &m_scaleEnabled, false);
+        d.readS32(266, &m_scaleWidth, 0);
+        d.readS32(267, &m_scaleHeight, 0);
+        d.readBool(268, &m_scaleKeepAspectRatio, true);
         if (isStreamCamera() && m_streamUrl.isEmpty()) {
             m_streamUrl = m_videoFileCameraPath;
         }
@@ -1187,6 +1199,8 @@ bool CameraSettings::deserialize(const QByteArray& data)
             exposureTimeMs = std::max(m_minExposureTimeMs, exposureTimeMs);
         }
         m_stackAlignmentMethod = qBound(StackAlignmentNone, m_stackAlignmentMethod, StackAlignmentStarCentroidMatching);
+        m_scaleWidth = qBound(0, m_scaleWidth, 65535);
+        m_scaleHeight = qBound(0, m_scaleHeight, 65535);
         m_keogramDirection = static_cast<KeogramDirection>(qBound(0, static_cast<int>(m_keogramDirection), 1));
         m_keogramDayMode = static_cast<KeogramDayMode>(qBound(0, static_cast<int>(m_keogramDayMode), 1));
         m_keogramSamplePeriodMinutes = qBound(1, m_keogramSamplePeriodMinutes, 1440);
@@ -1542,6 +1556,18 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     }
     if (settingsKeys.contains("stackRejectBadFrames")) {
         m_stackRejectBadFrames = settings.m_stackRejectBadFrames;
+    }
+    if (settingsKeys.contains("scaleEnabled")) {
+        m_scaleEnabled = settings.m_scaleEnabled;
+    }
+    if (settingsKeys.contains("scaleWidth")) {
+        m_scaleWidth = qBound(0, settings.m_scaleWidth, 65535);
+    }
+    if (settingsKeys.contains("scaleHeight")) {
+        m_scaleHeight = qBound(0, settings.m_scaleHeight, 65535);
+    }
+    if (settingsKeys.contains("scaleKeepAspectRatio")) {
+        m_scaleKeepAspectRatio = settings.m_scaleKeepAspectRatio;
     }
     if (settingsKeys.contains("stackDarkFileName")) {
         m_stackDarkFileName = settings.m_stackDarkFileName;
@@ -2329,6 +2355,18 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("stackRejectBadFrames") || force) {
         ostr << " m_stackRejectBadFrames: " << m_stackRejectBadFrames;
+    }
+    if (settingsKeys.contains("scaleEnabled") || force) {
+        ostr << " m_scaleEnabled: " << m_scaleEnabled;
+    }
+    if (settingsKeys.contains("scaleWidth") || force) {
+        ostr << " m_scaleWidth: " << m_scaleWidth;
+    }
+    if (settingsKeys.contains("scaleHeight") || force) {
+        ostr << " m_scaleHeight: " << m_scaleHeight;
+    }
+    if (settingsKeys.contains("scaleKeepAspectRatio") || force) {
+        ostr << " m_scaleKeepAspectRatio: " << m_scaleKeepAspectRatio;
     }
     if (settingsKeys.contains("stackDarkFileName") || force) {
         ostr << " m_stackDarkFileName: " << m_stackDarkFileName.toStdString();

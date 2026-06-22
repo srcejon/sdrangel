@@ -441,6 +441,10 @@ struct CameraSettings
     StackDisplayMode m_stackDisplayMode;
     int m_stackDisplayFrameIndex;
     bool m_stackRejectBadFrames;
+    bool m_scaleEnabled;           ///< Scale calibrated/stacked image output after stacking
+    int m_scaleWidth;              ///< Scaled output width in pixels; <= 0 disables scaling
+    int m_scaleHeight;             ///< Scaled output height in pixels; <= 0 disables scaling
+    bool m_scaleKeepAspectRatio;   ///< Preserve aspect ratio within the requested scale size
     QString m_stackDarkFileName;
     QString m_stackFlatFileName;
     QString m_stackBiasFileName;

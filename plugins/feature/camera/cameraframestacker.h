@@ -156,6 +156,7 @@ private:
     [[nodiscard]] bool applyDebevecFusionCuda(const std::vector<const HdrFrameSample *>& sortedSamples, const std::vector<float>& exposureTimesSeconds, cv::cuda::GpuMat& tonemappedRgbGpu);
     void setCudaBgrOutputFromRgbGpu(CameraPipelineFrame& inputFrame, const cv::cuda::GpuMat& rgbGpu, int outputDepth = CV_8U);
     bool setCudaBgrOutputFromRgbMat(CameraPipelineFrame& inputFrame, const cv::Mat& rgbMat);
+    [[nodiscard]] bool applyOutputScalingCuda(CameraPipelineFrame& frame, const QSize& targetSize);
 #endif
     static cv::Mat imageToWorkingMat(const QImage& input, bool& highBitDepthInput);
     static QImage workingMatToImage(const cv::Mat& frameMat);
@@ -170,6 +171,8 @@ private:
     std::vector<size_t> selectedSharpFrameIndices() const;
     static double medianQualityValue(const std::deque<StackFrameQuality>& qualities, double StackFrameQuality::*member);
     bool canPassThroughFrame(const CameraPipelineFrame& inputFrame) const;
+    [[nodiscard]] QSize scaledOutputSize(const QSize& inputSize) const;
+    [[nodiscard]] bool applyOutputScaling(CameraPipelineFrame& frame);
     [[nodiscard]] bool applyFrameStacking(CameraPipelineFrame& inputFrame, QImage& outputImage, int& stackCount);
     [[nodiscard]] bool shouldRejectStackFrame(const StackFrameQuality& quality, QString& reason) const;
     [[nodiscard]] bool shouldRejectStackAlignment(const CameraPipelineFrame& inputFrame, QString& reason) const;

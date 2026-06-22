@@ -351,6 +351,18 @@ CameraSettings:
     stackRejectBadFrames:
       description: "Reject frames that are poor candidates for stacking (1 for yes, 0 for no)"
       type: integer
+    scaleEnabled:
+      description: "Scale calibrated/stacked frames after stacking (1 for yes, 0 for no)"
+      type: integer
+    scaleWidth:
+      description: "Scaled output width in pixels; 0 keeps the source width"
+      type: integer
+    scaleHeight:
+      description: "Scaled output height in pixels; 0 keeps the source height"
+      type: integer
+    scaleKeepAspectRatio:
+      description: "Fit the scaled output inside the requested size without stretching (1 for yes, 0 for no)"
+      type: integer
     stackDarkFileName:
       description: "Dark calibration frame file path"
       type: string

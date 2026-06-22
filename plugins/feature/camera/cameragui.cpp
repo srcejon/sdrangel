@@ -1680,6 +1680,11 @@ void CameraGUI::displaySettings()
     settingsUI()->stackDisplayFrameLabel->setEnabled(m_settings.m_stackDisplayMode == CameraSettings::StackDisplayHistoryFrame);
     settingsUI()->stackDisplayFrameSpin->setEnabled(m_settings.m_stackDisplayMode == CameraSettings::StackDisplayHistoryFrame);
     settingsUI()->stackRejectBadFramesCheck->setChecked(m_settings.m_stackRejectBadFrames);
+    settingsUI()->scaleEnabledCheck->setChecked(m_settings.m_scaleEnabled);
+    settingsUI()->scaleWidthSpin->setValue(m_settings.m_scaleWidth);
+    settingsUI()->scaleHeightSpin->setValue(m_settings.m_scaleHeight);
+    settingsUI()->scaleKeepAspectRatioCheck->setChecked(m_settings.m_scaleKeepAspectRatio);
+    updateScaleControls();
     settingsUI()->stackDarkFileEdit->setText(m_settings.m_stackDarkFileName);
     settingsUI()->stackFlatFileEdit->setText(m_settings.m_stackFlatFileName);
     settingsUI()->stackBiasFileEdit->setText(m_settings.m_stackBiasFileName);
@@ -2508,6 +2513,10 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->stackDisplayFrameSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_stackDisplayFrameSpin_valueChanged);
     QObject::connect(settingsUI()->stackDeleteFrameButton, &QToolButton::clicked, this, &CameraGUI::on_stackDeleteFrameButton_clicked);
     QObject::connect(settingsUI()->stackRejectBadFramesCheck, &QCheckBox::toggled, this, &CameraGUI::on_stackRejectBadFramesCheck_toggled);
+    QObject::connect(settingsUI()->scaleEnabledCheck, &QCheckBox::toggled, this, &CameraGUI::on_scaleEnabledCheck_toggled);
+    QObject::connect(settingsUI()->scaleWidthSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_scaleWidthSpin_valueChanged);
+    QObject::connect(settingsUI()->scaleHeightSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_scaleHeightSpin_valueChanged);
+    QObject::connect(settingsUI()->scaleKeepAspectRatioCheck, &QCheckBox::toggled, this, &CameraGUI::on_scaleKeepAspectRatioCheck_toggled);
     QObject::connect(settingsUI()->stackDarkFileEdit, &QLineEdit::editingFinished, this, &CameraGUI::on_stackDarkFileEdit_editingFinished);
     QObject::connect(settingsUI()->stackDarkFileButton, &QToolButton::clicked, this, &CameraGUI::on_stackDarkFileButton_clicked);
     QObject::connect(settingsUI()->stackFlatFileEdit, &QLineEdit::editingFinished, this, &CameraGUI::on_stackFlatFileEdit_editingFinished);
@@ -3110,6 +3119,17 @@ void CameraGUI::updateHdrStackingControls()
         sliders[exposureIndex]->setEnabled(hdrControlsEnabled);
         spins[exposureIndex]->setEnabled(hdrControlsEnabled);
     }
+}
+
+void CameraGUI::updateScaleControls()
+{
+    const bool enabled = m_settings.m_scaleEnabled;
+    settingsUI()->scaleWidthLabel->setEnabled(enabled);
+    settingsUI()->scaleWidthSpin->setEnabled(enabled);
+    settingsUI()->scaleHeightLabel->setEnabled(enabled);
+    settingsUI()->scaleHeightSpin->setEnabled(enabled);
+    settingsUI()->scaleKeepAspectRatioLabel->setEnabled(enabled);
+    settingsUI()->scaleKeepAspectRatioCheck->setEnabled(enabled);
 }
 
 bool CameraGUI::isHdrStackingActiveForQt() const
@@ -6196,6 +6216,31 @@ void CameraGUI::on_stackRejectBadFramesCheck_toggled(bool checked)
 {
     m_settings.m_stackRejectBadFrames = checked;
     applySetting("stackRejectBadFrames");
+}
+
+void CameraGUI::on_scaleEnabledCheck_toggled(bool checked)
+{
+    m_settings.m_scaleEnabled = checked;
+    updateScaleControls();
+    applySetting("scaleEnabled");
+}
+
+void CameraGUI::on_scaleWidthSpin_valueChanged(int value)
+{
+    m_settings.m_scaleWidth = value;
+    applySetting("scaleWidth");
+}
+
+void CameraGUI::on_scaleHeightSpin_valueChanged(int value)
+{
+    m_settings.m_scaleHeight = value;
+    applySetting("scaleHeight");
+}
+
+void CameraGUI::on_scaleKeepAspectRatioCheck_toggled(bool checked)
+{
+    m_settings.m_scaleKeepAspectRatio = checked;
+    applySetting("scaleKeepAspectRatio");
 }
 
 void CameraGUI::on_stackDarkFileEdit_editingFinished()

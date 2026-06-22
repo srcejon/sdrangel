@@ -1874,6 +1874,95 @@
          </layout>
         </widget>
        </item>
+       <item alignment="Qt::AlignmentFlag::AlignTop">
+        <widget class="QGroupBox" name="scaleGroup">
+         <property name="sizePolicy">
+          <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
+           <horstretch>0</horstretch>
+           <verstretch>0</verstretch>
+          </sizepolicy>
+         </property>
+         <property name="title">
+          <string>Scaling</string>
+         </property>
+         <layout class="QFormLayout" name="formLayout_scaling">
+          <item row="0" column="0">
+           <widget class="QLabel" name="scaleEnabledLabel">
+            <property name="text">
+             <string>Output scale</string>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="1">
+           <widget class="QCheckBox" name="scaleEnabledCheck">
+            <property name="toolTip">
+             <string>Scale calibrated and stacked frames before downstream filtering, detection, display and recording</string>
+            </property>
+            <property name="text">
+             <string>Enable scaling</string>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="0">
+           <widget class="QLabel" name="scaleWidthLabel">
+            <property name="text">
+             <string>Width</string>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="1">
+           <widget class="QSpinBox" name="scaleWidthSpin">
+            <property name="toolTip">
+             <string>Scaled output width in pixels; 0 keeps the source width</string>
+            </property>
+            <property name="suffix">
+             <string> px</string>
+            </property>
+            <property name="maximum">
+             <number>65535</number>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="0">
+           <widget class="QLabel" name="scaleHeightLabel">
+            <property name="text">
+             <string>Height</string>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="1">
+           <widget class="QSpinBox" name="scaleHeightSpin">
+            <property name="toolTip">
+             <string>Scaled output height in pixels; 0 keeps the source height</string>
+            </property>
+            <property name="suffix">
+             <string> px</string>
+            </property>
+            <property name="maximum">
+             <number>65535</number>
+            </property>
+           </widget>
+          </item>
+          <item row="3" column="0">
+           <widget class="QLabel" name="scaleKeepAspectRatioLabel">
+            <property name="text">
+             <string>Aspect ratio</string>
+            </property>
+           </widget>
+          </item>
+          <item row="3" column="1">
+           <widget class="QCheckBox" name="scaleKeepAspectRatioCheck">
+            <property name="toolTip">
+             <string>Fit the scaled output inside the requested size without stretching the image</string>
+            </property>
+            <property name="text">
+             <string>Keep aspect ratio</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
        <item>
         <spacer name="verticalSpacerStacking">
          <property name="orientation">

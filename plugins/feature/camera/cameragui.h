@@ -370,6 +370,7 @@ private:
     void updateExposureControls();
     void updateHdrExposureControls();
     void updateHdrStackingControls();
+    void updateScaleControls();
     void updateVideoFileControls();
     void updateVideoPreRecordBufferMemoryLabel();
     void submitQtImageFrame(const QImage& image, qint64 playbackPositionMs = -1, int playbackFrameNumber = -1);
@@ -563,6 +564,10 @@ private slots:
     void on_stackDisplayFrameSpin_valueChanged(int value);
     void on_stackDeleteFrameButton_clicked();
     void on_stackRejectBadFramesCheck_toggled(bool checked);
+    void on_scaleEnabledCheck_toggled(bool checked);
+    void on_scaleWidthSpin_valueChanged(int value);
+    void on_scaleHeightSpin_valueChanged(int value);
+    void on_scaleKeepAspectRatioCheck_toggled(bool checked);
     void on_stackDarkFileEdit_editingFinished();
     void on_stackDarkFileButton_clicked();
     void on_stackFlatFileEdit_editingFinished();

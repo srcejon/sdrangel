@@ -778,6 +778,10 @@ void CameraFrameStacker::applySettings(const CameraSettings& settings, const QLi
 
     const bool displayChanged = settingsKeys.contains("stackDisplayMode")
         || settingsKeys.contains("stackDisplayFrameIndex");
+    const bool scaleChanged = settingsKeys.contains("scaleEnabled")
+        || settingsKeys.contains("scaleWidth")
+        || settingsKeys.contains("scaleHeight")
+        || settingsKeys.contains("scaleKeepAspectRatio");
     const bool sourceChanged = force
         || settingsKeys.contains("cameraId")
         || settingsKeys.contains("cameraProtocol")
@@ -825,7 +829,7 @@ void CameraFrameStacker::applySettings(const CameraSettings& settings, const QLi
         trimFrameHistoryToCurrentLimit();
     }
 
-    if (!sourceChanged && displayChanged) {
+    if (!sourceChanged && (displayChanged || scaleChanged)) {
         emitHistoryPreviewFrame();
     }
 }
@@ -929,6 +933,10 @@ void CameraFrameStacker::processNewFrame(const CameraPipelineFramePtr& frame)
     if (passThroughFrame)
     {
         frame->m_stack.m_count = 1;
+        if (!applyOutputScaling(*frame)) {
+            return;
+        }
+        m_lastFrameTemplate.reset(new CameraPipelineFrame(*frame));
         if (m_nextStage && Camera::acceptsPipelineFrame(frame, m_captureActive, m_captureEpoch)) {
             m_nextStage->submitFrame(frame);
         }
@@ -960,6 +968,9 @@ void CameraFrameStacker::processNewFrame(const CameraPipelineFramePtr& frame)
     }
     frame->m_bayerPattern = CameraPipelineFrame::BayerNone;
     frame->m_stack.m_count = std::max(1, stackCount);
+    if (!applyOutputScaling(*frame)) {
+        return;
+    }
     m_lastFrameTemplate.reset(new CameraPipelineFrame(*frame));
 
     if (m_nextStage && Camera::acceptsPipelineFrame(frame, m_captureActive, m_captureEpoch)) {
@@ -975,6 +986,100 @@ bool CameraFrameStacker::canPassThroughFrame(const CameraPipelineFrame& inputFra
 
     return !stackEnabled && inputFrame.hasImageData();
 }
+
+QSize CameraFrameStacker::scaledOutputSize(const QSize& inputSize) const
+{
+    if (!m_settings.m_scaleEnabled
+        || inputSize.isEmpty()
+        || (m_settings.m_scaleWidth <= 0)
+        || (m_settings.m_scaleHeight <= 0))
+    {
+        return inputSize;
+    }
+
+    int targetWidth = qBound(1, m_settings.m_scaleWidth, 65535);
+    int targetHeight = qBound(1, m_settings.m_scaleHeight, 65535);
+
+    if (m_settings.m_scaleKeepAspectRatio)
+    {
+        const double scale = std::min(
+            static_cast<double>(targetWidth) / static_cast<double>(inputSize.width()),
+            static_cast<double>(targetHeight) / static_cast<double>(inputSize.height()));
+        targetWidth = std::max(1, static_cast<int>(std::lround(static_cast<double>(inputSize.width()) * scale)));
+        targetHeight = std::max(1, static_cast<int>(std::lround(static_cast<double>(inputSize.height()) * scale)));
+    }
+
+    return QSize(targetWidth, targetHeight);
+}
+
+bool CameraFrameStacker::applyOutputScaling(CameraPipelineFrame& frame)
+{
+    const QSize inputSize = frame.imageSize();
+    const QSize targetSize = scaledOutputSize(inputSize);
+    if (targetSize == inputSize) {
+        return true;
+    }
+    if (targetSize.isEmpty()) {
+        return false;
+    }
+
+#ifdef CAMERA_OPENCV_CUDA_STACKING
+    if (canUseCudaStacking() && applyOutputScalingCuda(frame, targetSize)) {
+        return true;
+    }
+#endif
+
+    if (!frame.ensureCpuImageFromCuda() || frame.m_image.isNull()) {
+        return false;
+    }
+
+    bool highBitDepthInput = false;
+    const cv::Mat inputMat = imageToWorkingMat(frame.m_image, highBitDepthInput);
+    Q_UNUSED(highBitDepthInput);
+    if (inputMat.empty()) {
+        return false;
+    }
+
+    cv::Mat scaledMat;
+    const bool downscale = (targetSize.width() < inputMat.cols) || (targetSize.height() < inputMat.rows);
+    const int interpolation = downscale ? cv::INTER_AREA : cv::INTER_CUBIC;
+    cv::resize(inputMat, scaledMat, cv::Size(targetSize.width(), targetSize.height()), 0.0, 0.0, interpolation);
+    frame.m_image = workingMatToImage(scaledMat);
+    frame.clearCudaCache();
+    return !frame.m_image.isNull();
+}
+
+#ifdef CAMERA_OPENCV_CUDA_STACKING
+bool CameraFrameStacker::applyOutputScalingCuda(CameraPipelineFrame& frame, const QSize& targetSize)
+{
+    const cv::Size targetCvSize(targetSize.width(), targetSize.height());
+    constexpr int interpolation = cv::INTER_LINEAR;
+
+    if (frame.hasCudaBgrImage())
+    {
+        cv::cuda::GpuMat scaledGpu;
+        cv::cuda::resize(frame.m_cudaBgrImage, scaledGpu, targetCvSize, 0.0, 0.0, interpolation, m_cudaStackingStream);
+        frame.m_cudaBgrImage = scaledGpu;
+        frame.m_cudaGrayImage.release();
+        frame.clearCpuImage();
+        m_cudaStackingStream.waitForCompletion();
+        return true;
+    }
+
+    if (frame.hasCudaGrayImage())
+    {
+        cv::cuda::GpuMat scaledGpu;
+        cv::cuda::resize(frame.m_cudaGrayImage, scaledGpu, targetCvSize, 0.0, 0.0, interpolation, m_cudaStackingStream);
+        frame.m_cudaGrayImage = scaledGpu;
+        frame.m_cudaBgrImage.release();
+        frame.clearCpuImage();
+        m_cudaStackingStream.waitForCompletion();
+        return true;
+    }
+
+    return false;
+}
+#endif
 
 void CameraFrameStacker::ensureHistoryThumbnails()
 {
@@ -1143,6 +1248,10 @@ void CameraFrameStacker::emitHistoryPreviewFrame()
     previewFrame->m_stack.m_count = static_cast<int>(m_stackFrameHistory.size());
     previewFrame->m_stack.m_queuedCount = 0;
     previewFrame->m_stack.m_rejectedCount = m_rejectedFrameCount;
+    if (!applyOutputScaling(*previewFrame)) {
+        return;
+    }
+    previewFrame->m_unprocessedImage = previewFrame->m_image;
     m_nextStage->submitFrame(previewFrame);
 }
 

@@ -105,29 +105,10 @@ public:
     // instead of rounding to 33 ms and drifting ~1% fast — a drift the audio
     // resampler would otherwise track as slow pitch wander.
     double m_presentResidualMs = 0.0;
-    // Free-running stream playback clock anchor. The playback clock is
-    // content_anchor + (deviceProcessedUSecs - processedAnchor), i.e. it advances with
-    // the sound card's physically-played audio (which keeps running through a feed
-    // underrun), NOT with the decoder. Anchored to the decode-derived content position
-    // at playback start and on each rebuffer resume; the resampler keeps content
-    // playing at the device rate so the mapping stays 1:1 between re-anchors.
-    bool m_streamClockAnchored = false;
-    qint64 m_streamClockAnchorContentMs = 0;
-    qint64 m_streamClockAnchorProcessedUSecs = 0;
-    // Slow, clamped, deadbanded phase correction (ms) added to the device-rate clock to null
-    // the residual crystal drift between video (device rate) and audio (resampled to source
-    // rate). Constrained so it can't perturb the present rate enough to couple into the
-    // resampler buffer servo. Reset to 0 at each (re)anchor. See updateStreamPlaybackClock.
-    double m_streamClockTrimMs = 0.0;
-    // Last audio-content-heard reference (decode-derived − sink latency) the PLL locked
-    // to. The free-running clock advances on the device (no stall), but is slowly nudged
-    // toward this accurate audio-content position each tick so video tracks what is
-    // actually HEARD (not the device's nominal crystal rate, which the resampler
-    // compensates for audio but not video — the source of the slow A/V drift).
-    // Diagnostic: heard-content reference − synced video clock, ms. Bounded means video is
-    // tracking the audio actually heard (A/V in sync); a steady ramp means the clock slope
-    // (resampler integral) is off.
-    qint64 m_streamClockPllOffsetMs = 0;
+    // Diagnostic: video frames dropped in the last second to follow the audio clock. A
+    // small steady rate is normal (source slightly faster than display); a large/growing
+    // rate means video is chronically behind audio.
+    int m_streamFramesDroppedThisSecond = 0;
     quint64 m_frameSubmitGeneration = 0;
 
     QTimer m_delayedSubmitTimer;

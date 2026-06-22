@@ -979,7 +979,8 @@ int CameraMediaPlaybackController::takeResampledStreamPlaybackAudio(QByteArray& 
                 << " (pitch " << QString::number((avg - 1.0) * 100.0, 'f', 2) << "%)"
                 << " bufFillMs " << QString::number(m_state.m_audioWanderFillMsSum / n, 'f', 0)
                 << " integral " << QString::number(m_state.m_streamAudioResampleRatio, 'f', 4)
-                << " pllOffsetMs " << m_state.m_streamClockPllOffsetMs;
+                << " framesDropped/s " << m_state.m_streamFramesDroppedThisSecond;
+            m_state.m_streamFramesDroppedThisSecond = 0;
             m_state.m_audioWanderRatioMin = 2.0;
             m_state.m_audioWanderRatioMax = 0.0;
             m_state.m_audioWanderRatioSum = 0.0;
@@ -1369,10 +1370,6 @@ bool CameraMediaPlaybackController::readQueuedVideoFileFrame(bool submitAudio)
                 QMutexLocker audioLocker(&m_state.m_streamAudioMutex);
                 m_state.m_streamAudioTrimToTargetPending = true;
             }
-            // Re-anchor the free-running playback clock now the buffers are healthy and
-            // presentation is about to (re)start. The device kept playing (silence) while
-            // we were paused, so this re-aligns content to the current device clock.
-            anchorStreamPlaybackClock();
         }
         m_state.m_streamRebuffering = false;
     }
@@ -1380,6 +1377,36 @@ bool CameraMediaPlaybackController::readQueuedVideoFileFrame(bool submitAudio)
     CameraMediaPlaybackState::DecodedFrame decodedFrame;
     if (!takeDecodedVideoFileFrame(decodedFrame)) {
         return false;
+    }
+
+    // Drop late frames to follow the audio clock (the ffplay/VLC model). If the frame we
+    // took sits well behind the audio-heard position, video is behind audio: discard it and
+    // take the next, catching up by DROPPING rather than fast-forwarding the display. Bounded
+    // per tick, and we stop as soon as the queue would be emptied — we never starve the
+    // cushion chasing, and a persistently empty queue trips the normal rebuffer path instead.
+    if (m_settings->isStreamCamera() && (m_state.m_basePositionMs >= 0)
+        && decodedFrame.m_errorMessage.isEmpty() && !decodedFrame.m_eof && !decodedFrame.m_image.isNull())
+    {
+        const qint64 clockMs = videoFilePlaybackClockMs();
+        const qint64 lateThresholdMs =
+            static_cast<qint64>(std::llround(1.5 * qMax(1.0, videoFileExactFrameIntervalMs())));
+        int dropped = 0;
+        static constexpr int maxDropPerTick = 8;
+        while ((dropped < maxDropPerTick)
+               && (decodedFrame.m_positionMs >= 0)
+               && (clockMs - decodedFrame.m_positionMs > lateThresholdMs))
+        {
+            CameraMediaPlaybackState::DecodedFrame next;
+            if (!takeDecodedVideoFileFrame(next)) {
+                break;                       // nothing else queued — show this one, don't starve
+            }
+            decodedFrame = next;
+            ++dropped;
+            if (!decodedFrame.m_errorMessage.isEmpty() || decodedFrame.m_eof || decodedFrame.m_image.isNull()) {
+                break;                       // let the eof/error handlers below deal with it
+            }
+        }
+        m_state.m_streamFramesDroppedThisSecond += dropped;
     }
 
     if (!decodedFrame.m_errorMessage.isEmpty())
@@ -1645,7 +1672,6 @@ void CameraMediaPlaybackController::resetVideoFilePlaybackSchedule()
     m_state.m_lastFramePtsMs = -1;
     m_state.m_lastDecodeMs = 0;
     m_state.m_presentResidualMs = 0.0;
-    m_state.m_streamClockAnchored = false;
     m_state.m_streamRebuffering = false;
 }
 
@@ -1656,55 +1682,25 @@ qint64 CameraMediaPlaybackController::videoFilePlaybackClockMs() const
         && m_state.m_decoder
         && (m_audio->monitorSampleRate() > 0))
     {
-        // Free-running device clock: once anchored, advance the playback clock with the
-        // sound card's physically-played audio (monitorProcessedUSecs), plus a slow phase
-        // trim toward the audio heard (see below). It keeps running through a feed underrun
-        // (the device plays silence), so the present never stalls waiting on a decode-derived
-        // position — which previously deadlocked present<->decode (block-to-accumulate) into
-        // a runaway slowdown. Anchored at start and each rebuffer resume.
-        if (m_state.m_streamClockAnchored)
-        {
-            const qint64 processedUSecs = m_audio->monitorProcessedUSecs();
-            // Guard against the device clock running backwards: the QAudioSink is shared
-            // per physical device, so another feature reconfiguring it (device/sample-rate
-            // change) restarts it and resets processedUSecs to 0. A negative delta would
-            // jump the clock backwards and freeze the present. If that happens, fall
-            // through to the decode-derived clock (still valid; unaffected by the device
-            // reset); the next rebuffer resume re-anchors against the new device clock.
-            if (processedUSecs >= m_state.m_streamClockAnchorProcessedUSecs)
-            {
-                const double rate = qMax(0.1, m_settings->m_videoPlaybackRate);
-                // Slope 1 on the device clock: the decode is then fed at the device rate, so
-                // the resampler integral stays pinned to the true source/soundcard crystal
-                // ratio and the audio buffer is stable. m_streamClockTrimMs is a slow,
-                // clamped, deadbanded phase correction toward the audio actually heard that
-                // nulls the residual crystal drift WITHOUT perturbing the present rate enough
-                // to couple into the buffer servo (see updateStreamPlaybackClock).
-                return m_state.m_streamClockAnchorContentMs
-                    + static_cast<qint64>(std::llround(
-                        static_cast<double>(processedUSecs - m_state.m_streamClockAnchorProcessedUSecs) / 1000.0 * rate))
-                    + static_cast<qint64>(std::llround(m_state.m_streamClockTrimMs));
-            }
+        // Audio-master clock (the ffplay/VLC model): the playback clock IS the position of
+        // the audio currently being HEARD at the speaker — decoded-audio position minus
+        // everything still queued ahead of it (app queues + the device's own ~250 ms output
+        // buffer). The present shows each video frame when this clock reaches its PTS and
+        // DROPS late frames to catch up (see readQueuedVideoFileFrame); video follows audio,
+        // and audio is never rate-warped for sync. A feed underrun stalls this clock, but the
+        // present bounds its wait (scheduleNextVideoFileTick) so the decoded queue drains into
+        // a clean rebuffer instead of the old present<->decode deadlock.
+        //
+        // This replaced a long line of device-clock + rate-servo schemes (free-running
+        // processedUSecs, PLL/integral-slope/clamped-trim). They all coupled the present rate
+        // into the resampler buffer servo and either drained the buffer (clicks) or drifted
+        // (the device crystal vs the resampled audio). Following the audio position directly,
+        // with frame drop, is what real players do and sidesteps that coupling.
+        const qint64 heardMs = streamDecodeDerivedContentMs();
+        if (heardMs != std::numeric_limits<qint64>::min()) {
+            return heardMs;
         }
-        // Not yet anchored — decode-derived content position (audio decoded minus
-        // still-queued = the content currently being heard), used to seed the anchor.
-        // The decode thread owns the decoder, so read its snapshotted audio position.
-        qint64 audioDecodedPositionMs;
-        qint64 decoderPendingAudioBytes;
-        {
-            QMutexLocker snapshotLocker(&m_state.m_decodeSnapshotMutex);
-            audioDecodedPositionMs = m_state.m_decodeAudioPositionMs;
-            decoderPendingAudioBytes = m_state.m_decodePendingAudioBytes;
-        }
-        if (audioDecodedPositionMs >= 0)
-        {
-            const qint64 queuedAudioFrames =
-                static_cast<qint64>((decoderPendingAudioBytes + streamPlaybackAudioBytes()) / bytesPerSampleFrame)
-                + static_cast<qint64>(m_audio->monitorPlaybackClockFill());
-            const qint64 queuedAudioMs = static_cast<qint64>(
-                (static_cast<double>(queuedAudioFrames) * 1000.0 / static_cast<double>(m_audio->monitorSampleRate())) + 0.5);
-            return audioDecodedPositionMs - queuedAudioMs;
-        }
+        // Video-only stream (no audio to derive position from): fall through to wall clock.
     }
     if (!m_settings->isStreamCamera()
         && m_state.m_decoder
@@ -1730,37 +1726,6 @@ qint64 CameraMediaPlaybackController::videoFilePlaybackClockMs() const
     const double rate = qMax(0.1, m_settings->m_videoPlaybackRate);
     return m_state.m_basePositionMs
         + static_cast<qint64>(std::llround(static_cast<double>(m_state.m_clock.elapsed()) * rate));
-}
-
-void CameraMediaPlaybackController::anchorStreamPlaybackClock()
-{
-    if (!m_settings->isStreamCamera() || !m_state.m_decoder) {
-        return;
-    }
-    // Seed the free-running clock from the decode-derived content position (accurate
-    // while the buffers are healthy — i.e. now, at start or a just-completed rebuffer)
-    // paired with the current device processed clock. Thereafter videoFilePlaybackClockMs
-    // free-runs on the device. Re-anchoring on each rebuffer resume re-aligns content to
-    // the device after a stall (the device kept playing silence while we refilled).
-    m_state.m_streamClockAnchored = false;            // force the decode-derived path
-    qint64 contentMs = videoFilePlaybackClockMs();
-    // The decode-derived position is the content at the device's INPUT: it subtracts the
-    // app-side queues (pending + stream buffer + monitor FIFO) but NOT the sound device's
-    // own output buffer (~250 ms, monitorSinkLatencyUSecs). That buffer holds audio fed
-    // but not yet heard, so without subtracting it the anchor — and the video slaved to
-    // it — leads the audio actually at the speaker. The file path delays video by the
-    // same amount in submitVideoFileFrame; do the equivalent here on the clock.
-    const qint64 decodeDerivedMs = contentMs;
-    const qint64 sinkLatencyMs = m_audio->monitorSinkLatencyUSecs() / 1000;
-    contentMs -= sinkLatencyMs;
-    m_state.m_streamClockAnchorContentMs = contentMs;
-    m_state.m_streamClockAnchorProcessedUSecs = m_audio->monitorProcessedUSecs();
-    m_state.m_streamClockTrimMs = 0.0;   // anchor sets the offset; trim restarts from zero
-    m_state.m_streamClockAnchored = true;
-    qDebug() << "CameraMediaPlayback: stream clock anchored - contentMs" << contentMs
-             << "(decodeDerived" << decodeDerivedMs << "- sinkLatencyMs" << sinkLatencyMs << ")"
-             << "processedUSecs" << m_state.m_streamClockAnchorProcessedUSecs
-             << "basePositionMs" << m_state.m_basePositionMs;
 }
 
 qint64 CameraMediaPlaybackController::streamDecodeDerivedContentMs() const
@@ -1796,44 +1761,6 @@ qint64 CameraMediaPlaybackController::streamDecodeDerivedContentMs() const
     return audioDecodedPositionMs - queuedAudioMs - sinkLatencyMs;
 }
 
-void CameraMediaPlaybackController::updateStreamPlaybackClock()
-{
-    // Slow phase trim that keeps the video (on the device clock) aligned with the audio
-    // actually heard, without coupling into the resampler's audio-buffer servo.
-    //
-    // The video clock runs on the device at slope 1 (videoFilePlaybackClockMs). That keeps
-    // the decode fed at the device rate, so the resampler integral stays pinned to the true
-    // source/soundcard crystal ratio and the audio buffer is stable. The only residual is the
-    // small crystal drift: video at the device rate vs audio resampled to the source rate.
-    //
-    // Null it with a trim toward the heard-content reference, but heavily constrained so it
-    // can NEVER perturb the present rate enough to feed back into the buffer servo — the
-    // mistake that drained the buffer to clicks when the present chased the (buffer-coupled)
-    // heard position directly. Two guards: (1) a deadband — do nothing within ~1 frame, so
-    // the clock free-runs and the trim only engages on real accumulated drift; (2) a hard
-    // per-tick clamp of ~0.06 ms (~1.8 ms/s at 30 fps = ~0.18% rate, an order of magnitude
-    // below the resampler's ±1.5% proportional authority), so the resampler always dominates
-    // the buffer. Net effect: A/V offset is bounded to ~1 frame, corrected by trims too small
-    // and too rare to destabilise anything.
-    if (!m_settings->isStreamCamera() || !m_state.m_decoder || !m_state.m_streamClockAnchored) {
-        return;
-    }
-    const qint64 ref = streamDecodeDerivedContentMs();
-    if (ref == std::numeric_limits<qint64>::min()) {
-        return;                          // no audio content (e.g. video-only stream)
-    }
-    const qint64 offsetMs = ref - videoFilePlaybackClockMs();
-    m_state.m_streamClockPllOffsetMs = offsetMs;   // diagnostic
-    constexpr qint64 deadbandMs = 30;              // ~1 frame; trim only beyond real drift
-    if (qAbs(offsetMs) <= deadbandMs) {
-        return;
-    }
-    const double beyondBand = static_cast<double>(
-        (offsetMs > 0) ? (offsetMs - deadbandMs) : (offsetMs + deadbandMs));
-    const double step = qBound(-0.06, 0.02 * beyondBand, 0.06);
-    m_state.m_streamClockTrimMs += step;
-}
-
 void CameraMediaPlaybackController::scheduleNextVideoFileTick()
 {
     if (!m_callbacks.capturing() || !videoFilePlaybackIsPlaying() || !m_settings->isFfmpegMediaSource() || !m_state.m_decoder) {
@@ -1845,26 +1772,26 @@ void CameraMediaPlaybackController::scheduleNextVideoFileTick()
         resetVideoFilePlaybackSchedule();
     }
 
-    // Once per present tick, phase-lock the device clock onto the audio actually heard so
-    // the next delay (computed against videoFilePlaybackClockMs below) tracks audio content
-    // rather than the sound card's nominal crystal rate.
-    updateStreamPlaybackClock();
-
     qint64 delayMs = static_cast<qint64>(std::llround(intervalMs));
     if ((m_state.m_basePositionMs >= 0) && (m_state.m_lastFramePtsMs >= 0))
     {
-        // Single master clock = the audio playback (sound-card) clock, for BOTH file and
-        // stream sources. Present each frame when videoFilePlaybackClockMs() (the content
-        // position currently being heard) reaches its PTS. For streams that clock now
-        // FREE-RUNS on the device (see videoFilePlaybackClockMs / anchorStreamPlaybackClock),
-        // so it keeps advancing through a feed underrun and the present never deadlocks
-        // against the decode. Source-vs-device drift is absorbed by the bitstream cushion
-        // (block-to-accumulate / rebuffer), not by slewing the present rate — so there is
-        // no varying present for the audio resampler to chase (no pitch wander).
+        // Single master clock = the audio playback clock, for BOTH file and stream sources.
+        // Present each frame when videoFilePlaybackClockMs() (the audio position currently
+        // being heard) reaches its PTS. For streams that clock is the audio-heard position
+        // (see videoFilePlaybackClockMs); video follows audio and late frames are dropped in
+        // readQueuedVideoFileFrame.
         const qint64 nextFramePtsMs = m_state.m_lastFramePtsMs + static_cast<qint64>(std::llround(intervalMs));
         delayMs = nextFramePtsMs - videoFilePlaybackClockMs();
         delayMs -= m_state.m_lastDecodeMs;
         delayMs = qMax<qint64>(1, delayMs);
+        // Bound the wait for streams: the audio-heard clock STALLS on a feed underrun (the
+        // audio queue empties so it stops advancing). Without a cap the present would wait
+        // ever longer and deadlock against the decode (the original audio-master collapse).
+        // Capping at ~2 frames means a stall instead drains the decoded queue within a few
+        // ticks and trips a clean rebuffer, which re-syncs on resume.
+        if (m_settings->isStreamCamera()) {
+            delayMs = qMin<qint64>(delayMs, static_cast<qint64>(std::llround(2.0 * intervalMs)));
+        }
     }
     else
     {

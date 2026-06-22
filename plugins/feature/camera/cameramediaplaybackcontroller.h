@@ -185,8 +185,6 @@ private:
     void resetVideoFilePlaybackSchedule();
     qint64 videoFilePlaybackClockMs() const;
     qint64 streamDecodeDerivedContentMs() const;
-    void anchorStreamPlaybackClock();
-    void updateStreamPlaybackClock();
     void scheduleNextVideoFileTick();
     void reportVideoFilePlaybackToGUI();
 

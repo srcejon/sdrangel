@@ -2,6 +2,7 @@ set(camera_star_tests_SOURCES
     camerastartests.cpp
     ../cameradetector.cpp
     ../cameraimageutils.cpp
+    ../cameraimagepool.cpp
     ../camerastardetector.cpp
     ../camerasettings.cpp
     ../cameraicons.qrc

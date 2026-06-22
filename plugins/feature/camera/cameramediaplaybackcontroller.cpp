@@ -1797,7 +1797,12 @@ void CameraMediaPlaybackController::scheduleNextVideoFileTick()
         const qint64 elapsedMs = m_state.m_clock.elapsed();
         qint64 targetMs = static_cast<qint64>(std::llround(static_cast<double>(tick) * intervalMs));
 
-        if (targetMs <= elapsedMs)
+        // CATCH UP small lateness (fire ASAP, keep the tick) rather than skipping to the
+        // current interval. Skipping on any sub-frame jitter dropped the effective feed rate
+        // to ~59 at 60 fps, starving the audio buffer so the resampler pitched down audibly
+        // (~-3%). Only resync the tick if we have fallen more than ~2 frames behind, so a
+        // genuinely overloaded present doesn't busy-spin chasing an unreachable rate.
+        if (elapsedMs - targetMs > static_cast<qint64>(std::llround(2.0 * intervalMs)))
         {
             tick = static_cast<quint64>(std::floor(static_cast<double>(elapsedMs) / intervalMs)) + 1;
             targetMs = static_cast<qint64>(std::llround(static_cast<double>(tick) * intervalMs));

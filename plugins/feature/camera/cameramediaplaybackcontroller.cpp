@@ -938,17 +938,23 @@ int CameraMediaPlaybackController::takeResampledStreamPlaybackAudio(QByteArray& 
     //
     // So: a SLOW, ~unity-damped PI that converges to the true clock ratio and HOLDS it
     // (steady, inaudible pitch). No soft-deadband gainScale (it limit-cycles), no tight
-    // integral clamp (it starves the integral and parks the buffer off target, drifting
-    // sync). The INTEGRAL is the steady-state clock ratio (free, ±5%, inaudible — it is
-    // the correct rate); the PROPORTIONAL is a small bounded transient (≤1.5%). Because
-    // the gains are gentle and the decode does the bulk of a post-stall refill, the
-    // resampler rides out a stall with a small brief dip instead of an integral-windup
-    // swing.
+    // integral clamp. The INTEGRAL is the steady-state clock ratio (free, ±5%, inaudible
+    // — it is the correct rate); the PROPORTIONAL is a small bounded transient (≤1.5%).
+    //
+    // DAMPING: this servo runs once PER PRESENT TICK (~30-60 Hz), and the integral adds
+    // ki*err each tick — so the effective integral rate is ki*f. The plant is the buffer
+    // (an integrator), making the loop 2nd order: zeta = (kp/2)*sqrt(deviceRate /
+    // (targetFrames*ki*f)). An earlier ki=0.0004 gave zeta~=0.18 (badly underdamped) — a
+    // slow ~40 s limit cycle of +/-1.5% pitch that, since video is on the steady device
+    // clock, showed up as A/V sync slowly drifting in and out. ki=6e-6 puts zeta ~ 1 for
+    // f in 30..60, so it settles instead of cycling. The integral barely moves (the
+    // buffer is fed/drained at the device rate, so the true ratio is ~1.0); the
+    // proportional rejects feed jitter at <0.1% pitch.
     const double targetFrames = qMax(1.0, static_cast<double>(audioSampleRate) * qMax(0.05, targetBufferSeconds));
     const double err = (static_cast<double>(availFrames) - targetFrames) / targetFrames;
     m_state.m_streamAudioResampleRatio = qBound(0.95,
-        m_state.m_streamAudioResampleRatio + 0.0004 * err, 1.05);
-    const double proportional = qBound(-0.015, 0.03 * err, 0.015);
+        m_state.m_streamAudioResampleRatio + 0.000006 * err, 1.05);
+    const double proportional = qBound(-0.015, 0.025 * err, 0.015);
     const double ratio = qBound(0.93, m_state.m_streamAudioResampleRatio + proportional, 1.07);
 
     // Diagnostic: measure the wander = the swing of the applied audio ratio (pitch).

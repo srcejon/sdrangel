@@ -1001,14 +1001,17 @@ void CameraMediaPlaybackController::submitResampledStreamAudio()
     }
     m_audio->submitMonitorPcmSamples(audio, audioSampleRate);
     // Anchor the stream recording audio on the playback content timeline (the same
-    // timeline the recorder writes video PTS on). The resampler emits the audio that
-    // is about to play, i.e. the current presented content position; the recorder's
-    // first-audio-vs-first-video gap then captures the residual lead. (DIAGNOSTIC
-    // first cut for streams; refine once the measured gap is known.)
+    // timeline the recorder writes video PTS on). m_positionMs is the content that is
+    // PLAYING now (video is slaved to it), but the resampler emits audio that is about
+    // to play — it sits ahead of the playback position by the monitor FIFO cushion
+    // (the stream jitter buffer is matched out, so the cushion is the residual lead).
+    // Add it so the recorder anchors on the audio's true content position; this leaves
+    // no per-device tuning (the cushion is a fixed code constant).
+    const qint64 monitorCushionMs = static_cast<qint64>(monitorCushionSeconds * 1000.0 + 0.5);
     m_audio->submitRecordingPcmSamples(
         audio.left((audio.size() / bytesPerSampleFrame) * bytesPerSampleFrame),
         audioSampleRate,
-        m_state.m_positionMs);
+        m_state.m_positionMs + monitorCushionMs);
 }
 
 int CameraMediaPlaybackController::dropPacedStreamPlaybackAudio(int droppedVideoFrames, int audioSampleRate, double playbackFrameRate)

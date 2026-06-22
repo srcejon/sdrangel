@@ -2334,3 +2334,52 @@ sub-conditions actually fire, across REAL + RAND2 + FISHEYE-mode4. Findings:
 coverage, not blind tuning): `fov` + `elevationSeed` (cheap narrow/mode-2 safety checks, structurally
 inert on this corpus), the `useSeedProjectedBrightGate` branches, and the blind/fov accept path
 (mode 0/1). Plus the latent unbounded roll-recovery retry (only reachable with `rollAlias` disabled).
+
+## WS2 — near-zenith pose: rotation-vector LM (2026-06-21, flag-gated, WIP)
+
+**Root cause (confirmed):** `createProjector` builds `right = {cos az, -sin az, 0}` then rolls it about
+`center`. At zenith (el->90, center->vertical) a change in **az** and a change in **roll** are the same
+rotation about the vertical, so their Jacobian columns are parallel -> the LM normal matrix's Az-Roll
+block is singular -> the damped solve drifts along the degenerate valley and which basin it lands in
+flips with ULP noise (the wide-7/8/9 saga; currently masked by the Az/El-pin + match-count-grid +
+clamped-pp band-aids).
+
+**Implemented (approach: localized rotation-vector LM):** env flag
+`SDRANGEL_CAMERA_PLATE_SOLVER_ROTVEC_LM` (default OFF -> the legacy az/el/roll coordinate path is
+byte-identical when unset). When on, the LM's orientation deltas (the Az/El/Roll params) are applied as
+small rotations about the **camera-frame** axes (yaw about `up`, pitch about `right`, roll about
+`center`) instead of az/el/roll coordinate additions. The camera basis is always orthonormal, so the
+orientation Jacobian stays well-conditioned even at zenith. Helpers (next to the LM):
+`lmBasisFromAzElRoll` / `lmAzElRollFromBasis` (exact inverse of createProjector's convention) /
+`lmRotateOrientationCameraFrame`; the change is localized to `addPlateSolveLmParameterDelta` (single
+choke point used by both the FD Jacobian and the update). **Key fix:** in rot-vec mode the FD Jacobian
+must be taken w.r.t. the *rotation angle applied* (`appliedStep = step`), NOT the resulting az/el/roll
+coordinate change -- the latter is non-linear and degenerates to ~0 near zenith (it collapsed the
+refinement, the first bug: REAL 48->38). With that fix the update (which applies the solved delta as a
+rotation) and the Jacobian use consistent units.
+
+**Validation:**
+- flag OFF: REAL 48 (verified byte-identical legacy path -> committed solver is unaffected).
+- flag ON: **REAL 48 (neutral)**; RAND2 110/110 passing before an overnight environmental reap (full
+  150 run still pending); **FISHEYE-mode4 40 vs 42** -- loses `synth-fisheye-039` + `synth-fisheye-044`,
+  both documented borderline/hard fisheye cases at the rms acceptance boundary that the rot-vec LM's
+  slightly-different convergence tips over. Not a systematic fisheye break (REAL wide-7/8/9 still pass
+  with rot-vec on).
+
+**Status: sound foundation, NOT yet drop-in-neutral.** REAL-neutral and singularity-free, but costs 2
+marginal synthetic-fisheye cases, so it cannot become the default until those are resolved/accepted.
+Default-OFF keeps the committed behaviour safe at 48/48.
+
+**Remaining to land WS2 (make rot-vec the default + reap the payoff):**
+1. Resolve or accept synth-fisheye-039/044 (check whether they fail by a tiny rms margin -- likely
+   boundary noise, not a rot-vec defect).
+2. Complete the RAND2 (148) validation with rot-vec on (run it in chunks / poll -- the full ~20 min run
+   keeps getting environmentally reaped overnight).
+3. The actual payoff: with rot-vec on, drop the wide-fisheye Az/El pin (`lockSeedDirection =
+   isWidePlateSolveContext`) and GUI-re-test wide-7/8/9 -- the LM should now converge deterministically
+   without pinning. Then the seed-anchored-grid / clamped-pp band-aids can likely follow. Measure the
+   perf delta (rollAliasCheck/rollRecovery stay -- they serve deep-field roll, not just zenith).
+
+**Process note:** long (~20 min) `run_in_background` corpus runs get reaped by the environment (overnight
+sleep / idle) -- run fast corpora (REAL ~3 min, FISH4 ~30 s) foreground (synchronous, no reap) and
+poll/chunk the long ones instead of passively waiting on one detached run.

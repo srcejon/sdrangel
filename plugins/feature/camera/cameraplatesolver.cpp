@@ -19851,21 +19851,92 @@ static double plateSolveLmParameterValue(const PlateSolveLmPose& pose, PlateSolv
     }
 }
 
+// WS2: rotation-vector LM orientation parameterization. Enabled by
+// SDRANGEL_CAMERA_PLATE_SOLVER_ROTVEC_LM (default OFF, so the legacy az/el/roll coordinate path is
+// byte-for-byte unchanged when the env var is unset). When on, the LM's orientation deltas are
+// applied as small rotations about the *camera-frame* axes (pitch/yaw/roll) instead of additions to
+// the az/el/roll coordinates. The three camera axes are always orthonormal, so the orientation
+// Jacobian stays well-conditioned even near zenith where az and roll rotate about the same (vertical)
+// axis and the coordinate parameterization is degenerate.
+static bool rotVecLmEnabled()
+{
+    static const bool enabled = qEnvironmentVariableIsSet("SDRANGEL_CAMERA_PLATE_SOLVER_ROTVEC_LM");
+    return enabled;
+}
+
+// Camera basis from az/el/roll, matching createProjector's exact convention.
+static void lmBasisFromAzElRoll(double azimuthDegrees, double elevationDegrees, double rollDegrees,
+                                SkyVector& center, SkyVector& right, SkyVector& up)
+{
+    const double azr = degToRad(azimuthDegrees);
+    center = normalize(vectorFromAltAz(azimuthDegrees, elevationDegrees));
+    right = normalize({std::cos(azr), -std::sin(azr), 0.0});
+    up = normalize(cross(right, center));
+    const double rr = degToRad(rollDegrees);
+    if (std::fabs(rr) > 1e-9) {
+        right = normalize(rotateAroundAxis(right, center, rr));
+        up = normalize(rotateAroundAxis(up, center, rr));
+    }
+}
+
+// Exact inverse of lmBasisFromAzElRoll: recover az/el/roll from a camera basis.
+static void lmAzElRollFromBasis(const SkyVector& center, const SkyVector& right,
+                                double& azimuthDegrees, double& elevationDegrees, double& rollDegrees)
+{
+    const SkyVector c = normalize(center);
+    elevationDegrees = std::asin(std::clamp(c.z, -1.0, 1.0)) * (180.0 / kPi);
+    azimuthDegrees = normalizeDegrees(std::atan2(c.x, c.y) * (180.0 / kPi));
+    const double azr = degToRad(azimuthDegrees);
+    const SkyVector right0 = normalize({std::cos(azr), -std::sin(azr), 0.0});
+    const SkyVector r = normalize(right);
+    // Signed roll: angle from the unrolled right vector to r, measured about the boresight (center).
+    const double cosA = std::clamp(dot(right0, r), -1.0, 1.0);
+    const double sinA = dot(cross(right0, r), c);
+    rollDegrees = normalizeSignedDegrees(std::atan2(sinA, cosA) * (180.0 / kPi));
+}
+
+// Rotate the pose orientation by deltaDegrees about a camera-frame axis: 0=pitch(right),
+// 1=yaw(up), 2=roll(boresight/center). Singularity-free regardless of elevation.
+static void lmRotateOrientationCameraFrame(double& azimuthDegrees, double& elevationDegrees,
+                                           double& rollDegrees, int cameraAxis, double deltaDegrees)
+{
+    SkyVector center, right, up;
+    lmBasisFromAzElRoll(azimuthDegrees, elevationDegrees, rollDegrees, center, right, up);
+    const SkyVector axis = (cameraAxis == 0) ? right : (cameraAxis == 1) ? up : center;
+    const double a = degToRad(deltaDegrees);
+    center = normalize(rotateAroundAxis(center, axis, a));
+    right = normalize(rotateAroundAxis(right, axis, a));
+    lmAzElRollFromBasis(center, right, azimuthDegrees, elevationDegrees, rollDegrees);
+}
+
 static void addPlateSolveLmParameterDelta(const QSize& imageSize,
                                           PlateSolveLmPose& pose,
                                           PlateSolveLmParameter parameter,
                                           double delta)
 {
+    const bool rotVec = rotVecLmEnabled();
     switch (parameter)
     {
     case PlateSolveLmAzimuth:
-        pose.azimuthDegrees += delta;
+        if (rotVec) {
+            lmRotateOrientationCameraFrame(pose.azimuthDegrees, pose.elevationDegrees, pose.rollDegrees, 1, delta);
+        } else {
+            pose.azimuthDegrees += delta;
+        }
         break;
     case PlateSolveLmElevation:
-        pose.elevationDegrees += delta;
+        if (rotVec) {
+            lmRotateOrientationCameraFrame(pose.azimuthDegrees, pose.elevationDegrees, pose.rollDegrees, 0, delta);
+        } else {
+            pose.elevationDegrees += delta;
+        }
         break;
     case PlateSolveLmRoll:
-        pose.rollDegrees += delta;
+        if (rotVec) {
+            lmRotateOrientationCameraFrame(pose.azimuthDegrees, pose.elevationDegrees, pose.rollDegrees, 2, delta);
+        } else {
+            pose.rollDegrees += delta;
+        }
         break;
     case PlateSolveLmFov:
         pose.fovDegrees += delta;
@@ -20256,24 +20327,42 @@ Evaluation runPlateSolveLmRefinement(const CameraSettings& settings,
             double step = plateSolveLmFiniteDifferenceStep(pose, parameter);
             PlateSolveLmPose steppedPose = pose;
             addPlateSolveLmParameterDelta(imageSize, steppedPose, parameter, step);
-            auto parameterDelta = [&pose, parameter](const PlateSolveLmPose& candidatePose) {
-                const double rawDelta = plateSolveLmParameterValue(candidatePose, parameter)
-                    - plateSolveLmParameterValue(pose, parameter);
-                return ((parameter == PlateSolveLmAzimuth) || (parameter == PlateSolveLmRoll))
-                    ? normalizeSignedDegrees(rawDelta)
-                    : rawDelta;
-            };
-            double appliedStep = parameterDelta(steppedPose);
-            if (std::fabs(appliedStep) < 1e-12)
+            // WS2 rot-vec mode: for the orientation params the applied perturbation is a camera-frame
+            // ROTATION of `step` degrees, not an az/el/roll coordinate addition. The Jacobian must be
+            // taken w.r.t. that rotation angle (which is exactly what the update step applies via
+            // addPlateSolveLmParameterDelta), NOT the resulting coordinate change -- the latter is
+            // non-linear and degenerates to ~0 near zenith (collapsing the refinement). The legacy
+            // coordinate-difference accounting is preserved verbatim when rot-vec mode is off.
+            const bool rotVecOrientation = rotVecLmEnabled()
+                && ((parameter == PlateSolveLmAzimuth)
+                    || (parameter == PlateSolveLmElevation)
+                    || (parameter == PlateSolveLmRoll));
+            double appliedStep;
+            if (rotVecOrientation)
             {
-                steppedPose = pose;
-                addPlateSolveLmParameterDelta(imageSize, steppedPose, parameter, -step);
-                appliedStep = parameterDelta(steppedPose);
+                appliedStep = step;
             }
-            if (std::fabs(appliedStep) < 1e-12)
+            else
             {
-                jacobianValid = false;
-                break;
+                auto parameterDelta = [&pose, parameter](const PlateSolveLmPose& candidatePose) {
+                    const double rawDelta = plateSolveLmParameterValue(candidatePose, parameter)
+                        - plateSolveLmParameterValue(pose, parameter);
+                    return ((parameter == PlateSolveLmAzimuth) || (parameter == PlateSolveLmRoll))
+                        ? normalizeSignedDegrees(rawDelta)
+                        : rawDelta;
+                };
+                appliedStep = parameterDelta(steppedPose);
+                if (std::fabs(appliedStep) < 1e-12)
+                {
+                    steppedPose = pose;
+                    addPlateSolveLmParameterDelta(imageSize, steppedPose, parameter, -step);
+                    appliedStep = parameterDelta(steppedPose);
+                }
+                if (std::fabs(appliedStep) < 1e-12)
+                {
+                    jacobianValid = false;
+                    break;
+                }
             }
 
             const PlateSolveLmEvaluation stepped = evaluateFixedPlateSolveLmPose(

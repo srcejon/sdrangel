@@ -1243,6 +1243,10 @@ bool CameraMediaPlaybackController::readQueuedVideoFileFrame(bool submitAudio)
         const int rebufferTarget = streamInitialBufferFrameCount();
         if (queuedFrames <= 0) {
             if (m_state.m_basePositionMs >= 0) {
+                if (!m_state.m_streamRebuffering) {
+                    qDebug() << "CameraMediaPlayback: stream rebuffer START (queue emptied) - decodeFramesProduced"
+                             << m_state.m_decodeFramesProduced.load() << "target" << rebufferTarget;
+                }
                 m_state.m_streamRebuffering = true;
             }
             return false;
@@ -1257,6 +1261,10 @@ bool CameraMediaPlaybackController::readQueuedVideoFileFrame(bool submitAudio)
         }
         if (buffering)
         {
+            if (m_state.m_streamRebuffering) {
+                qDebug() << "CameraMediaPlayback: stream rebuffer RESUME - queuedFrames" << queuedFrames
+                         << "decodeFramesProduced" << m_state.m_decodeFramesProduced.load();
+            }
             // The cushion has been rebuilt and presentation is about to resume.
             // The stream-audio buffer filled past the resampler's target depth
             // while we were paused, so flag it for a one-shot trim back to target

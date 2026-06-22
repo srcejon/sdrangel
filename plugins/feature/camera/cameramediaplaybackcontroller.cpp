@@ -1725,12 +1725,22 @@ void CameraMediaPlaybackController::scheduleNextVideoFileTick()
             // (which tracks the present rate) has nothing to chase and there is no pitch
             // wander. The gentle gain only engages on a real drift (cushion exhausting,
             // or latency growing after a burst).
+            //
+            // CRITICAL: keep the present-rate excursion tiny. The audio buffer is fed
+            // at the present rate (the decode is gated by present consumption), and the
+            // resampler must consume at that same rate, so any present-rate change shows
+            // up DIRECTLY as audio pitch. Measured: a wide ±25% excursion drove the
+            // resampler into a ±12% pitch limit cycle ("wander"). Bound the present to
+            // ~±1.5% — inaudible, still enough to null source/device clock drift and
+            // slowly recentre the buffer. Genuine source stalls are absorbed by the
+            // cushion and, if it empties, a brief rebuffer — NOT by audibly slewing the
+            // present rate.
             const int fill = decodedStreamFrameQueueDepth()
                 + (m_state.m_decoder ? m_state.m_decoder->readAheadVideoPacketCount() : 0);
             const int target = streamBufferingCushionFrameCount();
             const int deadband = qMax(3, target / 5);
-            const double slackMs = qMax(5.0, intervalMs * 0.25);
-            const double gainMsPerFrame = qMax(0.3, intervalMs * 0.02);
+            const double slackMs = qMax(0.5, intervalMs * 0.015);
+            const double gainMsPerFrame = qMax(0.05, intervalMs * 0.004);
             double adjustedMs;
             if (qAbs(fill - target) <= deadband) {
                 adjustedMs = intervalMs;

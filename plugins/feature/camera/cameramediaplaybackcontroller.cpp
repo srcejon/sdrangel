@@ -1275,31 +1275,44 @@ bool CameraMediaPlaybackController::readQueuedVideoFileFrame(bool submitAudio)
         // bursty rate, the buffer never refills, and the downstream post-processor
         // drops frames continuously. Holding here lets the fill servo regain
         // control once the cushion is rebuilt.
-        // Startup builds the full initial cushion; a mid-playback underrun resumes on
-        // a much smaller cushion (~0.12 s). During a server-side slow patch (the
-        // source delivering below real time) the queue keeps dipping to empty, and
-        // waiting for the full initial count on every dip turns brief stutters into
-        // long, repeatedly-thrashing freezes. A few frames is enough for the fill
-        // servo to regain control, so playback rides the rough patch like a player
-        // holding the last frame rather than hard-freezing.
+        // Startup builds the playback cushion to streamBufferingSeconds of content,
+        // counting the cheap compressed bitstream read-ahead together with the small
+        // decoded queue. This is what makes the bitstream buffer pay off: playback
+        // begins ~streamBufferingSeconds behind the live edge and rides source
+        // slow-patches by draining the KB-sized packet buffer, instead of holding a
+        // deep decoded-image buffer (or sitting at the live edge with no cushion and
+        // rebuffering on every dip). A mid-playback underrun resumes on a small
+        // ~0.12 s cushion so a brief dip is a short stutter, not a long freeze.
         const bool initialBuffering = (m_state.m_basePositionMs < 0);
-        const int rebufferTarget = initialBuffering
-            ? streamInitialBufferFrameCount()
-            : qMax(CameraMediaPlaybackState::m_minDecodedStreamFrames / 2,
-                   static_cast<int>(std::ceil(qMax(1.0, m_state.m_frameRate) * 0.12)));
+        int bufferedFrames = queuedFrames;
+        int rebufferTarget;
+        if (initialBuffering)
+        {
+            bufferedFrames += m_state.m_decoder->readAheadVideoPacketCount();
+            rebufferTarget = static_cast<int>(std::ceil(qMax(1.0, m_state.m_frameRate)
+                * qBound(CameraSettings::m_minStreamBufferingSeconds,
+                         m_settings->m_streamBufferingSeconds,
+                         CameraSettings::m_maxStreamBufferingSeconds)));
+        }
+        else
+        {
+            rebufferTarget = qMax(CameraMediaPlaybackState::m_minDecodedStreamFrames / 2,
+                                  static_cast<int>(std::ceil(qMax(1.0, m_state.m_frameRate) * 0.12)));
+        }
         if (queuedFrames <= 0) {
             if (m_state.m_basePositionMs >= 0) {
                 if (!m_state.m_streamRebuffering) {
                     qDebug() << "CameraMediaPlayback: stream rebuffer START (queue emptied) - decodeFramesProduced"
-                             << m_state.m_decodeFramesProduced.load() << "target" << rebufferTarget;
+                             << m_state.m_decodeFramesProduced.load() << "target" << rebufferTarget
+                             << "bitstreamPkts" << m_state.m_decoder->readAheadVideoPacketCount();
                 }
                 m_state.m_streamRebuffering = true;
             }
             return false;
         }
 
-        const bool buffering = (m_state.m_basePositionMs < 0) || m_state.m_streamRebuffering;
-        if (buffering && (queuedFrames < rebufferTarget))
+        const bool buffering = initialBuffering || m_state.m_streamRebuffering;
+        if (buffering && (bufferedFrames < rebufferTarget))
         {
             m_presentTimer.setSingleShot(true);
             m_presentTimer.start(qMax(1, videoFileFrameIntervalMs() / 2));

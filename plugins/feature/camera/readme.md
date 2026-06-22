@@ -181,7 +181,7 @@ Pressing 'Save to CSV' will show a file dialog to select a filename to save the 
 
 <h3>27: Motion detection</h3>
 
-Cehck to enables motion detection using the Motion Detection settings in the Camera Settings dialog.
+Check to enable motion detection using the Motion Detection settings in the Camera Settings dialog.
 
 ![Motion dection](../../../doc/img/Camera_plugin_motion_detection.png)
 

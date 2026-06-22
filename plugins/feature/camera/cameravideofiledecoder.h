@@ -26,6 +26,7 @@
 #include <QImage>
 #include <QMutex>
 #include <QString>
+#include <QWaitCondition>
 
 #include "cameraaudiobytequeue.h"
 #include "cameraimagepool.h"
@@ -36,6 +37,7 @@ struct AVFrame;
 struct AVPacket;
 struct SwrContext;
 struct SwsContext;
+class QThread;
 
 /**
  * \brief FFmpeg-based decoder for video files and live network streams.
@@ -76,7 +78,8 @@ public:
     [[nodiscard]] bool open(
         const QString& fileName,
         QString& errorMessage,
-        int outputSampleRate = 48000);
+        int outputSampleRate = 48000,
+        double readAheadSeconds = 1.0);
     void requestAbort();
     void close();
     void seek(qint64 positionMs);
@@ -136,6 +139,28 @@ private:
     AVFrame *m_audioFrame = nullptr;
     AVPacket *m_packet = nullptr;
     SwsContext *m_swsContext = nullptr;
+    // Cached stream time bases (num/den), captured at open so the decode thread can
+    // rescale frame PTS WITHOUT touching m_formatContext — for URL sources that
+    // context is owned exclusively by the read-ahead thread (av_read_frame), and
+    // AVFormatContext is not safe for concurrent access.
+    int m_videoTimeBaseNum = 0;
+    int m_videoTimeBaseDen = 1;
+    int m_audioTimeBaseNum = 0;
+    int m_audioTimeBaseDen = 1;
+    // Read-ahead packet (bitstream) buffer for URL/live sources: a background thread
+    // pulls av_read_frame into this compressed-packet queue (capped at
+    // readAheadSeconds of video), so network jitter stalls only the read thread, not
+    // the decode/present. The decode path (readNextFrame) pops packets from here
+    // instead of calling av_read_frame. KB-sized vs the old decoded-image buffer.
+    QThread *m_readThread = nullptr;
+    mutable QMutex m_readAheadMutex;
+    QWaitCondition m_readAheadNotEmpty;
+    QWaitCondition m_readAheadNotFull;
+    std::deque<AVPacket*> m_readAheadPackets;
+    int m_readAheadVideoCount = 0;
+    int m_readAheadCapVideoPackets = 60;
+    bool m_readAheadEof = false;
+    bool m_readAheadError = false;
     // Source geometry/format the current m_swsContext was built for. The
     // converter is rebuilt when a decoded frame's actual width/height/format
     // differs from these (NOT from the codec context, which may already match
@@ -178,6 +203,14 @@ private:
     // for the in-flight frame count (≤4 stream pending + worker/pipeline copies).
     CameraImagePool m_imagePool { 8 };
 
+    void startReadAhead();
+    void stopReadAhead();
+    void clearReadAheadPackets();   // call with m_readAheadMutex held
+    // Pop the next packet from the read-ahead queue into pkt (URL sources). Returns
+    // 0 on success, AVERROR_EOF on end-of-stream, AVERROR_EXIT on abort, or a generic
+    // error if the read thread failed. Blocks (with a re-checking timeout) while the
+    // queue is empty and the reader is still running.
+    [[nodiscard]] int takeReadAheadPacket(AVPacket *pkt);
     [[nodiscard]] bool openVideoDecoder(QString& errorMessage);
     [[nodiscard]] bool openAudioDecoder(QString& errorMessage);
     [[nodiscard]] bool openAudioDecoderForStream(int streamIndex, QString& errorMessage);

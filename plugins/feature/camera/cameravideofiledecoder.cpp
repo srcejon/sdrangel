@@ -25,6 +25,7 @@
 #include <QDebug>
 #include <QMutexLocker>
 #include <QStringList>
+#include <QThread>
 #include <QUrl>
 
 #include "cameraffmpegaudio.h"
@@ -72,11 +73,13 @@ bool CameraVideoFileDecoder::isOpen() const
 bool CameraVideoFileDecoder::open(
     const QString& fileName,
     QString& errorMessage,
-    int outputSampleRate)
+    int outputSampleRate,
+    double readAheadSeconds)
 {
 #ifndef CAMERA_FFMPEG_STREAMING
     Q_UNUSED(fileName)
     Q_UNUSED(outputSampleRate)
+    Q_UNUSED(readAheadSeconds)
     errorMessage = QStringLiteral("FFmpeg support is not available in this build");
     return false;
 #else
@@ -294,6 +297,30 @@ bool CameraVideoFileDecoder::open(
     m_eof = false;
     m_videoDraining = false;
     m_audioDraining = false;
+
+    // Cache the stream time bases so the decode thread can rescale frame PTS without
+    // touching m_formatContext (owned by the read-ahead thread for URL sources).
+    {
+        const AVStream *videoStream = m_formatContext->streams[m_videoStreamIndex];
+        m_videoTimeBaseNum = videoStream->time_base.num;
+        m_videoTimeBaseDen = videoStream->time_base.den > 0 ? videoStream->time_base.den : 1;
+    }
+    if (m_audioStreamIndex >= 0)
+    {
+        const AVStream *audioStream = m_formatContext->streams[m_audioStreamIndex];
+        m_audioTimeBaseNum = audioStream->time_base.num;
+        m_audioTimeBaseDen = audioStream->time_base.den > 0 ? audioStream->time_base.den : 1;
+    }
+
+    // Live/URL sources: buffer the compressed bitstream ahead (≈ readAheadSeconds of
+    // video, KB-sized) so network jitter stalls only the read thread, not decode/
+    // present. File sources keep reading synchronously inside readNextFrame.
+    if (m_urlSource)
+    {
+        m_readAheadCapVideoPackets = std::max(8, static_cast<int>(readAheadSeconds * m_frameRate + 0.5));
+        startReadAhead();
+    }
+
     return true;
 #endif
 }
@@ -302,6 +329,9 @@ void CameraVideoFileDecoder::close()
 {
 #ifdef CAMERA_FFMPEG_STREAMING
     requestAbort();
+    // Join the read-ahead thread before tearing down FFmpeg state: it owns
+    // av_read_frame on m_formatContext, which is freed below.
+    stopReadAhead();
     if (m_swsContext)
     {
         sws_freeContext(m_swsContext);
@@ -353,6 +383,143 @@ void CameraVideoFileDecoder::close()
 void CameraVideoFileDecoder::requestAbort()
 {
     m_abortRequested.store(true);
+    // Wake both the read thread (blocked on a full queue or in av_read_frame via the
+    // interrupt callback) and the decode thread (blocked popping from the queue).
+    QMutexLocker locker(&m_readAheadMutex);
+    m_readAheadNotEmpty.wakeAll();
+    m_readAheadNotFull.wakeAll();
+}
+
+void CameraVideoFileDecoder::clearReadAheadPackets()
+{
+#ifdef CAMERA_FFMPEG_STREAMING
+    while (!m_readAheadPackets.empty())
+    {
+        AVPacket *pkt = m_readAheadPackets.front();
+        m_readAheadPackets.pop_front();
+        av_packet_free(&pkt);
+    }
+    m_readAheadVideoCount = 0;
+    m_readAheadEof = false;
+    m_readAheadError = false;
+#endif
+}
+
+void CameraVideoFileDecoder::startReadAhead()
+{
+#ifdef CAMERA_FFMPEG_STREAMING
+    if (m_readThread) {
+        return;
+    }
+    {
+        QMutexLocker locker(&m_readAheadMutex);
+        clearReadAheadPackets();
+    }
+    // Background reader: pull compressed packets ahead into the queue so network
+    // jitter blocks only this thread, not decode/present. Caps at the configured
+    // video-packet depth (≈ readAheadSeconds). m_formatContext is touched ONLY here.
+    m_readThread = QThread::create([this]()
+    {
+        while (!m_abortRequested.load())
+        {
+            {
+                QMutexLocker locker(&m_readAheadMutex);
+                while (!m_abortRequested.load() && (m_readAheadVideoCount >= m_readAheadCapVideoPackets)) {
+                    m_readAheadNotFull.wait(&m_readAheadMutex, 100);
+                }
+                if (m_abortRequested.load()) {
+                    break;
+                }
+            }
+            AVPacket *pkt = av_packet_alloc();
+            if (!pkt) {
+                QMutexLocker locker(&m_readAheadMutex);
+                m_readAheadError = true;
+                m_readAheadNotEmpty.wakeAll();
+                break;
+            }
+            const int ret = av_read_frame(m_formatContext, pkt);
+            if (ret < 0)
+            {
+                av_packet_free(&pkt);
+                QMutexLocker locker(&m_readAheadMutex);
+                if (ret == AVERROR_EOF) {
+                    m_readAheadEof = true;
+                } else {
+                    m_readAheadError = true;
+                }
+                m_readAheadNotEmpty.wakeAll();
+                break;
+            }
+            QMutexLocker locker(&m_readAheadMutex);
+            if (pkt->stream_index == m_videoStreamIndex) {
+                ++m_readAheadVideoCount;
+            }
+            m_readAheadPackets.push_back(pkt);
+            m_readAheadNotEmpty.wakeAll();
+        }
+    });
+    m_readThread->start();
+#endif
+}
+
+void CameraVideoFileDecoder::stopReadAhead()
+{
+#ifdef CAMERA_FFMPEG_STREAMING
+    if (!m_readThread) {
+        return;
+    }
+    // m_abortRequested is already set by close()/requestAbort(); make sure the reader
+    // is woken, then join it before the format context is freed (it owns av_read_frame).
+    {
+        QMutexLocker locker(&m_readAheadMutex);
+        m_readAheadNotFull.wakeAll();
+        m_readAheadNotEmpty.wakeAll();
+    }
+    m_readThread->wait();
+    delete m_readThread;
+    m_readThread = nullptr;
+    QMutexLocker locker(&m_readAheadMutex);
+    clearReadAheadPackets();
+#endif
+}
+
+int CameraVideoFileDecoder::takeReadAheadPacket(AVPacket *pkt)
+{
+#ifdef CAMERA_FFMPEG_STREAMING
+    QMutexLocker locker(&m_readAheadMutex);
+    while (m_readAheadPackets.empty()
+        && !m_readAheadEof
+        && !m_readAheadError
+        && !m_abortRequested.load())
+    {
+        m_readAheadNotEmpty.wait(&m_readAheadMutex, 100);
+    }
+    if (m_abortRequested.load()) {
+        return AVERROR_EXIT;
+    }
+    if (!m_readAheadPackets.empty())
+    {
+        AVPacket *front = m_readAheadPackets.front();
+        m_readAheadPackets.pop_front();
+        if (front->stream_index == m_videoStreamIndex) {
+            --m_readAheadVideoCount;
+        }
+        m_readAheadNotFull.wakeAll();
+        locker.unlock();
+        av_packet_unref(pkt);
+        av_packet_move_ref(pkt, front);
+        av_packet_free(&front);
+        return 0;
+    }
+    if (m_readAheadError) {
+        return AVERROR_UNKNOWN;
+    }
+    return AVERROR_EOF;
+#else
+    Q_UNUSED(pkt)
+    return -1;
+#endif
 }
 
 void CameraVideoFileDecoder::setAudioPaceFrameRate(double frameRate)
@@ -472,7 +639,9 @@ bool CameraVideoFileDecoder::readNextFrame(
             continue;
         }
 
-        ret = av_read_frame(m_formatContext, m_packet);
+        // URL/live sources demux on the read-ahead thread; pull the next buffered
+        // packet here instead of touching m_formatContext. File sources read inline.
+        ret = m_urlSource ? takeReadAheadPacket(m_packet) : av_read_frame(m_formatContext, m_packet);
         if (ret < 0)
         {
             if (ret == AVERROR_EOF)
@@ -886,7 +1055,7 @@ bool CameraVideoFileDecoder::receiveVideoFrame(QImage& image, qint64& positionMs
     {
         const int64_t bestTimestamp = m_videoFrame->best_effort_timestamp;
         if (bestTimestamp != AV_NOPTS_VALUE) {
-            positionMs = av_rescale_q(bestTimestamp, m_formatContext->streams[m_videoStreamIndex]->time_base, AVRational{1, 1000});
+            positionMs = av_rescale_q(bestTimestamp, AVRational{m_videoTimeBaseNum, m_videoTimeBaseDen}, AVRational{1, 1000});
         }
         QElapsedTimer convertTimer;
         convertTimer.start();
@@ -1241,7 +1410,7 @@ bool CameraVideoFileDecoder::appendFrameAudio(const AVFrame *frame, QByteArray& 
     {
         audioStartMs = av_rescale_q(
             frame->best_effort_timestamp,
-            m_formatContext->streams[m_audioStreamIndex]->time_base,
+            AVRational{m_audioTimeBaseNum, m_audioTimeBaseDen},
             AVRational{1, 1000});
     }
     if ((audioStartMs >= 0) && (m_audioDecodedPositionMs >= 0))

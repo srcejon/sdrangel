@@ -250,7 +250,10 @@ bool CameraMediaPlaybackController::openVideoFileDecoder()
     if (!m_state.m_decoder->open(
         mediaSourcePath,
         errorMessage,
-        audioOutputSampleRate))
+        audioOutputSampleRate,
+        qBound(CameraSettings::m_minStreamBufferingSeconds,
+               m_settings->m_streamBufferingSeconds,
+               CameraSettings::m_maxStreamBufferingSeconds)))
     {
         qWarning() << "CameraWorker: FFmpeg media source open failed"
                    << mediaSourcePath
@@ -692,7 +695,10 @@ bool CameraMediaPlaybackController::reopenStreamVideoFileDecoder(const QString& 
         }
 
         QString errorMessage;
-        if (m_state.m_decoder->open(mediaSourcePath, errorMessage, audioOutputSampleRate))
+        if (m_state.m_decoder->open(mediaSourcePath, errorMessage, audioOutputSampleRate,
+                qBound(CameraSettings::m_minStreamBufferingSeconds,
+                       m_settings->m_streamBufferingSeconds,
+                       CameraSettings::m_maxStreamBufferingSeconds)))
         {
             m_state.m_decoder->setAudioPaceFrameRate(playbackFrameRate);
             m_state.m_decoder->setMaxLivePendingAudioMs(qMax(1200, static_cast<int>(m_settings->m_streamBufferingSeconds * 1000.0)));
@@ -1113,14 +1119,15 @@ int CameraMediaPlaybackController::streamPlaybackAudioSampleRate() const
     return m_state.m_streamAudioSampleRate;
 }
 
+// The decoded-frame queue is now only a small present-smoothing cushion. Network
+// jitter is absorbed upstream by the decoder's compressed bitstream read-ahead
+// (sized by streamBufferingSeconds, KB-cheap), so this no longer scales with the
+// buffering setting: keeping it to a fraction of a second bounds decoded-image
+// memory (~6 MB/frame at 1080p) instead of the multi-hundred-MB it used to hold.
 int CameraMediaPlaybackController::streamInitialBufferFrameCount() const
 {
     const double frameRate = qMax(1.0, m_state.m_frameRate);
-    const double bufferingSeconds = qBound(
-        CameraSettings::m_minStreamBufferingSeconds,
-        m_settings->m_streamBufferingSeconds,
-        CameraSettings::m_maxStreamBufferingSeconds);
-    const int frameCount = static_cast<int>(std::ceil(frameRate * bufferingSeconds));
+    const int frameCount = static_cast<int>(std::ceil(frameRate * 0.35));
     return qMax(CameraMediaPlaybackState::m_minDecodedStreamFrames, frameCount);
 }
 
@@ -1133,12 +1140,8 @@ int CameraMediaPlaybackController::decodedStreamFrameQueueDepth() const
 int CameraMediaPlaybackController::maxDecodedStreamFrameCount() const
 {
     const double frameRate = qMax(1.0, m_state.m_frameRate);
-    const double bufferingSeconds = qBound(
-        CameraSettings::m_minStreamBufferingSeconds,
-        m_settings->m_streamBufferingSeconds,
-        CameraSettings::m_maxStreamBufferingSeconds);
-    const int timeFrameCount = static_cast<int>(std::ceil(frameRate * bufferingSeconds * 2.0));
-    return qMax(CameraMediaPlaybackState::m_minDecodedStreamFrames, timeFrameCount);
+    const int frameCount = static_cast<int>(std::ceil(frameRate * 0.7));
+    return qMax(2 * CameraMediaPlaybackState::m_minDecodedStreamFrames, frameCount);
 }
 
 qint64 CameraMediaPlaybackController::updateVideoFilePlaybackPosition(

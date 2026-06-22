@@ -1667,15 +1667,22 @@ void CameraMediaPlaybackController::scheduleNextVideoFileTick()
         if (m_settings->isStreamCamera()) {
             // Buffer-fill servo: hold the decoded-frame queue near a target depth
             // so the present rate tracks the true producer (content) rate. Present
-            // a touch faster when over-full and a touch slower when under-full;
-            // since fill is the integral of (produce - consume), holding it
-            // constant forces consumer rate == producer rate. This avoids both
-            // buffer drain (underrun) and overflow (dropped frames) without
-            // depending on the reported frame rate, and naturally refills after a
-            // network stall. Pacing video to an absolute audio/PTS clock instead
-            // does not regulate fill, so the queue rides a rail and drops frames.
+            // a touch slower when under-full; since fill is the integral of
+            // (produce - consume), holding it constant forces consumer rate ==
+            // producer rate. This avoids buffer drain (underrun) without depending
+            // on the reported frame rate, and naturally refills after a stall.
+            //
+            // The target is the decoded queue's CAP, because the decode thread blocks
+            // (rather than drops) when that queue is full, pinning it there and
+            // holding the real playback cushion in the cheap bitstream read-ahead
+            // (see queueDecodedVideoFileFrame). Targeting a lower depth would make the
+            // servo read the pinned-full queue as "over-full" and present faster than
+            // real time to drain it — which also drains the bitstream cushion the
+            // decode is feeding from, defeating the buffering. With target == cap,
+            // fill <= target always, so the present is bounded at real time and only
+            // ever slows when a genuine underrun (cushion exhausted) drops the queue.
             const int fill = decodedStreamFrameQueueDepth();
-            const int target = streamInitialBufferFrameCount();
+            const int target = maxDecodedStreamFrameCount();
             const double slackMs = qMax(5.0, intervalMs * 0.25);
             const double gainMsPerFrame = qMax(0.5, intervalMs * 0.05);
             const double adjustedMs = intervalMs - static_cast<double>(fill - target) * gainMsPerFrame;

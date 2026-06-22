@@ -21878,6 +21878,10 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
                 if (canCalibrateLens(settings))
                 {
                     // Coarse pass: locate the principal-point / distortion basin at the seed pose.
+                    // NB: load-bearing even under rot-vec/WS1a -- it finds the off-centre fisheye
+                    // principal-point basin the free-pp LM cannot reach from zero (gating it off the
+                    // rot-vec path regressed synth-fisheye-031). Kept; only the downstream pp clamp
+                    // (a pure cross-build band-aid) was retired.
                     Evaluation bestSeed = seedAnchored;
                     static const double kCenterGrid[] = { -60.0, -30.0, 0.0, 30.0, 60.0 };
                     static const double kK1Grid[] = { -0.15, -0.10, -0.05, 0.0, 0.05 };
@@ -21944,10 +21948,19 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
                         Evaluation lm = runPlateSolveLmRefinement(
                             settings, catalogContext, imageSize, starDetections, fixedMatches,
                             rankDetectionIndices, seedAnchored, freeParameters, finalMatchRadius);
-                        lm.centerOffsetXPixels = std::clamp(
-                            lm.centerOffsetXPixels, anchorCx - kCenterWindowPixels, anchorCx + kCenterWindowPixels);
-                        lm.centerOffsetYPixels = std::clamp(
-                            lm.centerOffsetYPixels, anchorCy - kCenterWindowPixels, anchorCy + kCenterWindowPixels);
+                        // WS2 follow-on: the ±window principal-point clamp existed to make the
+                        // RMS-minimising LM converge identically between the independently-compiled
+                        // GUI DLL and test EXE (cx=-41 vs cx=+91 across builds). WS1a makes both link
+                        // the same solver object, so there is no longer a cross-build choice to pin,
+                        // and the keep-best rule below already rejects a genuine overfit (fewer stars).
+                        // Drop the clamp on the modern (rot-vec) path; the legacy path keeps it.
+                        if (!rotVecLmActive(settings))
+                        {
+                            lm.centerOffsetXPixels = std::clamp(
+                                lm.centerOffsetXPixels, anchorCx - kCenterWindowPixels, anchorCx + kCenterWindowPixels);
+                            lm.centerOffsetYPixels = std::clamp(
+                                lm.centerOffsetYPixels, anchorCy - kCenterWindowPixels, anchorCy + kCenterWindowPixels);
+                        }
                         const Evaluation rematched = evalLens(
                             lm, lm.centerOffsetXPixels, lm.centerOffsetYPixels, lm.distortionK1);
                         if (!isBetterSeedAnchored(rematched, seedAnchored)) {

@@ -2440,3 +2440,31 @@ FISHEYE-full 56 / WIDE 27 / RAND2 148 / RAND ~80 / FISH4-mode4 40.** Kill-switch
 A/B. Follow-ons now unblocked: the seed-anchored-grid / clamped-pp wide band-aids can likely be retired
 the same way (gated on rotVecLmActive); investigate the blind-fisheye rot-vec tip if blind solving is
 prioritised.
+
+### WS2 follow-on — wide band-aid cleanup (2026-06-22)
+
+Retired the **clamped free-principal-point polish** clamp on the modern (rot-vec) path. The ±30px
+window around the grid value (cameraplatesolver.cpp ~21947) existed purely to make the RMS-minimising
+LM converge *identically between the independently-compiled GUI DLL and test EXE* (cx=-41 vs cx=+91
+across builds). **WS1a** makes both link the same solver object, so there is no cross-build choice to
+pin, and the keep-best rule already rejects a genuine overfit. Gated the clamp on `!rotVecLmActive`
+(legacy keeps it as A/B rollback). **Validated neutral: REAL 48 / WIDE 27 / FISH4 40** (identical
+pass+fail sets to baseline).
+
+The **match-count grid** (the cx/cy/k1 coarse sweep, ~21878) was tested for retirement the same way
+and **kept** — it is *load-bearing*, not a band-aid: gating it off the rot-vec path regressed
+**FISH4 40->39** (lost synth-fisheye-031), because it finds the off-centre fisheye principal-point
+basin the free-pp LM cannot reach from zero. The notes' earlier "likely retirable" guess was wrong;
+the grid is a legitimate coarse-to-fine basin finder and stays on all paths.
+
+**Harness build/run env (this worktree, 2026-06-22):** build-qt6 is configured against
+`external/windows/opencv4` (opencv **4.10.0 world**, single `opencv_world4100.dll`) but its cuda
+modules are *detected-but-missing* (`opencv_cudaarithm.lib` etc. absent), so camera targets fail to
+link out of the box. To build+run the harness here: (1) copy `opencv_cuda*4130.lib` ->
+`opencv_cuda*.lib` (unversioned) in the override lib dir
+`sdrangel-windows-libraries/opencv4/x64/vc17/lib`; (2) build via **PowerShell** capturing vcvars env
+then `$env:LIB="<override-lib>;$env:LIB"` BEFORE `cmake --build` (cmd's `set LIB=...` truncates at
+~8191 chars and drops the entry); (3) drop `opencv_world4100.dll` into `build-qt6/bin` (the exe needs
+it at load; copy from any sibling sdrangel `build-qt6/bin`). The proper fix is to reconfigure build-qt6
+against the override (4.13.0) with `-DOpenCV_DIR=<override>`, but the above gets a working, trustworthy
+harness without a full reconfigure.

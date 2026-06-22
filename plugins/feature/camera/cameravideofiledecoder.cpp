@@ -460,6 +460,9 @@ void CameraVideoFileDecoder::startReadAhead()
         }
     });
     m_readThread->start();
+    qDebug() << "CameraVideoFileDecoder: bitstream read-ahead started, cap"
+             << m_readAheadCapVideoPackets << "video packets ("
+             << QString::number(m_readAheadCapVideoPackets / qMax(1.0, m_frameRate), 'f', 2) << "s )";
 #endif
 }
 

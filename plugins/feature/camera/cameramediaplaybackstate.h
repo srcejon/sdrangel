@@ -135,6 +135,19 @@ public:
     // schedule (clock/rebuffer/pending/delayed frames) — that state is worker-
     // owned and must not be written from the decode thread.
     std::atomic_bool m_streamReopenResetPending { false };
+    // Set by the worker: true while presentation is actively consuming frames, false while
+    // (re)buffering. The decode thread reads it to switch behaviour: while buffering it
+    // block-to-accumulates (lets the read-ahead build the bitstream cushion while the present
+    // is held); during active playback it SELF-PACES at the frame rate and does NOT block on a
+    // full queue, so the audio (decoded alongside the video) is fed at the full source rate
+    // rather than throttled to the present's achievable display rate (~59 at 60 fps, which
+    // starved the audio and pitched the resampler down). The present's own frame drop sheds
+    // the small surplus the slow present can't display.
+    std::atomic_bool m_streamPresentActive { false };
+    // Decode-thread-owned self-pacing clock + frame counter (only used during active playback).
+    QElapsedTimer m_decodePaceClock;
+    quint64 m_decodePaceFrameCount = 0;
+    bool m_decodePacePrevActive = false;
     quint64 m_streamWatchdogLastProduced = 0;
     QElapsedTimer m_streamWatchdogClock;
     mutable QMutex m_decodedFramesMutex;

@@ -781,6 +781,42 @@ void CameraMediaPlaybackController::queueDecodedVideoFileFrame(
     int maxBufferedFrames,
     double playbackFrameRate)
 {
+    // During ACTIVE playback, self-pace the decode at the playback frame rate. The audio is
+    // decoded alongside the video in this same loop, so if the decode is instead throttled to
+    // the present's consume rate (which falls ~1 fps short at 60 fps) the audio buffer is fed
+    // short and the resampler pitches down to compensate (drains to underrun). Pacing the
+    // decode itself feeds the audio at the full source rate; the present's frame drop sheds the
+    // small video surplus it can't display. Self-pacing (vs. free-running) is also what keeps
+    // the decode from burning through the buffered bitstream cushion in non-blocking mode.
+    // While BUFFERING (present held) we skip this and block-to-accumulate below instead.
+    const bool presentActive = m_state.m_streamPresentActive.load();
+    if (presentActive && (playbackFrameRate > 0.0))
+    {
+        const double intervalMs = 1000.0 / playbackFrameRate;
+        if (!m_state.m_decodePacePrevActive || !m_state.m_decodePaceClock.isValid())
+        {
+            m_state.m_decodePaceClock.start();
+            m_state.m_decodePaceFrameCount = 0;
+        }
+        qint64 targetMs = static_cast<qint64>(std::llround(static_cast<double>(m_state.m_decodePaceFrameCount) * intervalMs));
+        // If we have drifted well behind (a slow patch), resync rather than sprint to catch up
+        // — sprinting would drain the read-ahead cushion.
+        if (m_state.m_decodePaceClock.elapsed() - targetMs > static_cast<qint64>(std::llround(4.0 * intervalMs)))
+        {
+            m_state.m_decodePaceClock.restart();
+            m_state.m_decodePaceFrameCount = 0;
+            targetMs = 0;
+        }
+        qint64 waitMs = targetMs - m_state.m_decodePaceClock.elapsed();
+        while ((waitMs > 0) && !m_state.m_decodeThreadStop.load())
+        {
+            QThread::msleep(static_cast<unsigned long>(qMin<qint64>(waitMs, 5)));
+            waitMs = targetMs - m_state.m_decodePaceClock.elapsed();
+        }
+        ++m_state.m_decodePaceFrameCount;
+    }
+    m_state.m_decodePacePrevActive = presentActive;
+
     QMutexLocker locker(&m_state.m_decodedFramesMutex);
     while (!m_state.m_playing && !m_state.m_decodeThreadStop.load())
     {
@@ -791,23 +827,35 @@ void CameraMediaPlaybackController::queueDecodedVideoFileFrame(
         return;
     }
 
-    // Hold the playback cushion in the cheap compressed bitstream read-ahead rather
-    // than by dropping decoded frames. When the decoded queue is full, BLOCK the
-    // decode so the read-ahead thread accumulates packets (the cushion) instead of
-    // decoding frames only to drop them at the live edge. This is what makes the
-    // bitstream buffer pay off on a real-time-paced source (e.g. ffmpeg -re): the
-    // source can't be read ahead, so the only way to build a cushion is to hold a few
-    // seconds of (cheap, undecoded) bitstream and play behind the live edge. Without
-    // this, the queue caps at maxDecodedFrames, the read-ahead never fills, and any
-    // momentary client slowdown starves playback and backs the source up. The source
-    // simply waits while we hold (it is not sending ahead of real time), so nothing is
-    // lost; for a buffered stream this latency is exactly what we want.
     const int maxDecodedFrames = qMax(minBufferedFrames, maxBufferedFrames);
-    while (m_state.m_playing
-        && !m_state.m_decodeThreadStop.load()
-        && (m_state.m_decodedFrames.size() >= static_cast<size_t>(maxDecodedFrames)))
+    if (presentActive)
     {
-        m_state.m_decodedFramesNotFull.wait(&m_state.m_decodedFramesMutex, 20);
+        // Active playback: the decode is self-paced above, so do NOT block on a full queue
+        // (blocking would re-throttle the decode — and the audio feed — to the present rate).
+        // Drop the OLDEST decoded frame instead. The queue normally sits below the cap (the
+        // present consumes at ~the audio rate), so this is a rare safety; and the oldest frame
+        // is always older than the audio position the present shows (queue depth > audio
+        // buffer depth), i.e. a frame the present would discard as late anyway.
+        while (m_state.m_playing
+            && (m_state.m_decodedFrames.size() >= static_cast<size_t>(maxDecodedFrames)))
+        {
+            m_state.m_decodedFrames.pop_front();
+        }
+    }
+    else
+    {
+        // Buffering (present held): BLOCK so the read-ahead thread accumulates packets (the
+        // bitstream cushion) instead of decoding frames only to drop them at the live edge.
+        // This is what makes the bitstream buffer pay off on a real-time-paced source (e.g.
+        // ffmpeg -re): the only way to build a cushion is to hold a few seconds of (cheap,
+        // undecoded) bitstream and play behind the live edge. The source simply waits while we
+        // hold; nothing is lost.
+        while (m_state.m_playing
+            && !m_state.m_decodeThreadStop.load()
+            && (m_state.m_decodedFrames.size() >= static_cast<size_t>(maxDecodedFrames)))
+        {
+            m_state.m_decodedFramesNotFull.wait(&m_state.m_decodedFramesMutex, 20);
+        }
     }
     if (m_state.m_decodeThreadStop.load()) {
         return;
@@ -1345,12 +1393,16 @@ bool CameraMediaPlaybackController::readQueuedVideoFileFrame(bool submitAudio)
                 }
                 m_state.m_streamRebuffering = true;
             }
+            // Presentation is held: tell the decode thread to block-to-accumulate (build the
+            // cushion) rather than self-pace.
+            m_state.m_streamPresentActive.store(false);
             return false;
         }
 
         const bool buffering = initialBuffering || m_state.m_streamRebuffering;
         if (buffering && (bufferedFrames < rebufferTarget))
         {
+            m_state.m_streamPresentActive.store(false);   // still building the cushion
             m_presentTimer.setSingleShot(true);
             m_presentTimer.start(qMax(1, videoFileFrameIntervalMs() / 2));
             return false;
@@ -1372,6 +1424,9 @@ bool CameraMediaPlaybackController::readQueuedVideoFileFrame(bool submitAudio)
             }
         }
         m_state.m_streamRebuffering = false;
+        // Cushion is healthy and we are presenting: let the decode thread self-pace at the
+        // frame rate and feed the audio at the full source rate (decoupled from this present).
+        m_state.m_streamPresentActive.store(true);
     }
 
     CameraMediaPlaybackState::DecodedFrame decodedFrame;
@@ -1673,6 +1728,7 @@ void CameraMediaPlaybackController::resetVideoFilePlaybackSchedule()
     m_state.m_lastDecodeMs = 0;
     m_state.m_presentResidualMs = 0.0;
     m_state.m_streamRebuffering = false;
+    m_state.m_streamPresentActive.store(false);   // rebuild the cushion before self-pacing again
 }
 
 qint64 CameraMediaPlaybackController::videoFilePlaybackClockMs() const

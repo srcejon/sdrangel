@@ -113,6 +113,14 @@ public:
     // handed toward the device by streamTakeAudio. The master clock the video present follows
     // is this minus the monitor-FIFO + sink-latency. −1 until audio starts.
     qint64 m_streamPlayedPtsMs = -1;
+    // Smoothed video master clock (ffplay model). The exact audio clock (streamMasterClockMs)
+    // is correct on average but advances in a staircase — it jumps ~2.5 frames each time the
+    // audio device pulls a chunk from the monitor (fifo drops instantly while the sink-latency
+    // EMA lags), then sits flat. Following it directly drops the skipped frames. Instead advance
+    // this at wall-clock rate and gently pull it toward the exact clock (hard-resync on a large
+    // gap), so the present shows one frame per tick. −1 until audio starts.
+    double m_streamVideoClockMs = -1.0;
+    QElapsedTimer m_streamVideoClockWall;
     // Diagnostic: per-second MAX duration (ms) of presentStreamTick stages, to find the
     // bottleneck capping the present rate.
     double m_streamTickTotalMaxMs = 0.0;

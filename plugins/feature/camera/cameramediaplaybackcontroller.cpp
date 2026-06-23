@@ -320,8 +320,34 @@ void CameraMediaPlaybackController::presentStreamTick()
     tickTimer.start();
     submitStreamAudio();
     const double tAudioMs = tickTimer.nsecsElapsed() / 1.0e6;
-    const qint64 clockMs = streamMasterClockMs();
     const double intervalMs = qMax(1.0, videoFileExactFrameIntervalMs());
+
+    // Smooth the staircase audio clock into a steady video master clock (see m_streamVideoClockMs).
+    const qint64 exactClockMs = streamMasterClockMs();
+    qint64 clockMs = exactClockMs;
+    if (exactClockMs >= 0)
+    {
+        if ((m_state.m_streamVideoClockMs < 0.0) || !m_state.m_streamVideoClockWall.isValid())
+        {
+            m_state.m_streamVideoClockMs = exactClockMs;             // anchor
+            m_state.m_streamVideoClockWall.start();
+        }
+        else
+        {
+            const double wallElapsedMs = m_state.m_streamVideoClockWall.nsecsElapsed() / 1.0e6;
+            m_state.m_streamVideoClockWall.restart();
+            const double playbackRate = qMax(0.1, m_settings->m_videoPlaybackRate);
+            double c = m_state.m_streamVideoClockMs + wallElapsedMs * playbackRate;   // free-run at wall rate
+            const double err = static_cast<double>(exactClockMs) - c;
+            if (qAbs(err) > 250.0) {
+                c = exactClockMs;                                    // large gap (start/stall/seek) → snap
+            } else {
+                c += err * 0.05;                                     // gentle pull: averages the staircase, tracks drift
+            }
+            m_state.m_streamVideoClockMs = c;
+        }
+        clockMs = llround(m_state.m_streamVideoClockMs);
+    }
 
     // Buffering gate: hold presentation until the compressed cushion is built AND audio has
     // started (clock valid). The cushion lives in the decoder's packet queue.
@@ -408,6 +434,7 @@ void CameraMediaPlaybackController::presentStreamTick()
     {
         qDebug().nospace()
             << "CameraMediaPlayback: stream - clockMs " << clockMs
+            << " exactMs " << exactClockMs
             << " audioBufMs " << (m_state.m_decoder->streamAudioBufferedFrames() * 1000 / qMax(1, m_audio->monitorSampleRate()))
             << " videoPkts " << m_state.m_decoder->streamVideoPacketCount()
             << " videoFrames " << m_state.m_decoder->streamDecodedVideoFrameCount()
@@ -488,6 +515,7 @@ bool CameraMediaPlaybackController::openVideoFileDecoder()
         // packet queues, not in the audio sample buffer.
         m_state.m_decoder->setStreamAudioTargetSeconds(0.30);
         m_state.m_streamPlayedPtsMs = -1;
+        m_state.m_streamVideoClockMs = -1.0;
         m_state.m_basePositionMs = -1;
         // Make the ~16 ms present timer reliable (see setHighTimerResolution); without this the
         // present is delivered at ~42 ms on Windows and caps at ~24 fps.
@@ -552,6 +580,7 @@ void CameraMediaPlaybackController::setVideoFilePlaying(bool playing)
             // filling the buffers; just kick the present loop, which gates on the cushion then
             // shows frames at the audio clock and re-schedules itself (presentStreamTick).
             m_state.m_streamPlayedPtsMs = -1;
+            m_state.m_streamVideoClockMs = -1.0;
             m_state.m_basePositionMs = -1;
             m_presentTimer.start(qMax(1, videoFileFrameIntervalMs()));
         }

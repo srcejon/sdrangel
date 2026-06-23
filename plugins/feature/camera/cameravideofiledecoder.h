@@ -79,7 +79,8 @@ public:
         const QString& fileName,
         QString& errorMessage,
         int outputSampleRate = 48000,
-        double readAheadSeconds = 1.0);
+        double readAheadSeconds = 1.0,
+        bool streaming = false);
     void requestAbort();
     void close();
     void seek(qint64 positionMs);
@@ -121,6 +122,30 @@ public:
     int takePendingAudio(QByteArray& pcmS16Stereo, int maxSampleFrames);
     [[nodiscard]] int pendingVideoFrameCount() const { return static_cast<int>(m_pendingVideoFrames.size()); }
     [[nodiscard]] int pendingVideoPacketCount() const { return static_cast<int>(m_pendingVideoPackets.size()); }
+
+    // ---- Clean streaming path (URL sources) — see STREAM_REWRITE_PLAN.md ----------------
+    // Separate demux + audio-decode + video-decode threads, each paced by its own consumer:
+    // audio decode blocks when the audio sample buffer is full (so it is paced by the audio
+    // OUTPUT pulling at the device rate), video decode blocks when the decoded-frame queue is
+    // full (paced by the present). This replaces the old single combined-decode loop whose
+    // pace was tied to the video present. Enabled by open(..., streaming=true).
+    //
+    // Decoder owns the whole audio path: decode → buffer → drift resampler → DEVICE-rate
+    // output. streamTakeAudio runs the slow drift servo (holding the buffer near
+    // streamAudioTargetSeconds) and returns up to maxSampleFrames of device-rate S16 stereo.
+    // It reports playedPtsMs = the content PTS (ms) most recently CONSUMED from the buffer
+    // (i.e. handed toward the device); the consumer derives the master clock as
+    // playedPtsMs − monitorFIFO_ms − sinkLatency_ms (single buffer ⇒ exact, no summing of
+    // estimated queue depths). Returns frames produced. playedPtsMs = −1 if nothing consumed.
+    int streamTakeAudio(QByteArray& pcmS16Stereo, int maxSampleFrames, qint64& playedPtsMs);
+    void setStreamAudioTargetSeconds(double seconds);
+    [[nodiscard]] int streamAudioBufferedFrames() const;
+    // Pop the next decoded video frame (oldest). Returns false if the queue is empty.
+    bool streamTakeVideoFrame(QImage& image, qint64& positionMs, bool& eof);
+    // PTS (ms) of the next decoded video frame without popping; −1 if the queue is empty.
+    [[nodiscard]] qint64 streamPeekVideoFramePtsMs() const;
+    [[nodiscard]] int streamDecodedVideoFrameCount() const;
+    [[nodiscard]] int streamVideoPacketCount() const;
 
 private:
     struct PendingVideoFrame
@@ -206,6 +231,59 @@ private:
     // convertFrameToImage, cutting malloc/page-fault churn at frame rate. Sized
     // for the in-flight frame count (≤4 stream pending + worker/pipeline copies).
     CameraImagePool m_imagePool { 8 };
+
+    // ---- Clean streaming path state (URL sources) — see STREAM_REWRITE_PLAN.md ----------
+    struct StreamDecodedFrame
+    {
+        QImage m_image;
+        qint64 m_ptsMs = -1;
+        bool m_eof = false;
+    };
+    bool m_streamingMode = false;
+    QThread *m_demuxThread = nullptr;
+    QThread *m_audioDecodeThread = nullptr;
+    QThread *m_videoDecodeThread = nullptr;
+    // One mutex guards all the streaming queues + their wait conditions. The three threads
+    // only ever briefly lock it to move a packet/frame in or out, so contention is low.
+    mutable QMutex m_streamMutex;
+    // Demux → decode: separate compressed packet queues (the jitter/cushion buffer). Capped
+    // by video-packet count (≈ streamBufferingSeconds); audio cap derived from it.
+    std::deque<AVPacket*> m_streamVideoPktQ;
+    std::deque<AVPacket*> m_streamAudioPktQ;
+    int m_streamVideoPktCap = 60;
+    int m_streamAudioPktCap = 300;
+    QWaitCondition m_streamVideoPktNotEmpty;
+    QWaitCondition m_streamVideoPktNotFull;
+    QWaitCondition m_streamAudioPktNotEmpty;
+    QWaitCondition m_streamAudioPktNotFull;
+    bool m_streamDemuxEof = false;
+    bool m_streamDemuxError = false;
+    // Audio decode → output: device-nominal S16 stereo, content-rate, paced by the consumer.
+    CameraAudioByteQueue m_streamAudioBuf;
+    // Content PTS (ms) of the END of decoded audio currently in the buffer (the back).
+    // head-PTS = this − buffered-ms, so it advances exactly as the consumer drains the
+    // buffer. Updated by the audio decode thread under m_streamMutex.
+    qint64 m_streamAudioEndPtsMs = -1;
+    int m_streamAudioBufCapFrames = 0;
+    QWaitCondition m_streamAudioBufNotFull;
+    QWaitCondition m_streamAudioBufNotEmpty;
+    // Drift servo (slow PI on buffer depth → output ratio) + interpolation phase, owned by
+    // the consumer (streamTakeAudio). Matches the source content rate to the soundcard rate.
+    double m_streamDriftRatio = 1.0;
+    double m_streamDriftPhase = 0.0;
+    double m_streamAudioTargetSeconds = 0.30;
+    // Video decode → present: decoded frames + PTS.
+    std::deque<StreamDecodedFrame> m_streamVideoFrameQ;
+    size_t m_streamVideoFrameCap = 4;
+    QWaitCondition m_streamVideoFrameNotEmpty;
+    QWaitCondition m_streamVideoFrameNotFull;
+
+    void startStreamThreads();
+    void stopStreamThreads();
+    void clearStreamQueues();       // call with m_streamMutex held
+    void streamDemuxLoop();
+    void streamAudioDecodeLoop();
+    void streamVideoDecodeLoop();
 
     void startReadAhead();
     void stopReadAhead();

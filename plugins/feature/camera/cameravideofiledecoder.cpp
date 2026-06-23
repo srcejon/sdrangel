@@ -74,17 +74,20 @@ bool CameraVideoFileDecoder::open(
     const QString& fileName,
     QString& errorMessage,
     int outputSampleRate,
-    double readAheadSeconds)
+    double readAheadSeconds,
+    bool streaming)
 {
 #ifndef CAMERA_FFMPEG_STREAMING
     Q_UNUSED(fileName)
     Q_UNUSED(outputSampleRate)
     Q_UNUSED(readAheadSeconds)
+    Q_UNUSED(streaming)
     errorMessage = QStringLiteral("FFmpeg support is not available in this build");
     return false;
 #else
     close();
     m_abortRequested.store(false);
+    m_streamingMode = false;
     m_outputSampleRate = std::max(1000, outputSampleRate);
 
     const QByteArray fileNameUtf8 = fileName.toUtf8();
@@ -328,8 +331,23 @@ bool CameraVideoFileDecoder::open(
     if (m_urlSource)
     {
         const int cushionPackets = std::max(8, static_cast<int>(readAheadSeconds * m_frameRate + 0.5));
-        m_readAheadCapVideoPackets = std::max(cushionPackets * 4, cushionPackets + 120);
-        startReadAhead();
+        if (streaming)
+        {
+            // Clean streaming engine: demux → two packet queues → separate audio/video decode
+            // threads, each paced by its own consumer. The compressed cushion lives in the
+            // packet queues (same generous headroom rationale as the read-ahead above — don't
+            // backpressure a real-time source). See STREAM_REWRITE_PLAN.md.
+            m_streamingMode = true;
+            m_streamVideoPktCap = std::max(cushionPackets * 4, cushionPackets + 120);
+            m_streamAudioPktCap = m_streamVideoPktCap * 4;     // audio packets are smaller/more frequent
+            m_streamAudioBufCapFrames = m_outputSampleRate * 2; // ~2 s ceiling; servo holds near target
+            startStreamThreads();
+        }
+        else
+        {
+            m_readAheadCapVideoPackets = std::max(cushionPackets * 4, cushionPackets + 120);
+            startReadAhead();
+        }
     }
 
     return true;
@@ -340,9 +358,12 @@ void CameraVideoFileDecoder::close()
 {
 #ifdef CAMERA_FFMPEG_STREAMING
     requestAbort();
-    // Join the read-ahead thread before tearing down FFmpeg state: it owns
-    // av_read_frame on m_formatContext, which is freed below.
+    // Join the demux/decode threads before tearing down FFmpeg state: the demux owns
+    // av_read_frame on m_formatContext, the decode threads own the codec contexts, all
+    // freed below.
+    stopStreamThreads();
     stopReadAhead();
+    m_streamingMode = false;
     if (m_swsContext)
     {
         sws_freeContext(m_swsContext);
@@ -541,6 +562,320 @@ int CameraVideoFileDecoder::takeReadAheadPacket(AVPacket *pkt)
     Q_UNUSED(pkt)
     return -1;
 #endif
+}
+
+// ======================= Clean streaming engine (URL sources) ==========================
+// See STREAM_REWRITE_PLAN.md. Three threads, each paced by ITS OWN consumer:
+//   demux  → m_streamVideoPktQ / m_streamAudioPktQ  (compressed cushion + latency)
+//   audio  → m_streamAudioBuf (device-rate S16), blocks when full ⇒ paced by streamTakeAudio
+//   video  → m_streamVideoFrameQ (just-in-time), blocks when full ⇒ paced by the present
+// FFmpeg state is disjoint per thread (demux: m_formatContext; audio: m_audioCodecContext/
+// m_resampler/m_audioFrame; video: m_videoCodecContext/m_swsContext/m_videoFrame), so the
+// three run concurrently without locking FFmpeg. The cushion + the audio/sink latency live in
+// the compressed PACKET queues; the decoded-frame queue stays small (pool-sized) because the
+// video decode runs just ahead of the present, not 0.6 s ahead.
+
+void CameraVideoFileDecoder::clearStreamQueues()
+{
+#ifdef CAMERA_FFMPEG_STREAMING
+    while (!m_streamVideoPktQ.empty()) { AVPacket *p = m_streamVideoPktQ.front(); m_streamVideoPktQ.pop_front(); av_packet_free(&p); }
+    while (!m_streamAudioPktQ.empty()) { AVPacket *p = m_streamAudioPktQ.front(); m_streamAudioPktQ.pop_front(); av_packet_free(&p); }
+    m_streamVideoFrameQ.clear();
+    m_streamAudioBuf.clear();
+    m_streamAudioEndPtsMs = -1;
+    m_streamDriftRatio = 1.0;
+    m_streamDriftPhase = 0.0;
+    m_streamDemuxEof = false;
+    m_streamDemuxError = false;
+#endif
+}
+
+void CameraVideoFileDecoder::startStreamThreads()
+{
+#ifdef CAMERA_FFMPEG_STREAMING
+    { QMutexLocker locker(&m_streamMutex); clearStreamQueues(); }
+    m_demuxThread = QThread::create([this]() { streamDemuxLoop(); });
+    m_audioDecodeThread = QThread::create([this]() { streamAudioDecodeLoop(); });
+    m_videoDecodeThread = QThread::create([this]() { streamVideoDecodeLoop(); });
+    m_demuxThread->start();
+    m_audioDecodeThread->start();
+    m_videoDecodeThread->start();
+    qDebug() << "CameraVideoFileDecoder: clean streaming engine started — video pkt cap"
+             << m_streamVideoPktCap << "(~" << QString::number(m_streamVideoPktCap / qMax(1.0, m_frameRate), 'f', 1)
+             << "s ), audio target" << m_streamAudioTargetSeconds << "s";
+#endif
+}
+
+void CameraVideoFileDecoder::stopStreamThreads()
+{
+#ifdef CAMERA_FFMPEG_STREAMING
+    if (!m_demuxThread && !m_audioDecodeThread && !m_videoDecodeThread) {
+        return;
+    }
+    // m_abortRequested is already set by close()/requestAbort(); wake every wait so the
+    // threads observe it and exit, then join before FFmpeg state is torn down.
+    {
+        QMutexLocker locker(&m_streamMutex);
+        m_streamVideoPktNotEmpty.wakeAll();   m_streamVideoPktNotFull.wakeAll();
+        m_streamAudioPktNotEmpty.wakeAll();   m_streamAudioPktNotFull.wakeAll();
+        m_streamAudioBufNotFull.wakeAll();    m_streamAudioBufNotEmpty.wakeAll();
+        m_streamVideoFrameNotEmpty.wakeAll(); m_streamVideoFrameNotFull.wakeAll();
+    }
+    if (m_demuxThread)       { m_demuxThread->wait();       delete m_demuxThread;       m_demuxThread = nullptr; }
+    if (m_audioDecodeThread) { m_audioDecodeThread->wait(); delete m_audioDecodeThread; m_audioDecodeThread = nullptr; }
+    if (m_videoDecodeThread) { m_videoDecodeThread->wait(); delete m_videoDecodeThread; m_videoDecodeThread = nullptr; }
+    QMutexLocker locker(&m_streamMutex);
+    clearStreamQueues();
+#endif
+}
+
+void CameraVideoFileDecoder::streamDemuxLoop()
+{
+#ifdef CAMERA_FFMPEG_STREAMING
+    while (!m_abortRequested.load())
+    {
+        AVPacket *pkt = av_packet_alloc();
+        if (!pkt) {
+            QMutexLocker locker(&m_streamMutex);
+            m_streamDemuxError = true;
+            m_streamVideoPktNotEmpty.wakeAll(); m_streamAudioPktNotEmpty.wakeAll();
+            break;
+        }
+        const int ret = av_read_frame(m_formatContext, pkt);
+        if (ret < 0) {
+            av_packet_free(&pkt);
+            QMutexLocker locker(&m_streamMutex);
+            if (ret == AVERROR_EOF) m_streamDemuxEof = true; else m_streamDemuxError = true;
+            m_streamVideoPktNotEmpty.wakeAll(); m_streamAudioPktNotEmpty.wakeAll();
+            break;
+        }
+        if (pkt->stream_index == m_videoStreamIndex) {
+            QMutexLocker locker(&m_streamMutex);
+            while (!m_abortRequested.load() && (static_cast<int>(m_streamVideoPktQ.size()) >= m_streamVideoPktCap))
+                m_streamVideoPktNotFull.wait(&m_streamMutex, 100);
+            if (m_abortRequested.load()) { locker.unlock(); av_packet_free(&pkt); break; }
+            m_streamVideoPktQ.push_back(pkt);
+            m_streamVideoPktNotEmpty.wakeAll();
+        } else if (pkt->stream_index == m_audioStreamIndex) {
+            QMutexLocker locker(&m_streamMutex);
+            while (!m_abortRequested.load() && (static_cast<int>(m_streamAudioPktQ.size()) >= m_streamAudioPktCap))
+                m_streamAudioPktNotFull.wait(&m_streamMutex, 100);
+            if (m_abortRequested.load()) { locker.unlock(); av_packet_free(&pkt); break; }
+            m_streamAudioPktQ.push_back(pkt);
+            m_streamAudioPktNotEmpty.wakeAll();
+        } else {
+            av_packet_free(&pkt);   // subtitles / alternate streams — drop
+        }
+    }
+#endif
+}
+
+void CameraVideoFileDecoder::streamAudioDecodeLoop()
+{
+#ifdef CAMERA_FFMPEG_STREAMING
+    static constexpr int bytesPerSampleFrame = 4;
+    while (!m_abortRequested.load())
+    {
+        AVPacket *pkt = nullptr;
+        {
+            QMutexLocker locker(&m_streamMutex);
+            while (m_streamAudioPktQ.empty() && !m_streamDemuxEof && !m_streamDemuxError && !m_abortRequested.load())
+                m_streamAudioPktNotEmpty.wait(&m_streamMutex, 100);
+            if (m_abortRequested.load()) break;
+            if (m_streamAudioPktQ.empty()) {
+                if (m_streamDemuxEof || m_streamDemuxError) break;   // drained + source done
+                continue;
+            }
+            pkt = m_streamAudioPktQ.front();
+            m_streamAudioPktQ.pop_front();
+            m_streamAudioPktNotFull.wakeAll();
+        }
+        QByteArray chunk;
+        QString errorMessage;
+        const bool ok = sendAudioPacket(pkt, chunk, errorMessage);   // → device-rate S16, updates m_audioDecodedPositionMs
+        av_packet_free(&pkt);
+        if (!ok || chunk.isEmpty()) continue;
+        QMutexLocker locker(&m_streamMutex);
+        while (!m_abortRequested.load() && ((m_streamAudioBuf.size() / bytesPerSampleFrame) >= m_streamAudioBufCapFrames))
+            m_streamAudioBufNotFull.wait(&m_streamMutex, 100);
+        if (m_abortRequested.load()) break;
+        m_streamAudioBuf.append(chunk);
+        m_streamAudioEndPtsMs = m_audioDecodedPositionMs;
+        m_streamAudioBufNotEmpty.wakeAll();
+    }
+#endif
+}
+
+void CameraVideoFileDecoder::streamVideoDecodeLoop()
+{
+#ifdef CAMERA_FFMPEG_STREAMING
+    bool flushed = false;
+    while (!m_abortRequested.load())
+    {
+        AVPacket *pkt = nullptr;
+        bool sourceDone = false;
+        {
+            QMutexLocker locker(&m_streamMutex);
+            while (m_streamVideoPktQ.empty() && !m_streamDemuxEof && !m_streamDemuxError && !m_abortRequested.load())
+                m_streamVideoPktNotEmpty.wait(&m_streamMutex, 100);
+            if (m_abortRequested.load()) break;
+            if (!m_streamVideoPktQ.empty()) {
+                pkt = m_streamVideoPktQ.front();
+                m_streamVideoPktQ.pop_front();
+                m_streamVideoPktNotFull.wakeAll();
+            } else {
+                sourceDone = (m_streamDemuxEof || m_streamDemuxError);
+            }
+        }
+        if (pkt) {
+            const int sret = avcodec_send_packet(m_videoCodecContext, pkt);
+            av_packet_free(&pkt);
+            if ((sret < 0) && (sret != AVERROR(EAGAIN))) continue;   // skip a bad packet
+        } else if (sourceDone && !flushed) {
+            avcodec_send_packet(m_videoCodecContext, nullptr);       // flush the decoder
+            flushed = true;
+        } else {
+            continue;
+        }
+        for (;;) {
+            const int rret = avcodec_receive_frame(m_videoCodecContext, m_videoFrame);
+            if (rret == AVERROR(EAGAIN)) break;
+            if (rret == AVERROR_EOF) {
+                QMutexLocker locker(&m_streamMutex);
+                StreamDecodedFrame f; f.m_eof = true;
+                m_streamVideoFrameQ.push_back(std::move(f));
+                m_streamVideoFrameNotEmpty.wakeAll();
+                return;   // decode complete
+            }
+            if (rret < 0) break;
+            qint64 ptsMs = -1;
+            const int64_t bt = m_videoFrame->best_effort_timestamp;
+            if (bt != AV_NOPTS_VALUE)
+                ptsMs = av_rescale_q(bt, AVRational{m_videoTimeBaseNum, m_videoTimeBaseDen}, AVRational{1, 1000});
+            QImage image;
+            QString errorMessage;
+            const bool ok = convertFrameToImage(m_videoFrame, image, errorMessage);
+            av_frame_unref(m_videoFrame);
+            if (!ok) continue;
+            // Detach from the recycled pool buffer: a queued frame may sit through the audio
+            // latency before the present shows it, longer than the pool's in-flight window.
+            image.detach();
+            QMutexLocker locker(&m_streamMutex);
+            while (!m_abortRequested.load() && (m_streamVideoFrameQ.size() >= m_streamVideoFrameCap))
+                m_streamVideoFrameNotFull.wait(&m_streamMutex, 100);
+            if (m_abortRequested.load()) return;
+            StreamDecodedFrame f; f.m_image = image; f.m_ptsMs = ptsMs;
+            m_streamVideoFrameQ.push_back(std::move(f));
+            m_streamVideoFrameNotEmpty.wakeAll();
+        }
+    }
+#endif
+}
+
+int CameraVideoFileDecoder::streamTakeAudio(QByteArray& pcmS16Stereo, int maxSampleFrames, qint64& playedPtsMs)
+{
+    pcmS16Stereo.clear();
+    playedPtsMs = -1;
+#ifdef CAMERA_FFMPEG_STREAMING
+    static constexpr int bytesPerSampleFrame = 4;
+    if (maxSampleFrames <= 0) return 0;
+    QMutexLocker locker(&m_streamMutex);
+    const int availFrames = m_streamAudioBuf.size() / bytesPerSampleFrame;
+    if (availFrames < 2) return 0;
+    // Slow PI drift servo on buffer depth → output ratio: matches the source content rate to
+    // the soundcard rate (integral = the true crystal ratio, proportional = a small bounded
+    // transient). ki sized for ~unity damping at the per-tick call rate. Moved here so the
+    // decoder owns the whole audio path and the consumed-PTS clock is EXACT.
+    const double rate = static_cast<double>(std::max(1, m_outputSampleRate));
+    const double targetFrames = std::max(1.0, rate * std::max(0.05, m_streamAudioTargetSeconds));
+    const double err = (static_cast<double>(availFrames) - targetFrames) / targetFrames;
+    m_streamDriftRatio = qBound(0.95, m_streamDriftRatio + 0.000006 * err, 1.05);
+    const double proportional = qBound(-0.015, 0.025 * err, 0.015);
+    const double ratio = qBound(0.93, m_streamDriftRatio + proportional, 1.07);
+    const qint16 *in = reinterpret_cast<const qint16*>(m_streamAudioBuf.constData());
+    const double phase = m_streamDriftPhase;
+    pcmS16Stereo.reserve(maxSampleFrames * bytesPerSampleFrame);
+    int produced = 0;
+    for (; produced < maxSampleFrames; ++produced) {
+        const double pos = phase + static_cast<double>(produced) * ratio;
+        const int idx = static_cast<int>(std::floor(pos));
+        if ((idx < 0) || (idx + 1 >= availFrames)) break;
+        const double frac = pos - static_cast<double>(idx);
+        const auto lerp = [frac](qint16 a, qint16 b) -> qint16 {
+            const double v = static_cast<double>(a) * (1.0 - frac) + static_cast<double>(b) * frac;
+            return static_cast<qint16>(std::lround(qBound(-32768.0, v, 32767.0)));
+        };
+        const qint16 l = lerp(in[2 * idx], in[2 * (idx + 1)]);
+        const qint16 r = lerp(in[2 * idx + 1], in[2 * (idx + 1) + 1]);
+        const qint16 frame[2] = { l, r };
+        pcmS16Stereo.append(reinterpret_cast<const char*>(frame), bytesPerSampleFrame);
+    }
+    if (produced <= 0) { pcmS16Stereo.clear(); return 0; }
+    const double endPos = phase + static_cast<double>(produced) * ratio;
+    const int consumed = static_cast<int>(std::floor(endPos));
+    if (consumed > 0) {
+        m_streamAudioBuf.consume(consumed * bytesPerSampleFrame);
+        m_streamDriftPhase = endPos - static_cast<double>(consumed);
+    } else {
+        m_streamDriftPhase = endPos;
+    }
+    m_streamAudioBufNotFull.wakeAll();
+    // playedPtsMs = content position now handed toward the device = the new buffer head
+    // (end-of-decoded minus what still remains). Master clock = this − monitorFIFO − sink.
+    if (m_streamAudioEndPtsMs >= 0) {
+        const int remaining = m_streamAudioBuf.size() / bytesPerSampleFrame;
+        playedPtsMs = m_streamAudioEndPtsMs - static_cast<qint64>(std::llround(static_cast<double>(remaining) * 1000.0 / rate));
+    }
+    return produced;
+#else
+    Q_UNUSED(maxSampleFrames)
+    return 0;
+#endif
+}
+
+void CameraVideoFileDecoder::setStreamAudioTargetSeconds(double seconds)
+{
+    QMutexLocker locker(&m_streamMutex);
+    m_streamAudioTargetSeconds = std::max(0.05, seconds);
+}
+
+int CameraVideoFileDecoder::streamAudioBufferedFrames() const
+{
+    QMutexLocker locker(&m_streamMutex);
+    return m_streamAudioBuf.size() / 4;
+}
+
+bool CameraVideoFileDecoder::streamTakeVideoFrame(QImage& image, qint64& positionMs, bool& eof)
+{
+    eof = false;
+    QMutexLocker locker(&m_streamMutex);
+    if (m_streamVideoFrameQ.empty()) return false;
+    StreamDecodedFrame f = std::move(m_streamVideoFrameQ.front());
+    m_streamVideoFrameQ.pop_front();
+    m_streamVideoFrameNotFull.wakeAll();
+    image = std::move(f.m_image);
+    positionMs = f.m_ptsMs;
+    eof = f.m_eof;
+    return true;
+}
+
+qint64 CameraVideoFileDecoder::streamPeekVideoFramePtsMs() const
+{
+    QMutexLocker locker(&m_streamMutex);
+    if (m_streamVideoFrameQ.empty()) return -1;
+    return m_streamVideoFrameQ.front().m_ptsMs;
+}
+
+int CameraVideoFileDecoder::streamDecodedVideoFrameCount() const
+{
+    QMutexLocker locker(&m_streamMutex);
+    return static_cast<int>(m_streamVideoFrameQ.size());
+}
+
+int CameraVideoFileDecoder::streamVideoPacketCount() const
+{
+    QMutexLocker locker(&m_streamMutex);
+    return static_cast<int>(m_streamVideoPktQ.size());
 }
 
 void CameraVideoFileDecoder::setAudioPaceFrameRate(double frameRate)

@@ -282,7 +282,10 @@ void CameraMediaPlaybackController::presentStreamTick()
     if (!m_state.m_decoder) {
         return;
     }
+    QElapsedTimer tickTimer;
+    tickTimer.start();
     submitStreamAudio();
+    const double tAudioMs = tickTimer.nsecsElapsed() / 1.0e6;
     const qint64 clockMs = streamMasterClockMs();
     const double intervalMs = qMax(1.0, videoFileExactFrameIntervalMs());
 
@@ -341,6 +344,7 @@ void CameraMediaPlaybackController::presentStreamTick()
     if (dropped > 0) {
         m_state.m_streamFramesDroppedThisSecond += dropped;
     }
+    double tSubmitMs = 0.0;
     if (gotFrame && m_callbacks.submitFrame)
     {
         m_state.m_positionMs = shownPts;
@@ -351,9 +355,16 @@ void CameraMediaPlaybackController::presentStreamTick()
         frame->m_pipelineInputWallClockMs = QDateTime::currentMSecsSinceEpoch();
         frame->m_playbackPositionMs = shownPts;
         frame->m_playbackFrameRate = qMax(1.0, m_state.m_frameRate) * qMax(0.1, m_settings->m_videoPlaybackRate);
+        const double tBeforeSubmit = tickTimer.nsecsElapsed() / 1.0e6;
         submitVideoFileFrame(frame, false);
         reportVideoFilePlaybackToGUI();
+        tSubmitMs = tickTimer.nsecsElapsed() / 1.0e6 - tBeforeSubmit;
     }
+
+    const double tTotalMs = tickTimer.nsecsElapsed() / 1.0e6;
+    m_state.m_streamTickTotalMaxMs = qMax(m_state.m_streamTickTotalMaxMs, tTotalMs);
+    m_state.m_streamTickAudioMaxMs = qMax(m_state.m_streamTickAudioMaxMs, tAudioMs);
+    m_state.m_streamTickSubmitMaxMs = qMax(m_state.m_streamTickSubmitMaxMs, tSubmitMs);
 
     // Per-second diagnostic.
     if (!m_state.m_audioWanderClock.isValid()) {
@@ -366,8 +377,14 @@ void CameraMediaPlaybackController::presentStreamTick()
             << " audioBufMs " << (m_state.m_decoder->streamAudioBufferedFrames() * 1000 / qMax(1, m_audio->monitorSampleRate()))
             << " videoPkts " << m_state.m_decoder->streamVideoPacketCount()
             << " videoFrames " << m_state.m_decoder->streamDecodedVideoFrameCount()
-            << " framesDropped/s " << m_state.m_streamFramesDroppedThisSecond;
+            << " framesDropped/s " << m_state.m_streamFramesDroppedThisSecond
+            << " tickMaxMs " << qRound(m_state.m_streamTickTotalMaxMs * 10) / 10.0
+            << " (audio " << qRound(m_state.m_streamTickAudioMaxMs * 10) / 10.0
+            << " submit " << qRound(m_state.m_streamTickSubmitMaxMs * 10) / 10.0 << ")";
         m_state.m_streamFramesDroppedThisSecond = 0;
+        m_state.m_streamTickTotalMaxMs = 0.0;
+        m_state.m_streamTickAudioMaxMs = 0.0;
+        m_state.m_streamTickSubmitMaxMs = 0.0;
         m_state.m_audioWanderClock.restart();
     }
 

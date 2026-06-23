@@ -113,6 +113,11 @@ public:
     // handed toward the device by streamTakeAudio. The master clock the video present follows
     // is this minus the monitor-FIFO + sink-latency. −1 until audio starts.
     qint64 m_streamPlayedPtsMs = -1;
+    // Diagnostic: per-second MAX duration (ms) of presentStreamTick stages, to find the
+    // bottleneck capping the present rate.
+    double m_streamTickTotalMaxMs = 0.0;
+    double m_streamTickAudioMaxMs = 0.0;
+    double m_streamTickSubmitMaxMs = 0.0;
     quint64 m_frameSubmitGeneration = 0;
 
     QTimer m_delayedSubmitTimer;

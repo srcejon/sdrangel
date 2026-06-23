@@ -1043,6 +1043,18 @@ void CameraPostProcessor::processNewFrame(const CameraPipelineFramePtr& frame)
 
 void CameraPostProcessor::reportFrameToGUI(const QImage& image, const CameraPipelineFrame& frame, const QVector<PreviewTextLabel>& previewTextLabels, const QVector<PreviewRectItem>& previewRectItems, const QVector<CameraPipelineTrackedObject>& trackedObjects)
 {
+    // Diagnostic: measure the submit->GUI-dispatch pipeline latency (how long the frame spent
+    // travelling the preprocessor/processor/post-processor stages after the present submitted it).
+    // This is the video lag the audio does not have. Throttled to ~1/s.
+    if (frame.m_pipelineInputWallClockMs > 0) {
+        const qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
+        const qint64 latencyMs = nowMs - frame.m_pipelineInputWallClockMs;
+        if (nowMs - m_lastPipelineLatencyLogMs >= 1000) {
+            m_lastPipelineLatencyLogMs = nowMs;
+            qDebug() << "CameraPostProcessor: submit->display pipeline latency" << latencyMs << "ms"
+                     << "playbackPositionMs" << frame.m_playbackPositionMs;
+        }
+    }
     if (m_msgQueueToGUI) {
         m_msgQueueToGUI->push(MsgReportFrame::create(
             image,

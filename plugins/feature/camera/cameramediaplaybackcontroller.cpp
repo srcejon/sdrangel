@@ -344,6 +344,13 @@ void CameraMediaPlaybackController::presentStreamTick()
             } else {
                 c += err * 0.05;                                     // gentle pull: averages the staircase, tracks drift
             }
+            // Keep the smoothed clock tethered to the true audio position: it may sit a little
+            // below the staircase top (smoothing lag) but must never free-run ahead — when the
+            // audio stalls, exactMs freezes while wall time keeps advancing, which would otherwise
+            // push the video ahead of the (frozen) audio. Cap the lead so video freezes with audio.
+            c = qBound(static_cast<double>(exactClockMs) - 150.0,
+                       c,
+                       static_cast<double>(exactClockMs) + 40.0);
             m_state.m_streamVideoClockMs = c;
         }
         clockMs = llround(m_state.m_streamVideoClockMs);

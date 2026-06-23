@@ -355,6 +355,8 @@ private:
     // oldest frame so latency stays bounded.
     static constexpr int m_maxPendingFrames = 3;
     std::deque<CameraPipelineFramePtr> m_pendingFrames;
+    // Diagnostic: throttle for logging the submit->GUI display pipeline latency.
+    qint64 m_lastPipelineLatencyLogMs = 0;
     bool m_processingFrame;
     mutable SkyGridOverlayCache m_skyGridOverlayCache;
     bool handleMessage(const Message& cmd);

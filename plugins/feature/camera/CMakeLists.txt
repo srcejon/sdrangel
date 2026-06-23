@@ -141,6 +141,7 @@ endif()
 # single compilation is safe for both consumers regardless of their own CUDA/FFmpeg define sets.
 add_library(camera_platesolver STATIC
     ${CMAKE_CURRENT_SOURCE_DIR}/cameraplatesolver.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/cameraplatesolvercatalog.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/cameraplatesolver.h
     ${CMAKE_CURRENT_SOURCE_DIR}/cameraplatesolverinternal.h
 )

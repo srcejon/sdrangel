@@ -142,6 +142,7 @@ endif()
 add_library(camera_platesolver STATIC
     ${CMAKE_CURRENT_SOURCE_DIR}/cameraplatesolver.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/cameraplatesolver.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/cameraplatesolverinternal.h
 )
 set_target_properties(camera_platesolver PROPERTIES INTERPROCEDURAL_OPTIMIZATION OFF)
 target_include_directories(camera_platesolver PUBLIC

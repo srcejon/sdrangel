@@ -347,6 +347,10 @@ void CameraMediaPlaybackController::presentStreamTick()
             m_state.m_streamVideoClockMs = c;
         }
         clockMs = llround(m_state.m_streamVideoClockMs);
+        // Manual A/V trim (preview only): shift the present clock by the audio-offset slider so
+        // any residual video-leads/lags-audio offset can be corrected. Negative delays the video
+        // (same sense as file playback). Does not affect audio or recording.
+        clockMs += m_settings->m_videoPlaybackAudioOffsetMs;
     }
 
     // Buffering gate: hold presentation until the compressed cushion is built AND audio has
@@ -363,6 +367,7 @@ void CameraMediaPlaybackController::presentStreamTick()
             return;
         }
         m_state.m_basePositionMs = 0;   // started
+        m_state.m_streamPosterShown = false;
         qDebug() << "CameraMediaPlayback: stream playback start - clockMs" << clockMs
                  << "bufferedFrames" << buffered;
     }
@@ -395,6 +400,21 @@ void CameraMediaPlaybackController::presentStreamTick()
         shown = std::move(img);
         shownPts = pts;
         gotFrame = true;
+    }
+    // Startup poster: if nothing is due yet (clock still behind the first frame), show the oldest
+    // available frame once so the view isn't blank during the audio-latency gap at start.
+    if (!gotFrame && !eof && !m_state.m_streamPosterShown && (m_state.m_decoder->streamPeekVideoFramePtsMs() >= 0))
+    {
+        QImage img;
+        qint64 pts = -1;
+        bool e = false;
+        if (m_state.m_decoder->streamTakeVideoFrame(img, pts, e) && !e)
+        {
+            shown = std::move(img);
+            shownPts = pts;
+            gotFrame = true;
+            m_state.m_streamPosterShown = true;
+        }
     }
     if (eof)
     {
@@ -435,6 +455,10 @@ void CameraMediaPlaybackController::presentStreamTick()
         qDebug().nospace()
             << "CameraMediaPlayback: stream - clockMs " << clockMs
             << " exactMs " << exactClockMs
+            << " playedPts " << m_state.m_streamPlayedPtsMs
+            << " monFifoMs " << (static_cast<qint64>(m_audio->monitorAudioFill()) * 1000 / qMax(1, m_audio->monitorSampleRate()))
+            << " sinkMs " << (m_audio->monitorSinkLatencyUSecs() / 1000)
+            << " offsetMs " << m_settings->m_videoPlaybackAudioOffsetMs
             << " audioBufMs " << (m_state.m_decoder->streamAudioBufferedFrames() * 1000 / qMax(1, m_audio->monitorSampleRate()))
             << " videoPkts " << m_state.m_decoder->streamVideoPacketCount()
             << " videoFrames " << m_state.m_decoder->streamDecodedVideoFrameCount()

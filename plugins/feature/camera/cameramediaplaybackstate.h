@@ -121,6 +121,9 @@ public:
     // gap), so the present shows one frame per tick. −1 until audio starts.
     double m_streamVideoClockMs = -1.0;
     QElapsedTimer m_streamVideoClockWall;
+    // Set false at playback start; lets the present show the first available frame once as a
+    // poster so the view isn't blank during the audio-latency gap before the clock reaches it.
+    bool m_streamPosterShown = false;
     // Diagnostic: per-second MAX duration (ms) of presentStreamTick stages, to find the
     // bottleneck capping the present rate.
     double m_streamTickTotalMaxMs = 0.0;

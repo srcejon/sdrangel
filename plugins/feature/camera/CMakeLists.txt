@@ -142,6 +142,10 @@ endif()
 add_library(camera_platesolver STATIC
     ${CMAKE_CURRENT_SOURCE_DIR}/cameraplatesolver.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/cameraplatesolvercatalog.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/cameraplatesolversiril.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/cameraplatesolverrefine.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/cameraplatesolveracceptance.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/cameraplatesolvercore.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/cameraplatesolver.h
     ${CMAKE_CURRENT_SOURCE_DIR}/cameraplatesolverinternal.h
 )

@@ -519,78 +519,13 @@ void copySearchStateFrom(const SolverContext& other)
     m_detectionBrightnessRankIndices.clear();
 }
 
-static qint64 boundedMultiply(qint64 lhs, qint64 rhs)
-{
-    if ((lhs <= 0) || (rhs <= 0)) {
-        return 0;
-    }
+static qint64 boundedMultiply(qint64 lhs, qint64 rhs);
 
-    const qint64 maxValue = std::numeric_limits<qint64>::max();
-    if (lhs > (maxValue / rhs)) {
-        return maxValue;
-    }
+static qint64 estimateRefinementWorkUnits(int candidateCount, int visibleStarCount, int detectionCount);
 
-    return lhs * rhs;
-}
+static int refinementWorkerThreadCount(int candidateCount, qint64 estimatedWorkUnits);
 
-static qint64 estimateRefinementWorkUnits(int candidateCount, int visibleStarCount, int detectionCount)
-{
-    const qint64 perCandidateWork = boundedMultiply(
-        std::max<qint64>(1, visibleStarCount),
-        std::max<qint64>(1, detectionCount));
-    return boundedMultiply(std::max<qint64>(0, candidateCount), perCandidateWork);
-}
-
-static int refinementWorkerThreadCount(int candidateCount, qint64 estimatedWorkUnits)
-{
-    static constexpr int kMinParallelRefinementCandidates = 128;
-    static constexpr int kRefinementCandidatesPerWorker = 32;
-    static constexpr qint64 kMinParallelRefinementWorkUnits = 300LL * 1000LL * 1000LL;
-    static constexpr qint64 kRefinementWorkUnitsPerWorker = 250LL * 1000LL * 1000LL;
-
-    if (candidateCount < 2) {
-        return 1;
-    }
-
-    const int idealThreadCount = QThread::idealThreadCount();
-    if (idealThreadCount <= 2) {
-        return 1;
-    }
-
-    const bool enoughCandidateCount = candidateCount >= kMinParallelRefinementCandidates;
-    const bool enoughEstimatedWork = estimatedWorkUnits >= kMinParallelRefinementWorkUnits;
-    if (!enoughCandidateCount && !enoughEstimatedWork) {
-        return 1;
-    }
-
-    const int countLimitedThreadCount = candidateCount / kRefinementCandidatesPerWorker;
-    const int workLimitedThreadCount = static_cast<int>(
-        (estimatedWorkUnits + kRefinementWorkUnitsPerWorker - 1) / kRefinementWorkUnitsPerWorker);
-    const int requestedThreadCount = std::max(countLimitedThreadCount, workLimitedThreadCount);
-    if (requestedThreadCount < 2) {
-        return 1;
-    }
-
-    return std::max(1, std::min({requestedThreadCount, candidateCount, idealThreadCount - 2}));
-}
-
-static int visibleCatalogWorkerThreadCount(int catalogStarCount)
-{
-    static constexpr int kMinParallelVisibleCatalogStars = 120000;
-    static constexpr int kVisibleCatalogStarsPerWorker = 80000;
-
-    if (catalogStarCount < kMinParallelVisibleCatalogStars) {
-        return 1;
-    }
-
-    const int idealThreadCount = QThread::idealThreadCount();
-    if (idealThreadCount <= 2) {
-        return 1;
-    }
-
-    const int requestedThreadCount = (catalogStarCount + kVisibleCatalogStarsPerWorker - 1) / kVisibleCatalogStarsPerWorker;
-    return std::max(1, std::min(requestedThreadCount, idealThreadCount - 2));
-}
+static int visibleCatalogWorkerThreadCount(int catalogStarCount);
 
 static constexpr double kSirilAutoMaxFovDegrees = 15.0;
 static constexpr double kSirilMaxQueryRadiusDegrees = 20.0;
@@ -624,339 +559,41 @@ CameraPlateSolveResult solve(const CameraSettings& settings,
                              const QDateTime& captureDateTime,
                              QVector<CameraPipelineStarDetection>& starDetections);
 
-static double degToRad(double value)
-{
-    return value * kPi / 180.0;
-}
+static double degToRad(double value);
 
-static double normalizeDegrees(double value)
-{
-    value = std::fmod(value, 360.0);
-    if (value < 0.0) {
-        value += 360.0;
-    }
-    return value;
-}
+static double normalizeDegrees(double value);
 
-static SkyVector vectorFromAltAz(double azimuthDegrees, double elevationDegrees)
-{
-    const double azimuth = degToRad(azimuthDegrees);
-    const double elevation = degToRad(elevationDegrees);
-    const double cosElevation = std::cos(elevation);
+static SkyVector vectorFromAltAz(double azimuthDegrees, double elevationDegrees);
 
-    return {
-        cosElevation * std::sin(azimuth),
-        cosElevation * std::cos(azimuth),
-        std::sin(elevation)
-    };
-}
+static double dot(const SkyVector& lhs, const SkyVector& rhs);
 
-static double dot(const SkyVector& lhs, const SkyVector& rhs)
-{
-    return lhs.x * rhs.x + lhs.y * rhs.y + lhs.z * rhs.z;
-}
+static SkyVector cross(const SkyVector& lhs, const SkyVector& rhs);
 
-static SkyVector cross(const SkyVector& lhs, const SkyVector& rhs)
-{
-    return {
-        lhs.y * rhs.z - lhs.z * rhs.y,
-        lhs.z * rhs.x - lhs.x * rhs.z,
-        lhs.x * rhs.y - lhs.y * rhs.x
-    };
-}
+static double length(const SkyVector& vector);
 
-static double length(const SkyVector& vector)
-{
-    return std::sqrt(dot(vector, vector));
-}
+static SkyVector normalize(const SkyVector& vector);
 
-static SkyVector normalize(const SkyVector& vector)
-{
-    const double vectorLength = length(vector);
-    if (vectorLength <= 0.0) {
-        return {0.0, 0.0, 0.0};
-    }
+static SkyVector rotateAroundAxis(const SkyVector& vector, const SkyVector& axis, double angleRadians);
 
-    return {
-        vector.x / vectorLength,
-        vector.y / vectorLength,
-        vector.z / vectorLength
-    };
-}
+static double parseRightAscensionDegrees(const QString& value);
 
-static SkyVector rotateAroundAxis(const SkyVector& vector, const SkyVector& axis, double angleRadians)
-{
-    const double cosAngle = std::cos(angleRadians);
-    const double sinAngle = std::sin(angleRadians);
-    const SkyVector axisCrossVector = cross(axis, vector);
-    const double axisDotVector = dot(axis, vector);
+static double parseDeclinationDegrees(const QString& value);
 
-    return {
-        vector.x * cosAngle + axisCrossVector.x * sinAngle + axis.x * axisDotVector * (1.0 - cosAngle),
-        vector.y * cosAngle + axisCrossVector.y * sinAngle + axis.y * axisDotVector * (1.0 - cosAngle),
-        vector.z * cosAngle + axisCrossVector.z * sinAngle + axis.z * axisDotVector * (1.0 - cosAngle)
-    };
-}
+static QString stripQuotedField(const QString& value);
 
-static double parseRightAscensionDegrees(const QString& value)
-{
-    const QStringList fields = value.split(' ', Qt::SkipEmptyParts);
-    if (fields.size() != 3) {
-        return std::numeric_limits<double>::quiet_NaN();
-    }
+static QString downloadedCatalogDir();
 
-    bool okHours = false;
-    bool okMinutes = false;
-    bool okSeconds = false;
-    const double hours = fields[0].toDouble(&okHours);
-    const double minutes = fields[1].toDouble(&okMinutes);
-    const double seconds = fields[2].toDouble(&okSeconds);
-    if (!okHours || !okMinutes || !okSeconds) {
-        return std::numeric_limits<double>::quiet_NaN();
-    }
+static QString downloadedCatalogReducedPath();
 
-    return 15.0 * (hours + minutes / 60.0 + seconds / 3600.0);
-}
+static QString sirilAstroCatalogPath();
 
-static double parseDeclinationDegrees(const QString& value)
-{
-    const QStringList fields = value.split(' ', Qt::SkipEmptyParts);
-    if (fields.size() != 3) {
-        return std::numeric_limits<double>::quiet_NaN();
-    }
+static QString sirilAstroCompressedCatalogPath();
 
-    bool okDegrees = false;
-    bool okMinutes = false;
-    bool okSeconds = false;
-    const double degreesWithSign = fields[0].toDouble(&okDegrees);
-    const double minutes = fields[1].toDouble(&okMinutes);
-    const double seconds = fields[2].toDouble(&okSeconds);
-    if (!okDegrees || !okMinutes || !okSeconds) {
-        return std::numeric_limits<double>::quiet_NaN();
-    }
+static QByteArray gunzipData(const QByteArray& compressedData, QString* errorMessage);
 
-    const double sign = (degreesWithSign < 0.0) ? -1.0 : 1.0;
-    const double absoluteDegrees = std::fabs(degreesWithSign);
-    return sign * (absoluteDegrees + minutes / 60.0 + seconds / 3600.0);
-}
+static QVector<CatalogStar> parseBundledCatalog(const QString& text);
 
-static QString stripQuotedField(const QString& value)
-{
-    QString stripped = value.trimmed();
-    if (stripped.startsWith('"') && stripped.endsWith('"') && (stripped.size() >= 2)) {
-        stripped = stripped.mid(1, stripped.size() - 2);
-    }
-    return stripped.replace(QStringLiteral("\"\""), QStringLiteral("\""));
-}
-
-static QString downloadedCatalogDir()
-{
-    const QString baseDir = QStandardPaths::standardLocations(QStandardPaths::AppDataLocation).value(0);
-    return QDir(baseDir).filePath(QString::fromUtf8(kDownloadedCatalogDir));
-}
-
-static QString downloadedCatalogReducedPath()
-{
-    return QDir(downloadedCatalogDir()).filePath(QString::fromUtf8(kDownloadedCatalogReducedFile));
-}
-
-static QString sirilAstroCatalogPath()
-{
-    return QDir(downloadedCatalogDir()).filePath(QString::fromUtf8(kSirilAstroFileName));
-}
-
-static QString sirilAstroCompressedCatalogPath()
-{
-    return QDir(downloadedCatalogDir()).filePath(QString::fromUtf8(kSirilAstroCompressedFileName));
-}
-
-static QByteArray gunzipData(const QByteArray& compressedData, QString* errorMessage)
-{
-    if (compressedData.isEmpty()) {
-        if (errorMessage) {
-            *errorMessage = QStringLiteral("Downloaded catalog archive is empty.");
-        }
-        return QByteArray();
-    }
-
-    z_stream stream;
-    std::memset(&stream, 0, sizeof(stream));
-    stream.next_in = reinterpret_cast<Bytef *>(const_cast<char *>(compressedData.constData()));
-    stream.avail_in = static_cast<uInt>(compressedData.size());
-
-    const int windowBits = 16 + MAX_WBITS;
-    if (inflateInit2(&stream, windowBits) != Z_OK)
-    {
-        if (errorMessage) {
-            *errorMessage = QStringLiteral("Failed to initialize gzip decompressor.");
-        }
-        return QByteArray();
-    }
-
-    QByteArray uncompressedData;
-    char buffer[32768];
-    int inflateStatus = Z_OK;
-    do
-    {
-        stream.next_out = reinterpret_cast<Bytef *>(buffer);
-        stream.avail_out = sizeof(buffer);
-        inflateStatus = inflate(&stream, Z_NO_FLUSH);
-        if ((inflateStatus != Z_OK) && (inflateStatus != Z_STREAM_END))
-        {
-            inflateEnd(&stream);
-            if (errorMessage) {
-                *errorMessage = QStringLiteral("Failed to decompress gzip catalog archive.");
-            }
-            return QByteArray();
-        }
-        uncompressedData.append(buffer, sizeof(buffer) - static_cast<int>(stream.avail_out));
-    } while (inflateStatus != Z_STREAM_END);
-
-    inflateEnd(&stream);
-    return uncompressedData;
-}
-
-static QVector<CatalogStar> parseBundledCatalog(const QString& text)
-{
-    QVector<CatalogStar> stars;
-    const QStringList lines = text.split('\n');
-    for (const QString& rawLine : lines)
-    {
-        const QString line = rawLine.trimmed();
-        if (line.isEmpty() || line.startsWith('#') || line.startsWith(QStringLiteral("name|"))) {
-            continue;
-        }
-
-        const QStringList fields = line.split('|');
-        if ((fields.size() != 4) && (fields.size() != 5)) {
-            continue;
-        }
-
-        bool okMagnitude = false;
-        const double rightAscensionDegrees = parseRightAscensionDegrees(fields[1].trimmed());
-        const double declinationDegrees = parseDeclinationDegrees(fields[2].trimmed());
-        const double magnitude = fields[3].trimmed().toDouble(&okMagnitude);
-        if (!std::isfinite(rightAscensionDegrees) || !std::isfinite(declinationDegrees) || !okMagnitude) {
-            continue;
-        }
-
-        stars.append({
-            fields[0].trimmed(),
-            rightAscensionDegrees,
-            declinationDegrees,
-            magnitude,
-            (fields.size() >= 5) ? fields[4].trimmed() : QString()
-        });
-    }
-
-    return stars;
-}
-
-static QVector<CatalogStar> parseDownloadedHygCatalog(const QString& text)
-{
-    QVector<CatalogStar> stars;
-    const QStringList lines = text.split('\n');
-    if (lines.isEmpty()) {
-        return stars;
-    }
-
-    const QStringList headers = lines.front().trimmed().split(',');
-    QHash<QString, int> indices;
-    for (int i = 0; i < headers.size(); ++i) {
-        indices.insert(stripQuotedField(headers[i]), i);
-    }
-
-    const int properIndex = indices.value(QStringLiteral("proper"), -1);
-    const int bfIndex = indices.value(QStringLiteral("bf"), -1);
-    const int raIndex = indices.value(QStringLiteral("ra"), -1);
-    const int decIndex = indices.value(QStringLiteral("dec"), -1);
-    const int magIndex = indices.value(QStringLiteral("mag"), -1);
-    const int hipIndex = indices.value(QStringLiteral("hip"), -1);
-    const int hdIndex = indices.value(QStringLiteral("hd"), -1);
-    const int hrIndex = indices.value(QStringLiteral("hr"), -1);
-    const int spectIndex = indices.value(QStringLiteral("spect"), -1);
-    const int bayerIndex = indices.value(QStringLiteral("bayer"), -1);
-    const int flamIndex = indices.value(QStringLiteral("flam"), -1);
-    const int conIndex = indices.value(QStringLiteral("con"), -1);
-
-    if ((raIndex < 0) || (decIndex < 0) || (magIndex < 0)) {
-        return stars;
-    }
-
-    stars.reserve(lines.size());
-    for (int lineIndex = 1; lineIndex < lines.size(); ++lineIndex)
-    {
-        const QString line = lines[lineIndex].trimmed();
-        if (line.isEmpty()) {
-            continue;
-        }
-
-        const QStringList fields = line.split(',');
-        if (fields.size() <= std::max({raIndex, decIndex, magIndex})) {
-            continue;
-        }
-
-        bool okRa = false;
-        bool okDec = false;
-        bool okMag = false;
-        const double rightAscensionHours = stripQuotedField(fields[raIndex]).toDouble(&okRa);
-        const double declinationDegrees = stripQuotedField(fields[decIndex]).toDouble(&okDec);
-        const double magnitude = stripQuotedField(fields[magIndex]).toDouble(&okMag);
-        if (!okRa || !okDec || !okMag) {
-            continue;
-        }
-
-        QString name;
-        if ((properIndex >= 0) && (properIndex < fields.size())) {
-            name = stripQuotedField(fields[properIndex]);
-        }
-        if (name.isEmpty() && (bfIndex >= 0) && (bfIndex < fields.size())) {
-            name = stripQuotedField(fields[bfIndex]);
-        }
-        if (name.isEmpty())
-        {
-            const QString bayer = ((bayerIndex >= 0) && (bayerIndex < fields.size())) ? stripQuotedField(fields[bayerIndex]) : QString();
-            const QString flam = ((flamIndex >= 0) && (flamIndex < fields.size())) ? stripQuotedField(fields[flamIndex]) : QString();
-            const QString constellation = ((conIndex >= 0) && (conIndex < fields.size())) ? stripQuotedField(fields[conIndex]) : QString();
-            if (!bayer.isEmpty() && !constellation.isEmpty()) {
-                name = QStringLiteral("%1 %2").arg(bayer, constellation);
-            } else if (!flam.isEmpty() && !constellation.isEmpty()) {
-                name = QStringLiteral("%1 %2").arg(flam, constellation);
-            }
-        }
-        if (name.isEmpty() && (hipIndex >= 0) && (hipIndex < fields.size()))
-        {
-            const QString hip = stripQuotedField(fields[hipIndex]);
-            if (!hip.isEmpty()) {
-                name = QStringLiteral("HIP %1").arg(hip);
-            }
-        }
-        if (name.isEmpty() && (hrIndex >= 0) && (hrIndex < fields.size()))
-        {
-            const QString hr = stripQuotedField(fields[hrIndex]);
-            if (!hr.isEmpty()) {
-                name = QStringLiteral("HR %1").arg(hr);
-            }
-        }
-        if (name.isEmpty() && (hdIndex >= 0) && (hdIndex < fields.size()))
-        {
-            const QString hd = stripQuotedField(fields[hdIndex]);
-            if (!hd.isEmpty()) {
-                name = QStringLiteral("HD %1").arg(hd);
-            }
-        }
-        if (name.isEmpty()) {
-            continue;
-        }
-
-        const QString spectralType = ((spectIndex >= 0) && (spectIndex < fields.size()))
-            ? stripQuotedField(fields[spectIndex]) : QString();
-
-        stars.append({name, rightAscensionHours * 15.0, declinationDegrees, magnitude, spectralType});
-    }
-
-    return stars;
-}
+static QVector<CatalogStar> parseDownloadedHygCatalog(const QString& text);
 
 QVector<CatalogStar> filterCatalogStars(const QVector<CatalogStar>& stars)
 {
@@ -1000,236 +637,49 @@ QVector<CatalogStar> filterCatalogStars(const QVector<CatalogStar>& stars)
     return filtered;
 }
 
-static QString formatRightAscensionHours(double rightAscensionDegrees)
-{
-    const double totalHours = normalizeDegrees(rightAscensionDegrees) / 15.0;
-    const int hours = static_cast<int>(std::floor(totalHours));
-    const double totalMinutes = (totalHours - hours) * 60.0;
-    const int minutes = static_cast<int>(std::floor(totalMinutes));
-    const double seconds = (totalMinutes - minutes) * 60.0;
-    return QStringLiteral("%1 %2 %3")
-        .arg(hours, 2, 10, QLatin1Char('0'))
-        .arg(minutes, 2, 10, QLatin1Char('0'))
-        .arg(seconds, 0, 'f', 5);
-}
+static QString formatRightAscensionHours(double rightAscensionDegrees);
 
-static QString formatDeclinationDegrees(double declinationDegrees)
-{
-    const QChar sign = (declinationDegrees < 0.0) ? QLatin1Char('-') : QLatin1Char('+');
-    const double absoluteDegrees = std::fabs(declinationDegrees);
-    const int degrees = static_cast<int>(std::floor(absoluteDegrees));
-    const double totalMinutes = (absoluteDegrees - degrees) * 60.0;
-    const int minutes = static_cast<int>(std::floor(totalMinutes));
-    const double seconds = (totalMinutes - minutes) * 60.0;
-    return QStringLiteral("%1%2 %3 %4")
-        .arg(sign)
-        .arg(degrees, 2, 10, QLatin1Char('0'))
-        .arg(minutes, 2, 10, QLatin1Char('0'))
-        .arg(seconds, 0, 'f', 4);
-}
+static QString formatDeclinationDegrees(double declinationDegrees);
 
 static QString formatGaiaCoordinateLabel(double rightAscensionDegrees, double declinationDegrees);
 
 static bool isGenericGaiaCatalogName(const QString& name);
 
-static bool writeReducedCatalog(const QVector<CatalogStar>& stars, const QString& path, QString* errorMessage)
-{
-    // QSaveFile (write-to-temp + atomic rename) so concurrent solver processes can't read a
-    // half-written reduced catalog or corrupt each other when both regenerate it at once;
-    // concurrent writers resolve to last-writer-wins with each version complete.
-    QSaveFile outputFile(path);
-    if (!outputFile.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text))
-    {
-        if (errorMessage) {
-            *errorMessage = QStringLiteral("Failed to write reduced HYG catalog: %1").arg(path);
-        }
-        return false;
-    }
+static bool writeReducedCatalog(const QVector<CatalogStar>& stars, const QString& path, QString* errorMessage);
 
-    QByteArray data;
-    data.append("name|ra_hms|dec_dms|magnitude|spect\n");
-    for (const CatalogStar& star : stars)
-    {
-        data.append(star.name.toUtf8());
-        data.append('|');
-        data.append(formatRightAscensionHours(star.rightAscensionDegrees).toUtf8());
-        data.append('|');
-        data.append(formatDeclinationDegrees(star.declinationDegrees).toUtf8());
-        data.append('|');
-        data.append(QByteArray::number(star.magnitude, 'f', 2));
-        data.append('|');
-        data.append(star.spectralType.toUtf8());
-        data.append('\n');
-    }
+static QVector<CatalogStar> loadCatalogFromTextFile(const QString& path);
 
-    if (outputFile.write(data) != data.size())
-    {
-        outputFile.cancelWriting();
-        if (errorMessage) {
-            *errorMessage = QStringLiteral("Failed to fully write reduced HYG catalog: %1").arg(path);
-        }
-        return false;
-    }
+static QString currentCatalogPath(const CameraSettings& settings);
 
-    if (!outputFile.commit())
-    {
-        if (errorMessage) {
-            *errorMessage = QStringLiteral("Failed to commit reduced HYG catalog: %1").arg(path);
-        }
-        return false;
-    }
-    return true;
-}
+static QString currentCatalogSource(const CameraSettings& settings);
 
-static QVector<CatalogStar> loadCatalogFromTextFile(const QString& path)
-{
-    QFile file(path);
-    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        return {};
-    }
+static double firstPassPlateSolveMaxMagnitude(const CameraSettings& settings);
 
-    const QString text = QString::fromUtf8(file.readAll());
-    if (path.endsWith(QStringLiteral(".txt"))) {
-        return parseBundledCatalog(text);
-    }
-    return parseDownloadedHygCatalog(text);
-}
+static double narrowGuidedFullSearchMaxMagnitude(const CameraSettings& settings);
 
-static QString currentCatalogPath(const CameraSettings& settings)
-{
-    (void) settings;
-    if (QFileInfo::exists(downloadedCatalogReducedPath())) {
-        return downloadedCatalogReducedPath();
-    }
-    return QString::fromUtf8(kBundledCatalogPath);
-}
+static bool isLowMagnitudeNarrowGuidedSolve(const CameraSettings& settings);
 
-static QString currentCatalogSource(const CameraSettings& settings)
-{
-    (void) settings;
-    return QFileInfo::exists(downloadedCatalogReducedPath())
-        ? QStringLiteral("HYG")
-        : QStringLiteral("Bundled");
-}
+static QString sirilSpccChunkUrl(int chunkIndex, int sourceIndex);
 
-static double firstPassPlateSolveMaxMagnitude(const CameraSettings& settings)
-{
-    if (plateSolveStartUsesDirection(settings)
-        && (isNarrowField(settings))
-        && (settings.m_plateSolveMaxMagnitude > kNarrowGuidedBrightCatalogMaxMagnitude))
-    {
-        return kNarrowGuidedBrightCatalogMaxMagnitude;
-    }
+static QString sirilSpccSourceName(int sourceIndex);
 
-    if (isWidePlateSolveContext(settings)
-        && (settings.m_plateSolveMaxMagnitude > kWideFovBrightFirstPassMaxMagnitude))
-    {
-        return kWideFovBrightFirstPassMaxMagnitude;
-    }
+static QString sirilRangeCacheKey(int chunkIndex, qint64 firstByte, qint64 lastByte);
 
-    return settings.m_plateSolveMaxMagnitude;
-}
+static QString sirilCacheRootDir();
 
-static double narrowGuidedFullSearchMaxMagnitude(const CameraSettings& settings)
-{
-    if (isNarrowGuidedDirectionSolve(settings))
-    {
-        // Mag 18 is a good Gaia depth for narrow guided solving: enough stars
-        // for galaxy fields without letting dense faint stars dominate matches.
-        return std::min(static_cast<double>(settings.m_plateSolveMaxMagnitude), 18.0);
-    }
+static QString sirilIndexDiskCachePath(int chunkIndex);
 
-    return settings.m_plateSolveMaxMagnitude;
-}
+static QString sirilRangeDiskCachePath(int chunkIndex, qint64 firstByte, qint64 lastByte);
 
-static bool isLowMagnitudeNarrowGuidedSolve(const CameraSettings& settings)
-{
-    return plateSolveStartUsesDirection(settings)
-        && (isNarrowField(settings))
-        && (settings.m_plateSolveMaxMagnitude <= 17.0);
-}
+static QString sirilRegionCacheRootDir();
 
-static QString sirilSpccChunkUrl(int chunkIndex, int sourceIndex)
-{
-    const QString fileName = QString::fromUtf8(kSirilSpccFileNamePattern).arg(chunkIndex);
-    if (sourceIndex == 1)
-    {
-        return QStringLiteral("%1/%2?download=1").arg(
-            QString::fromUtf8(kSirilSpccZenodoBaseUrl),
-            fileName);
-    }
+static QString sirilAstroRegionCacheRootDir();
 
-    return QStringLiteral("%1/%2").arg(
-        QString::fromUtf8(kSirilSpccBaseUrl),
-        fileName);
-}
+static QString sirilRegionCacheKey(double centerRaDegrees, double centerDecDegrees, double queryRadiusDegrees, double maxMagnitude);
 
-static QString sirilSpccSourceName(int sourceIndex)
-{
-    return sourceIndex == 1 ? QStringLiteral("Zenodo") : QStringLiteral("Hugging Face");
-}
+static QString sirilRegionDiskCachePath(double centerRaDegrees, double centerDecDegrees, double queryRadiusDegrees, double maxMagnitude);
 
-static QString sirilRangeCacheKey(int chunkIndex, qint64 firstByte, qint64 lastByte)
-{
-    return QStringLiteral("%1:%2:%3").arg(chunkIndex).arg(firstByte).arg(lastByte);
-}
-
-static QString sirilCacheRootDir()
-{
-    return QDir(downloadedCatalogDir()).filePath(QString::fromUtf8(kSirilCacheDir));
-}
-
-static QString sirilIndexDiskCachePath(int chunkIndex)
-{
-    return QDir(QDir(sirilCacheRootDir()).filePath(QStringLiteral("indexes")))
-        .filePath(QStringLiteral("chunk-%1.idx").arg(chunkIndex));
-}
-
-static QString sirilRangeDiskCachePath(int chunkIndex, qint64 firstByte, qint64 lastByte)
-{
-    return QDir(QDir(sirilCacheRootDir()).filePath(QStringLiteral("ranges")))
-        .filePath(QStringLiteral("chunk-%1-%2-%3.bin").arg(chunkIndex).arg(firstByte).arg(lastByte));
-}
-
-static QString sirilRegionCacheRootDir()
-{
-    return QDir(downloadedCatalogDir()).filePath(QString::fromUtf8(kSirilRegionCacheDir));
-}
-
-static QString sirilAstroRegionCacheRootDir()
-{
-    return QDir(downloadedCatalogDir()).filePath(QString::fromUtf8(kSirilAstroRegionCacheDir));
-}
-
-static QString sirilRegionCacheKey(double centerRaDegrees,
-                                   double centerDecDegrees,
-                                   double queryRadiusDegrees,
-                                   double maxMagnitude)
-{
-    return QStringLiteral("ra%1_dec%2_r%3_m%4.bin")
-        .arg(qRound64(normalizeDegrees(centerRaDegrees) * 1000.0))
-        .arg(qRound64(centerDecDegrees * 1000.0))
-        .arg(qRound64(queryRadiusDegrees * 1000.0))
-        .arg(qRound64(maxMagnitude * 100.0));
-}
-
-static QString sirilRegionDiskCachePath(double centerRaDegrees,
-                                        double centerDecDegrees,
-                                        double queryRadiusDegrees,
-                                        double maxMagnitude)
-{
-    return QDir(sirilRegionCacheRootDir()).filePath(
-        sirilRegionCacheKey(centerRaDegrees, centerDecDegrees, queryRadiusDegrees, maxMagnitude));
-}
-
-static QString sirilAstroRegionDiskCachePath(double centerRaDegrees,
-                                             double centerDecDegrees,
-                                             double queryRadiusDegrees,
-                                             double maxMagnitude)
-{
-    return QDir(sirilAstroRegionCacheRootDir()).filePath(
-        sirilRegionCacheKey(centerRaDegrees, centerDecDegrees, queryRadiusDegrees, maxMagnitude));
-}
+static QString sirilAstroRegionDiskCachePath(double centerRaDegrees, double centerDecDegrees, double queryRadiusDegrees, double maxMagnitude);
 
 // Binary region cache format (v3, little-endian):
 //
@@ -1254,248 +704,26 @@ static QString sirilAstroRegionDiskCachePath(double centerRaDegrees,
 static constexpr char kBinCacheMagic[4] = {'S', 'R', 'C', 'B'};
 static constexpr quint8 kBinCacheVersion = 1;
 
-static QVector<CatalogStar> readSirilRegionDiskCacheFile(const QString& path)
-{
-    QFile file(path);
-    if (!file.open(QIODevice::ReadOnly)) {
-        return {};
-    }
+static QVector<CatalogStar> readSirilRegionDiskCacheFile(const QString& path);
 
-    const QByteArray data = file.readAll();
-    const char *p = data.constData();
-    const char *end = p + data.size();
-
-    // Validate header
-    if (data.size() < 9
-        || p[0] != kBinCacheMagic[0]
-        || p[1] != kBinCacheMagic[1]
-        || p[2] != kBinCacheMagic[2]
-        || p[3] != kBinCacheMagic[3]
-        || static_cast<quint8>(p[4]) != kBinCacheVersion)
-    {
-        return {};
-    }
-    p += 5;
-
-    quint32 starCount = 0;
-    std::memcpy(&starCount, p, 4);
-    starCount = qFromLittleEndian(starCount);
-    p += 4;
-
-    if (starCount == 0) {
-        return {};
-    }
-
-    QVector<CatalogStar> stars;
-    stars.reserve(static_cast<int>(std::min<quint32>(starCount, 8000000u)));
-
-    for (quint32 i = 0; i < starCount; ++i)
-    {
-        // Need at least ra(8) + dec(8) + mag(4) + nameLen(1) + spectralLen(1) = 22 bytes
-        if ((end - p) < 22) {
-            return {};
-        }
-
-        double ra = 0.0;
-        double dec = 0.0;
-        float mag = 0.0f;
-        std::memcpy(&ra, p, 8); p += 8;
-        std::memcpy(&dec, p, 8); p += 8;
-        std::memcpy(&mag, p, 4); p += 4;
-        ra  = qFromLittleEndian(ra);
-        dec = qFromLittleEndian(dec);
-        mag = qFromLittleEndian(mag);
-
-        const quint8 nameLen = static_cast<quint8>(*p++);
-        if ((end - p) < nameLen + 1) {
-            return {};
-        }
-        const QString name = QString::fromUtf8(p, nameLen);
-        p += nameLen;
-
-        const quint8 spectralLen = static_cast<quint8>(*p++);
-        if ((end - p) < spectralLen) {
-            return {};
-        }
-        const QString spectralType = spectralLen > 0 ? QString::fromUtf8(p, spectralLen) : QString();
-        p += spectralLen;
-
-        stars.append({name, ra, dec, static_cast<double>(mag), spectralType});
-    }
-
-    return stars;
-}
-
-static qint64 sirilRegionDiskCacheMaxBytes(int maxSizeGb)
-{
-    if (maxSizeGb <= 0) {
-        return 0;
-    }
-
-    return static_cast<qint64>(maxSizeGb) * 1024LL * 1024LL * 1024LL;
-}
+static qint64 sirilRegionDiskCacheMaxBytes(int maxSizeGb);
 
 // Cap a per-region disk-cache directory at sirilRegionDiskCacheMaxBytes(), evicting the
 // oldest files (FIFO by modification time) until back under the cap. Best-effort and
 // concurrency-safe across solver processes: a delete that loses a race (file already gone,
 // or held open by another process mid-read) is simply skipped — a missing region file is a
 // cache miss that re-fetches, never a corruption.
-static void enforceSirilRegionDiskCacheLimit(const QString& directoryPath, int maxSizeGb)
-{
-    const qint64 maxBytes = sirilRegionDiskCacheMaxBytes(maxSizeGb);
-    if (maxBytes <= 0) {   // 0 = unlimited
-        return;
-    }
-    QDir dir(directoryPath);
-    if (!dir.exists()) {
-        return;
-    }
-    // Oldest first (QDir::Time is newest-first; Reversed flips it).
-    const QFileInfoList files = dir.entryInfoList(
-        QStringList() << QStringLiteral("*.bin"),
-        QDir::Files | QDir::NoSymLinks,
-        QDir::Time | QDir::Reversed);
-    qint64 total = 0;
-    for (const QFileInfo& info : files) {
-        total += info.size();
-    }
-    if (total <= maxBytes) {
-        return;
-    }
-    // Evict to a low-water mark (95%) so we don't re-scan/evict on every subsequent write.
-    const qint64 lowWater = maxBytes - (maxBytes / 20);
-    for (const QFileInfo& info : files) {
-        if (total <= lowWater) {
-            break;
-        }
-        const qint64 size = info.size();
-        if (QFile::remove(info.absoluteFilePath())) {
-            total -= size;
-        }
-    }
-}
+static void enforceSirilRegionDiskCacheLimit(const QString& directoryPath, int maxSizeGb);
 
-static void writeSirilRegionDiskCacheFile(const QString& path, const QVector<CatalogStar>& stars, int maxSizeGb)
-{
-    if (stars.isEmpty()) {
-        return;
-    }
+static void writeSirilRegionDiskCacheFile(const QString& path, const QVector<CatalogStar>& stars, int maxSizeGb);
 
-    QDir dir(QFileInfo(path).absolutePath());
-    if (!dir.exists() && !dir.mkpath(QStringLiteral("."))) {
-        return;
-    }
+static QByteArray readSirilDiskCacheFile(const QString& path, qint64 expectedSize);
 
-    QSaveFile file(path);
-    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-        return;
-    }
+static void writeSirilDiskCacheFile(const QString& path, const QByteArray& data);
 
-    // Binary format — see readSirilRegionDiskCacheFile for layout.
-    // Pre-size by ~22 bytes/star (minimum record) + header; actual size varies by
-    // name/spectral length but is always smaller than the equivalent TSV.
-    QByteArray buf;
-    buf.reserve(static_cast<qsizetype>(stars.size()) * 24 + 9);
+static double fovLongEdgeDiagonalDegrees(const QSize& imageSize, double fovDegrees);
 
-    // Header
-    buf.append(kBinCacheMagic, 4);
-    buf.append(static_cast<char>(kBinCacheVersion));
-    const quint32 starCountLE = qToLittleEndian(static_cast<quint32>(stars.size()));
-    buf.append(reinterpret_cast<const char*>(&starCountLE), 4);
-
-    for (const CatalogStar& star : stars)
-    {
-        const double raLE  = qToLittleEndian(star.rightAscensionDegrees);
-        const double decLE = qToLittleEndian(star.declinationDegrees);
-        const float  magLE = qToLittleEndian(static_cast<float>(star.magnitude));
-        buf.append(reinterpret_cast<const char*>(&raLE),  8);
-        buf.append(reinterpret_cast<const char*>(&decLE), 8);
-        buf.append(reinterpret_cast<const char*>(&magLE), 4);
-
-        const QByteArray nameUtf8     = star.name.toUtf8();
-        const QByteArray spectralUtf8 = star.spectralType.toUtf8();
-        const quint8 nameLen     = static_cast<quint8>(std::min<int>(nameUtf8.size(),     255));
-        const quint8 spectralLen = static_cast<quint8>(std::min<int>(spectralUtf8.size(), 255));
-        buf.append(static_cast<char>(nameLen));
-        buf.append(nameUtf8.constData(), nameLen);
-        buf.append(static_cast<char>(spectralLen));
-        buf.append(spectralUtf8.constData(), spectralLen);
-    }
-
-    file.write(buf);
-    if (!file.commit()) {
-        return;
-    }
-    enforceSirilRegionDiskCacheLimit(QFileInfo(path).absolutePath(), maxSizeGb);
-}
-
-static QByteArray readSirilDiskCacheFile(const QString& path, qint64 expectedSize)
-{
-    QFile file(path);
-    if (!file.open(QIODevice::ReadOnly)) {
-        return {};
-    }
-    if ((expectedSize >= 0) && (file.size() != expectedSize)) {
-        return {};
-    }
-    return file.readAll();
-}
-
-static void writeSirilDiskCacheFile(const QString& path, const QByteArray& data)
-{
-    if (data.isEmpty()) {
-        return;
-    }
-
-    QDir dir(QFileInfo(path).absolutePath());
-    if (!dir.exists() && !dir.mkpath(QStringLiteral("."))) {
-        return;
-    }
-
-    QSaveFile file(path);
-    if (!file.open(QIODevice::WriteOnly)) {
-        return;
-    }
-    if (file.write(data) != data.size()) {
-        file.cancelWriting();
-        return;
-    }
-    file.commit();
-}
-
-static double fovLongEdgeDiagonalDegrees(const QSize& imageSize, double fovDegrees)
-{
-    const int longEdge = std::max(imageSize.width(), imageSize.height());
-    const int shortEdge = std::min(imageSize.width(), imageSize.height());
-    if ((longEdge <= 0) || (shortEdge <= 0)) {
-        return fovDegrees;
-    }
-
-    const double shortToLong = static_cast<double>(shortEdge) / static_cast<double>(longEdge);
-    return fovDegrees * std::sqrt(1.0 + shortToLong * shortToLong);
-}
-
-static double halfHorizontalFovFromLongEdgeFov(CameraSettings::LensProjection lensProjection,
-                                               const QSize& imageSize,
-                                               double fovDegrees)
-{
-    const double halfLongEdgeFov = degToRad(fovDegrees) * 0.5;
-    if ((imageSize.width() <= 0) || (imageSize.height() <= 0) || (imageSize.width() >= imageSize.height())) {
-        return halfLongEdgeFov;
-    }
-
-    const double aspect = static_cast<double>(imageSize.height()) / static_cast<double>(imageSize.width());
-    switch (lensProjection)
-    {
-    case CameraSettings::LensProjectionEquidistant:
-        return halfLongEdgeFov / aspect;
-    case CameraSettings::LensProjectionEquisolid:
-        return 2.0 * std::asin(std::clamp(std::sin(halfLongEdgeFov * 0.5) / aspect, -1.0, 1.0));
-    case CameraSettings::LensProjectionRectilinear:
-    default:
-        return std::atan(std::tan(halfLongEdgeFov) / aspect);
-    }
-}
+static double halfHorizontalFovFromLongEdgeFov(CameraSettings::LensProjection lensProjection, const QSize& imageSize, double fovDegrees);
 
 QByteArray fetchSirilRangeFromSource(int chunkIndex, qint64 firstByte, qint64 lastByte, int sourceIndex)
 {
@@ -1838,76 +1066,11 @@ void prefetchSirilMergedRanges(const QVector<SirilMergedRange>& mergedRanges)
     }
 }
 
-static quint32 interleaveHealpixBits(int x, int y)
-{
-    quint32 pixel = 0;
-    for (int bit = 0; bit < kSirilHealpixLevel; ++bit)
-    {
-        pixel |= ((static_cast<quint32>(x) >> bit) & 1u) << (2 * bit);
-        pixel |= ((static_cast<quint32>(y) >> bit) & 1u) << (2 * bit + 1);
-    }
-    return pixel;
-}
+static quint32 interleaveHealpixBits(int x, int y);
 
-static quint32 healpixNestedPixel(double rightAscensionDegrees, double declinationDegrees)
-{
-    const double z = std::sin(degToRad(declinationDegrees));
-    const double za = std::fabs(z);
-    double tt = normalizeDegrees(rightAscensionDegrees) / 90.0;
-    if (tt >= 4.0) {
-        tt -= 4.0;
-    }
+static quint32 healpixNestedPixel(double rightAscensionDegrees, double declinationDegrees);
 
-    int face = 0;
-    int ix = 0;
-    int iy = 0;
-    if (za <= (2.0 / 3.0))
-    {
-        const int jp = static_cast<int>(std::floor(kSirilNside * (0.5 + tt - z * 0.75)));
-        const int jm = static_cast<int>(std::floor(kSirilNside * (0.5 + tt + z * 0.75)));
-        const int ifp = jp / kSirilNside;
-        const int ifm = jm / kSirilNside;
-        face = (ifp == ifm) ? (ifp | 4) : ((ifp < ifm) ? ifp : ifm + 8);
-        ix = jm & (kSirilNside - 1);
-        iy = kSirilNside - (jp & (kSirilNside - 1)) - 1;
-    }
-    else
-    {
-        int ntt = static_cast<int>(std::floor(tt));
-        if (ntt >= 4) {
-            ntt = 3;
-        }
-        const double tp = tt - ntt;
-        const double tmp = kSirilNside * std::sqrt(3.0 * (1.0 - za));
-        const int jp = std::min(kSirilNside - 1, static_cast<int>(std::floor(tp * tmp)));
-        const int jm = std::min(kSirilNside - 1, static_cast<int>(std::floor((1.0 - tp) * tmp)));
-        if (z >= 0.0)
-        {
-            face = ntt;
-            ix = kSirilNside - jm - 1;
-            iy = kSirilNside - jp - 1;
-        }
-        else
-        {
-            face = ntt + 8;
-            ix = jp;
-            iy = jm;
-        }
-    }
-
-    return static_cast<quint32>(face * kSirilNside * kSirilNside) + interleaveHealpixBits(ix, iy);
-}
-
-static double angularSeparationDegrees(double raDegreesA, double decDegreesA, double raDegreesB, double decDegreesB)
-{
-    const double raA = degToRad(raDegreesA);
-    const double decA = degToRad(decDegreesA);
-    const double raB = degToRad(raDegreesB);
-    const double decB = degToRad(decDegreesB);
-    const double cosSeparation = std::sin(decA) * std::sin(decB)
-        + std::cos(decA) * std::cos(decB) * std::cos(raA - raB);
-    return std::acos(std::clamp(cosSeparation, -1.0, 1.0)) * 180.0 / kPi;
-}
+static double angularSeparationDegrees(double raDegreesA, double decDegreesA, double raDegreesB, double decDegreesB);
 
 struct SirilQueryGeometry
 {
@@ -1956,37 +1119,7 @@ SirilQueryGeometry sirilQueryGeometry(const CameraSettings& settings,
     return geometry;
 }
 
-static QSet<quint32> sampleSirilHealpixPixels(double centerRaDegrees,
-                                               double centerDecDegrees,
-                                               double radiusDegrees)
-{
-    QSet<quint32> pixels;
-    const double boundedRadius = std::max(0.1, radiusDegrees);
-    const double stepDegrees = std::clamp(boundedRadius / 35.0, 0.03, 0.20);
-    const double minDec = std::max(-90.0, centerDecDegrees - boundedRadius);
-    const double maxDec = std::min(90.0, centerDecDegrees + boundedRadius);
-
-    for (double dec = minDec; dec <= maxDec; dec += stepDegrees)
-    {
-        const double cosDec = std::max(0.05, std::cos(degToRad(dec)));
-        const double raHalfWidth = std::min(180.0, boundedRadius / cosDec);
-        const double raStep = std::max(stepDegrees, stepDegrees / cosDec);
-        for (double raOffset = -raHalfWidth; raOffset <= raHalfWidth; raOffset += raStep)
-        {
-            const double ra = normalizeDegrees(centerRaDegrees + raOffset);
-            if (angularSeparationDegrees(centerRaDegrees, centerDecDegrees, ra, dec) <= (boundedRadius + stepDegrees)) {
-                pixels.insert(healpixNestedPixel(ra, dec));
-            }
-        }
-    }
-
-    pixels.insert(healpixNestedPixel(centerRaDegrees, centerDecDegrees));
-    pixels.insert(healpixNestedPixel(centerRaDegrees - boundedRadius, centerDecDegrees));
-    pixels.insert(healpixNestedPixel(centerRaDegrees + boundedRadius, centerDecDegrees));
-    pixels.insert(healpixNestedPixel(centerRaDegrees, minDec));
-    pixels.insert(healpixNestedPixel(centerRaDegrees, maxDec));
-    return pixels;
-}
+static QSet<quint32> sampleSirilHealpixPixels(double centerRaDegrees, double centerDecDegrees, double radiusDegrees);
 
 bool sirilCellRecordRange(quint32 pixel, int& chunkIndex, qint64& firstRecord, qint64& recordCount)
 {
@@ -2030,64 +1163,9 @@ bool sirilCellRecordRange(quint32 pixel, int& chunkIndex, qint64& firstRecord, q
     return true;
 }
 
-static QByteArray readSirilAstroIndex(QFile& file)
-{
-    if (!file.seek(kSirilHeaderSize)) {
-        return {};
-    }
+static QByteArray readSirilAstroIndex(QFile& file);
 
-    const QByteArray indexBytes = file.read(kSirilAstroIndexSize);
-    if (indexBytes.size() != kSirilAstroIndexSize)
-    {
-        qWarning() << "CameraPlateSolver: Siril Gaia astrometric index read failed"
-                   << "path" << file.fileName()
-                   << "expected" << kSirilAstroIndexSize
-                   << "got" << indexBytes.size();
-        return {};
-    }
-
-    return indexBytes;
-}
-
-static bool sirilAstroCellRecordRange(const QByteArray& indexBytes,
-                                      quint32 pixel,
-                                      qint64& firstRecord,
-                                      qint64& recordCount)
-{
-    if ((pixel >= static_cast<quint32>(kSirilAstroPixels)) || (indexBytes.size() != kSirilAstroIndexSize)) {
-        return false;
-    }
-
-    const char *cellEndBytes = indexBytes.constData() + static_cast<qint64>(pixel) * sizeof(quint32);
-    const quint32 cellStart = (pixel > 0)
-        ? qFromLittleEndian<quint32>(reinterpret_cast<const uchar *>(cellEndBytes - sizeof(quint32)))
-        : 0;
-    const quint32 cellEnd = qFromLittleEndian<quint32>(reinterpret_cast<const uchar *>(cellEndBytes));
-    const quint32 catalogRecordCount = qFromLittleEndian<quint32>(
-        reinterpret_cast<const uchar *>(indexBytes.constData() + kSirilAstroIndexSize - sizeof(quint32)));
-    if ((cellEnd < cellStart) || (cellEnd > catalogRecordCount))
-    {
-        qWarning() << "CameraPlateSolver: Siril Gaia astrometric invalid cell index"
-                   << "pixel" << pixel
-                   << "cellStart" << cellStart
-                   << "cellEnd" << cellEnd
-                   << "catalogRecords" << catalogRecordCount;
-        return false;
-    }
-
-    firstRecord = cellStart;
-    recordCount = static_cast<qint64>(cellEnd) - static_cast<qint64>(cellStart);
-    if (recordCount > kSirilMaxRecordsPerCell)
-    {
-        qWarning() << "CameraPlateSolver: Siril Gaia astrometric cell has too many records"
-                   << "pixel" << pixel
-                   << "records" << recordCount
-                   << "max" << kSirilMaxRecordsPerCell;
-        return false;
-    }
-
-    return true;
-}
+static bool sirilAstroCellRecordRange(const QByteArray& indexBytes, quint32 pixel, qint64& firstRecord, qint64& recordCount);
 
 QVector<CatalogStar> loadSirilAstroCatalog(const CameraSettings& settings,
                                            const QSize& imageSize,
@@ -2549,488 +1627,55 @@ QVector<CatalogStar> loadSirilSpccCatalog(const CameraSettings& settings,
     return stars;
 }
 
-static bool plateSolveStartUsesFov(const CameraSettings& settings)
-{
-    return settings.m_plateSolveStartMode != CameraSettings::PlateSolveStartBlind;
-}
+static bool plateSolveStartUsesFov(const CameraSettings& settings);
 
-static bool plateSolveStartUsesCurrentSettingsOnly(const CameraSettings& settings)
-{
-    return settings.m_plateSolveStartMode == CameraSettings::PlateSolveStartCurrentSettingsOnly;
-}
+static bool plateSolveStartUsesCurrentSettingsOnly(const CameraSettings& settings);
 
 // The seed-projected bright-star gate only applies when the user pinned roll (or is
 // re-solving the current settings), so the seed orientation -- and therefore the
 // projected positions of the bright catalog stars -- can be trusted.
-static bool usesSeedProjectedBrightGate(const CameraSettings& settings)
-{
-    return plateSolveStartUsesRoll(settings) || plateSolveStartUsesCurrentSettingsOnly(settings);
-}
+static bool usesSeedProjectedBrightGate(const CameraSettings& settings);
 
-static bool plateSolveStartUsesElevation(const CameraSettings& settings)
-{
-    switch (settings.m_plateSolveStartMode)
-    {
-    case CameraSettings::PlateSolveStartFovElevation:
-    case CameraSettings::PlateSolveStartFovAzEl:
-    case CameraSettings::PlateSolveStartFovAzElRoll:
-    case CameraSettings::PlateSolveStartFovAzElRollLens:
-    case CameraSettings::PlateSolveStartCurrentSettingsOnly:
-        return true;
-    default:
-        return false;
-    }
-}
+static bool plateSolveStartUsesElevation(const CameraSettings& settings);
 
-static bool plateSolveStartUsesDirection(const CameraSettings& settings)
-{
-    switch (settings.m_plateSolveStartMode)
-    {
-    case CameraSettings::PlateSolveStartFovAzEl:
-    case CameraSettings::PlateSolveStartFovAzElRoll:
-    case CameraSettings::PlateSolveStartFovAzElRollLens:
-    case CameraSettings::PlateSolveStartCurrentSettingsOnly:
-        return true;
-    default:
-        return false;
-    }
-}
+static bool plateSolveStartUsesDirection(const CameraSettings& settings);
 
-static bool plateSolveStartUsesRoll(const CameraSettings& settings)
-{
-    switch (settings.m_plateSolveStartMode)
-    {
-    case CameraSettings::PlateSolveStartFovAzElRoll:
-    case CameraSettings::PlateSolveStartFovAzElRollLens:
-    case CameraSettings::PlateSolveStartCurrentSettingsOnly:
-        return true;
-    default:
-        return false;
-    }
-}
+static bool plateSolveStartUsesRoll(const CameraSettings& settings);
 
-static bool plateSolveStartUsesLens(const CameraSettings& settings)
-{
-    switch (settings.m_plateSolveStartMode)
-    {
-    case CameraSettings::PlateSolveStartFovAzElRollLens:
-    case CameraSettings::PlateSolveStartCurrentSettingsOnly:
-        return true;
-    default:
-        return false;
-    }
-}
+static bool plateSolveStartUsesLens(const CameraSettings& settings);
 
-static bool isWidePlateSolveContext(const CameraSettings& settings)
-{
-    return (settings.m_lensProjection != CameraSettings::LensProjectionRectilinear)
-        && ((settings.m_fov >= kWideFovMagnitudePreferenceThresholdDegrees)
-            || (settings.m_plateSolveStartMode == CameraSettings::PlateSolveStartBlind));
-}
+static bool isWidePlateSolveContext(const CameraSettings& settings);
 
 // True for narrow (telescope) fields. See kNarrowFieldMaxFovDegrees.
-static bool isNarrowField(const CameraSettings& settings)
-{
-    return settings.m_fov <= kNarrowFieldMaxFovDegrees;
-}
+static bool isNarrowField(const CameraSettings& settings);
 
 // The common "user gave us a direction and it's a narrow telescope field" case that
 // many search and acceptance paths special-case.
-static bool isNarrowGuidedDirectionSolve(const CameraSettings& settings)
-{
-    return plateSolveStartUsesDirection(settings) && isNarrowField(settings);
-}
+static bool isNarrowGuidedDirectionSolve(const CameraSettings& settings);
 
-static bool seedFovCompatibleWithStartFov(const CameraSettings& settings, double seedFovDegrees)
-{
-    if (!plateSolveStartUsesFov(settings)) {
-        return true;
-    }
+static bool seedFovCompatibleWithStartFov(const CameraSettings& settings, double seedFovDegrees);
 
-    const double referenceFov = std::clamp(
-        static_cast<double>(settings.m_fov),
-        static_cast<double>(CameraSettings::m_minFov),
-        static_cast<double>(CameraSettings::m_maxFov));
-    const bool wideFisheye = isWidePlateSolveContext(settings);
-    const double toleranceDegrees = wideFisheye
-        ? std::max(30.0, referenceFov * 0.35)
-        : std::max(0.20, referenceFov * 0.35);
+static bool canCalibrateLens(const CameraSettings& settings);
 
-    return std::fabs(seedFovDegrees - referenceFov) <= toleranceDegrees;
-}
+static bool canCalibratePrincipalPoint(const CameraSettings& settings);
 
-static bool canCalibrateLens(const CameraSettings& settings)
-{
-    return (settings.m_plateSolveStartMode == CameraSettings::PlateSolveStartFovAzElRollLens)
-        || isWidePlateSolveContext(settings);
-}
+static const QVector<CatalogStar>& brightStarCatalog(const CameraSettings& settings);
 
-static bool canCalibratePrincipalPoint(const CameraSettings& settings)
-{
-    return (settings.m_plateSolveStartMode == CameraSettings::PlateSolveStartFovAzElRollLens)
-        || isWidePlateSolveContext(settings);
-}
+static const QVector<CatalogStar>& bundledAliasCatalog();
 
-static const QVector<CatalogStar>& brightStarCatalog(const CameraSettings& settings)
-{
-    static QMutex s_catalogMutex;
-    static QString s_loadedPath;
-    static QDateTime s_loadedModified;
-    static QVector<CatalogStar> s_catalog;
+static QVector<int> aliasCatalogDeclinationSortedIndices(const QVector<CatalogStar>& aliasStars);
 
-    const QString path = currentCatalogPath(settings);
-    const bool isResource = path.startsWith(QLatin1String(":/"));
-    const QDateTime modified = isResource ? QDateTime() : QFileInfo(path).lastModified();
+static QString resolveNamedAliasForCatalogStar(const CatalogStar& star, const QVector<CatalogStar>& aliasStars, const QVector<int>& sortedAliasIndices, double* outScore = nullptr);
 
-    QMutexLocker locker(&s_catalogMutex);
-    if ((path != s_loadedPath) || (!isResource && (modified != s_loadedModified)) || s_catalog.isEmpty())
-    {
-        s_catalog = loadCatalogFromTextFile(path);
-        s_loadedPath = path;
-        s_loadedModified = modified;
-    }
-
-    return s_catalog;
-}
-
-static const QVector<CatalogStar>& bundledAliasCatalog()
-{
-    static QMutex s_catalogMutex;
-    static QVector<CatalogStar> s_catalog;
-
-    QMutexLocker locker(&s_catalogMutex);
-    if (s_catalog.isEmpty())
-    {
-        if (QFileInfo::exists(downloadedCatalogReducedPath())) {
-            s_catalog = loadCatalogFromTextFile(downloadedCatalogReducedPath());
-        }
-        if (s_catalog.isEmpty()) {
-            s_catalog = loadCatalogFromTextFile(QString::fromUtf8(kBundledCatalogPath));
-        }
-    }
-    return s_catalog;
-}
-
-static QVector<int> aliasCatalogDeclinationSortedIndices(const QVector<CatalogStar>& aliasStars)
-{
-    static QMutex s_aliasIndexMutex;
-    static const QVector<CatalogStar>* s_aliasStars = nullptr;
-    static const CatalogStar* s_aliasStarsData = nullptr;
-    static int s_aliasStarsSize = 0;
-    static QVector<int> s_sortedIndices;
-
-    QMutexLocker locker(&s_aliasIndexMutex);
-    if ((s_aliasStars != &aliasStars)
-        || (s_aliasStarsData != aliasStars.constData())
-        || (s_aliasStarsSize != aliasStars.size())
-        || s_sortedIndices.isEmpty())
-    {
-        s_aliasStars = &aliasStars;
-        s_aliasStarsData = aliasStars.constData();
-        s_aliasStarsSize = aliasStars.size();
-        s_sortedIndices.resize(aliasStars.size());
-        for (int i = 0; i < aliasStars.size(); ++i) {
-            s_sortedIndices[i] = i;
-        }
-        std::sort(s_sortedIndices.begin(), s_sortedIndices.end(), [&aliasStars](int lhs, int rhs) {
-            return aliasStars[lhs].declinationDegrees < aliasStars[rhs].declinationDegrees;
-        });
-    }
-
-    return s_sortedIndices;
-}
-
-static QString resolveNamedAliasForCatalogStar(const CatalogStar& star,
-                                               const QVector<CatalogStar>& aliasStars,
-                                               const QVector<int>& sortedAliasIndices,
-                                               double* outScore = nullptr)
-{
-    if (outScore) {
-        *outScore = std::numeric_limits<double>::infinity();
-    }
-
-    if (aliasStars.isEmpty() || sortedAliasIndices.isEmpty()) {
-        return QString();
-    }
-
-    const double maxSeparationDegrees = kSirilAliasMaxSeparationArcSec / 3600.0;
-    const double minDeclination = star.declinationDegrees - maxSeparationDegrees;
-    const double maxDeclination = star.declinationDegrees + maxSeparationDegrees;
-    const auto first = std::lower_bound(
-        sortedAliasIndices.cbegin(),
-        sortedAliasIndices.cend(),
-        minDeclination,
-        [&aliasStars](int catalogIndex, double declination) {
-            return aliasStars[catalogIndex].declinationDegrees < declination;
-        });
-
-    QString bestName;
-    double bestScore = std::numeric_limits<double>::infinity();
-
-    for (auto it = first; it != sortedAliasIndices.cend(); ++it)
-    {
-        const CatalogStar& candidate = aliasStars[*it];
-        if (candidate.declinationDegrees > maxDeclination) {
-            break;
-        }
-
-        if (candidate.name.isEmpty()) {
-            continue;
-        }
-
-        const double magnitudeDifference = std::fabs(candidate.magnitude - star.magnitude);
-        if (magnitudeDifference > kSirilAliasMaxMagnitudeDifference) {
-            continue;
-        }
-
-        const double separationArcSec = angularSeparationDegrees(
-            star.rightAscensionDegrees,
-            star.declinationDegrees,
-            candidate.rightAscensionDegrees,
-            candidate.declinationDegrees) * 3600.0;
-        if (separationArcSec > kSirilAliasMaxSeparationArcSec) {
-            continue;
-        }
-
-        const double score = separationArcSec + magnitudeDifference * 4.0;
-        if (score < bestScore)
-        {
-            const QString candidateName = candidate.name.trimmed();
-            if (candidateName.isEmpty()) {
-                continue;
-            }
-            bestScore = score;
-            bestName = candidateName;
-        }
-    }
-
-    if (outScore && !bestName.isEmpty()) {
-        *outScore = bestScore;
-    }
-
-    return bestName;
-}
-
-static void applyNamedAliasesToCatalog(const CameraSettings& settings, QVector<CatalogStar>& stars)
-{
-    Q_UNUSED(settings)
-
-    if (stars.isEmpty()) {
-        return;
-    }
-
-    const QVector<CatalogStar>& aliasStars = bundledAliasCatalog();
-    const QVector<int> sortedAliasIndices = aliasCatalogDeclinationSortedIndices(aliasStars);
-
-    // Resolve alias names as a one-to-one assignment: each named alias (e.g. "HIP 37078")
-    // must end up on at most one catalog star -- the single closest/best-scoring match.
-    //
-    // Resolving independently per catalog star (the previous approach: "for every Gaia star,
-    // find its best alias and stamp the name on") is a many-to-one match. With a 30 arcsec /
-    // 2.5 magnitude tolerance, several distinct nearby Gaia DR3 sources can each independently
-    // consider the same bright named star their best (or only) alias candidate, so the same
-    // name (e.g. "HIP 37078") ends up stamped onto multiple catalog entries scattered around
-    // the true star's position. That confuses anchor-based searches, which key off named
-    // stars and implicitly assume a name identifies a single, unique catalog entry -- the
-    // search can latch onto a spurious duplicate (wrong position, "right" name) instead of
-    // the genuine star.
-    //
-    // To keep the assignment unique, gather every candidate (catalogIndex, alias, score) and
-    // keep only the best-scoring catalog star for each alias name.
-    QHash<QString, int> bestIndexForAlias;
-    QHash<QString, double> bestScoreForAlias;
-
-    for (int i = 0; i < stars.size(); ++i)
-    {
-        double score = std::numeric_limits<double>::infinity();
-        const QString alias = resolveNamedAliasForCatalogStar(stars[i], aliasStars, sortedAliasIndices, &score);
-        if (alias.isEmpty()) {
-            continue;
-        }
-
-        const auto existing = bestScoreForAlias.constFind(alias);
-        if ((existing == bestScoreForAlias.constEnd()) || (score < existing.value()))
-        {
-            bestIndexForAlias.insert(alias, i);
-            bestScoreForAlias.insert(alias, score);
-        }
-    }
-
-    int aliasCount = 0;
-    for (auto it = bestIndexForAlias.constBegin(); it != bestIndexForAlias.constEnd(); ++it)
-    {
-        stars[it.value()].name = it.key();
-        ++aliasCount;
-    }
-
-    if (aliasCount > 0) {
-        qDebug() << "CameraPlateSolver: applied bundled catalog aliases" << aliasCount;
-    }
-}
+static void applyNamedAliasesToCatalog(const CameraSettings& settings, QVector<CatalogStar>& stars);
 
 static QString catalogDisplayName(const CatalogStar& star);
 
-static double catalogAngularSeparationDegrees(const CatalogStar& lhs, const CatalogStar& rhs)
-{
-    const double lhsRa = degToRad(lhs.rightAscensionDegrees);
-    const double lhsDec = degToRad(lhs.declinationDegrees);
-    const double rhsRa = degToRad(rhs.rightAscensionDegrees);
-    const double rhsDec = degToRad(rhs.declinationDegrees);
-    const double sinLhsDec = std::sin(lhsDec);
-    const double cosLhsDec = std::cos(lhsDec);
-    const double sinRhsDec = std::sin(rhsDec);
-    const double cosRhsDec = std::cos(rhsDec);
-    const double cosDeltaRa = std::cos(lhsRa - rhsRa);
-    const double dotProduct = std::clamp(
-        sinLhsDec * sinRhsDec + cosLhsDec * cosRhsDec * cosDeltaRa,
-        -1.0,
-        1.0);
-    return std::acos(dotProduct) * 180.0 / kPi;
-}
+static double catalogAngularSeparationDegrees(const CatalogStar& lhs, const CatalogStar& rhs);
 
-static void mergeBundledBrightStarsIntoCatalog(const CameraSettings& settings,
-                                               QVector<CatalogStar>& catalogStars,
-                                               double maxMagnitude,
-                                               double centerRaDegrees,
-                                               double centerDecDegrees,
-                                               double queryRadiusDegrees)
-{
-    const QVector<CatalogStar>& brightStars = brightStarCatalog(settings);
-    const bool narrowDirectionSolve = plateSolveStartUsesDirection(settings)
-        && (isNarrowField(settings));
-    const double mergeMaxMagnitude = std::min(
-        maxMagnitude,
-        narrowDirectionSolve ? 10.5 : 7.0);
-    const double duplicateRadiusDegrees = 60.0 / 3600.0;
-    const bool filterToQueryRadius = std::isfinite(centerRaDegrees)
-        && std::isfinite(centerDecDegrees)
-        && std::isfinite(queryRadiusDegrees)
-        && (queryRadiusDegrees > 0.0);
-    int addedCount = 0;
-    int updatedCount = 0;
-    const int initialCatalogSize = catalogStars.size();
-    QVector<int> catalogIndicesByDeclination;
-    catalogIndicesByDeclination.resize(initialCatalogSize);
-    for (int i = 0; i < initialCatalogSize; ++i) {
-        catalogIndicesByDeclination[i] = i;
-    }
-    std::sort(catalogIndicesByDeclination.begin(), catalogIndicesByDeclination.end(), [&catalogStars](int lhs, int rhs) {
-        return catalogStars[lhs].declinationDegrees < catalogStars[rhs].declinationDegrees;
-    });
-    QVector<int> appendedCatalogIndices;
+static void mergeBundledBrightStarsIntoCatalog(const CameraSettings& settings, QVector<CatalogStar>& catalogStars, double maxMagnitude, double centerRaDegrees, double centerDecDegrees, double queryRadiusDegrees);
 
-    for (const CatalogStar& brightStar : brightStars)
-    {
-        if (brightStar.magnitude > mergeMaxMagnitude) {
-            continue;
-        }
-        if (filterToQueryRadius
-            && (angularSeparationDegrees(
-                    centerRaDegrees,
-                    centerDecDegrees,
-                    brightStar.rightAscensionDegrees,
-                    brightStar.declinationDegrees) > (queryRadiusDegrees + duplicateRadiusDegrees)))
-        {
-            continue;
-        }
-
-        int duplicateIndex = -1;
-        const double minDeclination = brightStar.declinationDegrees - duplicateRadiusDegrees;
-        const double maxDeclination = brightStar.declinationDegrees + duplicateRadiusDegrees;
-        const auto first = std::lower_bound(
-            catalogIndicesByDeclination.cbegin(),
-            catalogIndicesByDeclination.cend(),
-            minDeclination,
-            [&catalogStars](int catalogIndex, double declination) {
-                return catalogStars[catalogIndex].declinationDegrees < declination;
-            });
-        for (auto it = first; it != catalogIndicesByDeclination.cend(); ++it)
-        {
-            const int catalogIndex = *it;
-            if (catalogStars[catalogIndex].declinationDegrees > maxDeclination) {
-                break;
-            }
-            if (catalogAngularSeparationDegrees(brightStar, catalogStars[catalogIndex]) <= duplicateRadiusDegrees)
-            {
-                if ((duplicateIndex < 0) || (catalogIndex < duplicateIndex)) {
-                    duplicateIndex = catalogIndex;
-                }
-            }
-        }
-        if (duplicateIndex < 0)
-        {
-            for (int catalogIndex : appendedCatalogIndices)
-            {
-                if (catalogAngularSeparationDegrees(brightStar, catalogStars[catalogIndex]) <= duplicateRadiusDegrees)
-                {
-                    duplicateIndex = catalogIndex;
-                    break;
-                }
-            }
-        }
-
-        if (duplicateIndex >= 0)
-        {
-            CatalogStar& existing = catalogStars[duplicateIndex];
-            const bool existingHasGenericName = existing.name.isEmpty() || isGenericGaiaCatalogName(existing.name);
-            if (existingHasGenericName && !brightStar.name.isEmpty())
-            {
-                existing.name = brightStar.name;
-                existing.spectralType = brightStar.spectralType;
-                ++updatedCount;
-            }
-            if (brightStar.magnitude < existing.magnitude)
-            {
-                existing.name = brightStar.name;
-                existing.magnitude = brightStar.magnitude;
-                existing.spectralType = brightStar.spectralType;
-                ++updatedCount;
-            }
-        }
-        else
-        {
-            appendedCatalogIndices.append(catalogStars.size());
-            catalogStars.append(brightStar);
-            ++addedCount;
-        }
-    }
-
-    if ((addedCount > 0) || (updatedCount > 0))
-    {
-        qDebug() << "CameraPlateSolver: merged bundled bright stars into catalog"
-                 << "added" << addedCount
-                 << "updated" << updatedCount;
-    }
-}
-
-static QString matchSummary(const PlateSolveCatalogContext& catalogContext,
-                            const QVector<CameraPipelineStarDetection>& starDetections,
-                            const QVector<Match>& matches)
-{
-    QStringList parts;
-    parts.reserve(matches.size());
-    for (const Match& match : matches)
-    {
-        if ((match.detectionIndex < 0)
-            || (match.detectionIndex >= starDetections.size())
-            || (match.catalogIndex < 0)
-            || (match.catalogIndex >= catalogContext.catalogStars.size()))
-        {
-            continue;
-        }
-
-        const CameraPipelineStarDetection& detection = starDetections[match.detectionIndex];
-        const CatalogStar& star = catalogContext.catalogStars[match.catalogIndex];
-        parts.append(QStringLiteral("#%1 %2 d=%3 px mag=%4 snr=%5 fwhm=%6")
-            .arg(match.detectionIndex)
-            .arg(catalogDisplayName(star))
-            .arg(match.distancePixels, 0, 'f', 2)
-            .arg(star.magnitude, 0, 'f', 2)
-            .arg(detection.m_snr, 0, 'f', 1)
-            .arg(detection.m_fwhm, 0, 'f', 2));
-    }
-    return parts.join(QStringLiteral("; "));
-}
+static QString matchSummary(const PlateSolveCatalogContext& catalogContext, const QVector<CameraPipelineStarDetection>& starDetections, const QVector<Match>& matches);
 
 // Post-match collision repair: for each unmatched detection that is (a) closer to a
 // matched catalog star than the current match and (b) substantially brighter (SNR ratio),
@@ -3045,93 +1690,7 @@ static QString matchSummary(const PlateSolveCatalogContext& catalogContext,
 //     detection satisfies condition (a) for its catalog star.
 //   - Condition (b) guards against swapping in accidental close artifacts (hot pixels,
 //     noise spikes) that are dimmer than the legitimate matched detection.
-static void repairFinalMatchCollisions(
-    const QVector<CameraPipelineStarDetection>& starDetections,
-    const QVector<ProjectedCatalogStar>& projectedStars,
-    double matchRadius,
-    QVector<Match>& matches)
-{
-    constexpr double kMinSnrForRepair = 50.0;
-    // Strict condition: unmatched detection is CLOSER than current match, same-or-brighter.
-    constexpr double kSnrRatioStrict = 1.0;
-    // Relaxed condition: unmatched detection is within 1.5x current-match distance and 2x brighter.
-    // Handles cases where a bright star loses to a dimmer one due to BRE scoring, even when
-    // the bright star is slightly farther from the projected catalog position.
-    constexpr double kDistRatioRelaxed = 1.5;
-    constexpr double kSnrRatioRelaxed = 2.0;
-    constexpr double kMinAbsoluteSnrRelaxed = 150.0;
-    const double matchRadiusSq = matchRadius * matchRadius;
-
-    QSet<int> matchedDetections;
-    QHash<int, int> catalogToMatchIdx;
-    matchedDetections.reserve(matches.size());
-    catalogToMatchIdx.reserve(matches.size());
-    for (int i = 0; i < matches.size(); ++i) {
-        matchedDetections.insert(matches[i].detectionIndex);
-        catalogToMatchIdx.insert(matches[i].catalogIndex, i);
-    }
-
-    struct SwapCandidate {
-        // Strict candidates sort before relaxed; within each tier, lower distanceRatio wins.
-        bool relaxed;
-        double distanceRatio;   // newDist / currentDist
-        int detectionIndex;
-        int catalogIndex;
-        double newDistance;
-    };
-    QVector<SwapCandidate> candidates;
-
-    for (int detIdx = 0; detIdx < starDetections.size(); ++detIdx) {
-        if (matchedDetections.contains(detIdx)) continue;
-        const CameraPipelineStarDetection& det = starDetections[detIdx];
-        if (det.m_snr < kMinSnrForRepair || det.m_hotPixelSuspect) continue;
-
-        double nearestDist = std::numeric_limits<double>::infinity();
-        int nearestCatalogIdx = -1;
-        for (const ProjectedCatalogStar& proj : projectedStars) {
-            const double dx = det.m_center.x() - proj.point.x();
-            const double dy = det.m_center.y() - proj.point.y();
-            const double distSq = dx*dx + dy*dy;
-            if (distSq > matchRadiusSq) continue;
-            const double dist = std::sqrt(distSq);
-            if (dist < nearestDist) { nearestDist = dist; nearestCatalogIdx = proj.catalogIndex; }
-        }
-        if (nearestCatalogIdx < 0) continue;
-
-        const auto it = catalogToMatchIdx.constFind(nearestCatalogIdx);
-        if (it == catalogToMatchIdx.constEnd()) continue;
-
-        const Match& current = matches[it.value()];
-        const double distRatio = nearestDist / current.distancePixels;
-        const double snrRatio = det.m_snr / starDetections[current.detectionIndex].m_snr;
-
-        if (distRatio < 1.0 && snrRatio >= kSnrRatioStrict) {
-            candidates.append({false, distRatio, detIdx, nearestCatalogIdx, nearestDist});
-        } else if (distRatio <= kDistRatioRelaxed
-                   && snrRatio >= kSnrRatioRelaxed
-                   && det.m_snr >= kMinAbsoluteSnrRelaxed) {
-            candidates.append({true, distRatio, detIdx, nearestCatalogIdx, nearestDist});
-        }
-    }
-
-    if (candidates.isEmpty()) return;
-
-    std::sort(candidates.begin(), candidates.end(),
-              [](const SwapCandidate& a, const SwapCandidate& b) {
-                  if (a.relaxed != b.relaxed) return !a.relaxed;  // strict first
-                  return a.distanceRatio < b.distanceRatio;
-              });
-
-    QSet<int> usedDetections;
-    for (const SwapCandidate& cand : candidates) {
-        if (usedDetections.contains(cand.detectionIndex)) continue;
-        const int matchIdx = catalogToMatchIdx.value(cand.catalogIndex, -1);
-        if (matchIdx < 0) continue;
-        matches[matchIdx].detectionIndex = cand.detectionIndex;
-        matches[matchIdx].distancePixels = cand.newDistance;
-        usedDetections.insert(cand.detectionIndex);
-    }
-}
+static void repairFinalMatchCollisions( const QVector<CameraPipelineStarDetection>& starDetections, const QVector<ProjectedCatalogStar>& projectedStars, double matchRadius, QVector<Match>& matches);
 
 // Diagnostic-only (SDRANGEL_CAMERA_PLATE_SOLVER_DEBUG_UNMATCHED=1): for each strong
 // detection that the final match pass left unmatched, report the nearest projected
@@ -3139,1011 +1698,63 @@ static void repairFinalMatchCollisions(
 // and whether it was instead claimed by a different detection. This distinguishes
 // "no catalog star nearby" (candidate-pool/coverage gap) from "the right catalog
 // star is there but lost the assignment to another detection" (match collision).
-static void debugDumpUnmatchedDetections(const PlateSolveCatalogContext& catalogContext,
-                                         const QVector<CameraPipelineStarDetection>& starDetections,
-                                         const QVector<ProjectedCatalogStar>& projectedStars,
-                                         const QVector<Match>& finalMatches,
-                                         double finalMatchRadius)
-{
-    if (qgetenv("SDRANGEL_CAMERA_PLATE_SOLVER_DEBUG_UNMATCHED").isEmpty()) {
-        return;
-    }
+static void debugDumpUnmatchedDetections(const PlateSolveCatalogContext& catalogContext, const QVector<CameraPipelineStarDetection>& starDetections, const QVector<ProjectedCatalogStar>& projectedStars, const QVector<Match>& finalMatches, double finalMatchRadius);
 
-    QSet<int> matchedDetections;
-    QSet<int> matchedCatalogIndices;
-    for (const Match& match : finalMatches)
-    {
-        matchedDetections.insert(match.detectionIndex);
-        matchedCatalogIndices.insert(match.catalogIndex);
-    }
+static bool debugCatalogStarMatches(const PlateSolveCatalogContext& catalogContext, int catalogIndex);
 
-    constexpr double kMinSnrForDump = 50.0;
-    for (int detectionIndex = 0; detectionIndex < starDetections.size(); ++detectionIndex)
-    {
-        if (matchedDetections.contains(detectionIndex)) {
-            continue;
-        }
-        const CameraPipelineStarDetection& detection = starDetections[detectionIndex];
-        if (detection.m_snr < kMinSnrForDump) {
-            continue;
-        }
+static bool debugTriangleContainsCatalogStar(const PlateSolveCatalogContext& catalogContext, const std::array<int, 3>& catalogIndices);
 
-        double nearestDistance = std::numeric_limits<double>::infinity();
-        int nearestCatalogIndex = -1;
-        QPointF nearestPoint;
-        double nearestMagnitude = 0.0;
-        for (const ProjectedCatalogStar& projected : projectedStars)
-        {
-            const double dx = detection.m_center.x() - projected.point.x();
-            const double dy = detection.m_center.y() - projected.point.y();
-            const double distance = std::hypot(dx, dy);
-            if (distance < nearestDistance)
-            {
-                nearestDistance = distance;
-                nearestCatalogIndex = projected.catalogIndex;
-                nearestPoint = projected.point;
-                nearestMagnitude = projected.magnitude;
-            }
-        }
+static QString debugTriangleAnchorSummary(const PlateSolveCatalogContext& catalogContext, const QVector<CameraPipelineStarDetection>& starDetections, const std::array<int, 3>& detectionIndices, const std::array<int, 3>& catalogIndices);
 
-        if (nearestCatalogIndex < 0)
-        {
-            qDebug() << "CameraPlateSolver[unmatched-detection]"
-                     << "detection" << detectionIndex
-                     << "x" << detection.m_center.x()
-                     << "y" << detection.m_center.y()
-                     << "snr" << detection.m_snr
-                     << "nearestCatalog" << "<none, projectedStars empty>";
-            continue;
-        }
+static SkyProjector createProjector(const CameraSettings& settings, const QSize& size, double azimuthDegrees, double elevationDegrees, double rollDegrees, double fovDegrees, double centerOffsetXPixels = 0.0, double centerOffsetYPixels = 0.0, double distortionK1 = 0.0);
 
-        int claimedByDetection = -1;
-        if (matchedCatalogIndices.contains(nearestCatalogIndex))
-        {
-            for (const Match& match : finalMatches)
-            {
-                if (match.catalogIndex == nearestCatalogIndex)
-                {
-                    claimedByDetection = match.detectionIndex;
-                    break;
-                }
-            }
-        }
+static bool projectVector(const SkyProjector& projector, const SkyVector& vector, QPointF& point);
 
-        qDebug() << "CameraPlateSolver[unmatched-detection]"
-                 << "detection" << detectionIndex
-                 << "x" << detection.m_center.x()
-                 << "y" << detection.m_center.y()
-                 << "snr" << detection.m_snr
-                 << "nearestCatalog" << catalogDisplayName(catalogContext.catalogStars[nearestCatalogIndex])
-                 << "catalogIndex" << nearestCatalogIndex
-                 << "mag" << nearestMagnitude
-                 << "projX" << nearestPoint.x()
-                 << "projY" << nearestPoint.y()
-                 << "distance" << nearestDistance
-                 << "withinFinalMatchRadius" << (nearestDistance <= finalMatchRadius)
-                 << "claimedByDetection" << claimedByDetection;
-    }
-}
+static bool projectAltAz(const SkyProjector& projector, double azimuthDegrees, double elevationDegrees, QPointF& point);
 
-static bool debugCatalogStarMatches(const PlateSolveCatalogContext& catalogContext,
-                                    int catalogIndex)
-{
-    const QByteArray debugStar = qgetenv("SDRANGEL_CAMERA_PLATE_SOLVER_DEBUG_STAR");
-    if (debugStar.trimmed().isEmpty()
-        || (catalogIndex < 0)
-        || (catalogIndex >= catalogContext.catalogStars.size()))
-    {
-        return false;
-    }
+static bool unprojectPixelToVector(const SkyProjector& projector, const QPointF& point, SkyVector& vector);
 
-    return catalogDisplayName(catalogContext.catalogStars[catalogIndex]).contains(
-        QString::fromUtf8(debugStar).trimmed(),
-        Qt::CaseInsensitive);
-}
+static bool rotateBasisToAlignVector(const SkyProjector& projector, const SkyVector& fromVector, const SkyVector& toVector, SkyVector& alignedCenter, SkyVector& alignedRight, SkyVector& alignedUp);
 
-static bool debugTriangleContainsCatalogStar(const PlateSolveCatalogContext& catalogContext,
-                                             const std::array<int, 3>& catalogIndices)
-{
-    for (int catalogIndex : catalogIndices)
-    {
-        if (debugCatalogStarMatches(catalogContext, catalogIndex)) {
-            return true;
-        }
-    }
-    return false;
-}
+static bool projectorPoseFromBasis(const SkyVector& center, const SkyVector& right, double& azimuthDegrees, double& elevationDegrees, double& rollDegrees);
 
-static QString debugTriangleAnchorSummary(const PlateSolveCatalogContext& catalogContext,
-                                          const QVector<CameraPipelineStarDetection>& starDetections,
-                                          const std::array<int, 3>& detectionIndices,
-                                          const std::array<int, 3>& catalogIndices)
-{
-    QStringList parts;
-    for (int i = 0; i < 3; ++i)
-    {
-        const int detectionIndex = detectionIndices[i];
-        const int catalogIndex = catalogIndices[i];
-        if ((detectionIndex < 0)
-            || (detectionIndex >= starDetections.size())
-            || (catalogIndex < 0)
-            || (catalogIndex >= catalogContext.catalogStars.size()))
-        {
-            continue;
-        }
+static SkyVector subtractScaled(const SkyVector& lhs, const SkyVector& rhs, double scale);
 
-        const CameraPipelineStarDetection& detection = starDetections[detectionIndex];
-        parts.append(QStringLiteral("#%1(%2,%3)->%4")
-            .arg(detectionIndex)
-            .arg(detection.m_center.x(), 0, 'f', 1)
-            .arg(detection.m_center.y(), 0, 'f', 1)
-            .arg(catalogDisplayName(catalogContext.catalogStars[catalogIndex])));
-    }
-    return parts.join(QStringLiteral("; "));
-}
+static SkyVector combineBasis(const SkyVector& xAxis, const SkyVector& yAxis, const SkyVector& zAxis, double x, double y, double z);
 
-static SkyProjector createProjector(const CameraSettings& settings,
-                             const QSize& size,
-                             double azimuthDegrees,
-                             double elevationDegrees,
-                             double rollDegrees,
-                             double fovDegrees,
-                             double centerOffsetXPixels = 0.0,
-                             double centerOffsetYPixels = 0.0,
-                             double distortionK1 = 0.0)
-{
-    SkyProjector projector;
-    projector.width = size.width();
-    projector.height = size.height();
-    projector.lensProjection = settings.m_lensProjection;
+static bool mappedBasisVector(const SkyVector& sourceVector, const SkyVector& sourceXAxis, const SkyVector& sourceYAxis, const SkyVector& sourceZAxis, const SkyVector& targetXAxis, const SkyVector& targetYAxis, const SkyVector& targetZAxis, SkyVector& mappedVector);
 
-    if ((projector.width <= 0) || (projector.height <= 0) || (fovDegrees <= 0.0)) {
-        return projector;
-    }
+static bool poseFromTwoVectorPairs(const SkyProjector& baseProjector, const SkyVector& sourceA, const SkyVector& sourceB, const SkyVector& targetA, const SkyVector& targetB, double& azimuthDegrees, double& elevationDegrees, double& rollDegrees);
 
-    const double azimuthRadians = degToRad(azimuthDegrees);
-    projector.center = normalize(vectorFromAltAz(azimuthDegrees, elevationDegrees));
-    projector.right = normalize({std::cos(azimuthRadians), -std::sin(azimuthRadians), 0.0});
-    projector.up = normalize(cross(projector.right, projector.center));
-    if ((length(projector.right) <= 0.0) || (length(projector.up) <= 0.0)) {
-        return projector;
-    }
+static SkyVector rotateVectorByMatrix(const std::array<std::array<double, 3>, 3>& rotation, const SkyVector& vector);
 
-    const double rollRadians = degToRad(rollDegrees);
-    if (std::fabs(rollRadians) > 1e-9)
-    {
-        projector.right = normalize(rotateAroundAxis(projector.right, projector.center, rollRadians));
-        projector.up = normalize(rotateAroundAxis(projector.up, projector.center, rollRadians));
-    }
+static std::array<std::array<double, 3>, 3> transposeRotationMatrix( const std::array<std::array<double, 3>, 3>& rotation);
 
-    const double halfHorizontalFov = halfHorizontalFovFromLongEdgeFov(
-        settings.m_lensProjection,
-        size,
-        fovDegrees);
-    if ((halfHorizontalFov <= 0.0) || (halfHorizontalFov >= (kPi * 0.5))) {
-        return projector;
-    }
+static bool vectorPairRotationError(const std::array<std::array<double, 3>, 3>& rotation, const std::array<SkyVector, 3>& sourceVectors, const std::array<SkyVector, 3>& targetVectors, double& rmsAngularErrorDegrees, double& maxAngularErrorDegrees);
 
-    projector.halfHorizontalFov = halfHorizontalFov;
-    const double aspect = static_cast<double>(projector.height) / static_cast<double>(projector.width);
-    projector.horizontalScale = 1.0;
-    projector.verticalScale = aspect;
-    projector.principalPointX = static_cast<double>(projector.width) * 0.5 + centerOffsetXPixels;
-    projector.principalPointY = static_cast<double>(projector.height) * 0.5 + centerOffsetYPixels;
-    projector.distortionK1 = distortionK1;
-    projector.valid = projector.verticalScale > 0.0;
-    return projector;
-}
+static bool normalizeQuaternion(std::array<double, 4>& quaternion);
 
-static bool projectVector(const SkyProjector& projector, const SkyVector& vector, QPointF& point)
-{
-    if (!projector.valid) {
-        return false;
-    }
+static std::array<double, 4> largestSymmetric4Eigenvector(const std::array<std::array<double, 4>, 4>& matrix);
 
-    const double depth = dot(vector, projector.center);
-    if (depth <= 0.0) {
-        return false;
-    }
+static std::array<std::array<double, 3>, 3> rotationMatrixFromQuaternion(const std::array<double, 4>& quaternion);
 
-    const double planeX = dot(vector, projector.right);
-    const double planeY = dot(vector, projector.up);
-    if (!std::isfinite(planeX) || !std::isfinite(planeY)) {
-        return false;
-    }
+static bool wahbaRotationFromVectorPairs(const std::array<SkyVector, 3>& sourceVectors, const std::array<SkyVector, 3>& targetVectors, bool transposeCorrelation, std::array<std::array<double, 3>, 3>& rotation, double& rmsAngularErrorDegrees, double& maxAngularErrorDegrees);
 
-    const double theta = std::acos(std::clamp(depth, -1.0, 1.0));
-    const double phi = std::atan2(planeY, planeX);
-    const double projectionRadius = [&]() -> double
-    {
-        switch (projector.lensProjection)
-        {
-        case CameraSettings::LensProjectionEquidistant:
-            return theta / projector.halfHorizontalFov;
-        case CameraSettings::LensProjectionEquisolid:
-            return std::sin(theta * 0.5) / std::sin(projector.halfHorizontalFov * 0.5);
-        case CameraSettings::LensProjectionRectilinear:
-        default:
-            return std::tan(theta) / std::tan(projector.halfHorizontalFov);
-        }
-    }();
-
-    double projectedX = std::cos(phi) * projectionRadius;
-    double projectedY = std::sin(phi) * projectionRadius;
-    if (std::fabs(projector.distortionK1) > 1e-9)
-    {
-        const double radiusSquared = projectedX * projectedX + projectedY * projectedY;
-        const double distortionScale = 1.0
-            + projector.distortionK1 * radiusSquared;
-        // A non-positive scale means the distortion model has folded this direction
-        // back past the lens singularity — no valid image point exists.
-        if (distortionScale <= 0.0) return false;
-        projectedX *= distortionScale;
-        projectedY *= distortionScale;
-    }
-
-    const double normalizedX = projectedX / projector.horizontalScale;
-    const double normalizedY = projectedY / projector.verticalScale;
-    if (!std::isfinite(normalizedX) || !std::isfinite(normalizedY)) {
-        return false;
-    }
-
-    point.setX(projector.principalPointX + normalizedX * 0.5 * static_cast<double>(projector.width));
-    point.setY(projector.principalPointY - normalizedY * 0.5 * static_cast<double>(projector.height));
-    return true;
-}
-
-static bool projectAltAz(const SkyProjector& projector, double azimuthDegrees, double elevationDegrees, QPointF& point)
-{
-    return projectVector(projector, vectorFromAltAz(azimuthDegrees, elevationDegrees), point);
-}
-
-static bool unprojectPixelToVector(const SkyProjector& projector, const QPointF& point, SkyVector& vector)
-{
-    if (!projector.valid || (projector.width <= 0) || (projector.height <= 0)) {
-        return false;
-    }
-
-    double projectedX = ((point.x() - projector.principalPointX) / (0.5 * static_cast<double>(projector.width)))
-        * projector.horizontalScale;
-    double projectedY = (-(point.y() - projector.principalPointY) / (0.5 * static_cast<double>(projector.height)))
-        * projector.verticalScale;
-    if (!std::isfinite(projectedX) || !std::isfinite(projectedY)) {
-        return false;
-    }
-
-    if (std::fabs(projector.distortionK1) > 1e-9)
-    {
-        double undistortedX = projectedX;
-        double undistortedY = projectedY;
-        bool undistortOk = true;
-        for (int iteration = 0; iteration < 8; ++iteration)
-        {
-            const double radiusSquared = undistortedX * undistortedX + undistortedY * undistortedY;
-            const double distortionScale = 1.0
-                + projector.distortionK1 * radiusSquared;
-            // Non-positive scale means the pixel lies in the folded region of the
-            // distortion model — it cannot be mapped back to a sky direction.
-            if (distortionScale <= 0.0) { undistortOk = false; break; }
-            undistortedX = projectedX / distortionScale;
-            undistortedY = projectedY / distortionScale;
-        }
-        if (!undistortOk) return false;
-        projectedX = undistortedX;
-        projectedY = undistortedY;
-    }
-
-    const double projectionRadius = std::hypot(projectedX, projectedY);
-    double theta = 0.0;
-    switch (projector.lensProjection)
-    {
-    case CameraSettings::LensProjectionEquidistant:
-        theta = projectionRadius * projector.halfHorizontalFov;
-        break;
-    case CameraSettings::LensProjectionEquisolid:
-        theta = 2.0 * std::asin(std::clamp(
-            projectionRadius * std::sin(projector.halfHorizontalFov * 0.5),
-            -1.0,
-            1.0));
-        break;
-    case CameraSettings::LensProjectionRectilinear:
-    default:
-        theta = std::atan(projectionRadius * std::tan(projector.halfHorizontalFov));
-        break;
-    }
-    if (!std::isfinite(theta)) {
-        return false;
-    }
-
-    const double phi = std::atan2(projectedY, projectedX);
-    const double sinTheta = std::sin(theta);
-    const double cosTheta = std::cos(theta);
-    vector = normalize({
-        projector.center.x * cosTheta + (projector.right.x * std::cos(phi) + projector.up.x * std::sin(phi)) * sinTheta,
-        projector.center.y * cosTheta + (projector.right.y * std::cos(phi) + projector.up.y * std::sin(phi)) * sinTheta,
-        projector.center.z * cosTheta + (projector.right.z * std::cos(phi) + projector.up.z * std::sin(phi)) * sinTheta
-    });
-    return length(vector) > 0.0;
-}
-
-static bool rotateBasisToAlignVector(const SkyProjector& projector,
-                                     const SkyVector& fromVector,
-                                     const SkyVector& toVector,
-                                     SkyVector& alignedCenter,
-                                     SkyVector& alignedRight,
-                                     SkyVector& alignedUp)
-{
-    const SkyVector from = normalize(fromVector);
-    const SkyVector to = normalize(toVector);
-    if ((length(from) <= 0.0) || (length(to) <= 0.0)) {
-        return false;
-    }
-
-    const double alignment = std::clamp(dot(from, to), -1.0, 1.0);
-    SkyVector rotationAxis = cross(from, to);
-    double axisLength = length(rotationAxis);
-    if (axisLength <= 1e-9)
-    {
-        if (alignment > 0.0)
-        {
-            alignedCenter = projector.center;
-            alignedRight = projector.right;
-            alignedUp = projector.up;
-            return true;
-        }
-
-        rotationAxis = cross(from, projector.right);
-        axisLength = length(rotationAxis);
-        if (axisLength <= 1e-9) {
-            rotationAxis = cross(from, projector.up);
-            axisLength = length(rotationAxis);
-        }
-        if (axisLength <= 1e-9) {
-            return false;
-        }
-    }
-
-    rotationAxis = normalize(rotationAxis);
-    const double angle = std::acos(alignment);
-    alignedCenter = normalize(rotateAroundAxis(projector.center, rotationAxis, angle));
-    alignedRight = normalize(rotateAroundAxis(projector.right, rotationAxis, angle));
-    alignedUp = normalize(rotateAroundAxis(projector.up, rotationAxis, angle));
-    return (length(alignedCenter) > 0.0) && (length(alignedRight) > 0.0) && (length(alignedUp) > 0.0);
-}
-
-static bool projectorPoseFromBasis(const SkyVector& center,
-                                   const SkyVector& right,
-                                   double& azimuthDegrees,
-                                   double& elevationDegrees,
-                                   double& rollDegrees)
-{
-    const SkyVector normalizedCenter = normalize(center);
-    if (length(normalizedCenter) <= 0.0) {
-        return false;
-    }
-
-    azimuthDegrees = normalizeDegrees(std::atan2(normalizedCenter.x, normalizedCenter.y) * 180.0 / kPi);
-    elevationDegrees = std::asin(std::clamp(normalizedCenter.z, -1.0, 1.0)) * 180.0 / kPi;
-
-    const double azimuthRadians = degToRad(azimuthDegrees);
-    const SkyVector baseRight = normalize({std::cos(azimuthRadians), -std::sin(azimuthRadians), 0.0});
-    SkyVector projectedRight = {
-        right.x - normalizedCenter.x * dot(right, normalizedCenter),
-        right.y - normalizedCenter.y * dot(right, normalizedCenter),
-        right.z - normalizedCenter.z * dot(right, normalizedCenter)
-    };
-    projectedRight = normalize(projectedRight);
-    if ((length(baseRight) <= 0.0) || (length(projectedRight) <= 0.0)) {
-        return false;
-    }
-
-    const SkyVector rightCross = cross(baseRight, projectedRight);
-    rollDegrees = std::atan2(
-        dot(rightCross, normalizedCenter),
-        std::clamp(dot(baseRight, projectedRight), -1.0, 1.0)) * 180.0 / kPi;
-    return std::isfinite(azimuthDegrees) && std::isfinite(elevationDegrees) && std::isfinite(rollDegrees);
-}
-
-static SkyVector subtractScaled(const SkyVector& lhs, const SkyVector& rhs, double scale)
-{
-    return {
-        lhs.x - rhs.x * scale,
-        lhs.y - rhs.y * scale,
-        lhs.z - rhs.z * scale
-    };
-}
-
-static SkyVector combineBasis(const SkyVector& xAxis,
-                              const SkyVector& yAxis,
-                              const SkyVector& zAxis,
-                              double x,
-                              double y,
-                              double z)
-{
-    return {
-        xAxis.x * x + yAxis.x * y + zAxis.x * z,
-        xAxis.y * x + yAxis.y * y + zAxis.y * z,
-        xAxis.z * x + yAxis.z * y + zAxis.z * z
-    };
-}
-
-static bool mappedBasisVector(const SkyVector& sourceVector,
-                              const SkyVector& sourceXAxis,
-                              const SkyVector& sourceYAxis,
-                              const SkyVector& sourceZAxis,
-                              const SkyVector& targetXAxis,
-                              const SkyVector& targetYAxis,
-                              const SkyVector& targetZAxis,
-                              SkyVector& mappedVector)
-{
-    const double x = dot(sourceVector, sourceXAxis);
-    const double y = dot(sourceVector, sourceYAxis);
-    const double z = dot(sourceVector, sourceZAxis);
-    mappedVector = normalize(combineBasis(targetXAxis, targetYAxis, targetZAxis, x, y, z));
-    return length(mappedVector) > 0.0;
-}
-
-static bool poseFromTwoVectorPairs(const SkyProjector& baseProjector,
-                                   const SkyVector& sourceA,
-                                   const SkyVector& sourceB,
-                                   const SkyVector& targetA,
-                                   const SkyVector& targetB,
-                                   double& azimuthDegrees,
-                                   double& elevationDegrees,
-                                   double& rollDegrees)
-{
-    const SkyVector sourceXAxis = normalize(sourceA);
-    const SkyVector targetXAxis = normalize(targetA);
-    // The second basis axis is the component of B perpendicular to A. When A and B are
-    // (near-)parallel this residual collapses toward zero, and normalize() would then amplify
-    // floating-point noise into a finite but garbage unit axis that slips past the length() <= 0
-    // checks below and produces a wildly wrong pose. Reject when either residual is too small to
-    // define a stable axis. For unit inputs the residual length equals sin(angle between A and B),
-    // so 1e-6 (~0.00006 deg) is far below any realistic detection/catalog pair separation and only
-    // rejects genuinely degenerate inputs.
-    const SkyVector sourceYResidual = subtractScaled(sourceB, sourceXAxis, dot(sourceB, sourceXAxis));
-    const SkyVector targetYResidual = subtractScaled(targetB, targetXAxis, dot(targetB, targetXAxis));
-    constexpr double kMinPerpendicularResidualLength = 1e-6;
-    if ((length(sourceXAxis) <= 0.0)
-        || (length(targetXAxis) <= 0.0)
-        || (length(sourceYResidual) < kMinPerpendicularResidualLength)
-        || (length(targetYResidual) < kMinPerpendicularResidualLength))
-    {
-        return false;
-    }
-    const SkyVector sourceYAxis = normalize(sourceYResidual);
-    const SkyVector sourceZAxis = normalize(cross(sourceXAxis, sourceYAxis));
-    const SkyVector targetYAxis = normalize(targetYResidual);
-    const SkyVector targetZAxis = normalize(cross(targetXAxis, targetYAxis));
-    if ((length(sourceZAxis) <= 0.0)
-        || (length(targetZAxis) <= 0.0))
-    {
-        return false;
-    }
-
-    SkyVector mappedCenter;
-    SkyVector mappedRight;
-    if (!mappedBasisVector(
-            baseProjector.center,
-            sourceXAxis,
-            sourceYAxis,
-            sourceZAxis,
-            targetXAxis,
-            targetYAxis,
-            targetZAxis,
-            mappedCenter)
-        || !mappedBasisVector(
-            baseProjector.right,
-            sourceXAxis,
-            sourceYAxis,
-            sourceZAxis,
-            targetXAxis,
-            targetYAxis,
-            targetZAxis,
-            mappedRight))
-    {
-        return false;
-    }
-
-    return projectorPoseFromBasis(mappedCenter, mappedRight, azimuthDegrees, elevationDegrees, rollDegrees);
-}
-
-static SkyVector rotateVectorByMatrix(const std::array<std::array<double, 3>, 3>& rotation,
-                                      const SkyVector& vector)
-{
-    return {
-        rotation[0][0] * vector.x + rotation[0][1] * vector.y + rotation[0][2] * vector.z,
-        rotation[1][0] * vector.x + rotation[1][1] * vector.y + rotation[1][2] * vector.z,
-        rotation[2][0] * vector.x + rotation[2][1] * vector.y + rotation[2][2] * vector.z
-    };
-}
-
-static std::array<std::array<double, 3>, 3> transposeRotationMatrix(
-    const std::array<std::array<double, 3>, 3>& rotation)
-{
-    return {{
-        {{rotation[0][0], rotation[1][0], rotation[2][0]}},
-        {{rotation[0][1], rotation[1][1], rotation[2][1]}},
-        {{rotation[0][2], rotation[1][2], rotation[2][2]}}
-    }};
-}
-
-static bool vectorPairRotationError(const std::array<std::array<double, 3>, 3>& rotation,
-                                    const std::array<SkyVector, 3>& sourceVectors,
-                                    const std::array<SkyVector, 3>& targetVectors,
-                                    double& rmsAngularErrorDegrees,
-                                    double& maxAngularErrorDegrees)
-{
-    double squaredAngularError = 0.0;
-    maxAngularErrorDegrees = 0.0;
-    for (int index = 0; index < 3; ++index)
-    {
-        const SkyVector rotatedSource = normalize(rotateVectorByMatrix(rotation, sourceVectors[index]));
-        if (length(rotatedSource) <= 0.0) {
-            return false;
-        }
-        const double angularErrorDegrees = std::acos(std::clamp(
-            dot(rotatedSource, targetVectors[index]),
-            -1.0,
-            1.0)) * 180.0 / kPi;
-        squaredAngularError += angularErrorDegrees * angularErrorDegrees;
-        maxAngularErrorDegrees = std::max(maxAngularErrorDegrees, angularErrorDegrees);
-    }
-    rmsAngularErrorDegrees = std::sqrt(squaredAngularError / 3.0);
-    return std::isfinite(rmsAngularErrorDegrees) && std::isfinite(maxAngularErrorDegrees);
-}
-
-static bool normalizeQuaternion(std::array<double, 4>& quaternion)
-{
-    double norm = 0.0;
-    for (double value : quaternion) {
-        norm += value * value;
-    }
-    norm = std::sqrt(norm);
-    if (norm <= 0.0) {
-        return false;
-    }
-
-    for (double& value : quaternion) {
-        value /= norm;
-    }
-    if (quaternion[0] < 0.0) {
-        for (double& value : quaternion) {
-            value = -value;
-        }
-    }
-    return true;
-}
-
-static std::array<double, 4> largestSymmetric4Eigenvector(const std::array<std::array<double, 4>, 4>& matrix)
-{
-    double shift = 1.0;
-    for (int row = 0; row < 4; ++row)
-    {
-        for (int col = 0; col < 4; ++col) {
-            shift += std::fabs(matrix[row][col]);
-        }
-    }
-
-    std::array<double, 4> vector {{1.0, 0.2, -0.3, 0.4}};
-    normalizeQuaternion(vector);
-    for (int iteration = 0; iteration < 48; ++iteration)
-    {
-        std::array<double, 4> next {{0.0, 0.0, 0.0, 0.0}};
-        for (int row = 0; row < 4; ++row)
-        {
-            next[row] = shift * vector[row];
-            for (int col = 0; col < 4; ++col) {
-                next[row] += matrix[row][col] * vector[col];
-            }
-        }
-        if (!normalizeQuaternion(next)) {
-            break;
-        }
-        vector = next;
-    }
-
-    return vector;
-}
-
-static std::array<std::array<double, 3>, 3> rotationMatrixFromQuaternion(const std::array<double, 4>& quaternion)
-{
-    const double w = quaternion[0];
-    const double x = quaternion[1];
-    const double y = quaternion[2];
-    const double z = quaternion[3];
-
-    return {{
-        {{
-            1.0 - 2.0 * (y * y + z * z),
-            2.0 * (x * y - w * z),
-            2.0 * (x * z + w * y)
-        }},
-        {{
-            2.0 * (x * y + w * z),
-            1.0 - 2.0 * (x * x + z * z),
-            2.0 * (y * z - w * x)
-        }},
-        {{
-            2.0 * (x * z - w * y),
-            2.0 * (y * z + w * x),
-            1.0 - 2.0 * (x * x + y * y)
-        }}
-    }};
-}
-
-static bool wahbaRotationFromVectorPairs(const std::array<SkyVector, 3>& sourceVectors,
-                                         const std::array<SkyVector, 3>& targetVectors,
-                                         bool transposeCorrelation,
-                                         std::array<std::array<double, 3>, 3>& rotation,
-                                         double& rmsAngularErrorDegrees,
-                                         double& maxAngularErrorDegrees)
-{
-    std::array<std::array<double, 3>, 3> correlation {{
-        {{0.0, 0.0, 0.0}},
-        {{0.0, 0.0, 0.0}},
-        {{0.0, 0.0, 0.0}}
-    }};
-
-    for (int index = 0; index < 3; ++index)
-    {
-        const std::array<double, 3> source {{sourceVectors[index].x, sourceVectors[index].y, sourceVectors[index].z}};
-        const std::array<double, 3> target {{targetVectors[index].x, targetVectors[index].y, targetVectors[index].z}};
-        for (int row = 0; row < 3; ++row)
-        {
-            for (int col = 0; col < 3; ++col)
-            {
-                correlation[row][col] += transposeCorrelation
-                    ? source[row] * target[col]
-                    : target[row] * source[col];
-            }
-        }
-    }
-
-    const double sigma = correlation[0][0] + correlation[1][1] + correlation[2][2];
-    const std::array<double, 3> zVector {{
-        correlation[1][2] - correlation[2][1],
-        correlation[2][0] - correlation[0][2],
-        correlation[0][1] - correlation[1][0]
-    }};
-    const std::array<std::array<double, 3>, 3> symmetric {{
-        {{
-            2.0 * correlation[0][0] - sigma,
-            correlation[0][1] + correlation[1][0],
-            correlation[0][2] + correlation[2][0]
-        }},
-        {{
-            correlation[1][0] + correlation[0][1],
-            2.0 * correlation[1][1] - sigma,
-            correlation[1][2] + correlation[2][1]
-        }},
-        {{
-            correlation[2][0] + correlation[0][2],
-            correlation[2][1] + correlation[1][2],
-            2.0 * correlation[2][2] - sigma
-        }}
-    }};
-
-    const std::array<std::array<double, 4>, 4> davenport {{
-        {{sigma, zVector[0], zVector[1], zVector[2]}},
-        {{zVector[0], symmetric[0][0], symmetric[0][1], symmetric[0][2]}},
-        {{zVector[1], symmetric[1][0], symmetric[1][1], symmetric[1][2]}},
-        {{zVector[2], symmetric[2][0], symmetric[2][1], symmetric[2][2]}}
-    }};
-
-    std::array<double, 4> quaternion = largestSymmetric4Eigenvector(davenport);
-    if (!normalizeQuaternion(quaternion)) {
-        return false;
-    }
-
-    std::array<std::array<double, 3>, 3> rotationCandidate = rotationMatrixFromQuaternion(quaternion);
-    double rmsAngularError = std::numeric_limits<double>::infinity();
-    double maxAngularError = std::numeric_limits<double>::infinity();
-    bool haveRotation = vectorPairRotationError(
-        rotationCandidate,
-        sourceVectors,
-        targetVectors,
-        rmsAngularError,
-        maxAngularError);
-
-    const std::array<std::array<double, 3>, 3> transposedRotationCandidate =
-        transposeRotationMatrix(rotationCandidate);
-    double transposedRmsAngularError = std::numeric_limits<double>::infinity();
-    double transposedMaxAngularError = std::numeric_limits<double>::infinity();
-    const bool haveTransposedRotation = vectorPairRotationError(
-        transposedRotationCandidate,
-        sourceVectors,
-        targetVectors,
-        transposedRmsAngularError,
-        transposedMaxAngularError);
-
-    if (haveTransposedRotation
-        && (!haveRotation || (transposedRmsAngularError < rmsAngularError)))
-    {
-        rotationCandidate = transposedRotationCandidate;
-        rmsAngularError = transposedRmsAngularError;
-        maxAngularError = transposedMaxAngularError;
-        haveRotation = true;
-    }
-
-    if (!haveRotation) {
-        return false;
-    }
-
-    rotation = rotationCandidate;
-    rmsAngularErrorDegrees = rmsAngularError;
-    maxAngularErrorDegrees = maxAngularError;
-    return true;
-}
-
-static bool poseFromThreeVectorPairs(const SkyProjector& baseProjector,
-                                     const std::array<SkyVector, 3>& sourceVectors,
-                                     const std::array<SkyVector, 3>& targetVectors,
-                                     double& azimuthDegrees,
-                                     double& elevationDegrees,
-                                     double& rollDegrees,
-                                     double* rmsAngularErrorDegrees = nullptr,
-                                     double* maxAngularErrorDegrees = nullptr)
-{
-    std::array<std::array<double, 3>, 3> bestRotation;
-    double bestRmsAngularErrorDegrees = std::numeric_limits<double>::infinity();
-    double bestMaxAngularErrorDegrees = std::numeric_limits<double>::infinity();
-    bool haveRotation = false;
-
-    for (bool transposeCorrelation : {false, true})
-    {
-        std::array<std::array<double, 3>, 3> rotation;
-        double rmsAngularErrorDegreesCandidate = std::numeric_limits<double>::infinity();
-        double maxAngularErrorDegreesCandidate = std::numeric_limits<double>::infinity();
-        if (!wahbaRotationFromVectorPairs(
-                sourceVectors,
-                targetVectors,
-                transposeCorrelation,
-                rotation,
-                rmsAngularErrorDegreesCandidate,
-                maxAngularErrorDegreesCandidate))
-        {
-            continue;
-        }
-
-        if (rmsAngularErrorDegreesCandidate < bestRmsAngularErrorDegrees)
-        {
-            bestRotation = rotation;
-            bestRmsAngularErrorDegrees = rmsAngularErrorDegreesCandidate;
-            bestMaxAngularErrorDegrees = maxAngularErrorDegreesCandidate;
-            haveRotation = true;
-        }
-    }
-
-    if (!haveRotation) {
-        return false;
-    }
-
-    const SkyVector mappedCenter = normalize(rotateVectorByMatrix(bestRotation, baseProjector.center));
-    const SkyVector mappedRight = normalize(rotateVectorByMatrix(bestRotation, baseProjector.right));
-    if ((length(mappedCenter) <= 0.0)
-        || (length(mappedRight) <= 0.0)
-        || !projectorPoseFromBasis(mappedCenter, mappedRight, azimuthDegrees, elevationDegrees, rollDegrees))
-    {
-        return false;
-    }
-
-    if (rmsAngularErrorDegrees) {
-        *rmsAngularErrorDegrees = bestRmsAngularErrorDegrees;
-    }
-    if (maxAngularErrorDegrees) {
-        *maxAngularErrorDegrees = bestMaxAngularErrorDegrees;
-    }
-    return true;
-}
+static bool poseFromThreeVectorPairs(const SkyProjector& baseProjector, const std::array<SkyVector, 3>& sourceVectors, const std::array<SkyVector, 3>& targetVectors, double& azimuthDegrees, double& elevationDegrees, double& rollDegrees, double* rmsAngularErrorDegrees = nullptr, double* maxAngularErrorDegrees = nullptr);
 
 // N-vector (N>=2) generalizations of vectorPairRotationError / wahbaRotationFromVectorPairs /
 // poseFromThreeVectorPairs, used by the quad-hash blind seed engine where each hypothesis
 // supplies 4 ray<->sky correspondences. Kept as separate overloads (not refactored in terms
 // of the 3-vector versions) to avoid any risk to the existing triangle-seed callers.
-static bool vectorPairRotationErrorN(const std::array<std::array<double, 3>, 3>& rotation,
-                                     const QVector<SkyVector>& sourceVectors,
-                                     const QVector<SkyVector>& targetVectors,
-                                     double& rmsAngularErrorDegrees,
-                                     double& maxAngularErrorDegrees)
-{
-    const int count = sourceVectors.size();
-    if ((count < 1) || (targetVectors.size() != count)) {
-        return false;
-    }
+static bool vectorPairRotationErrorN(const std::array<std::array<double, 3>, 3>& rotation, const QVector<SkyVector>& sourceVectors, const QVector<SkyVector>& targetVectors, double& rmsAngularErrorDegrees, double& maxAngularErrorDegrees);
 
-    double squaredAngularError = 0.0;
-    maxAngularErrorDegrees = 0.0;
-    for (int index = 0; index < count; ++index)
-    {
-        const SkyVector rotatedSource = normalize(rotateVectorByMatrix(rotation, sourceVectors[index]));
-        if (length(rotatedSource) <= 0.0) {
-            return false;
-        }
-        const double angularErrorDegrees = std::acos(std::clamp(
-            dot(rotatedSource, targetVectors[index]),
-            -1.0,
-            1.0)) * 180.0 / kPi;
-        squaredAngularError += angularErrorDegrees * angularErrorDegrees;
-        maxAngularErrorDegrees = std::max(maxAngularErrorDegrees, angularErrorDegrees);
-    }
-    rmsAngularErrorDegrees = std::sqrt(squaredAngularError / count);
-    return std::isfinite(rmsAngularErrorDegrees) && std::isfinite(maxAngularErrorDegrees);
-}
-
-static bool wahbaRotationFromVectorPairsN(const QVector<SkyVector>& sourceVectors,
-                                          const QVector<SkyVector>& targetVectors,
-                                          bool transposeCorrelation,
-                                          std::array<std::array<double, 3>, 3>& rotation,
-                                          double& rmsAngularErrorDegrees,
-                                          double& maxAngularErrorDegrees)
-{
-    const int count = sourceVectors.size();
-    if ((count < 2) || (targetVectors.size() != count)) {
-        return false;
-    }
-
-    std::array<std::array<double, 3>, 3> correlation {{
-        {{0.0, 0.0, 0.0}},
-        {{0.0, 0.0, 0.0}},
-        {{0.0, 0.0, 0.0}}
-    }};
-
-    for (int index = 0; index < count; ++index)
-    {
-        const std::array<double, 3> source {{sourceVectors[index].x, sourceVectors[index].y, sourceVectors[index].z}};
-        const std::array<double, 3> target {{targetVectors[index].x, targetVectors[index].y, targetVectors[index].z}};
-        for (int row = 0; row < 3; ++row)
-        {
-            for (int col = 0; col < 3; ++col)
-            {
-                correlation[row][col] += transposeCorrelation
-                    ? source[row] * target[col]
-                    : target[row] * source[col];
-            }
-        }
-    }
-
-    const double sigma = correlation[0][0] + correlation[1][1] + correlation[2][2];
-    const std::array<double, 3> zVector {{
-        correlation[1][2] - correlation[2][1],
-        correlation[2][0] - correlation[0][2],
-        correlation[0][1] - correlation[1][0]
-    }};
-    const std::array<std::array<double, 3>, 3> symmetric {{
-        {{
-            2.0 * correlation[0][0] - sigma,
-            correlation[0][1] + correlation[1][0],
-            correlation[0][2] + correlation[2][0]
-        }},
-        {{
-            correlation[1][0] + correlation[0][1],
-            2.0 * correlation[1][1] - sigma,
-            correlation[1][2] + correlation[2][1]
-        }},
-        {{
-            correlation[2][0] + correlation[0][2],
-            correlation[2][1] + correlation[1][2],
-            2.0 * correlation[2][2] - sigma
-        }}
-    }};
-
-    const std::array<std::array<double, 4>, 4> davenport {{
-        {{sigma, zVector[0], zVector[1], zVector[2]}},
-        {{zVector[0], symmetric[0][0], symmetric[0][1], symmetric[0][2]}},
-        {{zVector[1], symmetric[1][0], symmetric[1][1], symmetric[1][2]}},
-        {{zVector[2], symmetric[2][0], symmetric[2][1], symmetric[2][2]}}
-    }};
-
-    std::array<double, 4> quaternion = largestSymmetric4Eigenvector(davenport);
-    if (!normalizeQuaternion(quaternion)) {
-        return false;
-    }
-
-    std::array<std::array<double, 3>, 3> rotationCandidate = rotationMatrixFromQuaternion(quaternion);
-    double rmsAngularError = std::numeric_limits<double>::infinity();
-    double maxAngularError = std::numeric_limits<double>::infinity();
-    bool haveRotation = vectorPairRotationErrorN(
-        rotationCandidate,
-        sourceVectors,
-        targetVectors,
-        rmsAngularError,
-        maxAngularError);
-
-    const std::array<std::array<double, 3>, 3> transposedRotationCandidate =
-        transposeRotationMatrix(rotationCandidate);
-    double transposedRmsAngularError = std::numeric_limits<double>::infinity();
-    double transposedMaxAngularError = std::numeric_limits<double>::infinity();
-    const bool haveTransposedRotation = vectorPairRotationErrorN(
-        transposedRotationCandidate,
-        sourceVectors,
-        targetVectors,
-        transposedRmsAngularError,
-        transposedMaxAngularError);
-
-    if (haveTransposedRotation
-        && (!haveRotation || (transposedRmsAngularError < rmsAngularError)))
-    {
-        rotationCandidate = transposedRotationCandidate;
-        rmsAngularError = transposedRmsAngularError;
-        maxAngularError = transposedMaxAngularError;
-        haveRotation = true;
-    }
-
-    if (!haveRotation) {
-        return false;
-    }
-
-    rotation = rotationCandidate;
-    rmsAngularErrorDegrees = rmsAngularError;
-    maxAngularErrorDegrees = maxAngularError;
-    return true;
-}
+static bool wahbaRotationFromVectorPairsN(const QVector<SkyVector>& sourceVectors, const QVector<SkyVector>& targetVectors, bool transposeCorrelation, std::array<std::array<double, 3>, 3>& rotation, double& rmsAngularErrorDegrees, double& maxAngularErrorDegrees);
 
 // Recovers az/el/roll of `baseProjector` rotated so that each sourceVectors[i] (camera-frame
 // rays, e.g. from unprojectPixelToVector) maps onto targetVectors[i] (sky vectors, e.g. from
 // the visible catalog context). Requires N>=2 correspondences; N>=3 recommended for a
 // well-conditioned rotation (a quad gives N=4).
-static bool poseFromVectorPairsN(const SkyProjector& baseProjector,
-                                 const QVector<SkyVector>& sourceVectors,
-                                 const QVector<SkyVector>& targetVectors,
-                                 double& azimuthDegrees,
-                                 double& elevationDegrees,
-                                 double& rollDegrees,
-                                 double* rmsAngularErrorDegrees = nullptr,
-                                 double* maxAngularErrorDegrees = nullptr)
-{
-    std::array<std::array<double, 3>, 3> bestRotation;
-    double bestRmsAngularErrorDegrees = std::numeric_limits<double>::infinity();
-    double bestMaxAngularErrorDegrees = std::numeric_limits<double>::infinity();
-    bool haveRotation = false;
-
-    for (bool transposeCorrelation : {false, true})
-    {
-        std::array<std::array<double, 3>, 3> rotation;
-        double rmsAngularErrorDegreesCandidate = std::numeric_limits<double>::infinity();
-        double maxAngularErrorDegreesCandidate = std::numeric_limits<double>::infinity();
-        if (!wahbaRotationFromVectorPairsN(
-                sourceVectors,
-                targetVectors,
-                transposeCorrelation,
-                rotation,
-                rmsAngularErrorDegreesCandidate,
-                maxAngularErrorDegreesCandidate))
-        {
-            continue;
-        }
-
-        if (rmsAngularErrorDegreesCandidate < bestRmsAngularErrorDegrees)
-        {
-            bestRotation = rotation;
-            bestRmsAngularErrorDegrees = rmsAngularErrorDegreesCandidate;
-            bestMaxAngularErrorDegrees = maxAngularErrorDegreesCandidate;
-            haveRotation = true;
-        }
-    }
-
-    if (!haveRotation) {
-        return false;
-    }
-
-    const SkyVector mappedCenter = normalize(rotateVectorByMatrix(bestRotation, baseProjector.center));
-    const SkyVector mappedRight = normalize(rotateVectorByMatrix(bestRotation, baseProjector.right));
-    if ((length(mappedCenter) <= 0.0)
-        || (length(mappedRight) <= 0.0)
-        || !projectorPoseFromBasis(mappedCenter, mappedRight, azimuthDegrees, elevationDegrees, rollDegrees))
-    {
-        return false;
-    }
-
-    if (rmsAngularErrorDegrees) {
-        *rmsAngularErrorDegrees = bestRmsAngularErrorDegrees;
-    }
-    if (maxAngularErrorDegrees) {
-        *maxAngularErrorDegrees = bestMaxAngularErrorDegrees;
-    }
-    return true;
-}
+static bool poseFromVectorPairsN(const SkyProjector& baseProjector, const QVector<SkyVector>& sourceVectors, const QVector<SkyVector>& targetVectors, double& azimuthDegrees, double& elevationDegrees, double& rollDegrees, double* rmsAngularErrorDegrees = nullptr, double* maxAngularErrorDegrees = nullptr);
 
 // Continuous vector-space "quad code" (astrometry.net-style), used by the blind quad-hash
 // engine for both detection rays (camera frame, post-unprojection) and catalog sky vectors.
@@ -4166,186 +1777,9 @@ struct QuadVectorCode
     bool abSwapped = false;
 };
 
-static QuadVectorCode buildVectorQuadCode(const std::array<SkyVector, 4>& vectors)
-{
-    QuadVectorCode code;
+static QuadVectorCode buildVectorQuadCode(const std::array<SkyVector, 4>& vectors);
 
-    // Step 1: most-separated pair (A, B) = the pair with the smallest dot product
-    // (largest angular separation) among the 6 pairs.
-    int indexA = 0;
-    int indexB = 1;
-    double minDot = std::numeric_limits<double>::infinity();
-    for (int i = 0; i < 4; i++) {
-        for (int j = i + 1; j < 4; j++) {
-            const double dotProduct = dot(vectors[i], vectors[j]);
-            if (dotProduct < minDot) {
-                minDot = dotProduct;
-                indexA = i;
-                indexB = j;
-            }
-        }
-    }
-
-    std::array<int, 2> remaining;
-    int remainingCount = 0;
-    for (int i = 0; i < 4; i++) {
-        if ((i != indexA) && (i != indexB)) {
-            remaining[remainingCount++] = i;
-        }
-    }
-    const int indexC = remaining[0];
-    const int indexD = remaining[1];
-
-    // Step 2: gnomonic-project all 4 unit vectors onto the tangent plane at their centroid.
-    SkyVector centroid = normalize({
-        vectors[0].x + vectors[1].x + vectors[2].x + vectors[3].x,
-        vectors[0].y + vectors[1].y + vectors[2].y + vectors[3].y,
-        vectors[0].z + vectors[1].z + vectors[2].z + vectors[3].z
-    });
-    if (length(centroid) <= 0.0) {
-        return code;
-    }
-
-    // Orthonormal basis (axisU, axisV) spanning the tangent plane at the centroid. Any valid
-    // basis works: rotating all 4 input vectors by a proper rotation rotates the centroid and
-    // this basis the same way, so the resulting code is unchanged.
-    const SkyVector referenceAxis = (std::abs(centroid.z) < 0.9)
-        ? SkyVector{0.0, 0.0, 1.0}
-        : SkyVector{1.0, 0.0, 0.0};
-    SkyVector axisU = cross(referenceAxis, centroid);
-    if (length(axisU) <= 0.0) {
-        return code;
-    }
-    axisU = normalize(axisU);
-    const SkyVector axisV = normalize(cross(centroid, axisU));
-
-    std::array<QPointF, 4> planePoints;
-    for (int i = 0; i < 4; i++) {
-        const double centerDot = dot(vectors[i], centroid);
-        if (centerDot <= 1e-6) {
-            // Vector is on or behind the tangent plane; code undefined for this quad.
-            return code;
-        }
-        const SkyVector scaled = {
-            vectors[i].x / centerDot,
-            vectors[i].y / centerDot,
-            vectors[i].z / centerDot
-        };
-        const SkyVector offset = {
-            scaled.x - centroid.x,
-            scaled.y - centroid.y,
-            scaled.z - centroid.z
-        };
-        planePoints[i] = QPointF(dot(offset, axisU), dot(offset, axisV));
-    }
-
-    // Step 3: affine-map A -> (0, 0), B -> (1, 1) using orthogonal equal-length basis vectors
-    // e_x' = (d + perp(d)) / 2, e_y' = (d - perp(d)) / 2, where d = B - A and
-    // perp(d) = (-d.y, d.x). These sum to d (so B maps to (1,1)) and are orthogonal with
-    // length |d| / sqrt(2).
-    const QPointF pointA = planePoints[indexA];
-    const QPointF pointB = planePoints[indexB];
-    const QPointF d = pointB - pointA;
-    const double dLengthSquared = d.x() * d.x() + d.y() * d.y();
-    if (dLengthSquared <= 0.0) {
-        return code;
-    }
-
-    const QPointF perpD(-d.y(), d.x());
-    const QPointF basisX((d.x() + perpD.x()) / 2.0, (d.y() + perpD.y()) / 2.0);
-    const QPointF basisY((d.x() - perpD.x()) / 2.0, (d.y() - perpD.y()) / 2.0);
-
-    auto codeCoordinates = [&](const QPointF& point) -> QPointF {
-        const QPointF relative = point - pointA;
-        const double u = (relative.x() * basisX.x() + relative.y() * basisX.y()) * 2.0 / dLengthSquared;
-        const double v = (relative.x() * basisY.x() + relative.y() * basisY.y()) * 2.0 / dLengthSquared;
-        return QPointF(u, v);
-    };
-
-    QPointF codeC = codeCoordinates(planePoints[indexC]);
-    QPointF codeD = codeCoordinates(planePoints[indexD]);
-
-    // Step 4: canonicalize. First, swap C/D so xC <= xD.
-    int orderA = indexA;
-    int orderB = indexB;
-    int orderC = indexC;
-    int orderD = indexD;
-    if (codeC.x() > codeD.x()) {
-        std::swap(codeC, codeD);
-        std::swap(orderC, orderD);
-    }
-
-    // Then, swap A/B (equivalent to mapping (x, y) -> (1 - x, 1 - y)) so xC + xD <= 1. This
-    // flip reverses the x-ordering of C and D, so re-swap them afterwards.
-    bool abSwapped = false;
-    if ((codeC.x() + codeD.x()) > 1.0) {
-        codeC = QPointF(1.0 - codeC.x(), 1.0 - codeC.y());
-        codeD = QPointF(1.0 - codeD.x(), 1.0 - codeD.y());
-        std::swap(codeC, codeD);
-        std::swap(orderC, orderD);
-        std::swap(orderA, orderB);
-        abSwapped = true;
-    }
-
-    code.valid = true;
-    code.xC = codeC.x();
-    code.yC = codeC.y();
-    code.xD = codeD.x();
-    code.yD = codeD.y();
-    code.order = {orderA, orderB, orderC, orderD};
-    code.abSwapped = abSwapped;
-
-    // Step 5: AB great-circle angle, for optional scale-aware (mode 1) matching.
-    const double abDot = std::clamp(dot(vectors[indexA], vectors[indexB]), -1.0, 1.0);
-    code.angleABRadians = std::acos(abDot);
-
-    return code;
-}
-
-static bool anchorAlignedPoseFromPixel(const CameraSettings& settings,
-                                       const QSize& imageSize,
-                                       const QPointF& anchorPoint,
-                                       const SkyVector& anchorVector,
-                                       double baseAzimuthDegrees,
-                                       double baseElevationDegrees,
-                                       double baseRollDegrees,
-                                       double fovDegrees,
-                                       double centerOffsetXPixels,
-                                       double centerOffsetYPixels,
-                                       double distortionK1,
-                                       double& alignedAzimuthDegrees,
-                                       double& alignedElevationDegrees,
-                                       double& alignedRollDegrees)
-{
-    const SkyProjector baseProjector = createProjector(
-        settings,
-        imageSize,
-        baseAzimuthDegrees,
-        baseElevationDegrees,
-        baseRollDegrees,
-        fovDegrees,
-        centerOffsetXPixels,
-        centerOffsetYPixels,
-        distortionK1);
-    if (!baseProjector.valid) {
-        return false;
-    }
-
-    SkyVector pixelVector;
-    if (!unprojectPixelToVector(baseProjector, anchorPoint, pixelVector)) {
-        return false;
-    }
-
-    SkyVector alignedCenter;
-    SkyVector alignedRight;
-    SkyVector alignedUp;
-    if (!rotateBasisToAlignVector(baseProjector, pixelVector, anchorVector, alignedCenter, alignedRight, alignedUp)) {
-        return false;
-    }
-
-    Q_UNUSED(alignedUp)
-    return projectorPoseFromBasis(alignedCenter, alignedRight, alignedAzimuthDegrees, alignedElevationDegrees, alignedRollDegrees);
-}
+static bool anchorAlignedPoseFromPixel(const CameraSettings& settings, const QSize& imageSize, const QPointF& anchorPoint, const SkyVector& anchorVector, double baseAzimuthDegrees, double baseElevationDegrees, double baseRollDegrees, double fovDegrees, double centerOffsetXPixels, double centerOffsetYPixels, double distortionK1, double& alignedAzimuthDegrees, double& alignedElevationDegrees, double& alignedRollDegrees);
 
 struct GuidedTrianglePoseSeed
 {
@@ -4355,656 +1789,57 @@ struct GuidedTrianglePoseSeed
     double fovDegrees = 0.0;
 };
 
-static bool estimateScreenSimilarity(const std::array<QPointF, 3>& sourcePoints,
-                                     const std::array<QPointF, 3>& targetPoints,
-                                     double& scale,
-                                     double& rotationDegrees,
-                                     double& rmsErrorPixels)
-{
-    QPointF sourceCentroid(0.0, 0.0);
-    QPointF targetCentroid(0.0, 0.0);
-    for (int i = 0; i < 3; ++i)
-    {
-        sourceCentroid += sourcePoints[i];
-        targetCentroid += targetPoints[i];
-    }
-    sourceCentroid /= 3.0;
-    targetCentroid /= 3.0;
+static bool estimateScreenSimilarity(const std::array<QPointF, 3>& sourcePoints, const std::array<QPointF, 3>& targetPoints, double& scale, double& rotationDegrees, double& rmsErrorPixels);
 
-    double denominator = 0.0;
-    double a = 0.0;
-    double b = 0.0;
-    for (int i = 0; i < 3; ++i)
-    {
-        const double sx = sourcePoints[i].x() - sourceCentroid.x();
-        const double sy = sourcePoints[i].y() - sourceCentroid.y();
-        const double tx = targetPoints[i].x() - targetCentroid.x();
-        const double ty = targetPoints[i].y() - targetCentroid.y();
-        denominator += sx * sx + sy * sy;
-        a += sx * tx + sy * ty;
-        b += sx * ty - sy * tx;
-    }
-    if (denominator <= 1e-6) {
-        return false;
-    }
+static QVector<GuidedTrianglePoseSeed> guidedTriangleSimilarityPoseSeeds( const CameraSettings& settings, const QSize& imageSize, const std::array<QPointF, 3>& detectionPoints, const std::array<VisibleCatalogStar, 3>& triangleStars, const std::array<int, 3>& permutation, double baseAzimuthDegrees, double baseElevationDegrees, double seedFovDegrees, double centerOffsetXPixels, double centerOffsetYPixels, double distortionK1);
 
-    a /= denominator;
-    b /= denominator;
-    scale = std::hypot(a, b);
-    if (!std::isfinite(scale) || (scale <= 0.0)) {
-        return false;
-    }
-    rotationDegrees = std::atan2(b, a) * 180.0 / kPi;
+static QPointF projectorPrincipalPoint(const SkyProjector& projector);
 
-    double squaredError = 0.0;
-    for (int i = 0; i < 3; ++i)
-    {
-        const double sx = sourcePoints[i].x() - sourceCentroid.x();
-        const double sy = sourcePoints[i].y() - sourceCentroid.y();
-        const QPointF projected(
-            targetCentroid.x() + a * sx - b * sy,
-            targetCentroid.y() + b * sx + a * sy);
-        const double error = std::hypot(
-            projected.x() - targetPoints[i].x(),
-            projected.y() - targetPoints[i].y());
-        squaredError += error * error;
-    }
-    rmsErrorPixels = std::sqrt(squaredError / 3.0);
-    return std::isfinite(rotationDegrees) && std::isfinite(rmsErrorPixels);
-}
+static double pointDistancePixels(const QPointF& lhs, const QPointF& rhs);
 
-static QVector<GuidedTrianglePoseSeed> guidedTriangleSimilarityPoseSeeds(
-    const CameraSettings& settings,
-    const QSize& imageSize,
-    const std::array<QPointF, 3>& detectionPoints,
-    const std::array<VisibleCatalogStar, 3>& triangleStars,
-    const std::array<int, 3>& permutation,
-    double baseAzimuthDegrees,
-    double baseElevationDegrees,
-    double seedFovDegrees,
-    double centerOffsetXPixels,
-    double centerOffsetYPixels,
-    double distortionK1)
-{
-    QVector<GuidedTrianglePoseSeed> seeds;
-    const SkyProjector projector = createProjector(
-        settings,
-        imageSize,
-        baseAzimuthDegrees,
-        baseElevationDegrees,
-        0.0,
-        seedFovDegrees,
-        centerOffsetXPixels,
-        centerOffsetYPixels,
-        distortionK1);
-    if (!projector.valid) {
-        return seeds;
-    }
+static double detectionBrightnessMetric(const CameraPipelineStarDetection& detection);
 
-    std::array<QPointF, 3> projectedPoints;
-    for (int i = 0; i < 3; ++i)
-    {
-        if (!projectVector(projector, triangleStars[permutation[i]].vector, projectedPoints[i])) {
-            return seeds;
-        }
-    }
+static bool triangleBrightnessOrderCompatible(const QVector<CameraPipelineStarDetection>& starDetections, const std::array<int, 3>& detectionIndices, const std::array<VisibleCatalogStar, 3>& triangleStars, const std::array<int, 3>& permutation);
 
-    double scale = 1.0;
-    double rotationDegrees = 0.0;
-    double similarityRmsPixels = std::numeric_limits<double>::infinity();
-    if (!estimateScreenSimilarity(projectedPoints, detectionPoints, scale, rotationDegrees, similarityRmsPixels)
-        || (similarityRmsPixels > std::max(18.0, static_cast<double>(settings.m_plateSolveMatchRadius) * 0.75)))
-    {
-        return seeds;
-    }
+static double triangleBrightnessMagnitudeError(const QVector<CameraPipelineStarDetection>& starDetections, const std::array<int, 3>& detectionIndices, const std::array<VisibleCatalogStar, 3>& triangleStars, const std::array<int, 3>& permutation);
 
-    QVector<double> fovCandidates;
-    const double scaledFov = std::clamp(
-        seedFovDegrees / std::max(0.25, std::min(4.0, scale)),
-        static_cast<double>(CameraSettings::m_minFov),
-        static_cast<double>(CameraSettings::m_maxFov));
-    fovCandidates.append(seedFovDegrees);
-    if (std::fabs(scaledFov - seedFovDegrees) > std::max(0.01, seedFovDegrees * 0.015)) {
-        fovCandidates.append(scaledFov);
-    }
+static bool isDetectionUsableForBrightPrior(const CameraPipelineStarDetection& detection);
 
-    QVector<double> rollCandidates;
-    const auto appendRollCandidate = [&rollCandidates](double rollDegrees) {
-        for (double existingRoll : rollCandidates)
-        {
-            const double delta = std::fabs(normalizeDegrees(rollDegrees - existingRoll + 180.0) - 180.0);
-            if (delta < 1.0) {
-                return;
-            }
-        }
-        rollCandidates.append(rollDegrees);
-    };
-    appendRollCandidate(rotationDegrees);
-    appendRollCandidate(-rotationDegrees);
-    const QLineF detectionBase(detectionPoints[0], detectionPoints[1]);
-    const QLineF projectedBase(projectedPoints[0], projectedPoints[1]);
-    appendRollCandidate(projectedBase.angleTo(detectionBase));
+static bool isImplausiblyCompactBrightCatalogDetection(const CameraPipelineStarDetection& detection, double catalogMagnitude, bool narrowGuidedSolve = false);
 
-    int brightestAnchor = 0;
-    for (int i = 1; i < 3; ++i)
-    {
-        if (triangleStars[permutation[i]].magnitude < triangleStars[permutation[brightestAnchor]].magnitude) {
-            brightestAnchor = i;
-        }
-    }
-    std::array<int, 2> anchorIndexes {{brightestAnchor, 0}};
-    if (anchorIndexes[1] == anchorIndexes[0]) {
-        anchorIndexes[1] = 1;
-    }
+static bool isNamedSparseGuidedCatalogStar(const CatalogStar& star);
 
-    for (double fovDegrees : fovCandidates)
-    {
-        if (!seedFovCompatibleWithStartFov(settings, fovDegrees)) {
-            continue;
-        }
-        for (double rollDegrees : rollCandidates)
-        {
-            for (int anchorIndex : anchorIndexes)
-            {
-                double alignedAzimuth = baseAzimuthDegrees;
-                double alignedElevation = baseElevationDegrees;
-                double alignedRoll = rollDegrees;
-                if (!anchorAlignedPoseFromPixel(
-                        settings,
-                        imageSize,
-                        detectionPoints[anchorIndex],
-                        triangleStars[permutation[anchorIndex]].vector,
-                        baseAzimuthDegrees,
-                        baseElevationDegrees,
-                        rollDegrees,
-                        fovDegrees,
-                        centerOffsetXPixels,
-                        centerOffsetYPixels,
-                        distortionK1,
-                        alignedAzimuth,
-                        alignedElevation,
-                        alignedRoll))
-                {
-                    continue;
-                }
+static bool isStrongSparseGuidedDetection(const CameraPipelineStarDetection& detection);
 
-                GuidedTrianglePoseSeed seed;
-                seed.azimuthDegrees = alignedAzimuth;
-                seed.elevationDegrees = alignedElevation;
-                seed.rollDegrees = alignedRoll;
-                seed.fovDegrees = fovDegrees;
-                seeds.append(seed);
-                if (seeds.size() >= 8) {
-                    return seeds;
-                }
-            }
-        }
-    }
+static double detectionReliabilityMetric(const CameraPipelineStarDetection& detection);
 
-    return seeds;
-}
+static double faintCatalogAssignmentPenalty(double magnitude);
 
-static QPointF projectorPrincipalPoint(const SkyProjector& projector)
-{
-    return QPointF(projector.principalPointX, projector.principalPointY);
-}
+static double brightDetectionFaintCatalogAssignmentPenalty(double detectionBrightnessRank, double catalogMagnitude, bool narrowGuidedSolve);
 
-static double pointDistancePixels(const QPointF& lhs, const QPointF& rhs)
-{
-    return std::hypot(lhs.x() - rhs.x(), lhs.y() - rhs.y());
-}
+static double catalogMagnitudeSupportWeight(double magnitude);
 
-static double detectionBrightnessMetric(const CameraPipelineStarDetection& detection)
-{
-    const double peak = std::isfinite(static_cast<double>(detection.m_peakValue))
-        ? std::max(0.0, static_cast<double>(detection.m_peakValue))
-        : 0.0;
-    const double flux = std::isfinite(static_cast<double>(detection.m_flux))
-        ? std::max(0.0, static_cast<double>(detection.m_flux))
-        : 0.0;
-    const double quality = std::isfinite(static_cast<double>(detection.m_qualityScore))
-        ? std::max(0.0, static_cast<double>(detection.m_qualityScore))
-        : 0.0;
-    const double brightness = (flux > 0.0) ? std::sqrt(flux) * std::sqrt(std::max(1.0, peak)) : peak;
-    double metric = brightness * (1.0 + 0.05 * std::log1p(quality));
-    if (detection.m_hotPixelSuspect) {
-        metric *= 0.10;
-    }
-    return metric;
-}
+static double matchDistanceSupportWeight(double distancePixels, double matchRadiusPixels);
 
-static bool triangleBrightnessOrderCompatible(const QVector<CameraPipelineStarDetection>& starDetections,
-                                              const std::array<int, 3>& detectionIndices,
-                                              const std::array<VisibleCatalogStar, 3>& triangleStars,
-                                              const std::array<int, 3>& permutation)
-{
-    std::array<double, 3> detectionBrightness {{0.0, 0.0, 0.0}};
-    std::array<double, 3> catalogMagnitude {{0.0, 0.0, 0.0}};
-    for (int i = 0; i < 3; ++i)
-    {
-        const int detectionIndex = detectionIndices[i];
-        if ((detectionIndex < 0) || (detectionIndex >= starDetections.size())) {
-            return false;
-        }
-        const int catalogIndex = permutation[i];
-        if ((catalogIndex < 0) || (catalogIndex >= 3)) {
-            return false;
-        }
+static double narrowGuidedMagnitudePriorityScore(const FinalMatchPassEvaluation& evaluation);
 
-        detectionBrightness[i] = detectionBrightnessMetric(starDetections[detectionIndex]);
-        catalogMagnitude[i] = triangleStars[catalogIndex].magnitude;
-        if (!std::isfinite(detectionBrightness[i]) || !std::isfinite(catalogMagnitude[i])) {
-            return true;
-        }
-    }
+static double prioritySeedRadialAffinity(const FinalMatchPassEvaluation& evaluation, double matchRadiusPixels);
 
-    constexpr double kDetectionContrast = 2.0;
-    constexpr double kCatalogMagnitudeContrast = 1.0;
-    for (int i = 0; i < 3; ++i)
-    {
-        for (int j = i + 1; j < 3; ++j)
-        {
-            const double brightnessRatio =
-                (detectionBrightness[i] + 1.0) / std::max(1.0, detectionBrightness[j] + 1.0);
-            const double magnitudeDelta = catalogMagnitude[i] - catalogMagnitude[j];
+static double prioritySeedProjectedAffinity(const FinalMatchPassEvaluation& evaluation, double matchRadiusPixels);
 
-            if ((brightnessRatio >= kDetectionContrast)
-                && (magnitudeDelta >= kCatalogMagnitudeContrast))
-            {
-                return false;
-            }
-            if ((brightnessRatio <= (1.0 / kDetectionContrast))
-                && (magnitudeDelta <= -kCatalogMagnitudeContrast))
-            {
-                return false;
-            }
-        }
-    }
+static double seedRadialMagnitudeCoverageAffinity(const FinalMatchPassEvaluation& evaluation);
 
-    return true;
-}
+static double seedProjectedMagnitudeCoverageAffinity(const FinalMatchPassEvaluation& evaluation);
 
-static double triangleBrightnessMagnitudeError(const QVector<CameraPipelineStarDetection>& starDetections,
-                                               const std::array<int, 3>& detectionIndices,
-                                               const std::array<VisibleCatalogStar, 3>& triangleStars,
-                                               const std::array<int, 3>& permutation)
-{
-    std::array<double, 3> detectionBrightness {{0.0, 0.0, 0.0}};
-    std::array<double, 3> catalogMagnitude {{0.0, 0.0, 0.0}};
-    for (int i = 0; i < 3; ++i)
-    {
-        const int detectionIndex = detectionIndices[i];
-        const int catalogIndex = permutation[i];
-        if ((detectionIndex < 0)
-            || (detectionIndex >= starDetections.size())
-            || (catalogIndex < 0)
-            || (catalogIndex >= 3))
-        {
-            return std::numeric_limits<double>::infinity();
-        }
+static bool hasPoorNoRollSeedRadialSupport(const CameraSettings& settings, const FinalMatchPassEvaluation& evaluation, bool useSeedProjectedBrightGate);
 
-        detectionBrightness[i] = detectionBrightnessMetric(starDetections[detectionIndex]);
-        catalogMagnitude[i] = triangleStars[catalogIndex].magnitude;
-        if (!std::isfinite(detectionBrightness[i]) || !std::isfinite(catalogMagnitude[i])) {
-            return 0.0;
-        }
-    }
+static bool hasComparableSeedRadialChecks(const FinalMatchPassEvaluation& lhs, const FinalMatchPassEvaluation& rhs);
 
-    double error = 0.0;
-    double weightSum = 0.0;
-    for (int i = 0; i < 3; ++i)
-    {
-        for (int j = i + 1; j < 3; ++j)
-        {
-            const double observedLogRatio = std::log(
-                (detectionBrightness[i] + 1.0) / std::max(1.0, detectionBrightness[j] + 1.0));
-            const double expectedLogRatio = -0.9210340371976183
-                * std::clamp(catalogMagnitude[i] - catalogMagnitude[j], -8.0, 8.0);
-            const double contrastWeight = std::clamp(std::fabs(expectedLogRatio) / 1.2, 0.25, 1.0);
-            const double normalizedError = std::fabs(observedLogRatio - expectedLogRatio)
-                / (1.0 + 0.30 * std::fabs(expectedLogRatio));
-            error += contrastWeight * normalizedError;
-            weightSum += contrastWeight;
-        }
-    }
+static bool shouldPreferSeedRadialConsistency(const FinalMatchPassEvaluation& candidate, const FinalMatchPassEvaluation& best, int matchTolerance);
 
-    return weightSum > 0.0 ? error / weightSum : 0.0;
-}
+static double narrowGuidedAnchorShapeScore(const CameraPipelineStarDetection& detection);
 
-static bool isDetectionUsableForBrightPrior(const CameraPipelineStarDetection& detection)
-{
-    if (detection.m_hotPixelSuspect) {
-        return false;
-    }
-    if (detection.m_aspectRatio > 2.5f) {
-        return false;
-    }
-    if ((detection.m_fwhm > 0.0f) && (detection.m_fwhm < 1.0f)) {
-        return false;
-    }
-    return true;
-}
-
-static bool isImplausiblyCompactBrightCatalogDetection(const CameraPipelineStarDetection& detection,
-                                                       double catalogMagnitude,
-                                                       bool narrowGuidedSolve = false)
-{
-    if (!std::isfinite(catalogMagnitude) || (catalogMagnitude > 9.5)) {
-        return false;
-    }
-
-    const double fwhm = std::isfinite(static_cast<double>(detection.m_fwhm))
-        ? static_cast<double>(detection.m_fwhm)
-        : 0.0;
-    const double snr = std::isfinite(static_cast<double>(detection.m_snr))
-        ? static_cast<double>(detection.m_snr)
-        : 0.0;
-    if (fwhm <= 0.0) {
-        return false;
-    }
-
-    if (((catalogMagnitude <= 8.5) || narrowGuidedSolve)
-        && (fwhm < 4.5)
-        && (snr < 220.0))
-    {
-        return true;
-    }
-
-    return (fwhm < (detection.m_saturated ? 3.2 : 3.0))
-        && (snr < 170.0);
-}
-
-static bool isNamedSparseGuidedCatalogStar(const CatalogStar& star)
-{
-    const QString displayName = catalogDisplayName(star);
-    return displayName.startsWith(QStringLiteral("HIP "), Qt::CaseInsensitive)
-        || displayName.startsWith(QStringLiteral("HR "), Qt::CaseInsensitive)
-        || displayName.startsWith(QStringLiteral("HD "), Qt::CaseInsensitive);
-}
-
-static bool isStrongSparseGuidedDetection(const CameraPipelineStarDetection& detection)
-{
-    if (detection.m_hotPixelSuspect) {
-        return false;
-    }
-
-    const double fwhm = std::isfinite(static_cast<double>(detection.m_fwhm))
-        ? static_cast<double>(detection.m_fwhm)
-        : 0.0;
-    const double snr = std::isfinite(static_cast<double>(detection.m_snr))
-        ? static_cast<double>(detection.m_snr)
-        : 0.0;
-    const double shapeScore =
-        std::max(0.0, static_cast<double>(detection.m_roundness))
-        * std::max(0.0, static_cast<double>(detection.m_fillRatio))
-        / std::max(1.0, static_cast<double>(detection.m_aspectRatio));
-    return (detection.m_saturated && (fwhm >= 3.0))
-        || ((fwhm >= 4.0) && (snr >= 35.0) && (shapeScore >= 0.10))
-        || ((fwhm >= 3.5) && (snr >= 80.0) && (detection.m_aspectRatio <= 2.5f));
-}
-
-static double detectionReliabilityMetric(const CameraPipelineStarDetection& detection)
-{
-    const double quality = std::isfinite(static_cast<double>(detection.m_qualityScore))
-        ? std::max(0.0, static_cast<double>(detection.m_qualityScore))
-        : 0.0;
-    const double snr = std::isfinite(static_cast<double>(detection.m_snr))
-        ? std::max(0.0, static_cast<double>(detection.m_snr))
-        : 0.0;
-    const double centroidUncertainty = std::isfinite(static_cast<double>(detection.m_centroidUncertainty))
-        ? std::max(0.05, static_cast<double>(detection.m_centroidUncertainty))
-        : 8.0;
-    const double fwhm = std::isfinite(static_cast<double>(detection.m_fwhm))
-        ? std::max(0.0, static_cast<double>(detection.m_fwhm))
-        : 0.0;
-    double reliability = std::log1p(quality) * (1.0 + std::log1p(snr)) / centroidUncertainty;
-    reliability *= std::max(0.25, static_cast<double>(detection.m_roundness));
-    reliability *= std::max(0.25, static_cast<double>(detection.m_fillRatio));
-    reliability /= std::max(1.0, static_cast<double>(detection.m_aspectRatio));
-    if (detection.m_saturated) {
-        reliability *= 0.80;
-    }
-    if (detection.m_hotPixelSuspect) {
-        reliability *= 0.20;
-    }
-    if ((fwhm > 0.0) && (fwhm < 0.75)) {
-        reliability *= 0.35;
-    }
-    return reliability;
-}
-
-static double faintCatalogAssignmentPenalty(double magnitude)
-{
-    if (!std::isfinite(magnitude)) {
-        return 0.0;
-    }
-
-    // Gaia/SPCC solves can now include very faint stars. Keep them available,
-    // but prefer brighter catalog stars when distance and brightness rank are
-    // otherwise comparable, reducing accidental dense-field assignments.
-    return std::max(0.0, magnitude - 11.0) * 0.08;
-}
-
-static double brightDetectionFaintCatalogAssignmentPenalty(double detectionBrightnessRank,
-                                                           double catalogMagnitude,
-                                                           bool narrowGuidedSolve)
-{
-    if (!narrowGuidedSolve || !std::isfinite(catalogMagnitude)) {
-        return 0.0;
-    }
-
-    // In a narrow field, the solver can otherwise build a dense but wrong solution by
-    // letting faint Gaia stars consume the brightest detections. Keep faint stars usable
-    // for the tail of the field, but make them increasingly implausible anchors for the
-    // brightest detections.
-    const double brightDetectionWeight = std::pow(
-        std::clamp(1.0 - detectionBrightnessRank, 0.0, 1.0),
-        2.0);
-    if (brightDetectionWeight <= 0.0) {
-        return 0.0;
-    }
-
-    const double faintExcess = std::max(0.0, catalogMagnitude - 11.0);
-    return brightDetectionWeight * faintExcess * faintExcess * 0.12;
-}
-
-static double catalogMagnitudeSupportWeight(double magnitude)
-{
-    if (!std::isfinite(magnitude)) {
-        return 1.0;
-    }
-
-    // This is deliberately much gentler than true flux scaling, but it still
-    // spans the whole practical catalog range.  Each magnitude step changes the
-    // evidence by about 22%, so mag 0 remains stronger than mag 5/10/15 without
-    // letting one bright star drown out a coherent fainter field.
-    const double boundedMagnitude = std::clamp(magnitude, -2.0, 20.0);
-    return std::pow(1.22, 10.0 - boundedMagnitude);
-}
-
-static double matchDistanceSupportWeight(double distancePixels, double matchRadiusPixels)
-{
-    if (!std::isfinite(distancePixels)) {
-        return 0.0;
-    }
-
-    const double safeRadius = std::max(1.0, matchRadiusPixels);
-    const double normalizedDistance = std::clamp(distancePixels / safeRadius, 0.0, 2.0);
-    return 1.0 / (1.0 + normalizedDistance * normalizedDistance);
-}
-
-static double narrowGuidedMagnitudePriorityScore(const FinalMatchPassEvaluation& evaluation)
-{
-    return evaluation.magnitudeWeightedSupport
-        + 2.0 * evaluation.priorityMagnitudeWeightedSupport
-        + 1.5 * evaluation.matchedProjectedMagnitudeSupport
-        + 2.5 * evaluation.matchedSeedProjectedMagnitudeSupport
-        + 0.35 * evaluation.matchedSeedRadialMagnitudeSupport;
-}
-
-static double prioritySeedRadialAffinity(const FinalMatchPassEvaluation& evaluation,
-                                         double matchRadiusPixels)
-{
-    if ((evaluation.prioritySeedRadialChecks < 2)
-        || !std::isfinite(evaluation.prioritySeedRadialErrorPixels))
-    {
-        return 1.0;
-    }
-
-    const double safeRadius = std::max(1.0, matchRadiusPixels);
-    const double normalizedError = evaluation.prioritySeedRadialErrorPixels / std::max(48.0, safeRadius * 3.0);
-    return 1.0 / (1.0 + 2.5 * normalizedError * normalizedError);
-}
-
-static double prioritySeedProjectedAffinity(const FinalMatchPassEvaluation& evaluation,
-                                            double matchRadiusPixels)
-{
-    if ((evaluation.prioritySeedProjectedChecks < 1)
-        || !std::isfinite(evaluation.prioritySeedProjectedErrorPixels))
-    {
-        return 1.0;
-    }
-
-    const double safeRadius = std::max(1.0, matchRadiusPixels);
-    const double normalizedError = evaluation.prioritySeedProjectedErrorPixels / std::max(48.0, safeRadius * 2.0);
-    return 1.0 / (1.0 + 1.5 * normalizedError * normalizedError);
-}
-
-static double seedRadialMagnitudeCoverageAffinity(const FinalMatchPassEvaluation& evaluation)
-{
-    if (evaluation.seedRadialMagnitudeSupport <= 0.0) {
-        return 1.0;
-    }
-
-    const double coverage = std::clamp(evaluation.seedRadialMagnitudeMatchFraction, 0.0, 1.0);
-    return 0.05 + 0.95 * coverage * coverage;
-}
-
-static double seedProjectedMagnitudeCoverageAffinity(const FinalMatchPassEvaluation& evaluation)
-{
-    if (evaluation.seedProjectedMagnitudeSupport <= 0.0) {
-        return 1.0;
-    }
-
-    const double coverage = std::clamp(evaluation.seedProjectedMagnitudeMatchFraction, 0.0, 1.0);
-    return 0.08 + 0.92 * coverage * coverage;
-}
-
-static bool hasPoorNoRollSeedRadialSupport(const CameraSettings& settings,
-                                           const FinalMatchPassEvaluation& evaluation,
-                                           bool useSeedProjectedBrightGate)
-{
-    if (useSeedProjectedBrightGate
-        || (!isNarrowField(settings))
-        || (evaluation.seedRadialMagnitudeSupport < 40.0)
-        || (evaluation.prioritySeedRadialChecks < 8)
-        || !std::isfinite(evaluation.prioritySeedRadialErrorPixels))
-    {
-        return false;
-    }
-
-    const double radialErrorThreshold = std::max(
-        96.0,
-        static_cast<double>(settings.m_plateSolveFinalMatchRadius) * 4.0);
-    return (evaluation.seedRadialMagnitudeMatchFraction < 0.08)
-        && (evaluation.prioritySeedRadialErrorPixels > radialErrorThreshold);
-}
-
-static bool hasComparableSeedRadialChecks(const FinalMatchPassEvaluation& lhs,
-                                          const FinalMatchPassEvaluation& rhs)
-{
-    return (lhs.prioritySeedRadialChecks >= 4)
-        && (rhs.prioritySeedRadialChecks >= 4)
-        && std::isfinite(lhs.prioritySeedRadialErrorPixels)
-        && std::isfinite(rhs.prioritySeedRadialErrorPixels);
-}
-
-static bool shouldPreferSeedRadialConsistency(const FinalMatchPassEvaluation& candidate,
-                                              const FinalMatchPassEvaluation& best,
-                                              int matchTolerance)
-{
-    if (!hasComparableSeedRadialChecks(candidate, best)) {
-        return false;
-    }
-
-    const int matchDelta = static_cast<int>(candidate.finalMatches.size())
-        - static_cast<int>(best.finalMatches.size());
-    if (std::abs(matchDelta) > matchTolerance) {
-        return false;
-    }
-
-    if ((candidate.seedRadialMagnitudeSupport > 0.0)
-        && (best.seedRadialMagnitudeSupport > 0.0))
-    {
-        const double candidateCoverage = std::clamp(candidate.seedRadialMagnitudeMatchFraction, 0.0, 1.0);
-        const double bestCoverage = std::clamp(best.seedRadialMagnitudeMatchFraction, 0.0, 1.0);
-        if ((candidateCoverage - bestCoverage) >= 0.18) {
-            return true;
-        }
-
-        const double supportDelta =
-            candidate.matchedSeedRadialMagnitudeSupport - best.matchedSeedRadialMagnitudeSupport;
-        const double supportScale = std::max(
-            candidate.matchedSeedRadialMagnitudeSupport,
-            best.matchedSeedRadialMagnitudeSupport);
-        if (supportDelta >= std::max(4.0, 0.20 * supportScale)) {
-            return true;
-        }
-    }
-
-    const double candidateError = candidate.prioritySeedRadialErrorPixels;
-    const double bestError = best.prioritySeedRadialErrorPixels;
-    const double meaningfulDelta = std::max(32.0, 0.25 * std::max(candidateError, bestError));
-    return (bestError - candidateError) >= meaningfulDelta;
-}
-
-static double narrowGuidedAnchorShapeScore(const CameraPipelineStarDetection& detection)
-{
-    if (detection.m_hotPixelSuspect) {
-        return -100.0;
-    }
-
-    double score = 0.0;
-    const double fwhm = std::isfinite(static_cast<double>(detection.m_fwhm))
-        ? std::max(0.0, static_cast<double>(detection.m_fwhm))
-        : 0.0;
-
-    if (detection.m_saturated) {
-        score += 35.0;
-    }
-    if (fwhm >= 3.0) {
-        score += std::min(45.0, (fwhm - 3.0) * 10.0);
-    } else if ((fwhm > 0.0) && (fwhm < 2.5)) {
-        score -= (2.5 - fwhm) * 12.0;
-    }
-
-    if (detection.m_aspectRatio > 1.8f) {
-        score -= std::min(30.0, (static_cast<double>(detection.m_aspectRatio) - 1.8) * 20.0);
-    }
-    score += std::min(8.0, std::max(0.0, static_cast<double>(detection.m_roundness) - 0.7) * 20.0);
-    return score;
-}
-
-static double brightGuidedDetectionPriorityScore(const CameraPipelineStarDetection& detection,
-                                                 double brightness,
-                                                 double reliability,
-                                                 double shapeScore)
-{
-    const double fwhm = std::isfinite(static_cast<double>(detection.m_fwhm))
-        ? std::max(0.0, static_cast<double>(detection.m_fwhm))
-        : 0.0;
-    const double flux = std::isfinite(static_cast<double>(detection.m_flux))
-        ? std::max(0.0, static_cast<double>(detection.m_flux))
-        : 0.0;
-    const double broadSaturatedBonus = detection.m_saturated
-        ? std::min(55.0, std::max(0.0, fwhm - 2.5) * 7.5 + std::log1p(flux) * 2.0)
-        : 0.0;
-
-    return std::log1p(std::max(0.0, brightness)) * 9.0
-        + std::log1p(std::max(0.0, reliability)) * 6.0
-        + shapeScore * 1.8
-        + broadSaturatedBonus;
-}
+static double brightGuidedDetectionPriorityScore(const CameraPipelineStarDetection& detection, double brightness, double reliability, double shapeScore);
 
 void prepareDetectionMetricCache(const QVector<CameraPipelineStarDetection>& starDetections)
 {
@@ -5298,104 +2133,9 @@ QVector<int> selectDetectionIndicesForBrightGuidedTriangles(const QVector<Camera
     return triangleDetections;
 }
 
-static void buildProjectedCatalogInto(const PlateSolveCatalogContext& catalogContext,
-                                      const SkyProjector& projector,
-                                      double searchMarginPixels,
-                                      const QVector<int>* allowedCatalogIndices,
-                                      QVector<ProjectedCatalogStar>& projectedStars)
-{
-    projectedStars.clear();
-    const QRectF expandedBounds(
-        -searchMarginPixels,
-        -searchMarginPixels,
-        projector.width + 2.0 * searchMarginPixels,
-        projector.height + 2.0 * searchMarginPixels);
+static void buildProjectedCatalogInto(const PlateSolveCatalogContext& catalogContext, const SkyProjector& projector, double searchMarginPixels, const QVector<int>* allowedCatalogIndices, QVector<ProjectedCatalogStar>& projectedStars);
 
-    const auto appendProjectedStar = [&](const VisibleCatalogStar& visibleStar)
-    {
-        QPointF point;
-        if (!projectVector(projector, visibleStar.vector, point)) {
-            return;
-        }
-        if (!expandedBounds.contains(point)) {
-            return;
-        }
-
-        projectedStars.append({visibleStar.catalogIndex, point, visibleStar.magnitude});
-    };
-
-    // Angular cone cull. Only catalog stars whose direction lies within the projector's field
-    // cone can land inside the (expanded) image bounds, so for a narrow field a cheap dot-product
-    // test against the bore-sight rejects the vast majority of candidate stars before the much
-    // more expensive projectVector(). Only enabled for genuinely narrow fields; for wide/fisheye
-    // fields the cone spans most of the sky and would reject nothing, so the dot product is skipped.
-    //
-    // The cone half-angle must cover the angle from the bore-sight (projector.center, which maps to
-    // the principal point) to the farthest in-bounds pixel. A lens centre offset shifts the
-    // principal point away from the image centre (by up to +/-2048 px), so the maximum normalized
-    // image radius is derived from the principal point itself (which already includes the offset)
-    // plus the search margin, NOT from a centred half-diagonal. This keeps the cone a strict
-    // superset of anything projectVector()+bounds accepts even with a large centre offset. The 2x
-    // factor plus 1 deg of slack leaves headroom for the small-angle approximation; for a centred
-    // principal point this only widens the cone, so the culled set is identical to the unculled scan.
-    const double halfWidthPixels = 0.5 * static_cast<double>(projector.width);
-    const double maxRadiusXPixels = std::max(projector.principalPointX, projector.width - projector.principalPointX) + searchMarginPixels;
-    const double maxRadiusYPixels = std::max(projector.principalPointY, projector.height - projector.principalPointY) + searchMarginPixels;
-    const double maxNormalizedRadius = (halfWidthPixels > 0.0)
-        ? std::sqrt(maxRadiusXPixels * maxRadiusXPixels + maxRadiusYPixels * maxRadiusYPixels) / halfWidthPixels
-        : 0.0;
-    const double halfDiagonalFovRadians = projector.halfHorizontalFov * maxNormalizedRadius;
-    const double coneHalfAngleRadians = halfDiagonalFovRadians * 2.0 + degToRad(1.0);
-    // projectVector() applies radial distortion (scale = 1 + k1*r^2 + k2*r^4) AFTER projection.
-    // With barrel distortion (scale < 1) a star at a larger undistorted angle is pulled
-    // radially inward and can still land in bounds, so an undistorted-angle cone would wrongly
-    // reject it. The solver sweeps negative k1 (distortion sweep + LM refinement), so the cone is
-    // only a guaranteed superset of the in-bounds set when k1 >= 0 (positive/pincushion
-    // distortion pushes stars outward, shrinking the in-bounds angular region).
-    // Disable the cull otherwise.
-    const bool useConeCull = (coneHalfAngleRadians < degToRad(15.0))
-        && (projector.distortionK1 >= 0.0);
-    const double coneCosThreshold = useConeCull ? std::cos(coneHalfAngleRadians) : -2.0;
-    const auto withinFieldCone = [&](const VisibleCatalogStar& visibleStar) {
-        return !useConeCull || (dot(projector.center, visibleStar.vector) >= coneCosThreshold);
-    };
-
-    if (allowedCatalogIndices)
-    {
-        projectedStars.reserve(allowedCatalogIndices->size());
-        for (int catalogIndex : *allowedCatalogIndices)
-        {
-            const auto it = catalogContext.visibleStarIndexByCatalogIndex.constFind(catalogIndex);
-            if (it != catalogContext.visibleStarIndexByCatalogIndex.cend())
-            {
-                const VisibleCatalogStar& visibleStar = catalogContext.visibleStars[*it];
-                if (withinFieldCone(visibleStar)) {
-                    appendProjectedStar(visibleStar);
-                }
-            }
-        }
-    }
-    else
-    {
-        projectedStars.reserve(catalogContext.visibleStars.size());
-        for (const VisibleCatalogStar& visibleStar : catalogContext.visibleStars)
-        {
-            if (withinFieldCone(visibleStar)) {
-                appendProjectedStar(visibleStar);
-            }
-        }
-    }
-}
-
-static QVector<ProjectedCatalogStar> buildProjectedCatalog(const PlateSolveCatalogContext& catalogContext,
-                                                    const SkyProjector& projector,
-                                                    double searchMarginPixels,
-                                                    const QVector<int>* allowedCatalogIndices = nullptr)
-{
-    QVector<ProjectedCatalogStar> projectedStars;
-    buildProjectedCatalogInto(catalogContext, projector, searchMarginPixels, allowedCatalogIndices, projectedStars);
-    return projectedStars;
-}
+static QVector<ProjectedCatalogStar> buildProjectedCatalog(const PlateSolveCatalogContext& catalogContext, const SkyProjector& projector, double searchMarginPixels, const QVector<int>* allowedCatalogIndices = nullptr);
 
 // Precomputed per-solve constants for the raDecToAzAlt inner loop.
 // All fields depend only on (latitude, longitude, datetime) which are constant
@@ -5411,172 +2151,15 @@ struct RaDecToAzAltParams
     double rot[3][3];
 };
 
-static RaDecToAzAltParams buildRaDecToAzAltParams(double latitude,
-                                                   double longitude,
-                                                   const QDateTime& captureDateTimeUtc)
-{
-    RaDecToAzAltParams p;
-    const double lat_rad = degToRad(latitude);
-    p.sinLat = std::sin(lat_rad);
-    p.cosLat = std::cos(lat_rad);
-    p.lst_deg = Astronomy::localSiderealTime(captureDateTimeUtc, longitude);
-    p.jd = Astronomy::julianDate(captureDateTimeUtc);
-    p.jd_from = Astronomy::jd_j2000();
-
-    // Precession rotation matrix — same formula as Astronomy::precess(),
-    // precomputed once for (J2000 → current epoch) so each star only needs
-    // a 3x3 matrix multiply instead of rebuilding the matrix from scratch.
-    const double days_per_century = 36524.219878;
-    const double t0 = (p.jd_from - Astronomy::jd_b1950()) / days_per_century;
-    const double t  = (p.jd       - p.jd_from)            / days_per_century;
-    p.rot[0][0] = 1.0 - ((29696.0 + 26.0*t0)*t*t - 13.0*t*t*t)*1e-8;
-    p.rot[1][0] = ((2234941.0 + 1355.0*t0)*t - 676.0*t*t + 221.0*t*t*t)*1e-8;
-    p.rot[2][0] = ((971690.0  -  414.0*t0)*t + 207.0*t*t +  96.0*t*t*t)*1e-8;
-    p.rot[0][1] = -p.rot[1][0];
-    p.rot[1][1] = 1.0 - ((24975.0 + 30.0*t0)*t*t - 15.0*t*t*t)*1e-8;
-    p.rot[2][1] = -((10858.0 + 2.0*t0)*t*t)*1e-8;
-    p.rot[0][2] = -p.rot[2][0];
-    p.rot[1][2] = p.rot[2][1];
-    p.rot[2][2] = 1.0 - ((4721.0 - 4.0*t0)*t*t)*1e-8;
-    return p;
-}
+static RaDecToAzAltParams buildRaDecToAzAltParams(double latitude, double longitude, const QDateTime& captureDateTimeUtc);
 
 // Fast per-star RaDecToAzAlt using precomputed constants.
 // Returns false if the star is below the horizon (or non-finite).
-static bool raDecToAzAltFast(const RaDecToAzAltParams& p,
-                              double rightAscensionDegrees,
-                              double declinationDegrees,
-                              double& az,
-                              double& alt)
-{
-    // Apply precession (J2000 → current epoch) via precomputed rotation matrix.
-    // Convert RA/Dec to unit vector, rotate, convert back.
-    const double ra_rad  = degToRad(rightAscensionDegrees);
-    const double dec_rad0 = degToRad(declinationDegrees);
-    const double cosDec = std::cos(dec_rad0);
-    double x = cosDec * std::cos(ra_rad);
-    double y = cosDec * std::sin(ra_rad);
-    double z = std::sin(dec_rad0);
-    const double xp = p.rot[0][0]*x + p.rot[0][1]*y + p.rot[0][2]*z;
-    const double yp = p.rot[1][0]*x + p.rot[1][1]*y + p.rot[1][2]*z;
-    const double zp = p.rot[2][0]*x + p.rot[2][1]*y + p.rot[2][2]*z;
+static bool raDecToAzAltFast(const RaDecToAzAltParams& p, double rightAscensionDegrees, double declinationDegrees, double& az, double& alt);
 
-    // Recover precessed RA/Dec from rotated vector.
-    const double dec_rad = std::asin(std::clamp(zp, -1.0, 1.0));
-    const double ra_prec_rad = std::atan2(yp, xp);
-    const double ra_prec_deg = (ra_prec_rad < 0.0 ? ra_prec_rad + 2.0 * kPi : ra_prec_rad) * (180.0 / kPi);
+static QVector<VisibleCatalogStar> buildVisibleCatalog(const CameraSettings& settings, const QVector<CatalogStar>& catalogStars, const QDateTime& captureDateTimeUtc, double maxMagnitude);
 
-    // Hour angle.
-    const double ha_deg = std::fmod(p.lst_deg - ra_prec_deg, 360.0);
-    const double ha_rad = degToRad(ha_deg);
-
-    // Altitude and azimuth.
-    const double sinDec = std::sin(dec_rad);
-    const double cosDec2 = std::cos(dec_rad);
-    const double cosHa  = std::cos(ha_rad);
-    const double alt_rad = std::asin(std::clamp(sinDec*p.sinLat + cosDec2*p.cosLat*cosHa, -1.0, 1.0));
-    alt = alt_rad * (180.0 / kPi);
-
-    if (!std::isfinite(alt) || (alt < kVisibleAltitudeFloor)) {
-        return false;
-    }
-
-    const double cosAlt = std::cos(alt_rad);
-    if (std::fabs(cosAlt) < 1e-12) {
-        az = 0.0;
-        return true;
-    }
-    const double cosA = std::clamp((sinDec - std::sin(alt_rad)*p.sinLat) / (cosAlt*p.cosLat), -1.0, 1.0);
-    const double a = std::acos(cosA) * (180.0 / kPi);
-    az = (std::sin(ha_rad) < 0.0) ? a : 360.0 - a;
-    return std::isfinite(az);
-}
-
-static QVector<VisibleCatalogStar> buildVisibleCatalog(const CameraSettings& settings,
-                                                const QVector<CatalogStar>& catalogStars,
-                                                const QDateTime& captureDateTimeUtc,
-                                                double maxMagnitude)
-{
-    // Precompute all time/location-dependent constants once for all stars.
-    const RaDecToAzAltParams azAltParams = buildRaDecToAzAltParams(
-        settings.m_latitude, settings.m_longitude, captureDateTimeUtc);
-
-    const auto buildVisibleCatalogRange = [&](int firstStarIndex, int lastStarIndex) {
-        QVector<VisibleCatalogStar> visibleStars;
-        visibleStars.reserve(std::max(0, lastStarIndex - firstStarIndex));
-
-        for (int i = firstStarIndex; i < lastStarIndex; ++i)
-        {
-            const CatalogStar& star = catalogStars[i];
-            if (star.magnitude > maxMagnitude) {
-                continue;
-            }
-
-            double az = 0.0;
-            double alt = 0.0;
-            if (!raDecToAzAltFast(azAltParams, star.rightAscensionDegrees, star.declinationDegrees, az, alt)) {
-                continue;
-            }
-
-            visibleStars.append({
-                i,
-                az,
-                alt,
-                star.magnitude,
-                normalize(vectorFromAltAz(az, alt))
-            });
-        }
-
-        return visibleStars;
-    };
-
-    const int workerThreadCount = visibleCatalogWorkerThreadCount(catalogStars.size());
-    QVector<VisibleCatalogStar> visibleStars;
-    if (workerThreadCount <= 1)
-    {
-        visibleStars = buildVisibleCatalogRange(0, catalogStars.size());
-    }
-    else
-    {
-        QVector<QVector<VisibleCatalogStar>> chunkVisibleStars(workerThreadCount);
-        QThreadPool workerPool;
-        workerPool.setMaxThreadCount(workerThreadCount);
-        for (int workerIndex = 0; workerIndex < workerThreadCount; ++workerIndex)
-        {
-            const int firstStarIndex = (catalogStars.size() * workerIndex) / workerThreadCount;
-            const int lastStarIndex = (catalogStars.size() * (workerIndex + 1)) / workerThreadCount;
-            workerPool.start(QRunnable::create([&, workerIndex, firstStarIndex, lastStarIndex]() {
-                chunkVisibleStars[workerIndex] = buildVisibleCatalogRange(firstStarIndex, lastStarIndex);
-            }));
-        }
-        workerPool.waitForDone();
-
-        int visibleStarCount = 0;
-        for (const QVector<VisibleCatalogStar>& chunk : chunkVisibleStars) {
-            visibleStarCount += chunk.size();
-        }
-        visibleStars.reserve(visibleStarCount);
-        for (QVector<VisibleCatalogStar>& chunk : chunkVisibleStars) {
-            visibleStars += chunk;
-        }
-    }
-
-    std::sort(visibleStars.begin(), visibleStars.end(), [](const VisibleCatalogStar& lhs, const VisibleCatalogStar& rhs) {
-        return lhs.magnitude < rhs.magnitude;
-    });
-
-    return visibleStars;
-}
-
-static void buildVisibleStarIndex(const QVector<VisibleCatalogStar>& visibleStars,
-                                  QHash<int, int>& visibleStarIndexByCatalogIndex)
-{
-    visibleStarIndexByCatalogIndex.clear();
-    visibleStarIndexByCatalogIndex.reserve(visibleStars.size());
-    for (int i = 0; i < visibleStars.size(); ++i) {
-        visibleStarIndexByCatalogIndex.insert(visibleStars[i].catalogIndex, i);
-    }
-}
+static void buildVisibleStarIndex(const QVector<VisibleCatalogStar>& visibleStars, QHash<int, int>& visibleStarIndexByCatalogIndex);
 
 struct VisibleCatalogCacheEntry
 {
@@ -5584,157 +2167,23 @@ struct VisibleCatalogCacheEntry
     QHash<int, int> visibleStarIndexByCatalogIndex;
 };
 
-static QMutex& visibleCatalogCacheMutex()
-{
-    static QMutex s_cacheMutex;
-    return s_cacheMutex;
-}
+static QMutex& visibleCatalogCacheMutex();
 
-static QHash<QString, VisibleCatalogCacheEntry>& visibleCatalogCache()
-{
-    static QHash<QString, VisibleCatalogCacheEntry> s_cache;
-    return s_cache;
-}
+static QHash<QString, VisibleCatalogCacheEntry>& visibleCatalogCache();
 
-static QStringList& visibleCatalogCacheOrder()
-{
-    static QStringList s_cacheOrder;
-    return s_cacheOrder;
-}
+static QStringList& visibleCatalogCacheOrder();
 
-static QString visibleCatalogFingerprint(const QVector<CatalogStar>& catalogStars)
-{
-    if (catalogStars.isEmpty()) {
-        return QStringLiteral("0");
-    }
+static QString visibleCatalogFingerprint(const QVector<CatalogStar>& catalogStars);
 
-    const int middleIndex = catalogStars.size() / 2;
-    const int lastIndex = catalogStars.size() - 1;
-    const int sampleIndexes[] = {0, middleIndex, lastIndex};
-    QStringList fields;
-    fields.reserve(1 + 3 * 3);
-    fields.append(QString::number(catalogStars.size()));
-    for (int index : sampleIndexes)
-    {
-        const CatalogStar& star = catalogStars[index];
-        fields.append(QString::number(qRound64(star.rightAscensionDegrees * 1000000.0)));
-        fields.append(QString::number(qRound64(star.declinationDegrees * 1000000.0)));
-        fields.append(QString::number(qRound64(star.magnitude * 1000.0)));
-    }
-    return fields.join(QLatin1Char(':'));
-}
+static double visibleCatalogCacheMagnitudeLimit(const QVector<CatalogStar>& catalogStars, double maxMagnitude);
 
-static double visibleCatalogCacheMagnitudeLimit(const QVector<CatalogStar>& catalogStars,
-                                                double maxMagnitude)
-{
-    double loadedMaxMagnitude = -std::numeric_limits<double>::infinity();
-    for (const CatalogStar& star : catalogStars)
-    {
-        if (std::isfinite(star.magnitude)) {
-            loadedMaxMagnitude = std::max(loadedMaxMagnitude, star.magnitude);
-        }
-    }
+static QString visibleCatalogCacheKey(const CameraSettings& settings, const QVector<CatalogStar>& catalogStars, const QDateTime& captureDateTimeUtc, double maxMagnitude);
 
-    return std::isfinite(loadedMaxMagnitude)
-        ? std::min(maxMagnitude, loadedMaxMagnitude)
-        : maxMagnitude;
-}
+static bool loadVisibleCatalogCache(const CameraSettings& settings, const QVector<CatalogStar>& catalogStars, const QDateTime& captureDateTimeUtc, double maxMagnitude, QVector<VisibleCatalogStar>& visibleStars, QHash<int, int>& visibleStarIndexByCatalogIndex);
 
-static QString visibleCatalogCacheKey(const CameraSettings& settings,
-                                      const QVector<CatalogStar>& catalogStars,
-                                      const QDateTime& captureDateTimeUtc,
-                                      double maxMagnitude)
-{
-    const QString path = currentCatalogPath(settings);
-    const bool isResource = path.startsWith(QLatin1String(":/"));
-    const qint64 modifiedSecs = isResource ? 0 : QFileInfo(path).lastModified().toSecsSinceEpoch();
-    const qint64 timeBucket = captureDateTimeUtc.toSecsSinceEpoch() / 30;
-    const double effectiveMaxMagnitude = visibleCatalogCacheMagnitudeLimit(catalogStars, maxMagnitude);
+static void storeVisibleCatalogCache(const CameraSettings& settings, const QVector<CatalogStar>& catalogStars, const QDateTime& captureDateTimeUtc, double maxMagnitude, const QVector<VisibleCatalogStar>& visibleStars, const QHash<int, int>& visibleStarIndexByCatalogIndex);
 
-    return QStringLiteral("%1|%2|%3|%4|%5|%6|%7|%8")
-        .arg(path)
-        .arg(modifiedSecs)
-        .arg(visibleCatalogFingerprint(catalogStars))
-        .arg(qRound64(settings.m_latitude * 100000.0))
-        .arg(qRound64(settings.m_longitude * 100000.0))
-        .arg(timeBucket)
-        .arg(qRound64(effectiveMaxMagnitude * 100.0))
-        .arg(static_cast<int>(settings.m_plateSolveCatalogSource));
-}
-
-static bool loadVisibleCatalogCache(const CameraSettings& settings,
-                                    const QVector<CatalogStar>& catalogStars,
-                                    const QDateTime& captureDateTimeUtc,
-                                    double maxMagnitude,
-                                    QVector<VisibleCatalogStar>& visibleStars,
-                                    QHash<int, int>& visibleStarIndexByCatalogIndex)
-{
-    const QString key = visibleCatalogCacheKey(settings, catalogStars, captureDateTimeUtc, maxMagnitude);
-    QMutexLocker locker(&visibleCatalogCacheMutex());
-    const QHash<QString, VisibleCatalogCacheEntry>& cache = visibleCatalogCache();
-    const auto it = cache.constFind(key);
-    if (it == cache.cend()) {
-        return false;
-    }
-
-    visibleStars = it->visibleStars;
-    visibleStarIndexByCatalogIndex = it->visibleStarIndexByCatalogIndex;
-    return true;
-}
-
-static void storeVisibleCatalogCache(const CameraSettings& settings,
-                                     const QVector<CatalogStar>& catalogStars,
-                                     const QDateTime& captureDateTimeUtc,
-                                     double maxMagnitude,
-                                     const QVector<VisibleCatalogStar>& visibleStars,
-                                     const QHash<int, int>& visibleStarIndexByCatalogIndex)
-{
-    static constexpr int kMaxVisibleCatalogCacheEntries = 8;
-
-    const QString key = visibleCatalogCacheKey(settings, catalogStars, captureDateTimeUtc, maxMagnitude);
-    QMutexLocker locker(&visibleCatalogCacheMutex());
-    QHash<QString, VisibleCatalogCacheEntry>& cache = visibleCatalogCache();
-    QStringList& cacheOrder = visibleCatalogCacheOrder();
-    if (!cache.contains(key))
-    {
-        cacheOrder.append(key);
-        while (cacheOrder.size() > kMaxVisibleCatalogCacheEntries) {
-            cache.remove(cacheOrder.takeFirst());
-        }
-    }
-    cache.insert(key, {visibleStars, visibleStarIndexByCatalogIndex});
-}
-
-static void populateVisibleCatalogContext(PlateSolveCatalogContext& context,
-                                          const CameraSettings& settings,
-                                          const QDateTime& captureDateTimeUtc,
-                                          double maxMagnitude,
-                                          bool allowCache)
-{
-    if (allowCache
-        && loadVisibleCatalogCache(
-            settings,
-            context.catalogStars,
-            captureDateTimeUtc,
-            maxMagnitude,
-            context.visibleStars,
-            context.visibleStarIndexByCatalogIndex))
-    {
-        return;
-    }
-
-    context.visibleStars = buildVisibleCatalog(settings, context.catalogStars, captureDateTimeUtc, maxMagnitude);
-    buildVisibleStarIndex(context.visibleStars, context.visibleStarIndexByCatalogIndex);
-    if (allowCache) {
-        storeVisibleCatalogCache(
-            settings,
-            context.catalogStars,
-            captureDateTimeUtc,
-            maxMagnitude,
-            context.visibleStars,
-            context.visibleStarIndexByCatalogIndex);
-    }
-}
+static void populateVisibleCatalogContext(PlateSolveCatalogContext& context, const CameraSettings& settings, const QDateTime& captureDateTimeUtc, double maxMagnitude, bool allowCache);
 
 PlateSolveCatalogContext buildPlateSolveCatalogContext(const CameraSettings& settings,
                                                        const QSize& imageSize,
@@ -5884,64 +2333,9 @@ void rebuildVisibleCatalogContext(PlateSolveCatalogContext& context,
     populateVisibleCatalogContext(context, settings, captureDateTimeUtc, maxMagnitude, true);
 }
 
-static QVector<VisibleCatalogStar> selectLocalVisibleStars(const QVector<VisibleCatalogStar>& visibleStars,
-                                                           double centerAzimuthDegrees,
-                                                           double centerElevationDegrees,
-                                                           double radiusDegrees,
-                                                           int maxStars)
-{
-    QVector<VisibleCatalogStar> localStars;
-    if ((maxStars <= 0) || visibleStars.isEmpty()) {
-        return localStars;
-    }
+static QVector<VisibleCatalogStar> selectLocalVisibleStars(const QVector<VisibleCatalogStar>& visibleStars, double centerAzimuthDegrees, double centerElevationDegrees, double radiusDegrees, int maxStars);
 
-    const SkyVector center = normalize(vectorFromAltAz(centerAzimuthDegrees, centerElevationDegrees));
-    const double radiusRadians = std::max(0.0, radiusDegrees) * kPi / 180.0;
-    const double minDot = std::cos(radiusRadians);
-    localStars.reserve(std::min(maxStars, static_cast<int>(visibleStars.size())));
-    for (const VisibleCatalogStar& star : visibleStars)
-    {
-        if (dot(center, star.vector) >= minDot) {
-            localStars.append(star);
-        }
-    }
-
-    std::sort(localStars.begin(), localStars.end(), [](const VisibleCatalogStar& lhs, const VisibleCatalogStar& rhs) {
-        return lhs.magnitude < rhs.magnitude;
-    });
-    if (localStars.size() > maxStars) {
-        localStars.resize(maxStars);
-    }
-    return localStars;
-}
-
-static QVector<VisibleCatalogStar> selectVisibleStarsNearElevation(const QVector<VisibleCatalogStar>& visibleStars,
-                                                                   double centerElevationDegrees,
-                                                                   double radiusDegrees,
-                                                                   int maxStars)
-{
-    QVector<VisibleCatalogStar> localStars;
-    if ((maxStars <= 0) || visibleStars.isEmpty()) {
-        return localStars;
-    }
-
-    const double radius = std::max(0.0, radiusDegrees);
-    localStars.reserve(std::min(maxStars, static_cast<int>(visibleStars.size())));
-    for (const VisibleCatalogStar& star : visibleStars)
-    {
-        if (std::fabs(star.elevationDegrees - centerElevationDegrees) <= radius) {
-            localStars.append(star);
-        }
-    }
-
-    std::sort(localStars.begin(), localStars.end(), [](const VisibleCatalogStar& lhs, const VisibleCatalogStar& rhs) {
-        return lhs.magnitude < rhs.magnitude;
-    });
-    if (localStars.size() > maxStars) {
-        localStars.resize(maxStars);
-    }
-    return localStars;
-}
+static QVector<VisibleCatalogStar> selectVisibleStarsNearElevation(const QVector<VisibleCatalogStar>& visibleStars, double centerElevationDegrees, double radiusDegrees, int maxStars);
 
 QVector<GuidedAnchorPair> findGuidedAnchorPairs(const CameraSettings& settings,
                                                 const PlateSolveCatalogContext& catalogContext,
@@ -6156,128 +2550,15 @@ QVector<GuidedAnchorPair> findGuidedAnchorPairs(const CameraSettings& settings,
     return anchors;
 }
 
-static TriangleSignature buildTriangleSignature(const std::array<QPointF, 3>& points)
-{
-    struct EdgeInfo {
-        double length = 0.0;
-        int a = -1;
-        int b = -1;
-    };
+static TriangleSignature buildTriangleSignature(const std::array<QPointF, 3>& points);
 
-    std::array<EdgeInfo, 3> edges {{
-        {QLineF(points[0], points[1]).length(), 0, 1},
-        {QLineF(points[0], points[2]).length(), 0, 2},
-        {QLineF(points[1], points[2]).length(), 1, 2}
-    }};
-    std::sort(edges.begin(), edges.end(), [](const EdgeInfo& lhs, const EdgeInfo& rhs) {
-        return lhs.length < rhs.length;
-    });
+static std::array<QPointF, 4> orderQuadPoints(const std::array<QPointF, 4>& points);
 
-    TriangleSignature signature;
-    if (edges[2].length <= 1e-6) {
-        return signature;
-    }
+static QuadSignature buildQuadSignature(const std::array<QPointF, 4>& unorderedPoints);
 
-    signature.ratioShortToLong = edges[0].length / edges[2].length;
-    signature.ratioMidToLong = edges[1].length / edges[2].length;
-    signature.longestDistance = edges[2].length;
+static bool isDistinctiveTriangleSignature(const TriangleSignature& signature);
 
-    const QPointF base = points[edges[2].a];
-    const QPointF tip = points[edges[2].b];
-    const int thirdIndex = 3 - edges[2].a - edges[2].b;
-    const QPointF third = points[thirdIndex];
-    signature.orientation = (tip.x() - base.x()) * (third.y() - base.y())
-        - (tip.y() - base.y()) * (third.x() - base.x());
-    signature.areaScore = std::clamp(
-        std::fabs(signature.orientation) / std::max(1.0, edges[2].length * edges[2].length),
-        0.0,
-        1.0);
-
-    return signature;
-}
-
-static std::array<QPointF, 4> orderQuadPoints(const std::array<QPointF, 4>& points)
-{
-    QPointF centroid;
-    for (const QPointF& point : points) {
-        centroid += point;
-    }
-    centroid /= 4.0;
-
-    std::array<int, 4> order{{0, 1, 2, 3}};
-    std::sort(order.begin(), order.end(), [&points, &centroid](int lhs, int rhs) {
-        return std::atan2(points[lhs].y() - centroid.y(), points[lhs].x() - centroid.x())
-            < std::atan2(points[rhs].y() - centroid.y(), points[rhs].x() - centroid.x());
-    });
-
-    std::array<QPointF, 4> orderedPoints;
-    for (int i = 0; i < 4; ++i) {
-        orderedPoints[i] = points[order[i]];
-    }
-    return orderedPoints;
-}
-
-static QuadSignature buildQuadSignature(const std::array<QPointF, 4>& unorderedPoints)
-{
-    QuadSignature signature;
-    const std::array<QPointF, 4> points = orderQuadPoints(unorderedPoints);
-
-    std::array<double, 6> distances{{
-        QLineF(points[0], points[1]).length(),
-        QLineF(points[0], points[2]).length(),
-        QLineF(points[0], points[3]).length(),
-        QLineF(points[1], points[2]).length(),
-        QLineF(points[1], points[3]).length(),
-        QLineF(points[2], points[3]).length()
-    }};
-    std::sort(distances.begin(), distances.end());
-    if (distances[5] <= 1e-6) {
-        return signature;
-    }
-
-    signature.longestDistance = distances[5];
-    for (int i = 0; i < 5; ++i) {
-        signature.edgeRatios[i] = distances[i] / distances[5];
-    }
-
-    double twiceArea = 0.0;
-    for (int i = 0; i < 4; ++i) {
-        const QPointF& a = points[i];
-        const QPointF& b = points[(i + 1) % 4];
-        twiceArea += (a.x() * b.y()) - (a.y() * b.x());
-    }
-    signature.orientation = twiceArea;
-    signature.areaScore = std::clamp(
-        std::fabs(twiceArea) / std::max(1.0, distances[5] * distances[5]),
-        0.0,
-        1.0);
-    return signature;
-}
-
-static bool isDistinctiveTriangleSignature(const TriangleSignature& signature)
-{
-    if (signature.longestDistance <= 0.0) {
-        return false;
-    }
-    if (signature.areaScore < 0.025) {
-        return false;
-    }
-    if (signature.ratioShortToLong < 0.10) {
-        return false;
-    }
-    return std::fabs(signature.ratioMidToLong - signature.ratioShortToLong) > 0.015;
-}
-
-static bool isDistinctiveQuadSignature(const QuadSignature& signature)
-{
-    if (signature.longestDistance <= 0.0) {
-        return false;
-    }
-    if (signature.areaScore < 0.025) {
-        return false;
-    }
-    return std::fabs(signature.edgeRatios[1] - signature.edgeRatios[0]) > 0.010;
-}
+static bool isDistinctiveQuadSignature(const QuadSignature& signature);
 
 double signatureReliabilityScore(const QVector<CameraPipelineStarDetection>& starDetections,
                                         const int *indices,
@@ -6311,83 +2592,17 @@ double signatureBrightnessScore(const QVector<CameraPipelineStarDetection>& star
     return score / std::max(1, count);
 }
 
-static double catalogSignatureBrightnessScore(const QVector<VisibleCatalogStar>& visibleStars,
-                                              const int *indices,
-                                              int count)
-{
-    double score = 0.0;
-    for (int i = 0; i < count; ++i)
-    {
-        const int starIndex = indices[i];
-        if ((starIndex < 0) || (starIndex >= visibleStars.size())) {
-            continue;
-        }
-        const double magnitude = visibleStars[starIndex].magnitude;
-        score += std::isfinite(magnitude)
-            ? 1.0 / (1.0 + std::exp((magnitude - 8.0) * 0.45))
-            : 0.0;
-    }
-    return score / std::max(1, count);
-}
+static double catalogSignatureBrightnessScore(const QVector<VisibleCatalogStar>& visibleStars, const int *indices, int count);
 
-static qint64 signatureBucketKey(int firstBin, int secondBin)
-{
-    return (static_cast<qint64>(firstBin) << 32)
-        ^ static_cast<quint32>(secondBin);
-}
+static qint64 signatureBucketKey(int firstBin, int secondBin);
 
-static int signatureRatioBin(double value, double binWidth)
-{
-    return static_cast<int>(std::floor(value / std::max(1e-6, binWidth)));
-}
+static int signatureRatioBin(double value, double binWidth);
 
-static QHash<qint64, QVector<int>> buildTriangleSignatureBuckets(const QVector<TriangleSignature>& signatures,
-                                                                 double binWidth)
-{
-    QHash<qint64, QVector<int>> buckets;
-    for (int i = 0; i < signatures.size(); ++i)
-    {
-        const TriangleSignature& signature = signatures.at(i);
-        const int firstBin = signatureRatioBin(signature.ratioShortToLong, binWidth);
-        const int secondBin = signatureRatioBin(signature.ratioMidToLong, binWidth);
-        buckets[signatureBucketKey(firstBin, secondBin)].append(i);
-    }
-    return buckets;
-}
+static QHash<qint64, QVector<int>> buildTriangleSignatureBuckets(const QVector<TriangleSignature>& signatures, double binWidth);
 
-static QHash<qint64, QVector<int>> buildQuadSignatureBuckets(const QVector<QuadSignature>& signatures,
-                                                             double binWidth)
-{
-    QHash<qint64, QVector<int>> buckets;
-    for (int i = 0; i < signatures.size(); ++i)
-    {
-        const QuadSignature& signature = signatures.at(i);
-        const int firstBin = signatureRatioBin(signature.edgeRatios[0], binWidth);
-        const int secondBin = signatureRatioBin(signature.edgeRatios[1], binWidth);
-        buckets[signatureBucketKey(firstBin, secondBin)].append(i);
-    }
-    return buckets;
-}
+static QHash<qint64, QVector<int>> buildQuadSignatureBuckets(const QVector<QuadSignature>& signatures, double binWidth);
 
-static double medianCandidateDistancePixels(const QVector<Match>& matches)
-{
-    if (matches.isEmpty()) {
-        return 0.0;
-    }
-
-    QVector<double> distances;
-    distances.reserve(matches.size());
-    for (const Match& match : matches) {
-        distances.append(match.distancePixels);
-    }
-
-    std::sort(distances.begin(), distances.end());
-    const int middle = distances.size() / 2;
-    if ((distances.size() % 2) == 0) {
-        return 0.5 * (distances[middle - 1] + distances[middle]);
-    }
-    return distances[middle];
-}
+static double medianCandidateDistancePixels(const QVector<Match>& matches);
 
 bool isStrongBlindSeedEvaluation(const CameraSettings& settings,
                                  const QVector<int>& detectionIndices,
@@ -6581,37 +2796,9 @@ struct SeedConsensusBasin
     double score = 0.0;
 };
 
-static double seedWrappedAngularDistanceDegrees(double lhs, double rhs)
-{
-    double delta = std::fabs(lhs - rhs);
-    while (delta > 360.0) {
-        delta -= 360.0;
-    }
-    return delta > 180.0 ? 360.0 - delta : delta;
-}
+static double seedWrappedAngularDistanceDegrees(double lhs, double rhs);
 
-static double seedCandidateConsensusScore(const Evaluation& candidate)
-{
-    if (!candidate.valid) {
-        return -std::numeric_limits<double>::infinity();
-    }
-
-    const double rmsPenalty = std::isfinite(candidate.rmsErrorPixels)
-        ? candidate.rmsErrorPixels * 0.10
-        : 1000.0;
-    const double magnitudePenalty = std::isfinite(candidate.meanCatalogMagnitude)
-        ? std::max(0.0, candidate.meanCatalogMagnitude - 8.0) * 0.25
-        : 0.0;
-    const double anchorBonus =
-        (candidate.anchored ? 2.0 : 0.0)
-        + (candidate.guidedTriangle ? 2.0 : 0.0)
-        + (candidate.sparseGuidedPair ? 1.0 : 0.0);
-    return candidate.matchCount * 4.0
-        + candidate.matches.size() * 0.5
-        + anchorBonus
-        - rmsPenalty
-        - magnitudePenalty;
-}
+static double seedCandidateConsensusScore(const Evaluation& candidate);
 
 QVector<Evaluation> selectConsensusSeedRepresentatives(const CameraSettings& settings,
                                                        const QVector<Evaluation>& seeds,
@@ -6837,14 +3024,7 @@ bool appendCatalogTriangleSignature(const CameraSettings& settings,
     return true;
 }
 
-static qint64 catalogTriangleKey(int a, int b, int c)
-{
-    std::array<int, 3> sorted {{a, b, c}};
-    std::sort(sorted.begin(), sorted.end());
-    return (static_cast<qint64>(sorted[0]) << 42)
-        | (static_cast<qint64>(sorted[1]) << 21)
-        | static_cast<qint64>(sorted[2]);
-}
+static qint64 catalogTriangleKey(int a, int b, int c);
 
 QVector<TriangleSignature> buildLocalCatalogTriangleSignatures(const CameraSettings& settings,
                                                                const QVector<VisibleCatalogStar>& visibleStars)
@@ -7033,46 +3213,7 @@ QVector<QuadSignature> buildDetectionQuadSignatures(const QVector<CameraPipeline
 // arbitrary but fixed, so poseFromVectorPairsN can later recover the true az/el/roll by
 // rotating this baseProjector's center/right vectors into the catalog (sky) frame.
 // detectionRayVectors and detectionRayVectorValid are parallel to detectionIndices.
-static SkyProjector buildDetectionRayVectors(const CameraSettings& settings,
-                                             const QSize& imageSize,
-                                             double referenceFovDegrees,
-                                             double centerOffsetXPixels,
-                                             double centerOffsetYPixels,
-                                             double distortionK1,
-                                             const QVector<CameraPipelineStarDetection>& starDetections,
-                                             const QVector<int>& detectionIndices,
-                                             QVector<SkyVector>& detectionRayVectors,
-                                             QVector<quint8>& detectionRayVectorValid)
-{
-    const SkyProjector referenceProjector = createProjector(
-        settings,
-        imageSize,
-        0.0,
-        90.0,
-        0.0,
-        referenceFovDegrees,
-        centerOffsetXPixels,
-        centerOffsetYPixels,
-        distortionK1);
-
-    detectionRayVectors.assign(detectionIndices.size(), SkyVector{0.0, 0.0, 0.0});
-    detectionRayVectorValid.assign(detectionIndices.size(), 0);
-    if (!referenceProjector.valid) {
-        return referenceProjector;
-    }
-
-    for (int i = 0; i < detectionIndices.size(); ++i)
-    {
-        const int detectionIndex = detectionIndices[i];
-        if ((detectionIndex >= 0)
-            && (detectionIndex < starDetections.size())
-            && unprojectPixelToVector(referenceProjector, starDetections[detectionIndex].m_center, detectionRayVectors[i]))
-        {
-            detectionRayVectorValid[i] = 1;
-        }
-    }
-    return referenceProjector;
-}
+static SkyProjector buildDetectionRayVectors(const CameraSettings& settings, const QSize& imageSize, double referenceFovDegrees, double centerOffsetXPixels, double centerOffsetYPixels, double distortionK1, const QVector<CameraPipelineStarDetection>& starDetections, const QVector<int>& detectionIndices, QVector<SkyVector>& detectionRayVectors, QVector<quint8>& detectionRayVectorValid);
 
 // A single quad in the catalog quad-code index: its vector code (buildVectorQuadCode output,
 // optionally extended with the AB great-circle angle for scale-aware mode-1 matching) plus
@@ -7172,175 +3313,7 @@ struct CatalogQuadCodeIndex
 // few per cell are kept as quad anchors; each anchor is combined with 3-of-k of its
 // angularly-nearest neighbours (restricted to the ~2-70deg scale band) to form quads, capped
 // per-anchor and overall so the index stays bounded (~50k quads) for large catalogs.
-static CatalogQuadCodeIndex buildCatalogQuadCodeIndex(const QVector<VisibleCatalogStar>& visibleStars,
-                                                       bool includeScaleDimension,
-                                                       int brightPoolLimit = 0)
-{
-    CatalogQuadCodeIndex index;
-    index.dimensions = includeScaleDimension ? 5 : 4;
-    if (visibleStars.size() < 4) {
-        return index;
-    }
-
-    // Bright-pool mode: build an unstructured C(k,4) index over the brightest
-    // brightPoolLimit catalog stars (visibleStars is magnitude-sorted, brightest
-    // first), mirroring the proven legacy buildCatalogQuadSignatures support.
-    // This aligns the catalog quad support with the detection side (which forms
-    // quads from the brightest ~16 detections): the anchor+6-nearest-neighbour
-    // structure below draws neighbours from ALL visible stars, so a bright
-    // anchor's nearest catalog neighbours are faint nearby stars that differ
-    // from its nearest *detected* neighbours - giving 0 code matches on wide
-    // fisheye mode-1 images (e.g. stars-wide-2.jpg). A shared C(k,4)-over-bright
-    // pool guarantees any 4 detected bright stars have their quad in the index.
-    if (brightPoolLimit > 0) {
-        const int poolSize = std::min<int>(brightPoolLimit, visibleStars.size());
-        for (int a = 0; a < poolSize; ++a) {
-            for (int b = a + 1; b < poolSize; ++b) {
-                for (int c = b + 1; c < poolSize; ++c) {
-                    for (int d = c + 1; d < poolSize; ++d) {
-                        const std::array<int, 4> starIndices = {{a, b, c, d}};
-                        const std::array<SkyVector, 4> vectors = {{
-                            visibleStars[a].vector,
-                            visibleStars[b].vector,
-                            visibleStars[c].vector,
-                            visibleStars[d].vector
-                        }};
-                        const QuadVectorCode quadCode = buildVectorQuadCode(vectors);
-                        if (!quadCode.valid) {
-                            continue;
-                        }
-                        CatalogQuadCodeEntry entry;
-                        entry.code[0] = quadCode.xC;
-                        entry.code[1] = quadCode.yC;
-                        entry.code[2] = quadCode.xD;
-                        entry.code[3] = quadCode.yD;
-                        entry.code[4] = quadCode.angleABRadians;
-                        for (int k = 0; k < 4; ++k) {
-                            entry.visibleStarIndices[k] = starIndices[quadCode.order[k]];
-                        }
-                        index.addEntry(entry);
-                    }
-                }
-            }
-        }
-        return index;
-    }
-
-    constexpr double cellSizeDegrees = 10.0;
-    constexpr int maxStarsPerCell = 6;
-    constexpr int neighborCount = 6;
-    constexpr int maxQuadsPerAnchor = 8;
-    constexpr int maxTotalQuads = 50000;
-    constexpr double minNeighborSeparationDegrees = 2.0;
-    constexpr double maxNeighborSeparationDegrees = 70.0;
-
-    QHash<quint64, QVector<int>> cellStars; // az/el cell key -> visibleStars indices
-    for (int i = 0; i < visibleStars.size(); ++i)
-    {
-        const qint64 azCell = static_cast<qint64>(std::floor(visibleStars[i].azimuthDegrees / cellSizeDegrees));
-        const qint64 elCell = static_cast<qint64>(std::floor((visibleStars[i].elevationDegrees + 90.0) / cellSizeDegrees));
-        const quint64 key = (static_cast<quint64>(azCell + 64) << 16) | static_cast<quint64>(elCell + 64);
-        cellStars[key].append(i);
-    }
-
-    QVector<int> anchorIndices;
-    for (auto it = cellStars.begin(); it != cellStars.end(); ++it)
-    {
-        QVector<int>& starsInCell = it.value();
-        std::sort(starsInCell.begin(), starsInCell.end(), [&](int lhs, int rhs) {
-            return visibleStars[lhs].magnitude < visibleStars[rhs].magnitude;
-        });
-        const int keepCount = std::min<int>(maxStarsPerCell, starsInCell.size());
-        for (int j = 0; j < keepCount; ++j) {
-            anchorIndices.append(starsInCell[j]);
-        }
-    }
-
-    const double minNeighborDot = std::cos(degToRad(maxNeighborSeparationDegrees));
-    const double maxNeighborDot = std::cos(degToRad(minNeighborSeparationDegrees));
-
-    for (int anchor : anchorIndices)
-    {
-        if (index.entries.size() >= maxTotalQuads) {
-            break;
-        }
-
-        QVector<std::pair<double, int>> neighborDistances;
-        neighborDistances.reserve(visibleStars.size());
-        for (int j = 0; j < visibleStars.size(); ++j)
-        {
-            if (j == anchor) {
-                continue;
-            }
-            const double angleDot = std::clamp(dot(visibleStars[anchor].vector, visibleStars[j].vector), -1.0, 1.0);
-            // Restrict neighbours to the design's scale band: too-close stars don't add
-            // distinguishing geometry, too-far stars rarely co-occur within one detection FoV.
-            if ((angleDot < minNeighborDot) || (angleDot > maxNeighborDot)) {
-                continue;
-            }
-            neighborDistances.append({std::acos(angleDot), j});
-        }
-
-        const int kCount = std::min<int>(neighborCount, static_cast<int>(neighborDistances.size()));
-        if (kCount < 3) {
-            continue;
-        }
-        std::partial_sort(neighborDistances.begin(), neighborDistances.begin() + kCount, neighborDistances.end(),
-            [](const std::pair<double, int>& lhs, const std::pair<double, int>& rhs) {
-                return lhs.first < rhs.first;
-            });
-
-        int quadsForAnchor = 0;
-        for (int a = 0; (a < kCount) && (quadsForAnchor < maxQuadsPerAnchor); ++a)
-        {
-            for (int b = a + 1; (b < kCount) && (quadsForAnchor < maxQuadsPerAnchor); ++b)
-            {
-                for (int c = b + 1; (c < kCount) && (quadsForAnchor < maxQuadsPerAnchor); ++c)
-                {
-                    const std::array<int, 4> starIndices = {{
-                        anchor,
-                        neighborDistances[a].second,
-                        neighborDistances[b].second,
-                        neighborDistances[c].second
-                    }};
-                    const std::array<SkyVector, 4> vectors = {{
-                        visibleStars[starIndices[0]].vector,
-                        visibleStars[starIndices[1]].vector,
-                        visibleStars[starIndices[2]].vector,
-                        visibleStars[starIndices[3]].vector
-                    }};
-                    const QuadVectorCode quadCode = buildVectorQuadCode(vectors);
-                    if (!quadCode.valid) {
-                        continue;
-                    }
-
-                    CatalogQuadCodeEntry entry;
-                    entry.code[0] = quadCode.xC;
-                    entry.code[1] = quadCode.yC;
-                    entry.code[2] = quadCode.xD;
-                    entry.code[3] = quadCode.yD;
-                    entry.code[4] = quadCode.angleABRadians;
-                    for (int k = 0; k < 4; ++k) {
-                        entry.visibleStarIndices[k] = starIndices[quadCode.order[k]];
-                    }
-                    index.addEntry(entry);
-                    ++quadsForAnchor;
-                    if (index.entries.size() >= maxTotalQuads) {
-                        break;
-                    }
-                }
-                if (index.entries.size() >= maxTotalQuads) {
-                    break;
-                }
-            }
-            if (index.entries.size() >= maxTotalQuads) {
-                break;
-            }
-        }
-    }
-
-    return index;
-}
+static CatalogQuadCodeIndex buildCatalogQuadCodeIndex(const QVector<VisibleCatalogStar>& visibleStars, bool includeScaleDimension, int brightPoolLimit = 0);
 
 QVector<QuadSignature> buildCatalogQuadSignatures(const CameraSettings& settings,
                                                   const QVector<VisibleCatalogStar>& visibleStars)
@@ -11987,23 +7960,9 @@ QVector<Evaluation> buildVectorQuadBlindSeeds(const CameraSettings& settings,
     return selectConsensusSeedRepresentatives(settings, seeds, seedLimit, "vector-quad");
 }
 
-static quint64 spatialCellKey(int x, int y)
-{
-    return (static_cast<quint64>(static_cast<quint32>(x)) << 32)
-        | static_cast<quint32>(y);
-}
+static quint64 spatialCellKey(int x, int y);
 
-static double angularDistanceDegrees(double lhs, double rhs)
-{
-    double delta = std::fabs(lhs - rhs);
-    while (delta > 360.0) {
-        delta -= 360.0;
-    }
-    if (delta > 180.0) {
-        delta = 360.0 - delta;
-    }
-    return delta;
-}
+static double angularDistanceDegrees(double lhs, double rhs);
 
 const QVector<double>& detectionBrightnessRanks(const QVector<CameraPipelineStarDetection>& starDetections,
                                                 const QVector<int>& detectionIndices)
@@ -12188,29 +8147,7 @@ double matchBrightnessRankError(const QVector<CameraPipelineStarDetection>& star
     return count > 0 ? sumError / count : 0.0;
 }
 
-static double meanCatalogMagnitudeForMatches(const QVector<CatalogStar>& catalogStars,
-                                             const QVector<Match>& matches)
-{
-    double sumMagnitude = 0.0;
-    int count = 0;
-
-    for (const Match& match : matches)
-    {
-        if ((match.catalogIndex < 0) || (match.catalogIndex >= catalogStars.size())) {
-            continue;
-        }
-
-        const double magnitude = catalogStars[match.catalogIndex].magnitude;
-        if (!std::isfinite(magnitude)) {
-            continue;
-        }
-
-        sumMagnitude += magnitude;
-        ++count;
-    }
-
-    return count > 0 ? sumMagnitude / count : std::numeric_limits<double>::infinity();
-}
+static double meanCatalogMagnitudeForMatches(const QVector<CatalogStar>& catalogStars, const QVector<Match>& matches);
 
 bool shouldPopulatePoseScoringMetrics(const CameraSettings& settings,
                                       const Evaluation& evaluation,
@@ -12529,288 +8466,9 @@ QVector<Match> buildMatches(const PlateSolveCatalogContext& catalogContext,
     return matches;
 }
 
-static void appendSupplementalMatches(const QVector<CameraPipelineStarDetection>& starDetections,
-                                      const QVector<ProjectedCatalogStar>& projectedStars,
-                                      double matchRadiusPixels,
-                                      const QVector<int>* supplementalDetectionIndices,
-                                      bool narrowGuidedSolve,
-                                      bool allowTightArtifactCoincidence,
-                                      QVector<Match>& matches)
-{
-    QVector<bool> detectionMatched(starDetections.size(), false);
-    QHash<int, bool> catalogMatched;
-    catalogMatched.reserve(matches.size());
-    for (const Match& match : matches)
-    {
-        detectionMatched[match.detectionIndex] = true;
-        catalogMatched.insert(match.catalogIndex, true);
-    }
+static void appendSupplementalMatches(const QVector<CameraPipelineStarDetection>& starDetections, const QVector<ProjectedCatalogStar>& projectedStars, double matchRadiusPixels, const QVector<int>* supplementalDetectionIndices, bool narrowGuidedSolve, bool allowTightArtifactCoincidence, QVector<Match>& matches);
 
-    // Bound supplemental matches to a quality envelope derived from the already-accepted
-    // inlier matches. Without this gate, every unmatched detection within the loose radius
-    // would be promoted to a match, inflating m_matchedStars and corrupting the reported
-    // RMS with what the bipartite assignment had already rejected.
-    const double medianAcceptedDistance = medianCandidateDistancePixels(matches);
-    const double supplementalRadiusCap = (medianAcceptedDistance > 0.0)
-        ? std::min(matchRadiusPixels, std::max(2.0, medianAcceptedDistance * 1.5))
-        : matchRadiusPixels;
-    const double maxDistanceSquared = supplementalRadiusCap * supplementalRadiusCap;
-
-    // Pre-sort projected stars into a spatial grid to avoid the O(D x P) loop that the
-    // original implementation used; for D=32 detections and P=500 catalog stars this cut
-    // ~16k coordinate compares per call.
-    const double cellSize = std::max(1.0, supplementalRadiusCap);
-    QHash<quint64, QVector<int>> projectedGrid;
-    projectedGrid.reserve(projectedStars.size());
-    for (int projectedIndex = 0; projectedIndex < projectedStars.size(); ++projectedIndex)
-    {
-        const QPointF& point = projectedStars[projectedIndex].point;
-        const int cellX = static_cast<int>(std::floor(point.x() / cellSize));
-        const int cellY = static_cast<int>(std::floor(point.y() / cellSize));
-        projectedGrid[spatialCellKey(cellX, cellY)].append(projectedIndex);
-    }
-
-    // A hot-pixel-suspect detection is normally excluded from supplemental matching (its
-    // compact/low-fill signature is shared with hot pixels and cosmic-ray spikes). But in a
-    // WIDE FISHEYE real stars are heavily undersampled (~1 px) and routinely get flagged
-    // suspect, and a TIGHT positional coincidence with a projected catalogue star at the solved
-    // pose is strong evidence the detection is that real star: an artifact is fixed to the
-    // sensor and would not land on a moving sky position (the single-frame equivalent of the
-    // star tracking across frames). So for wide fisheye only, admit a hot-pixel-suspect
-    // detection -- and waive the compact-bright guard for it -- when it falls within this tight
-    // radius (well inside the loose supplemental cap). Non-suspect detections and narrow fields
-    // keep the original behaviour, so genuine artifacts within the loose radius stay rejected.
-    // The exception is deliberately narrow: a tight radius, and only for a genuinely BRIGHT
-    // detection coinciding with a BRIGHT catalogue star. A real bright star mis-flagged as a hot
-    // pixel (Dziban: snr~134, mag 4.57) fits this; faint compact artifacts -- the dangerous,
-    // common case in dense/synthetic frames -- do not, so they stay excluded.
-    const double tightCoincidenceRadius = std::min(supplementalRadiusCap, std::max(2.0, matchRadiusPixels * 0.10));
-    const double tightCoincidenceRadiusSquared = tightCoincidenceRadius * tightCoincidenceRadius;
-    constexpr double kSuspectCoincidenceMinSnr = 100.0;
-    constexpr double kSuspectCoincidenceMaxCatalogMag = 6.5;
-
-    const auto appendSupplementalForDetection = [&](int detectionIndex)
-    {
-        if ((detectionIndex < 0)
-            || (detectionIndex >= starDetections.size())
-            || detectionMatched[detectionIndex])
-        {
-            return;
-        }
-        const bool detectionSuspect = starDetections[detectionIndex].m_hotPixelSuspect;
-        // Hot-pixel-suspect detections are admitted only via the wide-fisheye tight-coincidence
-        // exception, and only when the detection itself is bright; otherwise keep the original
-        // outright exclusion.
-        if (detectionSuspect
-            && (!allowTightArtifactCoincidence
-                || (static_cast<double>(starDetections[detectionIndex].m_snr) < kSuspectCoincidenceMinSnr)))
-        {
-            return;
-        }
-
-        const QPointF detectionPoint = starDetections[detectionIndex].m_center;
-        const int cellX = static_cast<int>(std::floor(detectionPoint.x() / cellSize));
-        const int cellY = static_cast<int>(std::floor(detectionPoint.y() / cellSize));
-        double bestDistanceSquared = std::numeric_limits<double>::max();
-        double bestScore = std::numeric_limits<double>::max();
-        int bestCatalogIndex = -1;
-
-        for (int dy = -1; dy <= 1; ++dy)
-        {
-            for (int dx = -1; dx <= 1; ++dx)
-            {
-                const auto it = projectedGrid.constFind(spatialCellKey(cellX + dx, cellY + dy));
-                if (it == projectedGrid.cend()) {
-                    continue;
-                }
-                for (int projectedIndex : it.value())
-                {
-                    const ProjectedCatalogStar& projected = projectedStars[projectedIndex];
-                    if (catalogMatched.contains(projected.catalogIndex)) {
-                        continue;
-                    }
-                    const double dxp = detectionPoint.x() - projected.point.x();
-                    const double dyp = detectionPoint.y() - projected.point.y();
-                    const double distanceSquared = dxp * dxp + dyp * dyp;
-                    if (distanceSquared > maxDistanceSquared) {
-                        continue;
-                    }
-                    // A hot-pixel-suspect detection (wide fisheye) is admitted only on a tight
-                    // coincidence; the compact-bright guard is waived for exactly that case.
-                    const bool tightSuspectCoincidence = detectionSuspect
-                        && allowTightArtifactCoincidence
-                        && (distanceSquared <= tightCoincidenceRadiusSquared)
-                        && (projected.magnitude <= kSuspectCoincidenceMaxCatalogMag);
-                    if (detectionSuspect && !tightSuspectCoincidence) {
-                        continue;
-                    }
-                    const bool compactReject = isImplausiblyCompactBrightCatalogDetection(
-                        starDetections[detectionIndex],
-                        projected.magnitude,
-                        narrowGuidedSolve);
-                    if (compactReject && !tightSuspectCoincidence) {
-                        continue;
-                    }
-                    const double distancePixels = std::sqrt(distanceSquared);
-                    const double score = distancePixels
-                        + supplementalRadiusCap * faintCatalogAssignmentPenalty(projected.magnitude)
-                        - std::min(supplementalRadiusCap * 0.15,
-                            std::log1p(detectionReliabilityMetric(starDetections[detectionIndex])));
-                    if (score < bestScore)
-                    {
-                        bestScore = score;
-                        bestDistanceSquared = distanceSquared;
-                        bestCatalogIndex = projected.catalogIndex;
-                    }
-                }
-            }
-        }
-
-        if (bestCatalogIndex >= 0)
-        {
-            const double distancePixels = std::sqrt(bestDistanceSquared);
-            matches.append({detectionIndex, bestCatalogIndex, distancePixels});
-            detectionMatched[detectionIndex] = true;
-            catalogMatched.insert(bestCatalogIndex, true);
-            if (kLogPlateSolveCandidates) {
-                qDebug() << "CameraPlateSolver: supplemental final match"
-                         << "detection=" << detectionIndex
-                         << "catalog=" << bestCatalogIndex
-                         << "distance=" << distancePixels;
-            }
-        }
-    };
-
-    if (supplementalDetectionIndices)
-    {
-        for (int detectionIndex : *supplementalDetectionIndices)
-        {
-            if ((detectionIndex >= 0) && (detectionIndex < starDetections.size())) {
-                appendSupplementalForDetection(detectionIndex);
-            }
-        }
-    }
-    else
-    {
-        for (int detectionIndex = 0; detectionIndex < starDetections.size(); ++detectionIndex) {
-            appendSupplementalForDetection(detectionIndex);
-        }
-    }
-}
-
-static void appendWideBrightSupplementalMatches(const CameraSettings& settings,
-                                                const QVector<CameraPipelineStarDetection>& starDetections,
-                                                const QVector<ProjectedCatalogStar>& projectedStars,
-                                                const QSize& imageSize,
-                                                double matchRadiusPixels,
-                                                QVector<Match>& matches)
-{
-    if (!isWidePlateSolveContext(settings)
-        || matches.isEmpty())
-    {
-        return;
-    }
-
-    const double brightRadius = std::min(
-        matchRadiusPixels + 6.0,
-        std::max(matchRadiusPixels, matchRadiusPixels * 1.25));
-    if (brightRadius <= matchRadiusPixels) {
-        return;
-    }
-
-    QVector<bool> detectionMatched(starDetections.size(), false);
-    QHash<int, bool> catalogMatched;
-    catalogMatched.reserve(matches.size());
-    for (const Match& match : matches)
-    {
-        if ((match.detectionIndex >= 0) && (match.detectionIndex < detectionMatched.size())) {
-            detectionMatched[match.detectionIndex] = true;
-        }
-        catalogMatched.insert(match.catalogIndex, true);
-    }
-
-    struct BrightCandidate
-    {
-        int detectionIndex = -1;
-        int catalogIndex = -1;
-        double distancePixels = 0.0;
-        double magnitude = 0.0;
-    };
-    QVector<BrightCandidate> candidates;
-    const double brightRadiusSquared = brightRadius * brightRadius;
-    const QRectF imageBounds(
-        -brightRadius,
-        -brightRadius,
-        imageSize.width() + 2.0 * brightRadius,
-        imageSize.height() + 2.0 * brightRadius);
-
-    for (const ProjectedCatalogStar& projectedStar : projectedStars)
-    {
-        if ((projectedStar.magnitude > 2.5)
-            || catalogMatched.contains(projectedStar.catalogIndex)
-            || !imageBounds.contains(projectedStar.point))
-        {
-            continue;
-        }
-
-        int nearestDetectionIndex = -1;
-        double nearestDistanceSquared = brightRadiusSquared;
-        for (int detectionIndex = 0; detectionIndex < starDetections.size(); ++detectionIndex)
-        {
-            if (detectionMatched[detectionIndex]
-                || !isDetectionUsableForBrightPrior(starDetections[detectionIndex]))
-            {
-                continue;
-            }
-            if (isImplausiblyCompactBrightCatalogDetection(starDetections[detectionIndex], projectedStar.magnitude)) {
-                continue;
-            }
-
-            const QPointF delta = starDetections[detectionIndex].m_center - projectedStar.point;
-            const double distanceSquared = delta.x() * delta.x() + delta.y() * delta.y();
-            if (distanceSquared < nearestDistanceSquared)
-            {
-                nearestDistanceSquared = distanceSquared;
-                nearestDetectionIndex = detectionIndex;
-            }
-        }
-
-        if (nearestDetectionIndex >= 0)
-        {
-            candidates.append({
-                nearestDetectionIndex,
-                projectedStar.catalogIndex,
-                std::sqrt(nearestDistanceSquared),
-                projectedStar.magnitude
-            });
-        }
-    }
-
-    std::sort(candidates.begin(), candidates.end(), [](const BrightCandidate& lhs, const BrightCandidate& rhs) {
-        if (!qFuzzyCompare(lhs.magnitude + 1.0, rhs.magnitude + 1.0)) {
-            return lhs.magnitude < rhs.magnitude;
-        }
-        return lhs.distancePixels < rhs.distancePixels;
-    });
-
-    int appended = 0;
-    for (const BrightCandidate& candidate : candidates)
-    {
-        if (appended >= 4) {
-            break;
-        }
-        if (detectionMatched[candidate.detectionIndex]
-            || catalogMatched.contains(candidate.catalogIndex))
-        {
-            continue;
-        }
-
-        detectionMatched[candidate.detectionIndex] = true;
-        catalogMatched.insert(candidate.catalogIndex, true);
-        matches.append({candidate.detectionIndex, candidate.catalogIndex, candidate.distancePixels});
-        ++appended;
-    }
-}
+static void appendWideBrightSupplementalMatches(const CameraSettings& settings, const QVector<CameraPipelineStarDetection>& starDetections, const QVector<ProjectedCatalogStar>& projectedStars, const QSize& imageSize, double matchRadiusPixels, QVector<Match>& matches);
 
 void logUnmatchedDetections(const PlateSolveCatalogContext& catalogContext,
                             const QVector<CameraPipelineStarDetection>& starDetections,
@@ -13254,50 +8912,15 @@ Evaluation evaluateAnchoredPose(const CameraSettings& settings,
     return evaluation;
 }
 
-static double medianDistancePixels(const QVector<Match>& matches)
-{
-    if (matches.isEmpty()) {
-        return 0.0;
-    }
+static double medianDistancePixels(const QVector<Match>& matches);
 
-    QVector<double> distances;
-    distances.reserve(matches.size());
-    for (const Match& match : matches) {
-        distances.append(match.distancePixels);
-    }
-
-    std::sort(distances.begin(), distances.end());
-    const int middle = distances.size() / 2;
-    if ((distances.size() % 2) == 0) {
-        return 0.5 * (distances[middle - 1] + distances[middle]);
-    }
-    return distances[middle];
-}
-
-static double maxDistancePixels(const QVector<Match>& matches)
-{
-    double maxDistance = 0.0;
-    for (const Match& match : matches) {
-        maxDistance = std::max(maxDistance, match.distancePixels);
-    }
-    return maxDistance;
-}
+static double maxDistancePixels(const QVector<Match>& matches);
 
 // RMS ceiling for a sparse guided-anchor solve, relaxed as more matches accumulate
 // (more matches => a high RMS is less likely to be a coincidence). Shared by the
 // pre-final evaluation gate and the final-pass ranking gate so the ladder stays in
 // one place.
-static double sparseGuidedMaxRms(const CameraSettings& settings, int matchCount)
-{
-    const double radius = static_cast<double>(settings.m_plateSolveFinalMatchRadius);
-    if (matchCount >= std::max(settings.m_plateSolveMinMatches + 8, 12)) {
-        return std::min(radius * 0.75, 18.0);
-    }
-    if (matchCount >= std::max(settings.m_plateSolveMinMatches + 4, 8)) {
-        return std::min(radius * 0.68, 16.0);
-    }
-    return std::min(radius * 0.62, 14.5);
-}
+static double sparseGuidedMaxRms(const CameraSettings& settings, int matchCount);
 
 bool isAcceptableSparseGuidedPairEvaluation(const CameraSettings& settings,
                                             const PlateSolveCatalogContext& catalogContext,
@@ -13571,20 +9194,7 @@ Evaluation promoteSparseGuidedPairFromMatches(const CameraSettings& settings,
 // bright star whose measured magnitude is unreliable; the strong match-count and
 // bright-support requirements still exclude the genuinely weak poses (e.g.
 // stars-narrow-1/3, which match only ~3 bright detections).
-static bool hasDenseFinalEvidenceOverridingSeedRadial(const CameraSettings& settings,
-                                                      const FinalMatchPassEvaluation& finalPass)
-{
-    return !usesSeedProjectedBrightGate(settings)
-        && (finalPass.finalMatches.size() >= static_cast<qsizetype>(std::max(settings.m_plateSolveMinMatches + 50, 80)))
-        && (finalPass.matchedBrightDetections >= std::min(12, std::max(4, finalPass.brightDetections / 2)))
-        && (finalPass.matchedBrightProjectedStars >= std::min(8, std::max(3, finalPass.brightProjectedStars / 2)))
-        && (finalPass.matchedProjectedMagnitudeSupport >= 60.0)
-        && (finalPass.brightDetectionMagnitudeError <= 1.30)
-        && (!std::isfinite(finalPass.brightnessRankError) || (finalPass.brightnessRankError <= 0.30))
-        && (finalPass.rmsErrorPixels <= std::min(
-                static_cast<double>(settings.m_plateSolveFinalMatchRadius) * 0.60,
-                16.0));
-}
+static bool hasDenseFinalEvidenceOverridingSeedRadial(const CameraSettings& settings, const FinalMatchPassEvaluation& finalPass);
 
 // Named-bright-anchor certificate: a pose that fits >= 2 named bright anchors at
 // <= 3 px rms, fits a dense match set at <= 3 px rms, and stays within the
@@ -13643,116 +9253,9 @@ bool hasNamedBrightAnchorCertifiedPose(const CameraSettings& settings,
 // non-rejecting value), so the marginal contribution of every accept/reject gate to the corpus +
 // negative suites can be measured one at a time, exactly like the seed-engine ablation. Inert unless
 // the env var is set (read once, cached). See doc/camera/plate-solver-notes.md "WS3".
-static bool gateAblationDisabled(const char* token)
-{
-    static const QString disabled = qEnvironmentVariable("SDRANGEL_CAMERA_PLATE_SOLVER_DISABLE_GATE");
-    if (disabled.isEmpty()) {
-        return false;
-    }
-    const QStringList tokens = disabled.split(QLatin1Char(','), Qt::SkipEmptyParts);
-    for (const QString& t : tokens) {
-        if (t.trimmed().compare(QLatin1String(token), Qt::CaseInsensitive) == 0) {
-            return true;
-        }
-    }
-    return false;
-}
+static bool gateAblationDisabled(const char* token);
 
-static double poseFalseAlarmLogOdds(const PlateSolveCatalogContext& catalogContext,
-                                    const FinalMatchPassEvaluation& finalPass,
-                                    const QSize& imageSize,
-                                    double matchRadiusPixels,
-                                    int detectionCount)
-{
-    if (!finalPass.projectorValid
-        || finalPass.finalMatches.isEmpty()
-        || (imageSize.width() <= 0)
-        || (imageSize.height() <= 0)
-        || (matchRadiusPixels <= 0.0)
-        || finalPass.projectedStars.isEmpty())
-    {
-        return 0.0;
-    }
-
-    const double area = static_cast<double>(imageSize.width())
-        * static_cast<double>(imageSize.height());
-    const double matchDiskArea = kPi * matchRadiusPixels * matchRadiusPixels;
-    const int projectedCount = static_cast<int>(finalPass.projectedStars.size());
-    // Tightness scale for the bright bonus. Real matches here sit well inside the match
-    // radius but not sub-pixel (pose-model error), so r/2 gives a gentle discount to
-    // loose matches rather than killing them.
-    const double sigma = std::max(1.0, matchRadiusPixels * 0.5);
-    const double inverseTwoSigmaSquared = 1.0 / (2.0 * sigma * sigma);
-
-    // Sorted projected-catalog magnitudes for a fast rho(<= m) lookup.
-    QVector<double> projectedMagnitudes;
-    projectedMagnitudes.reserve(finalPass.projectedStars.size());
-    for (const ProjectedCatalogStar& star : finalPass.projectedStars) {
-        projectedMagnitudes.append(star.magnitude);
-    }
-    std::sort(projectedMagnitudes.begin(), projectedMagnitudes.end());
-
-    // Magnitude-limited count-surprise (Poisson log-likelihood ratio). Under H0 (chance)
-    // the number of *bright* detection<->catalog coincidences within the match radius is
-    // ~Poisson(lambda_bright). Observing K_bright >> lambda_bright is strong evidence of
-    // a real alignment. Restricting the count to bright stars is deliberate: in a deep
-    // field (mag 15-19) a *wrong* roll still matches hundreds of faint stars, so an
-    // all-magnitude count-surprise rewards wrong rolls too; limiting it to the bright
-    // tier means only a roll that lands the genuinely-bright stars earns count-surprise,
-    // which is what separates the correct roll from a faint-coincidence one. A correct
-    // dense solve still wins comfortably because it matches far more bright stars than a
-    // wrong roll (so m51-2 stays safe). Fields with no bright tier fall back to the
-    // rarity bonus below.
-    constexpr double kCountSurpriseBrightLimit = 13.0;
-    int brightMatches = 0;
-    for (const Match& match : finalPass.finalMatches) {
-        if ((match.catalogIndex >= 0)
-            && (match.catalogIndex < catalogContext.catalogStars.size())
-            && (catalogContext.catalogStars[match.catalogIndex].magnitude <= kCountSurpriseBrightLimit)) {
-            ++brightMatches;
-        }
-    }
-    const int brightProjectedCount = static_cast<int>(
-        std::upper_bound(projectedMagnitudes.cbegin(), projectedMagnitudes.cend(), kCountSurpriseBrightLimit)
-        - projectedMagnitudes.cbegin());
-    const double safeDetections = static_cast<double>(std::max(detectionCount, 1));
-    const double brightDensity = static_cast<double>(brightProjectedCount) / area;
-    const double lambda = std::min(
-        std::min(safeDetections, static_cast<double>(std::max(1, brightProjectedCount))),
-        safeDetections * brightDensity * matchDiskArea);
-    double logOdds = 0.0;
-    if ((static_cast<double>(brightMatches) > lambda) && (lambda > 0.0))
-    {
-        logOdds += static_cast<double>(brightMatches)
-                * std::log(static_cast<double>(brightMatches) / lambda)
-            - (static_cast<double>(brightMatches) - lambda);
-    }
-
-    // Bright-rarity bonus: a tight match to a star rarer than the field average (a
-    // bright star) is far more surprising than one to a common faint star. The rarity
-    // is log(projectedCount / #stars-at-least-this-bright); it is weighted by tightness
-    // so loose coincidences add little. This is what separates the correct roll (which
-    // lands the rare bright stars on detections) from a faint-coincidence roll.
-    for (const Match& match : finalPass.finalMatches)
-    {
-        if ((match.catalogIndex < 0) || (match.catalogIndex >= catalogContext.catalogStars.size())) {
-            continue;
-        }
-        const double magnitude = catalogContext.catalogStars[match.catalogIndex].magnitude;
-        const int brighterOrEqual = static_cast<int>(
-            std::upper_bound(projectedMagnitudes.cbegin(), projectedMagnitudes.cend(), magnitude)
-            - projectedMagnitudes.cbegin());
-        const double rarity = std::log(
-            static_cast<double>(projectedCount) / static_cast<double>(std::max(1, brighterOrEqual)));
-        if (rarity <= 0.0) {
-            continue;
-        }
-        const double d = match.distancePixels;
-        const double tightness = std::exp(-d * d * inverseTwoSigmaSquared);
-        logOdds += rarity * tightness;
-    }
-    return logOdds;
-}
+static double poseFalseAlarmLogOdds(const PlateSolveCatalogContext& catalogContext, const FinalMatchPassEvaluation& finalPass, const QSize& imageSize, double matchRadiusPixels, int detectionCount);
 
 // (WS3 2026-06-19) hasOverwhelmingFaintGuidedSupport was removed: it bypassed the brightness
 // acceptance gates for faint anchor-less fields, but ablation showed it casts no deciding vote on
@@ -14040,153 +9543,13 @@ bool hasStrongDenseNarrowGuidedFinalPass(const CameraSettings& settings,
             || (finalPass.matchedBrightDetections >= std::min(finalPass.brightDetections, 12)));
 }
 
-static double detectionMatchWeight(const CameraPipelineStarDetection& detection)
-{
-    const double centroidUncertainty = std::isfinite(static_cast<double>(detection.m_centroidUncertainty))
-        ? std::max(0.05, static_cast<double>(detection.m_centroidUncertainty))
-        : 4.0;
-    const double snr = std::isfinite(static_cast<double>(detection.m_snr))
-        ? std::max(0.0, static_cast<double>(detection.m_snr))
-        : 0.0;
-    double weight = 1.0 / (centroidUncertainty * centroidUncertainty);
-    weight *= std::max(0.25, static_cast<double>(detection.m_roundness));
-    weight *= std::max(0.25, static_cast<double>(detection.m_fillRatio));
-    weight /= std::max(1.0, static_cast<double>(detection.m_aspectRatio));
-    weight *= 1.0 + std::min(4.0, std::log1p(snr));
-    if (detection.m_saturated) {
-        weight *= 0.65;
-    }
-    if (detection.m_hotPixelSuspect) {
-        weight *= 0.10;
-    }
-    return std::clamp(weight, 0.01, 100.0);
-}
+static double detectionMatchWeight(const CameraPipelineStarDetection& detection);
 
-static double weightedRmsDistancePixels(const QVector<CameraPipelineStarDetection>& starDetections,
-                                        const QVector<Match>& matches)
-{
-    double weightedSumSquaredError = 0.0;
-    double weightSum = 0.0;
-    for (const Match& match : matches)
-    {
-        if ((match.detectionIndex < 0) || (match.detectionIndex >= starDetections.size())) {
-            continue;
-        }
-        const double weight = detectionMatchWeight(starDetections[match.detectionIndex]);
-        weightedSumSquaredError += weight * match.distancePixels * match.distancePixels;
-        weightSum += weight;
-    }
-    if (weightSum <= 0.0) {
-        double sumSquaredError = 0.0;
-        for (const Match& match : matches) {
-            sumSquaredError += match.distancePixels * match.distancePixels;
-        }
-        return matches.isEmpty() ? std::numeric_limits<double>::infinity()
-            : std::sqrt(sumSquaredError / matches.size());
-    }
-    return std::sqrt(weightedSumSquaredError / weightSum);
-}
+static double weightedRmsDistancePixels(const QVector<CameraPipelineStarDetection>& starDetections, const QVector<Match>& matches);
 
-static bool hasGeometricallyConsistentMatches(const QVector<CameraPipelineStarDetection>& starDetections,
-                                              const QVector<ProjectedCatalogStar>& projectedStars,
-                                              const QVector<Match>& matches,
-                                              double matchRadiusPixels)
-{
-    if (matches.size() < 4) {
-        return true;
-    }
+static bool hasGeometricallyConsistentMatches(const QVector<CameraPipelineStarDetection>& starDetections, const QVector<ProjectedCatalogStar>& projectedStars, const QVector<Match>& matches, double matchRadiusPixels);
 
-    QHash<int, QPointF> projectedPointByCatalogIndex;
-    projectedPointByCatalogIndex.reserve(projectedStars.size());
-    for (const ProjectedCatalogStar& projectedStar : projectedStars) {
-        projectedPointByCatalogIndex.insert(projectedStar.catalogIndex, projectedStar.point);
-    }
-
-    int checkedPairs = 0;
-    int consistentPairs = 0;
-    for (int i = 0; i < matches.size(); ++i)
-    {
-        const Match& lhs = matches[i];
-        if ((lhs.detectionIndex < 0) || (lhs.detectionIndex >= starDetections.size())) {
-            continue;
-        }
-        const auto lhsProjectedIt = projectedPointByCatalogIndex.constFind(lhs.catalogIndex);
-        if (lhsProjectedIt == projectedPointByCatalogIndex.cend()) {
-            continue;
-        }
-        for (int j = i + 1; j < matches.size(); ++j)
-        {
-            const Match& rhs = matches[j];
-            if ((rhs.detectionIndex < 0) || (rhs.detectionIndex >= starDetections.size())) {
-                continue;
-            }
-            const auto rhsProjectedIt = projectedPointByCatalogIndex.constFind(rhs.catalogIndex);
-            if (rhsProjectedIt == projectedPointByCatalogIndex.cend()) {
-                continue;
-            }
-
-            const double detectionDistance = pointDistancePixels(
-                starDetections[lhs.detectionIndex].m_center,
-                starDetections[rhs.detectionIndex].m_center);
-            const double projectedDistance = pointDistancePixels(lhsProjectedIt.value(), rhsProjectedIt.value());
-            const double tolerance = std::max(
-                std::max(3.0, matchRadiusPixels * 0.35),
-                0.08 * std::max(detectionDistance, projectedDistance));
-            ++checkedPairs;
-            if (std::fabs(detectionDistance - projectedDistance) <= tolerance) {
-                ++consistentPairs;
-            }
-        }
-    }
-
-    if (checkedPairs < 6) {
-        return true;
-    }
-    const double fraction = static_cast<double>(consistentPairs) / static_cast<double>(checkedPairs);
-    return fraction >= 0.55;
-}
-
-static QVector<Match> rejectOutlierMatches(const QVector<Match>& matches,
-                                    int minMatches,
-                                    double matchRadiusPixels,
-                                    int* outlierCount = nullptr)
-{
-    if (outlierCount) {
-        *outlierCount = 0;
-    }
-
-    if (matches.size() <= minMatches) {
-        return matches;
-    }
-
-    double sumSquaredError = 0.0;
-    for (const Match& match : matches) {
-        sumSquaredError += match.distancePixels * match.distancePixels;
-    }
-
-    const double rmsError = std::sqrt(sumSquaredError / matches.size());
-    const double medianError = medianDistancePixels(matches);
-    const double threshold = std::min(
-        matchRadiusPixels,
-        std::max(2.0, std::max(medianError * 2.5, rmsError * 1.75)));
-
-    QVector<Match> inliers;
-    inliers.reserve(matches.size());
-    for (const Match& match : matches) {
-        if (match.distancePixels <= threshold) {
-            inliers.append(match);
-        }
-    }
-
-    if (inliers.size() < minMatches) {
-        return matches;
-    }
-
-    if (outlierCount) {
-        *outlierCount = matches.size() - inliers.size();
-    }
-    return inliers;
-}
+static QVector<Match> rejectOutlierMatches(const QVector<Match>& matches, int minMatches, double matchRadiusPixels, int* outlierCount = nullptr);
 
 // Residual acceptance thresholds shared by the seed-mode "is this solve good
 // enough" checks. Every mode applies the same shape -- a minimum match count, then
@@ -14212,151 +9575,25 @@ struct ResidualGates
 // Worst residual after discarding the `dropCount` largest matches. Falls back to the
 // absolute maximum when there are too few matches to spare any (so sparse solves stay
 // strict).
-static double trimmedWorstDistancePixels(const QVector<Match>& matches, int dropCount)
-{
-    if (matches.isEmpty()) {
-        return 0.0;
-    }
-    if ((dropCount <= 0) || (matches.size() <= dropCount + 1)) {
-        return maxDistancePixels(matches);
-    }
-    QVector<double> distances;
-    distances.reserve(matches.size());
-    for (const Match& match : matches) {
-        distances.append(match.distancePixels);
-    }
-    std::sort(distances.begin(), distances.end());
-    return distances[distances.size() - 1 - dropCount];
-}
+static double trimmedWorstDistancePixels(const QVector<Match>& matches, int dropCount);
 
-static bool passesResidualGates(const QVector<Match>& matches,
-                                double rmsErrorPixels,
-                                double maxErrorPixels,
-                                const ResidualGates& gates)
-{
-    if (matches.size() < gates.minMatches) {
-        return false;
-    }
-    const double worstForGate = (gates.worstTrimCount > 0)
-        ? trimmedWorstDistancePixels(matches, gates.worstTrimCount)
-        : maxErrorPixels;
-    return (rmsErrorPixels <= gates.maxRms)
-        && (medianDistancePixels(matches) <= gates.maxMedian)
-        && (worstForGate <= gates.maxWorst);
-}
+static bool passesResidualGates(const QVector<Match>& matches, double rmsErrorPixels, double maxErrorPixels, const ResidualGates& gates);
 
-static bool isAcceptableBlindSolve(const CameraSettings& settings,
-                            const QVector<CameraPipelineStarDetection>& starDetections,
-                            const QVector<Match>& matches,
-                            double rmsErrorPixels,
-                            double maxErrorPixels)
-{
-    ResidualGates gates;
-    gates.minMatches = std::max(settings.m_plateSolveMinMatches + 2,
-        std::min(10, std::max(6, static_cast<int>(std::ceil(static_cast<double>(starDetections.size()) * 0.20)))));
-    gates.maxRms = std::min(settings.m_plateSolveFinalMatchRadius * 0.70, 20.0);
-    gates.maxMedian = std::min(settings.m_plateSolveFinalMatchRadius * 0.55, 15.0);
-    gates.maxWorst = std::min(settings.m_plateSolveFinalMatchRadius * 1.10, 45.0);
-    return passesResidualGates(matches, rmsErrorPixels, maxErrorPixels, gates);
-}
+static bool isAcceptableBlindSolve(const CameraSettings& settings, const QVector<CameraPipelineStarDetection>& starDetections, const QVector<Match>& matches, double rmsErrorPixels, double maxErrorPixels);
 
-static bool isAcceptableSparseWideBlindSolve(const CameraSettings& settings,
-                                             const QVector<CameraPipelineStarDetection>& starDetections,
-                                             const FinalMatchPassEvaluation& evaluation)
-{
-    if (!isWidePlateSolveContext(settings)
-        || (settings.m_plateSolveStartMode != CameraSettings::PlateSolveStartBlind)
-        || (starDetections.size() > 12)
-        || (evaluation.finalMatches.size() < 3))
-    {
-        return false;
-    }
+static bool isAcceptableSparseWideBlindSolve(const CameraSettings& settings, const QVector<CameraPipelineStarDetection>& starDetections, const FinalMatchPassEvaluation& evaluation);
 
-    return (evaluation.rmsErrorPixels <= std::min(settings.m_plateSolveFinalMatchRadius * 0.70, 18.0))
-        && (evaluation.medianErrorPixels <= std::min(settings.m_plateSolveFinalMatchRadius * 0.60, 16.0))
-        && (evaluation.maxErrorPixels <= std::min(settings.m_plateSolveFinalMatchRadius * 1.25, 32.0))
-        && (evaluation.matchedBrightDetections >= 2)
-        && (evaluation.brightDetectionMagnitudeError <= 1.50);
-}
+static bool isStrongGuidedSolve(const CameraSettings& settings, int minMatchCount, const Evaluation& evaluation);
 
-static bool isStrongGuidedSolve(const CameraSettings& settings,
-                         int minMatchCount,
-                         const Evaluation& evaluation)
-{
-    if (!evaluation.valid) {
-        return false;
-    }
+static int minimumDirectionSeedAcceptedMatches(const CameraSettings& settings, const QVector<CameraPipelineStarDetection>& starDetections);
 
-    const int minAcceptedMatches = std::max(minMatchCount + 2, 6);
-    const double maxRmsError = std::min(settings.m_plateSolveFinalMatchRadius * 0.45, 12.0);
-    return (evaluation.matchCount >= minAcceptedMatches) && (evaluation.rmsErrorPixels <= maxRmsError);
-}
+static double maxDirectionSeedRmsError(const CameraSettings& settings, int matchCount);
 
-static int minimumDirectionSeedAcceptedMatches(const CameraSettings& settings,
-                                               const QVector<CameraPipelineStarDetection>& starDetections)
-{
-    const int configuredMinimum = std::max(settings.m_plateSolveMinMatches, 4);
+static double maxNarrowGuidedFovDeltaDegrees(const CameraSettings& settings);
 
-    // In a guided narrow-field solve the user is explicitly providing FoV + direction,
-    // so requiring extra matches just because the detector found many faint blobs rejects
-    // valid 1-degree telescope images. Keep the match count at the configured floor and
-    // let RMS/median/max-distance gates carry the false-positive protection.
-    if (isNarrowField(settings)) {
-        return configuredMinimum;
-    }
-    if (settings.m_fov <= 15.0)
-    {
-        return std::max(configuredMinimum,
-            std::min(6, std::max(4, static_cast<int>(std::ceil(static_cast<double>(starDetections.size()) * 0.10)))));
-    }
-    if (starDetections.size() <= 12) {
-        return configuredMinimum;
-    }
+static bool isAcceptableNarrowGuidedFov(const CameraSettings& settings, double fovDegrees);
 
-    return std::max(settings.m_plateSolveMinMatches + 1,
-        std::min(8, std::max(5, static_cast<int>(std::ceil(static_cast<double>(starDetections.size()) * 0.15)))));
-}
-
-static double maxDirectionSeedRmsError(const CameraSettings& settings, int matchCount)
-{
-    const bool narrowField = isNarrowField(settings);
-    const bool denseNarrowFieldSolve = narrowField
-        && (matchCount >= (isLowMagnitudeNarrowGuidedSolve(settings) ? 16 : 20));
-    if (narrowField)
-    {
-        return denseNarrowFieldSolve
-            ? std::min(settings.m_plateSolveFinalMatchRadius * 0.70, 17.0)
-            : std::min(settings.m_plateSolveFinalMatchRadius * 0.62, 14.5);
-    }
-
-    return std::min(settings.m_plateSolveFinalMatchRadius * 0.70, 18.0);
-}
-
-static double maxNarrowGuidedFovDeltaDegrees(const CameraSettings& settings)
-{
-    return std::max(0.08, static_cast<double>(settings.m_fov) * 0.08);
-}
-
-static bool isAcceptableNarrowGuidedFov(const CameraSettings& settings, double fovDegrees)
-{
-    if (!plateSolveStartUsesDirection(settings)
-        || !plateSolveStartUsesFov(settings)
-        || (!isNarrowField(settings)))
-    {
-        return true;
-    }
-
-    return std::isfinite(fovDegrees)
-        && (std::fabs(fovDegrees - settings.m_fov) <= maxNarrowGuidedFovDeltaDegrees(settings));
-}
-
-static QString narrowGuidedFovRejectionReason(const CameraSettings& settings, double fovDegrees)
-{
-    return QStringLiteral("FoV %1 outside start FoV %2 +/- %3")
-        .arg(fovDegrees, 0, 'f', 3)
-        .arg(static_cast<double>(settings.m_fov), 0, 'f', 3)
-        .arg(maxNarrowGuidedFovDeltaDegrees(settings), 0, 'f', 3);
-}
+static QString narrowGuidedFovRejectionReason(const CameraSettings& settings, double fovDegrees);
 
 // Residual gates for a direction-seeded solve. Shared by isAcceptableDirectionSeedSolve()
 // and directionSeedRejectionReason() so the accept decision and the human-readable
@@ -14366,113 +9603,17 @@ static QString narrowGuidedFovRejectionReason(const CameraSettings& settings, do
 // -> looser 0.75x median gate. Wide-field fisheye distortion at large angles raises
 // residuals even for correct solves, so the median gate is 0.65x (= 15.6 px at a 24 px
 // radius) to accept those while still rejecting clearly wrong ones.
-static ResidualGates directionSeedResidualGates(const CameraSettings& settings,
-                                                const QVector<CameraPipelineStarDetection>& starDetections,
-                                                int matchCount)
-{
-    const bool narrowField = isNarrowField(settings);
-    ResidualGates gates;
-    gates.minMatches = minimumDirectionSeedAcceptedMatches(settings, starDetections);
-    gates.maxRms = maxDirectionSeedRmsError(settings, matchCount);
-    gates.maxMedian = narrowField
-        ? std::min(settings.m_plateSolveFinalMatchRadius * 0.75, 18.0)
-        : std::min(settings.m_plateSolveFinalMatchRadius * 0.65, 18.0);
-    gates.maxWorst = std::min(
-        settings.m_plateSolveFinalMatchRadius * (isWidePlateSolveContext(settings) ? 1.15 : 1.05),
-        36.0);
-    // For a dense wide-fisheye solve, ignore the few most extreme rim residuals when
-    // applying the worst gate -- rim distortion at ~80 deg field angle inflates the
-    // single worst star even on a correct pose, and one such star should not veto a
-    // 70-star, median-4 px solution. Capped at 3 and only above 20 matches so sparse
-    // solves keep the strict absolute-max gate.
-    if (!narrowField && isWidePlateSolveContext(settings) && (matchCount >= 20)) {
-        gates.worstTrimCount = std::min(3,
-            std::max(1, static_cast<int>(std::ceil(matchCount * 0.03))));
-    }
-    return gates;
-}
+static ResidualGates directionSeedResidualGates(const CameraSettings& settings, const QVector<CameraPipelineStarDetection>& starDetections, int matchCount);
 
-static QString directionSeedRejectionReason(const CameraSettings& settings,
-                                            const QVector<CameraPipelineStarDetection>& starDetections,
-                                            const QVector<Match>& matches,
-                                            double rmsErrorPixels,
-                                            double maxErrorPixels)
-{
-    const ResidualGates gates = directionSeedResidualGates(settings, starDetections, matches.size());
-    const double medianError = medianDistancePixels(matches);
+static QString directionSeedRejectionReason(const CameraSettings& settings, const QVector<CameraPipelineStarDetection>& starDetections, const QVector<Match>& matches, double rmsErrorPixels, double maxErrorPixels);
 
-    QStringList reasons;
-    if (matches.size() < gates.minMatches) {
-        reasons.append(QStringLiteral("matches %1 < required %2").arg(matches.size()).arg(gates.minMatches));
-    }
-    if (rmsErrorPixels > gates.maxRms) {
-        reasons.append(QStringLiteral("RMS %1 > %2").arg(rmsErrorPixels, 0, 'f', 2).arg(gates.maxRms, 0, 'f', 2));
-    }
-    if (medianError > gates.maxMedian) {
-        reasons.append(QStringLiteral("median %1 > %2").arg(medianError, 0, 'f', 2).arg(gates.maxMedian, 0, 'f', 2));
-    }
-    const double worstForGate = (gates.worstTrimCount > 0)
-        ? trimmedWorstDistancePixels(matches, gates.worstTrimCount)
-        : maxErrorPixels;
-    if (worstForGate > gates.maxWorst) {
-        reasons.append(QStringLiteral("max %1 > %2").arg(worstForGate, 0, 'f', 2).arg(gates.maxWorst, 0, 'f', 2));
-    }
-    return reasons.isEmpty() ? QStringLiteral("accepted") : reasons.join(QStringLiteral(", "));
-}
+static bool isAcceptableDirectionSeedSolve(const CameraSettings& settings, int minMatchCount, const Evaluation& evaluation);
 
-static bool isAcceptableDirectionSeedSolve(const CameraSettings& settings,
-                                    int minMatchCount,
-                                    const Evaluation& evaluation)
-{
-    if (!evaluation.valid) {
-        return false;
-    }
-    if (!isAcceptableNarrowGuidedFov(settings, evaluation.fovDegrees)) {
-        return false;
-    }
+static bool isAcceptableDirectionSeedSolve(const CameraSettings& settings, const QVector<CameraPipelineStarDetection>& starDetections, const QVector<Match>& matches, double rmsErrorPixels, double maxErrorPixels);
 
-    const int minAcceptedMatches = std::max(minMatchCount, 4);
-    const double maxRmsError = maxDirectionSeedRmsError(settings, evaluation.matchCount);
-    return (evaluation.matchCount >= minAcceptedMatches) && (evaluation.rmsErrorPixels <= maxRmsError);
-}
+static bool isAcceptableElevationSeedEvaluation(const CameraSettings& settings, int minMatchCount, const Evaluation& evaluation);
 
-static bool isAcceptableDirectionSeedSolve(const CameraSettings& settings,
-                                    const QVector<CameraPipelineStarDetection>& starDetections,
-                                    const QVector<Match>& matches,
-                                    double rmsErrorPixels,
-                                    double maxErrorPixels)
-{
-    const ResidualGates gates = directionSeedResidualGates(settings, starDetections, matches.size());
-    return passesResidualGates(matches, rmsErrorPixels, maxErrorPixels, gates);
-}
-
-static bool isAcceptableElevationSeedEvaluation(const CameraSettings& settings,
-                                         int minMatchCount,
-                                         const Evaluation& evaluation)
-{
-    if (!evaluation.valid) {
-        return false;
-    }
-
-    const int minAcceptedMatches = std::max(minMatchCount + 1, 5);
-    const double maxRmsError = std::min(settings.m_plateSolveFinalMatchRadius * 0.85, 22.0);
-    return (evaluation.matchCount >= minAcceptedMatches) && (evaluation.rmsErrorPixels <= maxRmsError);
-}
-
-static bool isAcceptableElevationSeedSolve(const CameraSettings& settings,
-                                    const QVector<CameraPipelineStarDetection>& starDetections,
-                                    const QVector<Match>& matches,
-                                    double rmsErrorPixels,
-                                    double maxErrorPixels)
-{
-    ResidualGates gates;
-    gates.minMatches = std::max(settings.m_plateSolveMinMatches + 1,
-        std::min(8, std::max(5, static_cast<int>(std::ceil(static_cast<double>(starDetections.size()) * 0.15)))));
-    gates.maxRms = std::min(settings.m_plateSolveFinalMatchRadius * 0.85, 24.0);
-    gates.maxMedian = std::min(settings.m_plateSolveFinalMatchRadius * 0.70, 18.0);
-    gates.maxWorst = std::min(settings.m_plateSolveFinalMatchRadius * 1.20, 50.0);
-    return passesResidualGates(matches, rmsErrorPixels, maxErrorPixels, gates);
-}
+static bool isAcceptableElevationSeedSolve(const CameraSettings& settings, const QVector<CameraPipelineStarDetection>& starDetections, const QVector<Match>& matches, double rmsErrorPixels, double maxErrorPixels);
 
 double evaluationRmsQuality(const Evaluation& evaluation,
                             double normalizationRadius)
@@ -14876,46 +10017,15 @@ double guidedDirectionEvaluationScore(const Evaluation& evaluation,
 // preferred as a tie-break so the solver does not invent center-offset/distortion
 // it does not need. The 100x weight puts distortion k1 (a small dimensionless
 // value) on a comparable footing with the pixel offsets.
-static double calibrationMagnitude(const Evaluation& evaluation)
-{
-    return std::fabs(evaluation.centerOffsetXPixels)
-        + std::fabs(evaluation.centerOffsetYPixels)
-        + 100.0 * std::fabs(evaluation.distortionK1);
-}
+static double calibrationMagnitude(const Evaluation& evaluation);
 
 // Deterministic geometric tie-break shared by the evaluation comparators: prefer
 // more matches, then lower RMS, then less lens calibration, then the narrower FoV
 // (or smaller roll at equal FoV). Callers handle validity and any higher-priority
 // scoring before delegating here. Assumes both evaluations are valid.
-static bool isBetterByGeometricTieBreak(const Evaluation& candidate, const Evaluation& best)
-{
-    if (candidate.matchCount != best.matchCount) {
-        return candidate.matchCount > best.matchCount;
-    }
-    if (!qFuzzyCompare(candidate.rmsErrorPixels + 1.0, best.rmsErrorPixels + 1.0)) {
-        return candidate.rmsErrorPixels < best.rmsErrorPixels;
-    }
-    const double candidateCalibrationMagnitude = calibrationMagnitude(candidate);
-    const double bestCalibrationMagnitude = calibrationMagnitude(best);
-    if (!qFuzzyCompare(candidateCalibrationMagnitude + 1.0, bestCalibrationMagnitude + 1.0)) {
-        return candidateCalibrationMagnitude < bestCalibrationMagnitude;
-    }
+static bool isBetterByGeometricTieBreak(const Evaluation& candidate, const Evaluation& best);
 
-    return candidate.fovDegrees == best.fovDegrees
-        ? candidate.rollDegrees < best.rollDegrees
-        : candidate.fovDegrees < best.fovDegrees;
-}
-
-static bool isBetterEvaluation(const Evaluation& candidate, const Evaluation& best)
-{
-    if (!candidate.valid) {
-        return false;
-    }
-    if (!best.valid) {
-        return true;
-    }
-    return isBetterByGeometricTieBreak(candidate, best);
-}
+static bool isBetterEvaluation(const Evaluation& candidate, const Evaluation& best);
 
 double weakModeEvaluationScore(const Evaluation& evaluation,
                                double normalizationRadius = -1.0)
@@ -18222,28 +13332,7 @@ FinalMatchPassEvaluation searchBrightAnchorVerifierRescue(const CameraSettings& 
     return best;
 }
 
-static bool sameEvaluationBasin(const Evaluation& lhs, const Evaluation& rhs)
-{
-    if (lhs.anchored != rhs.anchored) {
-        return false;
-    }
-    if (lhs.anchored
-        && ((lhs.anchorDetectionIndex != rhs.anchorDetectionIndex)
-            || (lhs.anchorCatalogIndex != rhs.anchorCatalogIndex)
-            || (lhs.secondaryAnchorDetectionIndex != rhs.secondaryAnchorDetectionIndex)
-            || (lhs.secondaryAnchorCatalogIndex != rhs.secondaryAnchorCatalogIndex)
-            || (lhs.guidedTriangle != rhs.guidedTriangle)
-            || (lhs.tertiaryAnchorDetectionIndex != rhs.tertiaryAnchorDetectionIndex)
-            || (lhs.tertiaryAnchorCatalogIndex != rhs.tertiaryAnchorCatalogIndex)))
-    {
-        return false;
-    }
-
-    return angularDistanceDegrees(lhs.azimuthDegrees, rhs.azimuthDegrees) <= 20.0
-        && std::fabs(lhs.elevationDegrees - rhs.elevationDegrees) <= 10.0
-        && angularDistanceDegrees(lhs.rollDegrees, rhs.rollDegrees) <= 20.0
-        && std::fabs(lhs.fovDegrees - rhs.fovDegrees) <= 10.0;
-}
+static bool sameEvaluationBasin(const Evaluation& lhs, const Evaluation& rhs);
 
 void insertDistinctEvaluationCandidate(QVector<Evaluation>& candidates,
                                        const Evaluation& candidate,
@@ -18448,28 +13537,7 @@ void logPlateSolveEvaluation(const char *stage,
         << " K1=" << evaluation.distortionK1;
 }
 
-static bool sameEvaluationIdentity(const Evaluation& lhs, const Evaluation& rhs)
-{
-    return lhs.valid == rhs.valid
-        && lhs.anchored == rhs.anchored
-        && lhs.sparseGuidedPair == rhs.sparseGuidedPair
-        && lhs.guidedTriangle == rhs.guidedTriangle
-        && lhs.anchorDetectionIndex == rhs.anchorDetectionIndex
-        && lhs.anchorCatalogIndex == rhs.anchorCatalogIndex
-        && lhs.secondaryAnchorDetectionIndex == rhs.secondaryAnchorDetectionIndex
-        && lhs.secondaryAnchorCatalogIndex == rhs.secondaryAnchorCatalogIndex
-        && lhs.tertiaryAnchorDetectionIndex == rhs.tertiaryAnchorDetectionIndex
-        && lhs.tertiaryAnchorCatalogIndex == rhs.tertiaryAnchorCatalogIndex
-        && lhs.matchCount == rhs.matchCount
-        && qFuzzyCompare(lhs.azimuthDegrees + 1.0, rhs.azimuthDegrees + 1.0)
-        && qFuzzyCompare(lhs.elevationDegrees + 1.0, rhs.elevationDegrees + 1.0)
-        && qFuzzyCompare(lhs.rollDegrees + 1.0, rhs.rollDegrees + 1.0)
-        && qFuzzyCompare(lhs.fovDegrees + 1.0, rhs.fovDegrees + 1.0)
-        && qFuzzyCompare(lhs.rmsErrorPixels + 1.0, rhs.rmsErrorPixels + 1.0)
-        && qFuzzyCompare(lhs.centerOffsetXPixels + 1.0, rhs.centerOffsetXPixels + 1.0)
-        && qFuzzyCompare(lhs.centerOffsetYPixels + 1.0, rhs.centerOffsetYPixels + 1.0)
-        && qFuzzyCompare(lhs.distortionK1 + 1.0, rhs.distortionK1 + 1.0);
-}
+static bool sameEvaluationIdentity(const Evaluation& lhs, const Evaluation& rhs);
 
 void logWeakModePoolDecision(const char *stage,
                              const char *decision,
@@ -19733,65 +14801,13 @@ struct PlateSolveLmEvaluation
     double robustCost = std::numeric_limits<double>::infinity();
 };
 
-static double normalizeSignedDegrees(double value)
-{
-    value = normalizeDegrees(value);
-    if (value > 180.0) {
-        value -= 360.0;
-    }
-    return value;
-}
+static double normalizeSignedDegrees(double value);
 
-static PlateSolveLmPose poseFromEvaluation(const Evaluation& evaluation)
-{
-    PlateSolveLmPose pose;
-    pose.azimuthDegrees = evaluation.azimuthDegrees;
-    pose.elevationDegrees = evaluation.elevationDegrees;
-    pose.rollDegrees = evaluation.rollDegrees;
-    pose.fovDegrees = evaluation.fovDegrees;
-    pose.centerOffsetXPixels = evaluation.centerOffsetXPixels;
-    pose.centerOffsetYPixels = evaluation.centerOffsetYPixels;
-    pose.distortionK1 = evaluation.distortionK1;
-    return pose;
-}
+static PlateSolveLmPose poseFromEvaluation(const Evaluation& evaluation);
 
-static void clampPlateSolveLmPose(const QSize& imageSize, PlateSolveLmPose& pose)
-{
-    pose.azimuthDegrees = normalizeDegrees(pose.azimuthDegrees);
-    pose.elevationDegrees = std::clamp(pose.elevationDegrees, kVisibleAltitudeFloor, 90.0);
-    pose.rollDegrees = normalizeSignedDegrees(pose.rollDegrees);
-    pose.fovDegrees = std::clamp(
-        pose.fovDegrees,
-        static_cast<double>(CameraSettings::m_minFov),
-        static_cast<double>(CameraSettings::m_maxFov));
-    const double maxCenterOffset = std::max(1.0, static_cast<double>(std::max(imageSize.width(), imageSize.height())));
-    pose.centerOffsetXPixels = std::clamp(pose.centerOffsetXPixels, -maxCenterOffset, maxCenterOffset);
-    pose.centerOffsetYPixels = std::clamp(pose.centerOffsetYPixels, -maxCenterOffset, maxCenterOffset);
-    pose.distortionK1 = std::clamp(pose.distortionK1, -0.75, 0.75);
-}
+static void clampPlateSolveLmPose(const QSize& imageSize, PlateSolveLmPose& pose);
 
-static double plateSolveLmParameterValue(const PlateSolveLmPose& pose, PlateSolveLmParameter parameter)
-{
-    switch (parameter)
-    {
-    case PlateSolveLmAzimuth:
-        return pose.azimuthDegrees;
-    case PlateSolveLmElevation:
-        return pose.elevationDegrees;
-    case PlateSolveLmRoll:
-        return pose.rollDegrees;
-    case PlateSolveLmFov:
-        return pose.fovDegrees;
-    case PlateSolveLmCenterX:
-        return pose.centerOffsetXPixels;
-    case PlateSolveLmCenterY:
-        return pose.centerOffsetYPixels;
-    case PlateSolveLmDistortionK1:
-        return pose.distortionK1;
-    default:
-        return 0.0;
-    }
-}
+static double plateSolveLmParameterValue(const PlateSolveLmPose& pose, PlateSolveLmParameter parameter);
 
 // WS2: rotation-vector LM orientation parameterization. Enabled by
 // SDRANGEL_CAMERA_PLATE_SOLVER_ROTVEC_LM (default OFF, so the legacy az/el/roll coordinate path is
@@ -19800,226 +14816,33 @@ static double plateSolveLmParameterValue(const PlateSolveLmPose& pose, PlateSolv
 // the az/el/roll coordinates. The three camera axes are always orthonormal, so the orientation
 // Jacobian stays well-conditioned even near zenith where az and roll rotate about the same (vertical)
 // axis and the coordinate parameterization is degenerate.
-static bool rotVecLmEnabled()
-{
-    // WS2: rotation-vector LM orientation is the DEFAULT. Kill-switch
-    // SDRANGEL_CAMERA_PLATE_SOLVER_DISABLE_ROTVEC_LM reverts to the legacy az/el/roll path for A/B.
-    static const bool disabled = qEnvironmentVariableIsSet("SDRANGEL_CAMERA_PLATE_SOLVER_DISABLE_ROTVEC_LM");
-    return !disabled;
-}
+static bool rotVecLmEnabled();
 
 // Rot-vec is applied only to DIRECTION-SEEDED (guided) solves. Blind / fov-only solves keep the
 // legacy LM: a global rot-vec default regressed the blind-fisheye corpus (FISHEYE-full 56->51),
 // whereas guided-only keeps the near-zenith payoff (wide-7/8/9 pin retired) and is neutral on
 // REAL/RAND2/WIDE/FISHEYE-full (only the approved guided FISH4 -2 remains).
-static bool rotVecLmActive(const CameraSettings& settings)
-{
-    return rotVecLmEnabled() && plateSolveStartUsesDirection(settings);
-}
+static bool rotVecLmActive(const CameraSettings& settings);
 
 // Camera basis from az/el/roll, matching createProjector's exact convention.
-static void lmBasisFromAzElRoll(double azimuthDegrees, double elevationDegrees, double rollDegrees,
-                                SkyVector& center, SkyVector& right, SkyVector& up)
-{
-    const double azr = degToRad(azimuthDegrees);
-    center = normalize(vectorFromAltAz(azimuthDegrees, elevationDegrees));
-    right = normalize({std::cos(azr), -std::sin(azr), 0.0});
-    up = normalize(cross(right, center));
-    const double rr = degToRad(rollDegrees);
-    if (std::fabs(rr) > 1e-9) {
-        right = normalize(rotateAroundAxis(right, center, rr));
-        up = normalize(rotateAroundAxis(up, center, rr));
-    }
-}
+static void lmBasisFromAzElRoll(double azimuthDegrees, double elevationDegrees, double rollDegrees, SkyVector& center, SkyVector& right, SkyVector& up);
 
 // Exact inverse of lmBasisFromAzElRoll: recover az/el/roll from a camera basis.
-static void lmAzElRollFromBasis(const SkyVector& center, const SkyVector& right,
-                                double& azimuthDegrees, double& elevationDegrees, double& rollDegrees)
-{
-    const SkyVector c = normalize(center);
-    elevationDegrees = std::asin(std::clamp(c.z, -1.0, 1.0)) * (180.0 / kPi);
-    azimuthDegrees = normalizeDegrees(std::atan2(c.x, c.y) * (180.0 / kPi));
-    const double azr = degToRad(azimuthDegrees);
-    const SkyVector right0 = normalize({std::cos(azr), -std::sin(azr), 0.0});
-    const SkyVector r = normalize(right);
-    // Signed roll: angle from the unrolled right vector to r, measured about the boresight (center).
-    const double cosA = std::clamp(dot(right0, r), -1.0, 1.0);
-    const double sinA = dot(cross(right0, r), c);
-    rollDegrees = normalizeSignedDegrees(std::atan2(sinA, cosA) * (180.0 / kPi));
-}
+static void lmAzElRollFromBasis(const SkyVector& center, const SkyVector& right, double& azimuthDegrees, double& elevationDegrees, double& rollDegrees);
 
 // Rotate the pose orientation by deltaDegrees about a camera-frame axis: 0=pitch(right),
 // 1=yaw(up), 2=roll(boresight/center). Singularity-free regardless of elevation.
-static void lmRotateOrientationCameraFrame(double& azimuthDegrees, double& elevationDegrees,
-                                           double& rollDegrees, int cameraAxis, double deltaDegrees)
-{
-    SkyVector center, right, up;
-    lmBasisFromAzElRoll(azimuthDegrees, elevationDegrees, rollDegrees, center, right, up);
-    const SkyVector axis = (cameraAxis == 0) ? right : (cameraAxis == 1) ? up : center;
-    const double a = degToRad(deltaDegrees);
-    center = normalize(rotateAroundAxis(center, axis, a));
-    right = normalize(rotateAroundAxis(right, axis, a));
-    lmAzElRollFromBasis(center, right, azimuthDegrees, elevationDegrees, rollDegrees);
-}
+static void lmRotateOrientationCameraFrame(double& azimuthDegrees, double& elevationDegrees, double& rollDegrees, int cameraAxis, double deltaDegrees);
 
-static void addPlateSolveLmParameterDelta(const QSize& imageSize,
-                                          PlateSolveLmPose& pose,
-                                          PlateSolveLmParameter parameter,
-                                          double delta,
-                                          bool useRotVec)
-{
-    const bool rotVec = useRotVec;
-    switch (parameter)
-    {
-    case PlateSolveLmAzimuth:
-        if (rotVec) {
-            lmRotateOrientationCameraFrame(pose.azimuthDegrees, pose.elevationDegrees, pose.rollDegrees, 1, delta);
-        } else {
-            pose.azimuthDegrees += delta;
-        }
-        break;
-    case PlateSolveLmElevation:
-        if (rotVec) {
-            lmRotateOrientationCameraFrame(pose.azimuthDegrees, pose.elevationDegrees, pose.rollDegrees, 0, delta);
-        } else {
-            pose.elevationDegrees += delta;
-        }
-        break;
-    case PlateSolveLmRoll:
-        if (rotVec) {
-            lmRotateOrientationCameraFrame(pose.azimuthDegrees, pose.elevationDegrees, pose.rollDegrees, 2, delta);
-        } else {
-            pose.rollDegrees += delta;
-        }
-        break;
-    case PlateSolveLmFov:
-        pose.fovDegrees += delta;
-        break;
-    case PlateSolveLmCenterX:
-        pose.centerOffsetXPixels += delta;
-        break;
-    case PlateSolveLmCenterY:
-        pose.centerOffsetYPixels += delta;
-        break;
-    case PlateSolveLmDistortionK1:
-        pose.distortionK1 += delta;
-        break;
-    default:
-        break;
-    }
-    clampPlateSolveLmPose(imageSize, pose);
-}
+static void addPlateSolveLmParameterDelta(const QSize& imageSize, PlateSolveLmPose& pose, PlateSolveLmParameter parameter, double delta, bool useRotVec);
 
-static double plateSolveLmFiniteDifferenceStep(const PlateSolveLmPose& pose, PlateSolveLmParameter parameter)
-{
-    switch (parameter)
-    {
-    case PlateSolveLmAzimuth:
-    case PlateSolveLmElevation:
-    case PlateSolveLmRoll:
-        return std::max(1e-4, std::min(0.02, pose.fovDegrees * 0.001));
-    case PlateSolveLmFov:
-        return std::max(1e-4, pose.fovDegrees * 1e-4);
-    case PlateSolveLmCenterX:
-    case PlateSolveLmCenterY:
-        return 0.25;
-    case PlateSolveLmDistortionK1:
-        return 1e-4;
-    default:
-        return 1e-4;
-    }
-}
+static double plateSolveLmFiniteDifferenceStep(const PlateSolveLmPose& pose, PlateSolveLmParameter parameter);
 
-static double plateSolveLmMaximumStep(const QSize& imageSize,
-                                      const PlateSolveLmPose& pose,
-                                      PlateSolveLmParameter parameter)
-{
-    switch (parameter)
-    {
-    case PlateSolveLmAzimuth:
-    case PlateSolveLmElevation:
-        return std::max(0.05, std::min(5.0, pose.fovDegrees * 0.75));
-    case PlateSolveLmRoll:
-        return 30.0;
-    case PlateSolveLmFov:
-        return std::max(0.02, pose.fovDegrees * 0.25);
-    case PlateSolveLmCenterX:
-        return std::max(1.0, static_cast<double>(imageSize.width()) * 0.05);
-    case PlateSolveLmCenterY:
-        return std::max(1.0, static_cast<double>(imageSize.height()) * 0.05);
-    case PlateSolveLmDistortionK1:
-        return 0.10;
-    default:
-        return 1.0;
-    }
-}
+static double plateSolveLmMaximumStep(const QSize& imageSize, const PlateSolveLmPose& pose, PlateSolveLmParameter parameter);
 
-static double robustPlateSolveLmWeight(double residualNormPixels, double thresholdPixels)
-{
-    if ((residualNormPixels <= thresholdPixels) || (residualNormPixels <= 1e-9)) {
-        return 1.0;
-    }
-    return thresholdPixels / residualNormPixels;
-}
+static double robustPlateSolveLmWeight(double residualNormPixels, double thresholdPixels);
 
-static bool solveSmallLinearSystem(double matrix[PlateSolveLmParameterCount][PlateSolveLmParameterCount],
-                                   double rhs[PlateSolveLmParameterCount],
-                                   double solution[PlateSolveLmParameterCount],
-                                   int size)
-{
-    for (int i = 0; i < size; ++i) {
-        solution[i] = 0.0;
-    }
-    for (int column = 0; column < size; ++column)
-    {
-        int pivotRow = column;
-        double pivotAbs = std::fabs(matrix[column][column]);
-        for (int row = column + 1; row < size; ++row)
-        {
-            const double candidateAbs = std::fabs(matrix[row][column]);
-            if (candidateAbs > pivotAbs)
-            {
-                pivotAbs = candidateAbs;
-                pivotRow = row;
-            }
-        }
-        if (pivotAbs < 1e-12) {
-            return false;
-        }
-        if (pivotRow != column)
-        {
-            for (int col = column; col < size; ++col) {
-                std::swap(matrix[column][col], matrix[pivotRow][col]);
-            }
-            std::swap(rhs[column], rhs[pivotRow]);
-        }
-
-        const double pivot = matrix[column][column];
-        for (int col = column; col < size; ++col) {
-            matrix[column][col] /= pivot;
-        }
-        rhs[column] /= pivot;
-
-        for (int row = 0; row < size; ++row)
-        {
-            if (row == column) {
-                continue;
-            }
-            const double factor = matrix[row][column];
-            if (std::fabs(factor) <= 0.0) {
-                continue;
-            }
-            for (int col = column; col < size; ++col) {
-                matrix[row][col] -= factor * matrix[column][col];
-            }
-            rhs[row] -= factor * rhs[column];
-        }
-    }
-    for (int i = 0; i < size; ++i) {
-        solution[i] = rhs[i];
-    }
-    return true;
-}
+static bool solveSmallLinearSystem(double matrix[PlateSolveLmParameterCount][PlateSolveLmParameterCount], double rhs[PlateSolveLmParameterCount], double solution[PlateSolveLmParameterCount], int size);
 
 QVector<Match> uniqueValidMatchesForRefinement(const PlateSolveCatalogContext& catalogContext,
                                                const QVector<CameraPipelineStarDetection>& starDetections,
@@ -20058,21 +14881,7 @@ QVector<Match> uniqueValidMatchesForRefinement(const PlateSolveCatalogContext& c
     return uniqueMatches;
 }
 
-static QVector<int> detectionIndicesForMatches(const QVector<Match>& matches)
-{
-    QVector<int> detectionIndices;
-    QSet<int> seen;
-    detectionIndices.reserve(matches.size());
-    for (const Match& match : matches)
-    {
-        if (seen.contains(match.detectionIndex)) {
-            continue;
-        }
-        seen.insert(match.detectionIndex);
-        detectionIndices.append(match.detectionIndex);
-    }
-    return detectionIndices;
-}
+static QVector<int> detectionIndicesForMatches(const QVector<Match>& matches);
 
 PlateSolveLmEvaluation evaluateFixedPlateSolveLmPose(const CameraSettings& settings,
                                                      const PlateSolveCatalogContext& catalogContext,
@@ -20973,20 +15782,7 @@ CandidateRefinementResult refineMultiHypothesisCandidate(const CameraSettings& s
     return result;
 }
 
-static void clearSolvedStars(QVector<CameraPipelineStarDetection>& starDetections)
-{
-    for (CameraPipelineStarDetection& detection : starDetections)
-    {
-        detection.m_label.clear();
-        detection.m_projectedCenter = QPointF();
-        detection.m_matchDistancePixels = 0.0f;
-        detection.m_catalogMagnitude = 0.0f;
-        detection.m_catalogRightAscensionDegrees = std::numeric_limits<double>::quiet_NaN();
-        detection.m_catalogDeclinationDegrees = std::numeric_limits<double>::quiet_NaN();
-        detection.m_catalogSpectralType.clear();
-        detection.m_solved = false;
-    }
-}
+static void clearSolvedStars(QVector<CameraPipelineStarDetection>& starDetections);
 
 };
 

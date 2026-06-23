@@ -2468,3 +2468,36 @@ then `$env:LIB="<override-lib>;$env:LIB"` BEFORE `cmake --build` (cmd's `set LIB
 it at load; copy from any sibling sdrangel `build-qt6/bin`). The proper fix is to reconfigure build-qt6
 against the override (4.13.0) with `-DOpenCV_DIR=<override>`, but the above gets a working, trustworthy
 harness without a full reconfigure.
+
+## WS5 — split the single translation unit (2026-06-23, DONE)
+
+The solver was one ~24k-line TU built around a single ~21k-line **inline** `SolverContext` class
+body (nested types + ~219 inline static member functions + ~112 non-static member functions, all at
+column-0 indentation), with only `solve()` and the `CameraPlateSolver` public methods out-of-line.
+(The plan/notes had assumed "free functions, easy to move" -- they were inline class members, so the
+split required converting every definition to out-of-line form.)
+
+Done as a series of behaviour-preserving, per-phase validated moves:
+- **Phase 1:** lift the whole class into a private header `cameraplatesolverinternal.h`, included by
+  `cameraplatesolver.cpp` (the orchestrator: `solve()` + ctor/dtor/public statics). Enables out-of-line
+  member defs in other TUs.
+- **Phases 2-7:** move member *definitions* out of the header into themed TUs as **trailing-return**
+  out-of-line defs (`auto CameraPlateSolver::SolverContext::f(args) -> Ret { ... }`) -- the key trick:
+  the return type after the `Class::` qualifier resolves nested types (`Evaluation`, `QVector<Match>`)
+  in class scope, so NO return-type qualification is needed. Declarations stay in the class header.
+  TUs: `cameraplatesolvercatalog.cpp` / `siril.cpp` / `refine.cpp` / `acceptance.cpp` / `core.cpp`
+  (catalog I/O, projection, visibility, signatures, seeds, matching) / `pipeline.cpp` (non-static
+  pipeline members: fetch/build/evaluate/match).
+
+Result: the shared header went **~21k -> 1.95k lines** (now a real declaration header: nested types +
+member decls + data members + 3 `template<size_t N>` members + a few tiny `const` members that must
+stay inline). Function bodies live in the 6 themed TUs, all in the `camera_platesolver` static lib, so
+the GUI plugin and the harness link the identical split object (WS1a preserved). Editing a body now
+recompiles only its TU + the small header. Each phase validated **REAL 48 / WIDE 27 / FISH4-mode4 40**
+(identical pass+fail sets); commits `693e9bfa8` (P1) .. `8bf241184` (P7).
+
+**Mechanics note:** the move was scripted (a throwaway `ws5extract.py`, not committed) -- the codebase
+uses Allman braces at function level (col-0 `{` ... col-0 `}`), so functions are extractable by
+paren-matching the signature + col-0 brace bounds. Skips: template-preceded members (must stay inline),
+`const` members (trailer after `)`), and the constructor. Optional follow-on: `pipeline.cpp` (~13.7k)
+and `core.cpp` (~4.3k) could be split finer, but the header-shrink (the compile-time win) is done.

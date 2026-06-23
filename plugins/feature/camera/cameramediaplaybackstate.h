@@ -109,6 +109,10 @@ public:
     // small steady rate is normal (source slightly faster than display); a large/growing
     // rate means video is chronically behind audio.
     int m_streamFramesDroppedThisSecond = 0;
+    // Clean streaming present (see STREAM_REWRITE_PLAN.md): content PTS (ms) most recently
+    // handed toward the device by streamTakeAudio. The master clock the video present follows
+    // is this minus the monitor-FIFO + sink-latency. −1 until audio starts.
+    qint64 m_streamPlayedPtsMs = -1;
     quint64 m_frameSubmitGeneration = 0;
 
     QTimer m_delayedSubmitTimer;

@@ -171,6 +171,12 @@ void CameraMediaPlaybackController::presentTick()
     if (!videoFilePlaybackIsPlaying()) {
         return;
     }
+    // Streams use the clean decoder-engine present (decoder owns demux + A/V decode threads).
+    if (m_settings->isStreamCamera())
+    {
+        presentStreamTick();
+        return;
+    }
     const bool frameRead = readVideoFileFrame();
     // Feed stream audio from the adaptive resampler once per tick (decoupled
     // from whether a video frame was presented), but not during rebuffering:
@@ -222,6 +228,153 @@ void CameraMediaPlaybackController::presentTick()
     }
 }
 
+// ===================== Clean streaming present (URL sources) ===========================
+// See STREAM_REWRITE_PLAN.md. The decoder owns the demux + audio/video decode threads; here
+// we are just the consumer: feed the monitor from the decoder's audio buffer, derive the
+// master clock from the consumed audio PTS, and show the decoder's video frames at PTS ≤
+// clock (drop late, hold early). No controller-side decode thread / self-pace / pacing saga.
+
+void CameraMediaPlaybackController::submitStreamAudio()
+{
+    if (!m_settings->isStreamCamera() || !m_state.m_decoder) {
+        return;
+    }
+    const int audioSampleRate = qMax(1, m_audio->monitorSampleRate());
+    // Top the monitor up to its target fill each tick; the device drains it at the real
+    // sample rate, so refilling to target makes the output rate the device rate.
+    const int targetFill = m_audio->monitorTargetFillFrames(audioSampleRate);
+    const int currentFill = static_cast<int>(m_audio->monitorAudioFill());
+    const int need = targetFill - currentFill;
+    if (need <= 0) {
+        return;
+    }
+    QByteArray audio;
+    qint64 playedPtsMs = -1;
+    const int got = m_state.m_decoder->streamTakeAudio(audio, need, playedPtsMs);
+    if (got <= 0) {
+        return;
+    }
+    m_audio->submitMonitorPcmSamples(audio, audioSampleRate);
+    if (playedPtsMs >= 0) {
+        m_state.m_streamPlayedPtsMs = playedPtsMs;
+        // Anchor recorded audio on the source content timeline (the content just handed to
+        // the device); the recorder lays it alongside the video PTS.
+        m_audio->submitRecordingPcmSamples(audio, audioSampleRate, playedPtsMs);
+    }
+}
+
+qint64 CameraMediaPlaybackController::streamMasterClockMs() const
+{
+    // Master clock = content PTS handed toward the device (streamTakeAudio) minus the audio
+    // still ahead of the speaker: the monitor FIFO + the device's own output (sink) buffer.
+    // = the content position at the SPEAKER now. Single buffer in the decoder ⇒ exact.
+    if (m_state.m_streamPlayedPtsMs < 0) {
+        return -1;
+    }
+    const int rate = qMax(1, m_audio->monitorSampleRate());
+    const qint64 fifoMs = static_cast<qint64>(m_audio->monitorAudioFill()) * 1000 / rate;
+    const qint64 sinkMs = m_audio->monitorSinkLatencyUSecs() / 1000;
+    return m_state.m_streamPlayedPtsMs - fifoMs - sinkMs;
+}
+
+void CameraMediaPlaybackController::presentStreamTick()
+{
+    if (!m_state.m_decoder) {
+        return;
+    }
+    submitStreamAudio();
+    const qint64 clockMs = streamMasterClockMs();
+    const double intervalMs = qMax(1.0, videoFileExactFrameIntervalMs());
+
+    // Buffering gate: hold presentation until the compressed cushion is built AND audio has
+    // started (clock valid). The cushion lives in the decoder's packet queue.
+    if (m_state.m_basePositionMs < 0)
+    {
+        const int cushionFrames = streamBufferingCushionFrameCount();
+        const int buffered = m_state.m_decoder->streamVideoPacketCount()
+                           + m_state.m_decoder->streamDecodedVideoFrameCount();
+        if ((clockMs < 0) || (buffered < cushionFrames))
+        {
+            m_presentTimer.setSingleShot(true);
+            m_presentTimer.start(qMax(1, static_cast<int>(intervalMs / 2.0)));
+            return;
+        }
+        m_state.m_basePositionMs = 0;   // started
+        qDebug() << "CameraMediaPlayback: stream playback start - clockMs" << clockMs
+                 << "bufferedFrames" << buffered;
+    }
+
+    // Show frames due by the master clock: drop late (keep the newest due), hold early.
+    QImage shown;
+    qint64 shownPts = -1;
+    bool gotFrame = false;
+    bool eof = false;
+    int dropped = 0;
+    for (;;)
+    {
+        const qint64 nextPts = m_state.m_decoder->streamPeekVideoFramePtsMs();
+        if (nextPts < 0) {
+            break;                                                   // nothing decoded yet
+        }
+        if ((clockMs >= 0) && (nextPts > clockMs + static_cast<qint64>(intervalMs / 2.0))) {
+            break;                                                   // not due yet — hold
+        }
+        QImage img;
+        qint64 pts = -1;
+        bool e = false;
+        if (!m_state.m_decoder->streamTakeVideoFrame(img, pts, e)) {
+            break;
+        }
+        if (e) { eof = true; break; }
+        if (gotFrame) {
+            ++dropped;                                               // previous one was late
+        }
+        shown = std::move(img);
+        shownPts = pts;
+        gotFrame = true;
+    }
+    if (eof)
+    {
+        setVideoFilePlaying(false);
+        return;
+    }
+    if (dropped > 0) {
+        m_state.m_streamFramesDroppedThisSecond += dropped;
+    }
+    if (gotFrame && m_callbacks.submitFrame)
+    {
+        m_state.m_positionMs = shownPts;
+        CameraPipelineFramePtr frame(new CameraPipelineFrame);
+        frame->m_image = shown;
+        m_callbacks.populateExposureMeta(*frame);
+        frame->m_captureEpoch = m_callbacks.captureEpoch();
+        frame->m_pipelineInputWallClockMs = QDateTime::currentMSecsSinceEpoch();
+        frame->m_playbackPositionMs = shownPts;
+        frame->m_playbackFrameRate = qMax(1.0, m_state.m_frameRate) * qMax(0.1, m_settings->m_videoPlaybackRate);
+        submitVideoFileFrame(frame, false);
+        reportVideoFilePlaybackToGUI();
+    }
+
+    // Per-second diagnostic.
+    if (!m_state.m_audioWanderClock.isValid()) {
+        m_state.m_audioWanderClock.start();
+    }
+    if (m_state.m_audioWanderClock.elapsed() >= 1000)
+    {
+        qDebug().nospace()
+            << "CameraMediaPlayback: stream - clockMs " << clockMs
+            << " audioBufMs " << (m_state.m_decoder->streamAudioBufferedFrames() * 1000 / qMax(1, m_audio->monitorSampleRate()))
+            << " videoPkts " << m_state.m_decoder->streamVideoPacketCount()
+            << " videoFrames " << m_state.m_decoder->streamDecodedVideoFrameCount()
+            << " framesDropped/s " << m_state.m_streamFramesDroppedThisSecond;
+        m_state.m_streamFramesDroppedThisSecond = 0;
+        m_state.m_audioWanderClock.restart();
+    }
+
+    m_presentTimer.setSingleShot(true);
+    m_presentTimer.start(qMax(1, static_cast<int>(intervalMs)));
+}
+
 // ---------------------------------------------------------------------------
 // Moved verbatim from CameraWorker
 // ---------------------------------------------------------------------------
@@ -253,7 +406,8 @@ bool CameraMediaPlaybackController::openVideoFileDecoder()
         audioOutputSampleRate,
         qBound(CameraSettings::m_minStreamBufferingSeconds,
                m_settings->m_streamBufferingSeconds,
-               CameraSettings::m_maxStreamBufferingSeconds)))
+               CameraSettings::m_maxStreamBufferingSeconds),
+        /*streaming=*/ m_settings->isStreamCamera()))
     {
         qWarning() << "CameraWorker: FFmpeg media source open failed"
                    << mediaSourcePath
@@ -273,12 +427,13 @@ bool CameraMediaPlaybackController::openVideoFileDecoder()
     m_state.m_frameRate = m_state.m_decoder->frameRate();
     setVideoFilePlaybackPlayingState(false);
     if (m_settings->isStreamCamera()) {
-        m_state.m_decoder->setAudioPaceFrameRate(qMax(1.0, m_state.m_frameRate) * qMax(0.1, m_settings->m_videoPlaybackRate));
-        // Let the decoder's live pending-audio cap track the buffering setting so a
-        // deep buffer isn't undercut by the decoder trimming audio before it reaches
-        // the (larger) downstream stream-audio buffer.
-        m_state.m_decoder->setMaxLivePendingAudioMs(qMax(1200, static_cast<int>(m_settings->m_streamBufferingSeconds * 1000.0)));
-        startVideoFileDecodeThread();
+        // Clean streaming engine: the decoder runs its own demux + audio/video decode threads
+        // (started inside open()). No controller-side decode thread. Hold the audio buffer at a
+        // modest target — the cushion + the audio/sink latency live in the decoder's compressed
+        // packet queues, not in the audio sample buffer.
+        m_state.m_decoder->setStreamAudioTargetSeconds(0.30);
+        m_state.m_streamPlayedPtsMs = -1;
+        m_state.m_basePositionMs = -1;
     }
     reportVideoFilePlaybackToGUI();
     qDebug() << "CameraWorker: FFmpeg media source opened"
@@ -332,7 +487,19 @@ void CameraMediaPlaybackController::setVideoFilePlaying(bool playing)
     {
         m_presentTimer.setSingleShot(true);
         resetVideoFilePlaybackSchedule();
-        scheduleNextVideoFileTick();
+        if (m_settings->isStreamCamera())
+        {
+            // Clean streaming present: the decoder threads (started in open) are already
+            // filling the buffers; just kick the present loop, which gates on the cushion then
+            // shows frames at the audio clock and re-schedules itself (presentStreamTick).
+            m_state.m_streamPlayedPtsMs = -1;
+            m_state.m_basePositionMs = -1;
+            m_presentTimer.start(qMax(1, videoFileFrameIntervalMs()));
+        }
+        else
+        {
+            scheduleNextVideoFileTick();
+        }
     }
     else
     {

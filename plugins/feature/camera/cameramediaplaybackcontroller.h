@@ -188,6 +188,16 @@ private:
     void scheduleNextVideoFileTick();
     void reportVideoFilePlaybackToGUI();
 
+    // ---- Clean streaming present (URL sources) — see STREAM_REWRITE_PLAN.md ----
+    // The decoder owns the demux + audio/video decode threads; the controller is just the
+    // consumer: presentStreamTick feeds the monitor from the decoder's audio buffer, derives
+    // the master clock, and shows the decoder's video frames at PTS ≤ clock (drop late / hold
+    // early). No controller-side decode thread, self-pace, block-to-accumulate, or
+    // wall/audio pacing branches.
+    void presentStreamTick();
+    void submitStreamAudio();
+    qint64 streamMasterClockMs() const;
+
     CameraQtAudioController* m_audio;
     const CameraSettings* m_settings;
     MessageQueue* m_workerInputMessageQueue;

@@ -340,7 +340,7 @@ bool CameraVideoFileDecoder::open(
             m_streamingMode = true;
             m_streamVideoPktCap = std::max(cushionPackets * 4, cushionPackets + 120);
             m_streamAudioPktCap = m_streamVideoPktCap * 4;     // audio packets are smaller/more frequent
-            m_streamAudioBufCapFrames = m_outputSampleRate * 2; // ~2 s ceiling; servo holds near target
+            m_streamAudioBufCapFrames = static_cast<int>((m_streamAudioTargetSeconds + 0.10) * m_outputSampleRate);
             startStreamThreads();
         }
         else
@@ -837,6 +837,9 @@ void CameraVideoFileDecoder::setStreamAudioTargetSeconds(double seconds)
 {
     QMutexLocker locker(&m_streamMutex);
     m_streamAudioTargetSeconds = std::max(0.05, seconds);
+    // Hold the audio buffer near target; the cushion lives in the compressed packet queue, so
+    // a little headroom above target is all that's needed here.
+    m_streamAudioBufCapFrames = static_cast<int>((m_streamAudioTargetSeconds + 0.10) * m_outputSampleRate);
 }
 
 int CameraVideoFileDecoder::streamAudioBufferedFrames() const

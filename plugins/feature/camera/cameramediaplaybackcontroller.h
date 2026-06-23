@@ -197,6 +197,10 @@ private:
     void presentStreamTick();
     void submitStreamAudio();
     qint64 streamMasterClockMs() const;
+    // Raise/lower the OS timer resolution (Windows) so the present timer fires on time while a
+    // stream plays. Ref-balanced via m_timerResolutionRaised. No-op off Windows.
+    void setHighTimerResolution(bool enable);
+    bool m_timerResolutionRaised = false;
 
     CameraQtAudioController* m_audio;
     const CameraSettings* m_settings;

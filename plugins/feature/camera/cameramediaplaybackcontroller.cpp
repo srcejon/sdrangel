@@ -32,6 +32,16 @@
 #include "cameravideofiledecoder.h"
 #include "cameramediaplaybackcontroller.h"
 
+#ifdef _WIN32
+// Raise the system timer resolution to 1 ms while a stream plays so the present QTimer
+// (Qt::PreciseTimer, ~16 ms at 60 fps) is actually delivered on time. At the default ~15.6 ms
+// Windows scheduler granularity a 16 ms single-shot lands ~31–47 ms later, capping the present
+// at ~24 fps (heavy frame-drop / judder) even though each tick's work is < 1 ms. Declared here
+// (instead of pulling in <windows.h>) to keep this large TU clean; winmm is linked in CMake.
+extern "C" __declspec(dllimport) unsigned int __stdcall timeBeginPeriod(unsigned int uPeriod);
+extern "C" __declspec(dllimport) unsigned int __stdcall timeEndPeriod(unsigned int uPeriod);
+#endif
+
 CameraMediaPlaybackController::CameraMediaPlaybackController(
     CameraQtAudioController* audio,
     const CameraSettings* settings,
@@ -277,6 +287,21 @@ qint64 CameraMediaPlaybackController::streamMasterClockMs() const
     return m_state.m_streamPlayedPtsMs - fifoMs - sinkMs;
 }
 
+void CameraMediaPlaybackController::setHighTimerResolution(bool enable)
+{
+    if (enable == m_timerResolutionRaised) {
+        return;
+    }
+    m_timerResolutionRaised = enable;
+#ifdef _WIN32
+    if (enable) {
+        timeBeginPeriod(1);
+    } else {
+        timeEndPeriod(1);
+    }
+#endif
+}
+
 void CameraMediaPlaybackController::presentStreamTick()
 {
     if (!m_state.m_decoder) {
@@ -451,6 +476,9 @@ bool CameraMediaPlaybackController::openVideoFileDecoder()
         m_state.m_decoder->setStreamAudioTargetSeconds(0.30);
         m_state.m_streamPlayedPtsMs = -1;
         m_state.m_basePositionMs = -1;
+        // Make the ~16 ms present timer reliable (see setHighTimerResolution); without this the
+        // present is delivered at ~42 ms on Windows and caps at ~24 fps.
+        setHighTimerResolution(true);
     }
     reportVideoFilePlaybackToGUI();
     qDebug() << "CameraWorker: FFmpeg media source opened"
@@ -465,6 +493,7 @@ bool CameraMediaPlaybackController::openVideoFileDecoder()
 
 void CameraMediaPlaybackController::closeVideoFileDecoder()
 {
+    setHighTimerResolution(false);
     m_presentTimer.stop();
     stopVideoFileDecodeThread();
     clearPendingStreamVideoFileFrame();

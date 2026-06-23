@@ -273,6 +273,8 @@ target_link_libraries(${TARGET_NAME} PRIVATE
 install(TARGETS ${TARGET_NAME} DESTINATION ${INSTALL_FOLDER})
 
 if (WIN32)
+    # winmm for timeBeginPeriod/timeEndPeriod (raise the present timer resolution while streaming)
+    target_link_libraries(${TARGET_NAME} PRIVATE winmm)
     install(FILES $<TARGET_PDB_FILE:${TARGET_NAME}> CONFIGURATIONS Debug RelWithDebInfo DESTINATION ${INSTALL_FOLDER} )
 endif()
 

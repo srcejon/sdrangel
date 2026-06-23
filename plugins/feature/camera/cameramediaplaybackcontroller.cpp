@@ -307,6 +307,15 @@ void CameraMediaPlaybackController::presentStreamTick()
     if (!m_state.m_decoder) {
         return;
     }
+    if (!m_state.m_streamTickGapClock.isValid()) {
+        m_state.m_streamTickGapClock.start();
+    } else {
+        const double gapMs = m_state.m_streamTickGapClock.nsecsElapsed() / 1.0e6;
+        m_state.m_streamTickGapClock.restart();
+        m_state.m_streamTickGapMaxMs = qMax(m_state.m_streamTickGapMaxMs, gapMs);
+    }
+    ++m_state.m_streamPresentTicksThisSecond;
+
     QElapsedTimer tickTimer;
     tickTimer.start();
     submitStreamAudio();
@@ -403,10 +412,14 @@ void CameraMediaPlaybackController::presentStreamTick()
             << " videoPkts " << m_state.m_decoder->streamVideoPacketCount()
             << " videoFrames " << m_state.m_decoder->streamDecodedVideoFrameCount()
             << " framesDropped/s " << m_state.m_streamFramesDroppedThisSecond
+            << " presentTicks/s " << m_state.m_streamPresentTicksThisSecond
+            << " gapMaxMs " << qRound(m_state.m_streamTickGapMaxMs * 10) / 10.0
             << " tickMaxMs " << qRound(m_state.m_streamTickTotalMaxMs * 10) / 10.0
             << " (audio " << qRound(m_state.m_streamTickAudioMaxMs * 10) / 10.0
             << " submit " << qRound(m_state.m_streamTickSubmitMaxMs * 10) / 10.0 << ")";
         m_state.m_streamFramesDroppedThisSecond = 0;
+        m_state.m_streamPresentTicksThisSecond = 0;
+        m_state.m_streamTickGapMaxMs = 0.0;
         m_state.m_streamTickTotalMaxMs = 0.0;
         m_state.m_streamTickAudioMaxMs = 0.0;
         m_state.m_streamTickSubmitMaxMs = 0.0;

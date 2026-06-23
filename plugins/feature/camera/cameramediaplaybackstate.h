@@ -118,6 +118,11 @@ public:
     double m_streamTickTotalMaxMs = 0.0;
     double m_streamTickAudioMaxMs = 0.0;
     double m_streamTickSubmitMaxMs = 0.0;
+    // Diagnostic: actual present cadence — ticks per second (= effective present fps) and the
+    // worst inter-tick gap, to see directly whether the timer is being delivered late.
+    int m_streamPresentTicksThisSecond = 0;
+    QElapsedTimer m_streamTickGapClock;
+    double m_streamTickGapMaxMs = 0.0;
     quint64 m_frameSubmitGeneration = 0;
 
     QTimer m_delayedSubmitTimer;

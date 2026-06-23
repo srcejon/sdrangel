@@ -146,6 +146,7 @@ add_library(camera_platesolver STATIC
     ${CMAKE_CURRENT_SOURCE_DIR}/cameraplatesolverrefine.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/cameraplatesolveracceptance.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/cameraplatesolvercore.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/cameraplatesolverpipeline.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/cameraplatesolver.h
     ${CMAKE_CURRENT_SOURCE_DIR}/cameraplatesolverinternal.h
 )

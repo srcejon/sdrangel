@@ -1772,13 +1772,12 @@ bool CameraVideoFileDecoder::appendFrameAudio(const AVFrame *frame, QByteArray& 
             AVRational{m_audioTimeBaseNum, m_audioTimeBaseDen},
             AVRational{1, 1000});
     }
-    if ((audioStartMs >= 0) && (m_audioDecodedPositionMs >= 0))
-    {
-        if (m_urlSource) {
-            audioStartMs = -1;
-        }
-    }
-
+    // Anchor the audio position to the packet PTS, the SAME timeline the video frames use
+    // (best_effort_timestamp). Earlier this was discarded for URL sources and the position was
+    // accumulated from decoded-sample durations instead — but the decoded-sample timeline drifts
+    // from the PTS timeline (gaps, source clock vs decoded rate), so audio and video, derived from
+    // different clocks, slowly desynced (~1.3%/s). Re-anchoring every packet keeps audio and video
+    // on one clock; PTS jitter is absorbed by the present's clock smoothing, large jumps snap.
     if (audioStartMs >= 0) {
         m_audioDecodedPositionMs = audioStartMs + audioDurationMs;
     } else if (m_audioDecodedPositionMs >= 0) {

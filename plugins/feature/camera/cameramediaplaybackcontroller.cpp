@@ -376,9 +376,17 @@ void CameraMediaPlaybackController::presentStreamTick()
             m_state.m_streamVideoClockMs = c;
         }
         clockMs = llround(m_state.m_streamVideoClockMs);
-        // Manual A/V trim (preview only): shift the present clock by the audio-offset slider so
-        // any residual video-leads/lags-audio offset can be corrected. Negative delays the video
-        // (same sense as file playback). Does not affect audio or recording.
+        // Stream-specific audio-output-latency compensation. The audio's true latency to the
+        // speaker is larger than monFifo+sink (the OS/driver buffer past processedUSecs that the
+        // sink-latency EMA can't see). FILE playback absorbs this structurally — it holds the
+        // monitor deeper (250 vs 120 ms) and delays the video frame by the sink latency
+        // (submitVideoFileFrame applyPlaybackOffset) — so it doesn't show the lead. The stream's
+        // clock-based model (subtract monFifo+sink, no video delay) does, leaving video leading
+        // audio by this tail. Measured ~200 ms here; delay the video to match. Stream-only (this is
+        // presentStreamTick) so file playback is unaffected.
+        clockMs -= m_streamAudioOutputLatencyMs;
+        // Manual A/V trim (preview only): the audio-offset slider trims around the above, both
+        // paths. Negative delays the video. Does not affect audio or recording.
         clockMs += m_settings->m_videoPlaybackAudioOffsetMs;
     }
 

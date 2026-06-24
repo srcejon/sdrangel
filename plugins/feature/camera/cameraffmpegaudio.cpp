@@ -20,6 +20,7 @@
 #include "cameraffmpegcompat.h"
 
 #ifdef CAMERA_FFMPEG_STREAMING
+#include <cerrno>
 extern "C" {
 #include <libavutil/error.h>
 #include <libavutil/samplefmt.h>
@@ -163,6 +164,39 @@ bool CameraFFmpegAudio::PcmS16StereoResampler::flush(QByteArray& output, QString
 QString CameraFFmpegAudio::avErrorString(int errorCode)
 {
 #ifdef CAMERA_FFMPEG_STREAMING
+    // av_strerror() cannot stringify AVERROR(errno) system codes on Windows - the CRT has no
+    // strerror() text for ETIMEDOUT (138), ECONNREFUSED (107), etc. - so it falls back to the
+    // unhelpful "Error number -138 occurred". Map the common network errors to readable text first;
+    // the AVERROR() macro makes the case values portable (it negates the platform's errno value).
+    switch (errorCode)
+    {
+#ifdef ETIMEDOUT
+    case AVERROR(ETIMEDOUT):    return QStringLiteral("Connection timed out");
+#endif
+#ifdef ECONNREFUSED
+    case AVERROR(ECONNREFUSED): return QStringLiteral("Connection refused");
+#endif
+#ifdef ECONNRESET
+    case AVERROR(ECONNRESET):   return QStringLiteral("Connection reset by peer");
+#endif
+#ifdef ECONNABORTED
+    case AVERROR(ECONNABORTED): return QStringLiteral("Connection aborted");
+#endif
+#ifdef EHOSTUNREACH
+    case AVERROR(EHOSTUNREACH): return QStringLiteral("No route to host");
+#endif
+#ifdef ENETUNREACH
+    case AVERROR(ENETUNREACH):  return QStringLiteral("Network unreachable");
+#endif
+#ifdef ENETDOWN
+    case AVERROR(ENETDOWN):     return QStringLiteral("Network is down");
+#endif
+#ifdef EPIPE
+    case AVERROR(EPIPE):        return QStringLiteral("Connection closed by peer");
+#endif
+    default:
+        break;
+    }
     char buffer[AV_ERROR_MAX_STRING_SIZE] = {};
     av_strerror(errorCode, buffer, sizeof(buffer));
     return QString::fromLocal8Bit(buffer);

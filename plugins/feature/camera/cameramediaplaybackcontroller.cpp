@@ -335,7 +335,12 @@ void CameraMediaPlaybackController::presentStreamTick()
 
     QElapsedTimer tickTimer;
     tickTimer.start();
-    submitStreamAudio();
+    // While rebuffering, stop feeding the monitor so the decoder audio buffer + packet cushion
+    // rebuild to full before resuming (one clean pause), rather than feeding the trickle and
+    // stuttering. The monitor plays out what it already holds, then silence, until resume.
+    if (!m_state.m_streamRebuffering) {
+        submitStreamAudio();
+    }
     const double tAudioMs = tickTimer.nsecsElapsed() / 1.0e6;
     const double intervalMs = qMax(1.0, videoFileExactFrameIntervalMs());
 
@@ -377,45 +382,52 @@ void CameraMediaPlaybackController::presentStreamTick()
         clockMs += m_settings->m_videoPlaybackAudioOffsetMs;
     }
 
-    // Buffering gate: hold the master start until audio has started (clock valid) AND the video
-    // decode has caught up to the clock. At startup the audio buffer fills instantly while NVDEC
-    // spins up, so the audio clock runs ahead of any decoded video; starting then made the present
-    // race a backlog of late frames to catch the clock ("nothing, then a burst"). Instead wait for
-    // a decoded frame at/after the clock, and meanwhile show the LATEST decoded frame so the
-    // picture catches up smoothly rather than blanking.
+    // Rebuffer trigger: if the audio buffer underruns mid-playback (source fell behind), don't
+    // limp the trickle and stutter — pause and rebuild the buffer to full, then resume once. The
+    // take-loop below holds the picture at the clock meanwhile (video plays out the monitor's
+    // remaining audio, then freezes).
+    const int monRate = qMax(1, m_audio->monitorSampleRate());
+    const int audioBufMs = m_state.m_decoder->streamAudioBufferedFrames() * 1000 / monRate;
+    if ((m_state.m_basePositionMs >= 0) && !m_state.m_streamRebuffering && (audioBufMs < 50))
+    {
+        m_state.m_streamRebuffering = true;
+        m_state.m_basePositionMs = -1;
+        qDebug() << "CameraMediaPlayback: stream rebuffering - audio underrun, audioBufMs" << audioBufMs;
+    }
+
+    // Buffering / rebuffering gate. Hold the master start until the audio clock is valid AND the
+    // video decode has caught up to it (a decoded frame at/after the clock exists). On a rebuffer
+    // also wait for the packet cushion to refill to its target, so playback resumes with a full
+    // buffer. The take-loop below runs in all cases: with the clock ahead of the video (startup) it
+    // shows the latest decoded frame to catch up; with the clock frozen (rebuffer) it holds.
     if (m_state.m_basePositionMs < 0)
     {
         const qint64 videoEdgeMs = m_state.m_decoder->streamVideoDecodedEdgePtsMs();
-        if ((clockMs < 0) || (videoEdgeMs < clockMs))
+        bool ready = (clockMs >= 0) && (videoEdgeMs >= clockMs);
+        if (m_state.m_streamRebuffering)
         {
-            // Show the newest decoded frame while catching up (drop the older backlog).
-            QImage img;
-            qint64 pts = -1;
-            bool e = false;
-            bool got = false;
-            while (m_state.m_decoder->streamPeekVideoFramePtsMs() >= 0)
-            {
-                QImage t;
-                qint64 p = -1;
-                bool ee = false;
-                if (!m_state.m_decoder->streamTakeVideoFrame(t, p, ee) || ee) {
-                    break;
-                }
-                img = std::move(t);
-                pts = p;
-                got = true;
-            }
-            if (got) {
-                submitStreamPresentFrame(img, pts);
-            }
-            m_presentTimer.setSingleShot(true);
-            m_presentTimer.start(qMax(1, static_cast<int>(intervalMs / 2.0)));
-            return;
+            const int cushionFrames = streamBufferingCushionFrameCount();
+            const int buffered = m_state.m_decoder->streamVideoPacketCount()
+                               + m_state.m_decoder->streamDecodedVideoFrameCount();
+            ready = ready && (buffered >= cushionFrames);
         }
-        m_state.m_basePositionMs = 0;   // started
-        m_state.m_streamPosterShown = false;
-        qDebug() << "CameraMediaPlayback: stream playback start - clockMs" << clockMs
-                 << "videoEdgeMs" << videoEdgeMs;
+        if (ready)
+        {
+            m_state.m_basePositionMs = 0;
+            if (m_state.m_streamRebuffering)
+            {
+                m_state.m_streamRebuffering = false;
+                qDebug() << "CameraMediaPlayback: stream rebuffering done - resume, clockMs" << clockMs
+                         << "videoEdgeMs" << videoEdgeMs << "audioBufMs" << audioBufMs;
+            }
+            else
+            {
+                qDebug() << "CameraMediaPlayback: stream playback start - clockMs" << clockMs
+                         << "videoEdgeMs" << videoEdgeMs;
+            }
+        }
+        // If not ready, fall through: the take-loop shows up to the clock (catch-up / hold), then
+        // we reschedule fast at the bottom.
     }
 
     // Show frames due by the master clock: drop late (keep the newest due), hold early.
@@ -504,6 +516,7 @@ void CameraMediaPlaybackController::presentStreamTick()
             << " videoPkts " << m_state.m_decoder->streamVideoPacketCount()
             << " videoFrames " << m_state.m_decoder->streamDecodedVideoFrameCount()
             << " framesDropped/s " << m_state.m_streamFramesDroppedThisSecond
+            << " rebuf " << (m_state.m_streamRebuffering ? 1 : 0)
             << " presentTicks/s " << m_state.m_streamPresentTicksThisSecond
             << " gapMaxMs " << qRound(m_state.m_streamTickGapMaxMs * 10) / 10.0
             << " tickMaxMs " << qRound(m_state.m_streamTickTotalMaxMs * 10) / 10.0
@@ -518,8 +531,13 @@ void CameraMediaPlaybackController::presentStreamTick()
         m_state.m_audioWanderClock.restart();
     }
 
+    // Tick faster while (re)buffering so the gate re-checks readiness promptly; otherwise at the
+    // frame interval.
     m_presentTimer.setSingleShot(true);
-    m_presentTimer.start(qMax(1, static_cast<int>(intervalMs)));
+    const int delayMs = (m_state.m_basePositionMs < 0)
+        ? qMax(1, static_cast<int>(intervalMs / 2.0))
+        : qMax(1, static_cast<int>(intervalMs));
+    m_presentTimer.start(delayMs);
 }
 
 // ---------------------------------------------------------------------------
@@ -582,6 +600,7 @@ bool CameraMediaPlaybackController::openVideoFileDecoder()
         m_state.m_streamPlayedPtsMs = -1;
         m_state.m_streamVideoClockMs = -1.0;
         m_state.m_streamAvSkewBaselineSet = false;
+        m_state.m_streamRebuffering = false;
         m_state.m_basePositionMs = -1;
         // Make the ~16 ms present timer reliable (see setHighTimerResolution); without this the
         // present is delivered at ~42 ms on Windows and caps at ~24 fps.
@@ -648,6 +667,7 @@ void CameraMediaPlaybackController::setVideoFilePlaying(bool playing)
             m_state.m_streamPlayedPtsMs = -1;
             m_state.m_streamVideoClockMs = -1.0;
             m_state.m_streamAvSkewBaselineSet = false;
+            m_state.m_streamRebuffering = false;
             m_state.m_basePositionMs = -1;
             m_presentTimer.start(qMax(1, videoFileFrameIntervalMs()));
         }

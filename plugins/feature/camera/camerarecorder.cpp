@@ -515,6 +515,8 @@ void CameraRecorder::processNewFrame(const CameraPipelineFramePtr& frame)
     const QImage& calibratedImage = frame->m_unprocessedImage.isNull() ? frame->m_image : frame->m_unprocessedImage;
     const QImage& filteredImage = frame->m_image;
     const QImage& processedImage = frame->m_postProcessedImage.isNull() ? frame->m_image : frame->m_postProcessedImage;
+    const bool mediaPlaybackFrame = (frame->m_playbackPositionMs >= 0) || (frame->m_playbackFrameNumber > 0);
+    const bool recordContinuousFrame = !mediaPlaybackFrame || (frame->m_playbackActiveFrame && !frame->m_manualPreviewFrame);
     bool savedImageFrame = false;
     bool savedVideoFrame = false;
 
@@ -527,7 +529,7 @@ void CameraRecorder::processNewFrame(const CameraPipelineFramePtr& frame)
         closeYouTubeStream();
     }
 
-    if (((m_captureActive && m_settings.m_saveImage) || frame->m_saveCurrentImage) && !m_settings.m_imageFileName.isEmpty())
+    if ((((m_captureActive && m_settings.m_saveImage) && recordContinuousFrame) || frame->m_saveCurrentImage) && !m_settings.m_imageFileName.isEmpty())
     {
         if (shouldSaveRawFits())
         {
@@ -590,7 +592,7 @@ void CameraRecorder::processNewFrame(const CameraPipelineFramePtr& frame)
         }
     }
 
-    if (m_captureActive && m_settings.m_saveVideo && !m_settings.m_videoFileName.isEmpty())
+    if (m_captureActive && recordContinuousFrame && m_settings.m_saveVideo && !m_settings.m_videoFileName.isEmpty())
     {
         const double videoFrameRate = frame->m_playbackFrameRate > 0.0
             ? frame->m_playbackFrameRate
@@ -648,7 +650,7 @@ void CameraRecorder::processNewFrame(const CameraPipelineFramePtr& frame)
         m_pendingAudioChunks.clear();
         m_pendingAudioBytes = 0;
     }
-    else if (m_captureActive && !m_settings.m_saveVideo)
+    else if (m_captureActive && recordContinuousFrame && !m_settings.m_saveVideo)
     {
         appendPreRecordFrame(calibratedImage, filteredImage, processedImage);
         if (m_settings.m_youtubeStreamEnabled)

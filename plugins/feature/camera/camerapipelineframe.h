@@ -225,6 +225,7 @@ struct CameraPipelineFrame
     quint64 m_captureEpoch = 0;
     qint64 m_pipelineInputWallClockMs = 0;
     bool m_manualPreviewFrame = false;
+    bool m_playbackActiveFrame = false;
     qint64 m_playbackPositionMs = -1;
     int m_playbackFrameNumber = -1;
     double m_playbackFrameRate = 0.0;

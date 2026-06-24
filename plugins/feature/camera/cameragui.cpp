@@ -4439,6 +4439,7 @@ void CameraGUI::submitQtImageFrame(const QImage& image, qint64 playbackPositionM
             : QDateTime();
         frame->m_playbackPositionMs = playbackPositionMs;
         frame->m_playbackFrameNumber = playbackFrameNumber;
+        frame->m_playbackActiveFrame = m_captureActive && ((playbackPositionMs >= 0) || (playbackFrameNumber > 0));
         populateFrameExposureMetadata(*frame, exposureTimeMs, hdrExposureIndex, hdrExposureCount, captureDateTime);
         frame->m_captureEpoch = m_captureEpoch;
         frame->m_manualPreviewFrame = !m_captureActive;

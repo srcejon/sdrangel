@@ -319,6 +319,38 @@ void CameraMediaPlaybackController::submitStreamPresentFrame(const QImage& image
     reportVideoFilePlaybackToGUI();
 }
 
+bool CameraMediaPlaybackController::reconnectStreamDecoder()
+{
+    if (!m_state.m_decoder || !m_settings->isStreamCamera()) {
+        return false;
+    }
+    const QString mediaSourcePath = m_settings->ffmpegMediaSourcePath();
+    if (mediaSourcePath.isEmpty()) {
+        return false;
+    }
+    const int audioOutputSampleRate = qMax(1, m_audio->monitorSampleRate());
+    m_state.m_decoder->close();
+    QString errorMessage;
+    if (!m_state.m_decoder->open(
+        mediaSourcePath, errorMessage, audioOutputSampleRate,
+        qBound(CameraSettings::m_minStreamBufferingSeconds,
+               m_settings->m_streamBufferingSeconds,
+               CameraSettings::m_maxStreamBufferingSeconds),
+        /*streaming=*/ true))
+    {
+        return false;
+    }
+    m_state.m_decoder->setStreamAudioTargetSeconds(0.30);
+    m_state.m_frameRate = m_state.m_decoder->frameRate();
+    // Re-gate the present from the reconnected live edge.
+    m_state.m_streamPlayedPtsMs = -1;
+    m_state.m_streamVideoClockMs = -1.0;
+    m_state.m_streamAvSkewBaselineSet = false;
+    m_state.m_streamRebuffering = false;
+    m_state.m_basePositionMs = -1;
+    return true;
+}
+
 void CameraMediaPlaybackController::presentStreamTick()
 {
     if (!m_state.m_decoder) {
@@ -467,6 +499,32 @@ void CameraMediaPlaybackController::presentStreamTick()
     }
     if (eof)
     {
+        // The source ended or timed out (rw_timeout ~5s). For a live stream, try to reconnect at
+        // the live edge with a bounded back-off instead of stopping; only give up (and surface an
+        // error) after ~20s of failed attempts.
+        if (m_settings->isStreamCamera())
+        {
+            if (reconnectStreamDecoder())
+            {
+                qDebug() << "CameraMediaPlayback: stream reconnected after EOF/timeout";
+                m_streamReconnectAttempts = 0;
+                m_presentTimer.setSingleShot(true);
+                m_presentTimer.start(qMax(1, static_cast<int>(intervalMs / 2.0)));
+                return;
+            }
+            if (++m_streamReconnectAttempts <= m_maxStreamReconnectAttempts)
+            {
+                qDebug() << "CameraMediaPlayback: stream reconnect failed, attempt"
+                         << m_streamReconnectAttempts << "of" << m_maxStreamReconnectAttempts;
+                m_presentTimer.setSingleShot(true);
+                m_presentTimer.start(500);   // back off before retrying
+                return;
+            }
+            qWarning() << "CameraMediaPlayback: stream reconnect gave up after"
+                       << m_maxStreamReconnectAttempts << "attempts";
+            emit error(QStringLiteral("streamReconnect:%1").arg(m_settings->ffmpegMediaSourcePath()),
+                       tr("Stream lost"), tr("The stream ended and could not be reconnected."));
+        }
         setVideoFilePlaying(false);
         return;
     }
@@ -607,6 +665,7 @@ bool CameraMediaPlaybackController::openVideoFileDecoder()
         m_state.m_streamVideoClockMs = -1.0;
         m_state.m_streamAvSkewBaselineSet = false;
         m_state.m_streamRebuffering = false;
+        m_streamReconnectAttempts = 0;
         m_state.m_basePositionMs = -1;
         // Make the ~16 ms present timer reliable (see setHighTimerResolution); without this the
         // present is delivered at ~42 ms on Windows and caps at ~24 fps.
@@ -674,6 +733,7 @@ void CameraMediaPlaybackController::setVideoFilePlaying(bool playing)
             m_state.m_streamVideoClockMs = -1.0;
             m_state.m_streamAvSkewBaselineSet = false;
             m_state.m_streamRebuffering = false;
+            m_streamReconnectAttempts = 0;
             m_state.m_basePositionMs = -1;
             m_presentTimer.start(qMax(1, videoFileFrameIntervalMs()));
         }

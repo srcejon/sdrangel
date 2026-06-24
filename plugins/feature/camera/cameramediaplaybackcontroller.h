@@ -199,6 +199,12 @@ private:
     qint64 streamMasterClockMs() const;
     // Push one decoded stream frame into the pipeline (preview path).
     void submitStreamPresentFrame(const QImage& image, qint64 ptsMs);
+    // Reconnect the stream decoder after the source ends/times out (rw_timeout ~5s surfaces a dead
+    // source as EOF). Closes + reopens the decoder in streaming mode at the live edge and re-gates
+    // the present. Returns true on success. m_streamReconnectAttempts bounds the retries.
+    bool reconnectStreamDecoder();
+    int m_streamReconnectAttempts = 0;
+    static constexpr int m_maxStreamReconnectAttempts = 40;   // ~20s of ~500ms-spaced attempts
     // Raise/lower the OS timer resolution (Windows) so the present timer fires on time while a
     // stream plays. Ref-balanced via m_timerResolutionRaised. No-op off Windows.
     void setHighTimerResolution(bool enable);

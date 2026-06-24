@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>854</width>
-    <height>906</height>
+    <height>914</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -4266,6 +4266,9 @@ li.checked::marker { content: &quot;\2612&quot;; }
             <property name="toolTip">
              <string>Adjust A/V sync for video file and stream playback; negative delays video, positive delays audio</string>
             </property>
+            <property name="suffix">
+             <string> ms</string>
+            </property>
             <property name="minimum">
              <number>-2000</number>
             </property>
@@ -4274,9 +4277,6 @@ li.checked::marker { content: &quot;\2612&quot;; }
             </property>
             <property name="singleStep">
              <number>10</number>
-            </property>
-            <property name="suffix">
-             <string> ms</string>
             </property>
            </widget>
           </item>
@@ -5677,10 +5677,20 @@ car</string>
               <string>Star Detection</string>
              </property>
              <layout class="QGridLayout" name="gridLayout_11">
-              <item row="0" column="2">
-               <widget class="QLabel" name="starBackgroundBlurLabel">
+              <item row="2" column="0">
+               <widget class="QLabel" name="starMinAreaLabel">
                 <property name="text">
-                 <string>Background blur</string>
+                 <string>Min area</string>
+                </property>
+               </widget>
+              </item>
+              <item row="2" column="3">
+               <widget class="QSpinBox" name="starMaxAreaSpin">
+                <property name="suffix">
+                 <string> px²</string>
+                </property>
+                <property name="maximum">
+                 <number>10000</number>
                 </property>
                </widget>
               </item>
@@ -5694,7 +5704,89 @@ car</string>
                 </property>
                </widget>
               </item>
-              <item row="1" column="3">
+              <item row="1" column="1">
+               <widget class="QDoubleSpinBox" name="starMaxAspectRatioSpin">
+                <property name="minimum">
+                 <double>1.000000000000000</double>
+                </property>
+                <property name="maximum">
+                 <double>10.000000000000000</double>
+                </property>
+                <property name="singleStep">
+                 <double>0.100000000000000</double>
+                </property>
+               </widget>
+              </item>
+              <item row="0" column="2">
+               <widget class="QLabel" name="starBackgroundBlurLabel">
+                <property name="text">
+                 <string>Background blur</string>
+                </property>
+               </widget>
+              </item>
+              <item row="2" column="2">
+               <widget class="QLabel" name="starMaxAreaLabel">
+                <property name="text">
+                 <string>Max area</string>
+                </property>
+               </widget>
+              </item>
+              <item row="0" column="0">
+               <widget class="QLabel" name="starThresholdLabel">
+                <property name="text">
+                 <string>Threshold</string>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="0">
+               <widget class="QLabel" name="starMaxAspectRatioLabel">
+                <property name="text">
+                 <string>Max aspect ratio</string>
+                </property>
+               </widget>
+              </item>
+              <item row="2" column="1">
+               <widget class="QSpinBox" name="starMinAreaSpin">
+                <property name="suffix">
+                 <string> px²</string>
+                </property>
+                <property name="maximum">
+                 <number>10000</number>
+                </property>
+               </widget>
+              </item>
+              <item row="0" column="1">
+               <widget class="QSpinBox" name="starThresholdSpin">
+                <property name="maximum">
+                 <number>255</number>
+                </property>
+               </widget>
+              </item>
+              <item row="3" column="0">
+               <widget class="QLabel" name="showStarDetectionBoxesLabel">
+                <property name="text">
+                 <string>Show detection boxes</string>
+                </property>
+               </widget>
+              </item>
+              <item row="3" column="1">
+               <widget class="QCheckBox" name="showStarDetectionBoxesCheck">
+                <property name="toolTip">
+                 <string>Draw a box marker around each detected star on the preview</string>
+                </property>
+                <property name="text">
+                 <string/>
+                </property>
+               </widget>
+              </item>
+              <item row="3" column="2">
+               <widget class="QLabel" name="starDebugViewLabel">
+                <property name="text">
+                 <string>Debug view</string>
+                </property>
+               </widget>
+              </item>
+              <item row="3" column="3">
                <widget class="QComboBox" name="starDebugViewCombo">
                 <item>
                  <property name="text">
@@ -5723,81 +5815,6 @@ car</string>
                 </item>
                </widget>
               </item>
-              <item row="1" column="1">
-               <widget class="QDoubleSpinBox" name="starMaxAspectRatioSpin">
-                <property name="minimum">
-                 <double>1.000000000000000</double>
-                </property>
-                <property name="maximum">
-                 <double>10.000000000000000</double>
-                </property>
-                <property name="singleStep">
-                 <double>0.100000000000000</double>
-                </property>
-               </widget>
-              </item>
-              <item row="0" column="0">
-               <widget class="QLabel" name="starThresholdLabel">
-                <property name="text">
-                 <string>Threshold</string>
-                </property>
-               </widget>
-              </item>
-              <item row="1" column="2">
-               <widget class="QLabel" name="starDebugViewLabel">
-                <property name="text">
-                 <string>Debug view</string>
-                </property>
-               </widget>
-              </item>
-              <item row="1" column="0">
-               <widget class="QLabel" name="starMaxAspectRatioLabel">
-                <property name="text">
-                 <string>Max aspect ratio</string>
-                </property>
-               </widget>
-              </item>
-              <item row="0" column="1">
-               <widget class="QSpinBox" name="starThresholdSpin">
-                <property name="maximum">
-                 <number>255</number>
-                </property>
-               </widget>
-              </item>
-              <item row="2" column="0">
-               <widget class="QLabel" name="starMinAreaLabel">
-                <property name="text">
-                 <string>Min area</string>
-                </property>
-               </widget>
-              </item>
-              <item row="2" column="1">
-               <widget class="QSpinBox" name="starMinAreaSpin">
-                <property name="suffix">
-                 <string> px²</string>
-                </property>
-                <property name="maximum">
-                 <number>10000</number>
-                </property>
-               </widget>
-              </item>
-              <item row="2" column="2">
-               <widget class="QLabel" name="starMaxAreaLabel">
-                <property name="text">
-                 <string>Max area</string>
-                </property>
-               </widget>
-              </item>
-              <item row="2" column="3">
-               <widget class="QSpinBox" name="starMaxAreaSpin">
-                <property name="suffix">
-                 <string> px²</string>
-                </property>
-                <property name="maximum">
-                 <number>10000</number>
-                </property>
-               </widget>
-              </item>
              </layout>
             </widget>
            </item>
@@ -5807,40 +5824,6 @@ car</string>
               <string>Plate Solving</string>
              </property>
              <layout class="QGridLayout" name="gridLayout_12">
-              <item row="3" column="0">
-               <widget class="QLabel" name="plateSolveSearchRadiusLabel">
-                <property name="text">
-                 <string>Az/El search radius</string>
-                </property>
-               </widget>
-              </item>
-              <item row="6" column="1" colspan="2">
-               <widget class="QComboBox" name="plateSolveCatalogSourceCombo">
-                <property name="toolTip">
-                 <string>Select the star catalog used for plate solving</string>
-                </property>
-                <item>
-                 <property name="text">
-                  <string>Auto</string>
-                 </property>
-                </item>
-                <item>
-                 <property name="text">
-                  <string>HYG (Local) / bundled</string>
-                 </property>
-                </item>
-                <item>
-                 <property name="text">
-                  <string>Siril Gaia DR3 SPCC (Online)</string>
-                 </property>
-                </item>
-                <item>
-                 <property name="text">
-                  <string>Siril Gaia DR3 Astrometric (Local)</string>
-                 </property>
-                </item>
-               </widget>
-              </item>
               <item row="3" column="1">
                <widget class="QDoubleSpinBox" name="plateSolveSearchRadiusSpin">
                 <property name="sizePolicy">
@@ -5863,48 +5846,7 @@ car</string>
                 </property>
                </widget>
               </item>
-              <item row="7" column="1">
-               <widget class="QComboBox" name="plateSolveDateTimeModeCombo">
-                <item>
-                 <property name="text">
-                  <string>Capture</string>
-                 </property>
-                </item>
-                <item>
-                 <property name="text">
-                  <string>Custom</string>
-                 </property>
-                </item>
-               </widget>
-              </item>
-              <item row="4" column="1">
-               <widget class="QSpinBox" name="plateSolveMinMatchesSpin">
-                <property name="minimum">
-                 <number>2</number>
-                </property>
-                <property name="maximum">
-                 <number>32</number>
-                </property>
-               </widget>
-              </item>
-              <item row="6" column="3">
-               <widget class="QToolButton" name="plateSolveDownloadCatalogButton">
-                <property name="toolTip">
-                 <string>Download the selected plate-solving catalog(s)</string>
-                </property>
-                <property name="text">
-                 <string>Download </string>
-                </property>
-               </widget>
-              </item>
-              <item row="1" column="0">
-               <widget class="QLabel" name="plateSolveStartModeLabel">
-                <property name="text">
-                 <string>Start mode</string>
-                </property>
-               </widget>
-              </item>
-              <item row="7" column="2" colspan="2">
+              <item row="8" column="2" colspan="2">
                <layout class="QHBoxLayout" name="plateSolveDateTimeLayout">
                 <property name="spacing">
                  <number>2</number>
@@ -5948,6 +5890,116 @@ car</string>
                 </item>
                </layout>
               </item>
+              <item row="5" column="2">
+               <widget class="QLabel" name="plateSolveFinalMatchRadiusLabel">
+                <property name="text">
+                 <string>Final match radius</string>
+                </property>
+               </widget>
+              </item>
+              <item row="6" column="3">
+               <widget class="QToolButton" name="plateSolveDownloadCatalogButton">
+                <property name="toolTip">
+                 <string>Download the selected plate-solving catalog(s)</string>
+                </property>
+                <property name="text">
+                 <string>Download </string>
+                </property>
+               </widget>
+              </item>
+              <item row="5" column="3">
+               <widget class="QDoubleSpinBox" name="plateSolveFinalMatchRadiusSpin">
+                <property name="suffix">
+                 <string> px</string>
+                </property>
+                <property name="minimum">
+                 <double>1.000000000000000</double>
+                </property>
+                <property name="maximum">
+                 <double>256.000000000000000</double>
+                </property>
+                <property name="singleStep">
+                 <double>1.000000000000000</double>
+                </property>
+               </widget>
+              </item>
+              <item row="4" column="2">
+               <widget class="QLabel" name="plateSolveMaxMagnitudeLabel">
+                <property name="text">
+                 <string>Max magnitude</string>
+                </property>
+               </widget>
+              </item>
+              <item row="9" column="0">
+               <widget class="QLabel" name="plateSolveLabelModeLabel">
+                <property name="text">
+                 <string>Labels</string>
+                </property>
+               </widget>
+              </item>
+              <item row="9" column="1">
+               <widget class="QComboBox" name="plateSolveLabelModeCombo">
+                <item>
+                 <property name="text">
+                  <string>Name</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>Name + mag</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>Name + mag + spect</string>
+                 </property>
+                </item>
+               </widget>
+              </item>
+              <item row="10" column="1">
+               <widget class="QCheckBox" name="hideSyntheticNamesCheck">
+                <property name="toolTip">
+                 <string>Don't label stars that only have a synthetic Gaia coordinate name (Gaia Jhhmmss...); keep stars with a real catalogue name</string>
+                </property>
+                <property name="text">
+                 <string/>
+                </property>
+               </widget>
+              </item>
+              <item row="6" column="0">
+               <widget class="QLabel" name="plateSolveCatalogSourceLabel">
+                <property name="text">
+                 <string>Catalog</string>
+                </property>
+               </widget>
+              </item>
+              <item row="6" column="1" colspan="2">
+               <widget class="QComboBox" name="plateSolveCatalogSourceCombo">
+                <property name="toolTip">
+                 <string>Select the star catalog used for plate solving</string>
+                </property>
+                <item>
+                 <property name="text">
+                  <string>Auto</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>HYG (Local) / bundled</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>Siril Gaia DR3 SPCC (Online)</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>Siril Gaia DR3 Astrometric (Local)</string>
+                 </property>
+                </item>
+               </widget>
+              </item>
               <item row="1" column="1">
                <widget class="QComboBox" name="plateSolveStartModeCombo">
                 <item>
@@ -5987,50 +6039,6 @@ car</string>
                 </item>
                </widget>
               </item>
-              <item row="7" column="0">
-               <widget class="QLabel" name="plateSolveDateTimeModeLabel">
-                <property name="text">
-                 <string>Date/time</string>
-                </property>
-               </widget>
-              </item>
-              <item row="6" column="0">
-               <widget class="QLabel" name="plateSolveCatalogSourceLabel">
-                <property name="text">
-                 <string>Catalog</string>
-                </property>
-               </widget>
-              </item>
-              <item row="5" column="3">
-               <widget class="QDoubleSpinBox" name="plateSolveFinalMatchRadiusSpin">
-                <property name="suffix">
-                 <string> px</string>
-                </property>
-                <property name="minimum">
-                 <double>1.000000000000000</double>
-                </property>
-                <property name="maximum">
-                 <double>256.000000000000000</double>
-                </property>
-                <property name="singleStep">
-                 <double>1.000000000000000</double>
-                </property>
-               </widget>
-              </item>
-              <item row="4" column="0">
-               <widget class="QLabel" name="plateSolveMinMatchesLabel">
-                <property name="text">
-                 <string>Min matches</string>
-                </property>
-               </widget>
-              </item>
-              <item row="9" column="0">
-               <widget class="QLabel" name="starCatalogDiskCacheSizeLabel">
-                <property name="text">
-                 <string>Cache size</string>
-                </property>
-               </widget>
-              </item>
               <item row="4" column="3">
                <widget class="QDoubleSpinBox" name="plateSolveMaxMagnitudeSpin">
                 <property name="minimum">
@@ -6044,42 +6052,38 @@ car</string>
                 </property>
                </widget>
               </item>
-              <item row="9" column="1">
-               <widget class="QSpinBox" name="starCatalogDiskCacheSizeSpin">
-                <property name="toolTip">
-                 <string>Maximum size of the star catalog region disk cache; 0 disables pruning</string>
-                </property>
-                <property name="suffix">
-                 <string> GB</string>
-                </property>
-                <property name="minimum">
-                 <number>0</number>
-                </property>
-                <property name="maximum">
-                 <number>1024</number>
-                </property>
+              <item row="8" column="1">
+               <widget class="QComboBox" name="plateSolveDateTimeModeCombo">
+                <item>
+                 <property name="text">
+                  <string>Capture</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>Custom</string>
+                 </property>
+                </item>
                </widget>
               </item>
-              <item row="5" column="1">
-               <widget class="QDoubleSpinBox" name="plateSolveMatchRadiusSpin">
-                <property name="suffix">
-                 <string> px</string>
-                </property>
-                <property name="minimum">
-                 <double>1.000000000000000</double>
-                </property>
-                <property name="maximum">
-                 <double>256.000000000000000</double>
-                </property>
-                <property name="singleStep">
-                 <double>1.000000000000000</double>
-                </property>
-               </widget>
-              </item>
-              <item row="5" column="0">
-               <widget class="QLabel" name="plateSolveMatchRadiusLabel">
+              <item row="10" column="0">
+               <widget class="QLabel" name="hideSyntheticNamesLabel">
                 <property name="text">
-                 <string>Acquisition radius</string>
+                 <string>Hide synthetic names</string>
+                </property>
+               </widget>
+              </item>
+              <item row="3" column="0">
+               <widget class="QLabel" name="plateSolveSearchRadiusLabel">
+                <property name="text">
+                 <string>Az/El search radius</string>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="0">
+               <widget class="QLabel" name="plateSolveStartModeLabel">
+                <property name="text">
+                 <string>Start mode</string>
                 </property>
                </widget>
               </item>
@@ -6102,17 +6106,36 @@ car</string>
                 </property>
                </widget>
               </item>
-              <item row="4" column="2">
-               <widget class="QLabel" name="plateSolveMaxMagnitudeLabel">
-                <property name="text">
-                 <string>Max magnitude</string>
+              <item row="5" column="1">
+               <widget class="QDoubleSpinBox" name="plateSolveMatchRadiusSpin">
+                <property name="suffix">
+                 <string> px</string>
+                </property>
+                <property name="minimum">
+                 <double>1.000000000000000</double>
+                </property>
+                <property name="maximum">
+                 <double>256.000000000000000</double>
+                </property>
+                <property name="singleStep">
+                 <double>1.000000000000000</double>
                 </property>
                </widget>
               </item>
-              <item row="5" column="2">
-               <widget class="QLabel" name="plateSolveFinalMatchRadiusLabel">
+              <item row="8" column="0">
+               <widget class="QLabel" name="plateSolveDateTimeModeLabel">
                 <property name="text">
-                 <string>Final match radius</string>
+                 <string>Date/time</string>
+                </property>
+               </widget>
+              </item>
+              <item row="4" column="1">
+               <widget class="QSpinBox" name="plateSolveMinMatchesSpin">
+                <property name="minimum">
+                 <number>2</number>
+                </property>
+                <property name="maximum">
+                 <number>32</number>
                 </property>
                </widget>
               </item>
@@ -6123,33 +6146,14 @@ car</string>
                 </property>
                </widget>
               </item>
-              <item row="8" column="0">
-               <widget class="QLabel" name="plateSolveLabelModeLabel">
+              <item row="5" column="0">
+               <widget class="QLabel" name="plateSolveMatchRadiusLabel">
                 <property name="text">
-                 <string>Labels</string>
+                 <string>Acquisition radius</string>
                 </property>
                </widget>
               </item>
-              <item row="8" column="1">
-               <widget class="QComboBox" name="plateSolveLabelModeCombo">
-                <item>
-                 <property name="text">
-                  <string>Name</string>
-                 </property>
-                </item>
-                <item>
-                 <property name="text">
-                  <string>Name + mag</string>
-                 </property>
-                </item>
-                <item>
-                 <property name="text">
-                  <string>Name + mag + spect</string>
-                 </property>
-                </item>
-               </widget>
-              </item>
-              <item row="8" column="2">
+              <item row="9" column="2">
                <widget class="QLabel" name="starColorLabel">
                 <property name="sizePolicy">
                  <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
@@ -6162,30 +6166,40 @@ car</string>
                 </property>
                </widget>
               </item>
-              <item row="8" column="3">
+              <item row="4" column="0">
+               <widget class="QLabel" name="plateSolveMinMatchesLabel">
+                <property name="text">
+                 <string>Min matches</string>
+                </property>
+               </widget>
+              </item>
+              <item row="9" column="3">
                <widget class="QToolButton" name="starColorButton">
                 <property name="text">
                  <string/>
                 </property>
                </widget>
               </item>
-              <item row="9" column="0" colspan="2">
-               <widget class="QCheckBox" name="showStarDetectionBoxesCheck">
-                <property name="toolTip">
-                 <string>Draw a box marker around each detected star on the preview</string>
-                </property>
+              <item row="7" column="0">
+               <widget class="QLabel" name="starCatalogDiskCacheSizeLabel">
                 <property name="text">
-                 <string>Show detection boxes</string>
+                 <string>Catalog cache size</string>
                 </property>
                </widget>
               </item>
-              <item row="9" column="2" colspan="2">
-               <widget class="QCheckBox" name="hideSyntheticNamesCheck">
+              <item row="7" column="1">
+               <widget class="QSpinBox" name="starCatalogDiskCacheSizeSpin">
                 <property name="toolTip">
-                 <string>Don't label stars that only have a synthetic Gaia coordinate name (Gaia Jhhmmss...); keep stars with a real catalogue name</string>
+                 <string>Maximum size of the star catalog region disk cache; 0 disables pruning</string>
                 </property>
-                <property name="text">
-                 <string>Hide synthetic names</string>
+                <property name="suffix">
+                 <string> GB</string>
+                </property>
+                <property name="minimum">
+                 <number>0</number>
+                </property>
+                <property name="maximum">
+                 <number>1024</number>
                 </property>
                </widget>
               </item>

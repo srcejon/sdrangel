@@ -127,23 +127,16 @@ private:
     void clearDelayedVideoFileFrames();
     void scheduleDelayedVideoFileFrameSubmit();
     void releaseDelayedVideoFileFrames();
-    void stopVideoFileDecodeThread();
-    void clearDecodedVideoFileFrames();
+    void resetVideoFileDecodeState();
     bool videoFilePlaybackIsPlaying() const;
     void setVideoFilePlaybackPlayingState(bool playing);
-    bool takeDecodedVideoFileFrame(CameraMediaPlaybackState::DecodedFrame& frame);
     void clearStreamPlaybackAudio();
     int streamPlaybackAudioBytes() const;
     int streamPlaybackAudioSampleRate() const;
-    int streamInitialBufferFrameCount() const;
-    // Target playback cushion (frames) = streamBufferingSeconds of content. This is the
-    // total buffered depth (decoded queue + compressed read-ahead) the present holds,
-    // and the gate that starts playback. The read-ahead cap is much larger (headroom,
-    // so the reader never backpressures the source); this is the latency/jitter knob.
+    // Target playback cushion (frames) = streamBufferingSeconds of content, held mostly in the
+    // decoder's compressed packet read-ahead (KB-cheap) plus the small decoded frame queue; this is
+    // the gate that starts the clean stream present (presentStreamTick) and the latency/jitter knob.
     int streamBufferingCushionFrameCount() const;
-    int decodedStreamFrameQueueDepth() const;
-    int maxDecodedStreamFrameCount() const;
-    bool readQueuedVideoFileFrame(bool submitAudio);
     qint64 updateVideoFilePlaybackPosition(qint64 decodedPositionMs, qint64 decodeMs, bool repairTimestampDiscontinuities, bool resetClockOnLargeDrift);
     void submitDecodedVideoFileFrame(
         const QImage& image,

@@ -20,23 +20,19 @@
 #define INCLUDE_FEATURE_CAMERA_MEDIA_PLAYBACK_STATE_H_
 
 #include <atomic>
-#include <deque>
 #include <memory>
 
 #include <QByteArray>
 #include <QElapsedTimer>
-#include <QImage>
 #include <QMutex>
 #include <QTimer>
 #include <QVector>
-#include <QWaitCondition>
 
 #include "cameraaudiobytequeue.h"
 #include "camerapipelineframe.h"
 #include "cameravideofiledecoder.h"
 
 class QObject;
-class QThread;
 
 /**
  * \brief Plain state container shared between the decode thread and the worker
@@ -44,24 +40,16 @@ class QThread;
  *
  * Holds everything CameraMediaPlaybackController needs to drive playback: the
  * owned CameraVideoFileDecoder, the playback clock/position bookkeeping, the
- * present/delayed-submit/stream-retry timers, the decoded-frame and stream-audio
- * queues, and the adaptive stream-audio resampler servo state. It has no logic
- * of its own beyond resetClosed()/resetClock(); the controller mutates it.
+ * present/delayed-submit/stream-retry timers, and the stream-audio buffer. It
+ * has no logic of its own beyond resetClosed()/resetClock(); the controller
+ * mutates it.
  *
- * \note This struct is the boundary between two threads. The decode thread
- *       produces into m_decodedFrames (guarded by m_decodedFramesMutex, with
- *       m_decodedFramesAvailable/NotFull wait conditions) and into the decoder
- *       pending-state snapshot (guarded by m_decodeSnapshotMutex); the worker
- *       thread consumes both. The stream-audio buffer is guarded by
- *       m_streamAudioMutex. Cross-thread flags (m_decodeThreadStop,
- *       m_decodeFramesProduced, m_decodeReopening, m_streamReopenResetPending,
- *       etc.) are atomics.
- * \warning Fields are split by ownership: the schedule/clock/delayed-frame state
- *          (m_clock, m_basePositionMs, m_delayedFrames, rebuffering flags) is
- *          worker-owned and must not be written from the decode thread — the
- *          decode thread signals the worker via m_streamReopenResetPending
- *          instead of touching that state directly. The per-field inline
- *          comments document each item's threading contract.
+ * \note Streams run the clean present: the decoder owns its own demux/decode
+ *       threads (see CameraVideoFileDecoder) and the controller is the consumer.
+ *       This container only crosses threads via the decoder pending-state
+ *       snapshot (guarded by m_decodeSnapshotMutex), the stream-audio buffer
+ *       (m_streamAudioMutex), and m_playing (m_playingMutex). The schedule/clock
+ *       state is worker-owned; the per-field inline comments document the rest.
  */
 class CameraMediaPlaybackState
 {
@@ -72,17 +60,6 @@ public:
         qint64 m_dueMs = 0;
         quint64 m_captureEpoch = 0;
         quint64 m_generation = 0;
-    };
-
-    struct DecodedFrame
-    {
-        QImage m_image;
-        qint64 m_positionMs = -1;
-        QByteArray m_pcmS16Stereo;
-        int m_audioSampleRate = 0;
-        qint64 m_decodeMs = 0;
-        bool m_eof = false;
-        QString m_errorMessage;
     };
 
     explicit CameraMediaPlaybackState(QObject *timerParent = nullptr);
@@ -149,39 +126,10 @@ public:
     CameraPipelineFramePtr m_pendingStreamFrame;
     quint64 m_pendingStreamFrameGeneration = 0;
 
-    QThread* m_decodeThread = nullptr;
-    std::atomic_bool m_decodeThreadStop { false };
-    std::atomic_bool m_decodeFrameWakeQueued { false };
+    // Count of stream frames the present dropped to catch up to the clock, consumed once per submit.
     std::atomic<quint64> m_decodeDroppedSinceLastSubmit { 0 };
-    // Monotonic count of real frames the decode thread has produced. The worker
-    // thread watches it to detect a frozen decode (stuck inside readNextFrame on a
-    // desynced live stream, which never surfaces as a read error) and forces a
-    // reopen. m_decodeReopening guards the watchdog from firing mid-reopen.
-    std::atomic<quint64> m_decodeFramesProduced { 0 };
-    std::atomic_bool m_decodeReopening { false };
-    // Set by the decode thread after it reopens a live stream at a new edge (it
-    // has already cleared the stale audio + decoded-frame queue). The worker
-    // thread observes this on its next present tick and resets its own playback
-    // schedule (clock/rebuffer/pending/delayed frames) — that state is worker-
-    // owned and must not be written from the decode thread.
-    std::atomic_bool m_streamReopenResetPending { false };
-    // Set by the worker: true while presentation is actively consuming frames, false while
-    // (re)buffering. The decode thread reads it to switch behaviour: while buffering it
-    // block-to-accumulates (lets the read-ahead build the bitstream cushion while the present
-    // is held); during active playback it SELF-PACES at the frame rate and does NOT block on a
-    // full queue, so the audio (decoded alongside the video) is fed at the full source rate
-    // rather than throttled to the present's achievable display rate (~59 at 60 fps, which
-    // starved the audio and pitched the resampler down). The present's own frame drop sheds
-    // the small surplus the slow present can't display.
-    std::atomic_bool m_streamPresentActive { false };
-    // Decode-thread-owned self-pacing clock + frame counter (only used during active playback).
-    QElapsedTimer m_decodePaceClock;
-    quint64 m_decodePaceFrameCount = 0;
-    bool m_decodePacePrevActive = false;
-    mutable QMutex m_decodedFramesMutex;
-    QWaitCondition m_decodedFramesAvailable;
-    QWaitCondition m_decodedFramesNotFull;
-    std::deque<DecodedFrame> m_decodedFrames;
+    // Guards m_playing (the transport play/pause flag).
+    mutable QMutex m_playingMutex;
     // Snapshot of decoder pending-buffer state, written by the decode thread and
     // read by the worker thread (to derive the audio-slaved playback clock), so
     // the worker never touches the decoder (owned by the decode thread) directly.

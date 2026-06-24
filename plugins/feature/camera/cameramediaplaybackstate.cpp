@@ -27,7 +27,6 @@ CameraMediaPlaybackState::CameraMediaPlaybackState(QObject *timerParent) :
 void CameraMediaPlaybackState::resetClosed()
 {
     m_decoder.reset();
-    m_decodeFrameWakeQueued.store(false);
     m_decodeDroppedSinceLastSubmit.store(0);
     {
         QMutexLocker locker(&m_streamAudioMutex);
@@ -43,7 +42,6 @@ void CameraMediaPlaybackState::resetClosed()
 
 void CameraMediaPlaybackState::resetClock()
 {
-    m_decodeFrameWakeQueued.store(false);
     m_decodeDroppedSinceLastSubmit.store(0);
     {
         QMutexLocker locker(&m_streamAudioMutex);

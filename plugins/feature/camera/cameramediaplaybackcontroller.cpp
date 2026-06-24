@@ -651,9 +651,7 @@ bool CameraMediaPlaybackController::openVideoFileDecoder()
              << mediaSourcePath
              << "durationMs" << m_state.m_durationMs
              << "fps" << m_state.m_frameRate
-             << "streamBufferingSeconds" << (m_settings->isStreamCamera() ? m_settings->m_streamBufferingSeconds : 0.0)
-             << "streamInitialFrames" << (m_settings->isStreamCamera() ? streamInitialBufferFrameCount() : 0)
-             << "streamMaxFrames" << (m_settings->isStreamCamera() ? maxDecodedStreamFrameCount() : 0);
+             << "streamBufferingSeconds" << (m_settings->isStreamCamera() ? m_settings->m_streamBufferingSeconds : 0.0);
     return true;
 }
 
@@ -661,7 +659,7 @@ void CameraMediaPlaybackController::closeVideoFileDecoder()
 {
     setHighTimerResolution(false);
     m_presentTimer.stop();
-    stopVideoFileDecodeThread();
+    resetVideoFileDecodeState();
     clearPendingStreamVideoFileFrame();
     clearDelayedVideoFileFrames();
     m_state.resetClosed();
@@ -688,7 +686,6 @@ void CameraMediaPlaybackController::setVideoFilePlaying(bool playing)
     {
         clearPendingStreamVideoFileFrame();
         clearDelayedVideoFileFrames();
-        clearDecodedVideoFileFrames();
         clearStreamPlaybackAudio();
     }
 
@@ -938,65 +935,27 @@ void CameraMediaPlaybackController::releaseDelayedVideoFileFrames()
     scheduleDelayedVideoFileFrameSubmit();
 }
 
-void CameraMediaPlaybackController::stopVideoFileDecodeThread()
+void CameraMediaPlaybackController::resetVideoFileDecodeState()
 {
-    m_state.m_decodeThreadStop.store(true);
-    if (m_state.m_decodeThread && m_state.m_decoder) {
-        m_state.m_decoder->requestAbort();
-    }
-    m_state.m_decodedFramesNotFull.wakeAll();
-    m_state.m_decodedFramesAvailable.wakeAll();
-    if (m_state.m_decodeThread) {
-        m_state.m_decodeThread->wait();
-        delete m_state.m_decodeThread;
-        m_state.m_decodeThread = nullptr;
-    }
-    m_state.m_decodeThreadStop.store(false);
-    m_state.m_streamReopenResetPending.store(false);
-    clearDecodedVideoFileFrames();
     clearStreamPlaybackAudio();
 
-    {
-        QMutexLocker snapshotLocker(&m_state.m_decodeSnapshotMutex);
-        m_state.m_decodeAudioPositionMs = -1;
-        m_state.m_decodePendingAudioBytes = 0;
-        m_state.m_decodePendingVideoFrames = 0;
-        m_state.m_decodePendingVideoPackets = 0;
-    }
-}
-
-void CameraMediaPlaybackController::clearDecodedVideoFileFrames()
-{
-    QMutexLocker locker(&m_state.m_decodedFramesMutex);
-    m_state.m_decodedFrames.clear();
-    m_state.m_decodeFrameWakeQueued.store(false);
-    m_state.m_decodedFramesNotFull.wakeAll();
+    QMutexLocker snapshotLocker(&m_state.m_decodeSnapshotMutex);
+    m_state.m_decodeAudioPositionMs = -1;
+    m_state.m_decodePendingAudioBytes = 0;
+    m_state.m_decodePendingVideoFrames = 0;
+    m_state.m_decodePendingVideoPackets = 0;
 }
 
 bool CameraMediaPlaybackController::videoFilePlaybackIsPlaying() const
 {
-    QMutexLocker locker(&m_state.m_decodedFramesMutex);
+    QMutexLocker locker(&m_state.m_playingMutex);
     return m_state.m_playing;
 }
 
 void CameraMediaPlaybackController::setVideoFilePlaybackPlayingState(bool playing)
 {
-    QMutexLocker locker(&m_state.m_decodedFramesMutex);
+    QMutexLocker locker(&m_state.m_playingMutex);
     m_state.m_playing = playing;
-    m_state.m_decodedFramesNotFull.wakeAll();
-}
-
-bool CameraMediaPlaybackController::takeDecodedVideoFileFrame(CameraMediaPlaybackState::DecodedFrame& frame)
-{
-    QMutexLocker locker(&m_state.m_decodedFramesMutex);
-    if (m_state.m_decodedFrames.empty()) {
-        return false;
-    }
-
-    frame = std::move(m_state.m_decodedFrames.front());
-    m_state.m_decodedFrames.pop_front();
-    m_state.m_decodedFramesNotFull.wakeAll();
-    return true;
 }
 
 void CameraMediaPlaybackController::clearStreamPlaybackAudio()
@@ -1016,31 +975,6 @@ int CameraMediaPlaybackController::streamPlaybackAudioSampleRate() const
 {
     QMutexLocker locker(&m_state.m_streamAudioMutex);
     return m_state.m_streamAudioSampleRate;
-}
-
-// The decoded-frame queue is now only a small present-smoothing cushion. Network
-// jitter is absorbed upstream by the decoder's compressed bitstream read-ahead
-// (sized by streamBufferingSeconds, KB-cheap), so this no longer scales with the
-// buffering setting: keeping it to a fraction of a second bounds decoded-image
-// memory (~6 MB/frame at 1080p) instead of the multi-hundred-MB it used to hold.
-int CameraMediaPlaybackController::streamInitialBufferFrameCount() const
-{
-    const double frameRate = qMax(1.0, m_state.m_frameRate);
-    const int frameCount = static_cast<int>(std::ceil(frameRate * 0.35));
-    return qMax(CameraMediaPlaybackState::m_minDecodedStreamFrames, frameCount);
-}
-
-int CameraMediaPlaybackController::decodedStreamFrameQueueDepth() const
-{
-    QMutexLocker locker(&m_state.m_decodedFramesMutex);
-    return static_cast<int>(m_state.m_decodedFrames.size());
-}
-
-int CameraMediaPlaybackController::maxDecodedStreamFrameCount() const
-{
-    const double frameRate = qMax(1.0, m_state.m_frameRate);
-    const int frameCount = static_cast<int>(std::ceil(frameRate * 0.7));
-    return qMax(2 * CameraMediaPlaybackState::m_minDecodedStreamFrames, frameCount);
 }
 
 int CameraMediaPlaybackController::streamBufferingCushionFrameCount() const
@@ -1150,181 +1084,17 @@ void CameraMediaPlaybackController::submitDecodedVideoFileFrame(
     reportVideoFilePlaybackToGUI();
 }
 
-bool CameraMediaPlaybackController::readQueuedVideoFileFrame(bool submitAudio)
-{
-    if (m_settings->isStreamCamera())
-    {
-        if (!videoFilePlaybackIsPlaying()) {
-            return false;
-        }
-
-        // The decode thread reopened the stream at a new live edge (and cleared the
-        // stale audio + decoded-frame queue). Reset the worker-owned playback
-        // schedule so presentation restarts cleanly from the live edge instead of
-        // replaying pre-stall clock/pending-frame state against the new audio.
-        if (m_state.m_streamReopenResetPending.exchange(false))
-        {
-            clearPendingStreamVideoFileFrame();
-            clearDelayedVideoFileFrames();
-            resetVideoFilePlaybackSchedule();
-        }
-
-        m_state.m_decodeFrameWakeQueued.store(false);
-        int queuedFrames = 0;
-        {
-            QMutexLocker locker(&m_state.m_decodedFramesMutex);
-            queuedFrames = static_cast<int>(m_state.m_decodedFrames.size());
-            m_state.m_decodedFramesNotFull.wakeAll();
-        }
-
-        // (Re)buffer a cushion of frames before presenting: at startup
-        // (basePositionMs < 0) and again whenever a network stall drains the
-        // queue mid-playback. Without rebuffering, an empty queue makes the decode
-        // thread wake presentTick on every arriving frame (see
-        // queueDecodedVideoFileFrame), so frames are presented at the producer's
-        // bursty rate, the buffer never refills, and the downstream post-processor
-        // drops frames continuously. Holding here lets the fill servo regain
-        // control once the cushion is rebuilt.
-        // Startup builds the playback cushion to streamBufferingSeconds of content,
-        // counting the cheap compressed bitstream read-ahead together with the small
-        // decoded queue. This is what makes the bitstream buffer pay off: playback
-        // begins ~streamBufferingSeconds behind the live edge and rides source
-        // slow-patches by draining the KB-sized packet buffer, instead of holding a
-        // deep decoded-image buffer (or sitting at the live edge with no cushion and
-        // rebuffering on every dip). A mid-playback underrun resumes on a small
-        // ~0.12 s cushion so a brief dip is a short stutter, not a long freeze.
-        const bool initialBuffering = (m_state.m_basePositionMs < 0);
-        int bufferedFrames = queuedFrames;
-        int rebufferTarget;
-        if (initialBuffering)
-        {
-            bufferedFrames += m_state.m_decoder->readAheadVideoPacketCount();
-            rebufferTarget = streamBufferingCushionFrameCount();
-        }
-        else
-        {
-            rebufferTarget = qMax(CameraMediaPlaybackState::m_minDecodedStreamFrames / 2,
-                                  static_cast<int>(std::ceil(qMax(1.0, m_state.m_frameRate) * 0.12)));
-        }
-        if (queuedFrames <= 0) {
-            if (m_state.m_basePositionMs >= 0) {
-                if (!m_state.m_streamRebuffering) {
-                    qDebug() << "CameraMediaPlayback: stream rebuffer START (queue emptied) - decodeFramesProduced"
-                             << m_state.m_decodeFramesProduced.load() << "target" << rebufferTarget
-                             << "bitstreamPkts" << m_state.m_decoder->readAheadVideoPacketCount();
-                }
-                m_state.m_streamRebuffering = true;
-            }
-            // Presentation is held: tell the decode thread to block-to-accumulate (build the
-            // cushion) rather than self-pace.
-            m_state.m_streamPresentActive.store(false);
-            return false;
-        }
-
-        const bool buffering = initialBuffering || m_state.m_streamRebuffering;
-        if (buffering && (bufferedFrames < rebufferTarget))
-        {
-            m_state.m_streamPresentActive.store(false);   // still building the cushion
-            m_presentTimer.setSingleShot(true);
-            m_presentTimer.start(qMax(1, videoFileFrameIntervalMs() / 2));
-            return false;
-        }
-        if (buffering)
-        {
-            if (m_state.m_streamRebuffering) {
-                qDebug() << "CameraMediaPlayback: stream rebuffer RESUME - queuedFrames" << queuedFrames
-                         << "decodeFramesProduced" << m_state.m_decodeFramesProduced.load();
-            }
-        }
-        m_state.m_streamRebuffering = false;
-        // Cushion is healthy and we are presenting: let the decode thread self-pace at the
-        // frame rate and feed the audio at the full source rate (decoupled from this present).
-        m_state.m_streamPresentActive.store(true);
-    }
-
-    CameraMediaPlaybackState::DecodedFrame decodedFrame;
-    if (!takeDecodedVideoFileFrame(decodedFrame)) {
-        return false;
-    }
-
-    // Drop late frames to follow the audio clock (the ffplay/VLC model). If the frame we
-    // took sits well behind the audio-heard position, video is behind audio: discard it and
-    // take the next, catching up by DROPPING rather than fast-forwarding the display. Bounded
-    // per tick, and we stop as soon as the queue would be emptied — we never starve the
-    // cushion chasing, and a persistently empty queue trips the normal rebuffer path instead.
-    if (m_settings->isStreamCamera() && (m_state.m_basePositionMs >= 0)
-        && decodedFrame.m_errorMessage.isEmpty() && !decodedFrame.m_eof && !decodedFrame.m_image.isNull())
-    {
-        const qint64 clockMs = videoFilePlaybackClockMs();
-        const qint64 lateThresholdMs =
-            static_cast<qint64>(std::llround(1.5 * qMax(1.0, videoFileExactFrameIntervalMs())));
-        int dropped = 0;
-        static constexpr int maxDropPerTick = 8;
-        while ((dropped < maxDropPerTick)
-               && (decodedFrame.m_positionMs >= 0)
-               && (clockMs - decodedFrame.m_positionMs > lateThresholdMs))
-        {
-            CameraMediaPlaybackState::DecodedFrame next;
-            if (!takeDecodedVideoFileFrame(next)) {
-                break;                       // nothing else queued — show this one, don't starve
-            }
-            decodedFrame = next;
-            ++dropped;
-            if (!decodedFrame.m_errorMessage.isEmpty() || decodedFrame.m_eof || decodedFrame.m_image.isNull()) {
-                break;                       // let the eof/error handlers below deal with it
-            }
-        }
-        m_state.m_streamFramesDroppedThisSecond += dropped;
-    }
-
-    if (!decodedFrame.m_errorMessage.isEmpty())
-    {
-        emit error(
-            QStringLiteral("videoFileDecode:%1").arg(m_settings->ffmpegMediaSourcePath()),
-            tr("Stream decode failed"),
-            decodedFrame.m_errorMessage);
-        setVideoFilePlaying(false);
-        return true;
-    }
-
-    if (decodedFrame.m_eof || decodedFrame.m_image.isNull())
-    {
-        setVideoFilePlaying(false);
-        return true;
-    }
-
-    QByteArray pcmS16Stereo = decodedFrame.m_pcmS16Stereo;
-    int audioSampleRate = decodedFrame.m_audioSampleRate;
-    if (m_settings->isStreamCamera())
-    {
-        // Vestigial: streams now run the clean present (presentStreamTick) and never reach this
-        // old per-frame path; submit no per-frame audio here.
-        pcmS16Stereo.clear();
-        audioSampleRate = streamPlaybackAudioSampleRate();
-    }
-
-    submitDecodedVideoFileFrame(
-        decodedFrame.m_image,
-        decodedFrame.m_positionMs,
-        decodedFrame.m_decodeMs,
-        pcmS16Stereo,
-        audioSampleRate,
-        submitAudio,
-        submitAudio,
-        true,
-        true);
-    return true;
-}
-
 bool CameraMediaPlaybackController::readVideoFileFrame(bool submitAudio, qint64 minimumPositionMs)
 {
     if (!m_callbacks.capturing() || !m_settings->isFfmpegMediaSource() || !m_state.m_decoder) {
         return false;
     }
 
-    if (m_settings->isStreamCamera() && (minimumPositionMs < 0))
+    if (m_settings->isStreamCamera())
     {
-        return readQueuedVideoFileFrame(submitAudio);
+        // Streams are driven entirely by the clean present (presentStreamTick); the old
+        // per-frame file-read path below does not apply to them.
+        return false;
     }
 
     m_state.m_decoder->setAudioPaceFrameRate(
@@ -1535,7 +1305,6 @@ void CameraMediaPlaybackController::resetVideoFilePlaybackSchedule()
     m_state.m_lastDecodeMs = 0;
     m_state.m_presentResidualMs = 0.0;
     m_state.m_streamRebuffering = false;
-    m_state.m_streamPresentActive.store(false);   // rebuild the cushion before self-pacing again
 }
 
 qint64 CameraMediaPlaybackController::videoFilePlaybackClockMs() const
@@ -1549,7 +1318,7 @@ qint64 CameraMediaPlaybackController::videoFilePlaybackClockMs() const
         // the audio currently being HEARD at the speaker — decoded-audio position minus
         // everything still queued ahead of it (app queues + the device's own ~250 ms output
         // buffer). The present shows each video frame when this clock reaches its PTS and
-        // DROPS late frames to catch up (see readQueuedVideoFileFrame); video follows audio,
+        // DROPS late frames to catch up; video follows audio,
         // and audio is never rate-warped for sync. A feed underrun stalls this clock, but the
         // present bounds its wait (scheduleNextVideoFileTick) so the decoded queue drains into
         // a clean rebuffer instead of the old present<->decode deadlock.

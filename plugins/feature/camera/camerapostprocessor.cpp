@@ -41,6 +41,12 @@
 #include "camerapostprocessor.h"
 #include "camerarecorder.h"
 
+namespace {
+// Dev toggle for the once-per-second submit->display pipeline-latency log. Off by default to keep the
+// log clean; flip to true and rebuild when investigating video presentation lag.
+constexpr bool kPipelineLatencyDebug = false;
+}
+
 MESSAGE_CLASS_DEFINITION(CameraPostProcessor::MsgSpectrumFrame, Message)
 MESSAGE_CLASS_DEFINITION(CameraPostProcessor::MsgReportFrame, Message)
 MESSAGE_CLASS_DEFINITION(CameraPostProcessor::MsgClearTrackedObjectHeatMap, Message)
@@ -1045,8 +1051,8 @@ void CameraPostProcessor::reportFrameToGUI(const QImage& image, const CameraPipe
 {
     // Diagnostic: measure the submit->GUI-dispatch pipeline latency (how long the frame spent
     // travelling the preprocessor/processor/post-processor stages after the present submitted it).
-    // This is the video lag the audio does not have. Throttled to ~1/s.
-    if (frame.m_pipelineInputWallClockMs > 0) {
+    // This is the video lag the audio does not have. Throttled to ~1/s; off unless debugging.
+    if (kPipelineLatencyDebug && (frame.m_pipelineInputWallClockMs > 0)) {
         const qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
         const qint64 latencyMs = nowMs - frame.m_pipelineInputWallClockMs;
         if (nowMs - m_lastPipelineLatencyLogMs >= 1000) {

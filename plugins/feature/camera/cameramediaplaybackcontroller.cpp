@@ -42,6 +42,12 @@ extern "C" __declspec(dllimport) unsigned int __stdcall timeBeginPeriod(unsigned
 extern "C" __declspec(dllimport) unsigned int __stdcall timeEndPeriod(unsigned int uPeriod);
 #endif
 
+namespace {
+// Dev toggle for the once-per-second stream A/V-sync diagnostic (clockMs/avDrift/buffer/tick stats).
+// Off by default to keep the log clean; flip to true and rebuild when debugging stream sync.
+constexpr bool kStreamPresentDebug = false;
+}
+
 CameraMediaPlaybackController::CameraMediaPlaybackController(
     CameraQtAudioController* audio,
     const CameraSettings* settings,
@@ -614,42 +620,45 @@ void CameraMediaPlaybackController::presentStreamTick()
     }
     if (m_state.m_audioWanderClock.elapsed() >= 1000)
     {
-        // Non-circular A/V sync probe: compare the two decoders' independent PTS edges. The
-        // baseline absorbs the constant decode-order/interleave offset; avDriftMs is how far the
-        // live skew has drifted from it = real A/V drift (was ~1.3%/s before the audio-PTS fix).
-        const qint64 vEdge = m_state.m_decoder->streamVideoDecodedEdgePtsMs();
-        const qint64 aEdge = m_state.m_decoder->streamAudioDecodedEdgePtsMs();
-        qint64 avSkewMs = 0;
-        qint64 avDriftMs = 0;
-        if ((vEdge >= 0) && (aEdge >= 0))
+        if (kStreamPresentDebug)
         {
-            avSkewMs = vEdge - aEdge;
-            if (!m_state.m_streamAvSkewBaselineSet)
+            // Non-circular A/V sync probe: compare the two decoders' independent PTS edges. The
+            // baseline absorbs the constant decode-order/interleave offset; avDriftMs is how far the
+            // live skew has drifted from it = real A/V drift (was ~1.3%/s before the audio-PTS fix).
+            const qint64 vEdge = m_state.m_decoder->streamVideoDecodedEdgePtsMs();
+            const qint64 aEdge = m_state.m_decoder->streamAudioDecodedEdgePtsMs();
+            qint64 avSkewMs = 0;
+            qint64 avDriftMs = 0;
+            if ((vEdge >= 0) && (aEdge >= 0))
             {
-                m_state.m_streamAvSkewBaselineSet = true;
-                m_state.m_streamAvSkewBaselineMs = avSkewMs;
+                avSkewMs = vEdge - aEdge;
+                if (!m_state.m_streamAvSkewBaselineSet)
+                {
+                    m_state.m_streamAvSkewBaselineSet = true;
+                    m_state.m_streamAvSkewBaselineMs = avSkewMs;
+                }
+                avDriftMs = avSkewMs - m_state.m_streamAvSkewBaselineMs;
             }
-            avDriftMs = avSkewMs - m_state.m_streamAvSkewBaselineMs;
+            qDebug().nospace()
+                << "CameraMediaPlayback: stream - clockMs " << clockMs
+                << " exactMs " << exactClockMs
+                << " avSkewMs " << avSkewMs
+                << " avDriftMs " << avDriftMs
+                << " playedPts " << m_state.m_streamPlayedPtsMs
+                << " monFifoMs " << (static_cast<qint64>(m_audio->monitorAudioFill()) * 1000 / qMax(1, m_audio->monitorSampleRate()))
+                << " sinkMs " << (m_audio->monitorSinkLatencyUSecs() / 1000)
+                << " offsetMs " << m_settings->m_videoPlaybackAudioOffsetMs
+                << " audioBufMs " << (m_state.m_decoder->streamAudioBufferedFrames() * 1000 / qMax(1, m_audio->monitorSampleRate()))
+                << " videoPkts " << m_state.m_decoder->streamVideoPacketCount()
+                << " videoFrames " << m_state.m_decoder->streamDecodedVideoFrameCount()
+                << " framesDropped/s " << m_state.m_streamFramesDroppedThisSecond
+                << " rebuf " << (m_state.m_streamRebuffering ? 1 : 0)
+                << " presentTicks/s " << m_state.m_streamPresentTicksThisSecond
+                << " gapMaxMs " << qRound(m_state.m_streamTickGapMaxMs * 10) / 10.0
+                << " tickMaxMs " << qRound(m_state.m_streamTickTotalMaxMs * 10) / 10.0
+                << " (audio " << qRound(m_state.m_streamTickAudioMaxMs * 10) / 10.0
+                << " submit " << qRound(m_state.m_streamTickSubmitMaxMs * 10) / 10.0 << ")";
         }
-        qDebug().nospace()
-            << "CameraMediaPlayback: stream - clockMs " << clockMs
-            << " exactMs " << exactClockMs
-            << " avSkewMs " << avSkewMs
-            << " avDriftMs " << avDriftMs
-            << " playedPts " << m_state.m_streamPlayedPtsMs
-            << " monFifoMs " << (static_cast<qint64>(m_audio->monitorAudioFill()) * 1000 / qMax(1, m_audio->monitorSampleRate()))
-            << " sinkMs " << (m_audio->monitorSinkLatencyUSecs() / 1000)
-            << " offsetMs " << m_settings->m_videoPlaybackAudioOffsetMs
-            << " audioBufMs " << (m_state.m_decoder->streamAudioBufferedFrames() * 1000 / qMax(1, m_audio->monitorSampleRate()))
-            << " videoPkts " << m_state.m_decoder->streamVideoPacketCount()
-            << " videoFrames " << m_state.m_decoder->streamDecodedVideoFrameCount()
-            << " framesDropped/s " << m_state.m_streamFramesDroppedThisSecond
-            << " rebuf " << (m_state.m_streamRebuffering ? 1 : 0)
-            << " presentTicks/s " << m_state.m_streamPresentTicksThisSecond
-            << " gapMaxMs " << qRound(m_state.m_streamTickGapMaxMs * 10) / 10.0
-            << " tickMaxMs " << qRound(m_state.m_streamTickTotalMaxMs * 10) / 10.0
-            << " (audio " << qRound(m_state.m_streamTickAudioMaxMs * 10) / 10.0
-            << " submit " << qRound(m_state.m_streamTickSubmitMaxMs * 10) / 10.0 << ")";
         m_state.m_streamFramesDroppedThisSecond = 0;
         m_state.m_streamPresentTicksThisSecond = 0;
         m_state.m_streamTickGapMaxMs = 0.0;

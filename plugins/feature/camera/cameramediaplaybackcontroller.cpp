@@ -348,6 +348,7 @@ bool CameraMediaPlaybackController::reconnectStreamDecoder()
     m_state.m_streamAvSkewBaselineSet = false;
     m_state.m_streamRebuffering = false;
     m_state.m_basePositionMs = -1;
+    m_state.m_streamPosterShown = false;
     return true;
 }
 
@@ -365,16 +366,79 @@ void CameraMediaPlaybackController::presentStreamTick()
     }
     ++m_state.m_streamPresentTicksThisSecond;
 
+    const double intervalMs = qMax(1.0, videoFileExactFrameIntervalMs());
+
+    // ===================== BUFFERING / REBUFFERING =====================
+    // Fill to the streamBufferingSeconds cushion before (re)starting playback - at startup AND after
+    // a stall. Don't feed the monitor (audio goes silent) and don't consume video, so the demux can
+    // build the packet cushion and the decoders fill ahead; show the oldest decoded frame as a still
+    // poster meanwhile. Once the cushion is full, start playing from that oldest frame. If the source
+    // died, reconnect (with bounded back-off) - this is where a dead source surfaces (its cushion can
+    // never fill).
+    if (m_state.m_basePositionMs < 0)
+    {
+        if (m_settings->isStreamCamera() && m_state.m_decoder->streamSourceFailed())
+        {
+            if (reconnectStreamDecoder())
+            {
+                qDebug() << "CameraMediaPlayback: stream reconnected";
+                m_streamReconnectAttempts = 0;
+                m_state.m_streamPosterShown = false;          // poster the new source's first frame
+            }
+            else if (++m_streamReconnectAttempts <= m_maxStreamReconnectAttempts)
+            {
+                qDebug() << "CameraMediaPlayback: stream reconnect failed, attempt"
+                         << m_streamReconnectAttempts << "of" << m_maxStreamReconnectAttempts;
+                m_presentTimer.setSingleShot(true);
+                m_presentTimer.start(500);                    // back off before retrying
+                return;
+            }
+            else
+            {
+                qWarning() << "CameraMediaPlayback: stream reconnect gave up";
+                emit error(QStringLiteral("streamReconnect:%1").arg(m_settings->ffmpegMediaSourcePath()),
+                           tr("Stream lost"), tr("The stream ended and could not be reconnected."));
+                setVideoFilePlaying(false);
+                return;
+            }
+        }
+
+        const int cushionFrames = streamBufferingCushionFrameCount();
+        const int buffered = m_state.m_decoder->streamVideoPacketCount()
+                           + m_state.m_decoder->streamDecodedVideoFrameCount();
+        // Show the oldest decoded frame as a still poster, once. At startup it is the first content
+        // (and becomes the first played frame, so no jump); during a rebuffer m_streamPosterShown is
+        // already set, so the last shown frame is held instead.
+        if (!m_state.m_streamPosterShown)
+        {
+            QImage poster;
+            qint64 posterPts = -1;
+            if (m_state.m_decoder->streamPeekVideoFrameImage(poster, posterPts))
+            {
+                submitStreamPresentFrame(poster, posterPts);
+                m_state.m_streamPosterShown = true;
+            }
+        }
+        if (buffered >= cushionFrames)
+        {
+            const bool wasRebuffering = m_state.m_streamRebuffering;
+            m_state.m_basePositionMs = 0;
+            m_state.m_streamRebuffering = false;
+            m_state.m_streamVideoClockMs = -1.0;              // re-anchor the clock when audio resumes
+            qDebug() << (wasRebuffering ? "CameraMediaPlayback: stream rebuffering done - resume"
+                                        : "CameraMediaPlayback: stream playback start")
+                     << "- bufferedFrames" << buffered << "cushion" << cushionFrames;
+        }
+        m_presentTimer.setSingleShot(true);
+        m_presentTimer.start(qMax(1, static_cast<int>(intervalMs / 2.0)));
+        return;
+    }
+
+    // ===================== PLAYING =====================
     QElapsedTimer tickTimer;
     tickTimer.start();
-    // While rebuffering, stop feeding the monitor so the decoder audio buffer + packet cushion
-    // rebuild to full before resuming (one clean pause), rather than feeding the trickle and
-    // stuttering. The monitor plays out what it already holds, then silence, until resume.
-    if (!m_state.m_streamRebuffering) {
-        submitStreamAudio();
-    }
+    submitStreamAudio();
     const double tAudioMs = tickTimer.nsecsElapsed() / 1.0e6;
-    const double intervalMs = qMax(1.0, videoFileExactFrameIntervalMs());
 
     // Smooth the staircase audio clock into a steady video master clock (see m_streamVideoClockMs).
     const qint64 exactClockMs = streamMasterClockMs();
@@ -422,54 +486,19 @@ void CameraMediaPlaybackController::presentStreamTick()
         clockMs += m_settings->m_videoPlaybackAudioOffsetMs;
     }
 
-    // Rebuffer trigger: if the audio buffer underruns mid-playback (source fell behind), don't
-    // limp the trickle and stutter — pause and rebuild the buffer to full, then resume once. The
-    // take-loop below holds the picture at the clock meanwhile (video plays out the monitor's
-    // remaining audio, then freezes).
+    // Rebuffer trigger: if the audio buffer underruns mid-playback (source fell behind), don't limp
+    // the trickle and stutter — drop back into the buffering phase above, which rebuilds the cushion
+    // to full (one clean pause) and resumes, or reconnects if the source died.
     const int monRate = qMax(1, m_audio->monitorSampleRate());
     const int audioBufMs = m_state.m_decoder->streamAudioBufferedFrames() * 1000 / monRate;
-    if ((m_state.m_basePositionMs >= 0) && !m_state.m_streamRebuffering && (audioBufMs < 50))
+    if (audioBufMs < 50)
     {
         m_state.m_streamRebuffering = true;
         m_state.m_basePositionMs = -1;
         qDebug() << "CameraMediaPlayback: stream rebuffering - audio underrun, audioBufMs" << audioBufMs;
-    }
-
-    // Buffering / rebuffering gate. Hold the master start until the audio clock is valid AND the
-    // video decode has caught up to it (a decoded frame at/after the clock exists). On a REBUFFER
-    // also wait for the packet cushion to refill to its target. The cushion is NOT required at
-    // startup: the present consumes video during buffering (the catch-up take-loop below) while the
-    // clock advances, so the packet queue never builds to the cushion at startup (it only does
-    // during a rebuffer, where the clock is frozen and nothing is consumed). Requiring it at startup
-    // wedged basePositionMs at -1, double-ticking the present and disabling the rebuffer trigger.
-    if (m_state.m_basePositionMs < 0)
-    {
-        const qint64 videoEdgeMs = m_state.m_decoder->streamVideoDecodedEdgePtsMs();
-        bool ready = (clockMs >= 0) && (videoEdgeMs >= clockMs);
-        if (m_state.m_streamRebuffering)
-        {
-            const int cushionFrames = streamBufferingCushionFrameCount();
-            const int buffered = m_state.m_decoder->streamVideoPacketCount()
-                               + m_state.m_decoder->streamDecodedVideoFrameCount();
-            ready = ready && (buffered >= cushionFrames);
-        }
-        if (ready)
-        {
-            m_state.m_basePositionMs = 0;
-            if (m_state.m_streamRebuffering)
-            {
-                m_state.m_streamRebuffering = false;
-                qDebug() << "CameraMediaPlayback: stream rebuffering done - resume, clockMs" << clockMs
-                         << "videoEdgeMs" << videoEdgeMs << "audioBufMs" << audioBufMs;
-            }
-            else
-            {
-                qDebug() << "CameraMediaPlayback: stream playback start - clockMs" << clockMs
-                         << "videoEdgeMs" << videoEdgeMs;
-            }
-        }
-        // If not ready, fall through: the take-loop shows up to the clock (catch-up / hold), then
-        // we reschedule fast at the bottom.
+        m_presentTimer.setSingleShot(true);
+        m_presentTimer.start(qMax(1, static_cast<int>(intervalMs / 2.0)));
+        return;
     }
 
     // Show frames due by the master clock: drop late (keep the newest due), hold early.
@@ -501,38 +530,18 @@ void CameraMediaPlaybackController::presentStreamTick()
         shownPts = pts;
         gotFrame = true;
     }
-    // A dead live source rarely reaches the video decoder's own EOF (it blocks on a full frame
-    // queue with a frozen clock), so also treat a failed demux + drained audio as end-of-source so
-    // the reconnect path below runs.
-    const bool streamSourceDead = m_settings->isStreamCamera()
-        && m_state.m_decoder->streamSourceFailed() && (audioBufMs <= 0);
-    if (eof || streamSourceDead)
+    if (eof)
     {
-        // The source ended or timed out (rw_timeout ~5s). For a live stream, try to reconnect at
-        // the live edge with a bounded back-off instead of stopping; only give up (and surface an
-        // error) after ~20s of failed attempts.
         if (m_settings->isStreamCamera())
         {
-            if (reconnectStreamDecoder())
-            {
-                qDebug() << "CameraMediaPlayback: stream reconnected after EOF/timeout";
-                m_streamReconnectAttempts = 0;
-                m_presentTimer.setSingleShot(true);
-                m_presentTimer.start(qMax(1, static_cast<int>(intervalMs / 2.0)));
-                return;
-            }
-            if (++m_streamReconnectAttempts <= m_maxStreamReconnectAttempts)
-            {
-                qDebug() << "CameraMediaPlayback: stream reconnect failed, attempt"
-                         << m_streamReconnectAttempts << "of" << m_maxStreamReconnectAttempts;
-                m_presentTimer.setSingleShot(true);
-                m_presentTimer.start(500);   // back off before retrying
-                return;
-            }
-            qWarning() << "CameraMediaPlayback: stream reconnect gave up after"
-                       << m_maxStreamReconnectAttempts << "attempts";
-            emit error(QStringLiteral("streamReconnect:%1").arg(m_settings->ffmpegMediaSourcePath()),
-                       tr("Stream lost"), tr("The stream ended and could not be reconnected."));
+            // Live source ended → drop into the buffering phase, which reconnects (with back-off)
+            // and then refills the cushion. (A dead source usually surfaces there directly via
+            // streamSourceFailed; this covers the rarer clean-EOF case.)
+            m_state.m_streamRebuffering = true;
+            m_state.m_basePositionMs = -1;
+            m_presentTimer.setSingleShot(true);
+            m_presentTimer.start(qMax(1, static_cast<int>(intervalMs / 2.0)));
+            return;
         }
         setVideoFilePlaying(false);
         return;
@@ -604,13 +613,10 @@ void CameraMediaPlaybackController::presentStreamTick()
         m_state.m_audioWanderClock.restart();
     }
 
-    // Tick faster while (re)buffering so the gate re-checks readiness promptly; otherwise at the
-    // frame interval.
+    // Reschedule at the frame interval (the buffering phase returns earlier with its own faster
+    // re-check, so here playback is running).
     m_presentTimer.setSingleShot(true);
-    const int delayMs = (m_state.m_basePositionMs < 0)
-        ? qMax(1, static_cast<int>(intervalMs / 2.0))
-        : qMax(1, static_cast<int>(intervalMs));
-    m_presentTimer.start(delayMs);
+    m_presentTimer.start(qMax(1, static_cast<int>(intervalMs)));
 }
 
 // ---------------------------------------------------------------------------
@@ -676,6 +682,7 @@ bool CameraMediaPlaybackController::openVideoFileDecoder()
         m_state.m_streamRebuffering = false;
         m_streamReconnectAttempts = 0;
         m_state.m_basePositionMs = -1;
+        m_state.m_streamPosterShown = false;
         // Make the ~16 ms present timer reliable (see setHighTimerResolution); without this the
         // present is delivered at ~42 ms on Windows and caps at ~24 fps.
         setHighTimerResolution(true);
@@ -744,6 +751,7 @@ void CameraMediaPlaybackController::setVideoFilePlaying(bool playing)
             m_state.m_streamRebuffering = false;
             m_streamReconnectAttempts = 0;
             m_state.m_basePositionMs = -1;
+            m_state.m_streamPosterShown = false;
             m_presentTimer.start(qMax(1, videoFileFrameIntervalMs()));
         }
         else

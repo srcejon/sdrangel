@@ -880,6 +880,17 @@ qint64 CameraVideoFileDecoder::streamPeekVideoFramePtsMs() const
     return m_streamVideoFrameQ.front().m_ptsMs;
 }
 
+bool CameraVideoFileDecoder::streamPeekVideoFrameImage(QImage& image, qint64& positionMs) const
+{
+    // Copy the oldest queued frame WITHOUT consuming it, for a still poster while buffering (so the
+    // frame queue stays full, the decoder blocks, and the packet cushion can build to target).
+    QMutexLocker locker(&m_streamMutex);
+    if (m_streamVideoFrameQ.empty()) return false;
+    image = m_streamVideoFrameQ.front().m_image;
+    positionMs = m_streamVideoFrameQ.front().m_ptsMs;
+    return true;
+}
+
 int CameraVideoFileDecoder::streamDecodedVideoFrameCount() const
 {
     QMutexLocker locker(&m_streamMutex);

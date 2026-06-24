@@ -144,6 +144,8 @@ public:
     bool streamTakeVideoFrame(QImage& image, qint64& positionMs, bool& eof);
     // PTS (ms) of the next decoded video frame without popping; −1 if the queue is empty.
     [[nodiscard]] qint64 streamPeekVideoFramePtsMs() const;
+    // Copy the oldest queued frame's image + PTS without consuming it (for a buffering poster).
+    [[nodiscard]] bool streamPeekVideoFrameImage(QImage& image, qint64& positionMs) const;
     [[nodiscard]] int streamDecodedVideoFrameCount() const;
     [[nodiscard]] int streamVideoPacketCount() const;
     // True once the demux thread has stopped (read error / rw_timeout / EOF) - the source is dead

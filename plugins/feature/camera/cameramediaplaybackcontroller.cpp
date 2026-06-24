@@ -459,9 +459,28 @@ void CameraMediaPlaybackController::presentStreamTick()
     }
     if (m_state.m_audioWanderClock.elapsed() >= 1000)
     {
+        // Non-circular A/V sync probe: compare the two decoders' independent PTS edges. The
+        // baseline absorbs the constant decode-order/interleave offset; avDriftMs is how far the
+        // live skew has drifted from it = real A/V drift (was ~1.3%/s before the audio-PTS fix).
+        const qint64 vEdge = m_state.m_decoder->streamVideoDecodedEdgePtsMs();
+        const qint64 aEdge = m_state.m_decoder->streamAudioDecodedEdgePtsMs();
+        qint64 avSkewMs = 0;
+        qint64 avDriftMs = 0;
+        if ((vEdge >= 0) && (aEdge >= 0))
+        {
+            avSkewMs = vEdge - aEdge;
+            if (!m_state.m_streamAvSkewBaselineSet)
+            {
+                m_state.m_streamAvSkewBaselineSet = true;
+                m_state.m_streamAvSkewBaselineMs = avSkewMs;
+            }
+            avDriftMs = avSkewMs - m_state.m_streamAvSkewBaselineMs;
+        }
         qDebug().nospace()
             << "CameraMediaPlayback: stream - clockMs " << clockMs
             << " exactMs " << exactClockMs
+            << " avSkewMs " << avSkewMs
+            << " avDriftMs " << avDriftMs
             << " playedPts " << m_state.m_streamPlayedPtsMs
             << " monFifoMs " << (static_cast<qint64>(m_audio->monitorAudioFill()) * 1000 / qMax(1, m_audio->monitorSampleRate()))
             << " sinkMs " << (m_audio->monitorSinkLatencyUSecs() / 1000)
@@ -547,6 +566,7 @@ bool CameraMediaPlaybackController::openVideoFileDecoder()
         m_state.m_decoder->setStreamAudioTargetSeconds(0.30);
         m_state.m_streamPlayedPtsMs = -1;
         m_state.m_streamVideoClockMs = -1.0;
+        m_state.m_streamAvSkewBaselineSet = false;
         m_state.m_basePositionMs = -1;
         // Make the ~16 ms present timer reliable (see setHighTimerResolution); without this the
         // present is delivered at ~42 ms on Windows and caps at ~24 fps.
@@ -612,6 +632,7 @@ void CameraMediaPlaybackController::setVideoFilePlaying(bool playing)
             // shows frames at the audio clock and re-schedules itself (presentStreamTick).
             m_state.m_streamPlayedPtsMs = -1;
             m_state.m_streamVideoClockMs = -1.0;
+            m_state.m_streamAvSkewBaselineSet = false;
             m_state.m_basePositionMs = -1;
             m_presentTimer.start(qMax(1, videoFileFrameIntervalMs()));
         }

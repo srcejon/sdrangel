@@ -583,6 +583,7 @@ void CameraVideoFileDecoder::clearStreamQueues()
     m_streamVideoFrameQ.clear();
     m_streamAudioBuf.clear();
     m_streamAudioEndPtsMs = -1;
+    m_streamVideoDecodedEdgePtsMs = -1;
     m_streamDriftRatio = 1.0;
     m_streamDriftPhase = 0.0;
     m_streamDemuxEof = false;
@@ -766,6 +767,9 @@ void CameraVideoFileDecoder::streamVideoDecodeLoop()
             if (m_abortRequested.load()) return;
             StreamDecodedFrame f; f.m_image = image; f.m_ptsMs = ptsMs;
             m_streamVideoFrameQ.push_back(std::move(f));
+            if (ptsMs >= 0) {
+                m_streamVideoDecodedEdgePtsMs = ptsMs;   // video decode-edge PTS (sync probe)
+            }
             m_streamVideoFrameNotEmpty.wakeAll();
         }
     }
@@ -879,6 +883,18 @@ int CameraVideoFileDecoder::streamVideoPacketCount() const
 {
     QMutexLocker locker(&m_streamMutex);
     return static_cast<int>(m_streamVideoPktQ.size());
+}
+
+qint64 CameraVideoFileDecoder::streamVideoDecodedEdgePtsMs() const
+{
+    QMutexLocker locker(&m_streamMutex);
+    return m_streamVideoDecodedEdgePtsMs;
+}
+
+qint64 CameraVideoFileDecoder::streamAudioDecodedEdgePtsMs() const
+{
+    QMutexLocker locker(&m_streamMutex);
+    return m_streamAudioEndPtsMs;
 }
 
 void CameraVideoFileDecoder::setAudioPaceFrameRate(double frameRate)

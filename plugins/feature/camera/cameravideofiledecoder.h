@@ -146,6 +146,12 @@ public:
     [[nodiscard]] qint64 streamPeekVideoFramePtsMs() const;
     [[nodiscard]] int streamDecodedVideoFrameCount() const;
     [[nodiscard]] int streamVideoPacketCount() const;
+    // Decode-edge PTS (ms): the latest content timestamp each decoder has produced, straight from
+    // the packet PTS (best_effort_timestamp), BEFORE any present-side coupling. Comparing these two
+    // is a non-circular A/V sync probe — if the audio and video timelines drift apart these diverge,
+    // independent of which frame the present chooses to show. −1 until the first frame/packet.
+    [[nodiscard]] qint64 streamVideoDecodedEdgePtsMs() const;
+    [[nodiscard]] qint64 streamAudioDecodedEdgePtsMs() const;
 
 private:
     struct PendingVideoFrame
@@ -279,6 +285,8 @@ private:
     size_t m_streamVideoFrameCap = 6;
     QWaitCondition m_streamVideoFrameNotEmpty;
     QWaitCondition m_streamVideoFrameNotFull;
+    // Latest decoded video PTS (ms) — the video decode edge (see streamVideoDecodedEdgePtsMs).
+    qint64 m_streamVideoDecodedEdgePtsMs = -1;
 
     void startStreamThreads();
     void stopStreamThreads();

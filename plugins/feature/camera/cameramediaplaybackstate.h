@@ -134,6 +134,11 @@ public:
     int m_streamPresentTicksThisSecond = 0;
     QElapsedTimer m_streamTickGapClock;
     double m_streamTickGapMaxMs = 0.0;
+    // Non-circular A/V sync probe: baseline of (videoDecodeEdgePTS - audioDecodeEdgePTS) captured
+    // at start. The two decode edges come from independent decoders' packet PTS, before any
+    // present-side coupling, so DRIFT of the live skew away from this baseline is true A/V drift.
+    bool m_streamAvSkewBaselineSet = false;
+    qint64 m_streamAvSkewBaselineMs = 0;
     quint64 m_frameSubmitGeneration = 0;
 
     QTimer m_delayedSubmitTimer;

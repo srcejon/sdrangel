@@ -127,12 +127,8 @@ private:
     void clearDelayedVideoFileFrames();
     void scheduleDelayedVideoFileFrameSubmit();
     void releaseDelayedVideoFileFrames();
-    void resetVideoFileDecodeState();
     bool videoFilePlaybackIsPlaying() const;
     void setVideoFilePlaybackPlayingState(bool playing);
-    void clearStreamPlaybackAudio();
-    int streamPlaybackAudioBytes() const;
-    int streamPlaybackAudioSampleRate() const;
     // Target playback cushion (frames) = streamBufferingSeconds of content, held mostly in the
     // decoder's compressed packet read-ahead (KB-cheap) plus the small decoded frame queue; this is
     // the gate that starts the clean stream present (presentStreamTick) and the latency/jitter knob.
@@ -157,7 +153,6 @@ private:
     int videoFileFrameIntervalMs() const;
     void resetVideoFilePlaybackSchedule();
     qint64 videoFilePlaybackClockMs() const;
-    qint64 streamDecodeDerivedContentMs() const;
     void scheduleNextVideoFileTick();
     void reportVideoFilePlaybackToGUI();
 

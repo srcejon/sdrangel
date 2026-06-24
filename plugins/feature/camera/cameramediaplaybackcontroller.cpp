@@ -700,7 +700,6 @@ void CameraMediaPlaybackController::closeVideoFileDecoder()
 {
     setHighTimerResolution(false);
     m_presentTimer.stop();
-    resetVideoFileDecodeState();
     clearPendingStreamVideoFileFrame();
     clearDelayedVideoFileFrames();
     m_state.resetClosed();
@@ -727,7 +726,6 @@ void CameraMediaPlaybackController::setVideoFilePlaying(bool playing)
     {
         clearPendingStreamVideoFileFrame();
         clearDelayedVideoFileFrames();
-        clearStreamPlaybackAudio();
     }
 
     if (!m_settings->isStreamCamera() || playing) {
@@ -976,17 +974,6 @@ void CameraMediaPlaybackController::releaseDelayedVideoFileFrames()
     scheduleDelayedVideoFileFrameSubmit();
 }
 
-void CameraMediaPlaybackController::resetVideoFileDecodeState()
-{
-    clearStreamPlaybackAudio();
-
-    QMutexLocker snapshotLocker(&m_state.m_decodeSnapshotMutex);
-    m_state.m_decodeAudioPositionMs = -1;
-    m_state.m_decodePendingAudioBytes = 0;
-    m_state.m_decodePendingVideoFrames = 0;
-    m_state.m_decodePendingVideoPackets = 0;
-}
-
 bool CameraMediaPlaybackController::videoFilePlaybackIsPlaying() const
 {
     QMutexLocker locker(&m_state.m_playingMutex);
@@ -997,25 +984,6 @@ void CameraMediaPlaybackController::setVideoFilePlaybackPlayingState(bool playin
 {
     QMutexLocker locker(&m_state.m_playingMutex);
     m_state.m_playing = playing;
-}
-
-void CameraMediaPlaybackController::clearStreamPlaybackAudio()
-{
-    QMutexLocker locker(&m_state.m_streamAudioMutex);
-    m_state.m_streamAudioPcmS16Stereo.clear();
-    m_state.m_streamAudioSampleRate = 0;
-}
-
-int CameraMediaPlaybackController::streamPlaybackAudioBytes() const
-{
-    QMutexLocker locker(&m_state.m_streamAudioMutex);
-    return m_state.m_streamAudioPcmS16Stereo.size();
-}
-
-int CameraMediaPlaybackController::streamPlaybackAudioSampleRate() const
-{
-    QMutexLocker locker(&m_state.m_streamAudioMutex);
-    return m_state.m_streamAudioSampleRate;
 }
 
 int CameraMediaPlaybackController::streamBufferingCushionFrameCount() const
@@ -1350,31 +1318,13 @@ void CameraMediaPlaybackController::resetVideoFilePlaybackSchedule()
 
 qint64 CameraMediaPlaybackController::videoFilePlaybackClockMs() const
 {
+    // FILE playback only: streams run the clean present (presentStreamTick / streamMasterClockMs) and
+    // never call this. Audio-master clock (the ffplay/VLC model): the playback clock IS the position
+    // of the audio currently being heard at the speaker — the decoder's decoded-audio position minus
+    // everything still queued ahead of it (decoder pending + monitor FIFO). The present shows each
+    // video frame when this clock reaches its PTS and drops late frames to catch up; audio is never
+    // rate-warped for sync.
     static constexpr int bytesPerSampleFrame = 4;
-    if (m_settings->isStreamCamera()
-        && m_state.m_decoder
-        && (m_audio->monitorSampleRate() > 0))
-    {
-        // Audio-master clock (the ffplay/VLC model): the playback clock IS the position of
-        // the audio currently being HEARD at the speaker — decoded-audio position minus
-        // everything still queued ahead of it (app queues + the device's own ~250 ms output
-        // buffer). The present shows each video frame when this clock reaches its PTS and
-        // DROPS late frames to catch up; video follows audio,
-        // and audio is never rate-warped for sync. A feed underrun stalls this clock, but the
-        // present bounds its wait (scheduleNextVideoFileTick) so the decoded queue drains into
-        // a clean rebuffer instead of the old present<->decode deadlock.
-        //
-        // This replaced a long line of device-clock + rate-servo schemes (free-running
-        // processedUSecs, PLL/integral-slope/clamped-trim). They all coupled the present rate
-        // into the resampler buffer servo and either drained the buffer (clicks) or drifted
-        // (the device crystal vs the resampled audio). Following the audio position directly,
-        // with frame drop, is what real players do and sidesteps that coupling.
-        const qint64 heardMs = streamDecodeDerivedContentMs();
-        if (heardMs != std::numeric_limits<qint64>::min()) {
-            return heardMs;
-        }
-        // Video-only stream (no audio to derive position from): fall through to wall clock.
-    }
     if (!m_settings->isStreamCamera()
         && m_state.m_decoder
         && (m_state.m_decoder->audioDecodedPositionMs() >= 0)
@@ -1399,39 +1349,6 @@ qint64 CameraMediaPlaybackController::videoFilePlaybackClockMs() const
     const double rate = qMax(0.1, m_settings->m_videoPlaybackRate);
     return m_state.m_basePositionMs
         + static_cast<qint64>(std::llround(static_cast<double>(m_state.m_clock.elapsed()) * rate));
-}
-
-qint64 CameraMediaPlaybackController::streamDecodeDerivedContentMs() const
-{
-    // The audio content actually being HEARD at the speaker right now: the decoder's
-    // decoded-audio position, minus everything still queued ahead of the speaker — the
-    // app-side queues (decoder pending + stream resampler buffer + monitor FIFO) AND the
-    // sound device's own output buffer (~250 ms, monitorSinkLatencyUSecs). Accurate while
-    // the buffers are healthy, and (unlike the device clock) it reflects the resampled
-    // SOURCE content rate, so it is the correct sync reference. Returns INT64_MIN when there
-    // is no audio to derive it from (e.g. a video-only stream). Decode thread owns the
-    // decoder, so this reads the snapshot the decode thread publishes.
-    static constexpr int bytesPerSampleFrame = 4;
-    if (!m_settings->isStreamCamera() || !m_state.m_decoder || (m_audio->monitorSampleRate() <= 0)) {
-        return std::numeric_limits<qint64>::min();
-    }
-    qint64 audioDecodedPositionMs;
-    qint64 decoderPendingAudioBytes;
-    {
-        QMutexLocker snapshotLocker(&m_state.m_decodeSnapshotMutex);
-        audioDecodedPositionMs = m_state.m_decodeAudioPositionMs;
-        decoderPendingAudioBytes = m_state.m_decodePendingAudioBytes;
-    }
-    if (audioDecodedPositionMs < 0) {
-        return std::numeric_limits<qint64>::min();
-    }
-    const qint64 queuedAudioFrames =
-        static_cast<qint64>((decoderPendingAudioBytes + streamPlaybackAudioBytes()) / bytesPerSampleFrame)
-        + static_cast<qint64>(m_audio->monitorPlaybackClockFill());
-    const qint64 queuedAudioMs = static_cast<qint64>(
-        (static_cast<double>(queuedAudioFrames) * 1000.0 / static_cast<double>(m_audio->monitorSampleRate())) + 0.5);
-    const qint64 sinkLatencyMs = m_audio->monitorSinkLatencyUSecs() / 1000;
-    return audioDecodedPositionMs - queuedAudioMs - sinkLatencyMs;
 }
 
 void CameraMediaPlaybackController::scheduleNextVideoFileTick()

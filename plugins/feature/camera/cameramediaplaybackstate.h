@@ -28,7 +28,6 @@
 #include <QTimer>
 #include <QVector>
 
-#include "cameraaudiobytequeue.h"
 #include "camerapipelineframe.h"
 #include "cameravideofiledecoder.h"
 
@@ -46,10 +45,9 @@ class QObject;
  *
  * \note Streams run the clean present: the decoder owns its own demux/decode
  *       threads (see CameraVideoFileDecoder) and the controller is the consumer.
- *       This container only crosses threads via the decoder pending-state
- *       snapshot (guarded by m_decodeSnapshotMutex), the stream-audio buffer
- *       (m_streamAudioMutex), and m_playing (m_playingMutex). The schedule/clock
- *       state is worker-owned; the per-field inline comments document the rest.
+ *       The only cross-thread field here is m_playing (guarded by m_playingMutex);
+ *       the schedule/clock state is worker-owned. The per-field inline comments
+ *       document the rest.
  */
 class CameraMediaPlaybackState
 {
@@ -135,17 +133,6 @@ public:
     std::atomic<quint64> m_decodeDroppedSinceLastSubmit { 0 };
     // Guards m_playing (the transport play/pause flag).
     mutable QMutex m_playingMutex;
-    // Snapshot of decoder pending-buffer state, written by the decode thread and
-    // read by the worker thread (to derive the audio-slaved playback clock), so
-    // the worker never touches the decoder (owned by the decode thread) directly.
-    mutable QMutex m_decodeSnapshotMutex;
-    qint64 m_decodeAudioPositionMs = -1;
-    int m_decodePendingAudioBytes = 0;
-    int m_decodePendingVideoFrames = 0;
-    int m_decodePendingVideoPackets = 0;
-    mutable QMutex m_streamAudioMutex;
-    CameraAudioByteQueue m_streamAudioPcmS16Stereo;
-    int m_streamAudioSampleRate = 0;
     // Per-second throttle for the clean stream present diagnostic (presentStreamTick).
     QElapsedTimer m_audioWanderClock;
     // True while presentation is paused to (re)build the decoded-frame cushion,

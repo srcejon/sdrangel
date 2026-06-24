@@ -33,8 +33,6 @@ void CameraMediaPlaybackState::resetClosed()
         QMutexLocker locker(&m_streamAudioMutex);
         m_streamAudioPcmS16Stereo.clear();
         m_streamAudioSampleRate = 0;
-        m_streamAudioPaceRemainderFrames = 0.0;
-        m_streamAudioTrimToTargetPending = false;
     }
     m_frameRate = 25.0;
     m_positionMs = 0;
@@ -50,7 +48,6 @@ void CameraMediaPlaybackState::resetClock()
     {
         QMutexLocker locker(&m_streamAudioMutex);
         m_streamAudioPcmS16Stereo.clear();
-        m_streamAudioPaceRemainderFrames = 0.0;
     }
     m_clock.invalidate();
     m_tick = 0;

@@ -133,14 +133,6 @@ private:
     void setVideoFilePlaybackPlayingState(bool playing);
     bool takeDecodedVideoFileFrame(CameraMediaPlaybackState::DecodedFrame& frame);
     void clearStreamPlaybackAudio();
-    void appendStreamPlaybackAudio(const QByteArray& pcmS16Stereo, int audioSampleRate);
-    // Pull up to maxOutputFrames of monitor audio, linear-resampling the stream
-    // buffer by a ratio servoed to hold the buffer near targetBufferSeconds. Keeps
-    // audio consumption at the producer's content rate (synced to video) while
-    // emitting at the device sample rate, so the source/soundcard clock mismatch
-    // is absorbed smoothly instead of overflow-drained (clicks).
-    int takeResampledStreamPlaybackAudio(QByteArray& pcmS16Stereo, int audioSampleRate, int maxOutputFrames, double targetBufferSeconds);
-    void submitResampledStreamAudio();
     int streamPlaybackAudioBytes() const;
     int streamPlaybackAudioSampleRate() const;
     int streamInitialBufferFrameCount() const;

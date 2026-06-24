@@ -187,52 +187,11 @@ void CameraMediaPlaybackController::presentTick()
         presentStreamTick();
         return;
     }
+    // File playback only (streams returned above via presentStreamTick).
     const bool frameRead = readVideoFileFrame();
-    // Feed stream audio from the adaptive resampler once per tick (decoupled
-    // from whether a video frame was presented), but not during rebuffering:
-    // video is held to refill its cushion, so audio holds too and resyncs with
-    // it on resume. The resampler tops the monitor to target at the device
-    // rate while its ratio absorbs the source-vs-soundcard clock drift, so the
-    // monitor never overfills (no overflow-drain clicks).
-    if (m_settings->isStreamCamera()
-        && (m_state.m_basePositionMs >= 0)
-        && !m_state.m_streamRebuffering)
-    {
-        submitResampledStreamAudio();
-    }
-    // Watchdog: a desynced live stream can leave the decode thread stuck
-    // inside readNextFrame chewing through garbage for a long time without
-    // ever returning a read error, so its own reopen-on-failure path never
-    // fires and video freezes indefinitely. The worker thread keeps ticking,
-    // so detect "no new decoded frames for too long" here and force the decode
-    // thread out via requestAbort(), which routes it into the reopen path.
-    if (m_settings->isStreamCamera()
-        && videoFilePlaybackIsPlaying()
-        && (m_state.m_basePositionMs >= 0)
-        && !m_state.m_decodeReopening.load())
-    {
-        static constexpr qint64 streamDecodeWatchdogMs = 6000;
-        const quint64 produced = m_state.m_decodeFramesProduced.load();
-        if (!m_state.m_streamWatchdogClock.isValid()
-            || (produced != m_state.m_streamWatchdogLastProduced))
-        {
-            m_state.m_streamWatchdogLastProduced = produced;
-            m_state.m_streamWatchdogClock.restart();
-        }
-        else if (m_state.m_streamWatchdogClock.elapsed() > streamDecodeWatchdogMs)
-        {
-            qWarning() << "CameraWorker: stream decode produced no frames for"
-                       << m_state.m_streamWatchdogClock.elapsed()
-                       << "ms; forcing decoder reopen";
-            if (m_state.m_decoder) {
-                m_state.m_decoder->requestAbort();
-            }
-            m_state.m_streamWatchdogClock.restart();
-        }
-    }
     if (m_callbacks.capturing()
         && videoFilePlaybackIsPlaying()
-        && (m_settings->isStreamCamera() || frameRead))
+        && frameRead)
     {
         scheduleNextVideoFileTick();
     }
@@ -1044,253 +1003,6 @@ void CameraMediaPlaybackController::clearStreamPlaybackAudio()
     QMutexLocker locker(&m_state.m_streamAudioMutex);
     m_state.m_streamAudioPcmS16Stereo.clear();
     m_state.m_streamAudioSampleRate = 0;
-    m_state.m_streamAudioPaceRemainderFrames = 0.0;
-    m_state.m_streamAudioResampleRatio = 1.0;
-    m_state.m_streamAudioResamplePhase = 0.0;
-    m_state.m_streamAudioTrimToTargetPending = false;
-}
-
-void CameraMediaPlaybackController::appendStreamPlaybackAudio(const QByteArray& pcmS16Stereo, int audioSampleRate)
-{
-    static constexpr int bytesPerSampleFrame = 4;
-    if (pcmS16Stereo.isEmpty() || (audioSampleRate <= 0)) {
-        return;
-    }
-
-    const int alignedBytes = (pcmS16Stereo.size() / bytesPerSampleFrame) * bytesPerSampleFrame;
-    if (alignedBytes <= 0) {
-        return;
-    }
-
-    QMutexLocker locker(&m_state.m_streamAudioMutex);
-    if (m_state.m_streamAudioSampleRate != audioSampleRate)
-    {
-        m_state.m_streamAudioPcmS16Stereo.clear();
-        m_state.m_streamAudioPaceRemainderFrames = 0.0;
-        m_state.m_streamAudioSampleRate = audioSampleRate;
-    }
-
-    m_state.m_streamAudioPcmS16Stereo.append(pcmS16Stereo.constData(), alignedBytes);
-
-    // Cap the stream-audio buffer well ABOVE the resampler's target depth
-    // (~streamBufferingSeconds), otherwise the decoder's read-ahead bursts push
-    // the buffer over the cap and drop the oldest audio every tick (audible
-    // glitches). A fixed 2 s cap collided with the ~1.88 s target once buffering
-    // was raised to 2 s. Scale the cap with the buffering setting (2x, floored at
-    // 2 s so the historical 1 s-buffering default is unchanged) to leave room for
-    // the read-ahead to be drained by the resampler instead of dropped.
-    const double cappedBufferingSeconds = qBound(
-        CameraSettings::m_minStreamBufferingSeconds,
-        m_settings->m_streamBufferingSeconds,
-        CameraSettings::m_maxStreamBufferingSeconds);
-    const int maxBufferedBytes = static_cast<int>(
-        static_cast<double>(audioSampleRate) * bytesPerSampleFrame * qMax(2.0, cappedBufferingSeconds * 2.0));
-    if (m_state.m_streamAudioPcmS16Stereo.size() > maxBufferedBytes)
-    {
-        const int dropBytes = ((m_state.m_streamAudioPcmS16Stereo.size() - maxBufferedBytes) / bytesPerSampleFrame) * bytesPerSampleFrame;
-        if (dropBytes > 0)
-        {
-            m_state.m_streamAudioPcmS16Stereo.consume(dropBytes);
-        }
-    }
-}
-
-int CameraMediaPlaybackController::takeResampledStreamPlaybackAudio(QByteArray& pcmS16Stereo, int audioSampleRate, int maxOutputFrames, double targetBufferSeconds)
-{
-    static constexpr int bytesPerSampleFrame = 4;
-    pcmS16Stereo.clear();
-    if ((audioSampleRate <= 0) || (maxOutputFrames <= 0)) {
-        return 0;
-    }
-
-    QMutexLocker locker(&m_state.m_streamAudioMutex);
-    if (m_state.m_streamAudioSampleRate != audioSampleRate) {
-        return 0;
-    }
-    int availFrames = m_state.m_streamAudioPcmS16Stereo.size() / bytesPerSampleFrame;
-    // Need at least two input frames to interpolate across.
-    if (availFrames < 2) {
-        return 0;
-    }
-
-    // One-shot trim to target on resume from a (re)buffering phase. The buffer
-    // fills past target while presentation is paused; drop the excess oldest
-    // audio once so playback resumes in-band (within the soft deadband) and the
-    // servo holds steady instead of working off a large startup excursion.
-    // Dropping the oldest samples also tightens the audio lead toward the
-    // intended A/V offset rather than leaving audio running ahead of video.
-    if (m_state.m_streamAudioTrimToTargetPending)
-    {
-        m_state.m_streamAudioTrimToTargetPending = false;
-        const int targetFramesInt = static_cast<int>(
-            qMax(1.0, static_cast<double>(audioSampleRate) * qMax(0.05, targetBufferSeconds)));
-        if (availFrames > targetFramesInt)
-        {
-            const int dropFrames = availFrames - targetFramesInt;
-            m_state.m_streamAudioPcmS16Stereo.consume(dropFrames * bytesPerSampleFrame);
-            availFrames = targetFramesInt;
-        }
-    }
-
-    // Slow PI drift-corrector. Video is slaved to the free-running device clock (see
-    // scheduleNextVideoFileTick / videoFilePlaybackClockMs), so the decode runs at the
-    // device rate and this buffer is fed and drained at the device rate — it only moves
-    // with the slow source-vs-soundcard CLOCK drift, plus a transient bump each time a
-    // source stall drains it and the decode catch-up refills it.
-    //
-    // So: a SLOW, ~unity-damped PI that converges to the true clock ratio and HOLDS it
-    // (steady, inaudible pitch). No soft-deadband gainScale (it limit-cycles), no tight
-    // integral clamp. The INTEGRAL is the steady-state clock ratio (free, ±5%, inaudible
-    // — it is the correct rate); the PROPORTIONAL is a small bounded transient (≤1.5%).
-    //
-    // DAMPING: this servo runs once PER PRESENT TICK (~30-60 Hz), and the integral adds
-    // ki*err each tick — so the effective integral rate is ki*f. The plant is the buffer
-    // (an integrator), making the loop 2nd order: zeta = (kp/2)*sqrt(deviceRate /
-    // (targetFrames*ki*f)). An earlier ki=0.0004 gave zeta~=0.18 (badly underdamped) — a
-    // slow ~40 s limit cycle of +/-1.5% pitch that, since video is on the steady device
-    // clock, showed up as A/V sync slowly drifting in and out. ki=6e-6 puts zeta ~ 1 for
-    // f in 30..60, so it settles instead of cycling. The integral barely moves (the
-    // buffer is fed/drained at the device rate, so the true ratio is ~1.0); the
-    // proportional rejects feed jitter at <0.1% pitch.
-    const double targetFrames = qMax(1.0, static_cast<double>(audioSampleRate) * qMax(0.05, targetBufferSeconds));
-    const double err = (static_cast<double>(availFrames) - targetFrames) / targetFrames;
-    m_state.m_streamAudioResampleRatio = qBound(0.95,
-        m_state.m_streamAudioResampleRatio + 0.000006 * err, 1.05);
-    const double proportional = qBound(-0.015, 0.025 * err, 0.015);
-    const double ratio = qBound(0.93, m_state.m_streamAudioResampleRatio + proportional, 1.07);
-
-    // Diagnostic: measure the wander = the swing of the applied audio ratio (pitch).
-    {
-        if (!m_state.m_audioWanderClock.isValid()) {
-            m_state.m_audioWanderClock.start();
-        }
-        m_state.m_audioWanderRatioMin = qMin(m_state.m_audioWanderRatioMin, ratio);
-        m_state.m_audioWanderRatioMax = qMax(m_state.m_audioWanderRatioMax, ratio);
-        m_state.m_audioWanderRatioSum += ratio;
-        m_state.m_audioWanderFillMsSum += 1000.0 * static_cast<double>(availFrames) / static_cast<double>(audioSampleRate);
-        ++m_state.m_audioWanderCount;
-        if (m_state.m_audioWanderClock.elapsed() >= 1000)
-        {
-            const double n = qMax(1, m_state.m_audioWanderCount);
-            const double avg = m_state.m_audioWanderRatioSum / n;
-            qDebug().nospace()
-                << "CameraMediaPlayback: audio wander - ratio avg " << QString::number(avg, 'f', 4)
-                << " min " << QString::number(m_state.m_audioWanderRatioMin, 'f', 4)
-                << " max " << QString::number(m_state.m_audioWanderRatioMax, 'f', 4)
-                << " swing " << QString::number((m_state.m_audioWanderRatioMax - m_state.m_audioWanderRatioMin) * 100.0, 'f', 2) << "%"
-                << " (pitch " << QString::number((avg - 1.0) * 100.0, 'f', 2) << "%)"
-                << " bufFillMs " << QString::number(m_state.m_audioWanderFillMsSum / n, 'f', 0)
-                << " integral " << QString::number(m_state.m_streamAudioResampleRatio, 'f', 4)
-                << " framesDropped/s " << m_state.m_streamFramesDroppedThisSecond;
-            m_state.m_streamFramesDroppedThisSecond = 0;
-            m_state.m_audioWanderRatioMin = 2.0;
-            m_state.m_audioWanderRatioMax = 0.0;
-            m_state.m_audioWanderRatioSum = 0.0;
-            m_state.m_audioWanderFillMsSum = 0.0;
-            m_state.m_audioWanderCount = 0;
-            m_state.m_audioWanderClock.restart();
-        }
-    }
-
-    const qint16 *in = reinterpret_cast<const qint16*>(m_state.m_streamAudioPcmS16Stereo.constData());
-    const double phase = m_state.m_streamAudioResamplePhase;
-    pcmS16Stereo.reserve(maxOutputFrames * bytesPerSampleFrame);
-    int produced = 0;
-    for (; produced < maxOutputFrames; ++produced)
-    {
-        const double pos = phase + static_cast<double>(produced) * ratio;
-        const int idx = static_cast<int>(std::floor(pos));
-        if ((idx < 0) || (idx + 1 >= availFrames)) {
-            break;
-        }
-        const double frac = pos - static_cast<double>(idx);
-        const auto lerp = [frac](qint16 a, qint16 b) -> qint16 {
-            const double v = static_cast<double>(a) * (1.0 - frac) + static_cast<double>(b) * frac;
-            return static_cast<qint16>(std::lround(qBound(-32768.0, v, 32767.0)));
-        };
-        const qint16 l = lerp(in[2 * idx], in[2 * (idx + 1)]);
-        const qint16 r = lerp(in[2 * idx + 1], in[2 * (idx + 1) + 1]);
-        const qint16 frame[2] = { l, r };
-        pcmS16Stereo.append(reinterpret_cast<const char*>(frame), bytesPerSampleFrame);
-    }
-    if (produced <= 0) {
-        return 0;
-    }
-
-    const double endPos = phase + static_cast<double>(produced) * ratio;
-    const int consumed = static_cast<int>(std::floor(endPos));
-    if (consumed > 0) {
-        m_state.m_streamAudioPcmS16Stereo.consume(consumed * bytesPerSampleFrame);
-        m_state.m_streamAudioResamplePhase = endPos - static_cast<double>(consumed);
-    } else {
-        m_state.m_streamAudioResamplePhase = endPos;
-    }
-    return produced;
-}
-
-void CameraMediaPlaybackController::submitResampledStreamAudio()
-{
-    if (!m_settings->isStreamCamera()) {
-        return;
-    }
-    static constexpr int bytesPerSampleFrame = 4;
-    const int audioSampleRate = streamPlaybackAudioSampleRate();
-    if (audioSampleRate <= 0) {
-        return;
-    }
-    // Top the monitor up to its target each tick: the device drains it at the
-    // real sample rate, so refilling to target makes the output rate the device
-    // rate while the resampler ratio absorbs the source/soundcard clock drift.
-    const int targetFill = m_audio->monitorTargetFillFrames(audioSampleRate);
-    const int currentFill = static_cast<int>(m_audio->monitorAudioFill());
-    const int need = targetFill - currentFill;
-    if (need <= 0) {
-        return;
-    }
-    // Hold the audio buffer so total audio latency (this buffer + the ~120 ms monitor
-    // FIFO) matches the VIDEO latency after the shared bitstream cushion — i.e. the
-    // decoded-frame queue depth — so A/V stay lip-synced.
-    //
-    // The playback cushion now lives in the compressed bitstream read-ahead, which is
-    // shared by audio and video (both ride it as undecoded packets). So the audio side
-    // only needs to match the DECODED video queue (the post-bitstream video latency),
-    // NOT the whole streamBufferingSeconds. Targeting the full buffering here
-    // over-delayed the audio (sync error) and forced the resampler to stretch the
-    // buffer to a level it cannot reach, railing the pitch. Any residual offset is
-    // trimmable with the playback audio offset setting.
-    const double monitorCushionSeconds =
-        static_cast<double>(m_audio->monitorTargetFillFrames(audioSampleRate)) / static_cast<double>(audioSampleRate);
-    const double decodedQueueSeconds =
-        static_cast<double>(maxDecodedStreamFrameCount()) / qMax(1.0, m_state.m_frameRate);
-    // Total audio latency = this buffer + the monitor FIFO + the sound device's own output
-    // buffer (sink latency, ~234 ms). The present shows each video frame when the audio at the
-    // SPEAKER reaches its PTS, so for the matching frame to still be in the decoded-video queue
-    // that total audio latency must be SHORTER than the queue depth. Subtracting only the
-    // monitor FIFO (not the sink latency) left the audio ~sink-latency deeper than the queue
-    // could hold, so the present fell back on a too-new frame and video LED the audio by
-    // ~234 ms. Subtract the sink latency too, plus a small margin so the queue isn't pinned at
-    // its cap (which would race the decode's drop-oldest against the present).
-    const double sinkLatencySeconds = static_cast<double>(m_audio->monitorSinkLatencyUSecs()) / 1.0e6;
-    const double targetBufferSeconds = qMax(0.15,
-        decodedQueueSeconds - monitorCushionSeconds - sinkLatencySeconds - 0.10);
-    QByteArray audio;
-    const int got = takeResampledStreamPlaybackAudio(audio, audioSampleRate, need, targetBufferSeconds);
-    if (got <= 0) {
-        return;
-    }
-    m_audio->submitMonitorPcmSamples(audio, audioSampleRate);
-    // Anchor the stream recording audio on the playback content timeline (the same
-    // timeline the recorder writes video PTS on). m_positionMs is the content that is
-    // PLAYING now (video is slaved to it), but the resampler emits audio that is about
-    // to play — it sits ahead of the playback position by the monitor FIFO cushion
-    // (the stream jitter buffer is matched out, so the cushion is the residual lead).
-    // Add it so the recorder anchors on the audio's true content position; this leaves
-    // no per-device tuning (the cushion is a fixed code constant).
-    const qint64 monitorCushionMs = static_cast<qint64>(monitorCushionSeconds * 1000.0 + 0.5);
-    m_audio->submitRecordingPcmSamples(
-        audio.left((audio.size() / bytesPerSampleFrame) * bytesPerSampleFrame),
-        audioSampleRate,
-        m_state.m_positionMs + monitorCushionMs);
 }
 
 int CameraMediaPlaybackController::streamPlaybackAudioBytes() const
@@ -1521,15 +1233,6 @@ bool CameraMediaPlaybackController::readQueuedVideoFileFrame(bool submitAudio)
                 qDebug() << "CameraMediaPlayback: stream rebuffer RESUME - queuedFrames" << queuedFrames
                          << "decodeFramesProduced" << m_state.m_decodeFramesProduced.load();
             }
-            {
-                // The cushion has been rebuilt and presentation is about to resume.
-                // The stream-audio buffer filled past the resampler's target depth
-                // while we were paused, so flag it for a one-shot trim back to target
-                // (see takeResampledStreamPlaybackAudio) — covers both the initial
-                // startup and any mid-playback rebuffer after a stall.
-                QMutexLocker audioLocker(&m_state.m_streamAudioMutex);
-                m_state.m_streamAudioTrimToTargetPending = true;
-            }
         }
         m_state.m_streamRebuffering = false;
         // Cushion is healthy and we are presenting: let the decode thread self-pace at the
@@ -1592,11 +1295,8 @@ bool CameraMediaPlaybackController::readQueuedVideoFileFrame(bool submitAudio)
     int audioSampleRate = decodedFrame.m_audioSampleRate;
     if (m_settings->isStreamCamera())
     {
-        // Stream audio is no longer pulled per presented frame. It is fed to the
-        // monitor by the adaptive resampler (submitResampledStreamAudio, run every
-        // tick), which matches the source's content rate to the sound-card rate
-        // and keeps audio synced to the fill-servo-paced video. Submit the frame
-        // with no audio here so the resampler is the single audio source.
+        // Vestigial: streams now run the clean present (presentStreamTick) and never reach this
+        // old per-frame path; submit no per-frame audio here.
         pcmS16Stereo.clear();
         audioSampleRate = streamPlaybackAudioSampleRate();
     }
@@ -1737,10 +1437,8 @@ void CameraMediaPlaybackController::submitVideoFileAudio(const QByteArray& pcmS1
     // Maintain a small monitor cushion for FILE playback. The per-frame submission
     // feeds one video frame of audio per tick while the device consumes one per
     // tick, so without a top-up the FIFO drains to zero on any jitter and underruns
-    // (glitching). The top-up gradually rebuilds the cushion to target. Streams do
-    // NOT use this path: their audio is fed entirely by submitResampledStreamAudio
-    // (the adaptive resampler), which is the single stream-audio source; here a
-    // stream call carries empty audio and is a no-op.
+    // (glitching). The top-up gradually rebuilds the cushion to target. Streams do NOT use this
+    // path (they run the clean present, presentStreamTick, and feed the monitor in submitStreamAudio).
     if (m_state.m_decoder && !m_settings->isStreamCamera())
     {
         const uint32_t currentFill = m_audio->monitorAudioFill();
@@ -1768,9 +1466,8 @@ void CameraMediaPlaybackController::submitVideoFileAudio(const QByteArray& pcmS1
     // buffer and never reappears in a later frame's pcmS16Stereo, so recording only
     // pcmS16Stereo drops it: the recorded track ends up shorter than the video and
     // plays too fast (most visible on heavy 4K playback, where irregular present
-    // ticks drain the monitor and make the top-up frequent and large). For streams
-    // monitorAudio carries no per-frame audio (the resampler in
-    // submitResampledStreamAudio is the single stream recording-audio source), so
+    // ticks drain the monitor and make the top-up frequent and large). For streams monitorAudio
+    // carries no per-frame audio (the clean present feeds + records audio in submitStreamAudio), so
     // this stays a no-op there.
     const QByteArray& recordingAudio = monitorAudio;
     if (!recordingAudio.isEmpty()) {

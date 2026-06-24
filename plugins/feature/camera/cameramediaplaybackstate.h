@@ -178,8 +178,6 @@ public:
     QElapsedTimer m_decodePaceClock;
     quint64 m_decodePaceFrameCount = 0;
     bool m_decodePacePrevActive = false;
-    quint64 m_streamWatchdogLastProduced = 0;
-    QElapsedTimer m_streamWatchdogClock;
     mutable QMutex m_decodedFramesMutex;
     QWaitCondition m_decodedFramesAvailable;
     QWaitCondition m_decodedFramesNotFull;
@@ -195,35 +193,8 @@ public:
     mutable QMutex m_streamAudioMutex;
     CameraAudioByteQueue m_streamAudioPcmS16Stereo;
     int m_streamAudioSampleRate = 0;
-    // Carried fractional-sample remainder for the audio-drop helpers
-    // (dropPaced/dropTimedStreamPlaybackAudio), which discard the stream audio
-    // matching dropped video frames so A/V stay aligned.
-    double m_streamAudioPaceRemainderFrames = 0.0;
-    // Adaptive resampler state for matching the source's audio content rate to the
-    // sound-card output rate. The ratio is servoed to hold the stream-audio buffer
-    // at a fixed depth, so audio is consumed at the producer's content rate (kept
-    // in sync with the fill-servo-paced video) while the monitor is fed at the
-    // device rate. This absorbs the source-vs-soundcard clock difference smoothly
-    // (no overflow-drain clicks). m_streamAudioResamplePhase is the carried
-    // fractional input position for inter-call continuity.
-    double m_streamAudioResampleRatio = 1.0;
-    double m_streamAudioResamplePhase = 0.0;
-    // Diagnostic: per-second stats of the applied resample ratio (= audio playback
-    // pitch) and audio buffer fill, so the "wander" (ratio swing) can be measured
-    // rather than judged by ear.
+    // Per-second throttle for the clean stream present diagnostic (presentStreamTick).
     QElapsedTimer m_audioWanderClock;
-    double m_audioWanderRatioMin = 2.0;
-    double m_audioWanderRatioMax = 0.0;
-    double m_audioWanderRatioSum = 0.0;
-    double m_audioWanderFillMsSum = 0.0;
-    int m_audioWanderCount = 0;
-    // Set when a (re)buffering phase ends so the next resampler call trims the
-    // stream-audio buffer back to its target depth. While presentation is paused
-    // to rebuild the cushion the decoder keeps appending audio, so the buffer
-    // sits well above target when playback resumes; trimming it once on resume
-    // lets the soft-deadband servo start in-band instead of riding out a large
-    // startup excursion.
-    bool m_streamAudioTrimToTargetPending = false;
     // True while presentation is paused to (re)build the decoded-frame cushion,
     // at startup and after a stall drains the queue mid-playback.
     bool m_streamRebuffering = false;

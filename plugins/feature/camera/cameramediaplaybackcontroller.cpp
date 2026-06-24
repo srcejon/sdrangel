@@ -302,6 +302,23 @@ void CameraMediaPlaybackController::setHighTimerResolution(bool enable)
 #endif
 }
 
+void CameraMediaPlaybackController::submitStreamPresentFrame(const QImage& image, qint64 ptsMs)
+{
+    if (!m_callbacks.submitFrame) {
+        return;
+    }
+    m_state.m_positionMs = ptsMs;
+    CameraPipelineFramePtr frame(new CameraPipelineFrame);
+    frame->m_image = image;
+    m_callbacks.populateExposureMeta(*frame);
+    frame->m_captureEpoch = m_callbacks.captureEpoch();
+    frame->m_pipelineInputWallClockMs = QDateTime::currentMSecsSinceEpoch();
+    frame->m_playbackPositionMs = ptsMs;
+    frame->m_playbackFrameRate = qMax(1.0, m_state.m_frameRate) * qMax(0.1, m_settings->m_videoPlaybackRate);
+    submitVideoFileFrame(frame, false);
+    reportVideoFilePlaybackToGUI();
+}
+
 void CameraMediaPlaybackController::presentStreamTick()
 {
     if (!m_state.m_decoder) {
@@ -360,15 +377,37 @@ void CameraMediaPlaybackController::presentStreamTick()
         clockMs += m_settings->m_videoPlaybackAudioOffsetMs;
     }
 
-    // Buffering gate: hold presentation until the compressed cushion is built AND audio has
-    // started (clock valid). The cushion lives in the decoder's packet queue.
+    // Buffering gate: hold the master start until audio has started (clock valid) AND the video
+    // decode has caught up to the clock. At startup the audio buffer fills instantly while NVDEC
+    // spins up, so the audio clock runs ahead of any decoded video; starting then made the present
+    // race a backlog of late frames to catch the clock ("nothing, then a burst"). Instead wait for
+    // a decoded frame at/after the clock, and meanwhile show the LATEST decoded frame so the
+    // picture catches up smoothly rather than blanking.
     if (m_state.m_basePositionMs < 0)
     {
-        const int cushionFrames = streamBufferingCushionFrameCount();
-        const int buffered = m_state.m_decoder->streamVideoPacketCount()
-                           + m_state.m_decoder->streamDecodedVideoFrameCount();
-        if ((clockMs < 0) || (buffered < cushionFrames))
+        const qint64 videoEdgeMs = m_state.m_decoder->streamVideoDecodedEdgePtsMs();
+        if ((clockMs < 0) || (videoEdgeMs < clockMs))
         {
+            // Show the newest decoded frame while catching up (drop the older backlog).
+            QImage img;
+            qint64 pts = -1;
+            bool e = false;
+            bool got = false;
+            while (m_state.m_decoder->streamPeekVideoFramePtsMs() >= 0)
+            {
+                QImage t;
+                qint64 p = -1;
+                bool ee = false;
+                if (!m_state.m_decoder->streamTakeVideoFrame(t, p, ee) || ee) {
+                    break;
+                }
+                img = std::move(t);
+                pts = p;
+                got = true;
+            }
+            if (got) {
+                submitStreamPresentFrame(img, pts);
+            }
             m_presentTimer.setSingleShot(true);
             m_presentTimer.start(qMax(1, static_cast<int>(intervalMs / 2.0)));
             return;
@@ -376,7 +415,7 @@ void CameraMediaPlaybackController::presentStreamTick()
         m_state.m_basePositionMs = 0;   // started
         m_state.m_streamPosterShown = false;
         qDebug() << "CameraMediaPlayback: stream playback start - clockMs" << clockMs
-                 << "bufferedFrames" << buffered;
+                 << "videoEdgeMs" << videoEdgeMs;
     }
 
     // Show frames due by the master clock: drop late (keep the newest due), hold early.
@@ -408,21 +447,6 @@ void CameraMediaPlaybackController::presentStreamTick()
         shownPts = pts;
         gotFrame = true;
     }
-    // Startup poster: if nothing is due yet (clock still behind the first frame), show the oldest
-    // available frame once so the view isn't blank during the audio-latency gap at start.
-    if (!gotFrame && !eof && !m_state.m_streamPosterShown && (m_state.m_decoder->streamPeekVideoFramePtsMs() >= 0))
-    {
-        QImage img;
-        qint64 pts = -1;
-        bool e = false;
-        if (m_state.m_decoder->streamTakeVideoFrame(img, pts, e) && !e)
-        {
-            shown = std::move(img);
-            shownPts = pts;
-            gotFrame = true;
-            m_state.m_streamPosterShown = true;
-        }
-    }
     if (eof)
     {
         setVideoFilePlaying(false);
@@ -432,19 +456,10 @@ void CameraMediaPlaybackController::presentStreamTick()
         m_state.m_streamFramesDroppedThisSecond += dropped;
     }
     double tSubmitMs = 0.0;
-    if (gotFrame && m_callbacks.submitFrame)
+    if (gotFrame)
     {
-        m_state.m_positionMs = shownPts;
-        CameraPipelineFramePtr frame(new CameraPipelineFrame);
-        frame->m_image = shown;
-        m_callbacks.populateExposureMeta(*frame);
-        frame->m_captureEpoch = m_callbacks.captureEpoch();
-        frame->m_pipelineInputWallClockMs = QDateTime::currentMSecsSinceEpoch();
-        frame->m_playbackPositionMs = shownPts;
-        frame->m_playbackFrameRate = qMax(1.0, m_state.m_frameRate) * qMax(0.1, m_settings->m_videoPlaybackRate);
         const double tBeforeSubmit = tickTimer.nsecsElapsed() / 1.0e6;
-        submitVideoFileFrame(frame, false);
-        reportVideoFilePlaybackToGUI();
+        submitStreamPresentFrame(shown, shownPts);
         tSubmitMs = tickTimer.nsecsElapsed() / 1.0e6 - tBeforeSubmit;
     }
 

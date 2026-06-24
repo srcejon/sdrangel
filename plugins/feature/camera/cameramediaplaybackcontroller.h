@@ -197,6 +197,8 @@ private:
     void presentStreamTick();
     void submitStreamAudio();
     qint64 streamMasterClockMs() const;
+    // Push one decoded stream frame into the pipeline (preview path).
+    void submitStreamPresentFrame(const QImage& image, qint64 ptsMs);
     // Raise/lower the OS timer resolution (Windows) so the present timer fires on time while a
     // stream plays. Ref-balanced via m_timerResolutionRaised. No-op off Windows.
     void setHighTimerResolution(bool enable);

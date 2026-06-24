@@ -763,9 +763,11 @@ void CameraVideoFileDecoder::streamVideoDecodeLoop()
             const bool ok = convertFrameToImage(m_videoFrame, image, errorMessage);
             av_frame_unref(m_videoFrame);
             if (!ok) continue;
-            // Detach from the recycled pool buffer: a queued frame may sit through the audio
-            // latency before the present shows it, longer than the pool's in-flight window.
-            image.detach();
+            // No detach: the pool (CameraImagePool) is refcounted — a buffer is only recycled when
+            // the QImage's last reference dies, so a frame can sit in the queue / pipeline for any
+            // length of time and stay valid. Queueing the pool-backed image avoids a full
+            // per-frame deep copy (8 MB at 1080p, ~33 MB at 4K). The pool's free-list cap only
+            // bounds idle retention; it does not limit how many frames can be in flight.
             QMutexLocker locker(&m_streamMutex);
             while (!m_abortRequested.load() && (m_streamVideoFrameQ.size() >= m_streamVideoFrameCap))
                 m_streamVideoFrameNotFull.wait(&m_streamMutex, 100);

@@ -286,8 +286,9 @@ private:
     double m_streamAudioTargetSeconds = 0.30;
     // Video decode → present: decoded frames + PTS.
     std::deque<StreamDecodedFrame> m_streamVideoFrameQ;
-    // Small just-in-time queue (frames are detached, so not pool-limited). Holds a little
-    // ahead of the present for timer jitter; the cushion + latency are in the packet queue.
+    // Small just-in-time queue holding pool-backed frames a little ahead of the present for timer
+    // jitter; the cushion + latency live in the compressed packet queue. The image pool is
+    // refcounted so queued frames stay valid without copying (see streamVideoDecodeLoop).
     size_t m_streamVideoFrameCap = 6;
     QWaitCondition m_streamVideoFrameNotEmpty;
     QWaitCondition m_streamVideoFrameNotFull;

@@ -518,7 +518,13 @@ void CameraMediaPlaybackController::presentStreamTick()
         if (nextPts < 0) {
             break;                                                   // nothing decoded yet
         }
-        if ((clockMs >= 0) && (nextPts > clockMs + static_cast<qint64>(intervalMs / 2.0))) {
+        // Hold frames that aren't due yet - INCLUDING while the clock is still negative at startup
+        // (audio handed but monitor+sink still ahead of the speaker). The old `clockMs >= 0` guard
+        // here drained the whole queue every tick while the clock was negative, racing the video
+        // silently through the cushion (the "frames with no audio" burst) and then stranding it
+        // ahead of the clock (the pause) until the clock caught up. Holding from the poster until
+        // the clock reaches the oldest frame starts video and audio together, no burst.
+        if (nextPts > clockMs + static_cast<qint64>(intervalMs / 2.0)) {
             break;                                                   // not due yet — hold
         }
         QImage img;
@@ -598,6 +604,7 @@ void CameraMediaPlaybackController::presentStreamTick()
             << " playedPts " << m_state.m_streamPlayedPtsMs
             << " monFifoMs " << (static_cast<qint64>(m_audio->monitorAudioFill()) * 1000 / qMax(1, m_audio->monitorSampleRate()))
             << " sinkMs " << (m_audio->monitorSinkLatencyUSecs() / 1000)
+            << " calMs " << m_settings->m_streamAudioOutputLatencyMs
             << " offsetMs " << m_settings->m_videoPlaybackAudioOffsetMs
             << " audioBufMs " << (m_state.m_decoder->streamAudioBufferedFrames() * 1000 / qMax(1, m_audio->monitorSampleRate()))
             << " videoPkts " << m_state.m_decoder->streamVideoPacketCount()

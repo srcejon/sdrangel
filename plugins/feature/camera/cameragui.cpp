@@ -5115,7 +5115,7 @@ void CameraGUI::on_startStop_clicked(bool checked)
 
 void CameraGUI::on_refreshCamerasButton_clicked()
 {
-    m_camera->getInputMessageQueue()->push(Camera::MsgRefreshCameraList::create());
+    m_camera->getInputMessageQueue()->push(Camera::MsgRefreshCameraList::create(true));
 }
 
 void CameraGUI::on_browseVideoFileButton_clicked()

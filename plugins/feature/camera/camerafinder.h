@@ -21,6 +21,8 @@
 
 #include <QObject>
 #include <QSet>
+#include <QElapsedTimer>
+#include <QMutex>
 
 #include "camerainfo.h"
 #include "camerasettings.h"
@@ -51,7 +53,7 @@ public:
     ~CameraFinder() override;
 
     void setMessageQueueToGUI(MessageQueue* messageQueue) { m_msgQueueToGUI = messageQueue; }
-    void reportCameraList(const CameraSettings& settings);
+    void reportCameraList(const CameraSettings& settings, bool forceLocalRefresh = false);
 
 private:
     struct AlpacaEndpoint
@@ -74,8 +76,13 @@ private:
 
     static constexpr quint16 m_alpacaDiscoveryPort = 32227;
     static constexpr int m_alpacaDiscoveryTimeoutMs = 1000;
+    static constexpr qint64 m_localCameraCacheMaxAgeMs = 15000;
     static const QByteArray m_alpacaDiscoveryMessage;
+    static QMutex m_localCameraCacheMutex;
+    static QElapsedTimer m_localCameraCacheAge;
+    static QList<CameraInfo> m_cachedLocalCameras;
 
+    static QList<CameraInfo> listLocalCamerasCached(bool forceRefresh);
     static QList<CameraInfo> listQtCameras();
 #ifdef ASICAMERA_FOUND
     static QList<CameraInfo> listAsiCameras();

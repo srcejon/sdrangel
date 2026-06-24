@@ -17,6 +17,7 @@
 ///////////////////////////////////////////////////////////////////////////////////
 
 #include <QDebug>
+#include <QElapsedTimer>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -48,6 +49,9 @@
 #include "cameraworker.h"
 
 const QByteArray CameraFinder::m_alpacaDiscoveryMessage("alpacadiscovery1");
+QMutex CameraFinder::m_localCameraCacheMutex;
+QElapsedTimer CameraFinder::m_localCameraCacheAge;
+QList<CameraInfo> CameraFinder::m_cachedLocalCameras;
 
 CameraFinder::CameraFinder(QObject* parent) :
     QObject(parent),
@@ -67,13 +71,21 @@ CameraFinder::~CameraFinder()
     delete m_networkManager;
 }
 
-void CameraFinder::reportCameraList(const CameraSettings& settings)
+void CameraFinder::reportCameraList(const CameraSettings& settings, bool forceLocalRefresh)
 {
+    QElapsedTimer timer;
+    timer.start();
+
     m_settings = settings;
-    m_currentCameras = listQtCameras();
-#ifdef ASICAMERA_FOUND
-    m_currentCameras.append(listAsiCameras());
-#endif
+    m_currentCameras = listLocalCamerasCached(forceLocalRefresh);
+
+    const qint64 localElapsedMs = timer.elapsed();
+    if (localElapsedMs > 250) {
+        qDebug() << "CameraFinder: local camera enumeration took" << localElapsedMs
+                 << "ms force" << forceLocalRefresh
+                 << "cameras" << m_currentCameras.size();
+    }
+
     m_currentFocusers.clear();
     m_currentFilterWheels.clear();
     m_discoveredEndpointKeys.clear();
@@ -93,6 +105,37 @@ void CameraFinder::reportCameraList(const CameraSettings& settings)
     } else {
         queryConfiguredDevices({{settings.m_alpacaHost, settings.m_alpacaPort}}, m_requestId);
     }
+}
+
+QList<CameraInfo> CameraFinder::listLocalCamerasCached(bool forceRefresh)
+{
+    QMutexLocker locker(&m_localCameraCacheMutex);
+
+    if (!forceRefresh
+        && m_localCameraCacheAge.isValid()
+        && m_localCameraCacheAge.elapsed() < m_localCameraCacheMaxAgeMs)
+    {
+        return m_cachedLocalCameras;
+    }
+
+    QElapsedTimer timer;
+    timer.start();
+
+    QList<CameraInfo> cameras = listQtCameras();
+#ifdef ASICAMERA_FOUND
+    cameras.append(listAsiCameras());
+#endif
+
+    m_cachedLocalCameras = cameras;
+    m_localCameraCacheAge.restart();
+
+    const qint64 elapsedMs = timer.elapsed();
+    if (elapsedMs > 250) {
+        qDebug() << "CameraFinder: refreshed local camera cache in" << elapsedMs
+                 << "ms cameras" << cameras.size();
+    }
+
+    return m_cachedLocalCameras;
 }
 
 QList<CameraInfo> CameraFinder::listQtCameras()

@@ -477,8 +477,9 @@ bool Camera::handleMessage(const Message& cmd)
     }
     else if (MsgRefreshCameraList::match(cmd))
     {
+        const MsgRefreshCameraList& msg = (const MsgRefreshCameraList&) cmd;
         if (m_worker) {
-            m_worker->getInputMessageQueue()->push(CameraWorker::MsgRefreshCameraList::create());
+            m_worker->getInputMessageQueue()->push(CameraWorker::MsgRefreshCameraList::create(msg.getForceRefresh()));
         }
 
         return true;

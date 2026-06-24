@@ -170,13 +170,20 @@ public:
         MESSAGE_CLASS_DECLARATION
 
     public:
-        static MsgRefreshCameraList* create()
+        bool getForceRefresh() const { return m_forceRefresh; }
+
+        static MsgRefreshCameraList* create(bool forceRefresh = false)
         {
-            return new MsgRefreshCameraList();
+            return new MsgRefreshCameraList(forceRefresh);
         }
 
     private:
-        MsgRefreshCameraList() : Message() {}
+        bool m_forceRefresh;
+
+        MsgRefreshCameraList(bool forceRefresh) :
+            Message(),
+            m_forceRefresh(forceRefresh)
+        {}
     };
 
     class MsgReportError : public Message {

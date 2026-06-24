@@ -961,8 +961,9 @@ bool CameraWorker::handleMessage(const Message& cmd)
     }
     else if (MsgRefreshCameraList::match(cmd))
     {
+        const MsgRefreshCameraList& msg = (const MsgRefreshCameraList&) cmd;
         if (m_cameraFinder) {
-            m_cameraFinder->reportCameraList(m_settings);
+            m_cameraFinder->reportCameraList(m_settings, msg.getForceRefresh());
         }
 
         return true;

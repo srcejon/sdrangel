@@ -176,6 +176,13 @@ private:
     bool reconnectStreamDecoder();
     int m_streamReconnectAttempts = 0;
     static constexpr int m_maxStreamReconnectAttempts = 40;   // ~20s of ~500ms-spaced attempts
+    // True while we are retrying a dead source. The retry loop is gated on THIS, not on the decoder's
+    // streamSourceFailed(): a failed reconnect closes the decoder, which clears that flag, so gating
+    // on it alone would wedge after the first failed attempt (never retry, never give up).
+    bool m_streamReconnecting = false;
+    // Consecutive present ticks a video-only stream has had nothing buffered (frame queue + packet
+    // read-ahead both dry). Debounces a one-tick drain into a spurious rebuffer.
+    int m_streamVideoOnlyDryTicks = 0;
     // Raise/lower the OS timer resolution (Windows) so the present timer fires on time while a
     // stream plays. Ref-balanced via m_timerResolutionRaised. No-op off Windows.
     void setHighTimerResolution(bool enable);

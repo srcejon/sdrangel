@@ -31,7 +31,10 @@ void CameraMediaPlaybackState::resetClosed()
     m_frameRate = 25.0;
     m_positionMs = 0;
     m_durationMs = 0;
-    m_playing = false;
+    {
+        QMutexLocker locker(&m_playingMutex);   // m_playing is mutex-guarded everywhere else
+        m_playing = false;
+    }
     resetClock();
 }
 

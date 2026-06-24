@@ -578,16 +578,21 @@ int CameraVideoFileDecoder::takeReadAheadPacket(AVPacket *pkt)
 void CameraVideoFileDecoder::clearStreamQueues()
 {
 #ifdef CAMERA_FFMPEG_STREAMING
+    // Called with m_streamMutex held (packet/video domain).
     while (!m_streamVideoPktQ.empty()) { AVPacket *p = m_streamVideoPktQ.front(); m_streamVideoPktQ.pop_front(); av_packet_free(&p); }
     while (!m_streamAudioPktQ.empty()) { AVPacket *p = m_streamAudioPktQ.front(); m_streamAudioPktQ.pop_front(); av_packet_free(&p); }
     m_streamVideoFrameQ.clear();
-    m_streamAudioBuf.clear();
-    m_streamAudioEndPtsMs = -1;
     m_streamVideoDecodedEdgePtsMs = -1;
-    m_streamDriftRatio = 1.0;
-    m_streamDriftPhase = 0.0;
     m_streamDemuxEof = false;
     m_streamDemuxError = false;
+    // Audio-buffer domain (its own mutex). stream→audio nesting only — consistent ordering.
+    {
+        QMutexLocker audioLocker(&m_streamAudioMutex);
+        m_streamAudioBuf.clear();
+        m_streamAudioEndPtsMs = -1;
+        m_streamDriftRatio = 1.0;
+        m_streamDriftPhase = 0.0;
+    }
 #endif
 }
 
@@ -696,9 +701,9 @@ void CameraVideoFileDecoder::streamAudioDecodeLoop()
         const bool ok = sendAudioPacket(pkt, chunk, errorMessage);   // → device-rate S16, updates m_audioDecodedPositionMs
         av_packet_free(&pkt);
         if (!ok || chunk.isEmpty()) continue;
-        QMutexLocker locker(&m_streamMutex);
+        QMutexLocker locker(&m_streamAudioMutex);
         while (!m_abortRequested.load() && ((m_streamAudioBuf.size() / bytesPerSampleFrame) >= m_streamAudioBufCapFrames))
-            m_streamAudioBufNotFull.wait(&m_streamMutex, 100);
+            m_streamAudioBufNotFull.wait(&m_streamAudioMutex, 100);
         if (m_abortRequested.load()) break;
         m_streamAudioBuf.append(chunk);
         m_streamAudioEndPtsMs = m_audioDecodedPositionMs;
@@ -783,7 +788,7 @@ int CameraVideoFileDecoder::streamTakeAudio(QByteArray& pcmS16Stereo, int maxSam
 #ifdef CAMERA_FFMPEG_STREAMING
     static constexpr int bytesPerSampleFrame = 4;
     if (maxSampleFrames <= 0) return 0;
-    QMutexLocker locker(&m_streamMutex);
+    QMutexLocker locker(&m_streamAudioMutex);
     const int availFrames = m_streamAudioBuf.size() / bytesPerSampleFrame;
     if (availFrames < 2) return 0;
     // Slow PI drift servo on buffer depth → output ratio: matches the source content rate to
@@ -839,7 +844,7 @@ int CameraVideoFileDecoder::streamTakeAudio(QByteArray& pcmS16Stereo, int maxSam
 
 void CameraVideoFileDecoder::setStreamAudioTargetSeconds(double seconds)
 {
-    QMutexLocker locker(&m_streamMutex);
+    QMutexLocker locker(&m_streamAudioMutex);
     m_streamAudioTargetSeconds = std::max(0.05, seconds);
     // Hold the audio buffer near target; the cushion lives in the compressed packet queue, so
     // a little headroom above target is all that's needed here.
@@ -848,7 +853,7 @@ void CameraVideoFileDecoder::setStreamAudioTargetSeconds(double seconds)
 
 int CameraVideoFileDecoder::streamAudioBufferedFrames() const
 {
-    QMutexLocker locker(&m_streamMutex);
+    QMutexLocker locker(&m_streamAudioMutex);
     return m_streamAudioBuf.size() / 4;
 }
 
@@ -893,7 +898,7 @@ qint64 CameraVideoFileDecoder::streamVideoDecodedEdgePtsMs() const
 
 qint64 CameraVideoFileDecoder::streamAudioDecodedEdgePtsMs() const
 {
-    QMutexLocker locker(&m_streamMutex);
+    QMutexLocker locker(&m_streamAudioMutex);
     return m_streamAudioEndPtsMs;
 }
 

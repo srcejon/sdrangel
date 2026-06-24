@@ -264,11 +264,17 @@ private:
     QWaitCondition m_streamAudioPktNotFull;
     bool m_streamDemuxEof = false;
     bool m_streamDemuxError = false;
+    // Separate mutex for the decoded-audio buffer domain (m_streamAudioBuf, end-PTS, drift servo,
+    // cap). The resampler (streamTakeAudio) holds this for the whole interpolation, so it must NOT
+    // be the same lock as the packet/video queues or a big audio pull would block demux/video.
+    // Lock ordering: m_streamMutex BEFORE m_streamAudioMutex (only clearStreamQueues nests both);
+    // nothing locks audio-then-stream.
+    mutable QMutex m_streamAudioMutex;
     // Audio decode → output: device-nominal S16 stereo, content-rate, paced by the consumer.
     CameraAudioByteQueue m_streamAudioBuf;
     // Content PTS (ms) of the END of decoded audio currently in the buffer (the back).
     // head-PTS = this − buffered-ms, so it advances exactly as the consumer drains the
-    // buffer. Updated by the audio decode thread under m_streamMutex.
+    // buffer. Updated by the audio decode thread under m_streamAudioMutex.
     qint64 m_streamAudioEndPtsMs = -1;
     int m_streamAudioBufCapFrames = 0;
     QWaitCondition m_streamAudioBufNotFull;

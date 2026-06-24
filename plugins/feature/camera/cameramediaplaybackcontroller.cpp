@@ -230,10 +230,14 @@ void CameraMediaPlaybackController::submitStreamAudio()
     }
     m_audio->submitMonitorPcmSamples(audio, audioSampleRate);
     if (playedPtsMs >= 0) {
+        // Master clock wants the buffer HEAD (the content position now handed toward the device).
         m_state.m_streamPlayedPtsMs = playedPtsMs;
-        // Anchor recorded audio on the source content timeline (the content just handed to
-        // the device); the recorder lays it alongside the video PTS.
-        m_audio->submitRecordingPcmSamples(audio, audioSampleRate, playedPtsMs);
+        // The recorder anchors on the content position of the FIRST sample of the chunk, but
+        // playedPtsMs is the END (the new head). Back off by this chunk's own duration so recorded
+        // audio isn't laid ~one present-tick late relative to the video (S16 stereo = 4 bytes/frame).
+        const qint64 chunkFrames = audio.size() / 4;
+        const qint64 chunkStartPtsMs = playedPtsMs - chunkFrames * 1000 / audioSampleRate;
+        m_audio->submitRecordingPcmSamples(audio, audioSampleRate, chunkStartPtsMs);
     }
 }
 

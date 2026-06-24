@@ -170,6 +170,9 @@ private:
     void presentStreamTick();
     void submitStreamAudio();
     qint64 streamMasterClockMs() const;
+    // Master clock for a video-only stream: free-runs at wall rate, anchored to the oldest decoded
+    // frame's PTS at (re)start. Returns −1 until the first frame is decoded. Mutates the anchor.
+    qint64 streamVideoOnlyClockMs();
     // Push one decoded stream frame into the pipeline (preview path).
     void submitStreamPresentFrame(const QImage& image, qint64 ptsMs);
     // Reconnect the stream decoder after the source ends/times out (rw_timeout ~5s surfaces a dead

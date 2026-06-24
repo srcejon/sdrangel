@@ -246,6 +246,26 @@ qint64 CameraMediaPlaybackController::streamMasterClockMs() const
     return m_state.m_streamPlayedPtsMs - fifoMs - sinkMs;
 }
 
+qint64 CameraMediaPlaybackController::streamVideoOnlyClockMs()
+{
+    // No audio track to slave to: free-run the master clock at wall rate, anchored to the oldest
+    // decoded frame's PTS at (re)start (re-anchored each time we leave buffering, so a stall resumes
+    // cleanly instead of fast-forwarding). Returns −1 until the first frame is decoded.
+    if (m_state.m_streamVideoOnlyAnchorMs < 0)
+    {
+        const qint64 firstPts = m_state.m_decoder->streamPeekVideoFramePtsMs();
+        if (firstPts < 0) {
+            return -1;                                        // nothing decoded yet — hold
+        }
+        m_state.m_streamVideoOnlyAnchorMs = firstPts;
+        m_state.m_streamVideoOnlyClock.start();
+        return firstPts;
+    }
+    const double playbackRate = qMax(0.1, m_settings->m_videoPlaybackRate);
+    return m_state.m_streamVideoOnlyAnchorMs
+        + static_cast<qint64>(m_state.m_streamVideoOnlyClock.nsecsElapsed() / 1.0e6 * playbackRate);
+}
+
 void CameraMediaPlaybackController::setHighTimerResolution(bool enable)
 {
     if (enable == m_timerResolutionRaised) {
@@ -366,6 +386,13 @@ void CameraMediaPlaybackController::presentStreamTick()
         const int cushionFrames = streamBufferingCushionFrameCount();
         const int buffered = m_state.m_decoder->streamVideoPacketCount()
                            + m_state.m_decoder->streamDecodedVideoFrameCount();
+        const bool haveAudio = m_state.m_decoder->streamHasAudio();
+        const int monRate = qMax(1, m_audio->monitorSampleRate());
+        const int audioBufMs = haveAudio
+            ? (m_state.m_decoder->streamAudioBufferedFrames() * 1000 / monRate) : 0;
+        // Keep the video-only wall clock unanchored while buffering so it re-anchors to the new
+        // oldest frame on resume (no fast-forward after a stall).
+        m_state.m_streamVideoOnlyAnchorMs = -1;
         // Show the oldest decoded frame as a still poster, once. At startup it is the first content
         // (and becomes the first played frame, so no jump); during a rebuffer m_streamPosterShown is
         // already set, so the last shown frame is held instead.
@@ -379,15 +406,20 @@ void CameraMediaPlaybackController::presentStreamTick()
                 m_state.m_streamPosterShown = true;
             }
         }
-        if (buffered >= cushionFrames)
+        // Start once the video cushion is built AND - for audio streams - enough audio is buffered to
+        // drive the master clock; otherwise the first playing tick underruns and bounces straight back
+        // here. Video-only streams (no audio track) start on the video cushion alone.
+        const bool audioReady = !haveAudio || (audioBufMs >= 50);
+        if ((buffered >= cushionFrames) && audioReady)
         {
             const bool wasRebuffering = m_state.m_streamRebuffering;
             m_state.m_basePositionMs = 0;
             m_state.m_streamRebuffering = false;
-            m_state.m_streamVideoClockMs = -1.0;              // re-anchor the clock when audio resumes
+            m_state.m_streamVideoClockMs = -1.0;              // re-anchor the clock on resume
             qDebug() << (wasRebuffering ? "CameraMediaPlayback: stream rebuffering done - resume"
                                         : "CameraMediaPlayback: stream playback start")
-                     << "- bufferedFrames" << buffered << "cushion" << cushionFrames;
+                     << "- bufferedFrames" << buffered << "cushion" << cushionFrames
+                     << "haveAudio" << haveAudio << "audioBufMs" << audioBufMs;
         }
         m_presentTimer.setSingleShot(true);
         m_presentTimer.start(qMax(1, static_cast<int>(intervalMs / 2.0)));
@@ -400,8 +432,11 @@ void CameraMediaPlaybackController::presentStreamTick()
     submitStreamAudio();
     const double tAudioMs = tickTimer.nsecsElapsed() / 1.0e6;
 
+    // Master clock: the audio-at-speaker position for streams with an audio track; a wall clock
+    // free-running from the first decoded frame for video-only streams (no audio to slave to).
+    const bool haveAudio = m_state.m_decoder->streamHasAudio();
     // Smooth the staircase audio clock into a steady video master clock (see m_streamVideoClockMs).
-    const qint64 exactClockMs = streamMasterClockMs();
+    const qint64 exactClockMs = haveAudio ? streamMasterClockMs() : streamVideoOnlyClockMs();
     qint64 clockMs = exactClockMs;
     if (exactClockMs >= 0)
     {
@@ -439,16 +474,22 @@ void CameraMediaPlaybackController::presentStreamTick()
     // trimmed position and video + audio start together. Does not affect audio or recording.
     clockMs += m_settings->m_videoPlaybackAudioOffsetMs;
 
-    // Rebuffer trigger: if the audio buffer underruns mid-playback (source fell behind), don't limp
-    // the trickle and stutter — drop back into the buffering phase above, which rebuilds the cushion
-    // to full (one clean pause) and resumes, or reconnects if the source died.
+    // Rebuffer trigger: a mid-playback underrun (source fell behind) drops back into the buffering
+    // phase to rebuild the cushion (one clean pause) and resume, or reconnect if the source died.
+    // Audio streams signal it via the audio buffer draining; video-only streams via the video frame
+    // queue AND packet read-ahead both running dry (no audio buffer to watch).
     const int monRate = qMax(1, m_audio->monitorSampleRate());
-    const int audioBufMs = m_state.m_decoder->streamAudioBufferedFrames() * 1000 / monRate;
-    if (audioBufMs < 50)
+    const int audioBufMs = haveAudio ? (m_state.m_decoder->streamAudioBufferedFrames() * 1000 / monRate) : 0;
+    const bool underrun = haveAudio
+        ? (audioBufMs < 50)
+        : ((m_state.m_decoder->streamDecodedVideoFrameCount()
+            + m_state.m_decoder->streamVideoPacketCount()) <= 0);
+    if (underrun)
     {
         m_state.m_streamRebuffering = true;
         m_state.m_basePositionMs = -1;
-        qDebug() << "CameraMediaPlayback: stream rebuffering - audio underrun, audioBufMs" << audioBufMs;
+        qDebug() << "CameraMediaPlayback: stream rebuffering - underrun, haveAudio" << haveAudio
+                 << "audioBufMs" << audioBufMs;
         m_presentTimer.setSingleShot(true);
         m_presentTimer.start(qMax(1, static_cast<int>(intervalMs / 2.0)));
         return;

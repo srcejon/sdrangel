@@ -140,6 +140,9 @@ public:
     int streamTakeAudio(QByteArray& pcmS16Stereo, int maxSampleFrames, qint64& playedPtsMs);
     void setStreamAudioTargetSeconds(double seconds);
     [[nodiscard]] int streamAudioBufferedFrames() const;
+    // True if the source has an audio track. Set at open() and stable during playback; a video-only
+    // stream (no audio) must drive the present from a wall clock, not the audio clock.
+    [[nodiscard]] bool streamHasAudio() const { return m_audioStreamIndex >= 0; }
     // Pop the next decoded video frame (oldest). Returns false if the queue is empty.
     bool streamTakeVideoFrame(QImage& image, qint64& positionMs, bool& eof);
     // PTS (ms) of the next decoded video frame without popping; −1 if the queue is empty.

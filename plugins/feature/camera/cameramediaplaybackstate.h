@@ -98,6 +98,11 @@ public:
     // gap), so the present shows one frame per tick. −1 until audio starts.
     double m_streamVideoClockMs = -1.0;
     QElapsedTimer m_streamVideoClockWall;
+    // Video-only streams (no audio track) have no audio clock to slave to, so the master clock
+    // free-runs at wall rate from this anchor (= the oldest decoded frame's PTS at each (re)start).
+    // −1 while unanchored (buffering); set on the first playing tick.
+    qint64 m_streamVideoOnlyAnchorMs = -1;
+    QElapsedTimer m_streamVideoOnlyClock;
     // Set false at playback start; lets the present show the first available frame once as a
     // poster so the view isn't blank during the audio-latency gap before the clock reaches it.
     bool m_streamPosterShown = false;

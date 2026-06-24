@@ -473,22 +473,10 @@ void CameraMediaPlaybackController::presentStreamTick()
         }
         clockMs = llround(m_state.m_streamVideoClockMs);
     }
-    // Stream-specific audio-output-latency compensation. The audio's true latency to the speaker is
-    // larger than monFifo+sink (the OS/driver buffer past processedUSecs that the sink-latency EMA
-    // can't see). FILE playback absorbs this structurally — it holds the monitor deeper (250 vs
-    // 120 ms) and delays the video frame by the sink latency (submitVideoFileFrame
-    // applyPlaybackOffset) — so it doesn't show the lead. The stream's clock-based model (subtract
-    // monFifo+sink, no video delay) does, leaving video leading audio by this tail. Measured ~200 ms
-    // here; delay the video to match. Applied ALWAYS (not only when exactClockMs >= 0): at startup
-    // the clock is still negative, and gating the comp there opened the video gate at the raw audio
-    // position instead of the audible one, so several frames played before any audio was heard.
-    // Holding the (more negative) clock until audio is audible starts video and audio together.
-    // Stream-only (this is presentStreamTick) so file playback is unaffected. (When there is no
-    // audio yet this just makes an already-negative clock more negative, which correctly holds the
-    // video.)
-    clockMs -= m_settings->m_streamAudioOutputLatencyMs;
-    // Manual A/V trim (preview only): the audio-offset slider trims around the above, both paths.
-    // Negative delays the video. Does not affect audio or recording.
+    // Manual A/V trim: the single audio-offset slider (shared with file playback - see
+    // submitVideoFileFrame applyPlaybackOffset) trims sync. Negative delays the video. Applied
+    // always, including while the clock is still negative at startup, so the video gate opens at the
+    // trimmed position and video + audio start together. Does not affect audio or recording.
     clockMs += m_settings->m_videoPlaybackAudioOffsetMs;
 
     // Rebuffer trigger: if the audio buffer underruns mid-playback (source fell behind), don't limp
@@ -604,7 +592,6 @@ void CameraMediaPlaybackController::presentStreamTick()
             << " playedPts " << m_state.m_streamPlayedPtsMs
             << " monFifoMs " << (static_cast<qint64>(m_audio->monitorAudioFill()) * 1000 / qMax(1, m_audio->monitorSampleRate()))
             << " sinkMs " << (m_audio->monitorSinkLatencyUSecs() / 1000)
-            << " calMs " << m_settings->m_streamAudioOutputLatencyMs
             << " offsetMs " << m_settings->m_videoPlaybackAudioOffsetMs
             << " audioBufMs " << (m_state.m_decoder->streamAudioBufferedFrames() * 1000 / qMax(1, m_audio->monitorSampleRate()))
             << " videoPkts " << m_state.m_decoder->streamVideoPacketCount()

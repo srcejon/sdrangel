@@ -1853,7 +1853,6 @@ void CameraGUI::displaySettings()
     ui->loopVideo->setChecked(m_settings.m_videoLoop);
     ui->playbackRateSpin->setValue(m_settings.m_videoPlaybackRate);
     settingsUI()->playbackAudioOffsetSpin->setValue(m_settings.m_videoPlaybackAudioOffsetMs);
-    settingsUI()->streamAudioOutputLatencySpin->setValue(m_settings.m_streamAudioOutputLatencyMs);
     updateMotionExclusionRectsTable();
     updateColorButton(settingsUI()->dateTimeColorButton, m_settings.m_dateTimeColor);
     updateColorButton(settingsUI()->equatorialGridColorButton, m_settings.m_equatorialGridColor);
@@ -2479,7 +2478,6 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->videoHwAccelerationCheck, &QCheckBox::toggled, this, &CameraGUI::on_videoHwAccelerationCheck_toggled);
     QObject::connect(settingsUI()->streamBufferingSecondsSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_streamBufferingSecondsSpin_valueChanged);
     QObject::connect(settingsUI()->playbackAudioOffsetSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_playbackAudioOffsetSpin_valueChanged);
-    QObject::connect(settingsUI()->streamAudioOutputLatencySpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_streamAudioOutputLatencySpin_valueChanged);
     QObject::connect(settingsUI()->videoPreRecordBufferSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_videoPreRecordBufferSpin_valueChanged);
     QObject::connect(settingsUI()->imageRecordLimitSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_imageRecordLimitSpin_valueChanged);
     QObject::connect(settingsUI()->videoRecordLimitSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_videoRecordLimitSpin_valueChanged);
@@ -5302,12 +5300,6 @@ void CameraGUI::on_playbackAudioOffsetSpin_valueChanged(int value)
 {
     m_settings.m_videoPlaybackAudioOffsetMs = value;
     applySetting("videoPlaybackAudioOffsetMs");
-}
-
-void CameraGUI::on_streamAudioOutputLatencySpin_valueChanged(int value)
-{
-    m_settings.m_streamAudioOutputLatencyMs = value;
-    applySetting("streamAudioOutputLatencyMs");
 }
 
 void CameraGUI::on_playbackPositionSlider_sliderMoved(int value)

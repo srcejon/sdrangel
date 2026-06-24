@@ -466,7 +466,6 @@ private slots:
     void on_loopVideo_clicked(bool checked=false);
     void on_playbackRateSpin_valueChanged(double value);
     void on_playbackAudioOffsetSpin_valueChanged(int value);
-    void on_streamAudioOutputLatencySpin_valueChanged(int value);
     void on_playbackPositionSlider_sliderMoved(int value);
     void on_playbackPositionSlider_sliderReleased();
     void on_resolutionCombo_currentIndexChanged(int index);

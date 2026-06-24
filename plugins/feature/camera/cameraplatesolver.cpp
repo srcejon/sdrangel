@@ -18,6 +18,14 @@
 
 #include "cameraplatesolverinternal.h"
 
+#include <QLoggingCategory>
+
+// Per-solve diagnostic dump (settings / observer location / catalog path). These are intentional
+// GUI-vs-harness mismatch diagnostics (e.g. they pinned the m51-2 UTC bug), but for continuous
+// solving they are noisy, so they are gated behind this category (off by default at QtWarningMsg).
+// Enable with QT_LOGGING_RULES="camera.platesolver.info=true". qWarning/qCritical stay unconditional.
+Q_LOGGING_CATEGORY(cameraPlateSolverLog, "camera.platesolver", QtWarningMsg)
+
 
 CameraPlateSolver::CameraPlateSolver(QObject *parent) :
     QObject(parent),
@@ -164,7 +172,7 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
     // QStandardPaths AppDataLocation, which differs by application name -- so the GUI
     // (sdrangel) and the test harness can pick different files (downloaded HYG vs bundled
     // resource), giving different star positions from otherwise-identical inputs.
-    qInfo().nospace() << "CameraPlateSolver: solve catalogPath=" << currentCatalogPath(settings);
+    qCInfo(cameraPlateSolverLog).nospace() << "CameraPlateSolver: solve catalogPath=" << currentCatalogPath(settings);
     const bool useCurrentSettingsOnly = plateSolveStartUsesCurrentSettingsOnly(settings);
     const bool useStartFov = plateSolveStartUsesFov(settings);
     const bool useStartElevation = plateSolveStartUsesElevation(settings);
@@ -2403,6 +2411,9 @@ void CameraPlateSolver::requestCancellation()
 {
     m_cancelRequested.store(true);
     m_cancelNetworkRequests.store(true);
+    // Abort is posted (QueuedConnection) so it runs on the reply's owning thread; the mutex
+    // makes reading the pointer safe against the star-detector thread setting/clearing it.
+    QMutexLocker activeReplyLocker(&m_activeNetworkReplyMutex);
     if (m_activeNetworkReply) {
         QMetaObject::invokeMethod(m_activeNetworkReply, &QNetworkReply::abort, Qt::QueuedConnection);
     }
@@ -2442,31 +2453,31 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
     // can be diffed line-for-line when they disagree on the same image. Split across
     // several statements: the MSVC/Qt toolchain silently truncates a single qInfo
     // with >= ~10 streamed/arg fields, so keep each line short.
-    qInfo().nospace() << "CameraPlateSolver: solve image=" << imageSize.width() << "x" << imageSize.height()
+    qCInfo(cameraPlateSolverLog).nospace() << "CameraPlateSolver: solve image=" << imageSize.width() << "x" << imageSize.height()
                       << " detections=" << starDetections.size()
                       << " captureDateTime=" << captureDateTime.toString(Qt::ISODate);
-    qInfo().nospace() << "CameraPlateSolver: solve seed Az=" << settings.m_azimuth
+    qCInfo(cameraPlateSolverLog).nospace() << "CameraPlateSolver: solve seed Az=" << settings.m_azimuth
                       << " El=" << settings.m_elevation
                       << " Roll=" << settings.m_roll
                       << " FoV=" << settings.m_fov
                       << " startMode=" << static_cast<int>(settings.m_plateSolveStartMode);
-    qInfo().nospace() << "CameraPlateSolver: solve lens projection=" << static_cast<int>(settings.m_lensProjection)
+    qCInfo(cameraPlateSolverLog).nospace() << "CameraPlateSolver: solve lens projection=" << static_cast<int>(settings.m_lensProjection)
                       << " Cx=" << settings.m_lensCenterOffsetX
                       << " Cy=" << settings.m_lensCenterOffsetY
                       << " K1=" << settings.m_lensDistortionK1;
-    qInfo().nospace() << "CameraPlateSolver: solve detect=" << settings.m_starDetect
+    qCInfo(cameraPlateSolverLog).nospace() << "CameraPlateSolver: solve detect=" << settings.m_starDetect
                       << " threshold=" << settings.m_starThreshold
                       << " backgroundBlur=" << settings.m_starBackgroundBlur
                       << " minArea=" << settings.m_starMinArea
                       << " maxArea=" << settings.m_starMaxArea
                       << " maxAspectRatio=" << settings.m_starMaxAspectRatio;
-    qInfo().nospace() << "CameraPlateSolver: solve minMatches=" << settings.m_plateSolveMinMatches
+    qCInfo(cameraPlateSolverLog).nospace() << "CameraPlateSolver: solve minMatches=" << settings.m_plateSolveMinMatches
                       << " matchRadius=" << settings.m_plateSolveMatchRadius
                       << " finalMatchRadius=" << settings.m_plateSolveFinalMatchRadius
                       << " maxMagnitude=" << settings.m_plateSolveMaxMagnitude
                       << " azElSearchRadius=" << settings.m_plateSolveAzElSearchRadius
                       << " fovTolerance=" << settings.m_plateSolveFovTolerance;
-    qInfo().nospace() << "CameraPlateSolver: solve applyMode=" << static_cast<int>(settings.m_plateSolveApplyMode)
+    qCInfo(cameraPlateSolverLog).nospace() << "CameraPlateSolver: solve applyMode=" << static_cast<int>(settings.m_plateSolveApplyMode)
                       << " catalogSource=" << static_cast<int>(settings.m_plateSolveCatalogSource)
                       << " useDownloadedCatalog=" << settings.m_plateSolveUseDownloadedCatalog
                       << " useCaptureDateTime=" << settings.m_plateSolveUseCaptureDateTime;
@@ -2474,7 +2485,7 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
     // map the pointing to RA/Dec, so a location or time mismatch between GUI and harness
     // shifts where every catalog star projects -- the prime suspect when detections and
     // pose seed match but the fit is systematically off.
-    qInfo().nospace() << "CameraPlateSolver: solve latitude=" << settings.m_latitude
+    qCInfo(cameraPlateSolverLog).nospace() << "CameraPlateSolver: solve latitude=" << settings.m_latitude
                       << " longitude=" << settings.m_longitude
                       << " plateSolveDateTime=" << settings.m_plateSolveDateTime.toString(Qt::ISODate)
                       << " dateTimeUtc=" << settings.m_plateSolveDateTimeUtc;
@@ -2485,7 +2496,7 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
     cappedSettings.m_plateSolveAzElSearchRadius = effectiveAzElSearchRadiusDegrees(settings);
     if (std::fabs(cappedSettings.m_plateSolveAzElSearchRadius
                   - static_cast<double>(settings.m_plateSolveAzElSearchRadius)) > 1e-3) {
-        qInfo().nospace() << "CameraPlateSolver: solve azElSearchRadius capped "
+        qCInfo(cameraPlateSolverLog).nospace() << "CameraPlateSolver: solve azElSearchRadius capped "
                           << settings.m_plateSolveAzElSearchRadius << " -> "
                           << cappedSettings.m_plateSolveAzElSearchRadius
                           << " (FoV " << settings.m_fov << ")";

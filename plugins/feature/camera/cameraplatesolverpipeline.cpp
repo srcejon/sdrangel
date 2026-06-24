@@ -145,10 +145,11 @@ QByteArray CameraPlateSolver::SolverContext::fetchSirilRangeFromSource(int chunk
 
     QNetworkReply *reply = m_networkManager->get(request);
 
-    // Register the active reply so requestNetworkCancellation() can abort it while
-    // loop.exec() is running.  Both this function and captureActiveChanged() run on
-    // the star-detector thread, so no mutex is needed.
+    // Register the active reply so requestCancellation() can abort it while loop.exec() is
+    // running. requestCancellation() can run on the feature thread (synchronous call chain from
+    // Camera::applySettings), so guard the raw pointer with the owner's mutex.
     if (m_owner) {
+        QMutexLocker activeReplyLocker(&m_owner->m_activeNetworkReplyMutex);
         m_owner->m_activeNetworkReply = reply;
     }
 
@@ -162,6 +163,7 @@ QByteArray CameraPlateSolver::SolverContext::fetchSirilRangeFromSource(int chunk
     timeoutTimer.stop();  // stop the timer if the reply finished before it fired
 
     if (m_owner) {
+        QMutexLocker activeReplyLocker(&m_owner->m_activeNetworkReplyMutex);
         m_owner->m_activeNetworkReply = nullptr;
     }
 
@@ -446,6 +448,16 @@ void CameraPlateSolver::SolverContext::prefetchSirilMergedRanges(const QVector<S
         }
     };
 
+    // Quit promptly if plate solving is cancelled mid-prefetch; the cleanup below aborts the
+    // in-flight replies. Without this the loop would wait for the active replies to finish or hit
+    // their 30s timeout (requestCancellation only aborts the single-fetch reply, not these).
+    QTimer cancelCheckTimer;
+    QObject::connect(&cancelCheckTimer, &QTimer::timeout, &loop, [&]() {
+        if (isCancellationRequested()) {
+            loop.quit();
+        }
+    });
+    cancelCheckTimer.start(100);
     startMore();
     if (activeCount > 0) {
         loop.exec();
@@ -1169,7 +1181,13 @@ CameraPlateSolver::SolverContext::PlateSolveCatalogContext CameraPlateSolver::So
         .arg(captureDateTimeUtc.toSecsSinceEpoch())
         .arg(qRound64(maxMagnitude * 1e3))
         .arg(qRound64(catalogLoadMaxMagnitude * 1e3))
-        .arg(settings.m_plateSolveMinMatches);
+        .arg(settings.m_plateSolveMinMatches)
+        // Observer location: the az/el seed maps to the RA/Dec catalog region via
+        // sirilQueryGeometry()/buildRaDecToAzAltParams(), which both use lat/lon, so a site
+        // change with the same az/el/time/FoV must NOT reuse the previous location's context.
+        + QStringLiteral("|%1|%2")
+            .arg(qRound64(static_cast<double>(settings.m_latitude) * 1e5))
+            .arg(qRound64(static_cast<double>(settings.m_longitude) * 1e5));
     {
         QMutexLocker locker(&s_contextCacheMutex);
         for (int i = 0; i < s_contextCache.size(); ++i)

@@ -22,6 +22,7 @@
 #include <QByteArray>
 #include <QDateTime>
 #include <QHash>
+#include <QMutex>
 #include <QObject>
 #include <QSize>
 #include <QString>
@@ -127,6 +128,11 @@ private:
     // also checked by the nested Siril request event loops.
     std::atomic_bool m_cancelRequested {false};
     std::atomic_bool m_cancelNetworkRequests {false};
+    // The active Siril network reply, set/cleared on the star-detector thread (where the solver
+    // runs) but read by requestCancellation() which can be invoked synchronously from the feature
+    // thread (Camera::applySettings -> CameraStarDetector::requestPlateSolveCancellation). Guard
+    // every access with this mutex so the raw pointer is never read while being written/destroyed.
+    QMutex m_activeNetworkReplyMutex;
     QNetworkReply *m_activeNetworkReply = nullptr;
 };
 

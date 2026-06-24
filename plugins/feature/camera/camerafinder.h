@@ -68,6 +68,7 @@ private:
     QTimer* m_discoveryTimer;
     int m_requestId;
     int m_pendingConfiguredDeviceReplies;
+    QElapsedTimer m_reportTimer;
     CameraSettings m_settings;
     QList<CameraInfo> m_currentCameras;
     QList<AlpacaDeviceInfo> m_currentFocusers;
@@ -76,6 +77,7 @@ private:
 
     static constexpr quint16 m_alpacaDiscoveryPort = 32227;
     static constexpr int m_alpacaDiscoveryTimeoutMs = 1000;
+    static constexpr int m_alpacaConfiguredDevicesTimeoutMs = 2000;
     static constexpr qint64 m_localCameraCacheMaxAgeMs = 15000;
     static const QByteArray m_alpacaDiscoveryMessage;
     static QMutex m_localCameraCacheMutex;

@@ -26,6 +26,7 @@
 #include <QFileInfo>
 #include <QNetworkReply>
 #include <QNetworkRequest>
+#include <QPointer>
 #include <QTimer>
 #include <QUdpSocket>
 #include <QUrl>
@@ -90,6 +91,7 @@ void CameraFinder::reportCameraList(const CameraSettings& settings, bool forceLo
     m_currentFilterWheels.clear();
     m_discoveredEndpointKeys.clear();
     m_pendingConfiguredDeviceReplies = 0;
+    m_reportTimer.restart();
     ++m_requestId;
 
     if (!m_msgQueueToGUI) {
@@ -306,6 +308,14 @@ void CameraFinder::finalizeCameraList(int requestId)
 
     m_msgQueueToGUI->push(CameraWorker::MsgReportCameraList::create(m_currentCameras));
     m_msgQueueToGUI->push(CameraWorker::MsgReportAlpacaDeviceList::create(m_currentFocusers, m_currentFilterWheels));
+
+    const qint64 elapsedMs = m_reportTimer.isValid() ? m_reportTimer.elapsed() : -1;
+    if (elapsedMs > 1500) {
+        qDebug() << "CameraFinder: camera list completed in" << elapsedMs
+                 << "ms cameras" << m_currentCameras.size()
+                 << "focusers" << m_currentFocusers.size()
+                 << "filterWheels" << m_currentFilterWheels.size();
+    }
 }
 
 void CameraFinder::startAlpacaDiscovery()
@@ -410,9 +420,26 @@ void CameraFinder::queryConfiguredDevices(const QList<AlpacaEndpoint>& endpoints
     {
         QNetworkRequest request(QUrl(buildAlpacaBaseUrl(endpoint.m_host, endpoint.m_port) + "/management/v1/configureddevices"));
         QNetworkReply* reply = m_networkManager->get(request);
+        QPointer<QNetworkReply> guardedReply(reply);
+        QElapsedTimer replyTimer;
+        replyTimer.start();
 
-        connect(reply, &QNetworkReply::finished, this, [this, reply, endpoint, requestId]() {
-            if (requestId == m_requestId && reply->error() == QNetworkReply::NoError)
+        QTimer::singleShot(m_alpacaConfiguredDevicesTimeoutMs, this, [this, guardedReply, endpoint, requestId]() {
+            if (requestId != m_requestId || !guardedReply || guardedReply->isFinished()) {
+                return;
+            }
+
+            qDebug() << "CameraFinder: timed out querying Alpaca configured devices"
+                     << endpoint.m_host << endpoint.m_port
+                     << "after" << m_alpacaConfiguredDevicesTimeoutMs << "ms";
+            guardedReply->abort();
+        });
+
+        connect(reply, &QNetworkReply::finished, this, [this, reply, endpoint, requestId, replyTimer]() {
+            const qint64 elapsedMs = replyTimer.elapsed();
+            const QNetworkReply::NetworkError error = reply->error();
+
+            if (requestId == m_requestId && error == QNetworkReply::NoError)
             {
                 const QByteArray payload = reply->readAll();
                 const QList<AlpacaDeviceInfo> cameras = parseAlpacaDeviceList(payload, QStringLiteral("camera"), endpoint.m_host, endpoint.m_port);
@@ -428,6 +455,20 @@ void CameraFinder::queryConfiguredDevices(const QList<AlpacaEndpoint>& endpoints
                 }
                 m_currentFocusers.append(parseAlpacaDeviceList(payload, QStringLiteral("focuser"), endpoint.m_host, endpoint.m_port));
                 m_currentFilterWheels.append(parseAlpacaDeviceList(payload, QStringLiteral("filterwheel"), endpoint.m_host, endpoint.m_port));
+            }
+            else if (requestId == m_requestId)
+            {
+                qDebug() << "CameraFinder: Alpaca configured devices query failed"
+                         << endpoint.m_host << endpoint.m_port
+                         << "error" << error << reply->errorString()
+                         << "elapsedMs" << elapsedMs;
+            }
+
+            if (requestId == m_requestId && elapsedMs > 250) {
+                qDebug() << "CameraFinder: Alpaca configured devices query took"
+                         << elapsedMs << "ms"
+                         << endpoint.m_host << endpoint.m_port
+                         << "error" << error;
             }
 
             reply->deleteLater();

@@ -892,6 +892,16 @@ int CameraVideoFileDecoder::streamVideoPacketCount() const
     return static_cast<int>(m_streamVideoPktQ.size());
 }
 
+bool CameraVideoFileDecoder::streamSourceFailed() const
+{
+    // The demux thread errored (av_read_frame failed / rw_timeout) or hit EOF, so it has stopped
+    // producing packets. Unlike a transient stall, this never recovers on its own — the consumer
+    // should reconnect. (A dead source surfaces here in ~5s via rw_timeout, even though the video
+    // decoder, blocked on a full frame queue with a frozen clock, never reaches its own EOF.)
+    QMutexLocker locker(&m_streamMutex);
+    return m_streamDemuxError || m_streamDemuxEof;
+}
+
 qint64 CameraVideoFileDecoder::streamVideoDecodedEdgePtsMs() const
 {
     QMutexLocker locker(&m_streamMutex);

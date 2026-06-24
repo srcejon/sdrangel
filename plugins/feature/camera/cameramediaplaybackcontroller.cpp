@@ -435,20 +435,24 @@ void CameraMediaPlaybackController::presentStreamTick()
         qDebug() << "CameraMediaPlayback: stream rebuffering - audio underrun, audioBufMs" << audioBufMs;
     }
 
-    // Buffering / rebuffering gate. Hold the master start until: the audio clock is valid, the
-    // video decode has caught up to it (a decoded frame at/after the clock exists), AND the buffer
-    // has filled to the streamBufferingSeconds cushion. Gating BOTH startup and rebuffer on the
-    // cushion makes the buffer setting govern initial latency (not just rebuffer recovery); the
-    // video-edge condition prevents the startup frame burst (it can't start before video is
-    // decoded). The take-loop below runs in all cases: with the clock ahead of the video (startup)
-    // it shows the latest decoded frame to catch up; with the clock frozen (rebuffer) it holds.
+    // Buffering / rebuffering gate. Hold the master start until the audio clock is valid AND the
+    // video decode has caught up to it (a decoded frame at/after the clock exists). On a REBUFFER
+    // also wait for the packet cushion to refill to its target. The cushion is NOT required at
+    // startup: the present consumes video during buffering (the catch-up take-loop below) while the
+    // clock advances, so the packet queue never builds to the cushion at startup (it only does
+    // during a rebuffer, where the clock is frozen and nothing is consumed). Requiring it at startup
+    // wedged basePositionMs at -1, double-ticking the present and disabling the rebuffer trigger.
     if (m_state.m_basePositionMs < 0)
     {
         const qint64 videoEdgeMs = m_state.m_decoder->streamVideoDecodedEdgePtsMs();
-        const int cushionFrames = streamBufferingCushionFrameCount();
-        const int buffered = m_state.m_decoder->streamVideoPacketCount()
-                           + m_state.m_decoder->streamDecodedVideoFrameCount();
-        const bool ready = (clockMs >= 0) && (videoEdgeMs >= clockMs) && (buffered >= cushionFrames);
+        bool ready = (clockMs >= 0) && (videoEdgeMs >= clockMs);
+        if (m_state.m_streamRebuffering)
+        {
+            const int cushionFrames = streamBufferingCushionFrameCount();
+            const int buffered = m_state.m_decoder->streamVideoPacketCount()
+                               + m_state.m_decoder->streamDecodedVideoFrameCount();
+            ready = ready && (buffered >= cushionFrames);
+        }
         if (ready)
         {
             m_state.m_basePositionMs = 0;
@@ -497,7 +501,12 @@ void CameraMediaPlaybackController::presentStreamTick()
         shownPts = pts;
         gotFrame = true;
     }
-    if (eof)
+    // A dead live source rarely reaches the video decoder's own EOF (it blocks on a full frame
+    // queue with a frozen clock), so also treat a failed demux + drained audio as end-of-source so
+    // the reconnect path below runs.
+    const bool streamSourceDead = m_settings->isStreamCamera()
+        && m_state.m_decoder->streamSourceFailed() && (audioBufMs <= 0);
+    if (eof || streamSourceDead)
     {
         // The source ended or timed out (rw_timeout ~5s). For a live stream, try to reconnect at
         // the live edge with a bounded back-off instead of stopping; only give up (and surface an

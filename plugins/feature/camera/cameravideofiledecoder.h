@@ -146,6 +146,9 @@ public:
     [[nodiscard]] qint64 streamPeekVideoFramePtsMs() const;
     [[nodiscard]] int streamDecodedVideoFrameCount() const;
     [[nodiscard]] int streamVideoPacketCount() const;
+    // True once the demux thread has stopped (read error / rw_timeout / EOF) - the source is dead
+    // and will not recover without a reconnect (see streamSourceFailed body).
+    [[nodiscard]] bool streamSourceFailed() const;
     // Decode-edge PTS (ms): the latest content timestamp each decoder has produced, straight from
     // the packet PTS (best_effort_timestamp), BEFORE any present-side coupling. Comparing these two
     // is a non-circular A/V sync probe — if the audio and video timelines drift apart these diverge,

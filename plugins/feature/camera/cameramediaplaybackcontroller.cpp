@@ -403,22 +403,20 @@ void CameraMediaPlaybackController::presentStreamTick()
         qDebug() << "CameraMediaPlayback: stream rebuffering - audio underrun, audioBufMs" << audioBufMs;
     }
 
-    // Buffering / rebuffering gate. Hold the master start until the audio clock is valid AND the
-    // video decode has caught up to it (a decoded frame at/after the clock exists). On a rebuffer
-    // also wait for the packet cushion to refill to its target, so playback resumes with a full
-    // buffer. The take-loop below runs in all cases: with the clock ahead of the video (startup) it
-    // shows the latest decoded frame to catch up; with the clock frozen (rebuffer) it holds.
+    // Buffering / rebuffering gate. Hold the master start until: the audio clock is valid, the
+    // video decode has caught up to it (a decoded frame at/after the clock exists), AND the buffer
+    // has filled to the streamBufferingSeconds cushion. Gating BOTH startup and rebuffer on the
+    // cushion makes the buffer setting govern initial latency (not just rebuffer recovery); the
+    // video-edge condition prevents the startup frame burst (it can't start before video is
+    // decoded). The take-loop below runs in all cases: with the clock ahead of the video (startup)
+    // it shows the latest decoded frame to catch up; with the clock frozen (rebuffer) it holds.
     if (m_state.m_basePositionMs < 0)
     {
         const qint64 videoEdgeMs = m_state.m_decoder->streamVideoDecodedEdgePtsMs();
-        bool ready = (clockMs >= 0) && (videoEdgeMs >= clockMs);
-        if (m_state.m_streamRebuffering)
-        {
-            const int cushionFrames = streamBufferingCushionFrameCount();
-            const int buffered = m_state.m_decoder->streamVideoPacketCount()
-                               + m_state.m_decoder->streamDecodedVideoFrameCount();
-            ready = ready && (buffered >= cushionFrames);
-        }
+        const int cushionFrames = streamBufferingCushionFrameCount();
+        const int buffered = m_state.m_decoder->streamVideoPacketCount()
+                           + m_state.m_decoder->streamDecodedVideoFrameCount();
+        const bool ready = (clockMs >= 0) && (videoEdgeMs >= clockMs) && (buffered >= cushionFrames);
         if (ready)
         {
             m_state.m_basePositionMs = 0;

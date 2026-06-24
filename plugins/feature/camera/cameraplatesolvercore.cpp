@@ -20,7 +20,7 @@
 
 // Catalog I/O, projection, visibility, signatures/seeds, matching - the remaining solver core (WS5).
 
-auto CameraPlateSolver::SolverContext::boundedMultiply(qint64 lhs, qint64 rhs) -> qint64
+qint64 CameraPlateSolver::SolverContext::boundedMultiply(qint64 lhs, qint64 rhs)
 {
     if ((lhs <= 0) || (rhs <= 0)) {
         return 0;
@@ -34,7 +34,7 @@ auto CameraPlateSolver::SolverContext::boundedMultiply(qint64 lhs, qint64 rhs) -
     return lhs * rhs;
 }
 
-auto CameraPlateSolver::SolverContext::estimateRefinementWorkUnits(int candidateCount, int visibleStarCount, int detectionCount) -> qint64
+qint64 CameraPlateSolver::SolverContext::estimateRefinementWorkUnits(int candidateCount, int visibleStarCount, int detectionCount)
 {
     const qint64 perCandidateWork = boundedMultiply(
         std::max<qint64>(1, visibleStarCount),
@@ -42,7 +42,7 @@ auto CameraPlateSolver::SolverContext::estimateRefinementWorkUnits(int candidate
     return boundedMultiply(std::max<qint64>(0, candidateCount), perCandidateWork);
 }
 
-auto CameraPlateSolver::SolverContext::refinementWorkerThreadCount(int candidateCount, qint64 estimatedWorkUnits) -> int
+int CameraPlateSolver::SolverContext::refinementWorkerThreadCount(int candidateCount, qint64 estimatedWorkUnits)
 {
     static constexpr int kMinParallelRefinementCandidates = 128;
     static constexpr int kRefinementCandidatesPerWorker = 32;
@@ -75,7 +75,7 @@ auto CameraPlateSolver::SolverContext::refinementWorkerThreadCount(int candidate
     return std::max(1, std::min({requestedThreadCount, candidateCount, idealThreadCount - 2}));
 }
 
-auto CameraPlateSolver::SolverContext::visibleCatalogWorkerThreadCount(int catalogStarCount) -> int
+int CameraPlateSolver::SolverContext::visibleCatalogWorkerThreadCount(int catalogStarCount)
 {
     static constexpr int kMinParallelVisibleCatalogStars = 120000;
     static constexpr int kVisibleCatalogStarsPerWorker = 80000;
@@ -93,12 +93,12 @@ auto CameraPlateSolver::SolverContext::visibleCatalogWorkerThreadCount(int catal
     return std::max(1, std::min(requestedThreadCount, idealThreadCount - 2));
 }
 
-auto CameraPlateSolver::SolverContext::degToRad(double value) -> double
+double CameraPlateSolver::SolverContext::degToRad(double value)
 {
     return value * kPi / 180.0;
 }
 
-auto CameraPlateSolver::SolverContext::normalizeDegrees(double value) -> double
+double CameraPlateSolver::SolverContext::normalizeDegrees(double value)
 {
     value = std::fmod(value, 360.0);
     if (value < 0.0) {
@@ -107,7 +107,7 @@ auto CameraPlateSolver::SolverContext::normalizeDegrees(double value) -> double
     return value;
 }
 
-auto CameraPlateSolver::SolverContext::vectorFromAltAz(double azimuthDegrees, double elevationDegrees) -> SkyVector
+CameraPlateSolver::SolverContext::SkyVector CameraPlateSolver::SolverContext::vectorFromAltAz(double azimuthDegrees, double elevationDegrees)
 {
     const double azimuth = degToRad(azimuthDegrees);
     const double elevation = degToRad(elevationDegrees);
@@ -120,12 +120,12 @@ auto CameraPlateSolver::SolverContext::vectorFromAltAz(double azimuthDegrees, do
     };
 }
 
-auto CameraPlateSolver::SolverContext::dot(const SkyVector& lhs, const SkyVector& rhs) -> double
+double CameraPlateSolver::SolverContext::dot(const SkyVector& lhs, const SkyVector& rhs)
 {
     return lhs.x * rhs.x + lhs.y * rhs.y + lhs.z * rhs.z;
 }
 
-auto CameraPlateSolver::SolverContext::cross(const SkyVector& lhs, const SkyVector& rhs) -> SkyVector
+CameraPlateSolver::SolverContext::SkyVector CameraPlateSolver::SolverContext::cross(const SkyVector& lhs, const SkyVector& rhs)
 {
     return {
         lhs.y * rhs.z - lhs.z * rhs.y,
@@ -134,12 +134,12 @@ auto CameraPlateSolver::SolverContext::cross(const SkyVector& lhs, const SkyVect
     };
 }
 
-auto CameraPlateSolver::SolverContext::length(const SkyVector& vector) -> double
+double CameraPlateSolver::SolverContext::length(const SkyVector& vector)
 {
     return std::sqrt(dot(vector, vector));
 }
 
-auto CameraPlateSolver::SolverContext::normalize(const SkyVector& vector) -> SkyVector
+CameraPlateSolver::SolverContext::SkyVector CameraPlateSolver::SolverContext::normalize(const SkyVector& vector)
 {
     const double vectorLength = length(vector);
     if (vectorLength <= 0.0) {
@@ -153,7 +153,7 @@ auto CameraPlateSolver::SolverContext::normalize(const SkyVector& vector) -> Sky
     };
 }
 
-auto CameraPlateSolver::SolverContext::rotateAroundAxis(const SkyVector& vector, const SkyVector& axis, double angleRadians) -> SkyVector
+CameraPlateSolver::SolverContext::SkyVector CameraPlateSolver::SolverContext::rotateAroundAxis(const SkyVector& vector, const SkyVector& axis, double angleRadians)
 {
     const double cosAngle = std::cos(angleRadians);
     const double sinAngle = std::sin(angleRadians);
@@ -167,7 +167,7 @@ auto CameraPlateSolver::SolverContext::rotateAroundAxis(const SkyVector& vector,
     };
 }
 
-auto CameraPlateSolver::SolverContext::parseRightAscensionDegrees(const QString& value) -> double
+double CameraPlateSolver::SolverContext::parseRightAscensionDegrees(const QString& value)
 {
     const QStringList fields = value.split(' ', Qt::SkipEmptyParts);
     if (fields.size() != 3) {
@@ -187,7 +187,7 @@ auto CameraPlateSolver::SolverContext::parseRightAscensionDegrees(const QString&
     return 15.0 * (hours + minutes / 60.0 + seconds / 3600.0);
 }
 
-auto CameraPlateSolver::SolverContext::parseDeclinationDegrees(const QString& value) -> double
+double CameraPlateSolver::SolverContext::parseDeclinationDegrees(const QString& value)
 {
     const QStringList fields = value.split(' ', Qt::SkipEmptyParts);
     if (fields.size() != 3) {
@@ -209,7 +209,7 @@ auto CameraPlateSolver::SolverContext::parseDeclinationDegrees(const QString& va
     return sign * (absoluteDegrees + minutes / 60.0 + seconds / 3600.0);
 }
 
-auto CameraPlateSolver::SolverContext::stripQuotedField(const QString& value) -> QString
+QString CameraPlateSolver::SolverContext::stripQuotedField(const QString& value)
 {
     QString stripped = value.trimmed();
     if (stripped.startsWith('"') && stripped.endsWith('"') && (stripped.size() >= 2)) {
@@ -218,18 +218,18 @@ auto CameraPlateSolver::SolverContext::stripQuotedField(const QString& value) ->
     return stripped.replace(QStringLiteral("\"\""), QStringLiteral("\""));
 }
 
-auto CameraPlateSolver::SolverContext::downloadedCatalogDir() -> QString
+QString CameraPlateSolver::SolverContext::downloadedCatalogDir()
 {
     const QString baseDir = QStandardPaths::standardLocations(QStandardPaths::AppDataLocation).value(0);
     return QDir(baseDir).filePath(QString::fromUtf8(kDownloadedCatalogDir));
 }
 
-auto CameraPlateSolver::SolverContext::downloadedCatalogReducedPath() -> QString
+QString CameraPlateSolver::SolverContext::downloadedCatalogReducedPath()
 {
     return QDir(downloadedCatalogDir()).filePath(QString::fromUtf8(kDownloadedCatalogReducedFile));
 }
 
-auto CameraPlateSolver::SolverContext::gunzipData(const QByteArray& compressedData, QString* errorMessage) -> QByteArray
+QByteArray CameraPlateSolver::SolverContext::gunzipData(const QByteArray& compressedData, QString* errorMessage)
 {
     if (compressedData.isEmpty()) {
         if (errorMessage) {
@@ -275,7 +275,7 @@ auto CameraPlateSolver::SolverContext::gunzipData(const QByteArray& compressedDa
     return uncompressedData;
 }
 
-auto CameraPlateSolver::SolverContext::parseBundledCatalog(const QString& text) -> QVector<CatalogStar>
+QVector<CameraPlateSolver::SolverContext::CatalogStar> CameraPlateSolver::SolverContext::parseBundledCatalog(const QString& text)
 {
     QVector<CatalogStar> stars;
     const QStringList lines = text.split('\n');
@@ -311,7 +311,7 @@ auto CameraPlateSolver::SolverContext::parseBundledCatalog(const QString& text) 
     return stars;
 }
 
-auto CameraPlateSolver::SolverContext::parseDownloadedHygCatalog(const QString& text) -> QVector<CatalogStar>
+QVector<CameraPlateSolver::SolverContext::CatalogStar> CameraPlateSolver::SolverContext::parseDownloadedHygCatalog(const QString& text)
 {
     QVector<CatalogStar> stars;
     const QStringList lines = text.split('\n');
@@ -417,7 +417,7 @@ auto CameraPlateSolver::SolverContext::parseDownloadedHygCatalog(const QString& 
     return stars;
 }
 
-auto CameraPlateSolver::SolverContext::formatRightAscensionHours(double rightAscensionDegrees) -> QString
+QString CameraPlateSolver::SolverContext::formatRightAscensionHours(double rightAscensionDegrees)
 {
     const double totalHours = normalizeDegrees(rightAscensionDegrees) / 15.0;
     const int hours = static_cast<int>(std::floor(totalHours));
@@ -430,7 +430,7 @@ auto CameraPlateSolver::SolverContext::formatRightAscensionHours(double rightAsc
         .arg(seconds, 0, 'f', 5);
 }
 
-auto CameraPlateSolver::SolverContext::formatDeclinationDegrees(double declinationDegrees) -> QString
+QString CameraPlateSolver::SolverContext::formatDeclinationDegrees(double declinationDegrees)
 {
     const QChar sign = (declinationDegrees < 0.0) ? QLatin1Char('-') : QLatin1Char('+');
     const double absoluteDegrees = std::fabs(declinationDegrees);
@@ -445,7 +445,7 @@ auto CameraPlateSolver::SolverContext::formatDeclinationDegrees(double declinati
         .arg(seconds, 0, 'f', 4);
 }
 
-auto CameraPlateSolver::SolverContext::writeReducedCatalog(const QVector<CatalogStar>& stars, const QString& path, QString* errorMessage) -> bool
+bool CameraPlateSolver::SolverContext::writeReducedCatalog(const QVector<CatalogStar>& stars, const QString& path, QString* errorMessage)
 {
     // QSaveFile (write-to-temp + atomic rename) so concurrent solver processes can't read a
     // half-written reduced catalog or corrupt each other when both regenerate it at once;
@@ -494,7 +494,7 @@ auto CameraPlateSolver::SolverContext::writeReducedCatalog(const QVector<Catalog
     return true;
 }
 
-auto CameraPlateSolver::SolverContext::loadCatalogFromTextFile(const QString& path) -> QVector<CatalogStar>
+QVector<CameraPlateSolver::SolverContext::CatalogStar> CameraPlateSolver::SolverContext::loadCatalogFromTextFile(const QString& path)
 {
     QFile file(path);
     if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
@@ -508,7 +508,7 @@ auto CameraPlateSolver::SolverContext::loadCatalogFromTextFile(const QString& pa
     return parseDownloadedHygCatalog(text);
 }
 
-auto CameraPlateSolver::SolverContext::currentCatalogPath(const CameraSettings& settings) -> QString
+QString CameraPlateSolver::SolverContext::currentCatalogPath(const CameraSettings& settings)
 {
     (void) settings;
     if (QFileInfo::exists(downloadedCatalogReducedPath())) {
@@ -517,7 +517,7 @@ auto CameraPlateSolver::SolverContext::currentCatalogPath(const CameraSettings& 
     return QString::fromUtf8(kBundledCatalogPath);
 }
 
-auto CameraPlateSolver::SolverContext::currentCatalogSource(const CameraSettings& settings) -> QString
+QString CameraPlateSolver::SolverContext::currentCatalogSource(const CameraSettings& settings)
 {
     (void) settings;
     return QFileInfo::exists(downloadedCatalogReducedPath())
@@ -525,7 +525,7 @@ auto CameraPlateSolver::SolverContext::currentCatalogSource(const CameraSettings
         : QStringLiteral("Bundled");
 }
 
-auto CameraPlateSolver::SolverContext::firstPassPlateSolveMaxMagnitude(const CameraSettings& settings) -> double
+double CameraPlateSolver::SolverContext::firstPassPlateSolveMaxMagnitude(const CameraSettings& settings)
 {
     if (plateSolveStartUsesDirection(settings)
         && (isNarrowField(settings))
@@ -543,7 +543,7 @@ auto CameraPlateSolver::SolverContext::firstPassPlateSolveMaxMagnitude(const Cam
     return settings.m_plateSolveMaxMagnitude;
 }
 
-auto CameraPlateSolver::SolverContext::narrowGuidedFullSearchMaxMagnitude(const CameraSettings& settings) -> double
+double CameraPlateSolver::SolverContext::narrowGuidedFullSearchMaxMagnitude(const CameraSettings& settings)
 {
     if (isNarrowGuidedDirectionSolve(settings))
     {
@@ -555,14 +555,14 @@ auto CameraPlateSolver::SolverContext::narrowGuidedFullSearchMaxMagnitude(const 
     return settings.m_plateSolveMaxMagnitude;
 }
 
-auto CameraPlateSolver::SolverContext::isLowMagnitudeNarrowGuidedSolve(const CameraSettings& settings) -> bool
+bool CameraPlateSolver::SolverContext::isLowMagnitudeNarrowGuidedSolve(const CameraSettings& settings)
 {
     return plateSolveStartUsesDirection(settings)
         && (isNarrowField(settings))
         && (settings.m_plateSolveMaxMagnitude <= 17.0);
 }
 
-auto CameraPlateSolver::SolverContext::fovLongEdgeDiagonalDegrees(const QSize& imageSize, double fovDegrees) -> double
+double CameraPlateSolver::SolverContext::fovLongEdgeDiagonalDegrees(const QSize& imageSize, double fovDegrees)
 {
     const int longEdge = std::max(imageSize.width(), imageSize.height());
     const int shortEdge = std::min(imageSize.width(), imageSize.height());
@@ -574,7 +574,7 @@ auto CameraPlateSolver::SolverContext::fovLongEdgeDiagonalDegrees(const QSize& i
     return fovDegrees * std::sqrt(1.0 + shortToLong * shortToLong);
 }
 
-auto CameraPlateSolver::SolverContext::halfHorizontalFovFromLongEdgeFov(CameraSettings::LensProjection lensProjection, const QSize& imageSize, double fovDegrees) -> double
+double CameraPlateSolver::SolverContext::halfHorizontalFovFromLongEdgeFov(CameraSettings::LensProjection lensProjection, const QSize& imageSize, double fovDegrees)
 {
     const double halfLongEdgeFov = degToRad(fovDegrees) * 0.5;
     if ((imageSize.width() <= 0) || (imageSize.height() <= 0) || (imageSize.width() >= imageSize.height())) {
@@ -594,7 +594,7 @@ auto CameraPlateSolver::SolverContext::halfHorizontalFovFromLongEdgeFov(CameraSe
     }
 }
 
-auto CameraPlateSolver::SolverContext::interleaveHealpixBits(int x, int y) -> quint32
+quint32 CameraPlateSolver::SolverContext::interleaveHealpixBits(int x, int y)
 {
     quint32 pixel = 0;
     for (int bit = 0; bit < kSirilHealpixLevel; ++bit)
@@ -605,7 +605,7 @@ auto CameraPlateSolver::SolverContext::interleaveHealpixBits(int x, int y) -> qu
     return pixel;
 }
 
-auto CameraPlateSolver::SolverContext::healpixNestedPixel(double rightAscensionDegrees, double declinationDegrees) -> quint32
+quint32 CameraPlateSolver::SolverContext::healpixNestedPixel(double rightAscensionDegrees, double declinationDegrees)
 {
     const double z = std::sin(degToRad(declinationDegrees));
     const double za = std::fabs(z);
@@ -654,7 +654,7 @@ auto CameraPlateSolver::SolverContext::healpixNestedPixel(double rightAscensionD
     return static_cast<quint32>(face * kSirilNside * kSirilNside) + interleaveHealpixBits(ix, iy);
 }
 
-auto CameraPlateSolver::SolverContext::angularSeparationDegrees(double raDegreesA, double decDegreesA, double raDegreesB, double decDegreesB) -> double
+double CameraPlateSolver::SolverContext::angularSeparationDegrees(double raDegreesA, double decDegreesA, double raDegreesB, double decDegreesB)
 {
     const double raA = degToRad(raDegreesA);
     const double decA = degToRad(decDegreesA);
@@ -665,22 +665,22 @@ auto CameraPlateSolver::SolverContext::angularSeparationDegrees(double raDegrees
     return std::acos(std::clamp(cosSeparation, -1.0, 1.0)) * 180.0 / kPi;
 }
 
-auto CameraPlateSolver::SolverContext::plateSolveStartUsesFov(const CameraSettings& settings) -> bool
+bool CameraPlateSolver::SolverContext::plateSolveStartUsesFov(const CameraSettings& settings)
 {
     return settings.m_plateSolveStartMode != CameraSettings::PlateSolveStartBlind;
 }
 
-auto CameraPlateSolver::SolverContext::plateSolveStartUsesCurrentSettingsOnly(const CameraSettings& settings) -> bool
+bool CameraPlateSolver::SolverContext::plateSolveStartUsesCurrentSettingsOnly(const CameraSettings& settings)
 {
     return settings.m_plateSolveStartMode == CameraSettings::PlateSolveStartCurrentSettingsOnly;
 }
 
-auto CameraPlateSolver::SolverContext::usesSeedProjectedBrightGate(const CameraSettings& settings) -> bool
+bool CameraPlateSolver::SolverContext::usesSeedProjectedBrightGate(const CameraSettings& settings)
 {
     return plateSolveStartUsesRoll(settings) || plateSolveStartUsesCurrentSettingsOnly(settings);
 }
 
-auto CameraPlateSolver::SolverContext::plateSolveStartUsesElevation(const CameraSettings& settings) -> bool
+bool CameraPlateSolver::SolverContext::plateSolveStartUsesElevation(const CameraSettings& settings)
 {
     switch (settings.m_plateSolveStartMode)
     {
@@ -695,7 +695,7 @@ auto CameraPlateSolver::SolverContext::plateSolveStartUsesElevation(const Camera
     }
 }
 
-auto CameraPlateSolver::SolverContext::plateSolveStartUsesDirection(const CameraSettings& settings) -> bool
+bool CameraPlateSolver::SolverContext::plateSolveStartUsesDirection(const CameraSettings& settings)
 {
     switch (settings.m_plateSolveStartMode)
     {
@@ -709,7 +709,7 @@ auto CameraPlateSolver::SolverContext::plateSolveStartUsesDirection(const Camera
     }
 }
 
-auto CameraPlateSolver::SolverContext::plateSolveStartUsesRoll(const CameraSettings& settings) -> bool
+bool CameraPlateSolver::SolverContext::plateSolveStartUsesRoll(const CameraSettings& settings)
 {
     switch (settings.m_plateSolveStartMode)
     {
@@ -722,7 +722,7 @@ auto CameraPlateSolver::SolverContext::plateSolveStartUsesRoll(const CameraSetti
     }
 }
 
-auto CameraPlateSolver::SolverContext::plateSolveStartUsesLens(const CameraSettings& settings) -> bool
+bool CameraPlateSolver::SolverContext::plateSolveStartUsesLens(const CameraSettings& settings)
 {
     switch (settings.m_plateSolveStartMode)
     {
@@ -734,24 +734,24 @@ auto CameraPlateSolver::SolverContext::plateSolveStartUsesLens(const CameraSetti
     }
 }
 
-auto CameraPlateSolver::SolverContext::isWidePlateSolveContext(const CameraSettings& settings) -> bool
+bool CameraPlateSolver::SolverContext::isWidePlateSolveContext(const CameraSettings& settings)
 {
     return (settings.m_lensProjection != CameraSettings::LensProjectionRectilinear)
         && ((settings.m_fov >= kWideFovMagnitudePreferenceThresholdDegrees)
             || (settings.m_plateSolveStartMode == CameraSettings::PlateSolveStartBlind));
 }
 
-auto CameraPlateSolver::SolverContext::isNarrowField(const CameraSettings& settings) -> bool
+bool CameraPlateSolver::SolverContext::isNarrowField(const CameraSettings& settings)
 {
     return settings.m_fov <= kNarrowFieldMaxFovDegrees;
 }
 
-auto CameraPlateSolver::SolverContext::isNarrowGuidedDirectionSolve(const CameraSettings& settings) -> bool
+bool CameraPlateSolver::SolverContext::isNarrowGuidedDirectionSolve(const CameraSettings& settings)
 {
     return plateSolveStartUsesDirection(settings) && isNarrowField(settings);
 }
 
-auto CameraPlateSolver::SolverContext::seedFovCompatibleWithStartFov(const CameraSettings& settings, double seedFovDegrees) -> bool
+bool CameraPlateSolver::SolverContext::seedFovCompatibleWithStartFov(const CameraSettings& settings, double seedFovDegrees)
 {
     if (!plateSolveStartUsesFov(settings)) {
         return true;
@@ -769,19 +769,19 @@ auto CameraPlateSolver::SolverContext::seedFovCompatibleWithStartFov(const Camer
     return std::fabs(seedFovDegrees - referenceFov) <= toleranceDegrees;
 }
 
-auto CameraPlateSolver::SolverContext::canCalibrateLens(const CameraSettings& settings) -> bool
+bool CameraPlateSolver::SolverContext::canCalibrateLens(const CameraSettings& settings)
 {
     return (settings.m_plateSolveStartMode == CameraSettings::PlateSolveStartFovAzElRollLens)
         || isWidePlateSolveContext(settings);
 }
 
-auto CameraPlateSolver::SolverContext::canCalibratePrincipalPoint(const CameraSettings& settings) -> bool
+bool CameraPlateSolver::SolverContext::canCalibratePrincipalPoint(const CameraSettings& settings)
 {
     return (settings.m_plateSolveStartMode == CameraSettings::PlateSolveStartFovAzElRollLens)
         || isWidePlateSolveContext(settings);
 }
 
-auto CameraPlateSolver::SolverContext::brightStarCatalog(const CameraSettings& settings) -> const QVector<CatalogStar>&
+const QVector<CameraPlateSolver::SolverContext::CatalogStar>& CameraPlateSolver::SolverContext::brightStarCatalog(const CameraSettings& settings)
 {
     static QMutex s_catalogMutex;
     static QString s_loadedPath;
@@ -803,7 +803,7 @@ auto CameraPlateSolver::SolverContext::brightStarCatalog(const CameraSettings& s
     return s_catalog;
 }
 
-auto CameraPlateSolver::SolverContext::bundledAliasCatalog() -> const QVector<CatalogStar>&
+const QVector<CameraPlateSolver::SolverContext::CatalogStar>& CameraPlateSolver::SolverContext::bundledAliasCatalog()
 {
     static QMutex s_catalogMutex;
     static QVector<CatalogStar> s_catalog;
@@ -821,7 +821,7 @@ auto CameraPlateSolver::SolverContext::bundledAliasCatalog() -> const QVector<Ca
     return s_catalog;
 }
 
-auto CameraPlateSolver::SolverContext::aliasCatalogDeclinationSortedIndices(const QVector<CatalogStar>& aliasStars) -> QVector<int>
+QVector<int> CameraPlateSolver::SolverContext::aliasCatalogDeclinationSortedIndices(const QVector<CatalogStar>& aliasStars)
 {
     static QMutex s_aliasIndexMutex;
     static const QVector<CatalogStar>* s_aliasStars = nullptr;
@@ -850,7 +850,7 @@ auto CameraPlateSolver::SolverContext::aliasCatalogDeclinationSortedIndices(cons
     return s_sortedIndices;
 }
 
-auto CameraPlateSolver::SolverContext::resolveNamedAliasForCatalogStar(const CatalogStar& star, const QVector<CatalogStar>& aliasStars, const QVector<int>& sortedAliasIndices, double* outScore) -> QString
+QString CameraPlateSolver::SolverContext::resolveNamedAliasForCatalogStar(const CatalogStar& star, const QVector<CatalogStar>& aliasStars, const QVector<int>& sortedAliasIndices, double* outScore)
 {
     if (outScore) {
         *outScore = std::numeric_limits<double>::infinity();
@@ -918,7 +918,7 @@ auto CameraPlateSolver::SolverContext::resolveNamedAliasForCatalogStar(const Cat
     return bestName;
 }
 
-auto CameraPlateSolver::SolverContext::applyNamedAliasesToCatalog(const CameraSettings& settings, QVector<CatalogStar>& stars) -> void
+void CameraPlateSolver::SolverContext::applyNamedAliasesToCatalog(const CameraSettings& settings, QVector<CatalogStar>& stars)
 {
     Q_UNUSED(settings)
 
@@ -975,7 +975,7 @@ auto CameraPlateSolver::SolverContext::applyNamedAliasesToCatalog(const CameraSe
     }
 }
 
-auto CameraPlateSolver::SolverContext::catalogAngularSeparationDegrees(const CatalogStar& lhs, const CatalogStar& rhs) -> double
+double CameraPlateSolver::SolverContext::catalogAngularSeparationDegrees(const CatalogStar& lhs, const CatalogStar& rhs)
 {
     const double lhsRa = degToRad(lhs.rightAscensionDegrees);
     const double lhsDec = degToRad(lhs.declinationDegrees);
@@ -993,7 +993,7 @@ auto CameraPlateSolver::SolverContext::catalogAngularSeparationDegrees(const Cat
     return std::acos(dotProduct) * 180.0 / kPi;
 }
 
-auto CameraPlateSolver::SolverContext::mergeBundledBrightStarsIntoCatalog(const CameraSettings& settings, QVector<CatalogStar>& catalogStars, double maxMagnitude, double centerRaDegrees, double centerDecDegrees, double queryRadiusDegrees) -> void
+void CameraPlateSolver::SolverContext::mergeBundledBrightStarsIntoCatalog(const CameraSettings& settings, QVector<CatalogStar>& catalogStars, double maxMagnitude, double centerRaDegrees, double centerDecDegrees, double queryRadiusDegrees)
 {
     const QVector<CatalogStar>& brightStars = brightStarCatalog(settings);
     const bool narrowDirectionSolve = plateSolveStartUsesDirection(settings)
@@ -1103,7 +1103,7 @@ auto CameraPlateSolver::SolverContext::mergeBundledBrightStarsIntoCatalog(const 
     }
 }
 
-auto CameraPlateSolver::SolverContext::matchSummary(const PlateSolveCatalogContext& catalogContext, const QVector<CameraPipelineStarDetection>& starDetections, const QVector<Match>& matches) -> QString
+QString CameraPlateSolver::SolverContext::matchSummary(const PlateSolveCatalogContext& catalogContext, const QVector<CameraPipelineStarDetection>& starDetections, const QVector<Match>& matches)
 {
     QStringList parts;
     parts.reserve(matches.size());
@@ -1130,7 +1130,7 @@ auto CameraPlateSolver::SolverContext::matchSummary(const PlateSolveCatalogConte
     return parts.join(QStringLiteral("; "));
 }
 
-auto CameraPlateSolver::SolverContext::repairFinalMatchCollisions(const QVector<CameraPipelineStarDetection>& starDetections, const QVector<ProjectedCatalogStar>& projectedStars, double matchRadius, QVector<Match>& matches) -> void
+void CameraPlateSolver::SolverContext::repairFinalMatchCollisions(const QVector<CameraPipelineStarDetection>& starDetections, const QVector<ProjectedCatalogStar>& projectedStars, double matchRadius, QVector<Match>& matches)
 {
     constexpr double kMinSnrForRepair = 50.0;
     // Strict condition: unmatched detection is CLOSER than current match, same-or-brighter.
@@ -1214,7 +1214,7 @@ auto CameraPlateSolver::SolverContext::repairFinalMatchCollisions(const QVector<
     }
 }
 
-auto CameraPlateSolver::SolverContext::debugDumpUnmatchedDetections(const PlateSolveCatalogContext& catalogContext, const QVector<CameraPipelineStarDetection>& starDetections, const QVector<ProjectedCatalogStar>& projectedStars, const QVector<Match>& finalMatches, double finalMatchRadius) -> void
+void CameraPlateSolver::SolverContext::debugDumpUnmatchedDetections(const PlateSolveCatalogContext& catalogContext, const QVector<CameraPipelineStarDetection>& starDetections, const QVector<ProjectedCatalogStar>& projectedStars, const QVector<Match>& finalMatches, double finalMatchRadius)
 {
     if (qgetenv("SDRANGEL_CAMERA_PLATE_SOLVER_DEBUG_UNMATCHED").isEmpty()) {
         return;
@@ -1297,7 +1297,7 @@ auto CameraPlateSolver::SolverContext::debugDumpUnmatchedDetections(const PlateS
     }
 }
 
-auto CameraPlateSolver::SolverContext::debugCatalogStarMatches(const PlateSolveCatalogContext& catalogContext, int catalogIndex) -> bool
+bool CameraPlateSolver::SolverContext::debugCatalogStarMatches(const PlateSolveCatalogContext& catalogContext, int catalogIndex)
 {
     const QByteArray debugStar = qgetenv("SDRANGEL_CAMERA_PLATE_SOLVER_DEBUG_STAR");
     if (debugStar.trimmed().isEmpty()
@@ -1312,7 +1312,7 @@ auto CameraPlateSolver::SolverContext::debugCatalogStarMatches(const PlateSolveC
         Qt::CaseInsensitive);
 }
 
-auto CameraPlateSolver::SolverContext::debugTriangleContainsCatalogStar(const PlateSolveCatalogContext& catalogContext, const std::array<int, 3>& catalogIndices) -> bool
+bool CameraPlateSolver::SolverContext::debugTriangleContainsCatalogStar(const PlateSolveCatalogContext& catalogContext, const std::array<int, 3>& catalogIndices)
 {
     for (int catalogIndex : catalogIndices)
     {
@@ -1323,7 +1323,7 @@ auto CameraPlateSolver::SolverContext::debugTriangleContainsCatalogStar(const Pl
     return false;
 }
 
-auto CameraPlateSolver::SolverContext::debugTriangleAnchorSummary(const PlateSolveCatalogContext& catalogContext, const QVector<CameraPipelineStarDetection>& starDetections, const std::array<int, 3>& detectionIndices, const std::array<int, 3>& catalogIndices) -> QString
+QString CameraPlateSolver::SolverContext::debugTriangleAnchorSummary(const PlateSolveCatalogContext& catalogContext, const QVector<CameraPipelineStarDetection>& starDetections, const std::array<int, 3>& detectionIndices, const std::array<int, 3>& catalogIndices)
 {
     QStringList parts;
     for (int i = 0; i < 3; ++i)
@@ -1348,7 +1348,7 @@ auto CameraPlateSolver::SolverContext::debugTriangleAnchorSummary(const PlateSol
     return parts.join(QStringLiteral("; "));
 }
 
-auto CameraPlateSolver::SolverContext::createProjector(const CameraSettings& settings, const QSize& size, double azimuthDegrees, double elevationDegrees, double rollDegrees, double fovDegrees, double centerOffsetXPixels, double centerOffsetYPixels, double distortionK1) -> SkyProjector
+CameraPlateSolver::SolverContext::SkyProjector CameraPlateSolver::SolverContext::createProjector(const CameraSettings& settings, const QSize& size, double azimuthDegrees, double elevationDegrees, double rollDegrees, double fovDegrees, double centerOffsetXPixels, double centerOffsetYPixels, double distortionK1)
 {
     SkyProjector projector;
     projector.width = size.width();
@@ -1393,7 +1393,7 @@ auto CameraPlateSolver::SolverContext::createProjector(const CameraSettings& set
     return projector;
 }
 
-auto CameraPlateSolver::SolverContext::projectVector(const SkyProjector& projector, const SkyVector& vector, QPointF& point) -> bool
+bool CameraPlateSolver::SolverContext::projectVector(const SkyProjector& projector, const SkyVector& vector, QPointF& point)
 {
     if (!projector.valid) {
         return false;
@@ -1451,12 +1451,12 @@ auto CameraPlateSolver::SolverContext::projectVector(const SkyProjector& project
     return true;
 }
 
-auto CameraPlateSolver::SolverContext::projectAltAz(const SkyProjector& projector, double azimuthDegrees, double elevationDegrees, QPointF& point) -> bool
+bool CameraPlateSolver::SolverContext::projectAltAz(const SkyProjector& projector, double azimuthDegrees, double elevationDegrees, QPointF& point)
 {
     return projectVector(projector, vectorFromAltAz(azimuthDegrees, elevationDegrees), point);
 }
 
-auto CameraPlateSolver::SolverContext::unprojectPixelToVector(const SkyProjector& projector, const QPointF& point, SkyVector& vector) -> bool
+bool CameraPlateSolver::SolverContext::unprojectPixelToVector(const SkyProjector& projector, const QPointF& point, SkyVector& vector)
 {
     if (!projector.valid || (projector.width <= 0) || (projector.height <= 0)) {
         return false;
@@ -1524,7 +1524,7 @@ auto CameraPlateSolver::SolverContext::unprojectPixelToVector(const SkyProjector
     return length(vector) > 0.0;
 }
 
-auto CameraPlateSolver::SolverContext::rotateBasisToAlignVector(const SkyProjector& projector, const SkyVector& fromVector, const SkyVector& toVector, SkyVector& alignedCenter, SkyVector& alignedRight, SkyVector& alignedUp) -> bool
+bool CameraPlateSolver::SolverContext::rotateBasisToAlignVector(const SkyProjector& projector, const SkyVector& fromVector, const SkyVector& toVector, SkyVector& alignedCenter, SkyVector& alignedRight, SkyVector& alignedUp)
 {
     const SkyVector from = normalize(fromVector);
     const SkyVector to = normalize(toVector);
@@ -1564,7 +1564,7 @@ auto CameraPlateSolver::SolverContext::rotateBasisToAlignVector(const SkyProject
     return (length(alignedCenter) > 0.0) && (length(alignedRight) > 0.0) && (length(alignedUp) > 0.0);
 }
 
-auto CameraPlateSolver::SolverContext::projectorPoseFromBasis(const SkyVector& center, const SkyVector& right, double& azimuthDegrees, double& elevationDegrees, double& rollDegrees) -> bool
+bool CameraPlateSolver::SolverContext::projectorPoseFromBasis(const SkyVector& center, const SkyVector& right, double& azimuthDegrees, double& elevationDegrees, double& rollDegrees)
 {
     const SkyVector normalizedCenter = normalize(center);
     if (length(normalizedCenter) <= 0.0) {
@@ -1593,7 +1593,7 @@ auto CameraPlateSolver::SolverContext::projectorPoseFromBasis(const SkyVector& c
     return std::isfinite(azimuthDegrees) && std::isfinite(elevationDegrees) && std::isfinite(rollDegrees);
 }
 
-auto CameraPlateSolver::SolverContext::subtractScaled(const SkyVector& lhs, const SkyVector& rhs, double scale) -> SkyVector
+CameraPlateSolver::SolverContext::SkyVector CameraPlateSolver::SolverContext::subtractScaled(const SkyVector& lhs, const SkyVector& rhs, double scale)
 {
     return {
         lhs.x - rhs.x * scale,
@@ -1602,7 +1602,7 @@ auto CameraPlateSolver::SolverContext::subtractScaled(const SkyVector& lhs, cons
     };
 }
 
-auto CameraPlateSolver::SolverContext::combineBasis(const SkyVector& xAxis, const SkyVector& yAxis, const SkyVector& zAxis, double x, double y, double z) -> SkyVector
+CameraPlateSolver::SolverContext::SkyVector CameraPlateSolver::SolverContext::combineBasis(const SkyVector& xAxis, const SkyVector& yAxis, const SkyVector& zAxis, double x, double y, double z)
 {
     return {
         xAxis.x * x + yAxis.x * y + zAxis.x * z,
@@ -1611,7 +1611,7 @@ auto CameraPlateSolver::SolverContext::combineBasis(const SkyVector& xAxis, cons
     };
 }
 
-auto CameraPlateSolver::SolverContext::mappedBasisVector(const SkyVector& sourceVector, const SkyVector& sourceXAxis, const SkyVector& sourceYAxis, const SkyVector& sourceZAxis, const SkyVector& targetXAxis, const SkyVector& targetYAxis, const SkyVector& targetZAxis, SkyVector& mappedVector) -> bool
+bool CameraPlateSolver::SolverContext::mappedBasisVector(const SkyVector& sourceVector, const SkyVector& sourceXAxis, const SkyVector& sourceYAxis, const SkyVector& sourceZAxis, const SkyVector& targetXAxis, const SkyVector& targetYAxis, const SkyVector& targetZAxis, SkyVector& mappedVector)
 {
     const double x = dot(sourceVector, sourceXAxis);
     const double y = dot(sourceVector, sourceYAxis);
@@ -1620,7 +1620,7 @@ auto CameraPlateSolver::SolverContext::mappedBasisVector(const SkyVector& source
     return length(mappedVector) > 0.0;
 }
 
-auto CameraPlateSolver::SolverContext::poseFromTwoVectorPairs(const SkyProjector& baseProjector, const SkyVector& sourceA, const SkyVector& sourceB, const SkyVector& targetA, const SkyVector& targetB, double& azimuthDegrees, double& elevationDegrees, double& rollDegrees) -> bool
+bool CameraPlateSolver::SolverContext::poseFromTwoVectorPairs(const SkyProjector& baseProjector, const SkyVector& sourceA, const SkyVector& sourceB, const SkyVector& targetA, const SkyVector& targetB, double& azimuthDegrees, double& elevationDegrees, double& rollDegrees)
 {
     const SkyVector sourceXAxis = normalize(sourceA);
     const SkyVector targetXAxis = normalize(targetA);
@@ -1678,7 +1678,7 @@ auto CameraPlateSolver::SolverContext::poseFromTwoVectorPairs(const SkyProjector
     return projectorPoseFromBasis(mappedCenter, mappedRight, azimuthDegrees, elevationDegrees, rollDegrees);
 }
 
-auto CameraPlateSolver::SolverContext::rotateVectorByMatrix(const std::array<std::array<double, 3>, 3>& rotation, const SkyVector& vector) -> SkyVector
+CameraPlateSolver::SolverContext::SkyVector CameraPlateSolver::SolverContext::rotateVectorByMatrix(const std::array<std::array<double, 3>, 3>& rotation, const SkyVector& vector)
 {
     return {
         rotation[0][0] * vector.x + rotation[0][1] * vector.y + rotation[0][2] * vector.z,
@@ -1687,7 +1687,7 @@ auto CameraPlateSolver::SolverContext::rotateVectorByMatrix(const std::array<std
     };
 }
 
-auto CameraPlateSolver::SolverContext::transposeRotationMatrix(const std::array<std::array<double, 3>, 3>& rotation) -> std::array<std::array<double, 3>, 3>
+std::array<std::array<double, 3>, 3> CameraPlateSolver::SolverContext::transposeRotationMatrix(const std::array<std::array<double, 3>, 3>& rotation)
 {
     return {{
         {{rotation[0][0], rotation[1][0], rotation[2][0]}},
@@ -1696,7 +1696,7 @@ auto CameraPlateSolver::SolverContext::transposeRotationMatrix(const std::array<
     }};
 }
 
-auto CameraPlateSolver::SolverContext::vectorPairRotationError(const std::array<std::array<double, 3>, 3>& rotation, const std::array<SkyVector, 3>& sourceVectors, const std::array<SkyVector, 3>& targetVectors, double& rmsAngularErrorDegrees, double& maxAngularErrorDegrees) -> bool
+bool CameraPlateSolver::SolverContext::vectorPairRotationError(const std::array<std::array<double, 3>, 3>& rotation, const std::array<SkyVector, 3>& sourceVectors, const std::array<SkyVector, 3>& targetVectors, double& rmsAngularErrorDegrees, double& maxAngularErrorDegrees)
 {
     double squaredAngularError = 0.0;
     maxAngularErrorDegrees = 0.0;
@@ -1717,7 +1717,7 @@ auto CameraPlateSolver::SolverContext::vectorPairRotationError(const std::array<
     return std::isfinite(rmsAngularErrorDegrees) && std::isfinite(maxAngularErrorDegrees);
 }
 
-auto CameraPlateSolver::SolverContext::normalizeQuaternion(std::array<double, 4>& quaternion) -> bool
+bool CameraPlateSolver::SolverContext::normalizeQuaternion(std::array<double, 4>& quaternion)
 {
     double norm = 0.0;
     for (double value : quaternion) {
@@ -1739,7 +1739,7 @@ auto CameraPlateSolver::SolverContext::normalizeQuaternion(std::array<double, 4>
     return true;
 }
 
-auto CameraPlateSolver::SolverContext::largestSymmetric4Eigenvector(const std::array<std::array<double, 4>, 4>& matrix) -> std::array<double, 4>
+std::array<double, 4> CameraPlateSolver::SolverContext::largestSymmetric4Eigenvector(const std::array<std::array<double, 4>, 4>& matrix)
 {
     double shift = 1.0;
     for (int row = 0; row < 4; ++row)
@@ -1770,7 +1770,7 @@ auto CameraPlateSolver::SolverContext::largestSymmetric4Eigenvector(const std::a
     return vector;
 }
 
-auto CameraPlateSolver::SolverContext::rotationMatrixFromQuaternion(const std::array<double, 4>& quaternion) -> std::array<std::array<double, 3>, 3>
+std::array<std::array<double, 3>, 3> CameraPlateSolver::SolverContext::rotationMatrixFromQuaternion(const std::array<double, 4>& quaternion)
 {
     const double w = quaternion[0];
     const double x = quaternion[1];
@@ -1796,7 +1796,7 @@ auto CameraPlateSolver::SolverContext::rotationMatrixFromQuaternion(const std::a
     }};
 }
 
-auto CameraPlateSolver::SolverContext::wahbaRotationFromVectorPairs(const std::array<SkyVector, 3>& sourceVectors, const std::array<SkyVector, 3>& targetVectors, bool transposeCorrelation, std::array<std::array<double, 3>, 3>& rotation, double& rmsAngularErrorDegrees, double& maxAngularErrorDegrees) -> bool
+bool CameraPlateSolver::SolverContext::wahbaRotationFromVectorPairs(const std::array<SkyVector, 3>& sourceVectors, const std::array<SkyVector, 3>& targetVectors, bool transposeCorrelation, std::array<std::array<double, 3>, 3>& rotation, double& rmsAngularErrorDegrees, double& maxAngularErrorDegrees)
 {
     std::array<std::array<double, 3>, 3> correlation {{
         {{0.0, 0.0, 0.0}},
@@ -1895,7 +1895,7 @@ auto CameraPlateSolver::SolverContext::wahbaRotationFromVectorPairs(const std::a
     return true;
 }
 
-auto CameraPlateSolver::SolverContext::poseFromThreeVectorPairs(const SkyProjector& baseProjector, const std::array<SkyVector, 3>& sourceVectors, const std::array<SkyVector, 3>& targetVectors, double& azimuthDegrees, double& elevationDegrees, double& rollDegrees, double* rmsAngularErrorDegrees, double* maxAngularErrorDegrees) -> bool
+bool CameraPlateSolver::SolverContext::poseFromThreeVectorPairs(const SkyProjector& baseProjector, const std::array<SkyVector, 3>& sourceVectors, const std::array<SkyVector, 3>& targetVectors, double& azimuthDegrees, double& elevationDegrees, double& rollDegrees, double* rmsAngularErrorDegrees, double* maxAngularErrorDegrees)
 {
     std::array<std::array<double, 3>, 3> bestRotation;
     double bestRmsAngularErrorDegrees = std::numeric_limits<double>::infinity();
@@ -1949,7 +1949,7 @@ auto CameraPlateSolver::SolverContext::poseFromThreeVectorPairs(const SkyProject
     return true;
 }
 
-auto CameraPlateSolver::SolverContext::vectorPairRotationErrorN(const std::array<std::array<double, 3>, 3>& rotation, const QVector<SkyVector>& sourceVectors, const QVector<SkyVector>& targetVectors, double& rmsAngularErrorDegrees, double& maxAngularErrorDegrees) -> bool
+bool CameraPlateSolver::SolverContext::vectorPairRotationErrorN(const std::array<std::array<double, 3>, 3>& rotation, const QVector<SkyVector>& sourceVectors, const QVector<SkyVector>& targetVectors, double& rmsAngularErrorDegrees, double& maxAngularErrorDegrees)
 {
     const int count = sourceVectors.size();
     if ((count < 1) || (targetVectors.size() != count)) {
@@ -1975,7 +1975,7 @@ auto CameraPlateSolver::SolverContext::vectorPairRotationErrorN(const std::array
     return std::isfinite(rmsAngularErrorDegrees) && std::isfinite(maxAngularErrorDegrees);
 }
 
-auto CameraPlateSolver::SolverContext::wahbaRotationFromVectorPairsN(const QVector<SkyVector>& sourceVectors, const QVector<SkyVector>& targetVectors, bool transposeCorrelation, std::array<std::array<double, 3>, 3>& rotation, double& rmsAngularErrorDegrees, double& maxAngularErrorDegrees) -> bool
+bool CameraPlateSolver::SolverContext::wahbaRotationFromVectorPairsN(const QVector<SkyVector>& sourceVectors, const QVector<SkyVector>& targetVectors, bool transposeCorrelation, std::array<std::array<double, 3>, 3>& rotation, double& rmsAngularErrorDegrees, double& maxAngularErrorDegrees)
 {
     const int count = sourceVectors.size();
     if ((count < 2) || (targetVectors.size() != count)) {
@@ -2079,7 +2079,7 @@ auto CameraPlateSolver::SolverContext::wahbaRotationFromVectorPairsN(const QVect
     return true;
 }
 
-auto CameraPlateSolver::SolverContext::poseFromVectorPairsN(const SkyProjector& baseProjector, const QVector<SkyVector>& sourceVectors, const QVector<SkyVector>& targetVectors, double& azimuthDegrees, double& elevationDegrees, double& rollDegrees, double* rmsAngularErrorDegrees, double* maxAngularErrorDegrees) -> bool
+bool CameraPlateSolver::SolverContext::poseFromVectorPairsN(const SkyProjector& baseProjector, const QVector<SkyVector>& sourceVectors, const QVector<SkyVector>& targetVectors, double& azimuthDegrees, double& elevationDegrees, double& rollDegrees, double* rmsAngularErrorDegrees, double* maxAngularErrorDegrees)
 {
     std::array<std::array<double, 3>, 3> bestRotation;
     double bestRmsAngularErrorDegrees = std::numeric_limits<double>::infinity();
@@ -2133,7 +2133,7 @@ auto CameraPlateSolver::SolverContext::poseFromVectorPairsN(const SkyProjector& 
     return true;
 }
 
-auto CameraPlateSolver::SolverContext::buildVectorQuadCode(const std::array<SkyVector, 4>& vectors) -> QuadVectorCode
+CameraPlateSolver::SolverContext::QuadVectorCode CameraPlateSolver::SolverContext::buildVectorQuadCode(const std::array<SkyVector, 4>& vectors)
 {
     QuadVectorCode code;
 
@@ -2269,7 +2269,7 @@ auto CameraPlateSolver::SolverContext::buildVectorQuadCode(const std::array<SkyV
     return code;
 }
 
-auto CameraPlateSolver::SolverContext::anchorAlignedPoseFromPixel(const CameraSettings& settings, const QSize& imageSize, const QPointF& anchorPoint, const SkyVector& anchorVector, double baseAzimuthDegrees, double baseElevationDegrees, double baseRollDegrees, double fovDegrees, double centerOffsetXPixels, double centerOffsetYPixels, double distortionK1, double& alignedAzimuthDegrees, double& alignedElevationDegrees, double& alignedRollDegrees) -> bool
+bool CameraPlateSolver::SolverContext::anchorAlignedPoseFromPixel(const CameraSettings& settings, const QSize& imageSize, const QPointF& anchorPoint, const SkyVector& anchorVector, double baseAzimuthDegrees, double baseElevationDegrees, double baseRollDegrees, double fovDegrees, double centerOffsetXPixels, double centerOffsetYPixels, double distortionK1, double& alignedAzimuthDegrees, double& alignedElevationDegrees, double& alignedRollDegrees)
 {
     const SkyProjector baseProjector = createProjector(
         settings,
@@ -2301,7 +2301,7 @@ auto CameraPlateSolver::SolverContext::anchorAlignedPoseFromPixel(const CameraSe
     return projectorPoseFromBasis(alignedCenter, alignedRight, alignedAzimuthDegrees, alignedElevationDegrees, alignedRollDegrees);
 }
 
-auto CameraPlateSolver::SolverContext::estimateScreenSimilarity(const std::array<QPointF, 3>& sourcePoints, const std::array<QPointF, 3>& targetPoints, double& scale, double& rotationDegrees, double& rmsErrorPixels) -> bool
+bool CameraPlateSolver::SolverContext::estimateScreenSimilarity(const std::array<QPointF, 3>& sourcePoints, const std::array<QPointF, 3>& targetPoints, double& scale, double& rotationDegrees, double& rmsErrorPixels)
 {
     QPointF sourceCentroid(0.0, 0.0);
     QPointF targetCentroid(0.0, 0.0);
@@ -2355,7 +2355,7 @@ auto CameraPlateSolver::SolverContext::estimateScreenSimilarity(const std::array
     return std::isfinite(rotationDegrees) && std::isfinite(rmsErrorPixels);
 }
 
-auto CameraPlateSolver::SolverContext::guidedTriangleSimilarityPoseSeeds(const CameraSettings& settings, const QSize& imageSize, const std::array<QPointF, 3>& detectionPoints, const std::array<VisibleCatalogStar, 3>& triangleStars, const std::array<int, 3>& permutation, double baseAzimuthDegrees, double baseElevationDegrees, double seedFovDegrees, double centerOffsetXPixels, double centerOffsetYPixels, double distortionK1) -> QVector<GuidedTrianglePoseSeed>
+QVector<CameraPlateSolver::SolverContext::GuidedTrianglePoseSeed> CameraPlateSolver::SolverContext::guidedTriangleSimilarityPoseSeeds(const CameraSettings& settings, const QSize& imageSize, const std::array<QPointF, 3>& detectionPoints, const std::array<VisibleCatalogStar, 3>& triangleStars, const std::array<int, 3>& permutation, double baseAzimuthDegrees, double baseElevationDegrees, double seedFovDegrees, double centerOffsetXPixels, double centerOffsetYPixels, double distortionK1)
 {
     QVector<GuidedTrianglePoseSeed> seeds;
     const SkyProjector projector = createProjector(
@@ -2475,17 +2475,17 @@ auto CameraPlateSolver::SolverContext::guidedTriangleSimilarityPoseSeeds(const C
     return seeds;
 }
 
-auto CameraPlateSolver::SolverContext::projectorPrincipalPoint(const SkyProjector& projector) -> QPointF
+QPointF CameraPlateSolver::SolverContext::projectorPrincipalPoint(const SkyProjector& projector)
 {
     return QPointF(projector.principalPointX, projector.principalPointY);
 }
 
-auto CameraPlateSolver::SolverContext::pointDistancePixels(const QPointF& lhs, const QPointF& rhs) -> double
+double CameraPlateSolver::SolverContext::pointDistancePixels(const QPointF& lhs, const QPointF& rhs)
 {
     return std::hypot(lhs.x() - rhs.x(), lhs.y() - rhs.y());
 }
 
-auto CameraPlateSolver::SolverContext::detectionBrightnessMetric(const CameraPipelineStarDetection& detection) -> double
+double CameraPlateSolver::SolverContext::detectionBrightnessMetric(const CameraPipelineStarDetection& detection)
 {
     const double peak = std::isfinite(static_cast<double>(detection.m_peakValue))
         ? std::max(0.0, static_cast<double>(detection.m_peakValue))
@@ -2504,7 +2504,7 @@ auto CameraPlateSolver::SolverContext::detectionBrightnessMetric(const CameraPip
     return metric;
 }
 
-auto CameraPlateSolver::SolverContext::triangleBrightnessOrderCompatible(const QVector<CameraPipelineStarDetection>& starDetections, const std::array<int, 3>& detectionIndices, const std::array<VisibleCatalogStar, 3>& triangleStars, const std::array<int, 3>& permutation) -> bool
+bool CameraPlateSolver::SolverContext::triangleBrightnessOrderCompatible(const QVector<CameraPipelineStarDetection>& starDetections, const std::array<int, 3>& detectionIndices, const std::array<VisibleCatalogStar, 3>& triangleStars, const std::array<int, 3>& permutation)
 {
     std::array<double, 3> detectionBrightness {{0.0, 0.0, 0.0}};
     std::array<double, 3> catalogMagnitude {{0.0, 0.0, 0.0}};
@@ -2552,7 +2552,7 @@ auto CameraPlateSolver::SolverContext::triangleBrightnessOrderCompatible(const Q
     return true;
 }
 
-auto CameraPlateSolver::SolverContext::triangleBrightnessMagnitudeError(const QVector<CameraPipelineStarDetection>& starDetections, const std::array<int, 3>& detectionIndices, const std::array<VisibleCatalogStar, 3>& triangleStars, const std::array<int, 3>& permutation) -> double
+double CameraPlateSolver::SolverContext::triangleBrightnessMagnitudeError(const QVector<CameraPipelineStarDetection>& starDetections, const std::array<int, 3>& detectionIndices, const std::array<VisibleCatalogStar, 3>& triangleStars, const std::array<int, 3>& permutation)
 {
     std::array<double, 3> detectionBrightness {{0.0, 0.0, 0.0}};
     std::array<double, 3> catalogMagnitude {{0.0, 0.0, 0.0}};
@@ -2596,7 +2596,7 @@ auto CameraPlateSolver::SolverContext::triangleBrightnessMagnitudeError(const QV
     return weightSum > 0.0 ? error / weightSum : 0.0;
 }
 
-auto CameraPlateSolver::SolverContext::isDetectionUsableForBrightPrior(const CameraPipelineStarDetection& detection) -> bool
+bool CameraPlateSolver::SolverContext::isDetectionUsableForBrightPrior(const CameraPipelineStarDetection& detection)
 {
     if (detection.m_hotPixelSuspect) {
         return false;
@@ -2610,7 +2610,7 @@ auto CameraPlateSolver::SolverContext::isDetectionUsableForBrightPrior(const Cam
     return true;
 }
 
-auto CameraPlateSolver::SolverContext::isImplausiblyCompactBrightCatalogDetection(const CameraPipelineStarDetection& detection, double catalogMagnitude, bool narrowGuidedSolve) -> bool
+bool CameraPlateSolver::SolverContext::isImplausiblyCompactBrightCatalogDetection(const CameraPipelineStarDetection& detection, double catalogMagnitude, bool narrowGuidedSolve)
 {
     if (!std::isfinite(catalogMagnitude) || (catalogMagnitude > 9.5)) {
         return false;
@@ -2637,7 +2637,7 @@ auto CameraPlateSolver::SolverContext::isImplausiblyCompactBrightCatalogDetectio
         && (snr < 170.0);
 }
 
-auto CameraPlateSolver::SolverContext::isNamedSparseGuidedCatalogStar(const CatalogStar& star) -> bool
+bool CameraPlateSolver::SolverContext::isNamedSparseGuidedCatalogStar(const CatalogStar& star)
 {
     const QString displayName = catalogDisplayName(star);
     return displayName.startsWith(QStringLiteral("HIP "), Qt::CaseInsensitive)
@@ -2645,7 +2645,7 @@ auto CameraPlateSolver::SolverContext::isNamedSparseGuidedCatalogStar(const Cata
         || displayName.startsWith(QStringLiteral("HD "), Qt::CaseInsensitive);
 }
 
-auto CameraPlateSolver::SolverContext::isStrongSparseGuidedDetection(const CameraPipelineStarDetection& detection) -> bool
+bool CameraPlateSolver::SolverContext::isStrongSparseGuidedDetection(const CameraPipelineStarDetection& detection)
 {
     if (detection.m_hotPixelSuspect) {
         return false;
@@ -2666,7 +2666,7 @@ auto CameraPlateSolver::SolverContext::isStrongSparseGuidedDetection(const Camer
         || ((fwhm >= 3.5) && (snr >= 80.0) && (detection.m_aspectRatio <= 2.5f));
 }
 
-auto CameraPlateSolver::SolverContext::detectionReliabilityMetric(const CameraPipelineStarDetection& detection) -> double
+double CameraPlateSolver::SolverContext::detectionReliabilityMetric(const CameraPipelineStarDetection& detection)
 {
     const double quality = std::isfinite(static_cast<double>(detection.m_qualityScore))
         ? std::max(0.0, static_cast<double>(detection.m_qualityScore))
@@ -2696,7 +2696,7 @@ auto CameraPlateSolver::SolverContext::detectionReliabilityMetric(const CameraPi
     return reliability;
 }
 
-auto CameraPlateSolver::SolverContext::faintCatalogAssignmentPenalty(double magnitude) -> double
+double CameraPlateSolver::SolverContext::faintCatalogAssignmentPenalty(double magnitude)
 {
     if (!std::isfinite(magnitude)) {
         return 0.0;
@@ -2708,7 +2708,7 @@ auto CameraPlateSolver::SolverContext::faintCatalogAssignmentPenalty(double magn
     return std::max(0.0, magnitude - 11.0) * 0.08;
 }
 
-auto CameraPlateSolver::SolverContext::brightDetectionFaintCatalogAssignmentPenalty(double detectionBrightnessRank, double catalogMagnitude, bool narrowGuidedSolve) -> double
+double CameraPlateSolver::SolverContext::brightDetectionFaintCatalogAssignmentPenalty(double detectionBrightnessRank, double catalogMagnitude, bool narrowGuidedSolve)
 {
     if (!narrowGuidedSolve || !std::isfinite(catalogMagnitude)) {
         return 0.0;
@@ -2729,7 +2729,7 @@ auto CameraPlateSolver::SolverContext::brightDetectionFaintCatalogAssignmentPena
     return brightDetectionWeight * faintExcess * faintExcess * 0.12;
 }
 
-auto CameraPlateSolver::SolverContext::catalogMagnitudeSupportWeight(double magnitude) -> double
+double CameraPlateSolver::SolverContext::catalogMagnitudeSupportWeight(double magnitude)
 {
     if (!std::isfinite(magnitude)) {
         return 1.0;
@@ -2743,7 +2743,7 @@ auto CameraPlateSolver::SolverContext::catalogMagnitudeSupportWeight(double magn
     return std::pow(1.22, 10.0 - boundedMagnitude);
 }
 
-auto CameraPlateSolver::SolverContext::matchDistanceSupportWeight(double distancePixels, double matchRadiusPixels) -> double
+double CameraPlateSolver::SolverContext::matchDistanceSupportWeight(double distancePixels, double matchRadiusPixels)
 {
     if (!std::isfinite(distancePixels)) {
         return 0.0;
@@ -2754,7 +2754,7 @@ auto CameraPlateSolver::SolverContext::matchDistanceSupportWeight(double distanc
     return 1.0 / (1.0 + normalizedDistance * normalizedDistance);
 }
 
-auto CameraPlateSolver::SolverContext::narrowGuidedMagnitudePriorityScore(const FinalMatchPassEvaluation& evaluation) -> double
+double CameraPlateSolver::SolverContext::narrowGuidedMagnitudePriorityScore(const FinalMatchPassEvaluation& evaluation)
 {
     return evaluation.magnitudeWeightedSupport
         + 2.0 * evaluation.priorityMagnitudeWeightedSupport
@@ -2763,7 +2763,7 @@ auto CameraPlateSolver::SolverContext::narrowGuidedMagnitudePriorityScore(const 
         + 0.35 * evaluation.matchedSeedRadialMagnitudeSupport;
 }
 
-auto CameraPlateSolver::SolverContext::prioritySeedRadialAffinity(const FinalMatchPassEvaluation& evaluation, double matchRadiusPixels) -> double
+double CameraPlateSolver::SolverContext::prioritySeedRadialAffinity(const FinalMatchPassEvaluation& evaluation, double matchRadiusPixels)
 {
     if ((evaluation.prioritySeedRadialChecks < 2)
         || !std::isfinite(evaluation.prioritySeedRadialErrorPixels))
@@ -2776,7 +2776,7 @@ auto CameraPlateSolver::SolverContext::prioritySeedRadialAffinity(const FinalMat
     return 1.0 / (1.0 + 2.5 * normalizedError * normalizedError);
 }
 
-auto CameraPlateSolver::SolverContext::prioritySeedProjectedAffinity(const FinalMatchPassEvaluation& evaluation, double matchRadiusPixels) -> double
+double CameraPlateSolver::SolverContext::prioritySeedProjectedAffinity(const FinalMatchPassEvaluation& evaluation, double matchRadiusPixels)
 {
     if ((evaluation.prioritySeedProjectedChecks < 1)
         || !std::isfinite(evaluation.prioritySeedProjectedErrorPixels))
@@ -2789,7 +2789,7 @@ auto CameraPlateSolver::SolverContext::prioritySeedProjectedAffinity(const Final
     return 1.0 / (1.0 + 1.5 * normalizedError * normalizedError);
 }
 
-auto CameraPlateSolver::SolverContext::seedRadialMagnitudeCoverageAffinity(const FinalMatchPassEvaluation& evaluation) -> double
+double CameraPlateSolver::SolverContext::seedRadialMagnitudeCoverageAffinity(const FinalMatchPassEvaluation& evaluation)
 {
     if (evaluation.seedRadialMagnitudeSupport <= 0.0) {
         return 1.0;
@@ -2799,7 +2799,7 @@ auto CameraPlateSolver::SolverContext::seedRadialMagnitudeCoverageAffinity(const
     return 0.05 + 0.95 * coverage * coverage;
 }
 
-auto CameraPlateSolver::SolverContext::seedProjectedMagnitudeCoverageAffinity(const FinalMatchPassEvaluation& evaluation) -> double
+double CameraPlateSolver::SolverContext::seedProjectedMagnitudeCoverageAffinity(const FinalMatchPassEvaluation& evaluation)
 {
     if (evaluation.seedProjectedMagnitudeSupport <= 0.0) {
         return 1.0;
@@ -2809,7 +2809,7 @@ auto CameraPlateSolver::SolverContext::seedProjectedMagnitudeCoverageAffinity(co
     return 0.08 + 0.92 * coverage * coverage;
 }
 
-auto CameraPlateSolver::SolverContext::hasPoorNoRollSeedRadialSupport(const CameraSettings& settings, const FinalMatchPassEvaluation& evaluation, bool useSeedProjectedBrightGate) -> bool
+bool CameraPlateSolver::SolverContext::hasPoorNoRollSeedRadialSupport(const CameraSettings& settings, const FinalMatchPassEvaluation& evaluation, bool useSeedProjectedBrightGate)
 {
     if (useSeedProjectedBrightGate
         || (!isNarrowField(settings))
@@ -2827,7 +2827,7 @@ auto CameraPlateSolver::SolverContext::hasPoorNoRollSeedRadialSupport(const Came
         && (evaluation.prioritySeedRadialErrorPixels > radialErrorThreshold);
 }
 
-auto CameraPlateSolver::SolverContext::hasComparableSeedRadialChecks(const FinalMatchPassEvaluation& lhs, const FinalMatchPassEvaluation& rhs) -> bool
+bool CameraPlateSolver::SolverContext::hasComparableSeedRadialChecks(const FinalMatchPassEvaluation& lhs, const FinalMatchPassEvaluation& rhs)
 {
     return (lhs.prioritySeedRadialChecks >= 4)
         && (rhs.prioritySeedRadialChecks >= 4)
@@ -2835,7 +2835,7 @@ auto CameraPlateSolver::SolverContext::hasComparableSeedRadialChecks(const Final
         && std::isfinite(rhs.prioritySeedRadialErrorPixels);
 }
 
-auto CameraPlateSolver::SolverContext::shouldPreferSeedRadialConsistency(const FinalMatchPassEvaluation& candidate, const FinalMatchPassEvaluation& best, int matchTolerance) -> bool
+bool CameraPlateSolver::SolverContext::shouldPreferSeedRadialConsistency(const FinalMatchPassEvaluation& candidate, const FinalMatchPassEvaluation& best, int matchTolerance)
 {
     if (!hasComparableSeedRadialChecks(candidate, best)) {
         return false;
@@ -2872,7 +2872,7 @@ auto CameraPlateSolver::SolverContext::shouldPreferSeedRadialConsistency(const F
     return (bestError - candidateError) >= meaningfulDelta;
 }
 
-auto CameraPlateSolver::SolverContext::narrowGuidedAnchorShapeScore(const CameraPipelineStarDetection& detection) -> double
+double CameraPlateSolver::SolverContext::narrowGuidedAnchorShapeScore(const CameraPipelineStarDetection& detection)
 {
     if (detection.m_hotPixelSuspect) {
         return -100.0;
@@ -2899,7 +2899,7 @@ auto CameraPlateSolver::SolverContext::narrowGuidedAnchorShapeScore(const Camera
     return score;
 }
 
-auto CameraPlateSolver::SolverContext::brightGuidedDetectionPriorityScore(const CameraPipelineStarDetection& detection, double brightness, double reliability, double shapeScore) -> double
+double CameraPlateSolver::SolverContext::brightGuidedDetectionPriorityScore(const CameraPipelineStarDetection& detection, double brightness, double reliability, double shapeScore)
 {
     const double fwhm = std::isfinite(static_cast<double>(detection.m_fwhm))
         ? std::max(0.0, static_cast<double>(detection.m_fwhm))
@@ -2917,7 +2917,7 @@ auto CameraPlateSolver::SolverContext::brightGuidedDetectionPriorityScore(const 
         + broadSaturatedBonus;
 }
 
-auto CameraPlateSolver::SolverContext::buildProjectedCatalogInto(const PlateSolveCatalogContext& catalogContext, const SkyProjector& projector, double searchMarginPixels, const QVector<int>* allowedCatalogIndices, QVector<ProjectedCatalogStar>& projectedStars) -> void
+void CameraPlateSolver::SolverContext::buildProjectedCatalogInto(const PlateSolveCatalogContext& catalogContext, const SkyProjector& projector, double searchMarginPixels, const QVector<int>* allowedCatalogIndices, QVector<ProjectedCatalogStar>& projectedStars)
 {
     projectedStars.clear();
     const QRectF expandedBounds(
@@ -3002,14 +3002,14 @@ auto CameraPlateSolver::SolverContext::buildProjectedCatalogInto(const PlateSolv
     }
 }
 
-auto CameraPlateSolver::SolverContext::buildProjectedCatalog(const PlateSolveCatalogContext& catalogContext, const SkyProjector& projector, double searchMarginPixels, const QVector<int>* allowedCatalogIndices) -> QVector<ProjectedCatalogStar>
+QVector<CameraPlateSolver::SolverContext::ProjectedCatalogStar> CameraPlateSolver::SolverContext::buildProjectedCatalog(const PlateSolveCatalogContext& catalogContext, const SkyProjector& projector, double searchMarginPixels, const QVector<int>* allowedCatalogIndices)
 {
     QVector<ProjectedCatalogStar> projectedStars;
     buildProjectedCatalogInto(catalogContext, projector, searchMarginPixels, allowedCatalogIndices, projectedStars);
     return projectedStars;
 }
 
-auto CameraPlateSolver::SolverContext::buildRaDecToAzAltParams(double latitude, double longitude, const QDateTime& captureDateTimeUtc) -> RaDecToAzAltParams
+CameraPlateSolver::SolverContext::RaDecToAzAltParams CameraPlateSolver::SolverContext::buildRaDecToAzAltParams(double latitude, double longitude, const QDateTime& captureDateTimeUtc)
 {
     RaDecToAzAltParams p;
     const double lat_rad = degToRad(latitude);
@@ -3037,7 +3037,7 @@ auto CameraPlateSolver::SolverContext::buildRaDecToAzAltParams(double latitude, 
     return p;
 }
 
-auto CameraPlateSolver::SolverContext::raDecToAzAltFast(const RaDecToAzAltParams& p, double rightAscensionDegrees, double declinationDegrees, double& az, double& alt) -> bool
+bool CameraPlateSolver::SolverContext::raDecToAzAltFast(const RaDecToAzAltParams& p, double rightAscensionDegrees, double declinationDegrees, double& az, double& alt)
 {
     // Apply precession (J2000 → current epoch) via precomputed rotation matrix.
     // Convert RA/Dec to unit vector, rotate, convert back.
@@ -3082,7 +3082,7 @@ auto CameraPlateSolver::SolverContext::raDecToAzAltFast(const RaDecToAzAltParams
     return std::isfinite(az);
 }
 
-auto CameraPlateSolver::SolverContext::buildVisibleCatalog(const CameraSettings& settings, const QVector<CatalogStar>& catalogStars, const QDateTime& captureDateTimeUtc, double maxMagnitude) -> QVector<VisibleCatalogStar>
+QVector<CameraPlateSolver::SolverContext::VisibleCatalogStar> CameraPlateSolver::SolverContext::buildVisibleCatalog(const CameraSettings& settings, const QVector<CatalogStar>& catalogStars, const QDateTime& captureDateTimeUtc, double maxMagnitude)
 {
     // Precompute all time/location-dependent constants once for all stars.
     const RaDecToAzAltParams azAltParams = buildRaDecToAzAltParams(
@@ -3155,7 +3155,7 @@ auto CameraPlateSolver::SolverContext::buildVisibleCatalog(const CameraSettings&
     return visibleStars;
 }
 
-auto CameraPlateSolver::SolverContext::buildVisibleStarIndex(const QVector<VisibleCatalogStar>& visibleStars, QHash<int, int>& visibleStarIndexByCatalogIndex) -> void
+void CameraPlateSolver::SolverContext::buildVisibleStarIndex(const QVector<VisibleCatalogStar>& visibleStars, QHash<int, int>& visibleStarIndexByCatalogIndex)
 {
     visibleStarIndexByCatalogIndex.clear();
     visibleStarIndexByCatalogIndex.reserve(visibleStars.size());
@@ -3164,25 +3164,25 @@ auto CameraPlateSolver::SolverContext::buildVisibleStarIndex(const QVector<Visib
     }
 }
 
-auto CameraPlateSolver::SolverContext::visibleCatalogCacheMutex() -> QMutex&
+QMutex& CameraPlateSolver::SolverContext::visibleCatalogCacheMutex()
 {
     static QMutex s_cacheMutex;
     return s_cacheMutex;
 }
 
-auto CameraPlateSolver::SolverContext::visibleCatalogCache() -> QHash<QString, VisibleCatalogCacheEntry>&
+QHash<QString, CameraPlateSolver::SolverContext::VisibleCatalogCacheEntry>& CameraPlateSolver::SolverContext::visibleCatalogCache()
 {
     static QHash<QString, VisibleCatalogCacheEntry> s_cache;
     return s_cache;
 }
 
-auto CameraPlateSolver::SolverContext::visibleCatalogCacheOrder() -> QStringList&
+QStringList& CameraPlateSolver::SolverContext::visibleCatalogCacheOrder()
 {
     static QStringList s_cacheOrder;
     return s_cacheOrder;
 }
 
-auto CameraPlateSolver::SolverContext::visibleCatalogFingerprint(const QVector<CatalogStar>& catalogStars) -> QString
+QString CameraPlateSolver::SolverContext::visibleCatalogFingerprint(const QVector<CatalogStar>& catalogStars)
 {
     if (catalogStars.isEmpty()) {
         return QStringLiteral("0");
@@ -3204,7 +3204,7 @@ auto CameraPlateSolver::SolverContext::visibleCatalogFingerprint(const QVector<C
     return fields.join(QLatin1Char(':'));
 }
 
-auto CameraPlateSolver::SolverContext::visibleCatalogCacheMagnitudeLimit(const QVector<CatalogStar>& catalogStars, double maxMagnitude) -> double
+double CameraPlateSolver::SolverContext::visibleCatalogCacheMagnitudeLimit(const QVector<CatalogStar>& catalogStars, double maxMagnitude)
 {
     double loadedMaxMagnitude = -std::numeric_limits<double>::infinity();
     for (const CatalogStar& star : catalogStars)
@@ -3219,7 +3219,7 @@ auto CameraPlateSolver::SolverContext::visibleCatalogCacheMagnitudeLimit(const Q
         : maxMagnitude;
 }
 
-auto CameraPlateSolver::SolverContext::visibleCatalogCacheKey(const CameraSettings& settings, const QVector<CatalogStar>& catalogStars, const QDateTime& captureDateTimeUtc, double maxMagnitude) -> QString
+QString CameraPlateSolver::SolverContext::visibleCatalogCacheKey(const CameraSettings& settings, const QVector<CatalogStar>& catalogStars, const QDateTime& captureDateTimeUtc, double maxMagnitude)
 {
     const QString path = currentCatalogPath(settings);
     const bool isResource = path.startsWith(QLatin1String(":/"));
@@ -3238,7 +3238,7 @@ auto CameraPlateSolver::SolverContext::visibleCatalogCacheKey(const CameraSettin
         .arg(static_cast<int>(settings.m_plateSolveCatalogSource));
 }
 
-auto CameraPlateSolver::SolverContext::loadVisibleCatalogCache(const CameraSettings& settings, const QVector<CatalogStar>& catalogStars, const QDateTime& captureDateTimeUtc, double maxMagnitude, QVector<VisibleCatalogStar>& visibleStars, QHash<int, int>& visibleStarIndexByCatalogIndex) -> bool
+bool CameraPlateSolver::SolverContext::loadVisibleCatalogCache(const CameraSettings& settings, const QVector<CatalogStar>& catalogStars, const QDateTime& captureDateTimeUtc, double maxMagnitude, QVector<VisibleCatalogStar>& visibleStars, QHash<int, int>& visibleStarIndexByCatalogIndex)
 {
     const QString key = visibleCatalogCacheKey(settings, catalogStars, captureDateTimeUtc, maxMagnitude);
     QMutexLocker locker(&visibleCatalogCacheMutex());
@@ -3253,7 +3253,7 @@ auto CameraPlateSolver::SolverContext::loadVisibleCatalogCache(const CameraSetti
     return true;
 }
 
-auto CameraPlateSolver::SolverContext::storeVisibleCatalogCache(const CameraSettings& settings, const QVector<CatalogStar>& catalogStars, const QDateTime& captureDateTimeUtc, double maxMagnitude, const QVector<VisibleCatalogStar>& visibleStars, const QHash<int, int>& visibleStarIndexByCatalogIndex) -> void
+void CameraPlateSolver::SolverContext::storeVisibleCatalogCache(const CameraSettings& settings, const QVector<CatalogStar>& catalogStars, const QDateTime& captureDateTimeUtc, double maxMagnitude, const QVector<VisibleCatalogStar>& visibleStars, const QHash<int, int>& visibleStarIndexByCatalogIndex)
 {
     static constexpr int kMaxVisibleCatalogCacheEntries = 8;
 
@@ -3271,7 +3271,7 @@ auto CameraPlateSolver::SolverContext::storeVisibleCatalogCache(const CameraSett
     cache.insert(key, {visibleStars, visibleStarIndexByCatalogIndex});
 }
 
-auto CameraPlateSolver::SolverContext::populateVisibleCatalogContext(PlateSolveCatalogContext& context, const CameraSettings& settings, const QDateTime& captureDateTimeUtc, double maxMagnitude, bool allowCache) -> void
+void CameraPlateSolver::SolverContext::populateVisibleCatalogContext(PlateSolveCatalogContext& context, const CameraSettings& settings, const QDateTime& captureDateTimeUtc, double maxMagnitude, bool allowCache)
 {
     if (allowCache
         && loadVisibleCatalogCache(
@@ -3298,7 +3298,7 @@ auto CameraPlateSolver::SolverContext::populateVisibleCatalogContext(PlateSolveC
     }
 }
 
-auto CameraPlateSolver::SolverContext::selectLocalVisibleStars(const QVector<VisibleCatalogStar>& visibleStars, double centerAzimuthDegrees, double centerElevationDegrees, double radiusDegrees, int maxStars) -> QVector<VisibleCatalogStar>
+QVector<CameraPlateSolver::SolverContext::VisibleCatalogStar> CameraPlateSolver::SolverContext::selectLocalVisibleStars(const QVector<VisibleCatalogStar>& visibleStars, double centerAzimuthDegrees, double centerElevationDegrees, double radiusDegrees, int maxStars)
 {
     QVector<VisibleCatalogStar> localStars;
     if ((maxStars <= 0) || visibleStars.isEmpty()) {
@@ -3325,7 +3325,7 @@ auto CameraPlateSolver::SolverContext::selectLocalVisibleStars(const QVector<Vis
     return localStars;
 }
 
-auto CameraPlateSolver::SolverContext::selectVisibleStarsNearElevation(const QVector<VisibleCatalogStar>& visibleStars, double centerElevationDegrees, double radiusDegrees, int maxStars) -> QVector<VisibleCatalogStar>
+QVector<CameraPlateSolver::SolverContext::VisibleCatalogStar> CameraPlateSolver::SolverContext::selectVisibleStarsNearElevation(const QVector<VisibleCatalogStar>& visibleStars, double centerElevationDegrees, double radiusDegrees, int maxStars)
 {
     QVector<VisibleCatalogStar> localStars;
     if ((maxStars <= 0) || visibleStars.isEmpty()) {
@@ -3350,7 +3350,7 @@ auto CameraPlateSolver::SolverContext::selectVisibleStarsNearElevation(const QVe
     return localStars;
 }
 
-auto CameraPlateSolver::SolverContext::buildTriangleSignature(const std::array<QPointF, 3>& points) -> TriangleSignature
+CameraPlateSolver::SolverContext::TriangleSignature CameraPlateSolver::SolverContext::buildTriangleSignature(const std::array<QPointF, 3>& points)
 {
     struct EdgeInfo {
         double length = 0.0;
@@ -3390,7 +3390,7 @@ auto CameraPlateSolver::SolverContext::buildTriangleSignature(const std::array<Q
     return signature;
 }
 
-auto CameraPlateSolver::SolverContext::orderQuadPoints(const std::array<QPointF, 4>& points) -> std::array<QPointF, 4>
+std::array<QPointF, 4> CameraPlateSolver::SolverContext::orderQuadPoints(const std::array<QPointF, 4>& points)
 {
     QPointF centroid;
     for (const QPointF& point : points) {
@@ -3411,7 +3411,7 @@ auto CameraPlateSolver::SolverContext::orderQuadPoints(const std::array<QPointF,
     return orderedPoints;
 }
 
-auto CameraPlateSolver::SolverContext::buildQuadSignature(const std::array<QPointF, 4>& unorderedPoints) -> QuadSignature
+CameraPlateSolver::SolverContext::QuadSignature CameraPlateSolver::SolverContext::buildQuadSignature(const std::array<QPointF, 4>& unorderedPoints)
 {
     QuadSignature signature;
     const std::array<QPointF, 4> points = orderQuadPoints(unorderedPoints);
@@ -3448,7 +3448,7 @@ auto CameraPlateSolver::SolverContext::buildQuadSignature(const std::array<QPoin
     return signature;
 }
 
-auto CameraPlateSolver::SolverContext::isDistinctiveTriangleSignature(const TriangleSignature& signature) -> bool
+bool CameraPlateSolver::SolverContext::isDistinctiveTriangleSignature(const TriangleSignature& signature)
 {
     if (signature.longestDistance <= 0.0) {
         return false;
@@ -3462,7 +3462,7 @@ auto CameraPlateSolver::SolverContext::isDistinctiveTriangleSignature(const Tria
     return std::fabs(signature.ratioMidToLong - signature.ratioShortToLong) > 0.015;
 }
 
-auto CameraPlateSolver::SolverContext::isDistinctiveQuadSignature(const QuadSignature& signature) -> bool
+bool CameraPlateSolver::SolverContext::isDistinctiveQuadSignature(const QuadSignature& signature)
 {
     if (signature.longestDistance <= 0.0) {
         return false;
@@ -3473,7 +3473,7 @@ auto CameraPlateSolver::SolverContext::isDistinctiveQuadSignature(const QuadSign
     return std::fabs(signature.edgeRatios[1] - signature.edgeRatios[0]) > 0.010;
 }
 
-auto CameraPlateSolver::SolverContext::catalogSignatureBrightnessScore(const QVector<VisibleCatalogStar>& visibleStars, const int *indices, int count) -> double
+double CameraPlateSolver::SolverContext::catalogSignatureBrightnessScore(const QVector<VisibleCatalogStar>& visibleStars, const int *indices, int count)
 {
     double score = 0.0;
     for (int i = 0; i < count; ++i)
@@ -3490,18 +3490,18 @@ auto CameraPlateSolver::SolverContext::catalogSignatureBrightnessScore(const QVe
     return score / std::max(1, count);
 }
 
-auto CameraPlateSolver::SolverContext::signatureBucketKey(int firstBin, int secondBin) -> qint64
+qint64 CameraPlateSolver::SolverContext::signatureBucketKey(int firstBin, int secondBin)
 {
     return (static_cast<qint64>(firstBin) << 32)
         ^ static_cast<quint32>(secondBin);
 }
 
-auto CameraPlateSolver::SolverContext::signatureRatioBin(double value, double binWidth) -> int
+int CameraPlateSolver::SolverContext::signatureRatioBin(double value, double binWidth)
 {
     return static_cast<int>(std::floor(value / std::max(1e-6, binWidth)));
 }
 
-auto CameraPlateSolver::SolverContext::buildTriangleSignatureBuckets(const QVector<TriangleSignature>& signatures, double binWidth) -> QHash<qint64, QVector<int>>
+QHash<qint64, QVector<int>> CameraPlateSolver::SolverContext::buildTriangleSignatureBuckets(const QVector<TriangleSignature>& signatures, double binWidth)
 {
     QHash<qint64, QVector<int>> buckets;
     for (int i = 0; i < signatures.size(); ++i)
@@ -3514,7 +3514,7 @@ auto CameraPlateSolver::SolverContext::buildTriangleSignatureBuckets(const QVect
     return buckets;
 }
 
-auto CameraPlateSolver::SolverContext::buildQuadSignatureBuckets(const QVector<QuadSignature>& signatures, double binWidth) -> QHash<qint64, QVector<int>>
+QHash<qint64, QVector<int>> CameraPlateSolver::SolverContext::buildQuadSignatureBuckets(const QVector<QuadSignature>& signatures, double binWidth)
 {
     QHash<qint64, QVector<int>> buckets;
     for (int i = 0; i < signatures.size(); ++i)
@@ -3527,7 +3527,7 @@ auto CameraPlateSolver::SolverContext::buildQuadSignatureBuckets(const QVector<Q
     return buckets;
 }
 
-auto CameraPlateSolver::SolverContext::medianCandidateDistancePixels(const QVector<Match>& matches) -> double
+double CameraPlateSolver::SolverContext::medianCandidateDistancePixels(const QVector<Match>& matches)
 {
     if (matches.isEmpty()) {
         return 0.0;
@@ -3547,7 +3547,7 @@ auto CameraPlateSolver::SolverContext::medianCandidateDistancePixels(const QVect
     return distances[middle];
 }
 
-auto CameraPlateSolver::SolverContext::seedWrappedAngularDistanceDegrees(double lhs, double rhs) -> double
+double CameraPlateSolver::SolverContext::seedWrappedAngularDistanceDegrees(double lhs, double rhs)
 {
     double delta = std::fabs(lhs - rhs);
     while (delta > 360.0) {
@@ -3556,7 +3556,7 @@ auto CameraPlateSolver::SolverContext::seedWrappedAngularDistanceDegrees(double 
     return delta > 180.0 ? 360.0 - delta : delta;
 }
 
-auto CameraPlateSolver::SolverContext::seedCandidateConsensusScore(const Evaluation& candidate) -> double
+double CameraPlateSolver::SolverContext::seedCandidateConsensusScore(const Evaluation& candidate)
 {
     if (!candidate.valid) {
         return -std::numeric_limits<double>::infinity();
@@ -3579,7 +3579,7 @@ auto CameraPlateSolver::SolverContext::seedCandidateConsensusScore(const Evaluat
         - magnitudePenalty;
 }
 
-auto CameraPlateSolver::SolverContext::catalogTriangleKey(int a, int b, int c) -> qint64
+qint64 CameraPlateSolver::SolverContext::catalogTriangleKey(int a, int b, int c)
 {
     std::array<int, 3> sorted {{a, b, c}};
     std::sort(sorted.begin(), sorted.end());
@@ -3588,7 +3588,7 @@ auto CameraPlateSolver::SolverContext::catalogTriangleKey(int a, int b, int c) -
         | static_cast<qint64>(sorted[2]);
 }
 
-auto CameraPlateSolver::SolverContext::buildDetectionRayVectors(const CameraSettings& settings, const QSize& imageSize, double referenceFovDegrees, double centerOffsetXPixels, double centerOffsetYPixels, double distortionK1, const QVector<CameraPipelineStarDetection>& starDetections, const QVector<int>& detectionIndices, QVector<SkyVector>& detectionRayVectors, QVector<quint8>& detectionRayVectorValid) -> SkyProjector
+CameraPlateSolver::SolverContext::SkyProjector CameraPlateSolver::SolverContext::buildDetectionRayVectors(const CameraSettings& settings, const QSize& imageSize, double referenceFovDegrees, double centerOffsetXPixels, double centerOffsetYPixels, double distortionK1, const QVector<CameraPipelineStarDetection>& starDetections, const QVector<int>& detectionIndices, QVector<SkyVector>& detectionRayVectors, QVector<quint8>& detectionRayVectorValid)
 {
     const SkyProjector referenceProjector = createProjector(
         settings,
@@ -3620,7 +3620,7 @@ auto CameraPlateSolver::SolverContext::buildDetectionRayVectors(const CameraSett
     return referenceProjector;
 }
 
-auto CameraPlateSolver::SolverContext::buildCatalogQuadCodeIndex(const QVector<VisibleCatalogStar>& visibleStars, bool includeScaleDimension, int brightPoolLimit) -> CatalogQuadCodeIndex
+CameraPlateSolver::SolverContext::CatalogQuadCodeIndex CameraPlateSolver::SolverContext::buildCatalogQuadCodeIndex(const QVector<VisibleCatalogStar>& visibleStars, bool includeScaleDimension, int brightPoolLimit)
 {
     CatalogQuadCodeIndex index;
     index.dimensions = includeScaleDimension ? 5 : 4;
@@ -3788,13 +3788,13 @@ auto CameraPlateSolver::SolverContext::buildCatalogQuadCodeIndex(const QVector<V
     return index;
 }
 
-auto CameraPlateSolver::SolverContext::spatialCellKey(int x, int y) -> quint64
+quint64 CameraPlateSolver::SolverContext::spatialCellKey(int x, int y)
 {
     return (static_cast<quint64>(static_cast<quint32>(x)) << 32)
         | static_cast<quint32>(y);
 }
 
-auto CameraPlateSolver::SolverContext::angularDistanceDegrees(double lhs, double rhs) -> double
+double CameraPlateSolver::SolverContext::angularDistanceDegrees(double lhs, double rhs)
 {
     double delta = std::fabs(lhs - rhs);
     while (delta > 360.0) {
@@ -3806,7 +3806,7 @@ auto CameraPlateSolver::SolverContext::angularDistanceDegrees(double lhs, double
     return delta;
 }
 
-auto CameraPlateSolver::SolverContext::meanCatalogMagnitudeForMatches(const QVector<CatalogStar>& catalogStars, const QVector<Match>& matches) -> double
+double CameraPlateSolver::SolverContext::meanCatalogMagnitudeForMatches(const QVector<CatalogStar>& catalogStars, const QVector<Match>& matches)
 {
     double sumMagnitude = 0.0;
     int count = 0;
@@ -3829,7 +3829,7 @@ auto CameraPlateSolver::SolverContext::meanCatalogMagnitudeForMatches(const QVec
     return count > 0 ? sumMagnitude / count : std::numeric_limits<double>::infinity();
 }
 
-auto CameraPlateSolver::SolverContext::appendSupplementalMatches(const QVector<CameraPipelineStarDetection>& starDetections, const QVector<ProjectedCatalogStar>& projectedStars, double matchRadiusPixels, const QVector<int>* supplementalDetectionIndices, bool narrowGuidedSolve, bool allowTightArtifactCoincidence, QVector<Match>& matches) -> void
+void CameraPlateSolver::SolverContext::appendSupplementalMatches(const QVector<CameraPipelineStarDetection>& starDetections, const QVector<ProjectedCatalogStar>& projectedStars, double matchRadiusPixels, const QVector<int>* supplementalDetectionIndices, bool narrowGuidedSolve, bool allowTightArtifactCoincidence, QVector<Match>& matches)
 {
     QVector<bool> detectionMatched(starDetections.size(), false);
     QHash<int, bool> catalogMatched;
@@ -3992,7 +3992,7 @@ auto CameraPlateSolver::SolverContext::appendSupplementalMatches(const QVector<C
     }
 }
 
-auto CameraPlateSolver::SolverContext::appendWideBrightSupplementalMatches(const CameraSettings& settings, const QVector<CameraPipelineStarDetection>& starDetections, const QVector<ProjectedCatalogStar>& projectedStars, const QSize& imageSize, double matchRadiusPixels, QVector<Match>& matches) -> void
+void CameraPlateSolver::SolverContext::appendWideBrightSupplementalMatches(const CameraSettings& settings, const QVector<CameraPipelineStarDetection>& starDetections, const QVector<ProjectedCatalogStar>& projectedStars, const QSize& imageSize, double matchRadiusPixels, QVector<Match>& matches)
 {
     if (!isWidePlateSolveContext(settings)
         || matches.isEmpty())
@@ -4101,7 +4101,7 @@ auto CameraPlateSolver::SolverContext::appendWideBrightSupplementalMatches(const
     }
 }
 
-auto CameraPlateSolver::SolverContext::hasDenseFinalEvidenceOverridingSeedRadial(const CameraSettings& settings, const FinalMatchPassEvaluation& finalPass) -> bool
+bool CameraPlateSolver::SolverContext::hasDenseFinalEvidenceOverridingSeedRadial(const CameraSettings& settings, const FinalMatchPassEvaluation& finalPass)
 {
     return !usesSeedProjectedBrightGate(settings)
         && (finalPass.finalMatches.size() >= static_cast<qsizetype>(std::max(settings.m_plateSolveMinMatches + 50, 80)))
@@ -4115,7 +4115,7 @@ auto CameraPlateSolver::SolverContext::hasDenseFinalEvidenceOverridingSeedRadial
                 16.0));
 }
 
-auto CameraPlateSolver::SolverContext::isBetterByGeometricTieBreak(const Evaluation& candidate, const Evaluation& best) -> bool
+bool CameraPlateSolver::SolverContext::isBetterByGeometricTieBreak(const Evaluation& candidate, const Evaluation& best)
 {
     if (candidate.matchCount != best.matchCount) {
         return candidate.matchCount > best.matchCount;
@@ -4134,7 +4134,7 @@ auto CameraPlateSolver::SolverContext::isBetterByGeometricTieBreak(const Evaluat
         : candidate.fovDegrees < best.fovDegrees;
 }
 
-auto CameraPlateSolver::SolverContext::isBetterEvaluation(const Evaluation& candidate, const Evaluation& best) -> bool
+bool CameraPlateSolver::SolverContext::isBetterEvaluation(const Evaluation& candidate, const Evaluation& best)
 {
     if (!candidate.valid) {
         return false;
@@ -4145,7 +4145,7 @@ auto CameraPlateSolver::SolverContext::isBetterEvaluation(const Evaluation& cand
     return isBetterByGeometricTieBreak(candidate, best);
 }
 
-auto CameraPlateSolver::SolverContext::sameEvaluationBasin(const Evaluation& lhs, const Evaluation& rhs) -> bool
+bool CameraPlateSolver::SolverContext::sameEvaluationBasin(const Evaluation& lhs, const Evaluation& rhs)
 {
     if (lhs.anchored != rhs.anchored) {
         return false;
@@ -4168,7 +4168,7 @@ auto CameraPlateSolver::SolverContext::sameEvaluationBasin(const Evaluation& lhs
         && std::fabs(lhs.fovDegrees - rhs.fovDegrees) <= 10.0;
 }
 
-auto CameraPlateSolver::SolverContext::sameEvaluationIdentity(const Evaluation& lhs, const Evaluation& rhs) -> bool
+bool CameraPlateSolver::SolverContext::sameEvaluationIdentity(const Evaluation& lhs, const Evaluation& rhs)
 {
     return lhs.valid == rhs.valid
         && lhs.anchored == rhs.anchored
@@ -4191,7 +4191,7 @@ auto CameraPlateSolver::SolverContext::sameEvaluationIdentity(const Evaluation& 
         && qFuzzyCompare(lhs.distortionK1 + 1.0, rhs.distortionK1 + 1.0);
 }
 
-auto CameraPlateSolver::SolverContext::plateSolveLmParameterValue(const PlateSolveLmPose& pose, PlateSolveLmParameter parameter) -> double
+double CameraPlateSolver::SolverContext::plateSolveLmParameterValue(const PlateSolveLmPose& pose, PlateSolveLmParameter parameter)
 {
     switch (parameter)
     {
@@ -4214,7 +4214,7 @@ auto CameraPlateSolver::SolverContext::plateSolveLmParameterValue(const PlateSol
     }
 }
 
-auto CameraPlateSolver::SolverContext::plateSolveLmFiniteDifferenceStep(const PlateSolveLmPose& pose, PlateSolveLmParameter parameter) -> double
+double CameraPlateSolver::SolverContext::plateSolveLmFiniteDifferenceStep(const PlateSolveLmPose& pose, PlateSolveLmParameter parameter)
 {
     switch (parameter)
     {
@@ -4234,7 +4234,7 @@ auto CameraPlateSolver::SolverContext::plateSolveLmFiniteDifferenceStep(const Pl
     }
 }
 
-auto CameraPlateSolver::SolverContext::plateSolveLmMaximumStep(const QSize& imageSize, const PlateSolveLmPose& pose, PlateSolveLmParameter parameter) -> double
+double CameraPlateSolver::SolverContext::plateSolveLmMaximumStep(const QSize& imageSize, const PlateSolveLmPose& pose, PlateSolveLmParameter parameter)
 {
     switch (parameter)
     {
@@ -4256,7 +4256,7 @@ auto CameraPlateSolver::SolverContext::plateSolveLmMaximumStep(const QSize& imag
     }
 }
 
-auto CameraPlateSolver::SolverContext::detectionIndicesForMatches(const QVector<Match>& matches) -> QVector<int>
+QVector<int> CameraPlateSolver::SolverContext::detectionIndicesForMatches(const QVector<Match>& matches)
 {
     QVector<int> detectionIndices;
     QSet<int> seen;
@@ -4272,7 +4272,7 @@ auto CameraPlateSolver::SolverContext::detectionIndicesForMatches(const QVector<
     return detectionIndices;
 }
 
-auto CameraPlateSolver::SolverContext::clearSolvedStars(QVector<CameraPipelineStarDetection>& starDetections) -> void
+void CameraPlateSolver::SolverContext::clearSolvedStars(QVector<CameraPipelineStarDetection>& starDetections)
 {
     for (CameraPipelineStarDetection& detection : starDetections)
     {

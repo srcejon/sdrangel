@@ -20,17 +20,17 @@
 
 // Siril SPCC/Gaia network catalog path + disk-cache helpers (WS5).
 
-auto CameraPlateSolver::SolverContext::sirilAstroCatalogPath() -> QString
+QString CameraPlateSolver::SolverContext::sirilAstroCatalogPath()
 {
     return QDir(downloadedCatalogDir()).filePath(QString::fromUtf8(kSirilAstroFileName));
 }
 
-auto CameraPlateSolver::SolverContext::sirilAstroCompressedCatalogPath() -> QString
+QString CameraPlateSolver::SolverContext::sirilAstroCompressedCatalogPath()
 {
     return QDir(downloadedCatalogDir()).filePath(QString::fromUtf8(kSirilAstroCompressedFileName));
 }
 
-auto CameraPlateSolver::SolverContext::sirilSpccChunkUrl(int chunkIndex, int sourceIndex) -> QString
+QString CameraPlateSolver::SolverContext::sirilSpccChunkUrl(int chunkIndex, int sourceIndex)
 {
     const QString fileName = QString::fromUtf8(kSirilSpccFileNamePattern).arg(chunkIndex);
     if (sourceIndex == 1)
@@ -45,44 +45,44 @@ auto CameraPlateSolver::SolverContext::sirilSpccChunkUrl(int chunkIndex, int sou
         fileName);
 }
 
-auto CameraPlateSolver::SolverContext::sirilSpccSourceName(int sourceIndex) -> QString
+QString CameraPlateSolver::SolverContext::sirilSpccSourceName(int sourceIndex)
 {
     return sourceIndex == 1 ? QStringLiteral("Zenodo") : QStringLiteral("Hugging Face");
 }
 
-auto CameraPlateSolver::SolverContext::sirilRangeCacheKey(int chunkIndex, qint64 firstByte, qint64 lastByte) -> QString
+QString CameraPlateSolver::SolverContext::sirilRangeCacheKey(int chunkIndex, qint64 firstByte, qint64 lastByte)
 {
     return QStringLiteral("%1:%2:%3").arg(chunkIndex).arg(firstByte).arg(lastByte);
 }
 
-auto CameraPlateSolver::SolverContext::sirilCacheRootDir() -> QString
+QString CameraPlateSolver::SolverContext::sirilCacheRootDir()
 {
     return QDir(downloadedCatalogDir()).filePath(QString::fromUtf8(kSirilCacheDir));
 }
 
-auto CameraPlateSolver::SolverContext::sirilIndexDiskCachePath(int chunkIndex) -> QString
+QString CameraPlateSolver::SolverContext::sirilIndexDiskCachePath(int chunkIndex)
 {
     return QDir(QDir(sirilCacheRootDir()).filePath(QStringLiteral("indexes")))
         .filePath(QStringLiteral("chunk-%1.idx").arg(chunkIndex));
 }
 
-auto CameraPlateSolver::SolverContext::sirilRangeDiskCachePath(int chunkIndex, qint64 firstByte, qint64 lastByte) -> QString
+QString CameraPlateSolver::SolverContext::sirilRangeDiskCachePath(int chunkIndex, qint64 firstByte, qint64 lastByte)
 {
     return QDir(QDir(sirilCacheRootDir()).filePath(QStringLiteral("ranges")))
         .filePath(QStringLiteral("chunk-%1-%2-%3.bin").arg(chunkIndex).arg(firstByte).arg(lastByte));
 }
 
-auto CameraPlateSolver::SolverContext::sirilRegionCacheRootDir() -> QString
+QString CameraPlateSolver::SolverContext::sirilRegionCacheRootDir()
 {
     return QDir(downloadedCatalogDir()).filePath(QString::fromUtf8(kSirilRegionCacheDir));
 }
 
-auto CameraPlateSolver::SolverContext::sirilAstroRegionCacheRootDir() -> QString
+QString CameraPlateSolver::SolverContext::sirilAstroRegionCacheRootDir()
 {
     return QDir(downloadedCatalogDir()).filePath(QString::fromUtf8(kSirilAstroRegionCacheDir));
 }
 
-auto CameraPlateSolver::SolverContext::sirilRegionCacheKey(double centerRaDegrees, double centerDecDegrees, double queryRadiusDegrees, double maxMagnitude) -> QString
+QString CameraPlateSolver::SolverContext::sirilRegionCacheKey(double centerRaDegrees, double centerDecDegrees, double queryRadiusDegrees, double maxMagnitude)
 {
     return QStringLiteral("ra%1_dec%2_r%3_m%4.bin")
         .arg(qRound64(normalizeDegrees(centerRaDegrees) * 1000.0))
@@ -91,19 +91,19 @@ auto CameraPlateSolver::SolverContext::sirilRegionCacheKey(double centerRaDegree
         .arg(qRound64(maxMagnitude * 100.0));
 }
 
-auto CameraPlateSolver::SolverContext::sirilRegionDiskCachePath(double centerRaDegrees, double centerDecDegrees, double queryRadiusDegrees, double maxMagnitude) -> QString
+QString CameraPlateSolver::SolverContext::sirilRegionDiskCachePath(double centerRaDegrees, double centerDecDegrees, double queryRadiusDegrees, double maxMagnitude)
 {
     return QDir(sirilRegionCacheRootDir()).filePath(
         sirilRegionCacheKey(centerRaDegrees, centerDecDegrees, queryRadiusDegrees, maxMagnitude));
 }
 
-auto CameraPlateSolver::SolverContext::sirilAstroRegionDiskCachePath(double centerRaDegrees, double centerDecDegrees, double queryRadiusDegrees, double maxMagnitude) -> QString
+QString CameraPlateSolver::SolverContext::sirilAstroRegionDiskCachePath(double centerRaDegrees, double centerDecDegrees, double queryRadiusDegrees, double maxMagnitude)
 {
     return QDir(sirilAstroRegionCacheRootDir()).filePath(
         sirilRegionCacheKey(centerRaDegrees, centerDecDegrees, queryRadiusDegrees, maxMagnitude));
 }
 
-auto CameraPlateSolver::SolverContext::readSirilRegionDiskCacheFile(const QString& path) -> QVector<CatalogStar>
+QVector<CameraPlateSolver::SolverContext::CatalogStar> CameraPlateSolver::SolverContext::readSirilRegionDiskCacheFile(const QString& path)
 {
     QFile file(path);
     if (!file.open(QIODevice::ReadOnly)) {
@@ -175,7 +175,7 @@ auto CameraPlateSolver::SolverContext::readSirilRegionDiskCacheFile(const QStrin
     return stars;
 }
 
-auto CameraPlateSolver::SolverContext::sirilRegionDiskCacheMaxBytes(int maxSizeGb) -> qint64
+qint64 CameraPlateSolver::SolverContext::sirilRegionDiskCacheMaxBytes(int maxSizeGb)
 {
     if (maxSizeGb <= 0) {
         return 0;
@@ -184,7 +184,7 @@ auto CameraPlateSolver::SolverContext::sirilRegionDiskCacheMaxBytes(int maxSizeG
     return static_cast<qint64>(maxSizeGb) * 1024LL * 1024LL * 1024LL;
 }
 
-auto CameraPlateSolver::SolverContext::enforceSirilRegionDiskCacheLimit(const QString& directoryPath, int maxSizeGb) -> void
+void CameraPlateSolver::SolverContext::enforceSirilRegionDiskCacheLimit(const QString& directoryPath, int maxSizeGb)
 {
     const qint64 maxBytes = sirilRegionDiskCacheMaxBytes(maxSizeGb);
     if (maxBytes <= 0) {   // 0 = unlimited
@@ -219,7 +219,7 @@ auto CameraPlateSolver::SolverContext::enforceSirilRegionDiskCacheLimit(const QS
     }
 }
 
-auto CameraPlateSolver::SolverContext::writeSirilRegionDiskCacheFile(const QString& path, const QVector<CatalogStar>& stars, int maxSizeGb) -> void
+void CameraPlateSolver::SolverContext::writeSirilRegionDiskCacheFile(const QString& path, const QVector<CatalogStar>& stars, int maxSizeGb)
 {
     if (stars.isEmpty()) {
         return;
@@ -273,7 +273,7 @@ auto CameraPlateSolver::SolverContext::writeSirilRegionDiskCacheFile(const QStri
     enforceSirilRegionDiskCacheLimit(QFileInfo(path).absolutePath(), maxSizeGb);
 }
 
-auto CameraPlateSolver::SolverContext::readSirilDiskCacheFile(const QString& path, qint64 expectedSize) -> QByteArray
+QByteArray CameraPlateSolver::SolverContext::readSirilDiskCacheFile(const QString& path, qint64 expectedSize)
 {
     QFile file(path);
     if (!file.open(QIODevice::ReadOnly)) {
@@ -285,7 +285,7 @@ auto CameraPlateSolver::SolverContext::readSirilDiskCacheFile(const QString& pat
     return file.readAll();
 }
 
-auto CameraPlateSolver::SolverContext::writeSirilDiskCacheFile(const QString& path, const QByteArray& data) -> void
+void CameraPlateSolver::SolverContext::writeSirilDiskCacheFile(const QString& path, const QByteArray& data)
 {
     if (data.isEmpty()) {
         return;
@@ -307,7 +307,7 @@ auto CameraPlateSolver::SolverContext::writeSirilDiskCacheFile(const QString& pa
     file.commit();
 }
 
-auto CameraPlateSolver::SolverContext::sampleSirilHealpixPixels(double centerRaDegrees, double centerDecDegrees, double radiusDegrees) -> QSet<quint32>
+QSet<quint32> CameraPlateSolver::SolverContext::sampleSirilHealpixPixels(double centerRaDegrees, double centerDecDegrees, double radiusDegrees)
 {
     QSet<quint32> pixels;
     const double boundedRadius = std::max(0.1, radiusDegrees);
@@ -337,7 +337,7 @@ auto CameraPlateSolver::SolverContext::sampleSirilHealpixPixels(double centerRaD
     return pixels;
 }
 
-auto CameraPlateSolver::SolverContext::readSirilAstroIndex(QFile& file) -> QByteArray
+QByteArray CameraPlateSolver::SolverContext::readSirilAstroIndex(QFile& file)
 {
     if (!file.seek(kSirilHeaderSize)) {
         return {};
@@ -356,7 +356,7 @@ auto CameraPlateSolver::SolverContext::readSirilAstroIndex(QFile& file) -> QByte
     return indexBytes;
 }
 
-auto CameraPlateSolver::SolverContext::sirilAstroCellRecordRange(const QByteArray& indexBytes, quint32 pixel, qint64& firstRecord, qint64& recordCount) -> bool
+bool CameraPlateSolver::SolverContext::sirilAstroCellRecordRange(const QByteArray& indexBytes, quint32 pixel, qint64& firstRecord, qint64& recordCount)
 {
     if ((pixel >= static_cast<quint32>(kSirilAstroPixels)) || (indexBytes.size() != kSirilAstroIndexSize)) {
         return false;

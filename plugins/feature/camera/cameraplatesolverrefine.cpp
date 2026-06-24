@@ -20,7 +20,7 @@
 
 // Levenberg-Marquardt pose refinement + rotation-vector orientation helpers (WS5).
 
-auto CameraPlateSolver::SolverContext::normalizeSignedDegrees(double value) -> double
+double CameraPlateSolver::SolverContext::normalizeSignedDegrees(double value)
 {
     value = normalizeDegrees(value);
     if (value > 180.0) {
@@ -29,7 +29,7 @@ auto CameraPlateSolver::SolverContext::normalizeSignedDegrees(double value) -> d
     return value;
 }
 
-auto CameraPlateSolver::SolverContext::poseFromEvaluation(const Evaluation& evaluation) -> PlateSolveLmPose
+CameraPlateSolver::SolverContext::PlateSolveLmPose CameraPlateSolver::SolverContext::poseFromEvaluation(const Evaluation& evaluation)
 {
     PlateSolveLmPose pose;
     pose.azimuthDegrees = evaluation.azimuthDegrees;
@@ -42,7 +42,7 @@ auto CameraPlateSolver::SolverContext::poseFromEvaluation(const Evaluation& eval
     return pose;
 }
 
-auto CameraPlateSolver::SolverContext::clampPlateSolveLmPose(const QSize& imageSize, PlateSolveLmPose& pose) -> void
+void CameraPlateSolver::SolverContext::clampPlateSolveLmPose(const QSize& imageSize, PlateSolveLmPose& pose)
 {
     pose.azimuthDegrees = normalizeDegrees(pose.azimuthDegrees);
     pose.elevationDegrees = std::clamp(pose.elevationDegrees, kVisibleAltitudeFloor, 90.0);
@@ -57,7 +57,7 @@ auto CameraPlateSolver::SolverContext::clampPlateSolveLmPose(const QSize& imageS
     pose.distortionK1 = std::clamp(pose.distortionK1, -0.75, 0.75);
 }
 
-auto CameraPlateSolver::SolverContext::rotVecLmEnabled() -> bool
+bool CameraPlateSolver::SolverContext::rotVecLmEnabled()
 {
     // WS2: rotation-vector LM orientation is the DEFAULT. Kill-switch
     // SDRANGEL_CAMERA_PLATE_SOLVER_DISABLE_ROTVEC_LM reverts to the legacy az/el/roll path for A/B.
@@ -65,12 +65,12 @@ auto CameraPlateSolver::SolverContext::rotVecLmEnabled() -> bool
     return !disabled;
 }
 
-auto CameraPlateSolver::SolverContext::rotVecLmActive(const CameraSettings& settings) -> bool
+bool CameraPlateSolver::SolverContext::rotVecLmActive(const CameraSettings& settings)
 {
     return rotVecLmEnabled() && plateSolveStartUsesDirection(settings);
 }
 
-auto CameraPlateSolver::SolverContext::lmBasisFromAzElRoll(double azimuthDegrees, double elevationDegrees, double rollDegrees, SkyVector& center, SkyVector& right, SkyVector& up) -> void
+void CameraPlateSolver::SolverContext::lmBasisFromAzElRoll(double azimuthDegrees, double elevationDegrees, double rollDegrees, SkyVector& center, SkyVector& right, SkyVector& up)
 {
     const double azr = degToRad(azimuthDegrees);
     center = normalize(vectorFromAltAz(azimuthDegrees, elevationDegrees));
@@ -83,7 +83,7 @@ auto CameraPlateSolver::SolverContext::lmBasisFromAzElRoll(double azimuthDegrees
     }
 }
 
-auto CameraPlateSolver::SolverContext::lmAzElRollFromBasis(const SkyVector& center, const SkyVector& right, double& azimuthDegrees, double& elevationDegrees, double& rollDegrees) -> void
+void CameraPlateSolver::SolverContext::lmAzElRollFromBasis(const SkyVector& center, const SkyVector& right, double& azimuthDegrees, double& elevationDegrees, double& rollDegrees)
 {
     const SkyVector c = normalize(center);
     elevationDegrees = std::asin(std::clamp(c.z, -1.0, 1.0)) * (180.0 / kPi);
@@ -97,7 +97,7 @@ auto CameraPlateSolver::SolverContext::lmAzElRollFromBasis(const SkyVector& cent
     rollDegrees = normalizeSignedDegrees(std::atan2(sinA, cosA) * (180.0 / kPi));
 }
 
-auto CameraPlateSolver::SolverContext::lmRotateOrientationCameraFrame(double& azimuthDegrees, double& elevationDegrees, double& rollDegrees, int cameraAxis, double deltaDegrees) -> void
+void CameraPlateSolver::SolverContext::lmRotateOrientationCameraFrame(double& azimuthDegrees, double& elevationDegrees, double& rollDegrees, int cameraAxis, double deltaDegrees)
 {
     SkyVector center, right, up;
     lmBasisFromAzElRoll(azimuthDegrees, elevationDegrees, rollDegrees, center, right, up);
@@ -108,7 +108,7 @@ auto CameraPlateSolver::SolverContext::lmRotateOrientationCameraFrame(double& az
     lmAzElRollFromBasis(center, right, azimuthDegrees, elevationDegrees, rollDegrees);
 }
 
-auto CameraPlateSolver::SolverContext::addPlateSolveLmParameterDelta(const QSize& imageSize, PlateSolveLmPose& pose, PlateSolveLmParameter parameter, double delta, bool useRotVec) -> void
+void CameraPlateSolver::SolverContext::addPlateSolveLmParameterDelta(const QSize& imageSize, PlateSolveLmPose& pose, PlateSolveLmParameter parameter, double delta, bool useRotVec)
 {
     const bool rotVec = useRotVec;
     switch (parameter)
@@ -152,7 +152,7 @@ auto CameraPlateSolver::SolverContext::addPlateSolveLmParameterDelta(const QSize
     clampPlateSolveLmPose(imageSize, pose);
 }
 
-auto CameraPlateSolver::SolverContext::robustPlateSolveLmWeight(double residualNormPixels, double thresholdPixels) -> double
+double CameraPlateSolver::SolverContext::robustPlateSolveLmWeight(double residualNormPixels, double thresholdPixels)
 {
     if ((residualNormPixels <= thresholdPixels) || (residualNormPixels <= 1e-9)) {
         return 1.0;
@@ -160,7 +160,7 @@ auto CameraPlateSolver::SolverContext::robustPlateSolveLmWeight(double residualN
     return thresholdPixels / residualNormPixels;
 }
 
-auto CameraPlateSolver::SolverContext::solveSmallLinearSystem(double matrix[PlateSolveLmParameterCount][PlateSolveLmParameterCount], double rhs[PlateSolveLmParameterCount], double solution[PlateSolveLmParameterCount], int size) -> bool
+bool CameraPlateSolver::SolverContext::solveSmallLinearSystem(double matrix[PlateSolveLmParameterCount][PlateSolveLmParameterCount], double rhs[PlateSolveLmParameterCount], double solution[PlateSolveLmParameterCount], int size)
 {
     for (int i = 0; i < size; ++i) {
         solution[i] = 0.0;

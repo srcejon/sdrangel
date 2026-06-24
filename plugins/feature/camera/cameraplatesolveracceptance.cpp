@@ -20,7 +20,7 @@
 
 // Solve accept/reject gates + false-alarm scoring + residual gating (WS5).
 
-auto CameraPlateSolver::SolverContext::medianDistancePixels(const QVector<Match>& matches) -> double
+double CameraPlateSolver::SolverContext::medianDistancePixels(const QVector<Match>& matches)
 {
     if (matches.isEmpty()) {
         return 0.0;
@@ -40,7 +40,7 @@ auto CameraPlateSolver::SolverContext::medianDistancePixels(const QVector<Match>
     return distances[middle];
 }
 
-auto CameraPlateSolver::SolverContext::maxDistancePixels(const QVector<Match>& matches) -> double
+double CameraPlateSolver::SolverContext::maxDistancePixels(const QVector<Match>& matches)
 {
     double maxDistance = 0.0;
     for (const Match& match : matches) {
@@ -49,7 +49,7 @@ auto CameraPlateSolver::SolverContext::maxDistancePixels(const QVector<Match>& m
     return maxDistance;
 }
 
-auto CameraPlateSolver::SolverContext::sparseGuidedMaxRms(const CameraSettings& settings, int matchCount) -> double
+double CameraPlateSolver::SolverContext::sparseGuidedMaxRms(const CameraSettings& settings, int matchCount)
 {
     const double radius = static_cast<double>(settings.m_plateSolveFinalMatchRadius);
     if (matchCount >= std::max(settings.m_plateSolveMinMatches + 8, 12)) {
@@ -61,7 +61,7 @@ auto CameraPlateSolver::SolverContext::sparseGuidedMaxRms(const CameraSettings& 
     return std::min(radius * 0.62, 14.5);
 }
 
-auto CameraPlateSolver::SolverContext::gateAblationDisabled(const char* token) -> bool
+bool CameraPlateSolver::SolverContext::gateAblationDisabled(const char* token)
 {
     static const QString disabled = qEnvironmentVariable("SDRANGEL_CAMERA_PLATE_SOLVER_DISABLE_GATE");
     if (disabled.isEmpty()) {
@@ -76,7 +76,7 @@ auto CameraPlateSolver::SolverContext::gateAblationDisabled(const char* token) -
     return false;
 }
 
-auto CameraPlateSolver::SolverContext::poseFalseAlarmLogOdds(const PlateSolveCatalogContext& catalogContext, const FinalMatchPassEvaluation& finalPass, const QSize& imageSize, double matchRadiusPixels, int detectionCount) -> double
+double CameraPlateSolver::SolverContext::poseFalseAlarmLogOdds(const PlateSolveCatalogContext& catalogContext, const FinalMatchPassEvaluation& finalPass, const QSize& imageSize, double matchRadiusPixels, int detectionCount)
 {
     if (!finalPass.projectorValid
         || finalPass.finalMatches.isEmpty()
@@ -168,7 +168,7 @@ auto CameraPlateSolver::SolverContext::poseFalseAlarmLogOdds(const PlateSolveCat
     return logOdds;
 }
 
-auto CameraPlateSolver::SolverContext::detectionMatchWeight(const CameraPipelineStarDetection& detection) -> double
+double CameraPlateSolver::SolverContext::detectionMatchWeight(const CameraPipelineStarDetection& detection)
 {
     const double centroidUncertainty = std::isfinite(static_cast<double>(detection.m_centroidUncertainty))
         ? std::max(0.05, static_cast<double>(detection.m_centroidUncertainty))
@@ -190,7 +190,7 @@ auto CameraPlateSolver::SolverContext::detectionMatchWeight(const CameraPipeline
     return std::clamp(weight, 0.01, 100.0);
 }
 
-auto CameraPlateSolver::SolverContext::weightedRmsDistancePixels(const QVector<CameraPipelineStarDetection>& starDetections, const QVector<Match>& matches) -> double
+double CameraPlateSolver::SolverContext::weightedRmsDistancePixels(const QVector<CameraPipelineStarDetection>& starDetections, const QVector<Match>& matches)
 {
     double weightedSumSquaredError = 0.0;
     double weightSum = 0.0;
@@ -214,7 +214,7 @@ auto CameraPlateSolver::SolverContext::weightedRmsDistancePixels(const QVector<C
     return std::sqrt(weightedSumSquaredError / weightSum);
 }
 
-auto CameraPlateSolver::SolverContext::hasGeometricallyConsistentMatches(const QVector<CameraPipelineStarDetection>& starDetections, const QVector<ProjectedCatalogStar>& projectedStars, const QVector<Match>& matches, double matchRadiusPixels) -> bool
+bool CameraPlateSolver::SolverContext::hasGeometricallyConsistentMatches(const QVector<CameraPipelineStarDetection>& starDetections, const QVector<ProjectedCatalogStar>& projectedStars, const QVector<Match>& matches, double matchRadiusPixels)
 {
     if (matches.size() < 4) {
         return true;
@@ -270,7 +270,7 @@ auto CameraPlateSolver::SolverContext::hasGeometricallyConsistentMatches(const Q
     return fraction >= 0.55;
 }
 
-auto CameraPlateSolver::SolverContext::rejectOutlierMatches(const QVector<Match>& matches, int minMatches, double matchRadiusPixels, int* outlierCount) -> QVector<Match>
+QVector<CameraPlateSolver::SolverContext::Match> CameraPlateSolver::SolverContext::rejectOutlierMatches(const QVector<Match>& matches, int minMatches, double matchRadiusPixels, int* outlierCount)
 {
     if (outlierCount) {
         *outlierCount = 0;
@@ -309,7 +309,7 @@ auto CameraPlateSolver::SolverContext::rejectOutlierMatches(const QVector<Match>
     return inliers;
 }
 
-auto CameraPlateSolver::SolverContext::trimmedWorstDistancePixels(const QVector<Match>& matches, int dropCount) -> double
+double CameraPlateSolver::SolverContext::trimmedWorstDistancePixels(const QVector<Match>& matches, int dropCount)
 {
     if (matches.isEmpty()) {
         return 0.0;
@@ -326,7 +326,7 @@ auto CameraPlateSolver::SolverContext::trimmedWorstDistancePixels(const QVector<
     return distances[distances.size() - 1 - dropCount];
 }
 
-auto CameraPlateSolver::SolverContext::passesResidualGates(const QVector<Match>& matches, double rmsErrorPixels, double maxErrorPixels, const ResidualGates& gates) -> bool
+bool CameraPlateSolver::SolverContext::passesResidualGates(const QVector<Match>& matches, double rmsErrorPixels, double maxErrorPixels, const ResidualGates& gates)
 {
     if (matches.size() < gates.minMatches) {
         return false;
@@ -339,7 +339,7 @@ auto CameraPlateSolver::SolverContext::passesResidualGates(const QVector<Match>&
         && (worstForGate <= gates.maxWorst);
 }
 
-auto CameraPlateSolver::SolverContext::isAcceptableBlindSolve(const CameraSettings& settings, const QVector<CameraPipelineStarDetection>& starDetections, const QVector<Match>& matches, double rmsErrorPixels, double maxErrorPixels) -> bool
+bool CameraPlateSolver::SolverContext::isAcceptableBlindSolve(const CameraSettings& settings, const QVector<CameraPipelineStarDetection>& starDetections, const QVector<Match>& matches, double rmsErrorPixels, double maxErrorPixels)
 {
     ResidualGates gates;
     gates.minMatches = std::max(settings.m_plateSolveMinMatches + 2,
@@ -350,7 +350,7 @@ auto CameraPlateSolver::SolverContext::isAcceptableBlindSolve(const CameraSettin
     return passesResidualGates(matches, rmsErrorPixels, maxErrorPixels, gates);
 }
 
-auto CameraPlateSolver::SolverContext::isAcceptableSparseWideBlindSolve(const CameraSettings& settings, const QVector<CameraPipelineStarDetection>& starDetections, const FinalMatchPassEvaluation& evaluation) -> bool
+bool CameraPlateSolver::SolverContext::isAcceptableSparseWideBlindSolve(const CameraSettings& settings, const QVector<CameraPipelineStarDetection>& starDetections, const FinalMatchPassEvaluation& evaluation)
 {
     if (!isWidePlateSolveContext(settings)
         || (settings.m_plateSolveStartMode != CameraSettings::PlateSolveStartBlind)
@@ -367,7 +367,7 @@ auto CameraPlateSolver::SolverContext::isAcceptableSparseWideBlindSolve(const Ca
         && (evaluation.brightDetectionMagnitudeError <= 1.50);
 }
 
-auto CameraPlateSolver::SolverContext::isStrongGuidedSolve(const CameraSettings& settings, int minMatchCount, const Evaluation& evaluation) -> bool
+bool CameraPlateSolver::SolverContext::isStrongGuidedSolve(const CameraSettings& settings, int minMatchCount, const Evaluation& evaluation)
 {
     if (!evaluation.valid) {
         return false;
@@ -378,7 +378,7 @@ auto CameraPlateSolver::SolverContext::isStrongGuidedSolve(const CameraSettings&
     return (evaluation.matchCount >= minAcceptedMatches) && (evaluation.rmsErrorPixels <= maxRmsError);
 }
 
-auto CameraPlateSolver::SolverContext::minimumDirectionSeedAcceptedMatches(const CameraSettings& settings, const QVector<CameraPipelineStarDetection>& starDetections) -> int
+int CameraPlateSolver::SolverContext::minimumDirectionSeedAcceptedMatches(const CameraSettings& settings, const QVector<CameraPipelineStarDetection>& starDetections)
 {
     const int configuredMinimum = std::max(settings.m_plateSolveMinMatches, 4);
 
@@ -402,7 +402,7 @@ auto CameraPlateSolver::SolverContext::minimumDirectionSeedAcceptedMatches(const
         std::min(8, std::max(5, static_cast<int>(std::ceil(static_cast<double>(starDetections.size()) * 0.15)))));
 }
 
-auto CameraPlateSolver::SolverContext::maxDirectionSeedRmsError(const CameraSettings& settings, int matchCount) -> double
+double CameraPlateSolver::SolverContext::maxDirectionSeedRmsError(const CameraSettings& settings, int matchCount)
 {
     const bool narrowField = isNarrowField(settings);
     const bool denseNarrowFieldSolve = narrowField
@@ -417,12 +417,12 @@ auto CameraPlateSolver::SolverContext::maxDirectionSeedRmsError(const CameraSett
     return std::min(settings.m_plateSolveFinalMatchRadius * 0.70, 18.0);
 }
 
-auto CameraPlateSolver::SolverContext::maxNarrowGuidedFovDeltaDegrees(const CameraSettings& settings) -> double
+double CameraPlateSolver::SolverContext::maxNarrowGuidedFovDeltaDegrees(const CameraSettings& settings)
 {
     return std::max(0.08, static_cast<double>(settings.m_fov) * 0.08);
 }
 
-auto CameraPlateSolver::SolverContext::isAcceptableNarrowGuidedFov(const CameraSettings& settings, double fovDegrees) -> bool
+bool CameraPlateSolver::SolverContext::isAcceptableNarrowGuidedFov(const CameraSettings& settings, double fovDegrees)
 {
     if (!plateSolveStartUsesDirection(settings)
         || !plateSolveStartUsesFov(settings)
@@ -435,7 +435,7 @@ auto CameraPlateSolver::SolverContext::isAcceptableNarrowGuidedFov(const CameraS
         && (std::fabs(fovDegrees - settings.m_fov) <= maxNarrowGuidedFovDeltaDegrees(settings));
 }
 
-auto CameraPlateSolver::SolverContext::narrowGuidedFovRejectionReason(const CameraSettings& settings, double fovDegrees) -> QString
+QString CameraPlateSolver::SolverContext::narrowGuidedFovRejectionReason(const CameraSettings& settings, double fovDegrees)
 {
     return QStringLiteral("FoV %1 outside start FoV %2 +/- %3")
         .arg(fovDegrees, 0, 'f', 3)
@@ -443,7 +443,7 @@ auto CameraPlateSolver::SolverContext::narrowGuidedFovRejectionReason(const Came
         .arg(maxNarrowGuidedFovDeltaDegrees(settings), 0, 'f', 3);
 }
 
-auto CameraPlateSolver::SolverContext::directionSeedResidualGates(const CameraSettings& settings, const QVector<CameraPipelineStarDetection>& starDetections, int matchCount) -> ResidualGates
+CameraPlateSolver::SolverContext::ResidualGates CameraPlateSolver::SolverContext::directionSeedResidualGates(const CameraSettings& settings, const QVector<CameraPipelineStarDetection>& starDetections, int matchCount)
 {
     const bool narrowField = isNarrowField(settings);
     ResidualGates gates;
@@ -467,7 +467,7 @@ auto CameraPlateSolver::SolverContext::directionSeedResidualGates(const CameraSe
     return gates;
 }
 
-auto CameraPlateSolver::SolverContext::directionSeedRejectionReason(const CameraSettings& settings, const QVector<CameraPipelineStarDetection>& starDetections, const QVector<Match>& matches, double rmsErrorPixels, double maxErrorPixels) -> QString
+QString CameraPlateSolver::SolverContext::directionSeedRejectionReason(const CameraSettings& settings, const QVector<CameraPipelineStarDetection>& starDetections, const QVector<Match>& matches, double rmsErrorPixels, double maxErrorPixels)
 {
     const ResidualGates gates = directionSeedResidualGates(settings, starDetections, matches.size());
     const double medianError = medianDistancePixels(matches);
@@ -491,7 +491,7 @@ auto CameraPlateSolver::SolverContext::directionSeedRejectionReason(const Camera
     return reasons.isEmpty() ? QStringLiteral("accepted") : reasons.join(QStringLiteral(", "));
 }
 
-auto CameraPlateSolver::SolverContext::isAcceptableDirectionSeedSolve(const CameraSettings& settings, int minMatchCount, const Evaluation& evaluation) -> bool
+bool CameraPlateSolver::SolverContext::isAcceptableDirectionSeedSolve(const CameraSettings& settings, int minMatchCount, const Evaluation& evaluation)
 {
     if (!evaluation.valid) {
         return false;
@@ -505,13 +505,13 @@ auto CameraPlateSolver::SolverContext::isAcceptableDirectionSeedSolve(const Came
     return (evaluation.matchCount >= minAcceptedMatches) && (evaluation.rmsErrorPixels <= maxRmsError);
 }
 
-auto CameraPlateSolver::SolverContext::isAcceptableDirectionSeedSolve(const CameraSettings& settings, const QVector<CameraPipelineStarDetection>& starDetections, const QVector<Match>& matches, double rmsErrorPixels, double maxErrorPixels) -> bool
+bool CameraPlateSolver::SolverContext::isAcceptableDirectionSeedSolve(const CameraSettings& settings, const QVector<CameraPipelineStarDetection>& starDetections, const QVector<Match>& matches, double rmsErrorPixels, double maxErrorPixels)
 {
     const ResidualGates gates = directionSeedResidualGates(settings, starDetections, matches.size());
     return passesResidualGates(matches, rmsErrorPixels, maxErrorPixels, gates);
 }
 
-auto CameraPlateSolver::SolverContext::isAcceptableElevationSeedEvaluation(const CameraSettings& settings, int minMatchCount, const Evaluation& evaluation) -> bool
+bool CameraPlateSolver::SolverContext::isAcceptableElevationSeedEvaluation(const CameraSettings& settings, int minMatchCount, const Evaluation& evaluation)
 {
     if (!evaluation.valid) {
         return false;
@@ -522,7 +522,7 @@ auto CameraPlateSolver::SolverContext::isAcceptableElevationSeedEvaluation(const
     return (evaluation.matchCount >= minAcceptedMatches) && (evaluation.rmsErrorPixels <= maxRmsError);
 }
 
-auto CameraPlateSolver::SolverContext::isAcceptableElevationSeedSolve(const CameraSettings& settings, const QVector<CameraPipelineStarDetection>& starDetections, const QVector<Match>& matches, double rmsErrorPixels, double maxErrorPixels) -> bool
+bool CameraPlateSolver::SolverContext::isAcceptableElevationSeedSolve(const CameraSettings& settings, const QVector<CameraPipelineStarDetection>& starDetections, const QVector<Match>& matches, double rmsErrorPixels, double maxErrorPixels)
 {
     ResidualGates gates;
     gates.minMatches = std::max(settings.m_plateSolveMinMatches + 1,
@@ -533,7 +533,7 @@ auto CameraPlateSolver::SolverContext::isAcceptableElevationSeedSolve(const Came
     return passesResidualGates(matches, rmsErrorPixels, maxErrorPixels, gates);
 }
 
-auto CameraPlateSolver::SolverContext::calibrationMagnitude(const Evaluation& evaluation) -> double
+double CameraPlateSolver::SolverContext::calibrationMagnitude(const Evaluation& evaluation)
 {
     return std::fabs(evaluation.centerOffsetXPixels)
         + std::fabs(evaluation.centerOffsetYPixels)

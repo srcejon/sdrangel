@@ -2481,10 +2481,13 @@ Done as a series of behaviour-preserving, per-phase validated moves:
 - **Phase 1:** lift the whole class into a private header `cameraplatesolverinternal.h`, included by
   `cameraplatesolver.cpp` (the orchestrator: `solve()` + ctor/dtor/public statics). Enables out-of-line
   member defs in other TUs.
-- **Phases 2-7:** move member *definitions* out of the header into themed TUs as **trailing-return**
-  out-of-line defs (`auto CameraPlateSolver::SolverContext::f(args) -> Ret { ... }`) -- the key trick:
-  the return type after the `Class::` qualifier resolves nested types (`Evaluation`, `QVector<Match>`)
-  in class scope, so NO return-type qualification is needed. Declarations stay in the class header.
+- **Phases 2-7:** move member *definitions* out of the header into themed TUs as out-of-line defs
+  with **leading return types** (`CameraPlateSolver::SolverContext::Evaluation
+  CameraPlateSolver::SolverContext::f(args) { ... }`); nested return types are explicitly qualified,
+  params are left unqualified (they are in class scope after the `Class::name` qualifier). Declarations
+  stay in the class header. (The extractor first emitted trailing-return form `auto ... -> Ret` since
+  that resolves nested returns in class scope automatically, then a follow-up pass rewrote them all to
+  leading return types -- this codebase does not use `auto`/trailing-return in function declarations.)
   TUs: `cameraplatesolvercatalog.cpp` / `siril.cpp` / `refine.cpp` / `acceptance.cpp` / `core.cpp`
   (catalog I/O, projection, visibility, signatures, seeds, matching) / `pipeline.cpp` (non-static
   pipeline members: fetch/build/evaluate/match).

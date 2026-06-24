@@ -203,11 +203,6 @@ private:
     // stream plays. Ref-balanced via m_timerResolutionRaised. No-op off Windows.
     void setHighTimerResolution(bool enable);
     bool m_timerResolutionRaised = false;
-    // Stream-only video delay (ms) compensating audio output latency past processedUSecs (the
-    // OS/driver buffer the sink-latency EMA can't see). File playback compensates this via its
-    // delay-based model; the stream's clock-based model does not. ~200 ms measured; the audio
-    // offset slider trims around it. See presentStreamTick.
-    int m_streamAudioOutputLatencyMs = 200;
 
     CameraQtAudioController* m_audio;
     const CameraSettings* m_settings;

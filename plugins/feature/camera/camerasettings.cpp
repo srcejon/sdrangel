@@ -186,6 +186,7 @@ void CameraSettings::resetToDefaults()
     m_imageFileCameraPaths.clear();
     m_streamUrlHistory.clear();
     m_streamBufferingSeconds = 1.0;
+    m_streamAudioOutputLatencyMs = 200;
     m_videoFileName = "camera.mp4";
     m_recordRawFits = false;
     m_recordCalibratedMedia = true;
@@ -674,6 +675,7 @@ QByteArray CameraSettings::serialize() const
     s.writeString(259, serializeStringList(m_streamUrlHistory));
     s.writeString(260, m_streamUrl);
     s.writeDouble(262, m_streamBufferingSeconds);
+    s.writeS32(269, m_streamAudioOutputLatencyMs);
     s.writeBool(263, m_showStarDetectionBoxes);
     s.writeBool(264, m_plateSolveLabelHideSyntheticNames);
     s.writeBool(265, m_scaleEnabled);
@@ -1150,6 +1152,7 @@ bool CameraSettings::deserialize(const QByteArray& data)
         m_streamUrlHistory = deserializeStringList(streamUrlHistoryJson);
         d.readString(260, &m_streamUrl, "");
         d.readDouble(262, &m_streamBufferingSeconds, 1.0);
+        d.readS32(269, &m_streamAudioOutputLatencyMs, 200);
         d.readBool(263, &m_showStarDetectionBoxes, true);
         d.readBool(264, &m_plateSolveLabelHideSyntheticNames, false);
         d.readBool(265, &m_scaleEnabled, false);
@@ -1218,6 +1221,10 @@ bool CameraSettings::deserialize(const QByteArray& data)
             m_minStreamBufferingSeconds,
             m_streamBufferingSeconds,
             m_maxStreamBufferingSeconds);
+        m_streamAudioOutputLatencyMs = qBound(
+            m_minStreamAudioOutputLatencyMs,
+            m_streamAudioOutputLatencyMs,
+            m_maxStreamAudioOutputLatencyMs);
         m_latitude = qBound(m_minLatitude, m_latitude, m_maxLatitude);
         m_longitude = qBound(m_minLongitude, m_longitude, m_maxLongitude);
         m_altitude = qBound(m_minAltitude, m_altitude, m_maxAltitude);
@@ -1445,6 +1452,12 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
             m_minStreamBufferingSeconds,
             settings.m_streamBufferingSeconds,
             m_maxStreamBufferingSeconds);
+    }
+    if (settingsKeys.contains("streamAudioOutputLatencyMs")) {
+        m_streamAudioOutputLatencyMs = qBound(
+            m_minStreamAudioOutputLatencyMs,
+            settings.m_streamAudioOutputLatencyMs,
+            m_maxStreamAudioOutputLatencyMs);
     }
     if (settingsKeys.contains("videoLoop")) {
         m_videoLoop = settings.m_videoLoop;
@@ -2247,6 +2260,9 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("streamBufferingSeconds") || force) {
         ostr << " m_streamBufferingSeconds: " << m_streamBufferingSeconds;
+    }
+    if (settingsKeys.contains("streamAudioOutputLatencyMs") || force) {
+        ostr << " m_streamAudioOutputLatencyMs: " << m_streamAudioOutputLatencyMs;
     }
     if (settingsKeys.contains("videoLoop") || force) {
         ostr << " m_videoLoop: " << m_videoLoop;

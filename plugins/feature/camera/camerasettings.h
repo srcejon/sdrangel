@@ -342,6 +342,8 @@ struct CameraSettings
     static constexpr int m_maxVideoPlaybackAudioOffsetMs = 5000;
     static constexpr double m_minStreamBufferingSeconds = 0.1;
     static constexpr double m_maxStreamBufferingSeconds = 30.0;
+    static constexpr int m_minStreamAudioOutputLatencyMs = 0;
+    static constexpr int m_maxStreamAudioOutputLatencyMs = 1000;
 
     QString m_title;
     quint32 m_rgbColor;
@@ -403,6 +405,7 @@ struct CameraSettings
     QStringList m_imageFileCameraPaths;
     QStringList m_streamUrlHistory;
     double m_streamBufferingSeconds; ///< Decoded media cushion for stream: camera sources
+    int m_streamAudioOutputLatencyMs; ///< Stream A/V calibration: video delay (ms) compensating audio output latency past the OS-reported played position (driver/DAC buffer)
     QString m_videoFileName;
     bool m_recordRawFits;          ///< Save uncalibrated Bayer still images as FITS
     bool m_recordCalibratedMedia;  ///< Save calibrated/debayered image/video media

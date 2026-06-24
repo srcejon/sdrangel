@@ -384,7 +384,7 @@ void CameraMediaPlaybackController::presentStreamTick()
         // clock-based model (subtract monFifo+sink, no video delay) does, leaving video leading
         // audio by this tail. Measured ~200 ms here; delay the video to match. Stream-only (this is
         // presentStreamTick) so file playback is unaffected.
-        clockMs -= m_streamAudioOutputLatencyMs;
+        clockMs -= m_settings->m_streamAudioOutputLatencyMs;
         // Manual A/V trim (preview only): the audio-offset slider trims around the above, both
         // paths. Negative delays the video. Does not affect audio or recording.
         clockMs += m_settings->m_videoPlaybackAudioOffsetMs;

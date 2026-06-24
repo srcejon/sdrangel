@@ -4280,6 +4280,32 @@ li.checked::marker { content: &quot;\2612&quot;; }
             </property>
            </widget>
           </item>
+          <item row="2" column="0">
+           <widget class="QLabel" name="streamAudioOutputLatencyLabel">
+            <property name="text">
+             <string>Stream A/V cal</string>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="1">
+           <widget class="QSpinBox" name="streamAudioOutputLatencySpin">
+            <property name="toolTip">
+             <string>Stream A/V calibration: delay the stream video by this much to compensate audio output latency the OS does not report (driver/DAC buffer). Larger if audio is late; 0 disables.</string>
+            </property>
+            <property name="minimum">
+             <number>0</number>
+            </property>
+            <property name="maximum">
+             <number>1000</number>
+            </property>
+            <property name="singleStep">
+             <number>10</number>
+            </property>
+            <property name="suffix">
+             <string> ms</string>
+            </property>
+           </widget>
+          </item>
          </layout>
         </widget>
        </item>

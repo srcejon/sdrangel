@@ -40,9 +40,9 @@ class MessageQueue;
  * CameraQtAudioController's affinity. It owns the CameraMediaPlaybackState
  * (m_state) and its own present QTimer (m_presentTimer) — the playback present
  * cadence no longer borrows the worker's capture timer (which the worker keeps
- * for ASI/Alpaca capture). A background decode thread (started by
- * startVideoFileDecodeThread) wakes the present path by queuing presentTick()
- * onto this object across threads, so presentTick is a slot.
+ * for ASI/Alpaca capture). For streams the decoder owns its demux + A/V decode
+ * threads and the present is timer-driven (presentStreamTick); presentTick is a
+ * slot so it can also be queued across threads.
  *
  * \note Slaves video presentation to the audio device clock (via the audio
  *       controller's monitor FIFO), runs an adaptive stream-audio resampler
@@ -127,20 +127,10 @@ private:
     void clearDelayedVideoFileFrames();
     void scheduleDelayedVideoFileFrameSubmit();
     void releaseDelayedVideoFileFrames();
-    void startVideoFileDecodeThread();
     void stopVideoFileDecodeThread();
-    // Called from the decode thread to recover a live stream after a persistent
-    // read failure by reopening the source from the current live edge. Returns
-    // true once reopened, false if it gave up or a stop was requested.
-    bool reopenStreamVideoFileDecoder(const QString& mediaSourcePath, int audioOutputSampleRate, double playbackFrameRate);
     void clearDecodedVideoFileFrames();
     bool videoFilePlaybackIsPlaying() const;
     void setVideoFilePlaybackPlayingState(bool playing);
-    void queueDecodedVideoFileFrame(
-        CameraMediaPlaybackState::DecodedFrame&& frame,
-        int minBufferedFrames,
-        int maxBufferedFrames,
-        double playbackFrameRate);
     bool takeDecodedVideoFileFrame(CameraMediaPlaybackState::DecodedFrame& frame);
     void clearStreamPlaybackAudio();
     void appendStreamPlaybackAudio(const QByteArray& pcmS16Stereo, int audioSampleRate);
@@ -151,8 +141,6 @@ private:
     // is absorbed smoothly instead of overflow-drained (clicks).
     int takeResampledStreamPlaybackAudio(QByteArray& pcmS16Stereo, int audioSampleRate, int maxOutputFrames, double targetBufferSeconds);
     void submitResampledStreamAudio();
-    int dropPacedStreamPlaybackAudio(int droppedVideoFrames, int audioSampleRate, double playbackFrameRate);
-    int dropTimedStreamPlaybackAudio(qint64 durationMs, int audioSampleRate);
     int streamPlaybackAudioBytes() const;
     int streamPlaybackAudioSampleRate() const;
     int streamInitialBufferFrameCount() const;

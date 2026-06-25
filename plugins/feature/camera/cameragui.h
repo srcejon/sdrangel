@@ -42,6 +42,7 @@
 #ifdef QT_SENSORS_FOUND
 #include <QSensor>
 class QCompass;
+class QRotationSensor;
 class QTiltSensor;
 #endif
 
@@ -293,8 +294,10 @@ private:
 
 #ifdef QT_SENSORS_FOUND
     QCompass *m_directionCompassSensor = nullptr;
+    QRotationSensor *m_directionRotationSensor = nullptr;
     QTiltSensor *m_directionTiltSensor = nullptr;
     bool m_directionCompassReadingValid = false;
+    bool m_directionRotationReadingValid = false;
     bool m_directionTiltReadingValid = false;
 #endif
 

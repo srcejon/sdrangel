@@ -94,6 +94,8 @@
 #ifdef QT_SENSORS_FOUND
 #include <QCompass>
 #include <QCompassReading>
+#include <QRotationSensor>
+#include <QRotationReading>
 #include <QTiltSensor>
 #include <QTiltReading>
 #endif
@@ -3373,17 +3375,18 @@ void CameraGUI::populateDirectionSourceCombo()
 
 #ifdef QT_SENSORS_FOUND
     const QList<QByteArray> compassSensors = QSensor::sensorsForType(QCompass::sensorType);
+    const QList<QByteArray> rotationSensors = QSensor::sensorsForType(QRotationSensor::sensorType);
     const QList<QByteArray> tiltSensors = QSensor::sensorsForType(QTiltSensor::sensorType);
-    compatibleDirectionSensors = !compassSensors.isEmpty() && !tiltSensors.isEmpty();
+    compatibleDirectionSensors = !compassSensors.isEmpty() && !rotationSensors.isEmpty() && !tiltSensors.isEmpty();
 
     if (compatibleDirectionSensors)
     {
-        combo->addItem(tr("Sensor default compass + tilt"), sensorDirectionSourceId(kDefaultDirectionSensorId));
+        combo->addItem(tr("Sensor default compass + tilt + rotation"), sensorDirectionSourceId(kDefaultDirectionSensorId));
 
         for (const QByteArray& identifier : compassSensors)
         {
             const QString id = QString::fromUtf8(identifier);
-            combo->addItem(tr("Sensor compass %1 + default tilt").arg(id), sensorDirectionSourceId(id));
+            combo->addItem(tr("Sensor compass %1 + default tilt/rotation").arg(id), sensorDirectionSourceId(id));
         }
     }
     else
@@ -3423,8 +3426,10 @@ void CameraGUI::startDirectionSensors()
     }
 
     m_directionCompassReadingValid = false;
+    m_directionRotationReadingValid = false;
     m_directionTiltReadingValid = false;
     m_directionCompassSensor = new QCompass(this);
+    m_directionRotationSensor = new QRotationSensor(this);
     m_directionTiltSensor = new QTiltSensor(this);
 
     if (m_settings.m_directionSensor != kDefaultDirectionSensorId) {
@@ -3432,15 +3437,18 @@ void CameraGUI::startDirectionSensors()
     }
 
     connect(m_directionCompassSensor, &QSensor::readingChanged, this, &CameraGUI::syncFromDirectionSensors);
+    connect(m_directionRotationSensor, &QSensor::readingChanged, this, &CameraGUI::syncFromDirectionSensors);
     connect(m_directionTiltSensor, &QSensor::readingChanged, this, &CameraGUI::syncFromDirectionSensors);
 
     const bool compassStarted = m_directionCompassSensor->start();
+    const bool rotationStarted = m_directionRotationSensor->start();
     const bool tiltStarted = m_directionTiltSensor->start();
 
-    if (!compassStarted || !tiltStarted)
+    if (!compassStarted || !rotationStarted || !tiltStarted)
     {
         qWarning() << "CameraGUI: failed to start Qt direction sensors"
             << "compass" << compassStarted
+            << "rotation" << rotationStarted
             << "tilt" << tiltStarted
             << "sensor" << m_settings.m_directionSensor;
         stopDirectionSensors();
@@ -3460,6 +3468,12 @@ void CameraGUI::stopDirectionSensors()
         delete m_directionCompassSensor;
         m_directionCompassSensor = nullptr;
     }
+    if (m_directionRotationSensor)
+    {
+        m_directionRotationSensor->stop();
+        delete m_directionRotationSensor;
+        m_directionRotationSensor = nullptr;
+    }
     if (m_directionTiltSensor)
     {
         m_directionTiltSensor->stop();
@@ -3467,6 +3481,7 @@ void CameraGUI::stopDirectionSensors()
         m_directionTiltSensor = nullptr;
     }
     m_directionCompassReadingValid = false;
+    m_directionRotationReadingValid = false;
     m_directionTiltReadingValid = false;
 #endif
 }
@@ -3474,12 +3489,17 @@ void CameraGUI::stopDirectionSensors()
 void CameraGUI::syncFromDirectionSensors()
 {
 #ifdef QT_SENSORS_FOUND
-    if (m_settings.m_directionSensor.isEmpty() || !m_directionCompassSensor || !m_directionTiltSensor) {
+    if (m_settings.m_directionSensor.isEmpty()
+        || !m_directionCompassSensor
+        || !m_directionRotationSensor
+        || !m_directionTiltSensor)
+    {
         return;
     }
 
     double azimuth = m_settings.m_azimuth;
     double elevation = m_settings.m_elevation;
+    double roll = m_settings.m_roll;
 
     if (const QCompassReading *compassReading = m_directionCompassSensor->reading())
     {
@@ -3488,6 +3508,16 @@ void CameraGUI::syncFromDirectionSensors()
         {
             azimuth = readingAzimuth;
             m_directionCompassReadingValid = true;
+        }
+    }
+
+    if (const QRotationReading *rotationReading = m_directionRotationSensor->reading())
+    {
+        const double readingRoll = rotationReading->z();
+        if (std::isfinite(readingRoll))
+        {
+            roll = readingRoll;
+            m_directionRotationReadingValid = true;
         }
     }
 
@@ -3509,7 +3539,7 @@ void CameraGUI::syncFromDirectionSensors()
         }
     }
 
-    if (!m_directionCompassReadingValid || !m_directionTiltReadingValid) {
+    if (!m_directionCompassReadingValid || !m_directionRotationReadingValid || !m_directionTiltReadingValid) {
         return;
     }
 
@@ -3520,28 +3550,36 @@ void CameraGUI::syncFromDirectionSensors()
     if (azimuth < 0.0) {
         azimuth += 360.0;
     }
+    roll = std::fmod(roll, 360.0);
+    if (roll < 0.0) {
+        roll += 360.0;
+    }
     elevation = qBound(
         static_cast<double>(CameraSettings::m_minElevation),
         elevation,
         static_cast<double>(CameraSettings::m_maxElevation));
 
     if ((std::fabs(static_cast<double>(m_settings.m_azimuth) - azimuth) < 0.05)
-        && (std::fabs(static_cast<double>(m_settings.m_elevation) - elevation) < 0.05))
+        && (std::fabs(static_cast<double>(m_settings.m_elevation) - elevation) < 0.05)
+        && (std::fabs(static_cast<double>(m_settings.m_roll) - roll) < 0.05))
     {
         return;
     }
 
     m_settings.m_azimuth = static_cast<float>(azimuth);
     m_settings.m_elevation = static_cast<float>(elevation);
+    m_settings.m_roll = static_cast<float>(roll);
 
     {
         QSignalBlocker azimuthBlocker(settingsUI()->azimuthSpin);
         QSignalBlocker elevationBlocker(settingsUI()->elevationSpin);
+        QSignalBlocker rollBlocker(settingsUI()->rollSpin);
         settingsUI()->azimuthSpin->setValue(azimuth);
         settingsUI()->elevationSpin->setValue(elevation);
+        settingsUI()->rollSpin->setValue(roll);
     }
 
-    applySettings({"azimuth", "elevation"});
+    applySettings({"azimuth", "elevation", "roll"});
 #endif
 }
 
@@ -3573,6 +3611,7 @@ void CameraGUI::updatePositionControls()
     settingsUI()->altitudeSpin->setReadOnly(m_settings.m_positionSync);
     settingsUI()->azimuthSpin->setReadOnly(azElSynced);
     settingsUI()->elevationSpin->setReadOnly(azElSynced);
+    settingsUI()->rollSpin->setReadOnly(sensorSynced);
     settingsUI()->azimuthOffsetSpin->setEnabled(azElSynced);
     settingsUI()->elevationOffsetSpin->setEnabled(azElSynced);
     settingsUI()->azimuthOffsetLabel->setEnabled(azElSynced);

@@ -26,6 +26,7 @@
 #include <opencv2/core/core.hpp>
 #ifdef CAMERA_OPENCV_CUDA_IMAGE_PROCESSING
 #include <opencv2/core/cuda.hpp>
+#include <opencv2/cudafilters.hpp>
 #endif
 
 #include "util/message.h"
@@ -78,6 +79,8 @@ private:
     bool m_captureActive;
     quint64 m_captureEpoch = 0;
     cv::Mat m_darkCalibrationFrame;
+    cv::Mat m_darkHotPixelMask;
+    bool m_darkHotPixelRepairLogPending = false;
     cv::Mat m_flatCalibrationFrame;
     cv::Mat m_biasCalibrationFrame;
 #ifdef CAMERA_OPENCV_CUDA_IMAGE_PROCESSING
@@ -94,6 +97,10 @@ private:
     CudaCalibrationFrame m_cudaDarkCalibrationFrame;
     CudaCalibrationFrame m_cudaFlatCalibrationFrame;
     CudaCalibrationFrame m_cudaBiasCalibrationFrame;
+    cv::cuda::GpuMat m_cudaDarkHotPixelMask;
+    cv::Size m_cudaDarkHotPixelMaskSize;
+    cv::Ptr<cv::cuda::Filter> m_cudaMonoHotPixelRepairFilter;
+    cv::Ptr<cv::cuda::Filter> m_cudaColorHotPixelRepairFilter;
 #endif
     QMutex m_frameMutex;
     std::deque<CameraPipelineFramePtr> m_pendingFrames;
@@ -108,14 +115,19 @@ private:
     int pendingFrameLimit() const;
     void reloadCalibrationFrames();
     cv::Mat loadFitsCalibrationFrame(const QString& fileName, const QString& calibrationType, bool normalizeFlat) const;
+    cv::Mat buildHotPixelMask(const cv::Mat& darkFrame, const QString& fileName) const;
     void validateCalibrationFrame(cv::Mat& calibrationFrame, const cv::Size& expectedSize, const QString& calibrationType, const QString& fileName);
     cv::Mat applyCalibration(const cv::Mat& input);
+    int repairHotPixels(cv::Mat& calibratedFrame, const cv::Mat& hotPixelMask) const;
     bool shouldMaterializeUnprocessedImage(const CameraPipelineFrame& frame) const;
     bool shouldMaterializeRawInputImage(const CameraPipelineFrame& frame) const;
 #ifdef CAMERA_OPENCV_CUDA_IMAGE_PROCESSING
     bool canUseCudaPreprocessing() const;
     void invalidateCudaCalibrationFrames();
     cv::cuda::GpuMat uploadCalibrationFrameCuda(CudaCalibrationFrame& cachedFrame, const cv::Mat& calibrationFrame, int channels);
+    cv::cuda::GpuMat uploadHotPixelMaskCuda();
+    cv::Ptr<cv::cuda::Filter> cudaHotPixelRepairFilter(int channels);
+    int repairHotPixelsCuda(cv::cuda::GpuMat& calibratedGpu, int channels);
     bool applyCalibrationCuda(cv::cuda::GpuMat& frameGpu, const cv::Size& inputSize, int inputType);
     bool preprocessFrameCuda(CameraPipelineFrame& frame, const cv::Mat& inputMat);
     QImage downloadCudaBgrImage(const cv::cuda::GpuMat& bgrGpu, bool preserveBitDepth);

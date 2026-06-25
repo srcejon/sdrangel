@@ -19,12 +19,14 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <vector>
 
 #include <QDebug>
 #include <QTimer>
 
 #ifdef CAMERA_OPENCV_CUDA_IMAGE_PROCESSING
 #include <opencv2/cudaarithm.hpp>
+#include <opencv2/cudafilters.hpp>
 #include <opencv2/cudaimgproc.hpp>
 #endif
 
@@ -121,6 +123,7 @@ void CameraFramePreprocessor::applySettings(const CameraSettings& settings, cons
         || settingsKeys.contains("cameraGain")
         || settingsKeys.contains("cameraOffset")
         || settingsKeys.contains("cameraReadoutMode")
+        || settingsKeys.contains("asiColorImageType")
         || settingsKeys.contains("exposureTimeMs")
         || settingsKeys.contains("postProcessUseCuda")
         || settingsKeys.contains("stackDarkFileName")
@@ -259,14 +262,19 @@ void CameraFramePreprocessor::processNextFrame()
 void CameraFramePreprocessor::reloadCalibrationFrames()
 {
     m_darkCalibrationFrame.release();
+    m_darkHotPixelMask.release();
+    m_darkHotPixelRepairLogPending = false;
     m_flatCalibrationFrame.release();
     m_biasCalibrationFrame.release();
 #ifdef CAMERA_OPENCV_CUDA_IMAGE_PROCESSING
     invalidateCudaCalibrationFrames();
 #endif
 
-    if (!m_settings.m_stackDarkFileName.isEmpty()) {
+    if (!m_settings.m_stackDarkFileName.isEmpty())
+    {
         m_darkCalibrationFrame = loadFitsCalibrationFrame(m_settings.m_stackDarkFileName, QStringLiteral("dark"), false);
+        m_darkHotPixelMask = buildHotPixelMask(m_darkCalibrationFrame, m_settings.m_stackDarkFileName);
+        m_darkHotPixelRepairLogPending = !m_darkHotPixelMask.empty();
     }
 
     if (!m_settings.m_stackFlatFileName.isEmpty()) {
@@ -314,6 +322,56 @@ cv::Mat CameraFramePreprocessor::loadFitsCalibrationFrame(const QString& fileNam
     return monoFrame;
 }
 
+cv::Mat CameraFramePreprocessor::buildHotPixelMask(const cv::Mat& darkFrame, const QString& fileName) const
+{
+    if (darkFrame.empty() || (darkFrame.channels() != 1) || (darkFrame.depth() != CV_32F)) {
+        return cv::Mat();
+    }
+
+    std::vector<float> samples;
+    samples.reserve(static_cast<size_t>(darkFrame.total()));
+    for (int y = 0; y < darkFrame.rows; ++y)
+    {
+        const float *line = darkFrame.ptr<float>(y);
+        for (int x = 0; x < darkFrame.cols; ++x) {
+            samples.push_back(line[x]);
+        }
+    }
+
+    if (samples.empty()) {
+        return cv::Mat();
+    }
+
+    const size_t medianIndex = samples.size() / 2;
+    std::nth_element(samples.begin(), samples.begin() + static_cast<std::ptrdiff_t>(medianIndex), samples.end());
+    const float median = samples[medianIndex];
+
+    std::vector<float> deviations;
+    deviations.reserve(samples.size());
+    for (float sample : samples) {
+        deviations.push_back(std::fabs(sample - median));
+    }
+
+    std::nth_element(deviations.begin(), deviations.begin() + static_cast<std::ptrdiff_t>(medianIndex), deviations.end());
+    const float mad = deviations[medianIndex];
+    const float sigma = mad > 0.0f ? mad * 1.4826f : 0.0f;
+    const float threshold = median + std::max(16.0f, sigma * 8.0f);
+
+    cv::Mat mask;
+    cv::threshold(darkFrame, mask, threshold, 255.0, cv::THRESH_BINARY);
+    mask.convertTo(mask, CV_8UC1);
+
+    const int hotPixelCount = cv::countNonZero(mask);
+    if (hotPixelCount > 0)
+    {
+        qDebug() << "CameraFramePreprocessor: dark calibration hot-pixel mask"
+                 << hotPixelCount << "pixels threshold" << threshold
+                 << "from" << fileName;
+    }
+
+    return mask;
+}
+
 void CameraFramePreprocessor::validateCalibrationFrame(cv::Mat& calibrationFrame, const cv::Size& expectedSize, const QString& calibrationType, const QString& fileName)
 {
     if (calibrationFrame.empty()) {
@@ -330,6 +388,116 @@ void CameraFramePreprocessor::validateCalibrationFrame(cv::Mat& calibrationFrame
     }
 }
 
+int CameraFramePreprocessor::repairHotPixels(cv::Mat& calibratedFrame, const cv::Mat& hotPixelMask) const
+{
+    if (calibratedFrame.empty()
+        || hotPixelMask.empty()
+        || (hotPixelMask.size() != calibratedFrame.size())
+        || (hotPixelMask.type() != CV_8UC1)
+        || (calibratedFrame.depth() != CV_32F))
+    {
+        return 0;
+    }
+
+    const int channels = calibratedFrame.channels();
+    if ((channels != 1) && (channels != 3)) {
+        return 0;
+    }
+
+    cv::Mat repaired = calibratedFrame.clone();
+    const int step = channels == 1 ? 2 : 1;
+    int repairedCount = 0;
+
+    for (int y = 0; y < calibratedFrame.rows; ++y)
+    {
+        const uchar *maskLine = hotPixelMask.ptr<uchar>(y);
+        for (int x = 0; x < calibratedFrame.cols; ++x)
+        {
+            if (maskLine[x] == 0) {
+                continue;
+            }
+
+            if (channels == 1)
+            {
+                float samples[8];
+                int count = 0;
+                for (int dy = -step; dy <= step; dy += step)
+                {
+                    const int yy = y + dy;
+                    if ((yy < 0) || (yy >= calibratedFrame.rows)) {
+                        continue;
+                    }
+
+                    for (int dx = -step; dx <= step; dx += step)
+                    {
+                        if ((dx == 0) && (dy == 0)) {
+                            continue;
+                        }
+
+                        const int xx = x + dx;
+                        if ((xx < 0) || (xx >= calibratedFrame.cols) || (hotPixelMask.ptr<uchar>(yy)[xx] != 0)) {
+                            continue;
+                        }
+
+                        samples[count++] = calibratedFrame.ptr<float>(yy)[xx];
+                    }
+                }
+
+                if (count > 0)
+                {
+                    std::nth_element(samples, samples + (count / 2), samples + count);
+                    repaired.ptr<float>(y)[x] = samples[count / 2];
+                    ++repairedCount;
+                }
+            }
+            else
+            {
+                float samples[3][8];
+                int count = 0;
+                for (int dy = -step; dy <= step; dy += step)
+                {
+                    const int yy = y + dy;
+                    if ((yy < 0) || (yy >= calibratedFrame.rows)) {
+                        continue;
+                    }
+
+                    for (int dx = -step; dx <= step; dx += step)
+                    {
+                        if ((dx == 0) && (dy == 0)) {
+                            continue;
+                        }
+
+                        const int xx = x + dx;
+                        if ((xx < 0) || (xx >= calibratedFrame.cols) || (hotPixelMask.ptr<uchar>(yy)[xx] != 0)) {
+                            continue;
+                        }
+
+                        const cv::Vec3f& pixel = calibratedFrame.ptr<cv::Vec3f>(yy)[xx];
+                        samples[0][count] = pixel[0];
+                        samples[1][count] = pixel[1];
+                        samples[2][count] = pixel[2];
+                        ++count;
+                    }
+                }
+
+                if (count > 0)
+                {
+                    cv::Vec3f& pixel = repaired.ptr<cv::Vec3f>(y)[x];
+                    for (int channel = 0; channel < 3; ++channel)
+                    {
+                        std::nth_element(samples[channel], samples[channel] + (count / 2), samples[channel] + count);
+                        pixel[channel] = samples[channel][count / 2];
+                    }
+                    ++repairedCount;
+                }
+            }
+        }
+    }
+
+    calibratedFrame = repaired;
+    return repairedCount;
+}
+
 cv::Mat CameraFramePreprocessor::applyCalibration(const cv::Mat& input)
 {
     PROFILER_START();
@@ -341,6 +509,9 @@ cv::Mat CameraFramePreprocessor::applyCalibration(const cv::Mat& input)
     validateCalibrationFrame(m_darkCalibrationFrame, input.size(), QStringLiteral("dark"), m_settings.m_stackDarkFileName);
     validateCalibrationFrame(m_flatCalibrationFrame, input.size(), QStringLiteral("flat"), m_settings.m_stackFlatFileName);
     validateCalibrationFrame(m_biasCalibrationFrame, input.size(), QStringLiteral("bias"), m_settings.m_stackBiasFileName);
+    if (m_darkCalibrationFrame.empty() || (m_darkHotPixelMask.size() != input.size())) {
+        m_darkHotPixelMask.release();
+    }
 
     if (m_darkCalibrationFrame.empty() && m_flatCalibrationFrame.empty() && m_biasCalibrationFrame.empty()) {
         return input;
@@ -396,6 +567,16 @@ cv::Mat CameraFramePreprocessor::applyCalibration(const cv::Mat& input)
         cv::Mat safeFlatFrame;
         cv::max(flatFrame, cv::Scalar::all(1.0e-6), safeFlatFrame);
         cv::divide(calibratedFloat, safeFlatFrame, calibratedFloat);
+    }
+    const int repairedHotPixelCount = repairHotPixels(calibratedFloat, m_darkHotPixelMask);
+    if (m_darkHotPixelRepairLogPending && !m_darkHotPixelMask.empty())
+    {
+        qDebug() << "CameraFramePreprocessor: repaired" << repairedHotPixelCount
+                 << "dark hot pixels before debayer on frame"
+                 << input.cols << "x" << input.rows
+                 << "channels" << input.channels()
+                 << "depth" << input.depth();
+        m_darkHotPixelRepairLogPending = false;
     }
 
     const double maxValue = input.depth() == CV_16U ? 65535.0 : 255.0;
@@ -513,6 +694,10 @@ void CameraFramePreprocessor::invalidateCudaCalibrationFrames()
     m_cudaDarkCalibrationFrame = CudaCalibrationFrame();
     m_cudaFlatCalibrationFrame = CudaCalibrationFrame();
     m_cudaBiasCalibrationFrame = CudaCalibrationFrame();
+    m_cudaDarkHotPixelMask.release();
+    m_cudaDarkHotPixelMaskSize = cv::Size();
+    m_cudaMonoHotPixelRepairFilter.release();
+    m_cudaColorHotPixelRepairFilter.release();
 }
 
 cv::cuda::GpuMat CameraFramePreprocessor::uploadCalibrationFrameCuda(
@@ -552,11 +737,89 @@ cv::cuda::GpuMat CameraFramePreprocessor::uploadCalibrationFrameCuda(
     return cachedFrame.m_frame;
 }
 
+cv::cuda::GpuMat CameraFramePreprocessor::uploadHotPixelMaskCuda()
+{
+    if (m_darkHotPixelMask.empty()) {
+        return cv::cuda::GpuMat();
+    }
+
+    if (!m_cudaDarkHotPixelMask.empty() && (m_cudaDarkHotPixelMaskSize == m_darkHotPixelMask.size())) {
+        return m_cudaDarkHotPixelMask;
+    }
+
+    m_cudaDarkHotPixelMask.upload(m_darkHotPixelMask, m_cudaStream);
+    m_cudaDarkHotPixelMaskSize = m_darkHotPixelMask.size();
+    return m_cudaDarkHotPixelMask;
+}
+
+cv::Ptr<cv::cuda::Filter> CameraFramePreprocessor::cudaHotPixelRepairFilter(int channels)
+{
+    const int inputType = CV_MAKETYPE(CV_32F, channels);
+
+    if (channels == 1)
+    {
+        if (m_cudaMonoHotPixelRepairFilter.empty())
+        {
+            cv::Mat kernel = cv::Mat::zeros(5, 5, CV_32F);
+            for (int y = 0; y < 5; y += 2)
+            {
+                for (int x = 0; x < 5; x += 2)
+                {
+                    if ((x == 2) && (y == 2)) {
+                        continue;
+                    }
+                    kernel.at<float>(y, x) = 1.0f / 8.0f;
+                }
+            }
+            m_cudaMonoHotPixelRepairFilter = cv::cuda::createLinearFilter(
+                inputType, inputType, kernel, cv::Point(-1, -1), cv::BORDER_REFLECT101);
+        }
+        return m_cudaMonoHotPixelRepairFilter;
+    }
+
+    if (channels == 3)
+    {
+        if (m_cudaColorHotPixelRepairFilter.empty())
+        {
+            cv::Mat kernel = cv::Mat::ones(3, 3, CV_32F) / 8.0f;
+            kernel.at<float>(1, 1) = 0.0f;
+            m_cudaColorHotPixelRepairFilter = cv::cuda::createLinearFilter(
+                inputType, inputType, kernel, cv::Point(-1, -1), cv::BORDER_REFLECT101);
+        }
+        return m_cudaColorHotPixelRepairFilter;
+    }
+
+    return cv::Ptr<cv::cuda::Filter>();
+}
+
+int CameraFramePreprocessor::repairHotPixelsCuda(cv::cuda::GpuMat& calibratedGpu, int channels)
+{
+    if (calibratedGpu.empty() || m_darkHotPixelMask.empty() || ((channels != 1) && (channels != 3))) {
+        return 0;
+    }
+
+    const cv::cuda::GpuMat maskGpu = uploadHotPixelMaskCuda();
+    const cv::Ptr<cv::cuda::Filter> repairFilter = cudaHotPixelRepairFilter(channels);
+    if (maskGpu.empty() || repairFilter.empty()) {
+        return 0;
+    }
+
+    cv::cuda::GpuMat repairedGpu;
+    repairFilter->apply(calibratedGpu, repairedGpu, m_cudaStream);
+    repairedGpu.copyTo(calibratedGpu, maskGpu, m_cudaStream);
+    return cv::countNonZero(m_darkHotPixelMask);
+}
+
 bool CameraFramePreprocessor::applyCalibrationCuda(cv::cuda::GpuMat& frameGpu, const cv::Size& inputSize, int inputType)
 {
     validateCalibrationFrame(m_darkCalibrationFrame, inputSize, QStringLiteral("dark"), m_settings.m_stackDarkFileName);
     validateCalibrationFrame(m_flatCalibrationFrame, inputSize, QStringLiteral("flat"), m_settings.m_stackFlatFileName);
     validateCalibrationFrame(m_biasCalibrationFrame, inputSize, QStringLiteral("bias"), m_settings.m_stackBiasFileName);
+    if (m_darkCalibrationFrame.empty() || (m_darkHotPixelMask.size() != inputSize)) {
+        m_darkHotPixelMask.release();
+        m_cudaDarkHotPixelMask.release();
+        m_cudaDarkHotPixelMaskSize = cv::Size();
+    }
 
     if (m_darkCalibrationFrame.empty() && m_flatCalibrationFrame.empty() && m_biasCalibrationFrame.empty()) {
         return true;
@@ -586,6 +849,16 @@ bool CameraFramePreprocessor::applyCalibrationCuda(cv::cuda::GpuMat& frameGpu, c
             cv::cuda::GpuMat epsilonGpu(flatGpu.size(), flatGpu.type(), cv::Scalar::all(1.0e-6));
             cv::cuda::max(flatGpu, epsilonGpu, safeFlatGpu, m_cudaStream);
             cv::cuda::divide(calibratedGpu, safeFlatGpu, calibratedGpu, 1.0, -1, m_cudaStream);
+        }
+        const int repairedHotPixelCount = repairHotPixelsCuda(calibratedGpu, channels);
+        if (m_darkHotPixelRepairLogPending && !m_darkHotPixelMask.empty())
+        {
+            qDebug() << "CameraFramePreprocessor: CUDA repaired" << repairedHotPixelCount
+                     << "dark hot pixels before debayer on frame"
+                     << inputSize.width << "x" << inputSize.height
+                     << "channels" << channels
+                     << "depth" << CV_MAT_DEPTH(inputType);
+            m_darkHotPixelRepairLogPending = false;
         }
 
         calibratedGpu.convertTo(frameGpu, inputType, m_cudaStream);

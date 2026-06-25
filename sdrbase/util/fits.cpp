@@ -360,25 +360,27 @@ float FITS::value(int x, int y) const
     int offset = m_dataStart + (m_height-1-y) * m_width * m_bytesPerPixel + x * m_bytesPerPixel;
     const uchar *data = (const uchar *)m_data.data();
     // Big-endian
-    int v = 0;
-    for (int i = m_bytesPerPixel - 1; i >= 0; i--)
-        v += data[offset++] << (i*8);
+    quint64 v = 0;
+    for (int i = m_bytesPerPixel - 1; i >= 0; i--) {
+        v += static_cast<quint64>(data[offset++]) << (i*8);
+    }
     if (m_bitsPerPixel > 0)
     {
-        // Sign-extend
+        // FITS BITPIX=8 is unsigned. Larger integer BITPIX values are signed,
+        // with unsigned sensor data represented through BZERO/BSCALE.
         switch (m_bytesPerPixel)
         {
         case 1:
-            v = (char)v;
-            break;
+            return v * m_bscale + m_bzero;
         case 2:
-            v = (qint16)v;
-            break;
-        case 3:
-            v = (qint32)v;
-            break;
+            return static_cast<qint16>(static_cast<quint16>(v)) * m_bscale + m_bzero;
+        case 4:
+            return static_cast<qint32>(static_cast<quint32>(v)) * m_bscale + m_bzero;
+        case 8:
+            return static_cast<qint64>(v) * m_bscale + m_bzero;
+        default:
+            return v * m_bscale + m_bzero;
         }
-        return v * m_bscale + m_bzero;
     }
     else
     {

@@ -173,6 +173,28 @@ double normalizeSignedDegrees(double value)
     return value;
 }
 
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+int nearestCameraFormatFps(const QCameraFormat& format, int desiredFps)
+{
+    int minFps = static_cast<int>(std::ceil(format.minFrameRate()));
+    int maxFps = static_cast<int>(std::floor(format.maxFrameRate()));
+
+    if (minFps <= 0) {
+        minFps = 1;
+    }
+    if (maxFps < minFps) {
+        maxFps = minFps;
+    }
+
+    return qBound(minFps, desiredFps, maxFps);
+}
+
+int cameraFormatFpsDistance(const QCameraFormat& format, int desiredFps)
+{
+    return std::abs(nearestCameraFormatFps(format, desiredFps) - desiredFps);
+}
+#endif
+
 std::array<QLabel*, 4> hdrExposureLabels(Ui::CameraSettingsDialog *ui)
 {
     return {{
@@ -2895,7 +2917,22 @@ void CameraGUI::populateQtFormatControls(const QList<QSize>& resolutions, const 
         settingsUI()->resolutionCombo->setCurrentIndex(0);
     }
 
-    updateFrameRateControlForResolution(settingsUI()->resolutionCombo->currentText());
+    const QString selectedResolution = settingsUI()->resolutionCombo->currentText();
+    const QStringList parts = selectedResolution.split('x');
+    if (parts.size() == 2)
+    {
+        bool okWidth = false;
+        bool okHeight = false;
+        const int width = parts.at(0).trimmed().toInt(&okWidth);
+        const int height = parts.at(1).trimmed().toInt(&okHeight);
+        if (okWidth && okHeight && (width > 0) && (height > 0))
+        {
+            m_settings.m_resolutionWidth = width;
+            m_settings.m_resolutionHeight = height;
+        }
+    }
+
+    updateFrameRateControlForResolution(selectedResolution);
 }
 
 void CameraGUI::updateFrameRateControlForResolution(const QString& resolutionText)
@@ -4152,8 +4189,11 @@ void CameraGUI::setupQtCapture()
     m_imageCapture   = nullptr;
     m_videoSink      = nullptr;
 
-    // Select a matching camera format if one exists
+    // Select the requested format if possible, otherwise use the closest
+    // supported frame rate at the requested resolution.
     QCameraFormat chosenFormat;
+    bool exactFormat = false;
+    bool sameResolutionFallback = false;
     for (const QCameraFormat& fmt : selectedDevice.videoFormats())
     {
         if ((fmt.resolution().width()  == m_settings.m_resolutionWidth)
@@ -4163,23 +4203,65 @@ void CameraGUI::setupQtCapture()
             )
         {
             chosenFormat = fmt;
+            exactFormat = true;
             break;
         }
     }
-    if (!chosenFormat.isNull()) {
+
+    if (chosenFormat.isNull())
+    {
+        for (const QCameraFormat& fmt : selectedDevice.videoFormats())
+        {
+            if ((fmt.resolution().width() != m_settings.m_resolutionWidth)
+                || (fmt.resolution().height() != m_settings.m_resolutionHeight))
+            {
+                continue;
+            }
+
+            if (chosenFormat.isNull()
+                || (cameraFormatFpsDistance(fmt, m_settings.m_framesPerSecond)
+                    < cameraFormatFpsDistance(chosenFormat, m_settings.m_framesPerSecond)))
+            {
+                chosenFormat = fmt;
+                sameResolutionFallback = true;
+            }
+        }
+    }
+
+    if (!chosenFormat.isNull())
+    {
         m_qtCamera->setCameraFormat(chosenFormat);
-    } else {
-        qWarning() << "CameraGUI::setupQtCapture: No matching camera format"
-            << m_settings.m_resolutionWidth
+        if (sameResolutionFallback && !exactFormat)
+        {
+            const int requestedFps = m_settings.m_framesPerSecond;
+            const int supportedFps = nearestCameraFormatFps(chosenFormat, requestedFps);
+            m_settings.m_framesPerSecond = supportedFps;
+            {
+                QSignalBlocker spinBlocker(settingsUI()->fpsSpin);
+                QSignalBlocker comboBlocker(settingsUI()->fpsCombo);
+                if (settingsUI()->fpsStack->currentWidget() == settingsUI()->fpsSpinPage) {
+                    settingsUI()->fpsSpin->setValue(supportedFps);
+                } else {
+                    const int index = settingsUI()->fpsCombo->findData(supportedFps);
+                    if (index >= 0) {
+                        settingsUI()->fpsCombo->setCurrentIndex(index);
+                    }
+                }
+            }
+            qDebug() << "CameraGUI::setupQtCapture: using closest Qt camera format"
+                << chosenFormat.resolution()
+                << "requestedFps" << requestedFps
+                << "selectedFps" << supportedFps
+                << "formatFpsRange" << chosenFormat.minFrameRate() << chosenFormat.maxFrameRate();
+        }
+    }
+    else if (!selectedDevice.videoFormats().isEmpty())
+    {
+        qDebug() << "CameraGUI::setupQtCapture: no explicit Qt camera format match; using device default"
+            << "requested" << m_settings.m_resolutionWidth
             << m_settings.m_resolutionHeight
-            << m_settings.m_framesPerSecond;
-        reportFeatureError(
-            QStringLiteral("qtNoMatchingFormat"),
-            tr("Qt camera format not available"),
-            tr("No matching Qt camera format was found for %1x%2 at %3 FPS.")
-                .arg(m_settings.m_resolutionWidth)
-                .arg(m_settings.m_resolutionHeight)
-                .arg(m_settings.m_framesPerSecond));
+            << m_settings.m_framesPerSecond
+            << "availableFormats" << selectedDevice.videoFormats().size();
     }
 
     m_qtCamera->setExposureMode(QCamera::ExposureManual);
@@ -5643,6 +5725,9 @@ void CameraGUI::on_cameraCombo_currentIndexChanged(int index)
     }
 
     const CameraInfo previousCamera = selectedCameraFromSettings();
+    const int previousResolutionWidth = m_settings.m_resolutionWidth;
+    const int previousResolutionHeight = m_settings.m_resolutionHeight;
+    const int previousFramesPerSecond = m_settings.m_framesPerSecond;
     CameraInfo selectedCamera = comboCameraInfo(index);
     const bool wasAlpaca = previousCamera.m_protocol == CameraProtocol::alpaca();
     const bool wasAsi = previousCamera.m_protocol == CameraProtocol::asi();
@@ -5722,6 +5807,15 @@ void CameraGUI::on_cameraCombo_currentIndexChanged(int index)
         probeQtCameraCapabilities();
     }
     QStringList settingsKeys = cameraSelectionSettingsKeys(selectedCamera);
+    if (m_settings.m_resolutionWidth != previousResolutionWidth) {
+        settingsKeys.append("resolutionWidth");
+    }
+    if (m_settings.m_resolutionHeight != previousResolutionHeight) {
+        settingsKeys.append("resolutionHeight");
+    }
+    if (m_settings.m_framesPerSecond != previousFramesPerSecond) {
+        settingsKeys.append("framesPerSecond");
+    }
     if (switchedBetweenAsiAndAlpaca) {
         settingsKeys.append("cameraStartX");
         settingsKeys.append("cameraStartY");

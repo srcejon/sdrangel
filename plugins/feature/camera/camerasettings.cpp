@@ -240,6 +240,7 @@ void CameraSettings::resetToDefaults()
     m_elevation = 0.0f;
     m_roll = 0.0f;
     m_rotator.clear();
+    m_directionSensor.clear();
     m_fov = 60.0f;
     m_fovMode = FovModeDirect;
     m_fovSensorWidthMm = 36.0;
@@ -682,6 +683,7 @@ QByteArray CameraSettings::serialize() const
     s.writeS32(267, m_scaleHeight);
     s.writeBool(268, m_scaleKeepAspectRatio);
     s.writeString(269, m_trackObjectFontFamily);
+    s.writeString(270, m_directionSensor);
 
     return s.final();
 }
@@ -1159,6 +1161,7 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readS32(267, &m_scaleHeight, 0);
         d.readBool(268, &m_scaleKeepAspectRatio, true);
         d.readString(269, &m_trackObjectFontFamily, "");
+        d.readString(270, &m_directionSensor, "");
         if (isStreamCamera() && m_streamUrl.isEmpty()) {
             m_streamUrl = m_videoFileCameraPath;
         }
@@ -1607,6 +1610,9 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     }
     if (settingsKeys.contains("rotator")) {
         m_rotator = settings.m_rotator;
+    }
+    if (settingsKeys.contains("directionSensor")) {
+        m_directionSensor = settings.m_directionSensor;
     }
     if (settingsKeys.contains("fov")) {
         m_fov = qBound(m_minFov, settings.m_fov, m_maxFov);
@@ -2409,6 +2415,9 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("rotator") || force) {
         ostr << " m_rotator: " << m_rotator.toStdString();
+    }
+    if (settingsKeys.contains("directionSensor") || force) {
+        ostr << " m_directionSensor: " << m_directionSensor.toStdString();
     }
     if (settingsKeys.contains("fov") || force) {
         ostr << " m_fov: " << m_fov;

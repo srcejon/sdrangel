@@ -91,6 +91,12 @@
 #include <QCameraViewfinderSettings>
 #include <QVideoFrame>
 #endif
+#ifdef QT_SENSORS_FOUND
+#include <QCompass>
+#include <QCompassReading>
+#include <QTiltSensor>
+#include <QTiltReading>
+#endif
 
 #include "feature/featureuiset.h"
 #include "gui/crightclickenabler.h"
@@ -124,6 +130,8 @@ enum AutoExposureGainControl
     AutoExposureGainSoftware,
     AutoExposureGainHardware
 };
+
+const QString kDefaultDirectionSensorId = QStringLiteral("__default__");
 
 std::array<QLabel*, 4> hdrExposureLabels(Ui::CameraSettingsDialog *ui)
 {
@@ -1156,6 +1164,7 @@ CameraGUI::~CameraGUI()
     if (m_camera) {
         m_camera->setMessageQueueToGUI(nullptr);
     }
+    stopDirectionSensors();
     cleanupQtCapture();
     if (m_histogramDialog)
     {
@@ -1709,6 +1718,7 @@ void CameraGUI::displaySettings()
     settingsUI()->lensCenterOffsetYSpin->setValue(m_settings.m_lensCenterOffsetY);
     settingsUI()->lensDistortionK1Spin->setValue(m_settings.m_lensDistortionK1);
     populateGs232ControllerCombo();
+    populateDirectionSensorCombo();
     applyPositionSync();
     updatePositionControls();
     settingsUI()->postProcessWhiteBalanceModeCombo->setCurrentIndex(m_settings.m_postProcessWhiteBalanceMode);
@@ -2534,6 +2544,7 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->elevationSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_elevationSpin_valueChanged);
     QObject::connect(settingsUI()->rollSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_rollSpin_valueChanged);
     QObject::connect(settingsUI()->rotatorControllerCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_rotatorControllerCombo_currentIndexChanged);
+    QObject::connect(settingsUI()->directionSensorCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_directionSensorCombo_currentIndexChanged);
     QObject::connect(settingsUI()->fovModeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_fovModeCombo_currentIndexChanged);
     QObject::connect(settingsUI()->fovSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_fovSpin_valueChanged);
     QObject::connect(settingsUI()->fovSensorWidthSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_fovSensorWidthSpin_valueChanged);
@@ -3326,6 +3337,189 @@ void CameraGUI::populateGs232ControllerCombo()
     settingsUI()->rotatorControllerCombo->setCurrentIndex(index >= 0 ? index : 0);
 }
 
+void CameraGUI::populateDirectionSensorCombo()
+{
+    QComboBox *combo = settingsUI()->directionSensorCombo;
+    const QString currentSelection = m_settings.m_directionSensor;
+    QSignalBlocker blocker(combo);
+    combo->clear();
+    combo->addItem(tr("None"), QString());
+    bool compatibleDirectionSensors = false;
+
+#ifdef QT_SENSORS_FOUND
+    const QList<QByteArray> compassSensors = QSensor::sensorsForType(QCompass::sensorType);
+    const QList<QByteArray> tiltSensors = QSensor::sensorsForType(QTiltSensor::sensorType);
+    compatibleDirectionSensors = !compassSensors.isEmpty() && !tiltSensors.isEmpty();
+
+    if (compatibleDirectionSensors)
+    {
+        combo->addItem(tr("Default compass + tilt"), kDefaultDirectionSensorId);
+
+        for (const QByteArray& identifier : compassSensors)
+        {
+            const QString id = QString::fromUtf8(identifier);
+            combo->addItem(tr("Compass %1 + default tilt").arg(id), id);
+        }
+    }
+    else
+    {
+        combo->addItem(tr("No compatible Qt Sensors"), QString());
+    }
+
+    int index = combo->findData(currentSelection);
+    if ((index < 0) && !currentSelection.isEmpty())
+    {
+        combo->addItem(tr("Unavailable: %1").arg(currentSelection), currentSelection);
+        index = combo->count() - 1;
+    }
+    combo->setCurrentIndex(index >= 0 ? index : 0);
+    combo->setEnabled(compatibleDirectionSensors || !m_settings.m_directionSensor.isEmpty());
+    combo->setToolTip(tr("Select a Qt Sensors compass/tilt sensor pair to continually synchronize the camera azimuth and elevation."));
+    settingsUI()->directionSensorLabel->setEnabled(combo->isEnabled());
+#else
+    combo->addItem(tr("Qt Sensors unavailable"), QString());
+    combo->setCurrentIndex(0);
+    combo->setEnabled(false);
+    combo->setToolTip(tr("Qt Sensors support is not available in this build"));
+    settingsUI()->directionSensorLabel->setEnabled(false);
+#endif
+
+    if (compatibleDirectionSensors && !m_settings.m_directionSensor.isEmpty()) {
+        startDirectionSensors();
+    } else {
+        stopDirectionSensors();
+    }
+}
+
+void CameraGUI::startDirectionSensors()
+{
+#ifdef QT_SENSORS_FOUND
+    stopDirectionSensors();
+
+    if (m_settings.m_directionSensor.isEmpty()) {
+        return;
+    }
+
+    m_directionCompassReadingValid = false;
+    m_directionTiltReadingValid = false;
+    m_directionCompassSensor = new QCompass(this);
+    m_directionTiltSensor = new QTiltSensor(this);
+
+    if (m_settings.m_directionSensor != kDefaultDirectionSensorId) {
+        m_directionCompassSensor->setIdentifier(m_settings.m_directionSensor.toUtf8());
+    }
+
+    connect(m_directionCompassSensor, &QSensor::readingChanged, this, &CameraGUI::syncFromDirectionSensors);
+    connect(m_directionTiltSensor, &QSensor::readingChanged, this, &CameraGUI::syncFromDirectionSensors);
+
+    const bool compassStarted = m_directionCompassSensor->start();
+    const bool tiltStarted = m_directionTiltSensor->start();
+
+    if (!compassStarted || !tiltStarted)
+    {
+        qWarning() << "CameraGUI: failed to start Qt direction sensors"
+            << "compass" << compassStarted
+            << "tilt" << tiltStarted
+            << "sensor" << m_settings.m_directionSensor;
+        stopDirectionSensors();
+        return;
+    }
+
+    syncFromDirectionSensors();
+#endif
+}
+
+void CameraGUI::stopDirectionSensors()
+{
+#ifdef QT_SENSORS_FOUND
+    if (m_directionCompassSensor)
+    {
+        m_directionCompassSensor->stop();
+        delete m_directionCompassSensor;
+        m_directionCompassSensor = nullptr;
+    }
+    if (m_directionTiltSensor)
+    {
+        m_directionTiltSensor->stop();
+        delete m_directionTiltSensor;
+        m_directionTiltSensor = nullptr;
+    }
+    m_directionCompassReadingValid = false;
+    m_directionTiltReadingValid = false;
+#endif
+}
+
+void CameraGUI::syncFromDirectionSensors()
+{
+#ifdef QT_SENSORS_FOUND
+    if (m_settings.m_directionSensor.isEmpty() || !m_directionCompassSensor || !m_directionTiltSensor) {
+        return;
+    }
+
+    double azimuth = m_settings.m_azimuth;
+    double elevation = m_settings.m_elevation;
+
+    if (const QCompassReading *compassReading = m_directionCompassSensor->reading())
+    {
+        const double readingAzimuth = compassReading->azimuth();
+        if (std::isfinite(readingAzimuth))
+        {
+            azimuth = readingAzimuth;
+            m_directionCompassReadingValid = true;
+        }
+    }
+
+    if (const QTiltReading *tiltReading = m_directionTiltSensor->reading())
+    {
+        const double xRotation = tiltReading->xRotation();
+        const double yRotation = tiltReading->yRotation();
+        if (std::isfinite(xRotation) && std::isfinite(yRotation))
+        {
+            // Qt tilt is relative to a face-up device. Treat face-up as zenith,
+            // and a 90-degree tilt as horizon. This gives a useful camera
+            // elevation estimate for phones/tablets exposing compass + tilt.
+            const double tiltDegrees = std::min(180.0, std::hypot(xRotation, yRotation));
+            elevation = qBound(
+                static_cast<double>(CameraSettings::m_minElevation),
+                90.0 - tiltDegrees,
+                static_cast<double>(CameraSettings::m_maxElevation));
+            m_directionTiltReadingValid = true;
+        }
+    }
+
+    if (!m_directionCompassReadingValid || !m_directionTiltReadingValid) {
+        return;
+    }
+
+    azimuth = std::fmod(azimuth, 360.0);
+    if (azimuth < 0.0) {
+        azimuth += 360.0;
+    }
+    elevation = qBound(
+        static_cast<double>(CameraSettings::m_minElevation),
+        elevation,
+        static_cast<double>(CameraSettings::m_maxElevation));
+
+    if ((std::fabs(static_cast<double>(m_settings.m_azimuth) - azimuth) < 0.05)
+        && (std::fabs(static_cast<double>(m_settings.m_elevation) - elevation) < 0.05))
+    {
+        return;
+    }
+
+    m_settings.m_azimuth = static_cast<float>(azimuth);
+    m_settings.m_elevation = static_cast<float>(elevation);
+
+    {
+        QSignalBlocker azimuthBlocker(settingsUI()->azimuthSpin);
+        QSignalBlocker elevationBlocker(settingsUI()->elevationSpin);
+        settingsUI()->azimuthSpin->setValue(azimuth);
+        settingsUI()->elevationSpin->setValue(elevation);
+    }
+
+    applySettings({"azimuth", "elevation"});
+#endif
+}
+
 void CameraGUI::applyPositionSync()
 {
     if (m_settings.m_positionSync) {
@@ -3346,12 +3540,23 @@ void CameraGUI::applyPositionSync()
 
 void CameraGUI::updatePositionControls()
 {
-    const bool azElSynced = !m_settings.m_rotator.isEmpty();
+    const bool rotatorSynced = !m_settings.m_rotator.isEmpty();
+    const bool sensorSynced = !m_settings.m_directionSensor.isEmpty();
+    const bool azElSynced = rotatorSynced || sensorSynced;
     settingsUI()->latitudeSpin->setReadOnly(m_settings.m_positionSync);
     settingsUI()->longitudeSpin->setReadOnly(m_settings.m_positionSync);
     settingsUI()->altitudeSpin->setReadOnly(m_settings.m_positionSync);
     settingsUI()->azimuthSpin->setReadOnly(azElSynced);
     settingsUI()->elevationSpin->setReadOnly(azElSynced);
+    settingsUI()->rotatorControllerCombo->setEnabled(!sensorSynced);
+#ifdef QT_SENSORS_FOUND
+    const bool hasDirectionSensors = settingsUI()->directionSensorCombo->findData(kDefaultDirectionSensorId) >= 0;
+    settingsUI()->directionSensorCombo->setEnabled(!rotatorSynced && (hasDirectionSensors || sensorSynced));
+    settingsUI()->directionSensorLabel->setEnabled(settingsUI()->directionSensorCombo->isEnabled());
+#else
+    settingsUI()->directionSensorCombo->setEnabled(false);
+    settingsUI()->directionSensorLabel->setEnabled(false);
+#endif
 }
 
 void CameraGUI::updateFovControls()
@@ -6431,11 +6636,43 @@ void CameraGUI::on_rollSpin_valueChanged(double value)
 void CameraGUI::on_rotatorControllerCombo_currentIndexChanged(int index)
 {
     m_settings.m_rotator = settingsUI()->rotatorControllerCombo->itemData(index).toString();
+    QStringList settingsKeys = {"rotator"};
+    if (!m_settings.m_rotator.isEmpty() && !m_settings.m_directionSensor.isEmpty())
+    {
+        m_settings.m_directionSensor.clear();
+        stopDirectionSensors();
+        QSignalBlocker blocker(settingsUI()->directionSensorCombo);
+        settingsUI()->directionSensorCombo->setCurrentIndex(0);
+        settingsKeys.append("directionSensor");
+    }
     updatePositionControls();
     if (!m_settings.m_rotator.isEmpty()) {
         syncFromSelectedGs232Controller();
     }
-    applySetting("rotator");
+    applySettings(settingsKeys);
+}
+
+void CameraGUI::on_directionSensorCombo_currentIndexChanged(int index)
+{
+    m_settings.m_directionSensor = settingsUI()->directionSensorCombo->itemData(index).toString();
+    QStringList settingsKeys = {"directionSensor"};
+
+    if (!m_settings.m_directionSensor.isEmpty() && !m_settings.m_rotator.isEmpty())
+    {
+        m_settings.m_rotator.clear();
+        QSignalBlocker blocker(settingsUI()->rotatorControllerCombo);
+        settingsUI()->rotatorControllerCombo->setCurrentIndex(0);
+        settingsKeys.append("rotator");
+    }
+
+    if (m_settings.m_directionSensor.isEmpty()) {
+        stopDirectionSensors();
+    } else {
+        startDirectionSensors();
+    }
+
+    updatePositionControls();
+    applySettings(settingsKeys);
 }
 
 void CameraGUI::on_fovModeCombo_currentIndexChanged(int index)
@@ -8833,7 +9070,9 @@ void CameraGUI::onSettingsDialogFinished(int result)
 
 void CameraGUI::updateStatus()
 {
-    if (!m_settings.m_rotator.isEmpty()) {
+    if (!m_settings.m_directionSensor.isEmpty()) {
+        syncFromDirectionSensors();
+    } else if (!m_settings.m_rotator.isEmpty()) {
         syncFromSelectedGs232Controller();
     }
 

@@ -457,6 +457,7 @@ struct CameraSettings
     float m_elevation;             ///< Camera pointing elevation in degrees
     float m_roll;                  ///< Camera roll about optical axis in degrees
     QString m_rotator;             ///< "<featureSetIndex>:<featureIndex>" of rotator to follow
+    QString m_directionSensor;      ///< Qt Sensors compass identifier used to follow camera azimuth/elevation
     float m_fov;                   ///< Camera field of view in degrees
     FovMode m_fovMode;             ///< Whether FoV is entered directly or calculated from sensor/focal length
     double m_fovSensorWidthMm;     ///< Sensor width for calculated FoV

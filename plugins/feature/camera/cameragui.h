@@ -41,6 +41,8 @@
 #endif
 #ifdef QT_SENSORS_FOUND
 #include <QSensor>
+class QCompass;
+class QTiltSensor;
 #endif
 
 #include "feature/featuregui.h"
@@ -289,6 +291,13 @@ private:
     QDialog *m_keogramPreviewDialog = nullptr;
     QLabel *m_keogramPreviewLabel = nullptr;
 
+#ifdef QT_SENSORS_FOUND
+    QCompass *m_directionCompassSensor = nullptr;
+    QTiltSensor *m_directionTiltSensor = nullptr;
+    bool m_directionCompassReadingValid = false;
+    bool m_directionTiltReadingValid = false;
+#endif
+
     // Qt camera code appears to need to be on GUI thread. Would hang on clean up in the worker thread.
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     QCamera *m_qtCamera;
@@ -345,6 +354,10 @@ private:
     QString starDetectionSearchTarget(const CameraPipelineStarDetection& star) const;
     void showStarDetectionInfoDialog(const CameraPipelineStarDetection& star);
     void populateGs232ControllerCombo();
+    void populateDirectionSensorCombo();
+    void startDirectionSensors();
+    void stopDirectionSensors();
+    void syncFromDirectionSensors();
     void applyPositionSync();
     void updatePositionControls();
     void updateFovControls();
@@ -587,6 +600,7 @@ private slots:
     void on_elevationSpin_valueChanged(double value);
     void on_rollSpin_valueChanged(double value);
     void on_rotatorControllerCombo_currentIndexChanged(int index);
+    void on_directionSensorCombo_currentIndexChanged(int index);
     void on_fovModeCombo_currentIndexChanged(int index);
     void on_fovSpin_valueChanged(double value);
     void on_fovSensorWidthSpin_valueChanged(double value);

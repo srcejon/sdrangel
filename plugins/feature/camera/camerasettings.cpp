@@ -243,6 +243,7 @@ void CameraSettings::resetToDefaults()
     m_directionSensor.clear();
     m_azimuthOffset = 0.0f;
     m_elevationOffset = 0.0f;
+    m_rollOffset = 0.0f;
     m_fov = 60.0f;
     m_fovMode = FovModeDirect;
     m_fovSensorWidthMm = 36.0;
@@ -688,6 +689,7 @@ QByteArray CameraSettings::serialize() const
     s.writeString(270, m_directionSensor);
     s.writeFloat(271, m_azimuthOffset);
     s.writeFloat(272, m_elevationOffset);
+    s.writeFloat(273, m_rollOffset);
 
     return s.final();
 }
@@ -1168,6 +1170,7 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readString(270, &m_directionSensor, "");
         d.readFloat(271, &m_azimuthOffset, 0.0f);
         d.readFloat(272, &m_elevationOffset, 0.0f);
+        d.readFloat(273, &m_rollOffset, 0.0f);
         if (isStreamCamera() && m_streamUrl.isEmpty()) {
             m_streamUrl = m_videoFileCameraPath;
         }
@@ -1238,6 +1241,7 @@ bool CameraSettings::deserialize(const QByteArray& data)
         m_roll = normalizeSignedDegrees(m_roll);
         m_azimuthOffset = normalizeSignedDegrees(m_azimuthOffset);
         m_elevationOffset = qBound(-180.0f, m_elevationOffset, 180.0f);
+        m_rollOffset = normalizeSignedDegrees(m_rollOffset);
         if (m_fovMode == FovModeSensorFocalLength) {
             m_fov = calculateLongEdgeFovDegrees(m_fovSensorWidthMm, m_fovSensorHeightMm, m_fovFocalLengthMm);
         }
@@ -1627,6 +1631,9 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     }
     if (settingsKeys.contains("elevationOffset")) {
         m_elevationOffset = qBound(-180.0f, settings.m_elevationOffset, 180.0f);
+    }
+    if (settingsKeys.contains("rollOffset")) {
+        m_rollOffset = normalizeSignedDegrees(settings.m_rollOffset);
     }
     if (settingsKeys.contains("fov")) {
         m_fov = qBound(m_minFov, settings.m_fov, m_maxFov);
@@ -2438,6 +2445,9 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("elevationOffset") || force) {
         ostr << " m_elevationOffset: " << m_elevationOffset;
+    }
+    if (settingsKeys.contains("rollOffset") || force) {
+        ostr << " m_rollOffset: " << m_rollOffset;
     }
     if (settingsKeys.contains("fov") || force) {
         ostr << " m_fov: " << m_fov;

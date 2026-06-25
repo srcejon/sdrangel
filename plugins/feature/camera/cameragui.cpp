@@ -162,6 +162,39 @@ QString directionSourceValue(const QString& sourceId, const QString& prefix)
     return sourceId.mid(prefix.size());
 }
 
+double normalizeSignedDegrees(double value)
+{
+    value = std::fmod(value, 360.0);
+    if (value <= -180.0) {
+        value += 360.0;
+    } else if (value > 180.0) {
+        value -= 360.0;
+    }
+    return value;
+}
+
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+int nearestCameraFormatFps(const QCameraFormat& format, int desiredFps)
+{
+    int minFps = static_cast<int>(std::ceil(format.minFrameRate()));
+    int maxFps = static_cast<int>(std::floor(format.maxFrameRate()));
+
+    if (minFps <= 0) {
+        minFps = 1;
+    }
+    if (maxFps < minFps) {
+        maxFps = minFps;
+    }
+
+    return qBound(minFps, desiredFps, maxFps);
+}
+
+int cameraFormatFpsDistance(const QCameraFormat& format, int desiredFps)
+{
+    return std::abs(nearestCameraFormatFps(format, desiredFps) - desiredFps);
+}
+#endif
+
 std::array<QLabel*, 4> hdrExposureLabels(Ui::CameraSettingsDialog *ui)
 {
     return {{
@@ -1737,6 +1770,7 @@ void CameraGUI::displaySettings()
     settingsUI()->elevationSpin->setValue(m_settings.m_elevation);
     settingsUI()->azimuthOffsetSpin->setValue(m_settings.m_azimuthOffset);
     settingsUI()->elevationOffsetSpin->setValue(m_settings.m_elevationOffset);
+    settingsUI()->rollOffsetSpin->setValue(m_settings.m_rollOffset);
     settingsUI()->rollSpin->setValue(m_settings.m_roll);
     settingsUI()->fovModeCombo->setCurrentIndex(static_cast<int>(m_settings.m_fovMode));
     settingsUI()->fovSpin->setValue(m_settings.m_fov);
@@ -2574,6 +2608,7 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->elevationSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_elevationSpin_valueChanged);
     QObject::connect(settingsUI()->azimuthOffsetSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_azimuthOffsetSpin_valueChanged);
     QObject::connect(settingsUI()->elevationOffsetSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_elevationOffsetSpin_valueChanged);
+    QObject::connect(settingsUI()->rollOffsetSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_rollOffsetSpin_valueChanged);
     QObject::connect(settingsUI()->rollSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_rollSpin_valueChanged);
     QObject::connect(settingsUI()->directionSourceCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_directionSourceCombo_currentIndexChanged);
     QObject::connect(settingsUI()->fovModeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_fovModeCombo_currentIndexChanged);
@@ -2882,7 +2917,22 @@ void CameraGUI::populateQtFormatControls(const QList<QSize>& resolutions, const 
         settingsUI()->resolutionCombo->setCurrentIndex(0);
     }
 
-    updateFrameRateControlForResolution(settingsUI()->resolutionCombo->currentText());
+    const QString selectedResolution = settingsUI()->resolutionCombo->currentText();
+    const QStringList parts = selectedResolution.split('x');
+    if (parts.size() == 2)
+    {
+        bool okWidth = false;
+        bool okHeight = false;
+        const int width = parts.at(0).trimmed().toInt(&okWidth);
+        const int height = parts.at(1).trimmed().toInt(&okHeight);
+        if (okWidth && okHeight && (width > 0) && (height > 0))
+        {
+            m_settings.m_resolutionWidth = width;
+            m_settings.m_resolutionHeight = height;
+        }
+    }
+
+    updateFrameRateControlForResolution(selectedResolution);
 }
 
 void CameraGUI::updateFrameRateControlForResolution(const QString& resolutionText)
@@ -3406,7 +3456,7 @@ void CameraGUI::populateDirectionSourceCombo()
         index = combo->count() - 1;
     }
     combo->setCurrentIndex(index >= 0 ? index : 0);
-    combo->setToolTip(tr("Select a GS232Controller rotator or Qt Sensors compass/tilt sensor pair to continually synchronize the camera azimuth and elevation."));
+    combo->setToolTip(tr("Select a GS232Controller rotator or Qt Sensors compass/tilt/rotation sensor set to continually synchronize the camera direction."));
     settingsUI()->directionSourceLabel->setEnabled(combo->isEnabled());
 
     if (compatibleDirectionSensors && !m_settings.m_directionSensor.isEmpty()) {
@@ -3545,15 +3595,13 @@ void CameraGUI::syncFromDirectionSensors()
 
     azimuth += m_settings.m_azimuthOffset;
     elevation += m_settings.m_elevationOffset;
+    roll += m_settings.m_rollOffset;
 
     azimuth = std::fmod(azimuth, 360.0);
     if (azimuth < 0.0) {
         azimuth += 360.0;
     }
-    roll = std::fmod(roll, 360.0);
-    if (roll < 0.0) {
-        roll += 360.0;
-    }
+    roll = normalizeSignedDegrees(roll);
     elevation = qBound(
         static_cast<double>(CameraSettings::m_minElevation),
         elevation,
@@ -3614,8 +3662,10 @@ void CameraGUI::updatePositionControls()
     settingsUI()->rollSpin->setReadOnly(sensorSynced);
     settingsUI()->azimuthOffsetSpin->setEnabled(azElSynced);
     settingsUI()->elevationOffsetSpin->setEnabled(azElSynced);
+    settingsUI()->rollOffsetSpin->setEnabled(sensorSynced);
     settingsUI()->azimuthOffsetLabel->setEnabled(azElSynced);
     settingsUI()->elevationOffsetLabel->setEnabled(azElSynced);
+    settingsUI()->rollOffsetLabel->setEnabled(sensorSynced);
 #ifdef QT_SENSORS_FOUND
     settingsUI()->directionSourceCombo->setEnabled(true);
 #else
@@ -4139,8 +4189,11 @@ void CameraGUI::setupQtCapture()
     m_imageCapture   = nullptr;
     m_videoSink      = nullptr;
 
-    // Select a matching camera format if one exists
+    // Select the requested format if possible, otherwise use the closest
+    // supported frame rate at the requested resolution.
     QCameraFormat chosenFormat;
+    bool exactFormat = false;
+    bool sameResolutionFallback = false;
     for (const QCameraFormat& fmt : selectedDevice.videoFormats())
     {
         if ((fmt.resolution().width()  == m_settings.m_resolutionWidth)
@@ -4150,23 +4203,65 @@ void CameraGUI::setupQtCapture()
             )
         {
             chosenFormat = fmt;
+            exactFormat = true;
             break;
         }
     }
-    if (!chosenFormat.isNull()) {
+
+    if (chosenFormat.isNull())
+    {
+        for (const QCameraFormat& fmt : selectedDevice.videoFormats())
+        {
+            if ((fmt.resolution().width() != m_settings.m_resolutionWidth)
+                || (fmt.resolution().height() != m_settings.m_resolutionHeight))
+            {
+                continue;
+            }
+
+            if (chosenFormat.isNull()
+                || (cameraFormatFpsDistance(fmt, m_settings.m_framesPerSecond)
+                    < cameraFormatFpsDistance(chosenFormat, m_settings.m_framesPerSecond)))
+            {
+                chosenFormat = fmt;
+                sameResolutionFallback = true;
+            }
+        }
+    }
+
+    if (!chosenFormat.isNull())
+    {
         m_qtCamera->setCameraFormat(chosenFormat);
-    } else {
-        qWarning() << "CameraGUI::setupQtCapture: No matching camera format"
-            << m_settings.m_resolutionWidth
+        if (sameResolutionFallback && !exactFormat)
+        {
+            const int requestedFps = m_settings.m_framesPerSecond;
+            const int supportedFps = nearestCameraFormatFps(chosenFormat, requestedFps);
+            m_settings.m_framesPerSecond = supportedFps;
+            {
+                QSignalBlocker spinBlocker(settingsUI()->fpsSpin);
+                QSignalBlocker comboBlocker(settingsUI()->fpsCombo);
+                if (settingsUI()->fpsStack->currentWidget() == settingsUI()->fpsSpinPage) {
+                    settingsUI()->fpsSpin->setValue(supportedFps);
+                } else {
+                    const int index = settingsUI()->fpsCombo->findData(supportedFps);
+                    if (index >= 0) {
+                        settingsUI()->fpsCombo->setCurrentIndex(index);
+                    }
+                }
+            }
+            qDebug() << "CameraGUI::setupQtCapture: using closest Qt camera format"
+                << chosenFormat.resolution()
+                << "requestedFps" << requestedFps
+                << "selectedFps" << supportedFps
+                << "formatFpsRange" << chosenFormat.minFrameRate() << chosenFormat.maxFrameRate();
+        }
+    }
+    else if (!selectedDevice.videoFormats().isEmpty())
+    {
+        qDebug() << "CameraGUI::setupQtCapture: no explicit Qt camera format match; using device default"
+            << "requested" << m_settings.m_resolutionWidth
             << m_settings.m_resolutionHeight
-            << m_settings.m_framesPerSecond;
-        reportFeatureError(
-            QStringLiteral("qtNoMatchingFormat"),
-            tr("Qt camera format not available"),
-            tr("No matching Qt camera format was found for %1x%2 at %3 FPS.")
-                .arg(m_settings.m_resolutionWidth)
-                .arg(m_settings.m_resolutionHeight)
-                .arg(m_settings.m_framesPerSecond));
+            << m_settings.m_framesPerSecond
+            << "availableFormats" << selectedDevice.videoFormats().size();
     }
 
     m_qtCamera->setExposureMode(QCamera::ExposureManual);
@@ -5630,6 +5725,9 @@ void CameraGUI::on_cameraCombo_currentIndexChanged(int index)
     }
 
     const CameraInfo previousCamera = selectedCameraFromSettings();
+    const int previousResolutionWidth = m_settings.m_resolutionWidth;
+    const int previousResolutionHeight = m_settings.m_resolutionHeight;
+    const int previousFramesPerSecond = m_settings.m_framesPerSecond;
     CameraInfo selectedCamera = comboCameraInfo(index);
     const bool wasAlpaca = previousCamera.m_protocol == CameraProtocol::alpaca();
     const bool wasAsi = previousCamera.m_protocol == CameraProtocol::asi();
@@ -5709,6 +5807,15 @@ void CameraGUI::on_cameraCombo_currentIndexChanged(int index)
         probeQtCameraCapabilities();
     }
     QStringList settingsKeys = cameraSelectionSettingsKeys(selectedCamera);
+    if (m_settings.m_resolutionWidth != previousResolutionWidth) {
+        settingsKeys.append("resolutionWidth");
+    }
+    if (m_settings.m_resolutionHeight != previousResolutionHeight) {
+        settingsKeys.append("resolutionHeight");
+    }
+    if (m_settings.m_framesPerSecond != previousFramesPerSecond) {
+        settingsKeys.append("framesPerSecond");
+    }
     if (switchedBetweenAsiAndAlpaca) {
         settingsKeys.append("cameraStartX");
         settingsKeys.append("cameraStartY");
@@ -6727,6 +6834,15 @@ void CameraGUI::on_elevationOffsetSpin_valueChanged(double value)
         syncFromSelectedGs232Controller();
     }
     applySetting("elevationOffset");
+}
+
+void CameraGUI::on_rollOffsetSpin_valueChanged(double value)
+{
+    m_settings.m_rollOffset = static_cast<float>(value);
+    if (!m_settings.m_directionSensor.isEmpty()) {
+        syncFromDirectionSensors();
+    }
+    applySetting("rollOffset");
 }
 
 void CameraGUI::on_directionSourceCombo_currentIndexChanged(int index)

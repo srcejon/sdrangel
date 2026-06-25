@@ -424,10 +424,23 @@ QVector<CameraPlateSolver::SolverContext::CatalogStar> CameraPlateSolver::Solver
 QString CameraPlateSolver::SolverContext::formatRightAscensionHours(double rightAscensionDegrees)
 {
     const double totalHours = normalizeDegrees(rightAscensionDegrees) / 15.0;
-    const int hours = static_cast<int>(std::floor(totalHours));
+    int hours = static_cast<int>(std::floor(totalHours));
     const double totalMinutes = (totalHours - hours) * 60.0;
-    const int minutes = static_cast<int>(std::floor(totalMinutes));
-    const double seconds = (totalMinutes - minutes) * 60.0;
+    int minutes = static_cast<int>(std::floor(totalMinutes));
+    double seconds = (totalMinutes - minutes) * 60.0;
+    // Carry if seconds would round up to 60 at the formatted precision (5 dp), so the field is
+    // never the invalid "60.00000".
+    if (seconds >= 60.0 - 0.5e-5)
+    {
+        seconds = 0.0;
+        if (++minutes >= 60)
+        {
+            minutes = 0;
+            if (++hours >= 24) {
+                hours = 0;
+            }
+        }
+    }
     return QStringLiteral("%1 %2 %3")
         .arg(hours, 2, 10, QLatin1Char('0'))
         .arg(minutes, 2, 10, QLatin1Char('0'))
@@ -438,10 +451,20 @@ QString CameraPlateSolver::SolverContext::formatDeclinationDegrees(double declin
 {
     const QChar sign = (declinationDegrees < 0.0) ? QLatin1Char('-') : QLatin1Char('+');
     const double absoluteDegrees = std::fabs(declinationDegrees);
-    const int degrees = static_cast<int>(std::floor(absoluteDegrees));
+    int degrees = static_cast<int>(std::floor(absoluteDegrees));
     const double totalMinutes = (absoluteDegrees - degrees) * 60.0;
-    const int minutes = static_cast<int>(std::floor(totalMinutes));
-    const double seconds = (totalMinutes - minutes) * 60.0;
+    int minutes = static_cast<int>(std::floor(totalMinutes));
+    double seconds = (totalMinutes - minutes) * 60.0;
+    // Carry if seconds would round up to 60 at the formatted precision (4 dp).
+    if (seconds >= 60.0 - 0.5e-4)
+    {
+        seconds = 0.0;
+        if (++minutes >= 60)
+        {
+            minutes = 0;
+            ++degrees;
+        }
+    }
     return QStringLiteral("%1%2 %3 %4")
         .arg(sign)
         .arg(degrees, 2, 10, QLatin1Char('0'))

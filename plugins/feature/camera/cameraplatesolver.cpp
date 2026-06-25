@@ -19,6 +19,7 @@
 #include "cameraplatesolverinternal.h"
 
 #include <QLoggingCategory>
+#include <QTimeZone>
 
 // Per-solve diagnostic dump (settings / observer location / catalog path). These are intentional
 // GUI-vs-harness mismatch diagnostics (e.g. they pinned the m51-2 UTC bug), but for continuous
@@ -244,7 +245,12 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
         ? settings.m_plateSolveDateTime
         : captureDateTime;
     if (configuredSolveDateTime.isValid()) {
-        configuredSolveDateTime.setTimeSpec(settings.m_plateSolveDateTimeUtc ? Qt::UTC : Qt::LocalTime);
+        // Reinterpret the entered wall-clock in the chosen zone (keep hh:mm:ss, change the spec).
+#if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
+        configuredSolveDateTime.setTimeZone(QTimeZone(settings.m_plateSolveDateTimeUtc ? QTimeZone::UTC : QTimeZone::LocalTime));
+#else
+        configuredSolveDateTime.setTimeSpec(settings.m_plateSolveDateTimeUtc ? Qt::UTC : Qt::LocalTime);  // deprecated in Qt 6.9
+#endif
     }
     const QDateTime solveDateTime = settings.m_plateSolveUseCaptureDateTime
         ? captureDateTime

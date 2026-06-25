@@ -37,6 +37,9 @@ Raw, calibrated, filtered or post-processed images can be saved as JPEG, PNG or 
 The Camera feature can send events to the Scheduler feature when motion or YOLO object classes are detected, allowing you to automate actions such as recording from SDR devices, sending notifications or running custom commands. 
 Recoding images and video can also be triggered via the Scheduler feature, allowing triggering based on time or RF events.
 
+Camera position can be set manually or track GPS. Camera direction can be set manually or track a Rotator controller feature (for telescopes or mounted cameras)
+or sensors such as a compass or accelerometer (for laptop webcams).
+
 <h2>Interface</h2>
 
 ![Camera feature plugin GUI](../../../doc/img/Camera_plugin.png)

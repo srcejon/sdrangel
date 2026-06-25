@@ -704,9 +704,11 @@ static bool canCalibrateLens(const CameraSettings& settings);
 
 static bool canCalibratePrincipalPoint(const CameraSettings& settings);
 
-static const QVector<CatalogStar>& brightStarCatalog(const CameraSettings& settings);
+// Returns by value (QVector is copy-on-write): the static cache is reassignable by another
+// concurrent solver under the lock, so a const& would dangle once the lock is released.
+static QVector<CatalogStar> brightStarCatalog(const CameraSettings& settings);
 
-static const QVector<CatalogStar>& bundledAliasCatalog();
+static QVector<CatalogStar> bundledAliasCatalog();
 
 static QVector<int> aliasCatalogDeclinationSortedIndices(const QVector<CatalogStar>& aliasStars);
 
@@ -1916,7 +1918,7 @@ QVector<Match> uniqueValidMatchesForRefinement(const PlateSolveCatalogContext& c
 
 static QVector<int> detectionIndicesForMatches(const QVector<Match>& matches);
 
-PlateSolveLmEvaluation evaluateFixedPlateSolveLmPose(const CameraSettings& settings, const PlateSolveCatalogContext& catalogContext, const QSize& imageSize, const QVector<CameraPipelineStarDetection>& starDetections, const QVector<Match>& fixedMatches, const QVector<int>& rankDetectionIndices, const PlateSolveLmPose& inputPose, double robustThresholdPixels, const Evaluation& seedEvaluation);
+PlateSolveLmEvaluation evaluateFixedPlateSolveLmPose(const CameraSettings& settings, const PlateSolveCatalogContext& catalogContext, const QSize& imageSize, const QVector<CameraPipelineStarDetection>& starDetections, const QVector<Match>& fixedMatches, const QVector<int>& rankDetectionIndices, const PlateSolveLmPose& inputPose, double robustThresholdPixels, const Evaluation& seedEvaluation, bool populateScoringMetrics = true);
 
 Evaluation runPlateSolveLmRefinement(const CameraSettings& settings, const PlateSolveCatalogContext& catalogContext, const QSize& imageSize, const QVector<CameraPipelineStarDetection>& starDetections, const QVector<Match>& fixedMatches, const QVector<int>& rankDetectionIndices, const Evaluation& seedEvaluation, std::array<bool, PlateSolveLmParameterCount> activeParameters, double matchRadiusPixels);
 

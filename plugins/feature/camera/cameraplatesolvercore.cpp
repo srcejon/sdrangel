@@ -204,7 +204,11 @@ double CameraPlateSolver::SolverContext::parseDeclinationDegrees(const QString& 
         return std::numeric_limits<double>::quiet_NaN();
     }
 
-    const double sign = (degreesWithSign < 0.0) ? -1.0 : 1.0;
+    // Take the sign from the string, not the parsed double: a "-00 mm ss" degrees field parses to
+    // -0.0, and -0.0 < 0.0 is false, so deriving the sign from the double drops the minus for
+    // declinations in (-1, 0) deg (e.g. Mintaka, -00 17 56).
+    const bool negative = fields[0].trimmed().startsWith(QLatin1Char('-'));
+    const double sign = negative ? -1.0 : 1.0;
     const double absoluteDegrees = std::fabs(degreesWithSign);
     return sign * (absoluteDegrees + minutes / 60.0 + seconds / 3600.0);
 }
@@ -781,7 +785,7 @@ bool CameraPlateSolver::SolverContext::canCalibratePrincipalPoint(const CameraSe
         || isWidePlateSolveContext(settings);
 }
 
-const QVector<CameraPlateSolver::SolverContext::CatalogStar>& CameraPlateSolver::SolverContext::brightStarCatalog(const CameraSettings& settings)
+QVector<CameraPlateSolver::SolverContext::CatalogStar> CameraPlateSolver::SolverContext::brightStarCatalog(const CameraSettings& settings)
 {
     static QMutex s_catalogMutex;
     static QString s_loadedPath;
@@ -803,7 +807,7 @@ const QVector<CameraPlateSolver::SolverContext::CatalogStar>& CameraPlateSolver:
     return s_catalog;
 }
 
-const QVector<CameraPlateSolver::SolverContext::CatalogStar>& CameraPlateSolver::SolverContext::bundledAliasCatalog()
+QVector<CameraPlateSolver::SolverContext::CatalogStar> CameraPlateSolver::SolverContext::bundledAliasCatalog()
 {
     static QMutex s_catalogMutex;
     static QVector<CatalogStar> s_catalog;
@@ -926,7 +930,7 @@ void CameraPlateSolver::SolverContext::applyNamedAliasesToCatalog(const CameraSe
         return;
     }
 
-    const QVector<CatalogStar>& aliasStars = bundledAliasCatalog();
+    const QVector<CatalogStar> aliasStars = bundledAliasCatalog();
     const QVector<int> sortedAliasIndices = aliasCatalogDeclinationSortedIndices(aliasStars);
 
     // Resolve alias names as a one-to-one assignment: each named alias (e.g. "HIP 37078")
@@ -995,7 +999,7 @@ double CameraPlateSolver::SolverContext::catalogAngularSeparationDegrees(const C
 
 void CameraPlateSolver::SolverContext::mergeBundledBrightStarsIntoCatalog(const CameraSettings& settings, QVector<CatalogStar>& catalogStars, double maxMagnitude, double centerRaDegrees, double centerDecDegrees, double queryRadiusDegrees)
 {
-    const QVector<CatalogStar>& brightStars = brightStarCatalog(settings);
+    const QVector<CatalogStar> brightStars = brightStarCatalog(settings);
     const bool narrowDirectionSolve = plateSolveStartUsesDirection(settings)
         && (isNarrowField(settings));
     const double mergeMaxMagnitude = std::min(

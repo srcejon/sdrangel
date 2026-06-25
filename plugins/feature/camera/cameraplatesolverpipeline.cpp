@@ -11864,6 +11864,17 @@ CameraPlateSolver::SolverContext::Evaluation CameraPlateSolver::SolverContext::s
 
     const double finalMatchRadius = std::max(1.0, static_cast<double>(settings.m_plateSolveFinalMatchRadius));
     const double maxImageDimension = std::max(imageSize.width(), imageSize.height());
+    // WS0 coarse-search tuning knobs, grouped and named so the tuning surface is discoverable and
+    // the wide-seed image fraction cannot drift between its (formerly duplicated) FoV/blind uses.
+    constexpr double kWideSeedRadiusImageFraction = 0.065;
+    constexpr double kWideSeedRadiusMinPixels = 120.0;
+    constexpr double kWideSeedRadiusMaxPixels = 240.0;
+    constexpr double kGuidedSeedRadiusMatchScale = 4.0;
+    constexpr double kGuidedSeedRadiusMaxPixels = 96.0;
+    constexpr double kCoarseRollRadiusFovFraction = 0.20;
+    constexpr double kCoarseFovRadiusFovFraction = 0.10;
+    constexpr double kMinFovRefineStepFovFraction = 0.02;
+    constexpr double kFovGridStepFovFraction = 0.5;
     const bool useWideFovSeedRadius = useStartFov
         && !useStartElevation
         && !useStartDirection
@@ -11873,15 +11884,14 @@ CameraPlateSolver::SolverContext::Evaluation CameraPlateSolver::SolverContext::s
         && !useStartElevation
         && !useStartDirection
         && isWidePlateSolveContext(settings);
-    const double wideFovSeedMatchRadius = useWideFovSeedRadius
-        ? std::max(finalMatchRadius, std::min(240.0, std::max(120.0, maxImageDimension * 0.065)))
-        : finalMatchRadius;
-    const double wideBlindSeedMatchRadius = useWideBlindSeedRadius
-        ? std::max(finalMatchRadius, std::min(240.0, std::max(120.0, maxImageDimension * 0.065)))
-        : finalMatchRadius;
+    const double wideSeedMatchRadius = std::max(finalMatchRadius,
+        std::min(kWideSeedRadiusMaxPixels,
+            std::max(kWideSeedRadiusMinPixels, maxImageDimension * kWideSeedRadiusImageFraction)));
+    const double wideFovSeedMatchRadius = useWideFovSeedRadius ? wideSeedMatchRadius : finalMatchRadius;
+    const double wideBlindSeedMatchRadius = useWideBlindSeedRadius ? wideSeedMatchRadius : finalMatchRadius;
     const double guidedSeedMatchRadius = (useStartDirection && (isNarrowField(settings)))
         ? std::max(finalMatchRadius,
-            std::min(96.0, std::max(finalMatchRadius, static_cast<double>(settings.m_plateSolveMatchRadius)) * 4.0))
+            std::min(kGuidedSeedRadiusMaxPixels, std::max(finalMatchRadius, static_cast<double>(settings.m_plateSolveMatchRadius)) * kGuidedSeedRadiusMatchScale))
         : finalMatchRadius;
     const double searchMatchRadiusOverride = useStartDirection
         ? guidedSeedMatchRadius
@@ -11898,10 +11908,10 @@ CameraPlateSolver::SolverContext::Evaluation CameraPlateSolver::SolverContext::s
     }
     const double coarseSearchRadius = std::max(0.0, settings.m_plateSolveAzElSearchRadius);
     const double coarseRollRadius = useStartRoll
-        ? std::max(15.0, std::min(45.0, static_cast<double>(settings.m_fov) * 0.20))
-        : std::max(4.0, std::min(20.0, static_cast<double>(settings.m_fov) * 0.20));
-    const double coarseFovRadius = std::max(0.05, std::min(12.0, static_cast<double>(settings.m_fov) * 0.10));
-    const double minimumFovRefineStep = std::max(0.02, std::min(0.5, static_cast<double>(settings.m_fov) * 0.02));
+        ? std::max(15.0, std::min(45.0, static_cast<double>(settings.m_fov) * kCoarseRollRadiusFovFraction))
+        : std::max(4.0, std::min(20.0, static_cast<double>(settings.m_fov) * kCoarseRollRadiusFovFraction));
+    const double coarseFovRadius = std::max(0.05, std::min(12.0, static_cast<double>(settings.m_fov) * kCoarseFovRadiusFovFraction));
+    const double minimumFovRefineStep = std::max(0.02, std::min(0.5, static_cast<double>(settings.m_fov) * kMinFovRefineStepFovFraction));
 
     const double minAzimuthDegrees = 0.0;
     const double maxAzimuthDegrees = 360.0;
@@ -11909,9 +11919,9 @@ CameraPlateSolver::SolverContext::Evaluation CameraPlateSolver::SolverContext::s
     const double minElevationDegrees = 0.0;
     const double maxElevationDegrees = 90.0;
     const double elevationStepDegrees = 15.0;
-    const double fovGridStepDegrees = std::max(0.25, std::min(5.0, static_cast<double>(settings.m_fov) * 0.5));
+    const double fovGridStepDegrees = std::max(0.25, std::min(5.0, static_cast<double>(settings.m_fov) * kFovGridStepFovFraction));
     const double fovGridAzimuthStepDegrees = fovGridStepDegrees;
-    const double fovGridElevationStepDegrees = std::max(0.25, std::min(15.0, static_cast<double>(settings.m_fov) * 0.5));
+    const double fovGridElevationStepDegrees = std::max(0.25, std::min(15.0, static_cast<double>(settings.m_fov) * kFovGridStepFovFraction));
 
     const std::array<double, 3> coarseFovOffsets = {{-1.0, 0.0, 1.0}};
     const std::array<double, 5> coarseOffsetsOrdered = {{0.0, -0.5, 0.5, -1.0, 1.0}};
@@ -12956,7 +12966,7 @@ CameraPlateSolver::SolverContext::Evaluation CameraPlateSolver::SolverContext::s
     return best;
 }
 
-CameraPlateSolver::SolverContext::PlateSolveLmEvaluation CameraPlateSolver::SolverContext::evaluateFixedPlateSolveLmPose(const CameraSettings& settings, const PlateSolveCatalogContext& catalogContext, const QSize& imageSize, const QVector<CameraPipelineStarDetection>& starDetections, const QVector<Match>& fixedMatches, const QVector<int>& rankDetectionIndices, const PlateSolveLmPose& inputPose, double robustThresholdPixels, const Evaluation& seedEvaluation)
+CameraPlateSolver::SolverContext::PlateSolveLmEvaluation CameraPlateSolver::SolverContext::evaluateFixedPlateSolveLmPose(const CameraSettings& settings, const PlateSolveCatalogContext& catalogContext, const QSize& imageSize, const QVector<CameraPipelineStarDetection>& starDetections, const QVector<Match>& fixedMatches, const QVector<int>& rankDetectionIndices, const PlateSolveLmPose& inputPose, double robustThresholdPixels, const Evaluation& seedEvaluation, bool populateScoringMetrics)
 {
     PlateSolveLmEvaluation lmEvaluation;
     lmEvaluation.pose = inputPose;
@@ -13042,13 +13052,18 @@ CameraPlateSolver::SolverContext::PlateSolveLmEvaluation CameraPlateSolver::Solv
 
     evaluation.rmsErrorPixels = std::sqrt(sumSquaredError / evaluation.matchCount);
     evaluation.valid = true;
-    populatePoseScoringMetrics(
-        settings,
-        starDetections,
-        rankDetectionIndices,
-        projectedStars,
-        catalogContext.catalogStars,
-        evaluation);
+    // The brightness-rank/magnitude metrics drive candidate scoring, not the LM step (which uses
+    // only residuals/robustCost). Skip them for the Jacobian finite-difference probes, which
+    // discard everything but residuals -- they dominate the per-iteration eval count.
+    if (populateScoringMetrics) {
+        populatePoseScoringMetrics(
+            settings,
+            starDetections,
+            rankDetectionIndices,
+            projectedStars,
+            catalogContext.catalogStars,
+            evaluation);
+    }
     lmEvaluation.valid = true;
     lmEvaluation.robustCost = robustCost;
     return lmEvaluation;
@@ -13197,7 +13212,8 @@ CameraPlateSolver::SolverContext::Evaluation CameraPlateSolver::SolverContext::r
                 rankDetectionIndices,
                 steppedPose,
                 robustThresholdPixels,
-                seedEvaluation);
+                seedEvaluation,
+                false);  // Jacobian probe uses residuals only; skip scoring metrics.
             if (!stepped.valid || (stepped.residuals.size() != residualCount))
             {
                 jacobianValid = false;

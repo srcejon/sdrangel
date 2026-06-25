@@ -139,6 +139,12 @@ endif()
 # feature-define-insensitive (no CAMERA_OPENCV_CUDA_*/FFmpeg #ifdef) and its public interface uses
 # only ABI-stable types (CameraSettings, CameraPipelineStarDetection, CameraPlateSolveResult), so a
 # single compilation is safe for both consumers regardless of their own CUDA/FFmpeg define sets.
+# On Linux this directory is processed once per variant (GUI featurecamera + server
+# featurecamerasrv), but camera_platesolver is a single global target shared by both, so guard
+# its creation against the second pass. The lib is feature-define-insensitive (no CUDA/FFmpeg
+# #ifdef) with an ABI-stable interface, so one instance is correct for both plugin variants and
+# the test harness.
+if(NOT TARGET camera_platesolver)
 add_library(camera_platesolver STATIC
     ${CMAKE_CURRENT_SOURCE_DIR}/cameraplatesolver.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/cameraplatesolvercatalog.cpp
@@ -167,6 +173,7 @@ target_link_libraries(camera_platesolver PUBLIC
     ${camera_OpenCV_LIBS}
     ${ZLIB_LIBRARIES}
 )
+endif()
 
 if(NOT Qt6_FOUND)
     add_library(${TARGET_NAME} ${camera_SOURCES})

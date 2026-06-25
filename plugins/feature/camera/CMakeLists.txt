@@ -287,11 +287,20 @@ target_link_libraries(${TARGET_NAME} PRIVATE
     ${TARGET_LIB_GUI}
 )
 
-install(TARGETS ${TARGET_NAME} DESTINATION ${INSTALL_FOLDER})
-
 if (WIN32)
     # winmm for timeBeginPeriod/timeEndPeriod (raise the present timer resolution while streaming)
     target_link_libraries(${TARGET_NAME} PRIVATE winmm)
+endif()
+
+install(TARGETS ${TARGET_NAME} DESTINATION ${INSTALL_FOLDER})
+
+if(WIN32)
+    # Run deployqt for QtSensors, which isn't used in other plugins
+    include(DeployQt)
+    windeployqt(${TARGET_NAME} ${SDRANGEL_BINARY_BIN_DIR} "")
+endif()
+
+if (WIN32)
     install(FILES $<TARGET_PDB_FILE:${TARGET_NAME}> CONFIGURATIONS Debug RelWithDebInfo DESTINATION ${INSTALL_FOLDER} )
 endif()
 

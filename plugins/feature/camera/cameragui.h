@@ -657,6 +657,7 @@ private slots:
     void on_trackObjectClearHeatMapButton_clicked();
     void on_trackObjectMinElevationSpin_valueChanged(double value);
     void on_trackObjectColorButton_clicked();
+    void on_trackObjectFontCombo_currentFontChanged(const QFont& font);
     void on_trackObjectFontScaleSpin_valueChanged(double value);
     void on_gridLabelFontCombo_currentFontChanged(const QFont& font);
     void on_gridLabelFontScaleSpin_valueChanged(double value);

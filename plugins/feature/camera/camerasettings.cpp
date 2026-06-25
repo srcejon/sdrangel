@@ -297,6 +297,7 @@ void CameraSettings::resetToDefaults()
     m_trackObjectHeatMap = false;
     m_trackObjectMinElevation = 0.0;
     m_trackObjectColor = QColor(80, 255, 80);
+    m_trackObjectFontFamily.clear();
     m_trackObjectFontScale = 9.0;
     m_gridLabelFontFamily.clear();
     m_gridLabelFontScale = 9.0;
@@ -680,6 +681,7 @@ QByteArray CameraSettings::serialize() const
     s.writeS32(266, m_scaleWidth);
     s.writeS32(267, m_scaleHeight);
     s.writeBool(268, m_scaleKeepAspectRatio);
+    s.writeString(269, m_trackObjectFontFamily);
 
     return s.final();
 }
@@ -1156,6 +1158,7 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readS32(266, &m_scaleWidth, 0);
         d.readS32(267, &m_scaleHeight, 0);
         d.readBool(268, &m_scaleKeepAspectRatio, true);
+        d.readString(269, &m_trackObjectFontFamily, "");
         if (isStreamCamera() && m_streamUrl.isEmpty()) {
             m_streamUrl = m_videoFileCameraPath;
         }
@@ -1981,6 +1984,9 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     if (settingsKeys.contains("trackObjectColor")) {
         m_trackObjectColor = settings.m_trackObjectColor;
     }
+    if (settingsKeys.contains("trackObjectFontFamily")) {
+        m_trackObjectFontFamily = settings.m_trackObjectFontFamily;
+    }
     if (settingsKeys.contains("trackObjectFontScale")) {
         m_trackObjectFontScale = qBound(m_minOverlayFontScale, settings.m_trackObjectFontScale, m_maxOverlayFontScale);
     }
@@ -2754,6 +2760,9 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("trackObjectColor") || force) {
         ostr << " m_trackObjectColor: " << m_trackObjectColor.name().toStdString();
+    }
+    if (settingsKeys.contains("trackObjectFontFamily") || force) {
+        ostr << " m_trackObjectFontFamily: " << m_trackObjectFontFamily.toStdString();
     }
     if (settingsKeys.contains("trackObjectFontScale") || force) {
         ostr << " m_trackObjectFontScale: " << m_trackObjectFontScale;

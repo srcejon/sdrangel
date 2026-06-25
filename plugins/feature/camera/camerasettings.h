@@ -517,6 +517,7 @@ struct CameraSettings
     bool m_trackObjectHeatMap; ///< Draw a heat map from recent tracked object positions
     double m_trackObjectMinElevation; ///< Minimum elevation in degrees for tracked object overlay
     QColor m_trackObjectColor; ///< Colour for tracked object labels
+    QString m_trackObjectFontFamily; ///< QPainter font family for tracked object labels
     double m_trackObjectFontScale; ///< Font point size for tracked object labels: 4.0..144.0
     QString m_gridLabelFontFamily; ///< QPainter font family for sky grid labels
     double  m_gridLabelFontScale;  ///< Font point size for sky grid labels: 4.0..144.0

@@ -741,7 +741,7 @@ void CameraPostProcessor::applySettings(const CameraSettings& settings, const QL
         "equatorialGrid", "equatorialGridColor",
         "altAzGrid", "altAzGridColor",
         "constellation", "constellationColor", "constellationOverlay",
-        "trackObjects", "trackObjectTrails", "trackObjectHeatMap", "trackObjectMinElevation", "trackObjectColor", "trackObjectFontScale",
+        "trackObjects", "trackObjectTrails", "trackObjectHeatMap", "trackObjectMinElevation", "trackObjectColor", "trackObjectFontFamily", "trackObjectFontScale",
         "gridLabelFontFamily", "gridLabelFontScale",
         "overlayText", "overlayTextString", "overlayTextColor",
         "overlayTextFontFamily", "overlayTextFontScale", "overlayTextPosX", "overlayTextPosY",
@@ -1799,8 +1799,8 @@ void CameraPostProcessor::applyTrackedObjectOverlay(QImage& image, bool drawLabe
     painter.setRenderHint(QPainter::TextAntialiasing);
     painter.setClipRect(image.rect());
     QFont font;
-    if (!m_settings.m_gridLabelFontFamily.isEmpty()) {
-        font.setFamily(m_settings.m_gridLabelFontFamily);
+    if (!m_settings.m_trackObjectFontFamily.isEmpty()) {
+        font.setFamily(m_settings.m_trackObjectFontFamily);
     }
     font.setPointSizeF(m_settings.m_trackObjectFontScale);
     painter.setFont(font);

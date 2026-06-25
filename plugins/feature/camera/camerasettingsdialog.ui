@@ -3452,7 +3452,7 @@
             </property>
            </widget>
           </item>
-          <item row="1" column="2">
+          <item row="1" column="3">
            <widget class="QToolButton" name="trackObjectColorButton">
             <property name="toolTip">
              <string>Select tracked object label colour</string>
@@ -3501,6 +3501,13 @@
            </layout>
           </item>
           <item row="1" column="1">
+           <widget class="QFontComboBox" name="trackObjectFontCombo">
+            <property name="toolTip">
+             <string>Select font to use for tracked object labels</string>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="2">
            <widget class="QDoubleSpinBox" name="trackObjectFontScaleSpin">
             <property name="toolTip">
              <string>Font point size for tracked object labels</string>

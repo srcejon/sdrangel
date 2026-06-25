@@ -1786,6 +1786,7 @@ void CameraGUI::displaySettings()
     settingsUI()->trackObjectTrailsCheck->setChecked(m_settings.m_trackObjectTrails);
     settingsUI()->trackObjectHeatMapCheck->setChecked(m_settings.m_trackObjectHeatMap);
     settingsUI()->trackObjectMinElevationSpin->setValue(m_settings.m_trackObjectMinElevation);
+    settingsUI()->trackObjectFontCombo->setCurrentText(m_settings.m_trackObjectFontFamily);
     settingsUI()->trackObjectFontScaleSpin->setValue(m_settings.m_trackObjectFontScale);
     settingsUI()->gridLabelFontCombo->setCurrentText(m_settings.m_gridLabelFontFamily);
     settingsUI()->gridLabelFontScaleSpin->setValue(m_settings.m_gridLabelFontScale);
@@ -2606,6 +2607,7 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->trackObjectClearHeatMapButton, &QToolButton::clicked, this, &CameraGUI::on_trackObjectClearHeatMapButton_clicked);
     QObject::connect(settingsUI()->trackObjectMinElevationSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_trackObjectMinElevationSpin_valueChanged);
     QObject::connect(settingsUI()->trackObjectColorButton, &QToolButton::clicked, this, &CameraGUI::on_trackObjectColorButton_clicked);
+    QObject::connect(settingsUI()->trackObjectFontCombo, &QFontComboBox::currentFontChanged, this, &CameraGUI::on_trackObjectFontCombo_currentFontChanged);
     QObject::connect(settingsUI()->trackObjectFontScaleSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_trackObjectFontScaleSpin_valueChanged);
     QObject::connect(settingsUI()->gridLabelFontCombo, &QFontComboBox::currentFontChanged, this, &CameraGUI::on_gridLabelFontCombo_currentFontChanged);
     QObject::connect(settingsUI()->gridLabelFontScaleSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_gridLabelFontScaleSpin_valueChanged);
@@ -7428,6 +7430,12 @@ void CameraGUI::on_trackObjectColorButton_clicked()
         updateColorButton(settingsUI()->trackObjectColorButton, m_settings.m_trackObjectColor);
         applySetting("trackObjectColor");
     }
+}
+
+void CameraGUI::on_trackObjectFontCombo_currentFontChanged(const QFont& font)
+{
+    m_settings.m_trackObjectFontFamily = font.family();
+    applySetting("trackObjectFontFamily");
 }
 
 void CameraGUI::on_trackObjectFontScaleSpin_valueChanged(double value)

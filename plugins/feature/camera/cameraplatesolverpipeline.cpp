@@ -10924,7 +10924,6 @@ CameraPlateSolver::SolverContext::Evaluation CameraPlateSolver::SolverContext::s
     const double fixedCenterOffsetY = useStartLens ? settings.m_lensCenterOffsetY : 0.0;
     const double fixedDistortionK1 = useStartLens ? settings.m_lensDistortionK1 : 0.0;
     const bool calibrateLens = canCalibrateLens(settings);
-    const bool calibratePrincipalPoint = canCalibratePrincipalPoint(settings);
     QVector<QPointF> centerOffsetSeeds;
     centerOffsetSeeds.append(QPointF(fixedCenterOffsetX, fixedCenterOffsetY));
     QVector<double> distortionSeeds;

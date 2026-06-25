@@ -3601,8 +3601,9 @@ CameraPlateSolver::SolverContext::SkyProjector CameraPlateSolver::SolverContext:
         centerOffsetYPixels,
         distortionK1);
 
-    detectionRayVectors.assign(detectionIndices.size(), SkyVector{0.0, 0.0, 0.0});
-    detectionRayVectorValid.assign(detectionIndices.size(), 0);
+    // QVector::assign() is Qt6-only; fill(value, size) resizes+fills on both Qt5 and Qt6.
+    detectionRayVectors.fill(SkyVector{0.0, 0.0, 0.0}, detectionIndices.size());
+    detectionRayVectorValid.fill(0, detectionIndices.size());
     if (!referenceProjector.valid) {
         return referenceProjector;
     }

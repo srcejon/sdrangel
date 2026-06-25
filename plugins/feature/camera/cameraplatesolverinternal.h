@@ -1396,7 +1396,7 @@ double matchBrightnessRankError(const QVector<CameraPipelineStarDetection>& star
 
 static double meanCatalogMagnitudeForMatches(const QVector<CatalogStar>& catalogStars, const QVector<Match>& matches);
 
-bool shouldPopulatePoseScoringMetrics(const CameraSettings& settings,
+bool shouldPopulatePoseScoringMetrics(const CameraSettings& /*settings*/,
                                       const Evaluation& evaluation,
                                       bool forceSparseSeedMetrics = false) const
 {

@@ -1889,7 +1889,7 @@
           <item row="0" column="0">
            <widget class="QLabel" name="scaleEnabledLabel">
             <property name="text">
-             <string>Output scale</string>
+             <string>Enable scaling</string>
             </property>
            </widget>
           </item>
@@ -1899,7 +1899,7 @@
              <string>Scale calibrated and stacked frames before downstream filtering, detection, display and recording</string>
             </property>
             <property name="text">
-             <string>Enable scaling</string>
+             <string/>
             </property>
            </widget>
           </item>
@@ -1980,7 +1980,7 @@
           <item row="3" column="0">
            <widget class="QLabel" name="scaleKeepAspectRatioLabel">
             <property name="text">
-             <string>Aspect ratio</string>
+             <string>Keep aspect ratio</string>
             </property>
            </widget>
           </item>
@@ -1990,7 +1990,7 @@
              <string>Fit the scaled output inside the requested size without stretching the image</string>
             </property>
             <property name="text">
-             <string>Keep aspect ratio</string>
+             <string/>
             </property>
            </widget>
           </item>

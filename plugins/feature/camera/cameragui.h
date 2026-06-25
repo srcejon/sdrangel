@@ -39,6 +39,9 @@
 #include <QAbstractVideoBuffer>
 #include <QVideoFrame>
 #endif
+#ifdef QT_SENSORS_FOUND
+#include <QSensor>
+#endif
 
 #include "feature/featuregui.h"
 #include "util/messagequeue.h"

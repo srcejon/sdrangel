@@ -802,7 +802,8 @@ if (BUILD_GUI)
                             WebEngineCore
                             WebEngineWidgets
                             TextToSpeech
-                            Location)
+                            Location
+                            Sensors)
         else()
             find_package(Qt5
                            REQUIRED COMPONENTS
@@ -835,6 +836,9 @@ if(Qt${QT_DEFAULT_MAJOR_VERSION}Charts_FOUND)
 endif()
 if(Qt${QT_DEFAULT_MAJOR_VERSION}TextToSpeech_FOUND)
     add_compile_definitions(QT_TEXTTOSPEECH_FOUND)
+endif()
+if(Qt${QT_DEFAULT_MAJOR_VERSION}Sensors_FOUND)
+    add_compile_definitions(QT_SENSORS_FOUND)
 endif()
 if(BUILD_SHARED_LIBS)
     add_compile_definitions(BUILD_SHARED_LIBS)

@@ -114,6 +114,9 @@ endif()
 if(Qt${QT_DEFAULT_MAJOR_VERSION}TextToSpeech_FOUND)
     list(APPEND TARGET_LIB Qt::TextToSpeech)
 endif()
+if (Qt${QT_DEFAULT_MAJOR_VERSION}Sensors_FOUND)
+    list(APPEND TARGET_LIB Qt::Sensors)
+endif()
 
 # OpenGL viewport for the preview QGraphicsView (cameragui.cpp). Qt6 split
 # QOpenGLWidget into its own module; only needed for the GUI build.

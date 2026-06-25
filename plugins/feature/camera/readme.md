@@ -157,19 +157,19 @@ The histogram shows a count of the number of pixels with a given value, for red,
 
 <h3>25: Object detection</h3>
 
-Check to enables YOLO object detection. This uses an AI model to detect objects such as people or cars within an image, drawing a bounding box around them.
+Check to enable object detection. This uses an AI model to detect objects such as people or cars within an image, drawing a bounding box around them.
 
 ![Object dection](../../../doc/img/Camera_plugin_object_detection.png)
 
 The classes of objects that can be detected depend upon the dataset the AI model has been trained on.
-You use your own YOLO ONNX models or one of several predefined models that can be downloaded.
+You can use your own YOLO ONNX models or one of several predefined models that can be downloaded.
 The YOLO ONNX model to use must be set in the Object Detection sub-tab in the Camera Settings dialog.
 
 When an object is detected an event will be emitted that can be used by the Scheduler feature to perform user-defined actions.
 
 <h3>26: Object detection history</h3>
 
-Opens the YOLO object detection history dialog.
+Opens the object detection history dialog.
 
 ![Object dection history](../../../doc/img/Camera_plugin_detection_history.png)
 
@@ -205,12 +205,16 @@ In this image, difference detection shows a satellite flare, while hiding backgr
 <h3>29: Star detection and plate solving</h3>
 
 Enables star detection and plate solving.
-This can be used to display labels showing star names, or to work out the direction a camera is pointing.
-Plate solving can be used for both wide-angle all-sky cameras and narrow field-of-view telescopes:
+This can be used to display labels showing the names of stars detected within an image, or to work out the direction a camera is pointing.
+Plate solving can be used for both narrow field-of-view telescopes:
 
 ![Narrow FoV](../../../doc/img/Camera_plugin_plate_solve_narrow.png)
 
+and wide-angle all-sky cameras:
+
 ![Wide FoV](../../../doc/img/Camera_plugin_plate_solve_wide.png)
+
+The solution gives the direction the camera is pointing, field-of-view and lens distortion parameters:
 
 ![Plate solving result](../../../doc/img/Camera_plugin_plate_solve_result.png)
 

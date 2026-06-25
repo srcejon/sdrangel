@@ -6681,11 +6681,11 @@ Right-click: toggle continual synchronization from My Position.</string>
           </item>
           <item row="1" column="1">
            <widget class="QDoubleSpinBox" name="azimuthOffsetSpin">
-            <property name="decimals">
-             <number>4</number>
-            </property>
             <property name="suffix">
              <string>°</string>
+            </property>
+            <property name="decimals">
+             <number>4</number>
             </property>
             <property name="minimum">
              <double>-180.000000000000000</double>
@@ -6707,11 +6707,11 @@ Right-click: toggle continual synchronization from My Position.</string>
           </item>
           <item row="2" column="1">
            <widget class="QDoubleSpinBox" name="elevationOffsetSpin">
-            <property name="decimals">
-             <number>4</number>
-            </property>
             <property name="suffix">
              <string>°</string>
+            </property>
+            <property name="decimals">
+             <number>4</number>
             </property>
             <property name="minimum">
              <double>-180.000000000000000</double>
@@ -6793,14 +6793,44 @@ Right-click: toggle continual synchronization from My Position.</string>
             </property>
            </widget>
           </item>
-          <item row="6" column="0">
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <widget class="QGroupBox" name="lensSensorGroup">
+         <property name="title">
+          <string>Camera lens and sensor</string>
+         </property>
+         <layout class="QFormLayout" name="formLayout_2">
+          <item row="0" column="0">
+           <widget class="QLabel" name="fovModeLabel">
+            <property name="text">
+             <string>FoV setting</string>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="1">
+           <widget class="QComboBox" name="fovModeCombo">
+            <item>
+             <property name="text">
+              <string>Manual</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>Sensor/focal length</string>
+             </property>
+            </item>
+           </widget>
+          </item>
+          <item row="1" column="0">
            <widget class="QLabel" name="fovLabel">
             <property name="text">
              <string>FoV</string>
             </property>
            </widget>
           </item>
-          <item row="6" column="1">
+          <item row="1" column="1">
            <widget class="QDoubleSpinBox" name="fovSpin">
             <property name="suffix">
              <string> °</string>
@@ -6819,14 +6849,14 @@ Right-click: toggle continual synchronization from My Position.</string>
             </property>
            </widget>
           </item>
-          <item row="7" column="0">
+          <item row="2" column="0">
            <widget class="QLabel" name="fovSensorWidthLabel">
             <property name="text">
              <string>Sensor width</string>
             </property>
            </widget>
           </item>
-          <item row="7" column="1">
+          <item row="2" column="1">
            <widget class="QDoubleSpinBox" name="fovSensorWidthSpin">
             <property name="suffix">
              <string> mm</string>
@@ -6845,14 +6875,14 @@ Right-click: toggle continual synchronization from My Position.</string>
             </property>
            </widget>
           </item>
-          <item row="8" column="0">
+          <item row="3" column="0">
            <widget class="QLabel" name="fovSensorHeightLabel">
             <property name="text">
              <string>Sensor height</string>
             </property>
            </widget>
           </item>
-          <item row="8" column="1">
+          <item row="3" column="1">
            <widget class="QDoubleSpinBox" name="fovSensorHeightSpin">
             <property name="suffix">
              <string> mm</string>
@@ -6871,14 +6901,14 @@ Right-click: toggle continual synchronization from My Position.</string>
             </property>
            </widget>
           </item>
-          <item row="9" column="0">
+          <item row="4" column="0">
            <widget class="QLabel" name="fovFocalLengthLabel">
             <property name="text">
              <string>Focal length</string>
             </property>
            </widget>
           </item>
-          <item row="9" column="1">
+          <item row="4" column="1">
            <widget class="QDoubleSpinBox" name="fovFocalLengthSpin">
             <property name="suffix">
              <string> mm</string>
@@ -6897,14 +6927,14 @@ Right-click: toggle continual synchronization from My Position.</string>
             </property>
            </widget>
           </item>
-          <item row="10" column="0">
+          <item row="5" column="0">
            <widget class="QLabel" name="lensProjectionLabel">
             <property name="text">
              <string>Projection</string>
             </property>
            </widget>
           </item>
-          <item row="10" column="1">
+          <item row="5" column="1">
            <widget class="QComboBox" name="lensProjectionCombo">
             <item>
              <property name="text">
@@ -6923,14 +6953,14 @@ Right-click: toggle continual synchronization from My Position.</string>
             </item>
            </widget>
           </item>
-          <item row="11" column="0">
+          <item row="6" column="0">
            <widget class="QLabel" name="lensCenterOffsetXLabel">
             <property name="text">
              <string>Center offset X</string>
             </property>
            </widget>
           </item>
-          <item row="11" column="1">
+          <item row="6" column="1">
            <widget class="QDoubleSpinBox" name="lensCenterOffsetXSpin">
             <property name="decimals">
              <number>1</number>
@@ -6946,14 +6976,14 @@ Right-click: toggle continual synchronization from My Position.</string>
             </property>
            </widget>
           </item>
-          <item row="12" column="0">
+          <item row="7" column="0">
            <widget class="QLabel" name="lensCenterOffsetYLabel">
             <property name="text">
              <string>Center offset Y</string>
             </property>
            </widget>
           </item>
-          <item row="12" column="1">
+          <item row="7" column="1">
            <widget class="QDoubleSpinBox" name="lensCenterOffsetYSpin">
             <property name="decimals">
              <number>1</number>
@@ -6969,14 +6999,14 @@ Right-click: toggle continual synchronization from My Position.</string>
             </property>
            </widget>
           </item>
-          <item row="13" column="0">
+          <item row="8" column="0">
            <widget class="QLabel" name="lensDistortionK1Label">
             <property name="text">
              <string>Distortion K1</string>
             </property>
            </widget>
           </item>
-          <item row="13" column="1">
+          <item row="8" column="1">
            <widget class="QDoubleSpinBox" name="lensDistortionK1Spin">
             <property name="decimals">
              <number>4</number>
@@ -6989,27 +7019,6 @@ Right-click: toggle continual synchronization from My Position.</string>
             </property>
             <property name="singleStep">
              <double>0.001000000000000</double>
-            </property>
-           </widget>
-          </item>
-          <item row="5" column="1">
-           <widget class="QComboBox" name="fovModeCombo">
-            <item>
-             <property name="text">
-              <string>Manual</string>
-             </property>
-            </item>
-            <item>
-             <property name="text">
-              <string>Sensor/focal length</string>
-             </property>
-            </item>
-           </widget>
-          </item>
-          <item row="5" column="0">
-           <widget class="QLabel" name="fovModeLabel">
-            <property name="text">
-             <string>FoV setting</string>
             </property>
            </widget>
           </item>

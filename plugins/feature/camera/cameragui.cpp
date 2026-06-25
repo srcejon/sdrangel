@@ -132,6 +132,33 @@ enum AutoExposureGainControl
 };
 
 const QString kDefaultDirectionSensorId = QStringLiteral("__default__");
+const QString kDirectionSourceRotatorPrefix = QStringLiteral("rotator:");
+const QString kDirectionSourceSensorPrefix = QStringLiteral("sensor:");
+
+QString rotatorDirectionSourceId(const QString& rotatorId)
+{
+    return kDirectionSourceRotatorPrefix + rotatorId;
+}
+
+QString sensorDirectionSourceId(const QString& sensorId)
+{
+    return kDirectionSourceSensorPrefix + sensorId;
+}
+
+bool directionSourceIsRotator(const QString& sourceId)
+{
+    return sourceId.startsWith(kDirectionSourceRotatorPrefix);
+}
+
+bool directionSourceIsSensor(const QString& sourceId)
+{
+    return sourceId.startsWith(kDirectionSourceSensorPrefix);
+}
+
+QString directionSourceValue(const QString& sourceId, const QString& prefix)
+{
+    return sourceId.mid(prefix.size());
+}
 
 std::array<QLabel*, 4> hdrExposureLabels(Ui::CameraSettingsDialog *ui)
 {
@@ -1706,6 +1733,8 @@ void CameraGUI::displaySettings()
     settingsUI()->owmApiKeyEdit->setText(m_settings.m_owmAPIKey);
     settingsUI()->azimuthSpin->setValue(m_settings.m_azimuth);
     settingsUI()->elevationSpin->setValue(m_settings.m_elevation);
+    settingsUI()->azimuthOffsetSpin->setValue(m_settings.m_azimuthOffset);
+    settingsUI()->elevationOffsetSpin->setValue(m_settings.m_elevationOffset);
     settingsUI()->rollSpin->setValue(m_settings.m_roll);
     settingsUI()->fovModeCombo->setCurrentIndex(static_cast<int>(m_settings.m_fovMode));
     settingsUI()->fovSpin->setValue(m_settings.m_fov);
@@ -1717,8 +1746,7 @@ void CameraGUI::displaySettings()
     settingsUI()->lensCenterOffsetXSpin->setValue(m_settings.m_lensCenterOffsetX);
     settingsUI()->lensCenterOffsetYSpin->setValue(m_settings.m_lensCenterOffsetY);
     settingsUI()->lensDistortionK1Spin->setValue(m_settings.m_lensDistortionK1);
-    populateGs232ControllerCombo();
-    populateDirectionSensorCombo();
+    populateDirectionSourceCombo();
     applyPositionSync();
     updatePositionControls();
     settingsUI()->postProcessWhiteBalanceModeCombo->setCurrentIndex(m_settings.m_postProcessWhiteBalanceMode);
@@ -2542,9 +2570,10 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->useMyPositionButton, &QToolButton::clicked, this, &CameraGUI::on_useMyPositionButton_clicked);
     QObject::connect(settingsUI()->azimuthSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_azimuthSpin_valueChanged);
     QObject::connect(settingsUI()->elevationSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_elevationSpin_valueChanged);
+    QObject::connect(settingsUI()->azimuthOffsetSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_azimuthOffsetSpin_valueChanged);
+    QObject::connect(settingsUI()->elevationOffsetSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_elevationOffsetSpin_valueChanged);
     QObject::connect(settingsUI()->rollSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_rollSpin_valueChanged);
-    QObject::connect(settingsUI()->rotatorControllerCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_rotatorControllerCombo_currentIndexChanged);
-    QObject::connect(settingsUI()->directionSensorCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_directionSensorCombo_currentIndexChanged);
+    QObject::connect(settingsUI()->directionSourceCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_directionSourceCombo_currentIndexChanged);
     QObject::connect(settingsUI()->fovModeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_fovModeCombo_currentIndexChanged);
     QObject::connect(settingsUI()->fovSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_fovSpin_valueChanged);
     QObject::connect(settingsUI()->fovSensorWidthSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_fovSensorWidthSpin_valueChanged);
@@ -3295,12 +3324,19 @@ void CameraGUI::handleHdrExposureSpinChanged(int exposureIndex, double value)
     applySetting(QStringLiteral("stackHdrExposure%1Ms").arg(exposureIndex + 1));
 }
 
-void CameraGUI::populateGs232ControllerCombo()
+void CameraGUI::populateDirectionSourceCombo()
 {
-    const QString currentSelection = m_settings.m_rotator;
-    QSignalBlocker blocker(settingsUI()->rotatorControllerCombo);
-    settingsUI()->rotatorControllerCombo->clear();
-    settingsUI()->rotatorControllerCombo->addItem(tr("None"), QString());
+    QComboBox *combo = settingsUI()->directionSourceCombo;
+    QString currentSelection;
+    if (!m_settings.m_rotator.isEmpty()) {
+        currentSelection = rotatorDirectionSourceId(m_settings.m_rotator);
+    } else if (!m_settings.m_directionSensor.isEmpty()) {
+        currentSelection = sensorDirectionSourceId(m_settings.m_directionSensor);
+    }
+
+    QSignalBlocker blocker(combo);
+    combo->clear();
+    combo->addItem(tr("None"), QString());
 
     std::vector<FeatureSet*>& featureSets = MainCore::instance()->getFeatureeSets();
 
@@ -3327,23 +3363,12 @@ void CameraGUI::populateGs232ControllerCombo()
             }
 
             const QString selectionId = QStringLiteral("%1:%2").arg(featureSetIndex).arg(featureIndex);
-            settingsUI()->rotatorControllerCombo->addItem(
-                QStringLiteral("F%1:%2 %3").arg(featureSetIndex).arg(featureIndex).arg(title),
-                selectionId);
+            combo->addItem(
+                tr("Rotator F%1:%2 %3").arg(featureSetIndex).arg(featureIndex).arg(title),
+                rotatorDirectionSourceId(selectionId));
         }
     }
 
-    const int index = settingsUI()->rotatorControllerCombo->findData(currentSelection);
-    settingsUI()->rotatorControllerCombo->setCurrentIndex(index >= 0 ? index : 0);
-}
-
-void CameraGUI::populateDirectionSensorCombo()
-{
-    QComboBox *combo = settingsUI()->directionSensorCombo;
-    const QString currentSelection = m_settings.m_directionSensor;
-    QSignalBlocker blocker(combo);
-    combo->clear();
-    combo->addItem(tr("None"), QString());
     bool compatibleDirectionSensors = false;
 
 #ifdef QT_SENSORS_FOUND
@@ -3353,36 +3378,33 @@ void CameraGUI::populateDirectionSensorCombo()
 
     if (compatibleDirectionSensors)
     {
-        combo->addItem(tr("Default compass + tilt"), kDefaultDirectionSensorId);
+        combo->addItem(tr("Sensor default compass + tilt"), sensorDirectionSourceId(kDefaultDirectionSensorId));
 
         for (const QByteArray& identifier : compassSensors)
         {
             const QString id = QString::fromUtf8(identifier);
-            combo->addItem(tr("Compass %1 + default tilt").arg(id), id);
+            combo->addItem(tr("Sensor compass %1 + default tilt").arg(id), sensorDirectionSourceId(id));
         }
     }
     else
     {
         combo->addItem(tr("No compatible Qt Sensors"), QString());
     }
+#else
+    combo->addItem(tr("Qt Sensors unavailable"), QString());
+#endif
 
     int index = combo->findData(currentSelection);
     if ((index < 0) && !currentSelection.isEmpty())
     {
-        combo->addItem(tr("Unavailable: %1").arg(currentSelection), currentSelection);
+        combo->addItem(tr("Unavailable: %1").arg(
+                !m_settings.m_rotator.isEmpty() ? m_settings.m_rotator : m_settings.m_directionSensor),
+            currentSelection);
         index = combo->count() - 1;
     }
     combo->setCurrentIndex(index >= 0 ? index : 0);
-    combo->setEnabled(compatibleDirectionSensors || !m_settings.m_directionSensor.isEmpty());
-    combo->setToolTip(tr("Select a Qt Sensors compass/tilt sensor pair to continually synchronize the camera azimuth and elevation."));
-    settingsUI()->directionSensorLabel->setEnabled(combo->isEnabled());
-#else
-    combo->addItem(tr("Qt Sensors unavailable"), QString());
-    combo->setCurrentIndex(0);
-    combo->setEnabled(false);
-    combo->setToolTip(tr("Qt Sensors support is not available in this build"));
-    settingsUI()->directionSensorLabel->setEnabled(false);
-#endif
+    combo->setToolTip(tr("Select a GS232Controller rotator or Qt Sensors compass/tilt sensor pair to continually synchronize the camera azimuth and elevation."));
+    settingsUI()->directionSourceLabel->setEnabled(combo->isEnabled());
 
     if (compatibleDirectionSensors && !m_settings.m_directionSensor.isEmpty()) {
         startDirectionSensors();
@@ -3491,6 +3513,9 @@ void CameraGUI::syncFromDirectionSensors()
         return;
     }
 
+    azimuth += m_settings.m_azimuthOffset;
+    elevation += m_settings.m_elevationOffset;
+
     azimuth = std::fmod(azimuth, 360.0);
     if (azimuth < 0.0) {
         azimuth += 360.0;
@@ -3548,15 +3573,16 @@ void CameraGUI::updatePositionControls()
     settingsUI()->altitudeSpin->setReadOnly(m_settings.m_positionSync);
     settingsUI()->azimuthSpin->setReadOnly(azElSynced);
     settingsUI()->elevationSpin->setReadOnly(azElSynced);
-    settingsUI()->rotatorControllerCombo->setEnabled(!sensorSynced);
+    settingsUI()->azimuthOffsetSpin->setEnabled(azElSynced);
+    settingsUI()->elevationOffsetSpin->setEnabled(azElSynced);
+    settingsUI()->azimuthOffsetLabel->setEnabled(azElSynced);
+    settingsUI()->elevationOffsetLabel->setEnabled(azElSynced);
 #ifdef QT_SENSORS_FOUND
-    const bool hasDirectionSensors = settingsUI()->directionSensorCombo->findData(kDefaultDirectionSensorId) >= 0;
-    settingsUI()->directionSensorCombo->setEnabled(!rotatorSynced && (hasDirectionSensors || sensorSynced));
-    settingsUI()->directionSensorLabel->setEnabled(settingsUI()->directionSensorCombo->isEnabled());
+    settingsUI()->directionSourceCombo->setEnabled(true);
 #else
-    settingsUI()->directionSensorCombo->setEnabled(false);
-    settingsUI()->directionSensorLabel->setEnabled(false);
+    settingsUI()->directionSourceCombo->setEnabled(true);
 #endif
+    settingsUI()->directionSourceLabel->setEnabled(settingsUI()->directionSourceCombo->isEnabled());
 }
 
 void CameraGUI::updateFovControls()
@@ -3755,6 +3781,15 @@ void CameraGUI::syncFromSelectedGs232Controller()
     {
         return;
     }
+
+    azimuth = std::fmod(azimuth + m_settings.m_azimuthOffset, 360.0);
+    if (azimuth < 0.0) {
+        azimuth += 360.0;
+    }
+    elevation = qBound(
+        static_cast<double>(CameraSettings::m_minElevation),
+        elevation + m_settings.m_elevationOffset,
+        static_cast<double>(CameraSettings::m_maxElevation));
 
     settingsUI()->azimuthSpin->setValue(azimuth);
     settingsUI()->elevationSpin->setValue(elevation);
@@ -6633,42 +6668,51 @@ void CameraGUI::on_rollSpin_valueChanged(double value)
     applySetting("roll");
 }
 
-void CameraGUI::on_rotatorControllerCombo_currentIndexChanged(int index)
+void CameraGUI::on_azimuthOffsetSpin_valueChanged(double value)
 {
-    m_settings.m_rotator = settingsUI()->rotatorControllerCombo->itemData(index).toString();
-    QStringList settingsKeys = {"rotator"};
-    if (!m_settings.m_rotator.isEmpty() && !m_settings.m_directionSensor.isEmpty())
-    {
-        m_settings.m_directionSensor.clear();
-        stopDirectionSensors();
-        QSignalBlocker blocker(settingsUI()->directionSensorCombo);
-        settingsUI()->directionSensorCombo->setCurrentIndex(0);
-        settingsKeys.append("directionSensor");
-    }
-    updatePositionControls();
-    if (!m_settings.m_rotator.isEmpty()) {
+    m_settings.m_azimuthOffset = static_cast<float>(value);
+    if (!m_settings.m_directionSensor.isEmpty()) {
+        syncFromDirectionSensors();
+    } else if (!m_settings.m_rotator.isEmpty()) {
         syncFromSelectedGs232Controller();
     }
-    applySettings(settingsKeys);
+    applySetting("azimuthOffset");
 }
 
-void CameraGUI::on_directionSensorCombo_currentIndexChanged(int index)
+void CameraGUI::on_elevationOffsetSpin_valueChanged(double value)
 {
-    m_settings.m_directionSensor = settingsUI()->directionSensorCombo->itemData(index).toString();
-    QStringList settingsKeys = {"directionSensor"};
+    m_settings.m_elevationOffset = static_cast<float>(value);
+    if (!m_settings.m_directionSensor.isEmpty()) {
+        syncFromDirectionSensors();
+    } else if (!m_settings.m_rotator.isEmpty()) {
+        syncFromSelectedGs232Controller();
+    }
+    applySetting("elevationOffset");
+}
 
-    if (!m_settings.m_directionSensor.isEmpty() && !m_settings.m_rotator.isEmpty())
+void CameraGUI::on_directionSourceCombo_currentIndexChanged(int index)
+{
+    const QString sourceId = settingsUI()->directionSourceCombo->itemData(index).toString();
+    QStringList settingsKeys = {"rotator", "directionSensor"};
+
+    if (directionSourceIsRotator(sourceId))
+    {
+        m_settings.m_rotator = directionSourceValue(sourceId, kDirectionSourceRotatorPrefix);
+        m_settings.m_directionSensor.clear();
+        stopDirectionSensors();
+        syncFromSelectedGs232Controller();
+    }
+    else if (directionSourceIsSensor(sourceId))
     {
         m_settings.m_rotator.clear();
-        QSignalBlocker blocker(settingsUI()->rotatorControllerCombo);
-        settingsUI()->rotatorControllerCombo->setCurrentIndex(0);
-        settingsKeys.append("rotator");
-    }
-
-    if (m_settings.m_directionSensor.isEmpty()) {
-        stopDirectionSensors();
-    } else {
+        m_settings.m_directionSensor = directionSourceValue(sourceId, kDirectionSourceSensorPrefix);
         startDirectionSensors();
+    }
+    else
+    {
+        m_settings.m_rotator.clear();
+        m_settings.m_directionSensor.clear();
+        stopDirectionSensors();
     }
 
     updatePositionControls();
@@ -9131,7 +9175,7 @@ void CameraGUI::onFeatureAdded(int featureSetIndex, Feature *feature)
 {
     (void) featureSetIndex;
     if (feature && (feature->getURI() == QLatin1String("sdrangel.feature.gs232controller"))) {
-        populateGs232ControllerCombo();
+        populateDirectionSourceCombo();
         updatePositionControls();
     }
 }
@@ -9140,8 +9184,10 @@ void CameraGUI::onFeatureRemoved(int featureSetIndex, Feature *feature)
 {
     (void) featureSetIndex;
     if (feature && (feature->getURI() == QLatin1String("sdrangel.feature.gs232controller"))) {
-        populateGs232ControllerCombo();
-        if (settingsUI()->rotatorControllerCombo->findData(m_settings.m_rotator) < 0) {
+        populateDirectionSourceCombo();
+        if (!m_settings.m_rotator.isEmpty()
+            && (settingsUI()->directionSourceCombo->findData(rotatorDirectionSourceId(m_settings.m_rotator)) < 0))
+        {
             m_settings.m_rotator.clear();
             applySetting("rotator");
         }

@@ -241,6 +241,8 @@ void CameraSettings::resetToDefaults()
     m_roll = 0.0f;
     m_rotator.clear();
     m_directionSensor.clear();
+    m_azimuthOffset = 0.0f;
+    m_elevationOffset = 0.0f;
     m_fov = 60.0f;
     m_fovMode = FovModeDirect;
     m_fovSensorWidthMm = 36.0;
@@ -684,6 +686,8 @@ QByteArray CameraSettings::serialize() const
     s.writeBool(268, m_scaleKeepAspectRatio);
     s.writeString(269, m_trackObjectFontFamily);
     s.writeString(270, m_directionSensor);
+    s.writeFloat(271, m_azimuthOffset);
+    s.writeFloat(272, m_elevationOffset);
 
     return s.final();
 }
@@ -1162,6 +1166,8 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readBool(268, &m_scaleKeepAspectRatio, true);
         d.readString(269, &m_trackObjectFontFamily, "");
         d.readString(270, &m_directionSensor, "");
+        d.readFloat(271, &m_azimuthOffset, 0.0f);
+        d.readFloat(272, &m_elevationOffset, 0.0f);
         if (isStreamCamera() && m_streamUrl.isEmpty()) {
             m_streamUrl = m_videoFileCameraPath;
         }
@@ -1230,6 +1236,8 @@ bool CameraSettings::deserialize(const QByteArray& data)
         m_azimuth = normalizePositiveDegrees(m_azimuth);
         m_elevation = qBound(m_minElevation, m_elevation, m_maxElevation);
         m_roll = normalizeSignedDegrees(m_roll);
+        m_azimuthOffset = normalizeSignedDegrees(m_azimuthOffset);
+        m_elevationOffset = qBound(-180.0f, m_elevationOffset, 180.0f);
         if (m_fovMode == FovModeSensorFocalLength) {
             m_fov = calculateLongEdgeFovDegrees(m_fovSensorWidthMm, m_fovSensorHeightMm, m_fovFocalLengthMm);
         }
@@ -1613,6 +1621,12 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     }
     if (settingsKeys.contains("directionSensor")) {
         m_directionSensor = settings.m_directionSensor;
+    }
+    if (settingsKeys.contains("azimuthOffset")) {
+        m_azimuthOffset = normalizeSignedDegrees(settings.m_azimuthOffset);
+    }
+    if (settingsKeys.contains("elevationOffset")) {
+        m_elevationOffset = qBound(-180.0f, settings.m_elevationOffset, 180.0f);
     }
     if (settingsKeys.contains("fov")) {
         m_fov = qBound(m_minFov, settings.m_fov, m_maxFov);
@@ -2418,6 +2432,12 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("directionSensor") || force) {
         ostr << " m_directionSensor: " << m_directionSensor.toStdString();
+    }
+    if (settingsKeys.contains("azimuthOffset") || force) {
+        ostr << " m_azimuthOffset: " << m_azimuthOffset;
+    }
+    if (settingsKeys.contains("elevationOffset") || force) {
+        ostr << " m_elevationOffset: " << m_elevationOffset;
     }
     if (settingsKeys.contains("fov") || force) {
         ostr << " m_fov: " << m_fov;

@@ -6653,7 +6653,7 @@ Right-click: toggle continual synchronization from My Position.</string>
          </property>
          <layout class="QFormLayout" name="cameraDirectionLayout">
           <item row="0" column="0">
-           <widget class="QLabel" name="rotatorControllerLabel">
+           <widget class="QLabel" name="directionSourceLabel">
             <property name="minimumSize">
              <size>
               <width>100</width>
@@ -6661,39 +6661,77 @@ Right-click: toggle continual synchronization from My Position.</string>
              </size>
             </property>
             <property name="text">
-             <string>Rotator</string>
+             <string>Source</string>
             </property>
            </widget>
           </item>
           <item row="0" column="1">
-           <widget class="QComboBox" name="rotatorControllerCombo">
+           <widget class="QComboBox" name="directionSourceCombo">
             <property name="toolTip">
-             <string>Select a GS232Controller feature to continually synchronize the camera azimuth and elevation.</string>
+             <string>Select a GS232Controller rotator or Qt Sensors compass/tilt sensor pair to continually synchronize the camera azimuth and elevation.</string>
             </property>
            </widget>
           </item>
           <item row="1" column="0">
-           <widget class="QLabel" name="directionSensorLabel">
+           <widget class="QLabel" name="azimuthOffsetLabel">
             <property name="text">
-             <string>Sensor</string>
+             <string>Azimuth offset</string>
             </property>
            </widget>
           </item>
           <item row="1" column="1">
-           <widget class="QComboBox" name="directionSensorCombo">
-            <property name="toolTip">
-             <string>Select a Qt Sensors compass/tilt sensor pair to continually synchronize the camera azimuth and elevation.</string>
+           <widget class="QDoubleSpinBox" name="azimuthOffsetSpin">
+            <property name="decimals">
+             <number>4</number>
+            </property>
+            <property name="suffix">
+             <string>°</string>
+            </property>
+            <property name="minimum">
+             <double>-180.000000000000000</double>
+            </property>
+            <property name="maximum">
+             <double>180.000000000000000</double>
+            </property>
+            <property name="singleStep">
+             <double>0.100000000000000</double>
             </property>
            </widget>
           </item>
           <item row="2" column="0">
+           <widget class="QLabel" name="elevationOffsetLabel">
+            <property name="text">
+             <string>Elevation offset</string>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="1">
+           <widget class="QDoubleSpinBox" name="elevationOffsetSpin">
+            <property name="decimals">
+             <number>4</number>
+            </property>
+            <property name="suffix">
+             <string>°</string>
+            </property>
+            <property name="minimum">
+             <double>-180.000000000000000</double>
+            </property>
+            <property name="maximum">
+             <double>180.000000000000000</double>
+            </property>
+            <property name="singleStep">
+             <double>0.100000000000000</double>
+            </property>
+           </widget>
+          </item>
+          <item row="3" column="0">
            <widget class="QLabel" name="azimuthLabel">
             <property name="text">
              <string>Azimuth</string>
             </property>
            </widget>
           </item>
-          <item row="2" column="1">
+          <item row="3" column="1">
            <widget class="QDoubleSpinBox" name="azimuthSpin">
             <property name="decimals">
              <number>4</number>
@@ -6709,14 +6747,14 @@ Right-click: toggle continual synchronization from My Position.</string>
             </property>
            </widget>
           </item>
-          <item row="3" column="0">
+          <item row="4" column="0">
            <widget class="QLabel" name="elevationLabel">
             <property name="text">
              <string>Elevation</string>
             </property>
            </widget>
           </item>
-          <item row="3" column="1">
+          <item row="4" column="1">
            <widget class="QDoubleSpinBox" name="elevationSpin">
             <property name="decimals">
              <number>4</number>
@@ -6732,14 +6770,14 @@ Right-click: toggle continual synchronization from My Position.</string>
             </property>
            </widget>
           </item>
-          <item row="4" column="0">
+          <item row="5" column="0">
            <widget class="QLabel" name="rollLabel">
             <property name="text">
              <string>Roll</string>
             </property>
            </widget>
           </item>
-          <item row="4" column="1">
+          <item row="5" column="1">
            <widget class="QDoubleSpinBox" name="rollSpin">
             <property name="decimals">
              <number>2</number>

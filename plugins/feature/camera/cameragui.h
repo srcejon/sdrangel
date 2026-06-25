@@ -353,8 +353,7 @@ private:
     QString starDetectionDetails(const CameraPipelineStarDetection& star) const;
     QString starDetectionSearchTarget(const CameraPipelineStarDetection& star) const;
     void showStarDetectionInfoDialog(const CameraPipelineStarDetection& star);
-    void populateGs232ControllerCombo();
-    void populateDirectionSensorCombo();
+    void populateDirectionSourceCombo();
     void startDirectionSensors();
     void stopDirectionSensors();
     void syncFromDirectionSensors();
@@ -599,8 +598,9 @@ private slots:
     void on_azimuthSpin_valueChanged(double value);
     void on_elevationSpin_valueChanged(double value);
     void on_rollSpin_valueChanged(double value);
-    void on_rotatorControllerCombo_currentIndexChanged(int index);
-    void on_directionSensorCombo_currentIndexChanged(int index);
+    void on_azimuthOffsetSpin_valueChanged(double value);
+    void on_elevationOffsetSpin_valueChanged(double value);
+    void on_directionSourceCombo_currentIndexChanged(int index);
     void on_fovModeCombo_currentIndexChanged(int index);
     void on_fovSpin_valueChanged(double value);
     void on_fovSensorWidthSpin_valueChanged(double value);

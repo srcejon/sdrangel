@@ -162,6 +162,17 @@ QString directionSourceValue(const QString& sourceId, const QString& prefix)
     return sourceId.mid(prefix.size());
 }
 
+double normalizeSignedDegrees(double value)
+{
+    value = std::fmod(value, 360.0);
+    if (value <= -180.0) {
+        value += 360.0;
+    } else if (value > 180.0) {
+        value -= 360.0;
+    }
+    return value;
+}
+
 std::array<QLabel*, 4> hdrExposureLabels(Ui::CameraSettingsDialog *ui)
 {
     return {{
@@ -1737,6 +1748,7 @@ void CameraGUI::displaySettings()
     settingsUI()->elevationSpin->setValue(m_settings.m_elevation);
     settingsUI()->azimuthOffsetSpin->setValue(m_settings.m_azimuthOffset);
     settingsUI()->elevationOffsetSpin->setValue(m_settings.m_elevationOffset);
+    settingsUI()->rollOffsetSpin->setValue(m_settings.m_rollOffset);
     settingsUI()->rollSpin->setValue(m_settings.m_roll);
     settingsUI()->fovModeCombo->setCurrentIndex(static_cast<int>(m_settings.m_fovMode));
     settingsUI()->fovSpin->setValue(m_settings.m_fov);
@@ -2574,6 +2586,7 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->elevationSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_elevationSpin_valueChanged);
     QObject::connect(settingsUI()->azimuthOffsetSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_azimuthOffsetSpin_valueChanged);
     QObject::connect(settingsUI()->elevationOffsetSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_elevationOffsetSpin_valueChanged);
+    QObject::connect(settingsUI()->rollOffsetSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_rollOffsetSpin_valueChanged);
     QObject::connect(settingsUI()->rollSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_rollSpin_valueChanged);
     QObject::connect(settingsUI()->directionSourceCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_directionSourceCombo_currentIndexChanged);
     QObject::connect(settingsUI()->fovModeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_fovModeCombo_currentIndexChanged);
@@ -3406,7 +3419,7 @@ void CameraGUI::populateDirectionSourceCombo()
         index = combo->count() - 1;
     }
     combo->setCurrentIndex(index >= 0 ? index : 0);
-    combo->setToolTip(tr("Select a GS232Controller rotator or Qt Sensors compass/tilt sensor pair to continually synchronize the camera azimuth and elevation."));
+    combo->setToolTip(tr("Select a GS232Controller rotator or Qt Sensors compass/tilt/rotation sensor set to continually synchronize the camera direction."));
     settingsUI()->directionSourceLabel->setEnabled(combo->isEnabled());
 
     if (compatibleDirectionSensors && !m_settings.m_directionSensor.isEmpty()) {
@@ -3545,15 +3558,13 @@ void CameraGUI::syncFromDirectionSensors()
 
     azimuth += m_settings.m_azimuthOffset;
     elevation += m_settings.m_elevationOffset;
+    roll += m_settings.m_rollOffset;
 
     azimuth = std::fmod(azimuth, 360.0);
     if (azimuth < 0.0) {
         azimuth += 360.0;
     }
-    roll = std::fmod(roll, 360.0);
-    if (roll < 0.0) {
-        roll += 360.0;
-    }
+    roll = normalizeSignedDegrees(roll);
     elevation = qBound(
         static_cast<double>(CameraSettings::m_minElevation),
         elevation,
@@ -3614,8 +3625,10 @@ void CameraGUI::updatePositionControls()
     settingsUI()->rollSpin->setReadOnly(sensorSynced);
     settingsUI()->azimuthOffsetSpin->setEnabled(azElSynced);
     settingsUI()->elevationOffsetSpin->setEnabled(azElSynced);
+    settingsUI()->rollOffsetSpin->setEnabled(sensorSynced);
     settingsUI()->azimuthOffsetLabel->setEnabled(azElSynced);
     settingsUI()->elevationOffsetLabel->setEnabled(azElSynced);
+    settingsUI()->rollOffsetLabel->setEnabled(sensorSynced);
 #ifdef QT_SENSORS_FOUND
     settingsUI()->directionSourceCombo->setEnabled(true);
 #else
@@ -6727,6 +6740,15 @@ void CameraGUI::on_elevationOffsetSpin_valueChanged(double value)
         syncFromSelectedGs232Controller();
     }
     applySetting("elevationOffset");
+}
+
+void CameraGUI::on_rollOffsetSpin_valueChanged(double value)
+{
+    m_settings.m_rollOffset = static_cast<float>(value);
+    if (!m_settings.m_directionSensor.isEmpty()) {
+        syncFromDirectionSensors();
+    }
+    applySetting("rollOffset");
 }
 
 void CameraGUI::on_directionSourceCombo_currentIndexChanged(int index)

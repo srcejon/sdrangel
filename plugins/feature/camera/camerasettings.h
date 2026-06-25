@@ -460,6 +460,7 @@ struct CameraSettings
     QString m_directionSensor;      ///< Qt Sensors compass identifier used to follow camera azimuth/elevation
     float m_azimuthOffset;         ///< Offset added to synced rotator/sensor azimuth in degrees
     float m_elevationOffset;       ///< Offset added to synced rotator/sensor elevation in degrees
+    float m_rollOffset;            ///< Offset added to synced sensor roll in degrees
     float m_fov;                   ///< Camera field of view in degrees
     FovMode m_fovMode;             ///< Whether FoV is entered directly or calculated from sensor/focal length
     double m_fovSensorWidthMm;     ///< Sensor width for calculated FoV

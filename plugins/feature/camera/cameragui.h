@@ -603,6 +603,7 @@ private slots:
     void on_rollSpin_valueChanged(double value);
     void on_azimuthOffsetSpin_valueChanged(double value);
     void on_elevationOffsetSpin_valueChanged(double value);
+    void on_rollOffsetSpin_valueChanged(double value);
     void on_directionSourceCombo_currentIndexChanged(int index);
     void on_fovModeCombo_currentIndexChanged(int index);
     void on_fovSpin_valueChanged(double value);

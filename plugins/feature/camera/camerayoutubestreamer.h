@@ -69,6 +69,10 @@ public:
 
     [[nodiscard]] bool isOpen() const;
     [[nodiscard]] bool open(const Settings& settings, const QImage& firstFrame, QString& errorMessage);
+    // Prepend this many ms of silence before the first real audio so the read-ahead monitor audio
+    // (which leads the presented video) aligns with the video timeline. Mirrors CameraVideoWriter;
+    // only effective before the first audio is written (latched by m_audioLeadSilenceConsumed).
+    void setAudioLeadSilenceMs(int milliseconds) { if (!m_audioLeadSilenceConsumed) { m_audioLeadSilenceMs = milliseconds > 0 ? milliseconds : 0; } }
     [[nodiscard]] bool writePcmS16Stereo(const QByteArray& pcm, int sampleRate, QString& errorMessage);
     [[nodiscard]] bool writeFrame(const QImage& image, QString& errorMessage);
     void close();
@@ -91,6 +95,8 @@ private:
     qint64 m_nextFrameElapsedMs = 0;
     bool m_headerWritten = false;
     QByteArray m_audioInputBuffer;
+    int m_audioLeadSilenceMs = 0;
+    bool m_audioLeadSilenceConsumed = false;
     QElapsedTimer m_streamTimer;
 
     [[nodiscard]] static QString avErrorString(int errorCode);

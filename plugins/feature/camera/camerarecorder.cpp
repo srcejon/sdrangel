@@ -281,6 +281,8 @@ bool CameraRecorder::handleMessage(const Message& cmd)
         m_recordAudioFirstChunkMs = -1;
         m_recordPreRecordLeadMs = 0;
         m_recordAudioLeadLogged = false;
+        m_youtubeAudioLeadRefVideoMs = -1;
+        m_youtubeAudioLeadApplied = false;
         if (m_captureActive) {
             resetRecordingLimits();
         } else {
@@ -524,7 +526,7 @@ void CameraRecorder::processNewFrame(const CameraPipelineFramePtr& frame)
         updateKeogram(calibratedImage, frame->m_captureDateTime);
     }
     if (m_captureActive && m_settings.m_youtubeStreamEnabled) {
-        updateYouTubeStream(calibratedImage, processedImage);
+        updateYouTubeStream(calibratedImage, processedImage, frame->m_playbackPositionMs);
     } else {
         closeYouTubeStream();
     }
@@ -907,9 +909,11 @@ void CameraRecorder::closeYouTubeStream()
     if (m_youtubeStreamer) {
         m_youtubeStreamer->close();
     }
+    m_youtubeAudioLeadRefVideoMs = -1;
+    m_youtubeAudioLeadApplied = false;
 }
 
-void CameraRecorder::updateYouTubeStream(const QImage& calibratedImage, const QImage& processedImage)
+void CameraRecorder::updateYouTubeStream(const QImage& calibratedImage, const QImage& processedImage, qint64 videoContentMs)
 {
     if (!m_youtubeStreamer || m_youtubeStreamErrorReported) {
         return;
@@ -943,6 +947,28 @@ void CameraRecorder::updateYouTubeStream(const QImage& calibratedImage, const QI
             m_youtubeStreamErrorReported = true;
             closeYouTubeStream();
             return;
+        }
+    }
+
+    // Mirror the file writers' read-ahead audio-lead correction (see the m_saveVideo path): the
+    // appended chunks are the monitor read-ahead, whose source PTS leads the presented video, so
+    // prepend that gap as silence ONCE (before the first real audio) to lip-sync the stream. The
+    // file path's m_recordAudioLeadRefVideoMs is only set when saving video, so track a YouTube-
+    // scoped video anchor here. Apply when both anchors are known, before the first chunk is written.
+    if (!m_youtubeAudioLeadApplied)
+    {
+        if ((m_youtubeAudioLeadRefVideoMs < 0) && (videoContentMs >= 0)) {
+            m_youtubeAudioLeadRefVideoMs = videoContentMs;
+        }
+        if ((m_youtubeAudioLeadRefVideoMs >= 0) && (m_recordAudioFirstChunkMs >= 0))
+        {
+            const qint64 leadMs = qMax<qint64>(0, m_recordAudioFirstChunkMs - m_youtubeAudioLeadRefVideoMs);
+            m_youtubeStreamer->setAudioLeadSilenceMs(static_cast<int>(leadMs));
+            m_youtubeAudioLeadApplied = true;
+            qDebug() << "CameraRecorder: YouTube A/V-sync audio lead -"
+                     << "firstAudioSrcPtsMs" << m_recordAudioFirstChunkMs
+                     << "firstVideoFrameMs" << m_youtubeAudioLeadRefVideoMs
+                     << "-> silence prepended(ms)" << leadMs;
         }
     }
 

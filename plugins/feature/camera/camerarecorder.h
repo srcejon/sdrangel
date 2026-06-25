@@ -240,6 +240,10 @@ private:
     // recording in closeVideoWriters().
     qint64 m_recordAudioLeadRefVideoMs = -1;
     qint64 m_recordAudioFirstChunkMs = -1;
+    // YouTube-stream-scoped equivalent of m_recordAudioLeadRefVideoMs (the file path's anchor is set
+    // only when saving video). Used to prepend the same read-ahead audio lead to the YouTube stream.
+    qint64 m_youtubeAudioLeadRefVideoMs = -1;
+    bool m_youtubeAudioLeadApplied = false;
     // Duration (ms) of the video-only pre-record lead-in flushed at the front of the
     // recording. Those frames carry no audio, so this is added to the audio lead
     // silence to keep the live portion lip-synced. 0 when there is no pre-record.
@@ -275,7 +279,7 @@ private:
                                    const CameraPipelineFrame& frame) const;
     void closeVideoWriters();
     void closeYouTubeStream();
-    void updateYouTubeStream(const QImage& calibratedImage, const QImage& processedImage);
+    void updateYouTubeStream(const QImage& calibratedImage, const QImage& processedImage, qint64 videoContentMs);
     bool ensureVideoWriter(std::unique_ptr<CameraVideoWriter>& writer, const QString& baseFileName, const QImage& frameForSize, const QString& variant, double frameRate);
     bool writeVideoFrame(CameraVideoWriter& writer, const QImage& frameToWrite, const QString& variant, qint64 timestampMs = -1);
     void reportErrorToFeature(const QString& errorKey, const QString& title, const QString& errorMessage);

@@ -314,6 +314,8 @@ bool CameraYouTubeStreamer::open(const Settings& settings, const QImage& firstFr
     m_frameIndex = 0;
     m_audioFrameIndex = 0;
     m_audioInputBuffer.clear();
+    m_audioLeadSilenceMs = 0;
+    m_audioLeadSilenceConsumed = false;
     m_lastFrameElapsedMs = -1;
     m_nextFrameElapsedMs = 0;
     m_streamTimer.restart();
@@ -653,6 +655,21 @@ bool CameraYouTubeStreamer::writePcmS16Stereo(const QByteArray& pcm, int sampleR
     if (!m_audioCodecContext || !m_audioFrame) {
         return true;
     }
+    // Prepend the read-ahead audio lead as silence, once, before any real audio (see
+    // setAudioLeadSilenceMs). The buffer holds post-resample data at the encoder rate.
+    if (!m_audioLeadSilenceConsumed)
+    {
+        m_audioLeadSilenceConsumed = true;
+        if (m_audioLeadSilenceMs > 0)
+        {
+            const int bytesPerSampleFrame = 4;
+            const qint64 silenceFrames =
+                (static_cast<qint64>(m_audioCodecContext->sample_rate) * m_audioLeadSilenceMs) / 1000;
+            if (silenceFrames > 0) {
+                m_audioInputBuffer.append(QByteArray(static_cast<int>(silenceFrames) * bytesPerSampleFrame, 0));
+            }
+        }
+    }
     if (!pcm.isEmpty())
     {
         QByteArray streamPcm;
@@ -868,6 +885,8 @@ void CameraYouTubeStreamer::close()
     m_frameIndex = 0;
     m_audioFrameIndex = 0;
     m_audioInputBuffer.clear();
+    m_audioLeadSilenceMs = 0;
+    m_audioLeadSilenceConsumed = false;
     m_lastFrameElapsedMs = -1;
     m_nextFrameElapsedMs = 0;
     m_headerWritten = false;

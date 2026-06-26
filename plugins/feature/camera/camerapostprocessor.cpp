@@ -64,7 +64,8 @@ static constexpr double kTrackedObjectTrackMinDeltaDegrees = 1e-6;
 static constexpr double kTrackedObjectTrackMinDeltaAltitudeMetres = 0.5;
 static constexpr double kTrackedObjectHeatMapRadiusPixels = 18.0;
 static constexpr double kTrackedObjectHeatMapLineWidthPixels = 10.0;
-static constexpr float kTrackedObjectHeatMapSaturationDensity = 8.0f;
+static constexpr float kTrackedObjectHeatMapStrokeDensity = 0.25f;
+static constexpr float kTrackedObjectHeatMapSaturationDensity = 16.0f;
 
 struct EquatorialStar
 {
@@ -203,7 +204,7 @@ static QRect addTrackedObjectHeatMapStroke(QVector<float>& density, const QSize&
         {
             const int alpha = qAlpha(maskLine[localX]);
             if (alpha > 0) {
-                density[densityOffset + localX] += static_cast<float>(alpha) / 255.0f;
+                density[densityOffset + localX] += (static_cast<float>(alpha) / 255.0f) * kTrackedObjectHeatMapStrokeDensity;
             }
         }
     }

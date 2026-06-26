@@ -785,7 +785,7 @@ void CameraPostProcessor::applySettings(const CameraSettings& settings, const QL
         m_lastFrame = CameraPipelineFrame();
     }
 
-    if (sourceChanged
+    if (force
         || settingsKeys.contains("trackObjectMinElevation")
         || settingsKeys.contains("latitude")
         || settingsKeys.contains("longitude")
@@ -1783,7 +1783,20 @@ void CameraPostProcessor::applyTrackedObjectOverlay(QImage& image, bool drawLabe
 {
     PROFILER_START();
 
-    if (!m_settings.m_trackObjects || m_trackedMapObjects.isEmpty()) {
+    if (!m_settings.m_trackObjects) {
+        return;
+    }
+
+    if (m_trackedMapObjects.isEmpty())
+    {
+        if (m_settings.m_trackObjectHeatMap
+            && !m_trackedObjectHeatMap.isNull()
+            && (m_trackedObjectHeatMap.size() == image.size())
+            && (m_trackedObjectHeatMapSize == image.size()))
+        {
+            QPainter painter(&image);
+            painter.drawImage(0, 0, m_trackedObjectHeatMap);
+        }
         return;
     }
 

@@ -27,7 +27,6 @@
 #include <QLineF>
 #include <QPainter>
 #include <QPolygonF>
-#include <QRadialGradient>
 #include <QTextDocument>
 #include <QDateTime>
 #include "SWGMapItem.h"
@@ -65,6 +64,7 @@ static constexpr double kTrackedObjectTrackMinDeltaDegrees = 1e-6;
 static constexpr double kTrackedObjectTrackMinDeltaAltitudeMetres = 0.5;
 static constexpr double kTrackedObjectHeatMapRadiusPixels = 18.0;
 static constexpr double kTrackedObjectHeatMapLineWidthPixels = 10.0;
+static constexpr float kTrackedObjectHeatMapSaturationDensity = 8.0f;
 
 struct EquatorialStar
 {
@@ -91,6 +91,125 @@ const std::array<EquatorialStar, 7> kOrionStars = {{
     {83.001667, -0.299167},  // Alnilam
     {81.572917, -2.397222}   // Mintaka
 }};
+
+static QRgb turboHeatMapRgba(float density)
+{
+    if (density <= 0.0f) {
+        return qRgba(0, 0, 0, 0);
+    }
+
+    const double x = std::clamp(static_cast<double>(density / kTrackedObjectHeatMapSaturationDensity), 0.0, 1.0);
+    const double x2 = x * x;
+    const double x3 = x2 * x;
+    const double x4 = x3 * x;
+    const double x5 = x4 * x;
+    const auto channel = [](double v) -> int {
+        return static_cast<int>(std::round(std::clamp(v, 0.0, 1.0) * 255.0));
+    };
+
+    const int r = channel(0.13572138 + (4.61539260 * x) - (42.66032258 * x2) + (132.13108234 * x3) - (152.94239396 * x4) + (59.28637943 * x5));
+    const int g = channel(0.09140261 + (2.19418839 * x) + (4.84296658 * x2) - (14.18503333 * x3) + (4.27729857 * x4) + (2.82956604 * x5));
+    const int b = channel(0.10667330 + (12.64194608 * x) - (60.58204836 * x2) + (110.36276771 * x3) - (89.90310912 * x4) + (27.34824973 * x5));
+    const int a = channel(0.25 + (0.65 * std::sqrt(x)));
+    return qPremultiply(qRgba(r, g, b, a));
+}
+
+static void renderTrackedObjectHeatMapRect(QImage& heatMap, const QVector<float>& density, const QRect& rect)
+{
+    if (heatMap.format() != QImage::Format_ARGB32_Premultiplied) {
+        return;
+    }
+
+    const QRect imageRect(QPoint(0, 0), heatMap.size());
+    const QRect clippedRect = rect.intersected(imageRect);
+    if (clippedRect.isEmpty()) {
+        return;
+    }
+
+    const int width = heatMap.width();
+    for (int y = clippedRect.top(); y <= clippedRect.bottom(); ++y)
+    {
+        QRgb *line = reinterpret_cast<QRgb*>(heatMap.scanLine(y));
+        const int rowOffset = y * width;
+        for (int x = clippedRect.left(); x <= clippedRect.right(); ++x) {
+            line[x] = turboHeatMapRgba(density[rowOffset + x]);
+        }
+    }
+}
+
+static QRect addTrackedObjectHeatMapStroke(QVector<float>& density, const QSize& size, const QPolygonF& track, const QVector<QPointF>& points)
+{
+    if (density.size() != (size.width() * size.height())) {
+        return QRect();
+    }
+
+    QRectF bounds;
+    if (!track.isEmpty()) {
+        bounds = track.boundingRect();
+    }
+    for (const QPointF& point : points)
+    {
+        const QRectF pointBounds(
+            point.x() - kTrackedObjectHeatMapRadiusPixels,
+            point.y() - kTrackedObjectHeatMapRadiusPixels,
+            kTrackedObjectHeatMapRadiusPixels * 2.0,
+            kTrackedObjectHeatMapRadiusPixels * 2.0);
+        bounds = bounds.isNull() ? pointBounds : bounds.united(pointBounds);
+    }
+
+    if (bounds.isNull()) {
+        return QRect();
+    }
+
+    QRect dirtyRect = bounds.adjusted(
+        -kTrackedObjectHeatMapRadiusPixels,
+        -kTrackedObjectHeatMapRadiusPixels,
+        kTrackedObjectHeatMapRadiusPixels,
+        kTrackedObjectHeatMapRadiusPixels).toAlignedRect().intersected(QRect(QPoint(0, 0), size));
+    if (dirtyRect.isEmpty()) {
+        return QRect();
+    }
+
+    QImage mask(dirtyRect.size(), QImage::Format_ARGB32_Premultiplied);
+    mask.fill(Qt::transparent);
+
+    QPainter maskPainter(&mask);
+    maskPainter.setRenderHint(QPainter::Antialiasing);
+    maskPainter.translate(-dirtyRect.topLeft());
+    maskPainter.setCompositionMode(QPainter::CompositionMode_SourceOver);
+    maskPainter.setBrush(Qt::NoBrush);
+    if (track.size() > 1)
+    {
+        QPen linePen(Qt::white, kTrackedObjectHeatMapLineWidthPixels);
+        linePen.setCapStyle(Qt::RoundCap);
+        linePen.setJoinStyle(Qt::RoundJoin);
+        maskPainter.setPen(linePen);
+        maskPainter.drawPolyline(track);
+    }
+
+    maskPainter.setPen(Qt::NoPen);
+    maskPainter.setBrush(Qt::white);
+    for (const QPointF& point : points) {
+        maskPainter.drawEllipse(point, kTrackedObjectHeatMapRadiusPixels, kTrackedObjectHeatMapRadiusPixels);
+    }
+    maskPainter.end();
+
+    const int width = size.width();
+    for (int localY = 0; localY < mask.height(); ++localY)
+    {
+        const QRgb *maskLine = reinterpret_cast<const QRgb*>(mask.constScanLine(localY));
+        const int densityOffset = (dirtyRect.top() + localY) * width + dirtyRect.left();
+        for (int localX = 0; localX < mask.width(); ++localX)
+        {
+            const int alpha = qAlpha(maskLine[localX]);
+            if (alpha > 0) {
+                density[densityOffset + localX] += static_cast<float>(alpha) / 255.0f;
+            }
+        }
+    }
+
+    return dirtyRect;
+}
 
 const std::array<EquatorialStar, 4> kCruxStars = {{
     {186.649583, -63.099167}, // Acrux
@@ -661,6 +780,7 @@ bool CameraPostProcessor::handleMessage(const Message& cmd)
     else if (MsgClearTrackedObjectHeatMap::match(cmd))
     {
         m_trackedObjectHeatMap = QImage();
+        m_trackedObjectHeatMapDensity.clear();
         m_trackedObjectHeatMapSize = QSize();
         m_trackedObjectHeatMapLastPoints.clear();
         m_trackedObjectHeatMapSkipSeed = true;
@@ -800,6 +920,7 @@ void CameraPostProcessor::applySettings(const CameraSettings& settings, const QL
         || settingsKeys.contains("lensDistortionK1"))
     {
         m_trackedObjectHeatMap = QImage();
+        m_trackedObjectHeatMapDensity.clear();
         m_trackedObjectHeatMapSize = QSize();
         m_trackedObjectHeatMapLastPoints.clear();
         m_trackedObjectHeatMapSkipSeed = false;
@@ -1835,17 +1956,17 @@ void CameraPostProcessor::applyTrackedObjectOverlay(QImage& image, bool drawLabe
     {
         if ((m_trackedObjectHeatMap.size() != image.size())
             || (m_trackedObjectHeatMap.format() != QImage::Format_ARGB32_Premultiplied)
+            || (m_trackedObjectHeatMapDensity.size() != (image.width() * image.height()))
             || (m_trackedObjectHeatMapSize != image.size()))
         {
             m_trackedObjectHeatMap = QImage(image.size(), QImage::Format_ARGB32_Premultiplied);
             m_trackedObjectHeatMap.fill(Qt::transparent);
+            m_trackedObjectHeatMapDensity.fill(0.0f, image.width() * image.height());
             m_trackedObjectHeatMapSize = image.size();
             m_trackedObjectHeatMapLastPoints.clear();
         }
 
-        QPainter heatPainter(&m_trackedObjectHeatMap);
-        heatPainter.setRenderHint(QPainter::Antialiasing);
-        heatPainter.setCompositionMode(QPainter::CompositionMode_Plus);
+        QRect heatDirtyRect;
         const QRectF paddedImageRect = QRectF(image.rect()).adjusted(
             -kTrackedObjectHeatMapRadiusPixels,
             -kTrackedObjectHeatMapRadiusPixels,
@@ -1911,35 +2032,16 @@ void CameraPostProcessor::applyTrackedObjectOverlay(QImage& image, bool drawLabe
                 projectedTrack.append(validHeatPoints[i]);
             }
 
-            if (projectedTrack.size() > 1)
-            {
-                heatPainter.setBrush(Qt::NoBrush);
-                QPen heatLinePen(QColor(255, 120, 0, 32), kTrackedObjectHeatMapLineWidthPixels);
-                heatLinePen.setCapStyle(Qt::RoundCap);
-                heatLinePen.setJoinStyle(Qt::RoundJoin);
-                heatPainter.setPen(heatLinePen);
-                heatPainter.drawPolyline(projectedTrack);
-
-                QPen heatCorePen(QColor(255, 220, 0, 20), kTrackedObjectHeatMapLineWidthPixels * 0.45);
-                heatCorePen.setCapStyle(Qt::RoundCap);
-                heatCorePen.setJoinStyle(Qt::RoundJoin);
-                heatPainter.setPen(heatCorePen);
-                heatPainter.drawPolyline(projectedTrack);
+            QVector<QPointF> newHeatPoints;
+            newHeatPoints.reserve(validHeatPoints.size() - firstNewPointIndex);
+            for (int i = firstNewPointIndex; i < validHeatPoints.size(); ++i) {
+                newHeatPoints.append(validHeatPoints[i]);
             }
 
-            heatPainter.setPen(Qt::NoPen);
-            for (int i = firstNewPointIndex; i < validHeatPoints.size(); ++i)
+            const QRect dirtyRect = addTrackedObjectHeatMapStroke(m_trackedObjectHeatMapDensity, image.size(), projectedTrack, newHeatPoints);
+            if (!dirtyRect.isEmpty())
             {
-                const QPointF& heatPoint = validHeatPoints[i];
-                QRadialGradient gradient(heatPoint, kTrackedObjectHeatMapRadiusPixels);
-                gradient.setColorAt(0.0, QColor(255, 64, 0, 85));
-                gradient.setColorAt(0.45, QColor(255, 210, 0, 42));
-                gradient.setColorAt(1.0, QColor(255, 210, 0, 0));
-                heatPainter.setBrush(gradient);
-                heatPainter.drawEllipse(
-                    heatPoint,
-                    kTrackedObjectHeatMapRadiusPixels,
-                    kTrackedObjectHeatMapRadiusPixels);
+                heatDirtyRect = heatDirtyRect.isEmpty() ? dirtyRect : heatDirtyRect.united(dirtyRect);
             }
 
             const QPointF newestHeatPoint = validHeatPoints.last();
@@ -1948,7 +2050,7 @@ void CameraPostProcessor::applyTrackedObjectOverlay(QImage& image, bool drawLabe
             }
         }
         m_trackedObjectHeatMapSkipSeed = false;
-        heatPainter.end();
+        renderTrackedObjectHeatMapRect(m_trackedObjectHeatMap, m_trackedObjectHeatMapDensity, heatDirtyRect);
 
         painter.drawImage(0, 0, m_trackedObjectHeatMap);
     }
@@ -2110,7 +2212,7 @@ QImage CameraPostProcessor::applyPostProcessing(const CameraPipelineFrame& frame
     if (!frame.m_starDetections.isEmpty()) { applyStarOverlay(result, frame.m_starDetections, drawPreviewText, previewTextLabels); }
     if (m_settings.m_equatorialGrid || m_settings.m_altAzGrid) { applySkyGridOverlay(result, drawPreviewText, previewTextLabels); }
     if (m_settings.m_constellation) { applyConstellationOverlay(result); }
-    if (m_settings.m_trackObjects && !m_trackedMapObjects.isEmpty()) { applyTrackedObjectOverlay(result, drawPreviewText, previewTextLabels, trackedObjects); }
+    if (m_settings.m_trackObjects) { applyTrackedObjectOverlay(result, drawPreviewText, previewTextLabels, trackedObjects); }
     if (m_settings.m_overlayDateTime) { applyDateTimeOverlay(result, drawPreviewText, previewTextLabels); }
     if (needsTextOverlay) { applyTextOverlay(result, overlayTextDocument); }
 

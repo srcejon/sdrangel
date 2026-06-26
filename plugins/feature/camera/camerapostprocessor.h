@@ -344,6 +344,7 @@ private:
     float m_weatherWindDirection = std::numeric_limits<float>::quiet_NaN();
     QHash<QString, TrackedMapObject> m_trackedMapObjects;
     QImage m_trackedObjectHeatMap;
+    QVector<float> m_trackedObjectHeatMapDensity;
     QSize m_trackedObjectHeatMapSize;
     QHash<QString, QPointF> m_trackedObjectHeatMapLastPoints;
     bool m_trackedObjectHeatMapSkipSeed = false;

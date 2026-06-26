@@ -3908,7 +3908,11 @@ void CameraPlateSolver::SolverContext::appendSupplementalMatches(const QVector<C
     // common case in dense/synthetic frames -- do not, so they stay excluded.
     const double tightCoincidenceRadius = std::min(supplementalRadiusCap, std::max(2.0, matchRadiusPixels * 0.10));
     const double tightCoincidenceRadiusSquared = tightCoincidenceRadius * tightCoincidenceRadius;
-    constexpr double kSuspectCoincidenceMinSnr = 100.0;
+    // Lowered from 100 (tuned for Dziban, snr~134) to 50 so genuine naked-eye stars (mag ~5-6,
+    // snr ~50-70 when heavily undersampled in a wide field, e.g. eps2 Lyr snr~67) recover their
+    // label. The tight coincidence with a bright (mag <= 6.5) catalogue star is the real
+    // discriminator; this is label-only/post-acceptance so it cannot change a solve verdict.
+    constexpr double kSuspectCoincidenceMinSnr = 50.0;
     constexpr double kSuspectCoincidenceMaxCatalogMag = 6.5;
 
     const auto appendSupplementalForDetection = [&](int detectionIndex)

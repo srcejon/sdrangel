@@ -2255,13 +2255,14 @@ QImage CameraAlpacaController::parseImageBytes(const QByteArray& payload, const 
                      << pixelDataLen << "<" << required;
             return fallbackImage;
         }
+        const qsizetype heightStride = static_cast<qsizetype>(height);
 
         // First pass: min/max for black-level correction and linear scaling to 8-bit
         double minVal = std::numeric_limits<double>::max();
         double maxVal = std::numeric_limits<double>::lowest();
         for (int x = 0; x < width; ++x) {
             for (int y = 0; y < height; ++y) {
-                const double v = readPixelAsDouble(static_cast<qsizetype>(x * height + y) * elementSize);
+                const double v = readPixelAsDouble((static_cast<qsizetype>(x) * heightStride + y) * elementSize);
                 if (v < minVal) { minVal = v; }
                 if (v > maxVal) { maxVal = v; }
             }
@@ -2282,7 +2283,7 @@ QImage CameraAlpacaController::parseImageBytes(const QByteArray& payload, const 
         QVector<QVector<int>> raw(width, QVector<int>(height, 0));
         for (int x = 0; x < width; ++x) {
             for (int y = 0; y < height; ++y) {
-                const double v = readPixelAsDouble(static_cast<qsizetype>(x * height + y) * elementSize);
+                const double v = readPixelAsDouble((static_cast<qsizetype>(x) * heightStride + y) * elementSize);
                 raw[x][y] = qRound(v);
             }
         }
@@ -2304,8 +2305,13 @@ QImage CameraAlpacaController::parseImageBytes(const QByteArray& payload, const 
             return fallbackImage;
         }
 
+        const qsizetype widthStride = static_cast<qsizetype>(width);
+        const qsizetype heightStride = static_cast<qsizetype>(height);
+        const qsizetype planeStride = widthStride * heightStride;
         auto pixelAt = [&](int plane, int x, int y) -> double {
-            return readPixelAsDouble(static_cast<qsizetype>(plane * width * height + x * height + y) * elementSize);
+            return readPixelAsDouble((static_cast<qsizetype>(plane) * planeStride
+                + static_cast<qsizetype>(x) * heightStride
+                + y) * elementSize);
         };
 
         double minVal = std::numeric_limits<double>::max();

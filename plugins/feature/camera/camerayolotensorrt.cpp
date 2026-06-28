@@ -240,17 +240,73 @@ struct CameraYoloTensorRt::Impl
     std::string m_inputName;
     std::string m_outputName;
     cudaStream_t m_stream = nullptr;
+    void *m_inputDevice = nullptr;
+    size_t m_inputDeviceBytes = 0;
+    void *m_outputDevice = nullptr;
+    size_t m_outputDeviceBytes = 0;
     CameraYoloTensorRt::ProgressCallback m_progressCallback;
 
     ~Impl()
     {
+        releaseDeviceBuffers();
         if (m_stream) {
             cudaStreamDestroy(m_stream);
         }
     }
 
+    void releaseDeviceBuffers()
+    {
+        if (m_stream) {
+            cudaStreamSynchronize(m_stream);
+        }
+        if (m_inputDevice) {
+            cudaFree(m_inputDevice);
+            m_inputDevice = nullptr;
+            m_inputDeviceBytes = 0;
+        }
+        if (m_outputDevice) {
+            cudaFree(m_outputDevice);
+            m_outputDevice = nullptr;
+            m_outputDeviceBytes = 0;
+        }
+    }
+
+    bool ensureDeviceBuffer(void **buffer, size_t& bufferBytes, size_t requiredBytes, const QString& name, QString& error)
+    {
+        if (requiredBytes == 0)
+        {
+            error = QStringLiteral("TensorRT %1 allocation requested zero bytes").arg(name);
+            return false;
+        }
+
+        if (*buffer && (bufferBytes >= requiredBytes)) {
+            return true;
+        }
+
+        void *newBuffer = nullptr;
+        const cudaError_t cudaError = cudaMalloc(&newBuffer, requiredBytes);
+        if (cudaError != cudaSuccess)
+        {
+            error = QStringLiteral("TensorRT %1 allocation failed: %2")
+                .arg(name, QString::fromUtf8(cudaGetErrorString(cudaError)));
+            return false;
+        }
+
+        if (*buffer)
+        {
+            if (m_stream) {
+                cudaStreamSynchronize(m_stream);
+            }
+            cudaFree(*buffer);
+        }
+        *buffer = newBuffer;
+        bufferBytes = requiredBytes;
+        return true;
+    }
+
     void reset()
     {
+        releaseDeviceBuffers();
         m_context.reset();
         m_engine.reset();
         m_runtime.reset();
@@ -517,46 +573,40 @@ struct CameraYoloTensorRt::Impl
         }
 
         const size_t inputBytes = static_cast<size_t>(inputElements) * inputElementSize;
-        void *inputDevice = nullptr;
-        void *outputDevice = nullptr;
-
-        auto cleanup = [&]() {
-            if (inputDevice) {
-                cudaFree(inputDevice);
-            }
-            if (outputDevice) {
-                cudaFree(outputDevice);
-            }
-        };
-
-        cudaError_t cudaError = cudaMalloc(&inputDevice, inputBytes);
-        if (cudaError != cudaSuccess)
-        {
-            error = QStringLiteral("TensorRT input allocation failed: %1").arg(QString::fromUtf8(cudaGetErrorString(cudaError)));
+        if (!ensureDeviceBuffer(&m_inputDevice, m_inputDeviceBytes, inputBytes, QStringLiteral("input"), error)) {
             return false;
         }
 
-        cudaError = cudaMemcpyAsync(inputDevice, inputHostData, inputBytes, cudaMemcpyHostToDevice, m_stream);
+        cudaError_t cudaError = cudaMemcpyAsync(m_inputDevice, inputHostData, inputBytes, cudaMemcpyHostToDevice, m_stream);
         if (cudaError != cudaSuccess)
         {
-            cleanup();
             error = QStringLiteral("TensorRT input upload failed: %1").arg(QString::fromUtf8(cudaGetErrorString(cudaError)));
             return false;
         }
 
-        if (!m_context->setTensorAddress(m_inputName.c_str(), inputDevice))
+        if (!m_context->setTensorAddress(m_inputName.c_str(), m_inputDevice))
         {
-            cleanup();
             error = QStringLiteral("TensorRT failed to bind input tensor");
             return false;
         }
 
         const char *missingTensorNames[8] = {};
         const int missingShapes = m_context->inferShapes(8, missingTensorNames);
-        if (missingShapes < 0)
+        if (missingShapes != 0)
         {
-            cleanup();
-            error = QStringLiteral("TensorRT shape inference failed");
+            if (missingShapes < 0)
+            {
+                error = QStringLiteral("TensorRT shape inference failed");
+            }
+            else if ((missingShapes > 0) && missingTensorNames[0])
+            {
+                error = QStringLiteral("TensorRT shape inference has unresolved tensor shape: %1")
+                    .arg(QString::fromUtf8(missingTensorNames[0]));
+            }
+            else
+            {
+                error = QStringLiteral("TensorRT shape inference has %1 unresolved tensor shape(s)").arg(missingShapes);
+            }
             return false;
         }
 
@@ -565,47 +615,37 @@ struct CameraYoloTensorRt::Impl
         const size_t outputElementSize = dataTypeSize(m_engine->getTensorDataType(m_outputName.c_str()));
         if ((outputElements <= 0) || (outputElementSize != sizeof(float)))
         {
-            cleanup();
             error = QStringLiteral("TensorRT output tensor is unsupported");
             return false;
         }
 
         const size_t outputBytes = static_cast<size_t>(outputElements) * outputElementSize;
-        cudaError = cudaMalloc(&outputDevice, outputBytes);
-        if (cudaError != cudaSuccess)
-        {
-            cleanup();
-            error = QStringLiteral("TensorRT output allocation failed: %1").arg(QString::fromUtf8(cudaGetErrorString(cudaError)));
+        if (!ensureDeviceBuffer(&m_outputDevice, m_outputDeviceBytes, outputBytes, QStringLiteral("output"), error)) {
             return false;
         }
 
-        if (!m_context->setTensorAddress(m_outputName.c_str(), outputDevice))
+        if (!m_context->setTensorAddress(m_outputName.c_str(), m_outputDevice))
         {
-            cleanup();
             error = QStringLiteral("TensorRT failed to bind output tensor");
             return false;
         }
 
         if (!m_context->enqueueV3(m_stream))
         {
-            cleanup();
             error = QStringLiteral("TensorRT enqueue failed");
             return false;
         }
 
         std::vector<float> outputHost(static_cast<size_t>(outputElements));
-        cudaError = cudaMemcpyAsync(outputHost.data(), outputDevice, outputBytes, cudaMemcpyDeviceToHost, m_stream);
+        cudaError = cudaMemcpyAsync(outputHost.data(), m_outputDevice, outputBytes, cudaMemcpyDeviceToHost, m_stream);
         if (cudaError == cudaSuccess) {
             cudaError = cudaStreamSynchronize(m_stream);
         }
         if (cudaError != cudaSuccess)
         {
-            cleanup();
             error = QStringLiteral("TensorRT output download failed: %1").arg(QString::fromUtf8(cudaGetErrorString(cudaError)));
             return false;
         }
-
-        cleanup();
 
         if (outputDims.nbDims == 3)
         {

@@ -113,7 +113,7 @@ double estimateResidualNoiseSigma(const cv::Mat& residual)
     const double totalPixels = static_cast<double>(residual.rows) * static_cast<double>(residual.cols);
     const int sampleStep = std::max(1, static_cast<int>(std::sqrt(std::max(1.0, totalPixels / kTargetSamples))));
     std::vector<double> samples;
-    samples.reserve(static_cast<size_t>(std::min(kTargetSamples * 2, residual.rows * residual.cols)));
+    samples.reserve(static_cast<size_t>(std::min(static_cast<double>(kTargetSamples * 2), totalPixels)));
 
     for (int y = 0; y < residual.rows; y += sampleStep)
     {

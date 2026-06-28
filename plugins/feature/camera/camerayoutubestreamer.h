@@ -70,9 +70,8 @@ public:
     [[nodiscard]] bool isOpen() const;
     [[nodiscard]] bool open(const Settings& settings, const QImage& firstFrame, QString& errorMessage);
     // Prepend this many ms of silence before the first real audio so the read-ahead monitor audio
-    // (which leads the presented video) aligns with the video timeline. Mirrors CameraVideoWriter;
-    // only effective before the first audio is written (latched by m_audioLeadSilenceConsumed).
-    void setAudioLeadSilenceMs(int milliseconds) { if (!m_audioLeadSilenceConsumed) { m_audioLeadSilenceMs = milliseconds > 0 ? milliseconds : 0; } }
+    // (which leads the presented video) aligns with the video timeline. Latches before first audio.
+    void setAudioLeadSilenceMs(int milliseconds) { m_audioWriter.setLeadSilenceMs(milliseconds); }
     [[nodiscard]] bool writePcmS16Stereo(const QByteArray& pcm, int sampleRate, QString& errorMessage);
     [[nodiscard]] bool writeFrame(const QImage& image, QString& errorMessage);
     void close();
@@ -82,21 +81,14 @@ private:
     QSize m_streamSize;
     AVFormatContext *m_formatContext = nullptr;
     AVCodecContext *m_codecContext = nullptr;
-    AVCodecContext *m_audioCodecContext = nullptr;
     AVFrame *m_frame = nullptr;
-    AVFrame *m_audioFrame = nullptr;
     SwsContext *m_swsContext = nullptr;
-    CameraFFmpegAudio::PcmS16StereoResampler m_audioResampler;
+    CameraFFmpegAacStreamWriter m_audioWriter;   // owns the AAC stream in m_formatContext
     int m_streamIndex = -1;
-    int m_audioStreamIndex = -1;
     qint64 m_frameIndex = 0;
-    qint64 m_audioFrameIndex = 0;
     qint64 m_lastFrameElapsedMs = -1;
     qint64 m_nextFrameElapsedMs = 0;
     bool m_headerWritten = false;
-    QByteArray m_audioInputBuffer;
-    int m_audioLeadSilenceMs = 0;
-    bool m_audioLeadSilenceConsumed = false;
     QElapsedTimer m_streamTimer;
 
     [[nodiscard]] static QString avErrorString(int errorCode);
@@ -104,12 +96,7 @@ private:
     [[nodiscard]] static QString redactedStreamTargetUrl(const QString& targetUrl);
     [[nodiscard]] static QSize evenSize(const QSize& size);
     [[nodiscard]] static QImage prepareRgbImage(const QImage& image, const QSize& size);
-    [[nodiscard]] bool openAudioStream(QString& errorMessage);
-    [[nodiscard]] bool fillAudioFrameFromS16Stereo(const char *pcm, int sampleFrames, QString& errorMessage);
     [[nodiscard]] bool encodeAndWriteRgbFrame(const QImage& rgb, QString& errorMessage);
-    [[nodiscard]] bool encodeAndWriteAudioFrame(QString& errorMessage);
-    [[nodiscard]] bool encodeAndWriteSilentAudioFrame(QString& errorMessage);
-    [[nodiscard]] bool flushAudioInputBuffer(QString& errorMessage);
     [[nodiscard]] bool writeEncodedPacket(AVPacket *packet, AVCodecContext *codecContext, int streamIndex, QString& errorMessage);
     void flushEncoder(AVCodecContext *codecContext, int streamIndex);
 };

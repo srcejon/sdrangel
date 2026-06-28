@@ -84,7 +84,7 @@ public:
     // the video frames reach it later (sink-latency video delay + processing
     // pipeline), so the audio otherwise leads the video. Ignored once audio has
     // started; set it before the first writePcmS16Stereo call.
-    void setAudioLeadSilenceMs(int milliseconds) { if (!m_audioLeadSilenceConsumed) { m_audioLeadSilenceMs = milliseconds > 0 ? milliseconds : 0; } }
+    void setAudioLeadSilenceMs(int milliseconds) { m_audioWriter.setLeadSilenceMs(milliseconds); }
     void close();
 
 private:
@@ -92,31 +92,20 @@ private:
     QSize m_videoSize;
     AVFormatContext *m_formatContext = nullptr;
     AVCodecContext *m_codecContext = nullptr;
-    AVCodecContext *m_audioCodecContext = nullptr;
     AVFrame *m_frame = nullptr;
-    AVFrame *m_audioFrame = nullptr;
     SwsContext *m_swsContext = nullptr;
-    CameraFFmpegAudio::PcmS16StereoResampler m_audioResampler;
+    CameraFFmpegAacStreamWriter m_audioWriter;   // owns the AAC stream in m_formatContext
     int m_streamIndex = -1;
-    int m_audioStreamIndex = -1;
     qint64 m_frameIndex = 0;
     qint64 m_frameDurationPts = 40;
     qint64 m_firstFrameTimestampMs = -1;
     qint64 m_lastVideoPts = -1;
-    qint64 m_audioFrameIndex = 0;
     bool m_headerWritten = false;
-    QByteArray m_audioInputBuffer;
-    int m_audioLeadSilenceMs = 0;
-    bool m_audioLeadSilenceConsumed = false;
 
     [[nodiscard]] static QString avErrorString(int errorCode);
     [[nodiscard]] static QSize evenSize(const QSize& size);
     [[nodiscard]] static QImage prepareRgbImage(const QImage& image, const QSize& size);
-    [[nodiscard]] bool openAudioStream(QString& warningMessage);
     [[nodiscard]] bool writeEncodedPacket(AVPacket *packet, AVCodecContext *codecContext, int streamIndex, QString& errorMessage);
-    [[nodiscard]] bool fillAudioFrameFromS16Stereo(const char *pcm, int sampleFrames, QString& errorMessage);
-    [[nodiscard]] bool encodeAndWriteAudioFrame(QString& errorMessage);
-    [[nodiscard]] bool flushAudioInputBuffer(QString& errorMessage);
     void flushEncoder(AVCodecContext *codecContext, int streamIndex);
 };
 

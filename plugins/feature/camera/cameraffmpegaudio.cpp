@@ -19,9 +19,15 @@
 #include "cameraffmpegaudio.h"
 #include "cameraffmpegcompat.h"
 
+#include <cstring>
+
+#include <QDebug>
+
 #ifdef CAMERA_FFMPEG_STREAMING
 #include <cerrno>
 extern "C" {
+#include <libavcodec/avcodec.h>
+#include <libavformat/avformat.h>
 #include <libavutil/error.h>
 #include <libavutil/samplefmt.h>
 #include <libswresample/swresample.h>
@@ -214,4 +220,418 @@ bool CameraFFmpegAudio::resamplePcmS16Stereo(const QByteArray& input,
 {
     PcmS16StereoResampler resampler;
     return resampler.resample(input, inputSampleRate, outputSampleRate, output, errorMessage);
+}
+
+// ===================== CameraFFmpegAacStreamWriter =====================
+// Shared AAC encode+mux path factored out of CameraVideoWriter (file) and CameraYouTubeStreamer
+// (live RTMP). Behaviour is byte-for-byte the two paths' previous duplicated code, parameterised by
+// the caller's format context, the output sample rate, and flushAfterWrite.
+
+namespace { constexpr int kAacBytesPerSampleFrame = 4; }   // S16 stereo
+
+CameraFFmpegAacStreamWriter::~CameraFFmpegAacStreamWriter()
+{
+    close();
+}
+
+bool CameraFFmpegAacStreamWriter::open(AVFormatContext* formatContext, int outputSampleRate, bool flushAfterWrite, QString& errorMessage)
+{
+#ifndef CAMERA_FFMPEG_STREAMING
+    Q_UNUSED(formatContext)
+    Q_UNUSED(outputSampleRate)
+    Q_UNUSED(flushAfterWrite)
+    errorMessage = QStringLiteral("FFmpeg support is not available in this build");
+    return false;
+#else
+    close();
+    if (!formatContext) {
+        errorMessage = QStringLiteral("No format context for the audio stream");
+        return false;
+    }
+
+    const AVCodec *codec = avcodec_find_encoder(AV_CODEC_ID_AAC);
+    if (!codec)
+    {
+        errorMessage = QStringLiteral("No AAC encoder is available in FFmpeg");
+        return false;
+    }
+
+    m_codecContext = avcodec_alloc_context3(codec);
+    if (!m_codecContext)
+    {
+        errorMessage = QStringLiteral("Cannot allocate AAC encoder context");
+        return false;
+    }
+
+    m_codecContext->codec_id = codec->id;
+    m_codecContext->codec_type = AVMEDIA_TYPE_AUDIO;
+    m_codecContext->sample_rate = outputSampleRate;
+    m_codecContext->sample_fmt = codec->sample_fmts ? codec->sample_fmts[0] : AV_SAMPLE_FMT_FLTP;
+    m_codecContext->bit_rate = 128000;
+    cameraFFmpegSetStereoChannelLayout(m_codecContext);
+    m_codecContext->time_base = AVRational{1, m_codecContext->sample_rate};
+
+    if (formatContext->oformat->flags & AVFMT_GLOBALHEADER) {
+        m_codecContext->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
+    }
+
+    int ret = avcodec_open2(m_codecContext, codec, nullptr);
+    if (ret < 0)
+    {
+        errorMessage = QStringLiteral("Cannot open AAC encoder: %1").arg(CameraFFmpegAudio::avErrorString(ret));
+        close();
+        return false;
+    }
+
+    m_frame = av_frame_alloc();
+    if (!m_frame)
+    {
+        errorMessage = QStringLiteral("Cannot allocate audio frame");
+        close();
+        return false;
+    }
+    m_frame->format = m_codecContext->sample_fmt;
+    ret = cameraFFmpegSetFrameChannelLayoutFromContext(m_frame, m_codecContext);
+    if (ret < 0)
+    {
+        errorMessage = QStringLiteral("Cannot set audio channel layout: %1").arg(CameraFFmpegAudio::avErrorString(ret));
+        close();
+        return false;
+    }
+    m_frame->sample_rate = m_codecContext->sample_rate;
+    m_frame->nb_samples = m_codecContext->frame_size > 0 ? m_codecContext->frame_size : 1024;
+
+    ret = av_frame_get_buffer(m_frame, 0);
+    if (ret < 0)
+    {
+        errorMessage = QStringLiteral("Cannot allocate audio frame buffer: %1").arg(CameraFFmpegAudio::avErrorString(ret));
+        close();
+        return false;
+    }
+
+    AVStream *stream = avformat_new_stream(formatContext, nullptr);
+    if (!stream)
+    {
+        errorMessage = QStringLiteral("Cannot create audio stream");
+        close();
+        return false;
+    }
+    ret = avcodec_parameters_from_context(stream->codecpar, m_codecContext);
+    if (ret < 0)
+    {
+        errorMessage = QStringLiteral("Cannot copy audio encoder parameters: %1").arg(CameraFFmpegAudio::avErrorString(ret));
+        close();
+        return false;
+    }
+    stream->time_base = m_codecContext->time_base;
+
+    m_formatContext = formatContext;
+    m_streamIndex = stream->index;
+    m_flushAfterWrite = flushAfterWrite;
+    return true;
+#endif
+}
+
+int CameraFFmpegAacStreamWriter::frameSampleCount() const
+{
+#ifdef CAMERA_FFMPEG_STREAMING
+    return m_frame ? m_frame->nb_samples : 0;
+#else
+    return 0;
+#endif
+}
+
+qint64 CameraFFmpegAacStreamWriter::encodedDurationMs() const
+{
+#ifdef CAMERA_FFMPEG_STREAMING
+    if (!m_codecContext) {
+        return 0;
+    }
+    return av_rescale_q(m_frameIndex, m_codecContext->time_base, AVRational{1, 1000});
+#else
+    return 0;
+#endif
+}
+
+bool CameraFFmpegAacStreamWriter::writeEncodedPacket(AVPacket *packet, QString& errorMessage)
+{
+#ifndef CAMERA_FFMPEG_STREAMING
+    Q_UNUSED(packet)
+    Q_UNUSED(errorMessage)
+    return false;
+#else
+    packet->stream_index = m_streamIndex;
+    AVStream *stream = m_formatContext->streams[m_streamIndex];
+    av_packet_rescale_ts(packet, m_codecContext->time_base, stream->time_base);
+    if (packet->duration <= 0) {
+        packet->duration = av_rescale_q(1, m_codecContext->time_base, stream->time_base);
+    }
+    const int ret = av_interleaved_write_frame(m_formatContext, packet);
+    if ((ret >= 0) && m_flushAfterWrite && m_formatContext->pb) {
+        avio_flush(m_formatContext->pb);
+    }
+    av_packet_unref(packet);
+    if (ret < 0)
+    {
+        errorMessage = QStringLiteral("Cannot write audio packet: %1").arg(CameraFFmpegAudio::avErrorString(ret));
+        return false;
+    }
+    return true;
+#endif
+}
+
+bool CameraFFmpegAacStreamWriter::fillFrameFromS16Stereo(const char *pcm, int sampleFrames, QString& errorMessage)
+{
+#ifndef CAMERA_FFMPEG_STREAMING
+    Q_UNUSED(pcm)
+    Q_UNUSED(sampleFrames)
+    Q_UNUSED(errorMessage)
+    return false;
+#else
+    if (!m_frame || !m_codecContext) {
+        return false;
+    }
+    if (sampleFrames != m_frame->nb_samples)
+    {
+        errorMessage = QStringLiteral("Audio frame size mismatch");
+        return false;
+    }
+
+    const qint16 *samples = reinterpret_cast<const qint16*>(pcm);
+
+    switch (m_codecContext->sample_fmt)
+    {
+    case AV_SAMPLE_FMT_FLTP:
+    {
+        float *left = reinterpret_cast<float*>(m_frame->data[0]);
+        float *right = reinterpret_cast<float*>(m_frame->data[1]);
+        for (int i = 0; i < sampleFrames; ++i)
+        {
+            left[i] = samples[i * 2] / 32768.0f;
+            right[i] = samples[i * 2 + 1] / 32768.0f;
+        }
+        return true;
+    }
+    case AV_SAMPLE_FMT_S16P:
+    {
+        qint16 *left = reinterpret_cast<qint16*>(m_frame->data[0]);
+        qint16 *right = reinterpret_cast<qint16*>(m_frame->data[1]);
+        for (int i = 0; i < sampleFrames; ++i)
+        {
+            left[i] = samples[i * 2];
+            right[i] = samples[i * 2 + 1];
+        }
+        return true;
+    }
+    case AV_SAMPLE_FMT_S16:
+        std::memcpy(m_frame->data[0], pcm, static_cast<size_t>(sampleFrames) * 4U);
+        return true;
+    default:
+        errorMessage = QStringLiteral("Unsupported AAC sample format %1").arg(av_get_sample_fmt_name(m_codecContext->sample_fmt));
+        return false;
+    }
+#endif
+}
+
+bool CameraFFmpegAacStreamWriter::encodeAndWriteFrame(QString& errorMessage)
+{
+#ifndef CAMERA_FFMPEG_STREAMING
+    Q_UNUSED(errorMessage)
+    return false;
+#else
+    m_frame->pts = m_frameIndex;
+    m_frameIndex += m_frame->nb_samples;
+
+    int ret = avcodec_send_frame(m_codecContext, m_frame);
+    if (ret < 0)
+    {
+        errorMessage = QStringLiteral("Cannot encode audio frame: %1").arg(CameraFFmpegAudio::avErrorString(ret));
+        return false;
+    }
+
+    AVPacket *packet = av_packet_alloc();
+    if (!packet)
+    {
+        errorMessage = QStringLiteral("Cannot allocate audio packet");
+        return false;
+    }
+
+    bool ok = true;
+    while ((ret = avcodec_receive_packet(m_codecContext, packet)) >= 0)
+    {
+        if (!writeEncodedPacket(packet, errorMessage))
+        {
+            ok = false;
+            break;
+        }
+    }
+    if (ok && (ret != AVERROR(EAGAIN)) && (ret != AVERROR_EOF))
+    {
+        errorMessage = QStringLiteral("Cannot receive audio packet: %1").arg(CameraFFmpegAudio::avErrorString(ret));
+        ok = false;
+    }
+
+    av_packet_free(&packet);
+    return ok;
+#endif
+}
+
+bool CameraFFmpegAacStreamWriter::writePcmS16Stereo(const QByteArray& pcm, int inputSampleRate, QString& errorMessage)
+{
+#ifndef CAMERA_FFMPEG_STREAMING
+    Q_UNUSED(pcm)
+    Q_UNUSED(inputSampleRate)
+    errorMessage = QStringLiteral("FFmpeg support is not available in this build");
+    return false;
+#else
+    if (!m_codecContext || !m_frame) {
+        return true;
+    }
+    // One-shot A/V-sync lead silence before any real audio (see setLeadSilenceMs). The buffer holds
+    // post-resample data at the encoder rate, so size the silence at the encoder sample rate.
+    if (!m_leadSilenceConsumed)
+    {
+        m_leadSilenceConsumed = true;
+        if (m_leadSilenceMs > 0)
+        {
+            const qint64 silenceFrames =
+                (static_cast<qint64>(m_codecContext->sample_rate) * m_leadSilenceMs) / 1000;
+            if (silenceFrames > 0) {
+                m_inputBuffer.append(QByteArray(static_cast<int>(silenceFrames) * kAacBytesPerSampleFrame, 0));
+            }
+        }
+        qDebug() << "CameraFFmpegAacStreamWriter: applied audio lead silence (ms)" << m_leadSilenceMs;
+    }
+    if (!pcm.isEmpty())
+    {
+        QByteArray streamPcm;
+        if (!m_resampler.resample(pcm, inputSampleRate, m_codecContext->sample_rate, streamPcm, errorMessage)) {
+            return false;
+        }
+        m_inputBuffer.append(streamPcm);
+    }
+    const int audioFrameBytes = m_frame->nb_samples * kAacBytesPerSampleFrame;
+
+    while (m_inputBuffer.size() >= audioFrameBytes)
+    {
+        int ret = av_frame_make_writable(m_frame);
+        if (ret < 0)
+        {
+            errorMessage = QStringLiteral("Cannot write to audio frame buffer: %1").arg(CameraFFmpegAudio::avErrorString(ret));
+            return false;
+        }
+        if (!fillFrameFromS16Stereo(m_inputBuffer.constData(), m_frame->nb_samples, errorMessage)) {
+            return false;
+        }
+        m_inputBuffer.remove(0, audioFrameBytes);
+        if (!encodeAndWriteFrame(errorMessage)) {
+            return false;
+        }
+    }
+    return true;
+#endif
+}
+
+bool CameraFFmpegAacStreamWriter::writeSilentFrame(QString& errorMessage)
+{
+#ifndef CAMERA_FFMPEG_STREAMING
+    Q_UNUSED(errorMessage)
+    return false;
+#else
+    if (!m_codecContext || !m_frame) {
+        return true;
+    }
+    int ret = av_frame_make_writable(m_frame);
+    if (ret < 0)
+    {
+        errorMessage = QStringLiteral("Cannot write to audio frame buffer: %1").arg(CameraFFmpegAudio::avErrorString(ret));
+        return false;
+    }
+    ret = av_samples_set_silence(
+        m_frame->data,
+        0,
+        m_frame->nb_samples,
+        cameraFFmpegCodecContextChannels(m_codecContext),
+        m_codecContext->sample_fmt);
+    if (ret < 0)
+    {
+        errorMessage = QStringLiteral("Cannot clear audio buffer: %1").arg(CameraFFmpegAudio::avErrorString(ret));
+        return false;
+    }
+    return encodeAndWriteFrame(errorMessage);
+#endif
+}
+
+void CameraFFmpegAacStreamWriter::drainEncoder()
+{
+#ifdef CAMERA_FFMPEG_STREAMING
+    if (!m_codecContext || !m_formatContext) {
+        return;
+    }
+    avcodec_send_frame(m_codecContext, nullptr);
+    AVPacket *packet = av_packet_alloc();
+    if (packet)
+    {
+        QString ignored;
+        while (avcodec_receive_packet(m_codecContext, packet) >= 0) {
+            const bool ok = writeEncodedPacket(packet, ignored);
+            Q_UNUSED(ok)
+        }
+        av_packet_free(&packet);
+    }
+#endif
+}
+
+bool CameraFFmpegAacStreamWriter::flush(QString& errorMessage)
+{
+#ifndef CAMERA_FFMPEG_STREAMING
+    Q_UNUSED(errorMessage)
+    return false;
+#else
+    if (!m_codecContext || !m_frame) {
+        return true;
+    }
+    QByteArray delayedPcm;
+    if (!m_resampler.flush(delayedPcm, errorMessage)) {
+        return false;
+    }
+    if (!delayedPcm.isEmpty()) {
+        m_inputBuffer.append(delayedPcm);
+    }
+    if (!m_inputBuffer.isEmpty())
+    {
+        const int audioFrameBytes = m_frame->nb_samples * kAacBytesPerSampleFrame;
+        const int paddingBytes = audioFrameBytes - (m_inputBuffer.size() % audioFrameBytes);
+        if ((paddingBytes > 0) && (paddingBytes < audioFrameBytes)) {
+            m_inputBuffer.append(QByteArray(paddingBytes, 0));
+        }
+        if (!writePcmS16Stereo(QByteArray(), m_codecContext->sample_rate, errorMessage)) {
+            return false;
+        }
+    }
+    drainEncoder();
+    return true;
+#endif
+}
+
+void CameraFFmpegAacStreamWriter::close()
+{
+#ifdef CAMERA_FFMPEG_STREAMING
+    if (m_codecContext) {
+        avcodec_free_context(&m_codecContext);
+    }
+    if (m_frame) {
+        av_frame_free(&m_frame);
+    }
+    m_resampler.reset();
+#endif
+    m_formatContext = nullptr;
+    m_codecContext = nullptr;
+    m_frame = nullptr;
+    m_streamIndex = -1;
+    m_flushAfterWrite = false;
+    m_inputBuffer.clear();
+    m_frameIndex = 0;
+    m_leadSilenceMs = 0;
+    m_leadSilenceConsumed = false;
 }

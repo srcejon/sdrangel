@@ -23,6 +23,10 @@
 #include <QString>
 
 struct SwrContext;
+struct AVFormatContext;
+struct AVCodecContext;
+struct AVFrame;
+struct AVPacket;
 
 /**
  * \brief FFmpeg audio decode/resample helpers for the camera feature.
@@ -73,6 +77,70 @@ public:
                                                    int outputSampleRate,
                                                    QByteArray& output,
                                                    QString& errorMessage);
+};
+
+/**
+ * \brief Shared AAC audio stream encoder/muxer for the camera FFmpeg outputs.
+ *
+ * Factors the audio half that CameraVideoWriter (file) and CameraYouTubeStreamer (live RTMP) used to
+ * duplicate: it creates an AAC stream in a caller-owned AVFormatContext, resamples interleaved S16
+ * stereo to the encoder rate (via PcmS16StereoResampler), buffers + chunks it into encoder frames,
+ * prepends a one-shot A/V-sync lead silence, encodes, and muxes the packets back into that context.
+ *
+ * The caller owns the AVFormatContext and the video stream; this owns only the audio codec context +
+ * frame. flushAfterWrite=true avio_flushes after every packet (needed for live RTMP). The live caller
+ * also uses writeSilentFrame()/encodedDurationMs()/bufferedInputBytes() to pace silence fill.
+ *
+ * \note Single-threaded, mirrors the resampler's contract. flush() drains the resampler tail +
+ *       encoder and must run while the format context is still valid; close() then frees the codec
+ *       context/frame (it never touches the format context, so the caller may free that first).
+ */
+class CameraFFmpegAacStreamWriter
+{
+public:
+    CameraFFmpegAacStreamWriter() = default;
+    ~CameraFFmpegAacStreamWriter();
+    CameraFFmpegAacStreamWriter(const CameraFFmpegAacStreamWriter&) = delete;
+    CameraFFmpegAacStreamWriter& operator=(const CameraFFmpegAacStreamWriter&) = delete;
+
+    // Create the AAC stream in formatContext (non-owning; must outlive flush()/close()). On failure
+    // returns false + errorMessage and leaves nothing allocated (isOpen() == false).
+    [[nodiscard]] bool open(AVFormatContext* formatContext, int outputSampleRate, bool flushAfterWrite, QString& errorMessage);
+    [[nodiscard]] bool isOpen() const { return m_codecContext != nullptr; }
+    [[nodiscard]] int streamIndex() const { return m_streamIndex; }
+    // Encoder frame size in sample-frames (0 if not open).
+    [[nodiscard]] int frameSampleCount() const;
+    // Pending un-encoded S16-stereo bytes at the encoder rate (for the live silence-fill decision).
+    [[nodiscard]] int bufferedInputBytes() const { return static_cast<int>(m_inputBuffer.size()); }
+    // Content duration (ms) encoded so far = PTS of the next sample (for live pacing).
+    [[nodiscard]] qint64 encodedDurationMs() const;
+    // Prepend this many ms of silence before the first real audio (A/V-sync). Latches once.
+    void setLeadSilenceMs(int milliseconds) { if (!m_leadSilenceConsumed) { m_leadSilenceMs = milliseconds > 0 ? milliseconds : 0; } }
+    // Resample + buffer + chunk + encode + mux. Empty pcm just drains any full buffered frames.
+    [[nodiscard]] bool writePcmS16Stereo(const QByteArray& pcm, int inputSampleRate, QString& errorMessage);
+    // Encode + mux one frame of silence (live silence fill).
+    [[nodiscard]] bool writeSilentFrame(QString& errorMessage);
+    // Flush the resampler tail (zero-padded to a frame) + drain the encoder. Format context must be valid.
+    [[nodiscard]] bool flush(QString& errorMessage);
+    // Free the codec context + frame + resampler. Does not touch the format context.
+    void close();
+
+private:
+    AVFormatContext *m_formatContext = nullptr;   // non-owning
+    AVCodecContext *m_codecContext = nullptr;
+    AVFrame *m_frame = nullptr;
+    int m_streamIndex = -1;
+    bool m_flushAfterWrite = false;
+    CameraFFmpegAudio::PcmS16StereoResampler m_resampler;
+    QByteArray m_inputBuffer;
+    qint64 m_frameIndex = 0;                       // cumulative encoded sample-frames = next PTS
+    int m_leadSilenceMs = 0;
+    bool m_leadSilenceConsumed = false;
+
+    [[nodiscard]] bool fillFrameFromS16Stereo(const char *pcm, int sampleFrames, QString& errorMessage);
+    [[nodiscard]] bool encodeAndWriteFrame(QString& errorMessage);
+    [[nodiscard]] bool writeEncodedPacket(AVPacket *packet, QString& errorMessage);
+    void drainEncoder();
 };
 
 #endif // INCLUDE_FEATURE_CAMERA_FFMPEG_AUDIO_H_

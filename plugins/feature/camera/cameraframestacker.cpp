@@ -1418,10 +1418,15 @@ bool CameraFrameStacker::applyFrameStacking(CameraPipelineFrame& inputFrame, QIm
                 return std::isfinite(minValue) && std::isfinite(maxValue) && (maxValue > 1.0e-4);
             };
 
-            auto useMiddleExposureFrame = [](const std::vector<cv::Mat>& ldrFrames, cv::Mat& tonemapped)
+            auto useMiddleExposureFrame = [](const std::vector<cv::Mat>& ldrFrames, cv::Mat& tonemapped) -> bool
             {
+                if (ldrFrames.empty()) {
+                    return false;
+                }
+
                 const int middleIndex = static_cast<int>(ldrFrames.size() / 2);
                 ldrFrames[middleIndex].convertTo(tonemapped, CV_32FC3, 1.0 / 255.0);
+                return true;
             };
 
             std::vector<const HdrFrameSample *> sortedSamples;
@@ -1632,24 +1637,31 @@ bool CameraFrameStacker::applyFrameStacking(CameraPipelineFrame& inputFrame, QIm
                 {
                     qWarning() << "CameraFrameStacker: HDR exposure fusion produced an unusable image; falling back to middle exposure";
                     prepareLdrFrames();
-                    useMiddleExposureFrame(ldrFrames, tonemapped);
-                    hdrFallback = "middle";
+                    if (useMiddleExposureFrame(ldrFrames, tonemapped)) {
+                        hdrFallback = "middle";
+                    }
                 }
                 else
                 {
                     qWarning() << "CameraFrameStacker: HDR merge produced an unusable image; falling back to exposure fusion";
-                    cv::Ptr<cv::MergeMertens> mergeMertens = cv::createMergeMertens();
-                    mergeMertens->process(ldrFrames, tonemapped);
-                    hdrFallback = "mertens";
-                    if (tonemapped.depth() != CV_32F) {
-                        tonemapped.convertTo(tonemapped, CV_32FC3);
+                    prepareLdrFrames();
+
+                    if (!ldrFrames.empty())
+                    {
+                        cv::Ptr<cv::MergeMertens> mergeMertens = cv::createMergeMertens();
+                        mergeMertens->process(ldrFrames, tonemapped);
+                        hdrFallback = "mertens";
+                        if (tonemapped.depth() != CV_32F) {
+                            tonemapped.convertTo(tonemapped, CV_32FC3);
+                        }
+                        sanitizeFloatImage(tonemapped, true);
                     }
-                    sanitizeFloatImage(tonemapped, true);
 
                     if (!isUsefulFloatImage(tonemapped))
                     {
-                        useMiddleExposureFrame(ldrFrames, tonemapped);
-                        hdrFallback = "middle";
+                        if (useMiddleExposureFrame(ldrFrames, tonemapped)) {
+                            hdrFallback = "middle";
+                        }
                     }
                 }
             }

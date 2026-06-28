@@ -48,6 +48,12 @@ int matTypeForDepthAndChannels(int depth, int channels)
     return CV_MAKETYPE(depth, channels);
 }
 
+int medianBlurKernelForDepth(int requestedKernelSize, int depth)
+{
+    // OpenCV only supports median kernels larger than 5 for 8-bit input.
+    return depth == CV_8U ? requestedKernelSize : std::min(requestedKernelSize, 5);
+}
+
 cv::Mat bgrMatFromImagePreserveDepth(const QImage& image)
 {
     bool highBitDepthInput = false;
@@ -1248,7 +1254,18 @@ void CameraImageProcessor::applyMedianBlurCuda(cv::cuda::GpuMat& bgrGpu, cv::cud
 {
     PROFILER_START();
 
-    const int kernelSize = 2 * m_settings.m_medianBlur + 1;
+    const int kernelSize = medianBlurKernelForDepth(2 * m_settings.m_medianBlur + 1, bgrGpu.depth());
+    if (bgrGpu.depth() != CV_8U)
+    {
+        cv::Mat bgrMat;
+        bgrGpu.download(bgrMat, stream);
+        stream.waitForCompletion();
+        cv::medianBlur(bgrMat, bgrMat, kernelSize);
+        bgrGpu.upload(bgrMat, stream);
+        PROFILER_STOP(__FUNCTION__);
+        return;
+    }
+
     std::vector<cv::cuda::GpuMat> channels;
     cv::cuda::split(bgrGpu, channels, stream);
     const int channelType = channels[0].type();
@@ -1898,7 +1915,7 @@ void CameraImageProcessor::applyGaussianBlur(cv::Mat& bgrMat) const
 void CameraImageProcessor::applyMedianBlur(cv::Mat& bgrMat) const
 {
     PROFILER_START();
-    const int kernelSize = 2 * m_settings.m_medianBlur + 1;
+    const int kernelSize = medianBlurKernelForDepth(2 * m_settings.m_medianBlur + 1, bgrMat.depth());
     cv::medianBlur(bgrMat, bgrMat, kernelSize);
     PROFILER_STOP(__FUNCTION__);
 }

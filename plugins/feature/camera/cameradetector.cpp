@@ -29,7 +29,8 @@
 CameraDetectionStage::CameraDetectionStage() :
     m_nextStageQueue(nullptr),
     m_captureActive(false),
-    m_processingFrame(false)
+    m_processingFrame(false),
+    m_coalesceForwardedFrames(false)
 {
 }
 
@@ -120,6 +121,12 @@ void CameraDetectionStage::forwardFrame(const CameraPipelineFramePtr& frame)
     }
 
     if (m_nextStageQueue) {
+        if (m_coalesceForwardedFrames) {
+            const int dropped = Camera::discardQueuedProcessFrames(*m_nextStageQueue);
+            if (dropped > 0) {
+                qDebug() << "CameraDetectionStage: Dropping queued forwarded frames" << dropped;
+            }
+        }
         m_nextStageQueue->push(Camera::MsgProcessFrame::create(frame));
     }
 }

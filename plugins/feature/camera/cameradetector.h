@@ -68,6 +68,7 @@ public:
     MessageQueue *getInputMessageQueue() { return &m_inputMessageQueue; }
     void setNextStage(CameraDetectionStage *nextStage) { m_nextStageQueue = nextStage ? nextStage->getInputMessageQueue() : nullptr; }
     void setNextStageInputMessageQueue(MessageQueue *messageQueue) { m_nextStageQueue = messageQueue; }
+    void setCoalesceForwardedFrames(bool coalesceForwardedFrames) { m_coalesceForwardedFrames = coalesceForwardedFrames; }
 
 protected:
     MessageQueue m_inputMessageQueue;
@@ -82,6 +83,7 @@ protected:
     static constexpr int m_maxPendingFrames = 3;
     std::deque<CameraPipelineFramePtr> m_pendingFrames;
     bool m_processingFrame;
+    bool m_coalesceForwardedFrames;
 
     virtual bool handleStageMessage(const Message& cmd);
     virtual void applySettings(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force = false);

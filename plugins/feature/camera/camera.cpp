@@ -185,6 +185,7 @@ Camera::Camera(WebAPIAdapterInterface *webAPIAdapterInterface) :
     QObject::connect(m_starDetectorThread, &QThread::finished, m_starDetector, &QObject::deleteLater);
     QObject::connect(m_starDetectorThread, &QThread::finished, m_starDetectorThread, &QThread::deleteLater);
     m_starDetector->setNextStage(m_objectDetector);
+    m_starDetector->setCoalesceForwardedFrames(true);
     m_starDetector->setMessageQueueToGUI(getMessageQueueToGUI());
     m_starDetectorThread->start();
     m_starDetector->getInputMessageQueue()->push(Camera::MsgConfigureCamera::create(m_settings, QList<QString>(), true));

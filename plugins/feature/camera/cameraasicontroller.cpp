@@ -436,12 +436,15 @@ bool CameraAsiController::applyCameraSettings(int cameraId, const CameraSettings
 
 CameraAsiController::CaptureResult CameraAsiController::captureExposureFrame(int cameraId, double exposureTimeMs)
 {
-    CameraAsiSdkLocker asiSdkLocker;
     if (m_videoCaptureStarted && !stopVideoCapture(cameraId)) {
         return CaptureDataFailed;
     }
 
-    const ASI_ERROR_CODE startExposureError = ASIStartExposure(cameraId, ASI_FALSE);
+    ASI_ERROR_CODE startExposureError = ASI_SUCCESS;
+    {
+        CameraAsiSdkLocker asiSdkLocker;
+        startExposureError = ASIStartExposure(cameraId, ASI_FALSE);
+    }
     if (startExposureError != ASI_SUCCESS)
     {
         setLastError(startExposureError, errorCodeToString(startExposureError));
@@ -460,7 +463,11 @@ CameraAsiController::CaptureResult CameraAsiController::captureExposureFrame(int
 
     while (captureTimer.elapsed() <= timeoutMs)
     {
-        const ASI_ERROR_CODE statusError = ASIGetExpStatus(cameraId, &exposureStatus);
+        ASI_ERROR_CODE statusError = ASI_SUCCESS;
+        {
+            CameraAsiSdkLocker asiSdkLocker;
+            statusError = ASIGetExpStatus(cameraId, &exposureStatus);
+        }
         if (statusError != ASI_SUCCESS)
         {
             setLastError(statusError, errorCodeToString(statusError));
@@ -489,7 +496,11 @@ CameraAsiController::CaptureResult CameraAsiController::captureExposureFrame(int
         return CaptureDataFailed;
     }
 
-    const ASI_ERROR_CODE dataError = ASIGetDataAfterExp(cameraId, m_frameBuffer.data(), m_frameBuffer.size());
+    ASI_ERROR_CODE dataError = ASI_SUCCESS;
+    {
+        CameraAsiSdkLocker asiSdkLocker;
+        dataError = ASIGetDataAfterExp(cameraId, m_frameBuffer.data(), m_frameBuffer.size());
+    }
     if (dataError != ASI_SUCCESS)
     {
         setLastError(dataError, errorCodeToString(dataError));

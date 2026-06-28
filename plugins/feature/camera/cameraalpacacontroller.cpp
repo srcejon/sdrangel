@@ -32,8 +32,37 @@
 #include <QNetworkReply>
 #include <QRandomGenerator>
 #include <QSharedPointer>
+#include <QTimer>
 #include <QUrlQuery>
 #include <QtEndian>
+
+namespace {
+
+constexpr int alpacaDefaultNetworkTimeoutMs = 15000;
+constexpr int alpacaImageArrayNetworkTimeoutMs = 60000;
+
+void installAlpacaReplyTimeout(QNetworkReply *reply, int timeoutMs, const QString& operation)
+{
+    if (!reply || (timeoutMs <= 0)) {
+        return;
+    }
+
+    QTimer *timer = new QTimer(reply);
+    timer->setSingleShot(true);
+    QObject::connect(timer, &QTimer::timeout, reply, [reply, timeoutMs, operation]() {
+        if (reply->isRunning())
+        {
+            qWarning() << "CameraAlpacaController:" << operation
+                       << "timed out after" << timeoutMs << "ms"
+                       << reply->request().url().toString();
+            reply->abort();
+        }
+    });
+    QObject::connect(reply, &QNetworkReply::finished, timer, &QObject::deleteLater);
+    timer->start(timeoutMs);
+}
+
+}
 
 CameraAlpacaController::CameraAlpacaController() :
     m_frameRequestPending(false),
@@ -79,6 +108,7 @@ void CameraAlpacaController::resetConnectionState()
     m_connected = false;
     m_connectionPending = false;
     m_pendingConnectedContinuations.clear();
+    m_pendingConnectedFailureContinuations.clear();
     m_bootstrapPending = false;
     m_pendingBootstrapContinuations.clear();
     setLastError(0, QString());
@@ -221,6 +251,7 @@ void CameraAlpacaController::disconnectCamera(QNetworkAccessManager *networkMana
     logRequest(settings, "PUT", url, payload);
 
     QNetworkReply *reply = networkManager->put(request, payload);
+    installAlpacaReplyTimeout(reply, alpacaDefaultNetworkTimeoutMs, QStringLiteral("PUT disconnect camera"));
     QObject::connect(reply, &QNetworkReply::finished, reply, [this, settings, reply]() {
         const QByteArray responseBody = reply->readAll();
         logResponse(settings, "PUT", reply->request().url(), reply, responseBody, false);
@@ -229,9 +260,13 @@ void CameraAlpacaController::disconnectCamera(QNetworkAccessManager *networkMana
 }
 
 void CameraAlpacaController::setConnected(QNetworkAccessManager *networkManager, const CameraSettings& settings, bool connected,
-    std::function<void()> reportStatus, std::function<void()> continuation)
+    std::function<void()> reportStatus, std::function<void()> continuation, std::function<void()> onFailure)
 {
-    if (!networkManager) {
+    if (!networkManager)
+    {
+        if (onFailure) {
+            onFailure();
+        }
         return;
     }
 
@@ -250,8 +285,9 @@ void CameraAlpacaController::setConnected(QNetworkAccessManager *networkManager,
     logRequest(settings, "PUT", url, payload);
 
     QNetworkReply *reply = networkManager->put(request, payload);
+    installAlpacaReplyTimeout(reply, alpacaDefaultNetworkTimeoutMs, QStringLiteral("PUT connected"));
 
-    QObject::connect(reply, &QNetworkReply::finished, reply, [this, settings, reply, connected, reportStatus, continuation]() {
+    QObject::connect(reply, &QNetworkReply::finished, reply, [this, settings, reply, connected, reportStatus, continuation, onFailure]() {
         const QByteArray responseBody = reply->readAll();
         logResponse(settings, "PUT", reply->request().url(), reply, responseBody);
 
@@ -307,6 +343,9 @@ void CameraAlpacaController::setConnected(QNetworkAccessManager *networkManager,
         {
             m_connectionPending = false;
             m_pendingConnectedContinuations.clear();
+            if (onFailure) {
+                onFailure();
+            }
         }
 
         reply->deleteLater();
@@ -314,8 +353,16 @@ void CameraAlpacaController::setConnected(QNetworkAccessManager *networkManager,
 }
 
 void CameraAlpacaController::runWhenConnected(QNetworkAccessManager *networkManager, const CameraSettings& settings,
-    std::function<void()> reportStatus, std::function<void()> continuation)
+    std::function<void()> reportStatus, std::function<void()> continuation, std::function<void()> onFailure)
 {
+    if (!networkManager)
+    {
+        if (onFailure) {
+            onFailure();
+        }
+        return;
+    }
+
     if (m_connected)
     {
         if (continuation) {
@@ -327,6 +374,9 @@ void CameraAlpacaController::runWhenConnected(QNetworkAccessManager *networkMana
     if (continuation) {
         m_pendingConnectedContinuations.append(continuation);
     }
+    if (onFailure) {
+        m_pendingConnectedFailureContinuations.append(onFailure);
+    }
 
     if (m_connectionPending) {
         return;
@@ -336,6 +386,11 @@ void CameraAlpacaController::runWhenConnected(QNetworkAccessManager *networkMana
     setConnected(networkManager, settings, true, reportStatus, [this]() {
         m_connectionPending = false;
         runPendingContinuations(m_pendingConnectedContinuations);
+        m_pendingConnectedFailureContinuations.clear();
+    }, [this]() {
+        m_connectionPending = false;
+        m_pendingConnectedContinuations.clear();
+        runPendingContinuations(m_pendingConnectedFailureContinuations);
     });
 }
 
@@ -347,7 +402,15 @@ void CameraAlpacaController::bootstrap(QNetworkAccessManager *networkManager, co
     std::function<void()> onComplete,
     std::function<void()> continuation)
 {
-    if (!networkManager) {
+    if (!networkManager)
+    {
+        setLastError(-1, QStringLiteral("No network manager"));
+        if (reportStatus) {
+            reportStatus();
+        }
+        if (continuation) {
+            continuation();
+        }
         return;
     }
 
@@ -384,6 +447,12 @@ void CameraAlpacaController::bootstrap(QNetworkAccessManager *networkManager, co
                 }
             });
         });
+    }, [this, reportStatus]() {
+        m_bootstrapPending = false;
+        m_pendingBootstrapContinuations.clear();
+        if (reportStatus) {
+            reportStatus();
+        }
     });
 }
 
@@ -409,6 +478,7 @@ void CameraAlpacaController::setFocuserConnected(QNetworkAccessManager *networkM
     logRequest(settings, "PUT", url, payload);
 
     QNetworkReply *reply = networkManager->put(request, payload);
+    installAlpacaReplyTimeout(reply, alpacaDefaultNetworkTimeoutMs, QStringLiteral("PUT focuser connected"));
 
     QObject::connect(reply, &QNetworkReply::finished, reply, [this, settings, reply, connected, reportStatus, continuation]() {
         const QByteArray responseBody = reply->readAll();
@@ -521,6 +591,7 @@ void CameraAlpacaController::moveFocuserToPosition(QNetworkAccessManager *networ
         logRequest(settings, "PUT", url, payload);
 
         QNetworkReply *reply = networkManager->put(request, payload);
+        installAlpacaReplyTimeout(reply, alpacaDefaultNetworkTimeoutMs, QStringLiteral("PUT focuser move"));
         QObject::connect(reply, &QNetworkReply::finished, reply, [this, settings, reply, reportStatus, onSuccess, onFailure]() {
             const QByteArray responseBody = reply->readAll();
             logResponse(settings, "PUT", reply->request().url(), reply, responseBody);
@@ -558,7 +629,8 @@ void CameraAlpacaController::moveFocuserToPosition(QNetworkAccessManager *networ
 void CameraAlpacaController::setFilterWheelConnected(QNetworkAccessManager *networkManager, const CameraSettings& settings,
     bool connected, std::function<void()> reportStatus, std::function<void()> continuation)
 {
-    if (!networkManager) {
+    if (!networkManager)
+    {
         return;
     }
 
@@ -577,6 +649,7 @@ void CameraAlpacaController::setFilterWheelConnected(QNetworkAccessManager *netw
     logRequest(settings, "PUT", url, payload);
 
     QNetworkReply *reply = networkManager->put(request, payload);
+    installAlpacaReplyTimeout(reply, alpacaDefaultNetworkTimeoutMs, QStringLiteral("PUT filter wheel connected"));
 
     QObject::connect(reply, &QNetworkReply::finished, reply, [this, settings, reply, connected, reportStatus, continuation]() {
         const QByteArray responseBody = reply->readAll();
@@ -691,7 +764,9 @@ void CameraAlpacaController::queryFilterWheelInfo(QNetworkAccessManager *network
             q.addQueryItem("ClientTransactionID", QString::number(m_clientTransactionId++));
             url.setQuery(q);
             logRequest(settings, "GET", url);
-            return networkManager->get(QNetworkRequest(url));
+            QNetworkReply *reply = networkManager->get(QNetworkRequest(url));
+            installAlpacaReplyTimeout(reply, alpacaDefaultNetworkTimeoutMs, QStringLiteral("GET filter wheel info"));
+            return reply;
         };
 
         QNetworkReply *namesReply = makeGet("names");
@@ -776,6 +851,7 @@ void CameraAlpacaController::queryFilterWheelPosition(QNetworkAccessManager *net
         logRequest(settings, "GET", url);
 
         QNetworkReply *reply = networkManager->get(QNetworkRequest(url));
+        installAlpacaReplyTimeout(reply, alpacaDefaultNetworkTimeoutMs, QStringLiteral("GET filter wheel position"));
         QObject::connect(reply, &QNetworkReply::finished, reply, [this, settings, reply, continuation]() {
             int position = -1;
             const QByteArray responseBody = reply->readAll();
@@ -823,6 +899,7 @@ void CameraAlpacaController::setFilterWheelPosition(QNetworkAccessManager *netwo
         logRequest(settings, "PUT", url, payload);
 
         QNetworkReply *reply = networkManager->put(request, payload);
+        installAlpacaReplyTimeout(reply, alpacaDefaultNetworkTimeoutMs, QStringLiteral("PUT filter wheel position"));
         QObject::connect(reply, &QNetworkReply::finished, reply, [this, settings, reply, onSuccess, reportStatus]() {
             const QByteArray responseBody = reply->readAll();
             logResponse(settings, "PUT", reply->request().url(), reply, responseBody);
@@ -1122,7 +1199,11 @@ void CameraAlpacaController::putIntProperty(
     std::function<void()> onSuccess,
     std::function<void(int, const QString&)> onFailure)
 {
-    if (!networkManager) {
+    if (!networkManager)
+    {
+        if (onFailure) {
+            onFailure(-1, QStringLiteral("No network manager"));
+        }
         return;
     }
 
@@ -1138,6 +1219,7 @@ void CameraAlpacaController::putIntProperty(
     const QByteArray payload = body.toString(QUrl::FullyEncoded).toUtf8();
     logRequest(settings, "PUT", url, payload);
     QNetworkReply *reply = networkManager->put(request, payload);
+    installAlpacaReplyTimeout(reply, alpacaDefaultNetworkTimeoutMs, QStringLiteral("PUT camera property"));
 
     QObject::connect(reply, &QNetworkReply::finished, reply, [this, settings, reply, property, continuation, onSuccess, onFailure]() {
         const QByteArray responseBody = reply->readAll();
@@ -1186,7 +1268,11 @@ void CameraAlpacaController::putIntProperty(
 void CameraAlpacaController::startExposure(QNetworkAccessManager *networkManager, const CameraSettings& settings,
     double exposureTimeMs, std::function<void()> onSuccess, std::function<void()> onFailure)
 {
-    if (!networkManager) {
+    if (!networkManager)
+    {
+        if (onFailure) {
+            onFailure();
+        }
         return;
     }
 
@@ -1203,6 +1289,7 @@ void CameraAlpacaController::startExposure(QNetworkAccessManager *networkManager
     const QByteArray payload = body.toString(QUrl::FullyEncoded).toUtf8();
     logRequest(settings, "PUT", url, payload);
     QNetworkReply *reply = networkManager->put(request, payload);
+    installAlpacaReplyTimeout(reply, alpacaDefaultNetworkTimeoutMs, QStringLiteral("PUT start exposure"));
 
     QObject::connect(reply, &QNetworkReply::finished, reply, [this, settings, reply, onSuccess, onFailure]() {
         const QByteArray responseBody = reply->readAll();
@@ -1261,6 +1348,7 @@ void CameraAlpacaController::abortExposure(QNetworkAccessManager *networkManager
     const QByteArray payload = body.toString(QUrl::FullyEncoded).toUtf8();
     logRequest(settings, "PUT", url, payload);
     QNetworkReply *reply = networkManager->put(request, payload);
+    installAlpacaReplyTimeout(reply, alpacaDefaultNetworkTimeoutMs, QStringLiteral("PUT abort exposure"));
 
     QObject::connect(reply, &QNetworkReply::finished, reply, [this, settings, reply]() {
         const QByteArray responseBody = reply->readAll();
@@ -1289,7 +1377,11 @@ void CameraAlpacaController::abortExposure(QNetworkAccessManager *networkManager
 void CameraAlpacaController::checkImageReady(QNetworkAccessManager *networkManager, const CameraSettings& settings,
     std::function<void(bool)> onSuccess, std::function<void()> onFailure)
 {
-    if (!networkManager) {
+    if (!networkManager)
+    {
+        if (onFailure) {
+            onFailure();
+        }
         return;
     }
 
@@ -1301,6 +1393,7 @@ void CameraAlpacaController::checkImageReady(QNetworkAccessManager *networkManag
 
     logRequest(settings, "GET", url);
     QNetworkReply *reply = networkManager->get(QNetworkRequest(url));
+    installAlpacaReplyTimeout(reply, alpacaDefaultNetworkTimeoutMs, QStringLiteral("GET imageready"));
 
     QObject::connect(reply, &QNetworkReply::finished, reply, [this, settings, reply, onSuccess, onFailure]() {
         const QByteArray responseBody = reply->readAll();
@@ -1346,7 +1439,11 @@ void CameraAlpacaController::checkImageReady(QNetworkAccessManager *networkManag
 void CameraAlpacaController::checkCameraStateForImageReady(QNetworkAccessManager *networkManager, const CameraSettings& settings,
     std::function<void(int)> onSuccess, std::function<void()> onFailure)
 {
-    if (!networkManager) {
+    if (!networkManager)
+    {
+        if (onFailure) {
+            onFailure();
+        }
         return;
     }
 
@@ -1358,6 +1455,7 @@ void CameraAlpacaController::checkCameraStateForImageReady(QNetworkAccessManager
 
     logRequest(settings, "GET", url);
     QNetworkReply *reply = networkManager->get(QNetworkRequest(url));
+    installAlpacaReplyTimeout(reply, alpacaDefaultNetworkTimeoutMs, QStringLiteral("GET camerastate"));
 
     QObject::connect(reply, &QNetworkReply::finished, reply, [this, settings, reply, onSuccess, onFailure]() {
         const QByteArray responseBody = reply->readAll();
@@ -1407,7 +1505,12 @@ void CameraAlpacaController::checkCameraStateForImageReady(QNetworkAccessManager
 void CameraAlpacaController::fetchImageArray(QNetworkAccessManager *networkManager, const CameraSettings& settings,
     const QImage& fallbackImage, std::function<void(const ImageFetchResult&)> onSuccess, std::function<void()> onFailure)
 {
-    if (!networkManager) {
+    if (!networkManager)
+    {
+        m_frameRequestPending = false;
+        if (onFailure) {
+            onFailure();
+        }
         return;
     }
 
@@ -1424,6 +1527,7 @@ void CameraAlpacaController::fetchImageArray(QNetworkAccessManager *networkManag
 
     logRequest(settings, "GET", url);
     QNetworkReply *reply = networkManager->get(request);
+    installAlpacaReplyTimeout(reply, alpacaImageArrayNetworkTimeoutMs, QStringLiteral("GET imagearray"));
 
     QObject::connect(reply, &QNetworkReply::finished, reply, [this, settings, fallbackImage, reply, onSuccess, onFailure]() {
         m_frameRequestPending = false;
@@ -1550,6 +1654,7 @@ void CameraAlpacaController::queryCameraCapabilities(QNetworkAccessManager *netw
         logRequest(settings, "GET", url);
 
         QNetworkReply *reply = networkManager->get(QNetworkRequest(url));
+        installAlpacaReplyTimeout(reply, alpacaDefaultNetworkTimeoutMs, QStringLiteral("GET camera capability"));
 
         QObject::connect(reply, &QNetworkReply::finished, reply, [this, settings, reply, prop, report, checkDone]() {
             const QByteArray responseBody = reply->readAll();
@@ -1663,7 +1768,9 @@ void CameraAlpacaController::pollStatus(QNetworkAccessManager *networkManager, c
         q.addQueryItem("ClientTransactionID", QString::number(m_clientTransactionId++));
         url.setQuery(q);
         logRequest(settings, "GET", url);
-        return networkManager->get(QNetworkRequest(url));
+        QNetworkReply *reply = networkManager->get(QNetworkRequest(url));
+        installAlpacaReplyTimeout(reply, alpacaDefaultNetworkTimeoutMs, QStringLiteral("GET camera status"));
+        return reply;
     };
 
     QNetworkReply *stateReply = makeGet("camerastate");

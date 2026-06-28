@@ -117,9 +117,11 @@ public:
         const QByteArray& payload = QByteArray(), bool updateLastError = true);
     void disconnectCamera(QNetworkAccessManager *networkManager, const CameraSettings& settings);
     void setConnected(QNetworkAccessManager *networkManager, const CameraSettings& settings, bool connected,
-        std::function<void()> reportStatus, std::function<void()> continuation = {});
+        std::function<void()> reportStatus, std::function<void()> continuation = {},
+        std::function<void()> onFailure = {});
     void runWhenConnected(QNetworkAccessManager *networkManager, const CameraSettings& settings,
-        std::function<void()> reportStatus, std::function<void()> continuation);
+        std::function<void()> reportStatus, std::function<void()> continuation,
+        std::function<void()> onFailure = {});
     void bootstrap(QNetworkAccessManager *networkManager, const CameraSettings& settings,
         std::function<void()> reportStatus,
         std::function<void()> onConnected,
@@ -206,6 +208,7 @@ public:
     bool m_connected;
     bool m_connectionPending;
     QVector<std::function<void()>> m_pendingConnectedContinuations;
+    QVector<std::function<void()>> m_pendingConnectedFailureContinuations;
     bool m_focuserConnected;
     bool m_focuserConnectionPending;
     QVector<std::function<void()>> m_pendingFocuserConnectedContinuations;

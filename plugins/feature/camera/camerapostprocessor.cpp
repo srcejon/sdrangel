@@ -2216,7 +2216,8 @@ QImage CameraPostProcessor::applyPostProcessing(const CameraPipelineFrame& frame
     if (!frame.m_starDetections.isEmpty()) { 
         applyStarOverlay(result, frame.m_starDetections, drawPreviewText, previewTextLabels); 
     }
-    if (m_settings.m_equatorialGrid || m_settings.m_altAzGrid) { applySkyGridOverlay(result, drawPreviewText, previewTextLabels); 
+    if (m_settings.m_equatorialGrid || m_settings.m_altAzGrid) { 
+        applySkyGridOverlay(result, drawPreviewText, previewTextLabels); 
     }
     if (m_settings.m_constellation) { 
         applyConstellationOverlay(result); 

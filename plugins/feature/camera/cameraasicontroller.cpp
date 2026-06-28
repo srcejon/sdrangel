@@ -426,7 +426,9 @@ bool CameraAsiController::applyCameraSettings(int cameraId, const CameraSettings
         break;
     }
 
-    m_frameBuffer.resize(width * height * bytesPerPixel);
+    // Compute the buffer size in a 64-bit type so the multiplication cannot
+    // overflow int for large sensors before the result is used for sizing.
+    m_frameBuffer.resize(static_cast<qsizetype>(width) * height * bytesPerPixel);
     m_settingsApplied = true;
     setLastError(ASI_SUCCESS, QString());
     return true;

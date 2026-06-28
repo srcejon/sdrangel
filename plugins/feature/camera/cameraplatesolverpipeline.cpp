@@ -7074,7 +7074,11 @@ void CameraPlateSolver::SolverContext::logUnmatchedDetections(const PlateSolveCa
     catalogMatched.reserve(matches.size());
     for (const Match& match : matches)
     {
-        detectionMatched[match.detectionIndex] = true;
+        // Guard the QVector write against Match::detectionIndex's -1 default (consistency with
+        // the other supplemental-match builders; this function is debug-only).
+        if ((match.detectionIndex >= 0) && (match.detectionIndex < detectionMatched.size())) {
+            detectionMatched[match.detectionIndex] = true;
+        }
         catalogMatched.insert(match.catalogIndex, true);
     }
 

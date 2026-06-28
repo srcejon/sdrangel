@@ -3864,7 +3864,11 @@ void CameraPlateSolver::SolverContext::appendSupplementalMatches(const QVector<C
     catalogMatched.reserve(matches.size());
     for (const Match& match : matches)
     {
-        detectionMatched[match.detectionIndex] = true;
+        // Match::detectionIndex defaults to -1; guard the QVector write (the catalog side is a
+        // QHash, so a stray key is harmless). Mirrors the guard in appendWideBrightSupplementalMatches.
+        if ((match.detectionIndex >= 0) && (match.detectionIndex < detectionMatched.size())) {
+            detectionMatched[match.detectionIndex] = true;
+        }
         catalogMatched.insert(match.catalogIndex, true);
     }
 

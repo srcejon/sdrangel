@@ -937,33 +937,9 @@ void CameraObjectDetector::runYoloDetections(const cv::Mat& bgrMat, const cv::Re
 
         if ((output.dims == 2) && (tileCount > 1))
         {
-            const bool isV8Style = output.rows < output.cols;
-            if (isV8Style && ((output.cols % tileCount) == 0))
-            {
-                const int anchorsPerTile = output.cols / tileCount;
-                for (int localTileIndex = 0; localTileIndex < tileCount; ++localTileIndex)
-                {
-                    const int tileIndex = firstTile + localTileIndex;
-                    cv::Mat det = output.colRange(localTileIndex * anchorsPerTile, (localTileIndex + 1) * anchorsPerTile);
-                    decodeYoloDetections(det, tileRects[tileIndex], padXs[tileIndex], padYs[tileIndex], invScales[tileIndex], boxes, scores, classIds);
-                }
-                return true;
-            }
-
-            if (!isV8Style && ((output.rows % tileCount) == 0))
-            {
-                const int anchorsPerTile = output.rows / tileCount;
-                for (int localTileIndex = 0; localTileIndex < tileCount; ++localTileIndex)
-                {
-                    const int tileIndex = firstTile + localTileIndex;
-                    cv::Mat det = output.rowRange(localTileIndex * anchorsPerTile, (localTileIndex + 1) * anchorsPerTile);
-                    decodeYoloDetections(det, tileRects[tileIndex], padXs[tileIndex], padYs[tileIndex], invScales[tileIndex], boxes, scores, classIds);
-                }
-                return true;
-            }
-
-            qWarning() << "CameraObjectDetector::runYoloDetections: unable to split batched YOLO output"
-                       << output.rows << "x" << output.cols << "tiles" << tileCount;
+            qWarning() << "CameraObjectDetector::runYoloDetections: unsupported 2D batched YOLO output"
+                       << output.rows << "x" << output.cols << "tiles" << tileCount
+                       << "- retrying with per-tile inference";
             return false;
         }
 
@@ -1035,8 +1011,29 @@ void CameraObjectDetector::runYoloDetections(const cv::Mat& bgrMat, const cv::Re
         try
         {
             m_yoloNet.forward(outputs, m_yoloNet.getUnconnectedOutLayersNames());
-            if (!outputs.empty()) {
-                decodeOutput(outputs[0], 0, tileRects.size());
+            if (!outputs.empty())
+            {
+                const size_t boxCount = boxes.size();
+                const size_t scoreCount = scores.size();
+                const size_t classIdCount = classIds.size();
+                const bool decoded = decodeOutput(outputs[0], 0, tileRects.size());
+
+                if (!decoded)
+                {
+                    boxes.resize(boxCount);
+                    scores.resize(scoreCount);
+                    classIds.resize(classIdCount);
+
+                    if (tileRects.size() <= 1)
+                    {
+                        qWarning() << "CameraObjectDetector::runYoloDetections: unable to decode YOLO output"
+                                   << outputs[0].dims << outputs[0].rows << "x" << outputs[0].cols;
+                        return;
+                    }
+
+                    m_yoloBatchedInferenceSupported = false;
+                    batchInferenceFailed = true;
+                }
             }
         }
         catch (const cv::Exception& e)

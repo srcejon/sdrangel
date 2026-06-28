@@ -4063,7 +4063,9 @@ bool CameraVideoSurface::present(const QVideoFrame& frame)
     }
 
     QVideoFrame mutableFrame(frame);
-    mutableFrame.map(QAbstractVideoBuffer::ReadOnly);
+    if (!mutableFrame.map(QAbstractVideoBuffer::ReadOnly)) {
+        return false;
+    }
 
     const QImage::Format imageFormat = QVideoFrame::imageFormatFromPixelFormat(mutableFrame.pixelFormat());
     QImage image;

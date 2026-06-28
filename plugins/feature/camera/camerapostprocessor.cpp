@@ -138,75 +138,122 @@ static void renderTrackedObjectHeatMapRect(QImage& heatMap, const QVector<float>
     }
 }
 
+static float trackedObjectHeatMapCoverage(double distance, double radius)
+{
+    const double innerRadius = std::max(0.0, radius - 0.5);
+    const double outerRadius = radius + 0.5;
+
+    if (distance <= innerRadius) {
+        return 1.0f;
+    }
+    if (distance >= outerRadius) {
+        return 0.0f;
+    }
+
+    return static_cast<float>(outerRadius - distance);
+}
+
+static QRect trackedObjectHeatMapPrimitiveRect(const QRectF& bounds, const QSize& size)
+{
+    return bounds.toAlignedRect().intersected(QRect(QPoint(0, 0), size));
+}
+
+static void uniteTrackedObjectHeatMapDirtyRect(QRect& dirtyRect, const QRect& primitiveRect)
+{
+    if (primitiveRect.isEmpty()) {
+        return;
+    }
+
+    dirtyRect = dirtyRect.isEmpty() ? primitiveRect : dirtyRect.united(primitiveRect);
+}
+
+static void addTrackedObjectHeatMapDisk(QVector<float>& density, const QSize& size, const QPointF& center, double radius, QRect& dirtyRect)
+{
+    const QRect primitiveRect = trackedObjectHeatMapPrimitiveRect(
+        QRectF(center.x() - radius - 1.0, center.y() - radius - 1.0, (radius + 1.0) * 2.0, (radius + 1.0) * 2.0),
+        size);
+    if (primitiveRect.isEmpty()) {
+        return;
+    }
+
+    const int width = size.width();
+    for (int y = primitiveRect.top(); y <= primitiveRect.bottom(); ++y)
+    {
+        const double dy = (static_cast<double>(y) + 0.5) - center.y();
+        const int rowOffset = y * width;
+        for (int x = primitiveRect.left(); x <= primitiveRect.right(); ++x)
+        {
+            const double dx = (static_cast<double>(x) + 0.5) - center.x();
+            const float coverage = trackedObjectHeatMapCoverage(std::hypot(dx, dy), radius);
+            if (coverage > 0.0f) {
+                density[rowOffset + x] += coverage * kTrackedObjectHeatMapStrokeDensity;
+            }
+        }
+    }
+
+    uniteTrackedObjectHeatMapDirtyRect(dirtyRect, primitiveRect);
+}
+
+static double trackedObjectHeatMapSegmentDistance(double px, double py, const QPointF& a, const QPointF& b)
+{
+    const double dx = b.x() - a.x();
+    const double dy = b.y() - a.y();
+    const double lengthSquared = dx * dx + dy * dy;
+
+    if (lengthSquared <= 1e-9) {
+        return std::hypot(px - a.x(), py - a.y());
+    }
+
+    const double t = std::clamp(((px - a.x()) * dx + (py - a.y()) * dy) / lengthSquared, 0.0, 1.0);
+    const double cx = a.x() + (t * dx);
+    const double cy = a.y() + (t * dy);
+    return std::hypot(px - cx, py - cy);
+}
+
+static void addTrackedObjectHeatMapSegment(QVector<float>& density, const QSize& size, const QPointF& a, const QPointF& b, double radius, QRect& dirtyRect)
+{
+    const QRect primitiveRect = trackedObjectHeatMapPrimitiveRect(
+        QRectF(a, b).normalized().adjusted(-radius - 1.0, -radius - 1.0, radius + 1.0, radius + 1.0),
+        size);
+    if (primitiveRect.isEmpty()) {
+        return;
+    }
+
+    const int width = size.width();
+    for (int y = primitiveRect.top(); y <= primitiveRect.bottom(); ++y)
+    {
+        const double py = static_cast<double>(y) + 0.5;
+        const int rowOffset = y * width;
+        for (int x = primitiveRect.left(); x <= primitiveRect.right(); ++x)
+        {
+            const double px = static_cast<double>(x) + 0.5;
+            const float coverage = trackedObjectHeatMapCoverage(trackedObjectHeatMapSegmentDistance(px, py, a, b), radius);
+            if (coverage > 0.0f) {
+                density[rowOffset + x] += coverage * kTrackedObjectHeatMapStrokeDensity;
+            }
+        }
+    }
+
+    uniteTrackedObjectHeatMapDirtyRect(dirtyRect, primitiveRect);
+}
+
 static QRect addTrackedObjectHeatMapStroke(QVector<float>& density, const QSize& size, const QPolygonF& track, const QVector<QPointF>& points)
 {
     if (density.size() != (size.width() * size.height())) {
         return QRect();
     }
 
-    QRectF bounds;
-    if (!track.isEmpty()) {
-        bounds = track.boundingRect();
-    }
-    for (const QPointF& point : points)
-    {
-        const QRectF pointBounds(
-            point.x() - kTrackedObjectHeatMapRadiusPixels,
-            point.y() - kTrackedObjectHeatMapRadiusPixels,
-            kTrackedObjectHeatMapRadiusPixels * 2.0,
-            kTrackedObjectHeatMapRadiusPixels * 2.0);
-        bounds = bounds.isNull() ? pointBounds : bounds.united(pointBounds);
-    }
-
-    if (bounds.isNull()) {
-        return QRect();
-    }
-
-    QRect dirtyRect = bounds.adjusted(
-        -kTrackedObjectHeatMapRadiusPixels,
-        -kTrackedObjectHeatMapRadiusPixels,
-        kTrackedObjectHeatMapRadiusPixels,
-        kTrackedObjectHeatMapRadiusPixels).toAlignedRect().intersected(QRect(QPoint(0, 0), size));
-    if (dirtyRect.isEmpty()) {
-        return QRect();
-    }
-
-    QImage mask(dirtyRect.size(), QImage::Format_ARGB32_Premultiplied);
-    mask.fill(Qt::transparent);
-
-    QPainter maskPainter(&mask);
-    maskPainter.setRenderHint(QPainter::Antialiasing);
-    maskPainter.translate(-dirtyRect.topLeft());
-    maskPainter.setCompositionMode(QPainter::CompositionMode_SourceOver);
-    maskPainter.setBrush(Qt::NoBrush);
+    QRect dirtyRect;
     if (track.size() > 1)
     {
-        QPen linePen(Qt::white, kTrackedObjectHeatMapLineWidthPixels);
-        linePen.setCapStyle(Qt::RoundCap);
-        linePen.setJoinStyle(Qt::RoundJoin);
-        maskPainter.setPen(linePen);
-        maskPainter.drawPolyline(track);
-    }
-
-    maskPainter.setPen(Qt::NoPen);
-    maskPainter.setBrush(Qt::white);
-    for (const QPointF& point : points) {
-        maskPainter.drawEllipse(point, kTrackedObjectHeatMapRadiusPixels, kTrackedObjectHeatMapRadiusPixels);
-    }
-    maskPainter.end();
-
-    const int width = size.width();
-    for (int localY = 0; localY < mask.height(); ++localY)
-    {
-        const QRgb *maskLine = reinterpret_cast<const QRgb*>(mask.constScanLine(localY));
-        const int densityOffset = (dirtyRect.top() + localY) * width + dirtyRect.left();
-        for (int localX = 0; localX < mask.width(); ++localX)
-        {
-            const int alpha = qAlpha(maskLine[localX]);
-            if (alpha > 0) {
-                density[densityOffset + localX] += (static_cast<float>(alpha) / 255.0f) * kTrackedObjectHeatMapStrokeDensity;
-            }
+        const double lineRadius = kTrackedObjectHeatMapLineWidthPixels * 0.5;
+        for (int i = 1; i < track.size(); ++i) {
+            addTrackedObjectHeatMapSegment(density, size, track[i - 1], track[i], lineRadius, dirtyRect);
         }
+    }
+
+    for (const QPointF& point : points) {
+        addTrackedObjectHeatMapDisk(density, size, point, kTrackedObjectHeatMapRadiusPixels, dirtyRect);
     }
 
     return dirtyRect;

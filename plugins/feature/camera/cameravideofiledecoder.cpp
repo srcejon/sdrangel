@@ -20,6 +20,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <mutex>
 
 #include <QElapsedTimer>
 #include <QDebug>
@@ -91,7 +92,11 @@ bool CameraVideoFileDecoder::open(
     m_outputSampleRate = std::max(1000, outputSampleRate);
 
     const QByteArray fileNameUtf8 = fileName.toUtf8();
-    avformat_network_init();
+    // avformat_network_init() is reference-counted; calling it on every open() (and the reconnect
+    // loop reopens repeatedly) would grow the refcount unbounded with no matching deinit. Network
+    // init is process-global, so do it exactly once for the process lifetime.
+    static std::once_flag networkInitOnce;
+    std::call_once(networkInitOnce, []() { avformat_network_init(); });
 
     const QString scheme = QUrl(fileName).scheme().toLower();
     m_urlSource = scheme.size() > 1;

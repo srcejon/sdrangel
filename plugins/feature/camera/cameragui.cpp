@@ -789,8 +789,9 @@ bool CameraGUI::handleMessage(const Message& message)
         if (m_histogramDialog) {
             m_histogramDialog->updateHistogram(m_lastHistogramData);
         }
-        // When the image size changes, refit to view
-        if (oldSize != m_lastImage.size()) {
+        // When the image size changes, refit to view - but only if the user
+        // hasn't manually zoomed/panned (matching updateImageWidget()).
+        if ((oldSize != m_lastImage.size()) && ui->imageView->transform().isIdentity()) {
             ui->imageView->fitInView(m_imagePixmapItem, Qt::KeepAspectRatio);
         }
         return true;

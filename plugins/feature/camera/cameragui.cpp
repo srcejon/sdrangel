@@ -4837,15 +4837,9 @@ void CameraGUI::triggerQtStillCapture()
         applyQtExposureTimeMs(currentQtCaptureExposureTimeMs());
     }
 
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     if (m_imageCapture->isReadyForCapture()) {
         m_imageCapture->capture();
     }
-#else
-    if (m_imageCapture->isReadyForCapture()) {
-        m_imageCapture->capture();
-    }
-#endif
 }
 
 void CameraGUI::updateCameraSettingsVisibility()

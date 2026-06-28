@@ -2207,15 +2207,32 @@ QImage CameraPostProcessor::applyPostProcessing(const CameraPipelineFrame& frame
     {
         result = input.convertToFormat(QImage::Format_RGB32);
     }
-    if (!frame.m_motionBoxes.isEmpty()) { applyMotionOverlay(result, frame.m_motionBoxes, drawPreviewText, previewRectItems); }
-    if (m_settings.m_yoloEnabled && !frame.m_detections.isEmpty()) { applyDetectionOverlay(result, frame.m_detections, drawPreviewText, previewTextLabels, previewRectItems); }
-    if (needsSpectrumOverlay) { applySpectrumOverlay(result); }
-    if (!frame.m_starDetections.isEmpty()) { applyStarOverlay(result, frame.m_starDetections, drawPreviewText, previewTextLabels); }
-    if (m_settings.m_equatorialGrid || m_settings.m_altAzGrid) { applySkyGridOverlay(result, drawPreviewText, previewTextLabels); }
-    if (m_settings.m_constellation) { applyConstellationOverlay(result); }
-    if (m_settings.m_trackObjects) { applyTrackedObjectOverlay(result, drawPreviewText, previewTextLabels, trackedObjects); }
-    if (m_settings.m_overlayDateTime) { applyDateTimeOverlay(result, drawPreviewText, previewTextLabels); }
-    if (needsTextOverlay) { applyTextOverlay(result, overlayTextDocument); }
+    if (!frame.m_motionBoxes.isEmpty()) { 
+        applyMotionOverlay(result, frame.m_motionBoxes, drawPreviewText, previewRectItems); 
+    }
+    if (m_settings.m_yoloEnabled && !frame.m_detections.isEmpty()) { 
+        applyDetectionOverlay(result, frame.m_detections, drawPreviewText, previewTextLabels, previewRectItems); 
+    }
+    if (!frame.m_starDetections.isEmpty()) { 
+        applyStarOverlay(result, frame.m_starDetections, drawPreviewText, previewTextLabels); 
+    }
+    if (m_settings.m_equatorialGrid || m_settings.m_altAzGrid) { applySkyGridOverlay(result, drawPreviewText, previewTextLabels); 
+    }
+    if (m_settings.m_constellation) { 
+        applyConstellationOverlay(result); 
+    }
+    if (m_settings.m_trackObjects) { 
+        applyTrackedObjectOverlay(result, drawPreviewText, previewTextLabels, trackedObjects); 
+    }
+    if (needsSpectrumOverlay) {
+        applySpectrumOverlay(result);
+    }
+    if (m_settings.m_overlayDateTime) {
+        applyDateTimeOverlay(result, drawPreviewText, previewTextLabels); 
+    }
+    if (needsTextOverlay) { 
+        applyTextOverlay(result, overlayTextDocument); 
+    }
 
     PROFILER_STOP("CameraPostProcessor::applyPostProcessing");
     return result;

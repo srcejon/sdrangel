@@ -304,20 +304,25 @@ Camera::~Camera()
         m_diffDetector = nullptr;
     }
 
-    if (m_recorderThread)
-    {
-        m_recorderThread->quit();
-        m_recorderThread->wait();
-        m_recorderThread = nullptr;
-        m_recorder = nullptr;
-    }
-
+    // Tear down stages in pipeline (producer-before-consumer) order so that no
+    // running stage can push a frame into a downstream stage's input queue
+    // after that stage (which owns the queue) has been destroyed. The
+    // post-processor feeds the recorder's input queue, so it must be stopped
+    // before the recorder is deleted.
     if (m_postProcessorThread)
     {
         m_postProcessorThread->quit();
         m_postProcessorThread->wait();
         m_postProcessorThread = nullptr;
         m_postProcessor = nullptr;
+    }
+
+    if (m_recorderThread)
+    {
+        m_recorderThread->quit();
+        m_recorderThread->wait();
+        m_recorderThread = nullptr;
+        m_recorder = nullptr;
     }
 }
 

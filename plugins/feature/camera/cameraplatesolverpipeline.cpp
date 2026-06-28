@@ -9873,28 +9873,13 @@ bool CameraPlateSolver::SolverContext::isBetterWeakModeFinalMatchPass(const Came
 
     if (isWidePlateSolveContext(settings))
     {
-        // A very tight named anchor match (< 30% of matchRadius) is the strongest
-        // evidence of correct pose — check it BEFORE the broad bright-anchor gate so a
-        // precise anchor match cannot be blocked by brightness-consistency heuristics.
-        const double tightNamedAnchorRmsCap =
-            static_cast<double>(settings.m_plateSolveFinalMatchRadius) * 0.00;
-        const bool candidateHasTightNamedAnchor =
-            (candidate.namedBrightAnchorMatches >= 1)
-            && std::isfinite(candidate.namedBrightAnchorRmsErrorPixels)
-            && (candidate.namedBrightAnchorRmsErrorPixels <= tightNamedAnchorRmsCap);
-        const bool bestHasTightNamedAnchor =
-            (best.namedBrightAnchorMatches >= 1)
-            && std::isfinite(best.namedBrightAnchorRmsErrorPixels)
-            && (best.namedBrightAnchorRmsErrorPixels <= tightNamedAnchorRmsCap);
-        if (candidateHasTightNamedAnchor != bestHasTightNamedAnchor) {
-            return candidateHasTightNamedAnchor;
-        }
-        if (candidateHasTightNamedAnchor && bestHasTightNamedAnchor
-            && std::fabs(candidate.namedBrightAnchorRmsErrorPixels
-                         - best.namedBrightAnchorRmsErrorPixels) >= 1.0) {
-            return candidate.namedBrightAnchorRmsErrorPixels
-                   < best.namedBrightAnchorRmsErrorPixels;
-        }
+        // NB: a "tight named anchor" early preference (prefer the candidate whose named bright
+        // anchor matched within ~30% of the match radius, ahead of the broad bright-anchor gate)
+        // was tried here and removed. It was introduced disabled (multiplier * 0.00) in
+        // "Fix failing test" and re-enabling it at * 0.30 regresses 7 wide REAL cases
+        // (stars-wide-2/3/4/5/7/8): a single tight named-anchor RMS is not by itself reliable
+        // evidence of the correct wide pose, so it prefers contaminated candidates. The broad
+        // bright-anchor support gate below is the wide-field selector.
         const bool candidateBrightAnchorAccepted =
             hasAcceptableWideBrightAnchorSupport(settings, starDetections, candidate);
         const bool bestBrightAnchorAccepted =

@@ -100,7 +100,6 @@ private:
     cv::cuda::GpuMat m_cudaDarkHotPixelMask;
     cv::Size m_cudaDarkHotPixelMaskSize;
     cv::Ptr<cv::cuda::Filter> m_cudaMonoHotPixelRepairFilter;
-    cv::Ptr<cv::cuda::Filter> m_cudaColorHotPixelRepairFilter;
 #endif
     QMutex m_frameMutex;
     std::deque<CameraPipelineFramePtr> m_pendingFrames;

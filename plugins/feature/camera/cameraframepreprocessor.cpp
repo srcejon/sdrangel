@@ -697,7 +697,6 @@ void CameraFramePreprocessor::invalidateCudaCalibrationFrames()
     m_cudaDarkHotPixelMask.release();
     m_cudaDarkHotPixelMaskSize = cv::Size();
     m_cudaMonoHotPixelRepairFilter.release();
-    m_cudaColorHotPixelRepairFilter.release();
 }
 
 cv::cuda::GpuMat CameraFramePreprocessor::uploadCalibrationFrameCuda(
@@ -779,14 +778,7 @@ cv::Ptr<cv::cuda::Filter> CameraFramePreprocessor::cudaHotPixelRepairFilter(int 
 
     if (channels == 3)
     {
-        if (m_cudaColorHotPixelRepairFilter.empty())
-        {
-            cv::Mat kernel = cv::Mat::ones(3, 3, CV_32F) / 8.0f;
-            kernel.at<float>(1, 1) = 0.0f;
-            m_cudaColorHotPixelRepairFilter = cv::cuda::createLinearFilter(
-                inputType, inputType, kernel, cv::Point(-1, -1), cv::BORDER_REFLECT101);
-        }
-        return m_cudaColorHotPixelRepairFilter;
+        return cudaHotPixelRepairFilter(1);
     }
 
     return cv::Ptr<cv::cuda::Filter>();
@@ -805,7 +797,23 @@ int CameraFramePreprocessor::repairHotPixelsCuda(cv::cuda::GpuMat& calibratedGpu
     }
 
     cv::cuda::GpuMat repairedGpu;
-    repairFilter->apply(calibratedGpu, repairedGpu, m_cudaStream);
+    if (channels == 3)
+    {
+        std::vector<cv::cuda::GpuMat> planes;
+        std::vector<cv::cuda::GpuMat> repairedPlanes(3);
+        cv::cuda::split(calibratedGpu, planes, m_cudaStream);
+        if (planes.size() != 3) {
+            return 0;
+        }
+        for (int i = 0; i < 3; ++i) {
+            repairFilter->apply(planes[static_cast<size_t>(i)], repairedPlanes[static_cast<size_t>(i)], m_cudaStream);
+        }
+        cv::cuda::merge(repairedPlanes, repairedGpu, m_cudaStream);
+    }
+    else
+    {
+        repairFilter->apply(calibratedGpu, repairedGpu, m_cudaStream);
+    }
     repairedGpu.copyTo(calibratedGpu, maskGpu, m_cudaStream);
     return cv::countNonZero(m_darkHotPixelMask);
 }

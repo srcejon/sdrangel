@@ -55,9 +55,10 @@ namespace {
 
 const QStringList kTrackedObjectPipeURIs = {
     QStringLiteral("sdrangel.channel.adsbdemod"),
-    QStringLiteral("sdrangel.channel.aisdemod"),
+    QStringLiteral("sdrangel.feature.ais"),
     QStringLiteral("sdrangel.feature.satellitetracker"),
-    QStringLiteral("sdrangel.feature.startracker")
+    QStringLiteral("sdrangel.feature.startracker"),
+    QStringLiteral("sdrangel.feature.radiosonde")
 };
 
 static constexpr int kTrackedObjectMaxTrackPoints = 256;

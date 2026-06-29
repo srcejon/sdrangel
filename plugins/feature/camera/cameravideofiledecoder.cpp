@@ -20,6 +20,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 #include <mutex>
 
 #include <QElapsedTimer>
@@ -52,6 +53,53 @@ int cameraVideoFileDecoderInterruptCallback(void *opaque)
 {
     CameraVideoFileDecoder *decoder = static_cast<CameraVideoFileDecoder*>(opaque);
     return decoder ? (decoder->abortRequested() ? 1 : 0) : 0;
+}
+
+qint16 readS16Sample(const char *data)
+{
+    qint16 sample = 0;
+    std::memcpy(&sample, data, sizeof(sample));
+    return sample;
+}
+
+void writeS16Sample(char *data, qint16 sample)
+{
+    std::memcpy(data, &sample, sizeof(sample));
+}
+
+QByteArray rateConvertS16StereoLinear(const QByteArray& source, int outputFrames)
+{
+    static constexpr int bytesPerSampleFrame = 4;
+    static constexpr int bytesPerSample = 2;
+    const int sourceFrames = source.size() / bytesPerSampleFrame;
+    if ((sourceFrames <= 0) || (outputFrames <= 0)) {
+        return QByteArray();
+    }
+    if (sourceFrames == outputFrames) {
+        return source.left(sourceFrames * bytesPerSampleFrame);
+    }
+
+    QByteArray output;
+    output.resize(outputFrames * bytesPerSampleFrame);
+    const char *src = source.constData();
+    char *dst = output.data();
+    for (int frame = 0; frame < outputFrames; ++frame)
+    {
+        const double sourcePosition = outputFrames > 1
+            ? static_cast<double>(frame) * static_cast<double>(sourceFrames - 1) / static_cast<double>(outputFrames - 1)
+            : 0.0;
+        const int sourceFrame0 = qBound(0, static_cast<int>(sourcePosition), sourceFrames - 1);
+        const int sourceFrame1 = qMin(sourceFrame0 + 1, sourceFrames - 1);
+        const double frac = sourcePosition - static_cast<double>(sourceFrame0);
+        for (int channel = 0; channel < 2; ++channel)
+        {
+            const qint16 s0 = readS16Sample(src + sourceFrame0 * bytesPerSampleFrame + channel * bytesPerSample);
+            const qint16 s1 = readS16Sample(src + sourceFrame1 * bytesPerSampleFrame + channel * bytesPerSample);
+            const int sample = qBound(-32768, static_cast<int>(std::lround(static_cast<double>(s0) + (static_cast<double>(s1 - s0) * frac))), 32767);
+            writeS16Sample(dst + frame * bytesPerSampleFrame + channel * bytesPerSample, static_cast<qint16>(sample));
+        }
+    }
+    return output;
 }
 #endif
 
@@ -402,6 +450,7 @@ void CameraVideoFileDecoder::close()
     m_outputSampleRate = 48000;
     m_audioPaceFrameRate = 0.0;
     m_audioPaceRemainderFrames = 0.0;
+    m_audioPaceSourceRemainderFrames = 0.0;
     m_audioPaceFrameRateApplied = 0.0;
     m_eof = false;
     m_videoDraining = false;
@@ -985,6 +1034,7 @@ void CameraVideoFileDecoder::seek(qint64 positionMs)
     m_audioDraining = false;
     clearPendingAudio();
     m_audioPaceRemainderFrames = 0.0;
+    m_audioPaceSourceRemainderFrames = 0.0;
     m_pendingVideoFrames.clear();
 #else
     Q_UNUSED(positionMs)
@@ -1146,6 +1196,7 @@ bool CameraVideoFileDecoder::readNextFrameAtOrAfter(
         {
             clearPendingAudio();
             m_audioPaceRemainderFrames = 0.0;
+            m_audioPaceSourceRemainderFrames = 0.0;
             m_audioDecodedPositionMs = -1;
             m_lastReturnedAudioStartMs = -1;
             return true;
@@ -1913,21 +1964,37 @@ void CameraVideoFileDecoder::takePacedAudio(QByteArray& pcmS16Stereo)
     const double paceRate = m_audioPaceFrameRate.load(std::memory_order_relaxed);
     if (std::abs(paceRate - m_audioPaceFrameRateApplied) > 0.001) {
         m_audioPaceRemainderFrames = 0.0;
+        m_audioPaceSourceRemainderFrames = 0.0;
         m_audioPaceFrameRateApplied = paceRate;
     }
     const double paceFrameRate = paceRate > 0.0 ? paceRate : m_frameRate;
-    const double exactTargetFrames = static_cast<double>(m_outputSampleRate) / std::max(1.0, paceFrameRate);
+    const double sourceFrameRate = std::max(0.001, m_frameRate);
+    const double playbackRate = std::max(0.001, paceFrameRate / sourceFrameRate);
+    const double exactSourceFrames = static_cast<double>(m_outputSampleRate) / sourceFrameRate;
+    const double availableSourceFrames = exactSourceFrames + m_audioPaceSourceRemainderFrames;
+    int sourceFrames = std::max(1, static_cast<int>(availableSourceFrames));
+    m_audioPaceSourceRemainderFrames = availableSourceFrames - static_cast<double>(sourceFrames);
+    const double exactTargetFrames = static_cast<double>(sourceFrames) / playbackRate;
     const double availableTargetFrames = exactTargetFrames + m_audioPaceRemainderFrames;
-    const int targetFrames = std::max(1, static_cast<int>(availableTargetFrames));
+    int targetFrames = std::max(1, static_cast<int>(availableTargetFrames));
     m_audioPaceRemainderFrames = availableTargetFrames - static_cast<double>(targetFrames);
-    const int targetBytes = targetFrames * bytesPerSampleFrame;
+    const int sourceBytes = sourceFrames * bytesPerSampleFrame;
     int byteCount = 0;
+    QByteArray sourceAudio;
     {
         QMutexLocker locker(&m_pendingAudioMutex);
-        byteCount = std::min(targetBytes, static_cast<int>(m_pendingAudioPcm.size()));
-        pcmS16Stereo = m_pendingAudioPcm.left(byteCount);
+        byteCount = std::min(sourceBytes, static_cast<int>(m_pendingAudioPcm.size()));
+        sourceAudio = m_pendingAudioPcm.left(byteCount);
         m_pendingAudioPcm.consume(byteCount);
     }
+    sourceFrames = byteCount / bytesPerSampleFrame;
+    if (sourceFrames <= 0) {
+        return;
+    }
+    if (byteCount < sourceBytes) {
+        targetFrames = std::max(1, static_cast<int>((static_cast<double>(sourceFrames) / playbackRate) + 0.5));
+    }
+    pcmS16Stereo = rateConvertS16StereoLinear(sourceAudio, targetFrames);
 #endif
 }
 

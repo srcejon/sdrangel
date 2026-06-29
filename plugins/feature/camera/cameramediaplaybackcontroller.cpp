@@ -1179,7 +1179,7 @@ bool CameraMediaPlaybackController::readVideoFileFrame(bool submitAudio, qint64 
     }
 
     m_state.m_decoder->setAudioPaceFrameRate(
-        qMax(1.0, m_state.m_decoder->frameRate()) * qMax(0.1, m_settings->m_videoPlaybackRate));
+        qMax(0.001, m_state.m_decoder->frameRate()) * qMax(0.1, m_settings->m_videoPlaybackRate));
 
     QImage image;
     qint64 positionMs = -1;
@@ -1294,7 +1294,8 @@ void CameraMediaPlaybackController::submitVideoFileAudio(const QByteArray& pcmS1
     // tick, so without a top-up the FIFO drains to zero on any jitter and underruns
     // (glitching). The top-up gradually rebuilds the cushion to target. Streams do NOT use this
     // path (they run the clean present, presentStreamTick, and feed the monitor in submitStreamAudio).
-    if (m_state.m_decoder && !m_settings->isStreamCamera())
+    const double playbackRate = qMax(0.1, m_settings->m_videoPlaybackRate);
+    if (m_state.m_decoder && !m_settings->isStreamCamera() && (std::abs(playbackRate - 1.0) < 0.001))
     {
         const uint32_t currentFill = m_audio->monitorAudioFill();
         const int targetFillFrames = m_audio->monitorTargetFillFrames(audioSampleRate);
@@ -1401,19 +1402,25 @@ qint64 CameraMediaPlaybackController::videoFilePlaybackClockMs() const
     // never call this. Audio-master clock (the ffplay/VLC model): the playback clock IS the position
     // of the audio currently being heard at the speaker — the decoder's decoded-audio position minus
     // everything still queued ahead of it (decoder pending + monitor FIFO). The present shows each
-    // video frame when this clock reaches its PTS and drops late frames to catch up; audio is never
-    // rate-warped for sync.
+    // video frame when this clock reaches its PTS and drops late frames to catch up. For non-1x
+    // playback, file audio is rate-converted as it leaves the decoder staging buffer, so queued
+    // monitor audio duration has to be converted back to source-time duration below.
     static constexpr int bytesPerSampleFrame = 4;
     if (!m_settings->isStreamCamera()
         && m_state.m_decoder
         && (m_state.m_decoder->audioDecodedPositionMs() >= 0)
         && (m_audio->monitorSampleRate() > 0))
     {
-        const qint64 queuedAudioFrames =
-            static_cast<qint64>(m_state.m_decoder->pendingAudioBytes() / bytesPerSampleFrame)
-            + static_cast<qint64>(m_audio->monitorPlaybackClockFill());
-        const qint64 queuedAudioMs = static_cast<qint64>(
-            (static_cast<double>(queuedAudioFrames) * 1000.0 / static_cast<double>(m_audio->monitorSampleRate())) + 0.5);
+        const double playbackRate = qMax(0.1, m_settings->m_videoPlaybackRate);
+        const qint64 decoderPendingAudioFrames =
+            static_cast<qint64>(m_state.m_decoder->pendingAudioBytes() / bytesPerSampleFrame);
+        const qint64 monitorQueuedAudioFrames =
+            static_cast<qint64>(m_audio->monitorPlaybackClockFill());
+        const double decoderPendingAudioMs =
+            static_cast<double>(decoderPendingAudioFrames) * 1000.0 / static_cast<double>(m_audio->monitorSampleRate());
+        const double monitorQueuedSourceMs =
+            static_cast<double>(monitorQueuedAudioFrames) * 1000.0 * playbackRate / static_cast<double>(m_audio->monitorSampleRate());
+        const qint64 queuedAudioMs = static_cast<qint64>(decoderPendingAudioMs + monitorQueuedSourceMs + 0.5);
         // NB: the audio device's own output buffer (~250 ms, see monitorSinkLatencyUSecs)
         // is deliberately NOT subtracted here. This clock also paces the decode/audio-submit
         // tick, so shifting it starves the monitor FIFO. The sink-buffer A/V skew is instead

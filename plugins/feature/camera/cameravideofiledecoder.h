@@ -227,6 +227,7 @@ private:
     // written cross-thread.
     std::atomic<double> m_audioPaceFrameRate { 0.0 };
     double m_audioPaceRemainderFrames = 0.0;
+    double m_audioPaceSourceRemainderFrames = 0.0;
     double m_audioPaceFrameRateApplied = 0.0;
     qint64 m_audioDecodedPositionMs = -1;
     qint64 m_lastReturnedAudioStartMs = -1;

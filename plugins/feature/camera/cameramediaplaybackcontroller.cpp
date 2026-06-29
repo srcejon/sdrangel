@@ -199,13 +199,9 @@ void CameraMediaPlaybackController::presentTick()
         return;
     }
     // File playback only (streams returned above via presentStreamTick).
-    // Catch-up skip: when the playback clock has run more than ~1.5 source-frame intervals past the
-    // last presented frame, jump the next decode to the clock so video re-syncs instead of falling
-    // progressively behind. This applies to both no-audio files (wall-clock clock) and files with
-    // audio (audio-master clock) - at playback rates >1x the present pipeline may not sustain
-    // rate x fps frame-for-frame, so dropping stale frames is what keeps video locked to the audio.
     qint64 minimumPositionMs = -1;
     if (m_state.m_decoder
+        && !m_state.m_decoder->streamHasAudio()
         && (m_state.m_lastFramePtsMs >= 0))
     {
         const qint64 sourceFrameIntervalMs = qMax<qint64>(
@@ -1209,9 +1205,7 @@ bool CameraMediaPlaybackController::readVideoFileFrame(bool submitAudio, qint64 
         audioSampleRate = 0;
         errorMessage.clear();
         readOk = minimumPositionMs >= 0
-            // Video-only catch-up: keep the skipped span's audio (resyncAudio=false) so playback
-            // stays locked to the audio master clock instead of resyncing as if it were a seek.
-            ? m_state.m_decoder->readNextFrameAtOrAfter(minimumPositionMs, image, positionMs, errorMessage, /*resyncAudio=*/false)
+            ? m_state.m_decoder->readNextFrameAtOrAfter(minimumPositionMs, image, positionMs, errorMessage)
             : m_state.m_decoder->readNextFrame(image, positionMs, pcmS16Stereo, audioSampleRate, errorMessage);
         decodeMs = decodeTimer.elapsed();
         if (!readOk || image.isNull() || (minimumPositionMs >= 0)) {

@@ -67,19 +67,16 @@ void writeS16Sample(char *data, qint16 sample)
     std::memcpy(data, &sample, sizeof(sample));
 }
 
-// Linear-interpolation resampler with caller-maintained phase. Produces outputFrames stereo frames
-// sampled at source positions startPos + j*step (step = source frames per output frame = the
-// playback rate). The caller carries startPos in [0,1) and leaves the unconsumed source tail in the
-// queue between calls, so the interpolation phase is continuous across chunk boundaries — no
-// per-chunk phase reset and no seam click. The caller guarantees the top neighbour of the last
-// output frame, floor(startPos+(outputFrames-1)*step)+1, is present in source.
-QByteArray resampleS16StereoLinear(const QByteArray& source, double startPos, double step, int outputFrames)
+QByteArray rateConvertS16StereoLinear(const QByteArray& source, int outputFrames)
 {
     static constexpr int bytesPerSampleFrame = 4;
     static constexpr int bytesPerSample = 2;
     const int sourceFrames = source.size() / bytesPerSampleFrame;
     if ((sourceFrames <= 0) || (outputFrames <= 0)) {
         return QByteArray();
+    }
+    if (sourceFrames == outputFrames) {
+        return source.left(sourceFrames * bytesPerSampleFrame);
     }
 
     QByteArray output;
@@ -88,7 +85,9 @@ QByteArray resampleS16StereoLinear(const QByteArray& source, double startPos, do
     char *dst = output.data();
     for (int frame = 0; frame < outputFrames; ++frame)
     {
-        const double sourcePosition = startPos + static_cast<double>(frame) * step;
+        const double sourcePosition = outputFrames > 1
+            ? static_cast<double>(frame) * static_cast<double>(sourceFrames - 1) / static_cast<double>(outputFrames - 1)
+            : 0.0;
         const int sourceFrame0 = qBound(0, static_cast<int>(sourcePosition), sourceFrames - 1);
         const int sourceFrame1 = qMin(sourceFrame0 + 1, sourceFrames - 1);
         const double frac = sourcePosition - static_cast<double>(sourceFrame0);
@@ -451,7 +450,7 @@ void CameraVideoFileDecoder::close()
     m_outputSampleRate = 48000;
     m_audioPaceFrameRate = 0.0;
     m_audioPaceRemainderFrames = 0.0;
-    m_audioResamplePos = 0.0;
+    m_audioPaceSourceRemainderFrames = 0.0;
     m_audioPaceFrameRateApplied = 0.0;
     m_eof = false;
     m_videoDraining = false;
@@ -1035,7 +1034,7 @@ void CameraVideoFileDecoder::seek(qint64 positionMs)
     m_audioDraining = false;
     clearPendingAudio();
     m_audioPaceRemainderFrames = 0.0;
-    m_audioResamplePos = 0.0;
+    m_audioPaceSourceRemainderFrames = 0.0;
     m_pendingVideoFrames.clear();
 #else
     Q_UNUSED(positionMs)
@@ -1173,14 +1172,12 @@ bool CameraVideoFileDecoder::readNextFrameAtOrAfter(
     qint64 targetPositionMs,
     QImage& image,
     qint64& positionMs,
-    QString& errorMessage,
-    bool resyncAudio)
+    QString& errorMessage)
 {
 #ifndef CAMERA_FFMPEG_STREAMING
     Q_UNUSED(targetPositionMs)
     Q_UNUSED(image)
     Q_UNUSED(positionMs)
-    Q_UNUSED(resyncAudio)
     errorMessage = QStringLiteral("FFmpeg support is not available in this build");
     return false;
 #else
@@ -1197,17 +1194,11 @@ bool CameraVideoFileDecoder::readNextFrameAtOrAfter(
 
         if (image.isNull() || (positionMs < 0) || (positionMs + toleranceMs >= targetPositionMs))
         {
-            // Each readNextFrame above already queued its audio into the pending buffer. For a
-            // seek we drop it and resync the audio clock to the landing frame; for a video-only
-            // catch-up we keep it so the audio master clock plays through without a gap.
-            if (resyncAudio)
-            {
-                clearPendingAudio();
-                m_audioPaceRemainderFrames = 0.0;
-                m_audioResamplePos = 0.0;
-                m_audioDecodedPositionMs = -1;
-                m_lastReturnedAudioStartMs = -1;
-            }
+            clearPendingAudio();
+            m_audioPaceRemainderFrames = 0.0;
+            m_audioPaceSourceRemainderFrames = 0.0;
+            m_audioDecodedPositionMs = -1;
+            m_lastReturnedAudioStartMs = -1;
             return true;
         }
     }
@@ -1973,53 +1964,37 @@ void CameraVideoFileDecoder::takePacedAudio(QByteArray& pcmS16Stereo)
     const double paceRate = m_audioPaceFrameRate.load(std::memory_order_relaxed);
     if (std::abs(paceRate - m_audioPaceFrameRateApplied) > 0.001) {
         m_audioPaceRemainderFrames = 0.0;
-        m_audioResamplePos = 0.0;
+        m_audioPaceSourceRemainderFrames = 0.0;
         m_audioPaceFrameRateApplied = paceRate;
     }
     const double paceFrameRate = paceRate > 0.0 ? paceRate : m_frameRate;
     const double sourceFrameRate = std::max(0.001, m_frameRate);
-    // step = source frames consumed per output frame = the playback rate. Held constant (not a
-    // per-chunk sourceFrames/targetFrames ratio) so the resampled pitch is identical every tick.
-    const double step = std::max(0.001, paceFrameRate / sourceFrameRate);
-    // Output frames to emit this tick (one video-frame period of post-rate audio), with the
-    // fractional carry preserved in m_audioPaceRemainderFrames.
-    const double exactTargetFrames = static_cast<double>(m_outputSampleRate) / std::max(0.001, paceFrameRate);
+    const double playbackRate = std::max(0.001, paceFrameRate / sourceFrameRate);
+    const double exactSourceFrames = static_cast<double>(m_outputSampleRate) / sourceFrameRate;
+    const double availableSourceFrames = exactSourceFrames + m_audioPaceSourceRemainderFrames;
+    int sourceFrames = std::max(1, static_cast<int>(availableSourceFrames));
+    m_audioPaceSourceRemainderFrames = availableSourceFrames - static_cast<double>(sourceFrames);
+    const double exactTargetFrames = static_cast<double>(sourceFrames) / playbackRate;
     const double availableTargetFrames = exactTargetFrames + m_audioPaceRemainderFrames;
     int targetFrames = std::max(1, static_cast<int>(availableTargetFrames));
     m_audioPaceRemainderFrames = availableTargetFrames - static_cast<double>(targetFrames);
-
-    // Advance the fractional resample cursor under the lock, but resample outside it. We consume
-    // only the source frames fully behind the cursor, leaving the lower interpolation neighbour
-    // (and any look-ahead) in the queue so the next tick continues the same phase.
-    const double startPos = m_audioResamplePos;
+    const int sourceBytes = sourceFrames * bytesPerSampleFrame;
+    int byteCount = 0;
     QByteArray sourceAudio;
     {
         QMutexLocker locker(&m_pendingAudioMutex);
-        const int availFrames = static_cast<int>(m_pendingAudioPcm.size()) / bytesPerSampleFrame;
-        if (availFrames < 2) {
-            return;   // need a lower and an upper sample to interpolate between
-        }
-        // Clamp output so the last frame's upper neighbour, floor(startPos+(n-1)*step)+1, exists.
-        const int maxOutputFrames =
-            static_cast<int>(std::floor((static_cast<double>(availFrames - 1) - startPos) / step)) + 1;
-        if (maxOutputFrames < targetFrames) {
-            m_audioPaceRemainderFrames += static_cast<double>(targetFrames - std::max(0, maxOutputFrames));
-            targetFrames = std::max(0, maxOutputFrames);
-        }
-        if (targetFrames <= 0) {
-            return;
-        }
-        const double nextPos = startPos + static_cast<double>(targetFrames) * step;
-        const int wantConsumeFrames = static_cast<int>(std::floor(nextPos));
-        const int peekFrames = std::min(availFrames, wantConsumeFrames + 2);
-        sourceAudio = m_pendingAudioPcm.left(peekFrames * bytesPerSampleFrame);
-        const int consumeFrames = std::min(wantConsumeFrames, availFrames);
-        m_pendingAudioPcm.consume(consumeFrames * bytesPerSampleFrame);
-        m_audioResamplePos = (consumeFrames == wantConsumeFrames)
-            ? (nextPos - static_cast<double>(consumeFrames))   // carry the sub-frame phase
-            : 0.0;                                             // outran the buffer; restart phase
+        byteCount = std::min(sourceBytes, static_cast<int>(m_pendingAudioPcm.size()));
+        sourceAudio = m_pendingAudioPcm.left(byteCount);
+        m_pendingAudioPcm.consume(byteCount);
     }
-    pcmS16Stereo = resampleS16StereoLinear(sourceAudio, startPos, step, targetFrames);
+    sourceFrames = byteCount / bytesPerSampleFrame;
+    if (sourceFrames <= 0) {
+        return;
+    }
+    if (byteCount < sourceBytes) {
+        targetFrames = std::max(1, static_cast<int>((static_cast<double>(sourceFrames) / playbackRate) + 0.5));
+    }
+    pcmS16Stereo = rateConvertS16StereoLinear(sourceAudio, targetFrames);
 #endif
 }
 

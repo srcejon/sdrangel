@@ -96,17 +96,11 @@ public:
         QByteArray& pcmS16Stereo,
         int& audioSampleRate,
         QString& errorMessage);
-    // Decode forward, dropping video frames, until one lands at/after targetPositionMs. Each read
-    // still queues its audio into the pending buffer. resyncAudio=true (seek-style) then discards
-    // that audio and resets the audio clock to the landing frame; resyncAudio=false keeps the
-    // accumulated audio playing continuously (video-only catch-up that stays locked to the audio
-    // master clock).
     [[nodiscard]] bool readNextFrameAtOrAfter(
         qint64 targetPositionMs,
         QImage& image,
         qint64& positionMs,
-        QString& errorMessage,
-        bool resyncAudio = true);
+        QString& errorMessage);
     [[nodiscard]] qint64 durationMs() const { return m_durationMs; }
     [[nodiscard]] double frameRate() const { return m_frameRate; }
     [[nodiscard]] qint64 audioDecodedPositionMs() const { return m_audioDecodedPositionMs; }
@@ -233,10 +227,7 @@ private:
     // written cross-thread.
     std::atomic<double> m_audioPaceFrameRate { 0.0 };
     double m_audioPaceRemainderFrames = 0.0;
-    // Fractional source-frame position of the rate-conversion cursor, relative to the front of
-    // m_pendingAudioPcm. Carried across ticks so the linear resampler's phase is continuous (no
-    // per-chunk seam); decode-thread-owned, reset on rate change / seek alongside the remainder.
-    double m_audioResamplePos = 0.0;
+    double m_audioPaceSourceRemainderFrames = 0.0;
     double m_audioPaceFrameRateApplied = 0.0;
     qint64 m_audioDecodedPositionMs = -1;
     qint64 m_lastReturnedAudioStartMs = -1;

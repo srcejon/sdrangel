@@ -57,6 +57,12 @@ CameraAsiController::CameraAsiController() :
     m_exposureMaxMs(60000.0),
     m_frameWidth(0),
     m_frameHeight(0),
+    m_appliedWidth(-1),
+    m_appliedHeight(-1),
+    m_appliedBin(-1),
+    m_appliedImageType(-1),
+    m_appliedStartX(-1),
+    m_appliedStartY(-1),
     m_frameBuffer(),
     m_lastCcdTemperature(0.0),
     m_lastCcdTemperatureValid(false),
@@ -150,6 +156,14 @@ void CameraAsiController::closeCamera(int fallbackCameraId)
         m_openCameraId = -1;
     }
     m_settingsApplied = false;
+    // The camera's ROI/format state is gone once closed; force a fresh apply on
+    // the next open so the cached values can't suppress a needed reconfigure.
+    m_appliedWidth = -1;
+    m_appliedHeight = -1;
+    m_appliedBin = -1;
+    m_appliedImageType = -1;
+    m_appliedStartX = -1;
+    m_appliedStartY = -1;
 }
 
 bool CameraAsiController::stopVideoCapture(int fallbackCameraId)
@@ -324,20 +338,46 @@ bool CameraAsiController::applyCameraSettings(int cameraId, const CameraSettings
     const int startX = qBound(0, settings.m_cameraStartX, std::max(0, maxWidth - width));
     const int startY = qBound(0, settings.m_cameraStartY, std::max(0, maxHeight - height));
 
-    const ASI_ERROR_CODE roiError = ASISetROIFormat(cameraId, width, height, bin, static_cast<ASI_IMG_TYPE>(m_imageType));
-    if (roiError != ASI_SUCCESS) {
-        setLastError(roiError, errorCodeToString(roiError));
-        qDebug() << "CameraAsiController: ASISetROIFormat failed:" << roiError << errorCodeToString(roiError)
-                 << "width" << width << "height" << height << "bin" << bin << "imageType" << m_imageType;
-        return false;
+    // Only reconfigure the sensor ROI/format when it has actually changed.
+    // ASISetROIFormat reconfigures the readout, and the next snap-mode frame
+    // after such a reconfigure can be corrupt; re-applying it for every
+    // exposure/gain change (which only need ASISetControlValue) is both
+    // wasteful and a source of bad frames.
+    const bool roiChanged = (width != m_appliedWidth)
+        || (height != m_appliedHeight)
+        || (bin != m_appliedBin)
+        || (m_imageType != m_appliedImageType);
+
+    if (roiChanged)
+    {
+        const ASI_ERROR_CODE roiError = ASISetROIFormat(cameraId, width, height, bin, static_cast<ASI_IMG_TYPE>(m_imageType));
+        if (roiError != ASI_SUCCESS) {
+            setLastError(roiError, errorCodeToString(roiError));
+            qDebug() << "CameraAsiController: ASISetROIFormat failed:" << roiError << errorCodeToString(roiError)
+                     << "width" << width << "height" << height << "bin" << bin << "imageType" << m_imageType;
+            return false;
+        }
+        m_appliedWidth = width;
+        m_appliedHeight = height;
+        m_appliedBin = bin;
+        m_appliedImageType = m_imageType;
+        // A new ROI also resets the start position in the SDK, so it must be
+        // re-applied below.
+        m_appliedStartX = -1;
+        m_appliedStartY = -1;
     }
 
-    const ASI_ERROR_CODE startPosError = ASISetStartPos(cameraId, startX, startY);
-    if (startPosError != ASI_SUCCESS) {
-        setLastError(startPosError, errorCodeToString(startPosError));
-        qDebug() << "CameraAsiController: ASISetStartPos failed:" << startPosError << errorCodeToString(startPosError)
-                 << "startX" << startX << "startY" << startY << "width" << width << "height" << height << "bin" << bin;
-        return false;
+    if ((startX != m_appliedStartX) || (startY != m_appliedStartY))
+    {
+        const ASI_ERROR_CODE startPosError = ASISetStartPos(cameraId, startX, startY);
+        if (startPosError != ASI_SUCCESS) {
+            setLastError(startPosError, errorCodeToString(startPosError));
+            qDebug() << "CameraAsiController: ASISetStartPos failed:" << startPosError << errorCodeToString(startPosError)
+                     << "startX" << startX << "startY" << startY << "width" << width << "height" << height << "bin" << bin;
+            return false;
+        }
+        m_appliedStartX = startX;
+        m_appliedStartY = startY;
     }
 
     const ASI_BOOL autoExposureGain = (settings.m_asiAutoExposureGain

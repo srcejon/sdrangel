@@ -177,6 +177,16 @@ private:
     double m_exposureMaxMs;
     int m_frameWidth;
     int m_frameHeight;
+    // Last ROI/format actually pushed to the SDK via ASISetROIFormat/ASISetStartPos.
+    // Used to skip redundant sensor reconfiguration (which can corrupt the next
+    // snap-mode frame) when only exposure/gain/other live controls change.
+    // -1 means nothing has been applied yet (forces a fresh ROI apply).
+    int m_appliedWidth;
+    int m_appliedHeight;
+    int m_appliedBin;
+    int m_appliedImageType;
+    int m_appliedStartX;
+    int m_appliedStartY;
     QVector<uchar> m_frameBuffer;
     // Recycles the per-frame QImage backing buffers produced in frameToImage
     // (Grayscale8/16 and RGB888 for sustained high-res capture). mutable because

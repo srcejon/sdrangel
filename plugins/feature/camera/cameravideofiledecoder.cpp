@@ -298,7 +298,7 @@ bool CameraVideoFileDecoder::open(
         }
         else
         {
-            m_frameRate = qBound(1.0, reportedFrameRate, 240.0);
+            m_frameRate = qBound(0.001, reportedFrameRate, 240.0);
         }
     }
 
@@ -1133,7 +1133,7 @@ bool CameraVideoFileDecoder::readNextFrameAtOrAfter(
 #else
     QByteArray discardedAudio;
     int discardedSampleRate = 0;
-    const qint64 toleranceMs = std::max<qint64>(1, static_cast<qint64>((500.0 / std::max(1.0, m_frameRate)) + 0.5));
+    const qint64 toleranceMs = std::max<qint64>(1, static_cast<qint64>((500.0 / std::max(0.001, m_frameRate)) + 0.5));
 
     for (;;)
     {

@@ -149,6 +149,7 @@ private:
     bool readVideoFileFrame(bool submitAudio = true, qint64 minimumPositionMs = -1);
     void seekVideoFile(qint64 positionMs, bool displayFrame);
     void stepVideoFile(int direction);
+    double videoFileSourceFrameIntervalMs() const;
     double videoFileExactFrameIntervalMs() const;
     int videoFileFrameIntervalMs() const;
     void resetVideoFilePlaybackSchedule();

@@ -199,7 +199,20 @@ void CameraMediaPlaybackController::presentTick()
         return;
     }
     // File playback only (streams returned above via presentStreamTick).
-    const bool frameRead = readVideoFileFrame();
+    qint64 minimumPositionMs = -1;
+    if (m_state.m_decoder
+        && !m_state.m_decoder->streamHasAudio()
+        && (m_state.m_lastFramePtsMs >= 0))
+    {
+        const qint64 sourceFrameIntervalMs = qMax<qint64>(
+            1,
+            static_cast<qint64>(std::llround(videoFileSourceFrameIntervalMs())));
+        const qint64 playbackClockMs = videoFilePlaybackClockMs();
+        if ((playbackClockMs - m_state.m_lastFramePtsMs) > (sourceFrameIntervalMs * 3 / 2)) {
+            minimumPositionMs = playbackClockMs;
+        }
+    }
+    const bool frameRead = readVideoFileFrame(true, minimumPositionMs);
     if (m_callbacks.capturing()
         && videoFilePlaybackIsPlaying()
         && frameRead)
@@ -1069,7 +1082,7 @@ qint64 CameraMediaPlaybackController::updateVideoFilePlaybackPosition(
     {
         if (repairTimestampDiscontinuities && (m_state.m_lastFramePtsMs >= 0))
         {
-            const qint64 frameIntervalMs = videoFileFrameIntervalMs();
+            const qint64 frameIntervalMs = static_cast<qint64>(std::llround(videoFileSourceFrameIntervalMs()));
             const qint64 positionDeltaMs = positionMs - m_state.m_lastFramePtsMs;
             if ((positionDeltaMs <= 0) || ((positionDeltaMs > frameIntervalMs * 3) && !droppedStreamFrames)) {
                 positionMs = m_state.m_lastFramePtsMs + frameIntervalMs;
@@ -1079,7 +1092,7 @@ qint64 CameraMediaPlaybackController::updateVideoFilePlaybackPosition(
     }
     else
     {
-        m_state.m_positionMs += videoFileFrameIntervalMs();
+        m_state.m_positionMs += static_cast<qint64>(std::llround(videoFileSourceFrameIntervalMs()));
     }
 
     m_state.m_lastDecodeMs = decodeMs;
@@ -1145,7 +1158,7 @@ void CameraMediaPlaybackController::submitDecodedVideoFileFrame(
         frame->m_pipelineInputWallClockMs = QDateTime::currentMSecsSinceEpoch();
         frame->m_playbackActiveFrame = true;
         frame->m_playbackPositionMs = playbackPositionMs;
-        frame->m_playbackFrameRate = qMax(1.0, m_state.m_frameRate) * qMax(0.1, m_settings->m_videoPlaybackRate);
+        frame->m_playbackFrameRate = qMax(0.001, m_state.m_frameRate) * qMax(0.1, m_settings->m_videoPlaybackRate);
         submitVideoFileFrame(frame, applyPlaybackOffset);
     }
 
@@ -1199,7 +1212,9 @@ bool CameraMediaPlaybackController::readVideoFileFrame(bool submitAudio, qint64 
             break;
         }
 
-        const qint64 framePtsMs = positionMs >= 0 ? positionMs : (m_state.m_lastFramePtsMs + videoFileFrameIntervalMs());
+        const qint64 framePtsMs = positionMs >= 0
+            ? positionMs
+            : (m_state.m_lastFramePtsMs + static_cast<qint64>(std::llround(videoFileSourceFrameIntervalMs())));
         if (m_state.m_basePositionMs < 0)
         {
             m_state.m_basePositionMs = framePtsMs;
@@ -1347,10 +1362,16 @@ void CameraMediaPlaybackController::stepVideoFile(int direction)
         const qint64 maxPosition = m_state.m_durationMs > 0 ? m_state.m_durationMs : std::numeric_limits<qint64>::max();
         const qint64 position = qBound<qint64>(
             0,
-            m_state.m_positionMs - videoFileFrameIntervalMs(),
+            m_state.m_positionMs - static_cast<qint64>(std::llround(videoFileSourceFrameIntervalMs())),
             maxPosition);
         seekVideoFile(position, true);
     }
+}
+
+double CameraMediaPlaybackController::videoFileSourceFrameIntervalMs() const
+{
+    const double decoderFps = m_state.m_decoder ? m_state.m_frameRate : m_settings->m_framesPerSecond;
+    return 1000.0 / qMax(0.001, decoderFps);
 }
 
 int CameraMediaPlaybackController::videoFileFrameIntervalMs() const
@@ -1360,8 +1381,7 @@ int CameraMediaPlaybackController::videoFileFrameIntervalMs() const
 
 double CameraMediaPlaybackController::videoFileExactFrameIntervalMs() const
 {
-    const double decoderFps = m_state.m_decoder ? m_state.m_frameRate : m_settings->m_framesPerSecond;
-    return 1000.0 / (qMax(1.0, decoderFps) * qMax(0.1, m_settings->m_videoPlaybackRate));
+    return videoFileSourceFrameIntervalMs() / qMax(0.1, m_settings->m_videoPlaybackRate);
 }
 
 void CameraMediaPlaybackController::resetVideoFilePlaybackSchedule()
@@ -1432,8 +1452,11 @@ void CameraMediaPlaybackController::scheduleNextVideoFileTick()
         // clock instead — needed before the decode decouple — left the displayed frame at a
         // fixed queue depth unrelated to the audio position, so video LED the audio by a
         // constant ~80ms+; the frame drop only fixes video that's behind, not ahead.)
-        const qint64 nextFramePtsMs = m_state.m_lastFramePtsMs + static_cast<qint64>(std::llround(intervalMs));
-        delayMs = nextFramePtsMs - videoFilePlaybackClockMs();
+        const double playbackRate = qMax(0.1, m_settings->m_videoPlaybackRate);
+        const qint64 nextFramePtsMs = m_state.m_lastFramePtsMs
+            + static_cast<qint64>(std::llround(videoFileSourceFrameIntervalMs()));
+        delayMs = static_cast<qint64>(std::llround(
+            static_cast<double>(nextFramePtsMs - videoFilePlaybackClockMs()) / playbackRate));
         delayMs -= m_state.m_lastDecodeMs;
         delayMs = qMax<qint64>(1, delayMs);
         // Bound the wait for streams: if the audio-heard clock stalls (full underrun) don't

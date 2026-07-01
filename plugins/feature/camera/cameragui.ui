@@ -378,7 +378,7 @@
       <item>
        <widget class="QToolButton" name="saveImageButton">
         <property name="toolTip">
-         <string>Save current image to JPEG</string>
+         <string>Save current image to JPEG or PNG</string>
         </property>
         <property name="text">
          <string/>

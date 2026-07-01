@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>MeshcoreKeysDialog</class>
+ <widget class="QDialog" name="MeshcoreKeysDialog">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>760</width>
+    <height>460</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>Meshcore Keys</string>
+  </property>
+  <layout class="QVBoxLayout" name="verticalLayout">
+   <item>
+    <widget class="QLabel" name="helpLabel">
+     <property name="text">
+      <string>MeshCore key spec — semicolon-separated entries:
+
+  channel:&lt;name&gt;=&lt;32hex&gt;   16-byte channel PSK in hex
+  channel:public=public   built-in public channel PSK
+  identity=&lt;64hex&gt;        32-byte Ed25519 public key
+  contact:&lt;name&gt;=&lt;64hex&gt;   known peer pubkey with name
+
+  Example: channel:public=public;identity=aabbccdd...</string>
+     </property>
+     <property name="wordWrap">
+      <bool>true</bool>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QTextEdit" name="keyEditor">
+     <property name="toolTip">
+      <string>Enter one or more key specs used to decrypt Meshcore packets.</string>
+     </property>
+      <property name="placeholderText">
+       <string>channel:public=public;contact:Alice=aabbccdd...</string>
+      </property>
+    </widget>
+   </item>
+   <item>
+    <layout class="QHBoxLayout" name="statusLayout">
+     <item>
+      <widget class="QPushButton" name="validate">
+       <property name="toolTip">
+        <string>Validate key syntax and count without saving.</string>
+       </property>
+       <property name="text">
+        <string>Validate</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QLabel" name="statusLabel">
+       <property name="toolTip">
+        <string>Validation status for the current key list.</string>
+       </property>
+       <property name="wordWrap">
+        <bool>true</bool>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+   <item>
+    <widget class="QDialogButtonBox" name="buttonBox">
+     <property name="orientation">
+      <enum>Qt::Horizontal</enum>
+     </property>
+     <property name="standardButtons">
+      <set>QDialogButtonBox::Cancel|QDialogButtonBox::Ok</set>
+     </property>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections>
+  <connection>
+   <sender>buttonBox</sender>
+   <signal>accepted()</signal>
+   <receiver>MeshcoreKeysDialog</receiver>
+   <slot>accept()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>248</x>
+     <y>254</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>157</x>
+     <y>274</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>buttonBox</sender>
+   <signal>rejected()</signal>
+   <receiver>MeshcoreKeysDialog</receiver>
+   <slot>reject()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>316</x>
+     <y>260</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>286</x>
+     <y>274</y>
+    </hint>
+   </hints>
+  </connection>
+ </connections>
+</ui>

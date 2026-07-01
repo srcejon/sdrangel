@@ -569,6 +569,7 @@ parts:
             - libstdc++6
         cmake-parameters:
             - -DCMAKE_INSTALL_PREFIX=/opt/install/sdrangel
+            - -DENABLE_SIMD_FLAGS=SSE4.2
 
     airspyhf:
         plugin: cmake

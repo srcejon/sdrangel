@@ -39,8 +39,6 @@ modules:
         x86_64:
           config-opts:
             - --enable-sse2
-            - --enable-avx
-            - --enable-avx-128-fma
         aarch64:
           config-opts:
             - --enable-neon
@@ -207,6 +205,7 @@ modules:
     buildsystem: cmake-ninja
     config-opts:
       - -Wno-dev
+      - -DENABLE_DISTRIBUTION=ON
     sources:
       - type: git
         url: https://github.com/f4exb/cm256cc.git
@@ -299,6 +298,9 @@ modules:
 
   - name: cspice
     buildsystem: cmake-ninja
+    config-opts:
+      - -Wno-dev
+      - -DCSPICE_BUILD_STATIC_LIBRARY=OFF
     sources:
       - type: git
         url: https://github.com/srcejon/cspice-cmake
@@ -330,8 +332,8 @@ modules:
   - name: hamlib
     sources:
       - type: archive
-        url: https://github.com/Hamlib/Hamlib/releases/download/4.6.5/hamlib-4.6.5.tar.gz
-        sha256: 90d6f1dba59417c00f8f4545131c7efd31930cd0e178598980a8210425e3852e
+        url: https://github.com/Hamlib/Hamlib/releases/download/4.7.1/hamlib-4.7.1.tar.gz
+        sha256: d197a08a3d5d936d7571ae573f745bbba619e88998742c8267e3fcb0fb3d5974
 
   - name: airspy
     buildsystem: cmake-ninja
@@ -413,6 +415,7 @@ modules:
       - -DENABLE_EXAMPLES=OFF
       - -DENABLE_UTILITIES=OFF
       - -DENABLE_HEADERS=ON
+      - -DENABLE_SIMD_FLAGS=SSE4.2
       - -Wno-dev
     sources:
       - type: archive

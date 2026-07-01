@@ -42,6 +42,7 @@ public:
     void stopWork();
     bool isRunning() const { return m_running; }
     unsigned int getNbChannels() const { return m_nbChannels; }
+    void getStreamStatus(bool& active, quint64& packets, quint32& underflows, quint32& errors);
     void setLog2Interpolation(unsigned int channel, unsigned int log2_interp);
     unsigned int getLog2Interpolation(unsigned int channel) const;
     void setSampleRate(unsigned int sampleRate) { m_sampleRate = sampleRate; }
@@ -86,6 +87,12 @@ private:
     unsigned int m_sampleRate;
     unsigned int m_nbChannels;
     InterpolatorType m_interpolatorType;
+
+    // Diagnostic counters
+    quint64 m_packets;              //!< Total packets (writeStream calls) sent
+    quint32 m_underflows;           //!< Underflow / timeout events
+    quint32 m_errors;               //!< Fatal write stream errors (SOAPY_SDR_ERR_*)
+    quint32 m_consecutiveErrors;    //!< Consecutive non-fatal errors before break
 
     void run();
     unsigned int getNbFifos();

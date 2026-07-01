@@ -16,6 +16,9 @@ jobs:
     runs-on: ubuntu-latest
     env:
       ARCH: x86_64
+    container:
+      image: ghcr.io/flathub-infra/flatpak-github-actions:gnome-48
+      options: --privileged
     steps:
       - uses: actions/checkout@v4
         with:

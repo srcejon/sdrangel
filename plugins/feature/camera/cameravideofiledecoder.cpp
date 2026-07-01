@@ -1950,13 +1950,13 @@ int CameraVideoFileDecoder::takePendingAudio(QByteArray& pcmS16Stereo, int maxSa
 #endif
 }
 
-void CameraVideoFileDecoder::takePacedAudio(QByteArray& pcmS16Stereo)
+int CameraVideoFileDecoder::takePacedAudio(QByteArray& pcmS16Stereo, int maxOutputSampleFrames)
 {
     pcmS16Stereo.clear();
 #ifdef CAMERA_FFMPEG_STREAMING
     static constexpr int bytesPerSampleFrame = 4;
     if ((m_outputSampleRate <= 0) || (pendingAudioBytes() <= 0)) {
-        return;
+        return 0;
     }
 
     // Load the worker-published rate, and reset the (decode-thread-owned)
@@ -1974,10 +1974,18 @@ void CameraVideoFileDecoder::takePacedAudio(QByteArray& pcmS16Stereo)
     const double availableSourceFrames = exactSourceFrames + m_audioPaceSourceRemainderFrames;
     int sourceFrames = std::max(1, static_cast<int>(availableSourceFrames));
     m_audioPaceSourceRemainderFrames = availableSourceFrames - static_cast<double>(sourceFrames);
+    if (maxOutputSampleFrames > 0) {
+        sourceFrames = std::min(
+            sourceFrames,
+            std::max(1, static_cast<int>(std::ceil(static_cast<double>(maxOutputSampleFrames) * playbackRate))));
+    }
     const double exactTargetFrames = static_cast<double>(sourceFrames) / playbackRate;
     const double availableTargetFrames = exactTargetFrames + m_audioPaceRemainderFrames;
     int targetFrames = std::max(1, static_cast<int>(availableTargetFrames));
     m_audioPaceRemainderFrames = availableTargetFrames - static_cast<double>(targetFrames);
+    if (maxOutputSampleFrames > 0) {
+        targetFrames = std::min(targetFrames, maxOutputSampleFrames);
+    }
     const int sourceBytes = sourceFrames * bytesPerSampleFrame;
     int byteCount = 0;
     QByteArray sourceAudio;
@@ -1989,12 +1997,19 @@ void CameraVideoFileDecoder::takePacedAudio(QByteArray& pcmS16Stereo)
     }
     sourceFrames = byteCount / bytesPerSampleFrame;
     if (sourceFrames <= 0) {
-        return;
+        return 0;
     }
     if (byteCount < sourceBytes) {
         targetFrames = std::max(1, static_cast<int>((static_cast<double>(sourceFrames) / playbackRate) + 0.5));
+        if (maxOutputSampleFrames > 0) {
+            targetFrames = std::min(targetFrames, maxOutputSampleFrames);
+        }
     }
     pcmS16Stereo = rateConvertS16StereoLinear(sourceAudio, targetFrames);
+    return pcmS16Stereo.size() / bytesPerSampleFrame;
+#else
+    Q_UNUSED(maxOutputSampleFrames)
+    return 0;
 #endif
 }
 

@@ -25,8 +25,10 @@
 #include <QColor>
 #include <QDebug>
 #include <QDateTime>
+#include <QFileInfo>
 #include <QMetaObject>
 #include <QNetworkAccessManager>
+#include <QRegularExpression>
 
 #include "maincore.h"
 #include "util/profiler.h"
@@ -52,6 +54,34 @@ MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportAlpacaStatus, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportAvailableDevices, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportAutoExposureGain, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportAutoFocus, Message)
+
+namespace {
+
+QDateTime captureDateTimeFromFileName(const QString& fileName)
+{
+    static const QRegularExpression dateTimeRe(
+        QStringLiteral("(\\d{4}-\\d{2}-\\d{2})T(\\d{2})[_:](\\d{2})[_:](\\d{2})(?:[_.](\\d{1,3}))?"));
+    const QRegularExpressionMatch match = dateTimeRe.match(QFileInfo(fileName).fileName());
+    if (!match.hasMatch()) {
+        return QDateTime();
+    }
+
+    const QDate date = QDate::fromString(match.captured(1), Qt::ISODate);
+    QString milliseconds = match.captured(5);
+    while (!milliseconds.isEmpty() && milliseconds.size() < 3) {
+        milliseconds.append(QLatin1Char('0'));
+    }
+
+    const QTime time(
+        match.captured(2).toInt(),
+        match.captured(3).toInt(),
+        match.captured(4).toInt(),
+        milliseconds.left(3).toInt());
+    const QDateTime dateTime(date, time, Qt::UTC);
+    return dateTime.isValid() ? dateTime : QDateTime();
+}
+
+}
 
 CameraWorker::CameraWorker() :
     m_msgQueueToGUI(nullptr),
@@ -443,7 +473,16 @@ void CameraWorker::scheduleNextCaptureAfterFailure()
 
 void CameraWorker::populateFrameExposureMetadata(CameraPipelineFrame& frame) const
 {
-    frame.m_captureDateTime = QDateTime::currentDateTime();
+    QDateTime captureDateTime;
+    if (m_settings.isVideoFileCamera())
+    {
+        captureDateTime = captureDateTimeFromFileName(m_settings.ffmpegMediaSourcePath());
+        if (captureDateTime.isValid() && (frame.m_playbackPositionMs > 0)) {
+            captureDateTime = captureDateTime.addMSecs(frame.m_playbackPositionMs);
+        }
+    }
+
+    frame.m_captureDateTime = captureDateTime.isValid() ? captureDateTime : QDateTime::currentDateTime();
     frame.m_captureEpoch = m_captureEpoch;
     frame.m_pipelineInputWallClockMs = QDateTime::currentMSecsSinceEpoch();
     frame.m_manualPreviewFrame = false;

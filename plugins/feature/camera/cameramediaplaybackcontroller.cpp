@@ -328,12 +328,12 @@ void CameraMediaPlaybackController::submitStreamPresentFrame(const QImage& image
     m_state.m_positionMs = ptsMs;
     CameraPipelineFramePtr frame(new CameraPipelineFrame);
     frame->m_image = image;
-    m_callbacks.populateExposureMeta(*frame);
-    frame->m_captureEpoch = m_callbacks.captureEpoch();
-    frame->m_pipelineInputWallClockMs = QDateTime::currentMSecsSinceEpoch();
     frame->m_playbackActiveFrame = true;
     frame->m_playbackPositionMs = ptsMs;
     frame->m_playbackFrameRate = qMax(1.0, m_state.m_frameRate) * qMax(0.1, m_settings->m_videoPlaybackRate);
+    m_callbacks.populateExposureMeta(*frame);
+    frame->m_captureEpoch = m_callbacks.captureEpoch();
+    frame->m_pipelineInputWallClockMs = QDateTime::currentMSecsSinceEpoch();
     submitVideoFileFrame(frame, false);
     reportVideoFilePlaybackToGUI();
 }
@@ -1153,12 +1153,12 @@ void CameraMediaPlaybackController::submitDecodedVideoFileFrame(
     {
         CameraPipelineFramePtr frame(new CameraPipelineFrame);
         frame->m_image = image;
-        m_callbacks.populateExposureMeta(*frame);
-        frame->m_captureEpoch = m_callbacks.captureEpoch();
-        frame->m_pipelineInputWallClockMs = QDateTime::currentMSecsSinceEpoch();
         frame->m_playbackActiveFrame = true;
         frame->m_playbackPositionMs = playbackPositionMs;
         frame->m_playbackFrameRate = qMax(0.001, m_state.m_frameRate) * qMax(0.1, m_settings->m_videoPlaybackRate);
+        m_callbacks.populateExposureMeta(*frame);
+        frame->m_captureEpoch = m_callbacks.captureEpoch();
+        frame->m_pipelineInputWallClockMs = QDateTime::currentMSecsSinceEpoch();
         submitVideoFileFrame(frame, applyPlaybackOffset);
     }
 
@@ -1294,8 +1294,7 @@ void CameraMediaPlaybackController::submitVideoFileAudio(const QByteArray& pcmS1
     // tick, so without a top-up the FIFO drains to zero on any jitter and underruns
     // (glitching). The top-up gradually rebuilds the cushion to target. Streams do NOT use this
     // path (they run the clean present, presentStreamTick, and feed the monitor in submitStreamAudio).
-    const double playbackRate = qMax(0.1, m_settings->m_videoPlaybackRate);
-    if (m_state.m_decoder && !m_settings->isStreamCamera() && (std::abs(playbackRate - 1.0) < 0.001))
+    if (m_state.m_decoder && !m_settings->isStreamCamera())
     {
         const uint32_t currentFill = m_audio->monitorAudioFill();
         const int targetFillFrames = m_audio->monitorTargetFillFrames(audioSampleRate);
@@ -1304,7 +1303,19 @@ void CameraMediaPlaybackController::submitVideoFileAudio(const QByteArray& pcmS1
             const int neededFrames = targetFillFrames - static_cast<int>(currentFill);
             const int maxExtraFrames = audioSampleRate / 2;
             QByteArray extraAudio;
-            const int extraFrames = m_state.m_decoder->takePendingAudio(extraAudio, std::min(neededFrames, maxExtraFrames));
+            int extraFrames = 0;
+            while (extraFrames < std::min(neededFrames, maxExtraFrames))
+            {
+                QByteArray chunk;
+                const int chunkFrames = m_state.m_decoder->takePacedAudio(
+                    chunk,
+                    std::min(neededFrames, maxExtraFrames) - extraFrames);
+                if (chunkFrames <= 0) {
+                    break;
+                }
+                extraFrames += chunkFrames;
+                extraAudio.append(chunk);
+            }
             if (extraFrames > 0)
             {
                 monitorAudio.append(extraAudio);

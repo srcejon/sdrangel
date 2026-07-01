@@ -120,6 +120,7 @@ public:
     [[nodiscard]] int readAheadVideoPacketCount() const;
     [[nodiscard]] int pendingAudioBytes() const;
     int takePendingAudio(QByteArray& pcmS16Stereo, int maxSampleFrames);
+    int takePacedAudio(QByteArray& pcmS16Stereo, int maxOutputSampleFrames = -1);
     [[nodiscard]] int pendingVideoFrameCount() const { return static_cast<int>(m_pendingVideoFrames.size()); }
     [[nodiscard]] int pendingVideoPacketCount() const { return static_cast<int>(m_pendingVideoPackets.size()); }
 
@@ -336,7 +337,6 @@ private:
     [[nodiscard]] bool appendFrameAudio(const AVFrame *frame, QByteArray& pcmS16Stereo, QString& errorMessage);
     [[nodiscard]] bool convertFrameToImage(const AVFrame *frame, QImage& image, QString& errorMessage);
     void trimLivePendingAudio();
-    void takePacedAudio(QByteArray& pcmS16Stereo);
     void clearPendingAudio();
     void appendPendingAudio(const QByteArray& pcmS16Stereo);
     void clearPendingVideoPackets();

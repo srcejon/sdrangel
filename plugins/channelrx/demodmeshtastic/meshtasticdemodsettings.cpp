@@ -85,6 +85,7 @@ void MeshtasticDemodSettings::resetToDefaults()
     m_packetLength = 237;
     m_nbParityBits = 1;
     m_sendViaUDP = false;
+    m_sendJsonViaUDP = false;
     m_invertRamps = false;
     m_udpAddress = "127.0.0.1";
     m_udpPort = 9999;
@@ -138,6 +139,7 @@ QByteArray MeshtasticDemodSettings::serialize() const
     s.writeBool(26, m_sendViaUDP);
     s.writeString(27, m_udpAddress);
     s.writeU32(28, m_udpPort);
+    s.writeBool(38, m_sendJsonViaUDP);
 
     if (m_rollupState) {
         s.writeBlob(29, m_rollupState->serialize());
@@ -220,6 +222,8 @@ bool MeshtasticDemodSettings::deserialize(const QByteArray& data)
             m_udpPort = 9999;
         }
 
+        d.readBool(38, &m_sendJsonViaUDP, false);
+
         if (m_rollupState)
         {
             d.readBlob(29, &bytetmp);
@@ -268,6 +272,8 @@ void MeshtasticDemodSettings::applySettings(const QStringList& settingsKeys, con
         m_packetLength = settings.m_packetLength;
     if (settingsKeys.contains("sendViaUDP"))
         m_sendViaUDP = settings.m_sendViaUDP;
+    if (settingsKeys.contains("sendJsonViaUDP"))
+        m_sendJsonViaUDP = settings.m_sendJsonViaUDP;
     if (settingsKeys.contains("invertRamps"))
         m_invertRamps = settings.m_invertRamps;
     if (settingsKeys.contains("udpAddress"))
@@ -324,6 +330,8 @@ QString MeshtasticDemodSettings::getDebugString(const QStringList& settingsKeys,
         debug += QString("PacketLength: %1 ").arg(m_packetLength);
     if (force || settingsKeys.contains("sendViaUDP"))
         debug += QString("SendViaUDP: %1 ").arg(m_sendViaUDP);
+    if (force || settingsKeys.contains("sendJsonViaUDP"))
+        debug += QString("SendJsonViaUDP: %1 ").arg(m_sendJsonViaUDP);
     if (force || settingsKeys.contains("invertRamps"))
         debug += QString("InvertRamps: %1 ").arg(m_invertRamps);
     if (force || settingsKeys.contains("udpAddress"))

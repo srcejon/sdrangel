@@ -54,6 +54,7 @@ ADSBDemod::ADSBDemod(DeviceAPI *devieAPI) :
         ChannelAPI(m_channelIdURI, ChannelAPI::StreamSingleSink),
         m_deviceAPI(devieAPI),
         m_basebandSampleRate(0),
+        m_centerFrequency(0),
         m_targetAzElValid(false),
         m_targetAzimuth(0.0f),
         m_targetElevation(0.0f)
@@ -134,15 +135,14 @@ void ADSBDemod::start()
 {
     qDebug() << "ADSBDemod::start";
 
-    if (m_basebandSampleRate != 0) {
-        m_basebandSink->setBasebandSampleRate(m_basebandSampleRate);
-    }
-
     m_worker->reset();
     m_worker->startWork();
     m_basebandSink->reset();
     m_basebandSink->startWork();
     m_thread->start();
+
+    DSPSignalNotification *dspMsg = new DSPSignalNotification(m_basebandSampleRate, m_centerFrequency);
+    m_basebandSink->getInputMessageQueue()->push(dspMsg);
 
     ADSBDemodWorker::MsgConfigureADSBDemodWorker *msg = ADSBDemodWorker::MsgConfigureADSBDemodWorker::create(m_settings, QStringList(), true);
     m_worker->getInputMessageQueue()->push(msg);
@@ -174,6 +174,7 @@ bool ADSBDemod::handleMessage(const Message& cmd)
     {
         DSPSignalNotification& notif = (DSPSignalNotification&) cmd;
         m_basebandSampleRate = notif.getSampleRate();
+        m_centerFrequency = notif.getCenterFrequency();
         // Forward to the sink
         DSPSignalNotification* rep = new DSPSignalNotification(notif); // make a copy
         qDebug() << "ADSBDemod::handleMessage: DSPSignalNotification";

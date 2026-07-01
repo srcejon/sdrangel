@@ -137,6 +137,7 @@ private:
 
     int64_t m_frequencyOffset;
     int m_basebandSampleRate;
+    qint64 m_centerFrequency;
 
     QNetworkAccessManager *m_networkManager;
     QNetworkRequest m_networkRequest;

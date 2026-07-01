@@ -191,6 +191,7 @@ private:
     bool m_running;
 	DSDDemodSettings m_settings;
     int m_basebandSampleRate; //!< stored from device message used when starting baseband sink
+    qint64 m_centerFrequency;
     QHash<Feature*, DSDDemodSettings::AvailableAMBEFeature> m_availableAMBEFeatures;
     BasebandSampleSink *m_scopeXYSink;
     QNetworkAccessManager *m_networkManager;

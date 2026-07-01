@@ -34,7 +34,7 @@ This specifies the bandwidth of a LPF that is applied to the input signal to lim
 
 <h3>6: Frequency deviation</h3>
 
-Adjusts the expected frequency deviation in 0.1 kHz steps from 1 to 6 kHz. Typical values are 2.5 kHz and 5 kHz.
+Adjusts the expected peak frequency deviation in 0.1 kHz steps from 1 to 6 kHz. Typical values are ±2.5 kHz and ±5 kHz.
 
 <h3>7: Filter Packets From</h3>
 

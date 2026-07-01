@@ -36,7 +36,7 @@ struct RadiosondeDemodSettings
     qint32 m_baud;
     qint32 m_inputFrequencyOffset;
     Real m_rfBandwidth;
-    Real m_fmDeviation;
+    Real m_fmDeviation; // Peak frequency deviation in Hz
     Real m_correlationThreshold;
     QString m_filterSerial;
     bool m_udpEnabled;

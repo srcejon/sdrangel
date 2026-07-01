@@ -5274,6 +5274,11 @@ bool WebAPIRequestMapper::getFeatureSettings(
             featureSettings->setDemodAnalyzerSettings(new SWGSDRangel::SWGDemodAnalyzerSettings());
             featureSettings->getDemodAnalyzerSettings()->fromJsonObject(settingsJsonObject);
         }
+        else if (featureSettingsKey == "FreqDisplaySettings")
+        {
+            featureSettings->setFreqDisplaySettings(new SWGSDRangel::SWGFreqDisplaySettings());
+            featureSettings->getFreqDisplaySettings()->fromJsonObject(settingsJsonObject);
+        }
         else if (featureSettingsKey == "JogdialControllerSettings")
         {
             featureSettings->setJogdialControllerSettings(new SWGSDRangel::SWGJogdialControllerSettings());
@@ -5688,6 +5693,7 @@ void WebAPIRequestMapper::resetFeatureSettings(SWGSDRangel::SWGFeatureSettings& 
     featureSettings.setAisSettings(nullptr);
     featureSettings.setAntennaToolsSettings(nullptr);
     featureSettings.setAprsSettings(nullptr);
+    featureSettings.setFreqDisplaySettings(nullptr);
     featureSettings.setGs232ControllerSettings(nullptr);
     featureSettings.setMapSettings(nullptr);
     featureSettings.setPerTesterSettings(nullptr);
@@ -5705,6 +5711,7 @@ void WebAPIRequestMapper::resetFeatureReport(SWGSDRangel::SWGFeatureReport& feat
     featureReport.cleanup();
     featureReport.setFeatureType(nullptr);
     featureReport.setAfcReport(nullptr);
+    featureReport.setFreqDisplayReport(nullptr);
     featureReport.setGs232ControllerReport(nullptr);
     featureReport.setPerTesterReport(nullptr);
     featureReport.setRigCtlServerReport(nullptr);

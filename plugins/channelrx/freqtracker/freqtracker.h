@@ -157,6 +157,7 @@ private:
     FreqTrackerSettings m_settings;
     SpectrumVis m_spectrumVis;
     int m_basebandSampleRate; //!< stored from device message used when starting baseband sink
+    qint64 m_centerFrequency;
     static const int m_udpBlockSize;
     QNetworkAccessManager *m_networkManager;
     QNetworkRequest m_networkRequest;

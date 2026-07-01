@@ -343,6 +343,12 @@ void MeshtasticDemodGUI::on_udpSend_stateChanged(int state)
     applySettings();
 }
 
+void MeshtasticDemodGUI::on_udpSendJson_stateChanged(int state)
+{
+    m_settings.m_sendJsonViaUDP = (state == Qt::Checked);
+    applySettings();
+}
+
 void MeshtasticDemodGUI::on_udpAddress_editingFinished()
 {
     m_settings.m_udpAddress = ui->udpAddress->text();
@@ -2009,6 +2015,7 @@ void MeshtasticDemodGUI::displaySettings()
     ui->messageLengthText->setText(tr("%1").arg(m_settings.m_nbSymbolsMax));
     ui->messageLength->setValue(m_settings.m_nbSymbolsMax);
     ui->udpSend->setChecked(m_settings.m_sendViaUDP);
+    ui->udpSendJson->setChecked(m_settings.m_sendJsonViaUDP);
     ui->udpAddress->setText(m_settings.m_udpAddress);
     ui->udpPort->setText(tr("%1").arg(m_settings.m_udpPort));
     ui->invertRamps->setChecked(s.m_invertRamps);
@@ -3345,8 +3352,10 @@ void MeshtasticDemodGUI::makeUIConnections()
     QObject::connect(ui->messageLength, &QDial::valueChanged, this, &MeshtasticDemodGUI::on_messageLength_valueChanged);
 #if QT_VERSION >= QT_VERSION_CHECK(6, 9, 0)
     QObject::connect(ui->udpSend, &QCheckBox::checkStateChanged, this, [this](Qt::CheckState state){ on_udpSend_stateChanged(static_cast<int>(state)); });
+    QObject::connect(ui->udpSendJson, &QCheckBox::checkStateChanged, this, [this](Qt::CheckState state){ on_udpSendJson_stateChanged(static_cast<int>(state)); });
 #else
     QObject::connect(ui->udpSend, &QCheckBox::stateChanged, this, &MeshtasticDemodGUI::on_udpSend_stateChanged);
+    QObject::connect(ui->udpSendJson, &QCheckBox::stateChanged, this, &MeshtasticDemodGUI::on_udpSendJson_stateChanged);
 #endif
     QObject::connect(ui->udpAddress, &QLineEdit::editingFinished, this, &MeshtasticDemodGUI::on_udpAddress_editingFinished);
     QObject::connect(ui->udpPort, &QLineEdit::editingFinished, this, &MeshtasticDemodGUI::on_udpPort_editingFinished);

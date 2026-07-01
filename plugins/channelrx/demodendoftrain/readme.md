@@ -7,7 +7,7 @@ that can be found on some trains.
 It transmits information about whether motion is detected, brake pressure, whether the marker light is on and battery information.
 
 * Frequency: 457.9375 MHz (North America, India), 477.7 MHz (Australia) and 450.2625 MHz (New Zealand).
-* Modulation: FSK, 1800Hz space, 1200 mark, +-3kHz deviation.
+* Modulation: FSK, 1800Hz space, 1200 mark, ±3kHz deviation.
 * Baud rate: 1200 baud.
 
 The End-of-train packet specification is defined in:
@@ -40,7 +40,7 @@ This specifies the bandwidth of a LPF that is applied to the input signal to lim
 
 <h3>5: Frequency deviation</h3>
 
-Adjusts the expected frequency deviation in 0.1 kHz steps from 1 to 6 kHz. Typical value is 3 kHz.
+Adjusts the expected peak frequency deviation in 0.1 kHz steps from 1 to 6 kHz. Typical value is ±3 kHz.
 
 <h3>6: Filter Address</h3>
 

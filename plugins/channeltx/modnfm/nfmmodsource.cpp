@@ -171,6 +171,7 @@ void NFMModSource::modulateSample()
         t1 = m_lowpass.filter(t);
     }
 
+    // The usual factor of 2*pi is cancelled by m_fmDeviation being the full rather than peak deviation
     m_modPhasor += (float) ((M_PI * m_settings.m_fmDeviation / (float) m_audioSampleRate) * t1);
 
     // limit phasor range to ]-pi,pi]

@@ -38,7 +38,7 @@ struct NFMDemodSettings
     int32_t m_inputFrequencyOffset;
     Real m_rfBandwidth;
     Real m_afBandwidth;
-    Real m_fmDeviation;
+    Real m_fmDeviation; //!< Full deviation in Hz (UI shows peak deviation)
     int  m_squelchGate;
     bool m_deltaSquelch;
     Real m_squelch; //!< deci-Bels

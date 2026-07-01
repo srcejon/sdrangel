@@ -332,7 +332,7 @@ void DeviceEnumerator::listRxDeviceNames(QList<QString>& list, std::vector<int>&
 {
     for (DevicesEnumeration::const_iterator it = m_rxEnumeration.begin(); it != m_rxEnumeration.end(); ++it)
     {
-        if (((it->m_samplingDevice.claimed < 0) && (!it->m_samplingDevice.removed)) || (it->m_samplingDevice.type == PluginInterface::SamplingDevice::BuiltInDevice))
+        if (((!it->m_samplingDevice.removed)) || (it->m_samplingDevice.type == PluginInterface::SamplingDevice::BuiltInDevice))
         {
             list.append(it->m_samplingDevice.displayedName);
             indexes.push_back(it->m_index);
@@ -344,7 +344,7 @@ void DeviceEnumerator::listTxDeviceNames(QList<QString>& list, std::vector<int>&
 {
     for (DevicesEnumeration::const_iterator it = m_txEnumeration.begin(); it != m_txEnumeration.end(); ++it)
     {
-        if (((it->m_samplingDevice.claimed < 0) && (!it->m_samplingDevice.removed)) || (it->m_samplingDevice.type == PluginInterface::SamplingDevice::BuiltInDevice))
+        if (((!it->m_samplingDevice.removed)) || (it->m_samplingDevice.type == PluginInterface::SamplingDevice::BuiltInDevice))
         {
             list.append(it->m_samplingDevice.displayedName);
             indexes.push_back(it->m_index);
@@ -356,7 +356,7 @@ void DeviceEnumerator::listMIMODeviceNames(QList<QString>& list, std::vector<int
 {
     for (DevicesEnumeration::const_iterator it = m_mimoEnumeration.begin(); it != m_mimoEnumeration.end(); ++it)
     {
-        if (((it->m_samplingDevice.claimed < 0) && (!it->m_samplingDevice.removed)) || (it->m_samplingDevice.type == PluginInterface::SamplingDevice::BuiltInDevice))
+        if (((!it->m_samplingDevice.removed)) || (it->m_samplingDevice.type == PluginInterface::SamplingDevice::BuiltInDevice))
         {
             list.append(it->m_samplingDevice.displayedName);
             indexes.push_back(it->m_index);

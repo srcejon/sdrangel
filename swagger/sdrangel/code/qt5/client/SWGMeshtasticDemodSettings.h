@@ -78,6 +78,9 @@ public:
     qint32 getSendViaUdp();
     void setSendViaUdp(qint32 send_via_udp);
 
+    qint32 getSendJsonViaUdp();
+    void setSendJsonViaUdp(qint32 send_json_via_udp);
+
     qint32 getUdpEnabled();
     void setUdpEnabled(qint32 udp_enabled);
 
@@ -159,6 +162,9 @@ private:
 
     qint32 send_via_udp;
     bool m_send_via_udp_isSet;
+
+    qint32 send_json_via_udp;
+    bool m_send_json_via_udp_isSet;
 
     qint32 udp_enabled;
     bool m_udp_enabled_isSet;

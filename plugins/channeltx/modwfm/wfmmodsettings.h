@@ -45,7 +45,7 @@ struct WFMModSettings
     qint64 m_inputFrequencyOffset;
     Real m_rfBandwidth;
     Real m_afBandwidth;
-    float m_fmDeviation;
+    float m_fmDeviation; //!< Peak frequency deviation in Hz
     float m_toneFrequency;
     float m_volumeFactor;
     bool m_channelMute;

@@ -58,7 +58,8 @@ WFMDemod::WFMDemod(DeviceAPI* deviceAPI) :
         m_thread(nullptr),
         m_basebandSink(nullptr),
         m_running(false),
-        m_basebandSampleRate(0)
+        m_basebandSampleRate(0),
+        m_centerFrequency(0)
 {
 	setObjectName(m_channelId);
 	applySettings(QStringList(), m_settings, true);
@@ -138,12 +139,11 @@ void WFMDemod::start()
     QObject::connect(m_thread, &QThread::finished, m_basebandSink, &QObject::deleteLater);
     QObject::connect(m_thread, &QThread::finished, m_thread, &QThread::deleteLater);
 
-    if (m_basebandSampleRate != 0) {
-        m_basebandSink->setBasebandSampleRate(m_basebandSampleRate);
-    }
-
     m_basebandSink->reset();
     m_thread->start();
+
+    DSPSignalNotification *dspMsg = new DSPSignalNotification(m_basebandSampleRate, m_centerFrequency);
+    m_basebandSink->getInputMessageQueue()->push(dspMsg);
 
     WFMDemodBaseband::MsgConfigureWFMDemodBaseband *msg = WFMDemodBaseband::MsgConfigureWFMDemodBaseband::create(QStringList(), m_settings, true);
     m_basebandSink->getInputMessageQueue()->push(msg);
@@ -178,6 +178,7 @@ bool WFMDemod::handleMessage(const Message& cmd)
     {
         DSPSignalNotification& notif = (DSPSignalNotification&) cmd;
         m_basebandSampleRate = notif.getSampleRate();
+        m_centerFrequency = notif.getCenterFrequency();
         qDebug() << "WFMDemod::handleMessage: DSPSignalNotification";
 
         // Forward to the sink

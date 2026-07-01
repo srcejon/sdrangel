@@ -150,6 +150,7 @@ protected:
     UDPSinkSettings m_settings;
     SpectrumVis m_spectrumVis;
     int m_basebandSampleRate; //!< stored from device message used when starting baseband sink
+    qint64 m_centerFrequency;
 
     int m_channelSampleRate;
     int m_channelFrequencyOffset;

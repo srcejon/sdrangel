@@ -1,6 +1,6 @@
 ///////////////////////////////////////////////////////////////////////////////////
 // Copyright (C) 2017-2020 Edouard Griffiths, F4EXB <f4exb06@gmail.com>          //
-// Copyright (C) 2020 Jon Beniston, M7RCE <jon@beniston.com>                     //
+// Copyright (C) 2020-26 Jon Beniston, M7RCE <jon@beniston.com>                  //
 //                                                                               //
 // This program is free software; you can redistribute it and/or modify          //
 // it under the terms of the GNU General Public License as published by          //
@@ -28,20 +28,23 @@
 USRPOutputThread::USRPOutputThread(uhd::tx_streamer::sptr stream, size_t bufSamples, SampleSourceFifo* sampleFifo, QObject* parent) :
     QThread(parent),
     m_running(false),
+    m_packets(0),
+    m_underflows(0),
+    m_droppedPackets(0),
     m_stream(stream),
     m_bufSamples(bufSamples),
     m_sampleFifo(sampleFifo),
     m_log2Interp(0)
 {
     // *2 as samples are I+Q
-    m_buf = new qint16[2*bufSamples];
-    std::fill(m_buf, m_buf + 2*bufSamples, 0);
+    m_buf = new qint16[2 * bufSamples];
+    std::fill(m_buf, m_buf + 2 * bufSamples, 0);
 }
 
 USRPOutputThread::~USRPOutputThread()
 {
     stopWork();
-    delete m_buf;
+    delete[] m_buf;
 }
 
 void USRPOutputThread::startWork()
@@ -55,8 +58,9 @@ void USRPOutputThread::startWork()
 
     m_startWaitMutex.lock();
     start();
-    while(!m_running)
+    while (!m_running) {
         m_startWaiter.wait(&m_startWaitMutex, 100);
+    }
     m_startWaitMutex.unlock();
 }
 
@@ -100,15 +104,14 @@ void USRPOutputThread::run()
 
     while (m_running)
     {
-        callback(m_buf, m_bufSamples);
+        qint32 writtenSamples = callback(m_buf, m_bufSamples);
 
         try
         {
-            const size_t samples_sent = m_stream->send(m_buf, m_bufSamples, md);
+            const size_t sentSamples = m_stream->send(m_buf, writtenSamples, md);
             m_packets++;
-            if (samples_sent != m_bufSamples)
-            {
-                qDebug("USRPOutputThread::run written %ld/%ld samples", samples_sent, m_bufSamples);
+            if (sentSamples != writtenSamples) {
+                qDebug("USRPOutputThread::run sent %ld/%ld samples", sentSamples, writtenSamples);
             }
         }
         catch (std::exception& e)
@@ -120,28 +123,34 @@ void USRPOutputThread::run()
     m_running = false;
 }
 
-//  Interpolate according to specified log2 (ex: log2=4 => decim=16)
-void USRPOutputThread::callback(qint16* buf, qint32 len)
+// Interpolate according to specified log2 (ex: log2=4 => interpolate=16)
+// Returns the number of samples written to buf, which may be less than len, when the TX buffer is not divisible by the interpolation factor.
+qint32 USRPOutputThread::callback(qint16* buf, qint32 len)
 {
+    const unsigned int interpolationFactor = 1U << m_log2Interp;
     SampleVector& data = m_sampleFifo->getData();
     unsigned int iPart1Begin, iPart1End, iPart2Begin, iPart2End;
-    m_sampleFifo->read(len/(1<<m_log2Interp), iPart1Begin, iPart1End, iPart2Begin, iPart2End);
+
+    // Truncation is intentional here: reading more would overrun the fixed TX buffer when len is not divisible by interpolation factor.
+    m_sampleFifo->read(static_cast<unsigned int>(len)/interpolationFactor, iPart1Begin, iPart1End, iPart2Begin, iPart2End);
 
     if (iPart1Begin != iPart1End) {
         callbackPart(buf, data, iPart1Begin, iPart1End);
     }
 
-    unsigned int shift = (iPart1End - iPart1Begin)*(1<<m_log2Interp);
+    const unsigned int shift = (iPart1End - iPart1Begin) * interpolationFactor;
 
     if (iPart2Begin != iPart2End) {
-        callbackPart(buf + 2*shift, data, iPart2Begin, iPart2End);
+        callbackPart(buf + 2 * shift, data, iPart2Begin, iPart2End);
     }
+
+    return ((iPart1End - iPart1Begin) + (iPart2End - iPart2Begin)) * interpolationFactor;
 }
 
 void USRPOutputThread::callbackPart(qint16* buf, SampleVector& data, unsigned int iBegin, unsigned int iEnd)
 {
     SampleVector::iterator beginRead = data.begin() + iBegin;
-    int len = 2*(iEnd - iBegin)*(1<<m_log2Interp);
+    const int len = 2 * (iEnd - iBegin) * (1 << m_log2Interp);
 
     if (m_log2Interp == 0)
     {
@@ -181,12 +190,14 @@ void USRPOutputThread::getStreamStatus(bool& active, quint32& underflows, quint3
 
     if (m_stream->recv_async_msg(md))
     {
-        if ((md.event_code == uhd::async_metadata_t::event_code_t::EVENT_CODE_UNDERFLOW)
-            || (md.event_code == uhd::async_metadata_t::event_code_t::EVENT_CODE_UNDERFLOW_IN_PACKET))
+        if ((md.event_code & uhd::async_metadata_t::event_code_t::EVENT_CODE_UNDERFLOW)
+            || (md.event_code & uhd::async_metadata_t::event_code_t::EVENT_CODE_UNDERFLOW_IN_PACKET)) {
             m_underflows++;
-        if ((md.event_code == uhd::async_metadata_t::event_code_t::EVENT_CODE_SEQ_ERROR)
-            || (md.event_code == uhd::async_metadata_t::event_code_t::EVENT_CODE_SEQ_ERROR_IN_BURST))
+        }
+        if ((md.event_code & uhd::async_metadata_t::event_code_t::EVENT_CODE_SEQ_ERROR)
+            || (md.event_code & uhd::async_metadata_t::event_code_t::EVENT_CODE_SEQ_ERROR_IN_BURST)) {
             m_droppedPackets++;
+        }
     }
     //qDebug() << "USRPOutputThread::getStreamStatus " << m_packets << " " << m_underflows << " " << m_droppedPackets;
     active = m_packets > 0;

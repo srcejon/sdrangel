@@ -61,6 +61,7 @@ ChirpChatDemod::ChirpChatDemod(DeviceAPI* deviceAPI) :
         m_running(false),
         m_spectrumVis(SDR_RX_SCALEF),
         m_basebandSampleRate(0),
+        m_centerFrequency(0),
         m_lastMsgSignalDb(0.0),
         m_lastMsgNoiseDb(0.0),
         m_lastMsgSyncWord(0),
@@ -158,12 +159,11 @@ void ChirpChatDemod::start()
     QObject::connect(m_thread, &QThread::finished, m_basebandSink, &QObject::deleteLater);
     QObject::connect(m_thread, &QThread::finished, m_thread, &QThread::deleteLater);
 
-    if (m_basebandSampleRate != 0) {
-        m_basebandSink->setBasebandSampleRate(m_basebandSampleRate);
-    }
-
     m_basebandSink->reset();
     m_thread->start();
+
+    DSPSignalNotification *dspMsg = new DSPSignalNotification(m_basebandSampleRate, m_centerFrequency);
+    m_basebandSink->getInputMessageQueue()->push(dspMsg);
 
     SpectrumSettings spectrumSettings = m_spectrumVis.getSettings();
     spectrumSettings.m_ssb = true;
@@ -360,6 +360,7 @@ bool ChirpChatDemod::handleMessage(const Message& cmd)
     {
         DSPSignalNotification& notif = (DSPSignalNotification&) cmd;
         m_basebandSampleRate = notif.getSampleRate();
+        m_centerFrequency = notif.getCenterFrequency();
         qDebug() << "ChirpChatDemod::handleMessage: DSPSignalNotification: m_basebandSampleRate: " << m_basebandSampleRate;
 
         // Forward to the sink

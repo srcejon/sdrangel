@@ -23,6 +23,9 @@
 ///////////////////////////////////////////////////////////////////////////////////
 
 #include <QThread>
+#include <QPushButton>
+#include <QStandardItemModel>
+#include <QStandardItem>
 
 #include "samplingdevicedialog.h"
 #include "ui_samplingdevicedialog.h"
@@ -70,6 +73,47 @@ void SamplingDeviceDialog::displayDevices()
 
     ui->deviceSelect->clear();
     ui->deviceSelect->addItems(deviceDisplayNames);
+
+    // --- Disable, but still list CLAIMED/BUSY hardware ---
+    QStandardItemModel *model = qobject_cast<QStandardItemModel*>(ui->deviceSelect->model());
+    int firstEnabled = -1;
+    if (model) {
+        for (int idx = 0; idx < deviceDisplayNames.size(); ++idx) {
+            if (idx < static_cast<int>(m_deviceIndexes.size())) {
+                int coreDeviceIndex = m_deviceIndexes[idx];
+                const PluginInterface::SamplingDevice *samplingDevice = nullptr;
+
+                if (m_deviceType == 0) {
+                    samplingDevice = DeviceEnumerator::instance()->getRxSamplingDevice(coreDeviceIndex);
+                } else if (m_deviceType == 1) {
+                    samplingDevice = DeviceEnumerator::instance()->getTxSamplingDevice(coreDeviceIndex);
+                } else if (m_deviceType == 2) {
+                    samplingDevice = DeviceEnumerator::instance()->getMIMOSamplingDevice(coreDeviceIndex);
+                }
+
+                if (samplingDevice && samplingDevice->claimed >= 0) {
+                    QStandardItem *item = model->item(idx);
+                    if (item) {
+                        // Deactivate to block selection clicks
+                        item->setEnabled(false);
+                        // change the name, rather than a tooltip in case of touchscreen
+                        item->setText(item->text() + tr(" [in use]"));
+                    }
+                } else if (firstEnabled < 0) {
+                    firstEnabled = idx;
+                }
+            }
+        }
+
+        // Allow acceptance only when at least one selectable device exists
+        if (QPushButton *okButton = ui->buttonBox->button(QDialogButtonBox::Ok)) {
+            okButton->setEnabled(firstEnabled >= 0);
+        }
+        // Select the first available device
+        if (firstEnabled >= 0) {
+            ui->deviceSelect->setCurrentIndex(firstEnabled);
+        }
+    }
 }
 
 void SamplingDeviceDialog::setSelectedDeviceIndex(int deviceIndex)

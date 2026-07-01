@@ -1,0 +1,78 @@
+project(modmeshcore)
+
+set(modmeshcore_SOURCES
+	meshcoremod.cpp
+	meshcoremodsettings.cpp
+	meshcoremodsource.cpp
+	meshcoremodbaseband.cpp
+    meshcoremodplugin.cpp
+    meshcoremodencoder.cpp
+    meshcoremodencoderlora.cpp
+    meshcoremodwebapiadapter.cpp
+)
+
+set(modmeshcore_HEADERS
+	meshcoremod.h
+	meshcoremodsettings.h
+	meshcoremodsource.h
+	meshcoremodbaseband.h
+    meshcoremodplugin.h
+    meshcoremodencoder.h
+    meshcoremodencoderlora.h
+    meshcoremodwebapiadapter.h
+)
+
+include_directories(
+    ${CMAKE_SOURCE_DIR}/swagger/sdrangel/code/qt5/client
+    ${CMAKE_SOURCE_DIR}/modemmeshcore
+)
+
+if(NOT SERVER_MODE)
+    set(modmeshcore_SOURCES
+        ${modmeshcore_SOURCES}
+        meshcoremodgui.cpp
+        meshcoremodgui.ui
+    )
+    set(modmeshcore_HEADERS
+        ${modmeshcore_HEADERS}
+        meshcoremodgui.h
+    )
+
+    set(TARGET_NAME ${PLUGINS_PREFIX}modmeshcore)
+    set(TARGET_LIB "Qt::Widgets")
+    set(TARGET_LIB_GUI "sdrgui")
+    set(INSTALL_FOLDER ${INSTALL_PLUGINS_DIR})
+else()
+    set(TARGET_NAME ${PLUGINSSRV_PREFIX}modmeshcoresrv)
+    set(TARGET_LIB "")
+    set(TARGET_LIB_GUI "")
+    set(INSTALL_FOLDER ${INSTALL_PLUGINSSRV_DIR})
+endif()
+
+if(NOT Qt6_FOUND)
+    add_library(${TARGET_NAME} ${modmeshcore_SOURCES})
+else()
+    qt_add_plugin(${TARGET_NAME} CLASS_NAME MeshcoreModPlugin)
+    target_sources(${TARGET_NAME} PRIVATE ${modmeshcore_SOURCES})
+endif()
+
+if(NOT BUILD_SHARED_LIBS)
+    set_property(GLOBAL APPEND PROPERTY STATIC_PLUGINS_PROPERTY ${TARGET_NAME})
+endif()
+
+target_link_libraries(${TARGET_NAME} PRIVATE
+    Qt::Core
+    ${TARGET_LIB}
+    sdrbase
+    ${TARGET_LIB_GUI}
+    swagger
+    modemmeshcore
+)
+
+install(TARGETS ${TARGET_NAME} DESTINATION ${INSTALL_FOLDER})
+
+# Install debug symbols
+if (WIN32)
+    install(FILES $<TARGET_PROPERTY:${TARGET_NAME},RUNTIME_OUTPUT_DIRECTORY>/${TARGET_NAME}stripped.pdb CONFIGURATIONS Release DESTINATION ${INSTALL_FOLDER} RENAME ${TARGET_NAME}.pdb )
+    install(FILES $<TARGET_PDB_FILE:${TARGET_NAME}> CONFIGURATIONS Debug RelWithDebInfo DESTINATION ${INSTALL_FOLDER} )
+endif()

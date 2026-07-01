@@ -56,7 +56,8 @@ RemoteSink::RemoteSink(DeviceAPI *deviceAPI) :
         m_basebandSink(nullptr),
         m_running(false),
         m_frequencyOffset(0),
-        m_basebandSampleRate(0)
+        m_basebandSampleRate(0),
+        m_centerFrequency(0)
 {
     setObjectName(m_channelId);
     updateWithDeviceData();
@@ -141,9 +142,8 @@ void RemoteSink::start()
     m_basebandSink->startWork();
     m_thread->start();
 
-    if (m_basebandSampleRate != 0) {
-        m_basebandSink->setBasebandSampleRate(m_basebandSampleRate);
-    }
+    DSPSignalNotification *dspMsg = new DSPSignalNotification(m_basebandSampleRate, m_centerFrequency);
+    m_basebandSink->getInputMessageQueue()->push(dspMsg);
 
     RemoteSinkBaseband::MsgConfigureRemoteSinkBaseband *msg = RemoteSinkBaseband::MsgConfigureRemoteSinkBaseband::create(QStringList(), m_settings, true);
     m_basebandSink->getInputMessageQueue()->push(msg);
@@ -178,6 +178,7 @@ bool RemoteSink::handleMessage(const Message& cmd)
     {
         DSPSignalNotification& notif = (DSPSignalNotification&) cmd;
         m_basebandSampleRate = notif.getSampleRate();
+        m_centerFrequency = notif.getCenterFrequency();
         qDebug() << "RemoteSink::handleMessage: DSPSignalNotification: m_basebandSampleRate:" << m_basebandSampleRate;
         calculateFrequencyOffset();
         updateWithDeviceData(); // Device center frequency and/or sample rate has changed

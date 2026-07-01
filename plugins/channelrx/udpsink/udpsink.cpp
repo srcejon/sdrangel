@@ -49,6 +49,8 @@ UDPSink::UDPSink(DeviceAPI *deviceAPI) :
         ChannelAPI(m_channelIdURI, ChannelAPI::StreamSingleSink),
         m_deviceAPI(deviceAPI),
         m_spectrumVis(SDR_RX_SCALEF),
+        m_basebandSampleRate(0),
+        m_centerFrequency(0),
         m_channelSampleRate(48000),
         m_channelFrequencyOffset(0)
 {
@@ -122,12 +124,11 @@ void UDPSink::start()
 {
     qDebug() << "UDPSink::start";
 
-    if (m_basebandSampleRate != 0) {
-        m_basebandSink->setBasebandSampleRate(m_basebandSampleRate);
-    }
-
     m_basebandSink->reset();
     m_thread->start();
+
+    DSPSignalNotification *dspMsg = new DSPSignalNotification(m_basebandSampleRate, m_centerFrequency);
+    m_basebandSink->getInputMessageQueue()->push(dspMsg);
 }
 
 void UDPSink::stop()
@@ -152,6 +153,7 @@ bool UDPSink::handleMessage(const Message& cmd)
     {
         DSPSignalNotification& notif = (DSPSignalNotification&) cmd;
         m_basebandSampleRate = notif.getSampleRate();
+        m_centerFrequency = notif.getCenterFrequency();
         // Forward to the sink
         DSPSignalNotification* rep = new DSPSignalNotification(notif); // make a copy
         qDebug() << "UDPSink::handleMessage: DSPSignalNotification";

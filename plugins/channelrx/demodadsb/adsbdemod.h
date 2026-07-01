@@ -188,6 +188,7 @@ private:
     ADSBDemodBaseband* m_basebandSink;
     ADSBDemodSettings m_settings;
     int m_basebandSampleRate; //!< stored from device message used when starting baseband sink
+    qint64 m_centerFrequency;
 
     bool m_targetAzElValid;
     float m_targetAzimuth;

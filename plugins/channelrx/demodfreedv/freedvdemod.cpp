@@ -48,7 +48,9 @@ const char* const FreeDVDemod::m_channelId = "FreeDVDemod";
 FreeDVDemod::FreeDVDemod(DeviceAPI *deviceAPI) :
         ChannelAPI(m_channelIdURI, ChannelAPI::StreamSingleSink),
         m_deviceAPI(deviceAPI),
-        m_spectrumVis(SDR_RX_SCALEF)
+        m_spectrumVis(SDR_RX_SCALEF),
+        m_basebandSampleRate(0),
+        m_centerFrequency(0)
 {
 	setObjectName(m_channelId);
 
@@ -120,12 +122,11 @@ void FreeDVDemod::start()
 {
     qDebug() << "FreeDVDemod::start";
 
-    if (m_basebandSampleRate != 0) {
-        m_basebandSink->setBasebandSampleRate(m_basebandSampleRate);
-    }
-
     m_basebandSink->reset();
     m_thread->start();
+
+    DSPSignalNotification *dspMsg = new DSPSignalNotification(m_basebandSampleRate, m_centerFrequency);
+    m_basebandSink->getInputMessageQueue()->push(dspMsg);
 
     SpectrumSettings spectrumSettings = m_spectrumVis.getSettings();
     spectrumSettings.m_ssb = true;
@@ -163,6 +164,7 @@ bool FreeDVDemod::handleMessage(const Message& cmd)
     {
         DSPSignalNotification& notif = (DSPSignalNotification&) cmd;
         m_basebandSampleRate = notif.getSampleRate();
+        m_centerFrequency = notif.getCenterFrequency();
         // Forward to the sink
         DSPSignalNotification* rep = new DSPSignalNotification(notif); // make a copy
         qDebug() << "FreeDVDemod::handleMessage: DSPSignalNotification";

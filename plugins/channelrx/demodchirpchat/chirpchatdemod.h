@@ -148,6 +148,7 @@ private:
     ChirpChatDemodSettings m_settings;
     SpectrumVis m_spectrumVis;
     int m_basebandSampleRate; //!< stored from device message used when starting baseband sink
+    qint64 m_centerFrequency;
     float m_lastMsgSignalDb;
     float m_lastMsgNoiseDb;
     int m_lastMsgSyncWord;

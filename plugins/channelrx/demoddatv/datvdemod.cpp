@@ -45,7 +45,8 @@ MESSAGE_CLASS_DEFINITION(DATVDemod::MsgConfigureDATVDemod, Message)
 DATVDemod::DATVDemod(DeviceAPI *deviceAPI) :
     ChannelAPI(m_channelIdURI, ChannelAPI::StreamSingleSink),
     m_deviceAPI(deviceAPI),
-    m_basebandSampleRate(0)
+    m_basebandSampleRate(0),
+    m_centerFrequency(0)
 {
     qDebug("DATVDemod::DATVDemod");
     setObjectName(m_channelId);
@@ -115,13 +116,12 @@ void DATVDemod::start()
 {
 	qDebug("DATVDemod::start");
 
-    if (m_basebandSampleRate != 0) {
-        m_basebandSink->setBasebandSampleRate(m_basebandSampleRate);
-    }
-
     m_basebandSink->reset();
     m_basebandSink->startWork();
     m_thread.start();
+
+    DSPSignalNotification *dspMsg = new DSPSignalNotification(m_basebandSampleRate, m_centerFrequency);
+    m_basebandSink->getInputMessageQueue()->push(dspMsg);
 
     DATVDemodBaseband::MsgConfigureDATVDemodBaseband *msg = DATVDemodBaseband::MsgConfigureDATVDemodBaseband::create(QStringList(), m_settings, true);
     m_basebandSink->getInputMessageQueue()->push(msg);
@@ -149,6 +149,7 @@ bool DATVDemod::handleMessage(const Message& cmd)
     {
         DSPSignalNotification& notif = (DSPSignalNotification&) cmd;
         m_basebandSampleRate = notif.getSampleRate(); // store for init at start
+        m_centerFrequency = notif.getCenterFrequency();
         qDebug() << "DATVDemod::handleMessage: DSPSignalNotification" << m_basebandSampleRate;
 
         // Forward to the sink

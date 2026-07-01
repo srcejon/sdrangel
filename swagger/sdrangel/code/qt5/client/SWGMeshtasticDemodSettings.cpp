@@ -50,6 +50,8 @@ SWGMeshtasticDemodSettings::SWGMeshtasticDemodSettings() {
     m_packet_length_isSet = false;
     send_via_udp = 0;
     m_send_via_udp_isSet = false;
+    send_json_via_udp = 0;
+    m_send_json_via_udp_isSet = false;
     udp_enabled = 0;
     m_udp_enabled_isSet = false;
     udp_address = nullptr;
@@ -110,6 +112,8 @@ SWGMeshtasticDemodSettings::init() {
     m_packet_length_isSet = false;
     send_via_udp = 0;
     m_send_via_udp_isSet = false;
+    send_json_via_udp = 0;
+    m_send_json_via_udp_isSet = false;
     udp_enabled = 0;
     m_udp_enabled_isSet = false;
     udp_address = new QString("");
@@ -216,6 +220,8 @@ SWGMeshtasticDemodSettings::fromJsonObject(QJsonObject &pJson) {
     ::SWGSDRangel::setValue(&packet_length, pJson["packetLength"], "qint32", "");
     
     ::SWGSDRangel::setValue(&send_via_udp, pJson["sendViaUDP"], "qint32", "");
+
+    ::SWGSDRangel::setValue(&send_json_via_udp, pJson["sendJsonViaUDP"], "qint32", "");
     
     ::SWGSDRangel::setValue(&udp_enabled, pJson["udpEnabled"], "qint32", "");
     
@@ -295,6 +301,9 @@ SWGMeshtasticDemodSettings::asJsonObject() {
     }
     if(m_send_via_udp_isSet){
         obj->insert("sendViaUDP", QJsonValue(send_via_udp));
+    }
+    if(m_send_json_via_udp_isSet){
+        obj->insert("sendJsonViaUDP", QJsonValue(send_json_via_udp));
     }
     if(m_udp_enabled_isSet){
         obj->insert("udpEnabled", QJsonValue(udp_enabled));
@@ -453,6 +462,16 @@ void
 SWGMeshtasticDemodSettings::setSendViaUdp(qint32 send_via_udp) {
     this->send_via_udp = send_via_udp;
     this->m_send_via_udp_isSet = true;
+}
+
+qint32
+SWGMeshtasticDemodSettings::getSendJsonViaUdp() {
+    return send_json_via_udp;
+}
+void
+SWGMeshtasticDemodSettings::setSendJsonViaUdp(qint32 send_json_via_udp) {
+    this->send_json_via_udp = send_json_via_udp;
+    this->m_send_json_via_udp_isSet = true;
 }
 
 qint32
@@ -641,6 +660,9 @@ SWGMeshtasticDemodSettings::isSet(){
             isObjectUpdated = true; break;
         }
         if(m_send_via_udp_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_send_json_via_udp_isSet){
             isObjectUpdated = true; break;
         }
         if(m_udp_enabled_isSet){

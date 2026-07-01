@@ -172,7 +172,7 @@ void WFMModGUI::on_afBW_valueChanged(int value)
 
 void WFMModGUI::on_fmDev_valueChanged(int value)
 {
-	ui->fmDevText->setText(QString("%1k").arg(value));
+	ui->fmDevText->setText(QString("%1%2k").arg(QChar(0xB1, 0x00)).arg(value));
 	m_settings.m_fmDeviation = value * 1000.0;
 	applySettings(QStringList("fmDeviation"));
 }
@@ -476,7 +476,7 @@ void WFMModGUI::displaySettings()
     ui->afBWText->setText(QString("%1k").arg(m_settings.m_afBandwidth / 1000.0));
     ui->afBW->setValue(m_settings.m_afBandwidth / 1000.0);
 
-    ui->fmDevText->setText(QString("%1k").arg(m_settings.m_fmDeviation / 1000.0));
+    ui->fmDevText->setText(QString("%1%2k").arg(QChar(0xB1, 0x00)).arg(m_settings.m_fmDeviation / 1000.0));
     ui->fmDev->setValue(m_settings.m_fmDeviation / 1000.0);
 
     ui->volumeText->setText(QString("%1").arg(m_settings.m_volumeFactor, 0, 'f', 1));

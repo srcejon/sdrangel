@@ -39,6 +39,8 @@
 MESSAGE_CLASS_DEFINITION(SoapySDROutput::MsgConfigureSoapySDROutput, Message)
 MESSAGE_CLASS_DEFINITION(SoapySDROutput::MsgStartStop, Message)
 MESSAGE_CLASS_DEFINITION(SoapySDROutput::MsgReportGainChange, Message)
+MESSAGE_CLASS_DEFINITION(SoapySDROutput::MsgGetStreamInfo, Message)
+MESSAGE_CLASS_DEFINITION(SoapySDROutput::MsgReportStreamInfo, Message)
 
 SoapySDROutput::SoapySDROutput(DeviceAPI *deviceAPI) :
     m_deviceAPI(deviceAPI),
@@ -526,7 +528,16 @@ bool SoapySDROutput::start()
     else // first allocation
     {
         qDebug("SoapySDROutput::start: allocate thread and take ownership");
-        soapySDROutputThread = new SoapySDROutputThread(m_deviceShared.m_device, requestedChannel+1);
+        unsigned int nbChannels = requestedChannel + 1;
+        // Dual-channel TX with chan-1 zero-fill. Required on B210/B220
+        // to activate second DUC chain in FPGA, preventing USB corruption
+        // and enabling the TX PA (ATR switch needs both chains).
+        if (m_deviceShared.m_device->getNumChannels(SOAPY_SDR_TX) >= 2
+            && m_deviceAPI->getSourceBuddies().empty()) {
+            nbChannels = 2;
+            qWarning("SoapySDROutput::start: forced dual-channel TX");
+        }
+        soapySDROutputThread = new SoapySDROutputThread(m_deviceShared.m_device, nbChannels);
         m_thread = soapySDROutputThread; // take ownership
         needsStart = true;
     }
@@ -539,6 +550,16 @@ bool SoapySDROutput::start()
         qDebug("SoapySDROutput::start: (re)start buddy thread");
         soapySDROutputThread->setSampleRate(m_settings.m_devSampleRate);
         soapySDROutputThread->startWork();
+        // Re-apply gain now that stream is active — setGain before activation
+        // silently fails on SoapyUHD/B210.
+        if (m_deviceShared.m_device) {
+            try {
+                m_deviceShared.m_device->setGain(
+                    SOAPY_SDR_TX, requestedChannel, m_settings.m_globalGain);
+                qCritical("SoapySDROutput::start: setGain ch%d %d (post-activation)",
+                          requestedChannel, m_settings.m_globalGain);
+            } catch (...) {}
+        }
     }
 
     qDebug("SoapySDROutput::start: started");
@@ -729,6 +750,16 @@ bool SoapySDROutput::setDeviceCenterFrequency(SoapySDR::Device *dev, int request
                 m_deviceShared.m_deviceParams->getTxChannelMainTunableElementName(requestedChannel),
                 freq_hz);
         qDebug("SoapySDROutput::setDeviceCenterFrequency: setFrequency(%llu)", freq_hz);
+        // In dual-channel mode, also set channel 1 to match so both AD9361
+        // LOs are configured (chain B needs frequency for LO lock).
+        if (m_thread && m_thread->getNbChannels() > 1
+            && dev->getNumChannels(SOAPY_SDR_TX) > 1) {
+            dev->setFrequency(SOAPY_SDR_TX, 1,
+                m_deviceShared.m_deviceParams->getTxChannelMainTunableElementName(1),
+                freq_hz);
+            // Do NOT set ch1 gain — B210's global gain is shared.
+            // Setting ch1 gain overrides ch0's configured gain.
+        }
         return true;
     }
     catch (const std::exception &ex)
@@ -746,11 +777,14 @@ void SoapySDROutput::updateGains(SoapySDR::Device *dev, int requestedChannel, So
 
     try
     {
-        settings.m_globalGain = round(dev->getGain(SOAPY_SDR_TX, requestedChannel));
+        double hwGain = dev->getGain(SOAPY_SDR_TX, requestedChannel);
+        settings.m_globalGain = round(hwGain);
 
         for (const auto &name : settings.m_individualGains.keys()) {
             settings.m_individualGains[name] = dev->getGain(SOAPY_SDR_TX, requestedChannel, name.toStdString());
         }
+
+        qCritical("SoapySDROutput::updateGains: hwGain=%.1f -> m_gain=%d", hwGain, settings.m_globalGain);
     }
     catch (const std::exception &ex)
     {
@@ -808,6 +842,35 @@ bool SoapySDROutput::handleMessage(const Message& message)
 
         if (m_settings.m_useReverseAPI) {
             webapiReverseSendStartStop(cmd.getStartStop());
+        }
+
+        return true;
+    }
+    else if (MsgGetStreamInfo::match(message))
+    {
+        if (m_deviceAPI->getSamplingDeviceGUIMessageQueue())
+        {
+            if (m_thread && m_running)
+            {
+                bool active;
+                quint64 packets;
+                quint32 underflows;
+                quint32 errors;
+                m_thread->getStreamStatus(active, packets, underflows, errors);
+                (void) packets;
+                MsgReportStreamInfo *report = MsgReportStreamInfo::create(
+                        true,
+                        active,
+                        underflows,
+                        errors
+                        );
+                m_deviceAPI->getSamplingDeviceGUIMessageQueue()->push(report);
+            }
+            else
+            {
+                MsgReportStreamInfo *report = MsgReportStreamInfo::create(false, false, 0, 0);
+                m_deviceAPI->getSamplingDeviceGUIMessageQueue()->push(report);
+            }
         }
 
         return true;
@@ -876,6 +939,10 @@ bool SoapySDROutput::handleMessage(const Message& message)
 
 bool SoapySDROutput::applySettings(const SoapySDROutputSettings& settings, bool force)
 {
+    qCritical("SoapySDROutput::applySettings: E freq=%llu->%llu gain=%d->%d force=%d this=%p settings=%p",
+              m_settings.m_centerFrequency, settings.m_centerFrequency,
+              m_settings.m_globalGain, settings.m_globalGain, force,
+              this, &settings);
     bool forwardChangeOwnDSP = false;
     bool forwardChangeToBuddies  = false;
     bool globalGainChanged = false;
@@ -980,6 +1047,8 @@ bool SoapySDROutput::applySettings(const SoapySDROutputSettings& settings, bool 
         forwardChangeToBuddies = true;
 
         if (dev) {
+            qCritical("SoapySDROutput::applySettings: set freq=%llu gain=%d",
+                      settings.m_centerFrequency, settings.m_globalGain);
             setDeviceCenterFrequency(dev, requestedChannel, settings.m_centerFrequency, settings.m_LOppmTenths);
         }
     }
@@ -1293,7 +1362,9 @@ bool SoapySDROutput::applySettings(const SoapySDROutputSettings& settings, bool 
     if (globalGainChanged || individualGainsChanged)
     {
         if (dev) {
+            int savedGlobalGain = m_settings.m_globalGain;
             updateGains(dev, requestedChannel, m_settings);
+            m_settings.m_globalGain = savedGlobalGain;
         }
 
         if (getMessageQueueToGUI())
@@ -1681,6 +1752,31 @@ void SoapySDROutput::webapiFormatDeviceReport(SWGSDRangel::SWGDeviceReport& resp
     {
         response.getSoapySdrOutputReport()->getStreamSettingsArgs()->append(new SWGSDRangel::SWGArgInfo);
         webapiFormatArgInfo(itArg, response.getSoapySdrOutputReport()->getStreamSettingsArgs()->back());
+    }
+
+    // Append TX diagnostic counters
+    if (m_thread)
+    {
+        bool active;
+        quint64 packets;
+        quint32 underflows;
+        quint32 errors;
+        m_thread->getStreamStatus(active, packets, underflows, errors);
+        (void) active;
+
+        auto addCounter = [&](const std::string& key, const std::string& name, const std::string& value) {
+            SoapySDR::ArgInfo info;
+            info.key = key;
+            info.value = value;
+            info.type = SoapySDR::ArgInfo::STRING;
+            info.name = name;
+            response.getSoapySdrOutputReport()->getStreamSettingsArgs()->append(new SWGSDRangel::SWGArgInfo);
+            webapiFormatArgInfo(info, response.getSoapySdrOutputReport()->getStreamSettingsArgs()->back());
+        };
+
+        addCounter("packets", "TX packets sent", std::to_string(packets));
+        addCounter("underflows", "TX underflow events", std::to_string(underflows));
+        addCounter("errors", "TX fatal errors", std::to_string(errors));
     }
 
     response.getSoapySdrOutputReport()->setFrequencySettingsArgs(new QList<SWGSDRangel::SWGArgInfo*>);

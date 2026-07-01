@@ -34,6 +34,8 @@ SWGFeatureReport::SWGFeatureReport() {
     m_afc_report_isSet = false;
     ambe_report = nullptr;
     m_ambe_report_isSet = false;
+    freq_display_report = nullptr;
+    m_freq_display_report_isSet = false;
     gs232_controller_report = nullptr;
     m_gs232_controller_report_isSet = false;
     lime_rfe_report = nullptr;
@@ -68,6 +70,8 @@ SWGFeatureReport::init() {
     m_afc_report_isSet = false;
     ambe_report = new SWGAMBEReport();
     m_ambe_report_isSet = false;
+    freq_display_report = new SWGFreqDisplayReport();
+    m_freq_display_report_isSet = false;
     gs232_controller_report = new SWGGS232ControllerReport();
     m_gs232_controller_report_isSet = false;
     lime_rfe_report = new SWGLimeRFEReport();
@@ -100,6 +104,9 @@ SWGFeatureReport::cleanup() {
     }
     if(ambe_report != nullptr) { 
         delete ambe_report;
+    }
+    if(freq_display_report != nullptr) { 
+        delete freq_display_report;
     }
     if(gs232_controller_report != nullptr) { 
         delete gs232_controller_report;
@@ -150,6 +157,8 @@ SWGFeatureReport::fromJsonObject(QJsonObject &pJson) {
     
     ::SWGSDRangel::setValue(&ambe_report, pJson["AMBEReport"], "SWGAMBEReport", "SWGAMBEReport");
     
+    ::SWGSDRangel::setValue(&freq_display_report, pJson["FreqDisplayReport"], "SWGFreqDisplayReport", "SWGFreqDisplayReport");
+    
     ::SWGSDRangel::setValue(&gs232_controller_report, pJson["GS232ControllerReport"], "SWGGS232ControllerReport", "SWGGS232ControllerReport");
     
     ::SWGSDRangel::setValue(&lime_rfe_report, pJson["LimeRFEReport"], "SWGLimeRFEReport", "SWGLimeRFEReport");
@@ -194,6 +203,9 @@ SWGFeatureReport::asJsonObject() {
     }
     if((ambe_report != nullptr) && (ambe_report->isSet())){
         toJsonValue(QString("AMBEReport"), ambe_report, obj, QString("SWGAMBEReport"));
+    }
+    if((freq_display_report != nullptr) && (freq_display_report->isSet())){
+        toJsonValue(QString("FreqDisplayReport"), freq_display_report, obj, QString("SWGFreqDisplayReport"));
     }
     if((gs232_controller_report != nullptr) && (gs232_controller_report->isSet())){
         toJsonValue(QString("GS232ControllerReport"), gs232_controller_report, obj, QString("SWGGS232ControllerReport"));
@@ -257,6 +269,16 @@ void
 SWGFeatureReport::setAmbeReport(SWGAMBEReport* ambe_report) {
     this->ambe_report = ambe_report;
     this->m_ambe_report_isSet = true;
+}
+
+SWGFreqDisplayReport*
+SWGFeatureReport::getFreqDisplayReport() {
+    return freq_display_report;
+}
+void
+SWGFeatureReport::setFreqDisplayReport(SWGFreqDisplayReport* freq_display_report) {
+    this->freq_display_report = freq_display_report;
+    this->m_freq_display_report_isSet = true;
 }
 
 SWGGS232ControllerReport*
@@ -371,6 +393,9 @@ SWGFeatureReport::isSet(){
             isObjectUpdated = true; break;
         }
         if(ambe_report && ambe_report->isSet()){
+            isObjectUpdated = true; break;
+        }
+        if(freq_display_report && freq_display_report->isSet()){
             isObjectUpdated = true; break;
         }
         if(gs232_controller_report && gs232_controller_report->isSet()){

@@ -301,7 +301,7 @@
          </size>
         </property>
         <property name="toolTip">
-         <string>Frequency deviation</string>
+         <string>Peak frequency deviation</string>
         </property>
         <property name="minimum">
          <number>10</number>

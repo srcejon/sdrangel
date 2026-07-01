@@ -33,7 +33,7 @@ QByteArray RollupState::serialize() const
     QDataStream stream(&state, QIODevice::WriteOnly);
     stream << VersionMarker;
     stream << m_version;
-    stream << m_childrenStates.size();
+    stream << (int) m_childrenStates.size();
 
     for (const auto &child : m_childrenStates)
     {

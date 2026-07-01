@@ -304,7 +304,7 @@
          </size>
         </property>
         <property name="toolTip">
-         <string>Frequency deviation</string>
+         <string>Peak frequency deviation</string>
         </property>
         <property name="minimum">
          <number>10</number>
@@ -332,7 +332,7 @@
          </size>
         </property>
         <property name="text">
-         <string>5.0k</string>
+         <string>±5.0k</string>
         </property>
         <property name="alignment">
          <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>

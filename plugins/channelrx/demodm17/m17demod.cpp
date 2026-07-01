@@ -59,6 +59,7 @@ M17Demod::M17Demod(DeviceAPI *deviceAPI) :
         m_basebandSink(nullptr),
         m_running(false),
         m_basebandSampleRate(0),
+        m_centerFrequency(0),
         m_scopeXYSink(nullptr)
 {
     qDebug("M17Demod::M17Demod");
@@ -140,13 +141,13 @@ void M17Demod::start()
     QObject::connect(m_thread, &QThread::finished, m_basebandSink, &QObject::deleteLater);
     QObject::connect(m_thread, &QThread::finished, m_thread, &QThread::deleteLater);
 
-    if (m_basebandSampleRate != 0) {
-        m_basebandSink->setBasebandSampleRate(m_basebandSampleRate);
-    }
     m_basebandSink->setScopeXYSink(m_scopeXYSink);
 
     m_basebandSink->reset();
     m_thread->start();
+
+    DSPSignalNotification *dspMsg = new DSPSignalNotification(m_basebandSampleRate, m_centerFrequency);
+    m_basebandSink->getInputMessageQueue()->push(dspMsg);
 
     M17DemodBaseband::MsgConfigureM17DemodBaseband *msg = M17DemodBaseband::MsgConfigureM17DemodBaseband::create(m_settings, QStringList(), true);
     m_basebandSink->getInputMessageQueue()->push(msg);
@@ -182,6 +183,7 @@ bool M17Demod::handleMessage(const Message& cmd)
     {
         DSPSignalNotification& notif = (DSPSignalNotification&) cmd;
         m_basebandSampleRate = notif.getSampleRate();
+        m_centerFrequency = notif.getCenterFrequency();
         qDebug() << "M17Demod::handleMessage: DSPSignalNotification";
 
         // Forward to the sink

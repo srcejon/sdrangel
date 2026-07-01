@@ -61,6 +61,9 @@ MeshtasticDemodSettings:
     sendViaUDP:
       description: boolean 1 to send decoded message via UDP else 0
       type: integer
+    sendJsonViaUDP:
+      description: boolean 1 to send decoded message as JSON via UDP else 0
+      type: integer
     udpEnabled:
       type: integer
       description: >

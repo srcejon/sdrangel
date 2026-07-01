@@ -48,7 +48,7 @@ struct NFMModSettings
     qint64 m_inputFrequencyOffset;
     Real m_rfBandwidth;
     Real m_afBandwidth;
-    float m_fmDeviation;
+    float m_fmDeviation; //!< Full deviation in Hz (UI shows peak deviation)
     float m_toneFrequency;
     float m_volumeFactor;
     bool m_channelMute;

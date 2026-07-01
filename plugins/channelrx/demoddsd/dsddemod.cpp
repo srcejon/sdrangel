@@ -63,6 +63,7 @@ DSDDemod::DSDDemod(DeviceAPI *deviceAPI) :
         m_deviceAPI(deviceAPI),
         m_running(false),
         m_basebandSampleRate(0),
+        m_centerFrequency(0),
         m_scopeXYSink(nullptr)
 {
     qDebug("DSDDemod::DSDDemod");
@@ -176,12 +177,12 @@ void DSDDemod::start()
         &QThread::deleteLater
     );
 
-    if (m_basebandSampleRate != 0) {
-        m_basebandSink->setBasebandSampleRate(m_basebandSampleRate);
-    }
     m_basebandSink->setScopeXYSink(m_scopeXYSink);
 
     m_thread->start();
+
+    DSPSignalNotification *dspMsg = new DSPSignalNotification(m_basebandSampleRate, m_centerFrequency);
+    m_basebandSink->getInputMessageQueue()->push(dspMsg);
 
     DSDDemodBaseband::MsgConfigureDSDDemodBaseband *msg = DSDDemodBaseband::MsgConfigureDSDDemodBaseband::create(QStringList(), m_settings, true);
     m_basebandSink->getInputMessageQueue()->push(msg);
@@ -229,6 +230,7 @@ bool DSDDemod::handleMessage(const Message& cmd)
         qDebug() << "DSDDemod::handleMessage: DSPSignalNotification";
         DSPSignalNotification& notif = (DSPSignalNotification&) cmd;
         m_basebandSampleRate = notif.getSampleRate();
+        m_centerFrequency = notif.getCenterFrequency();
         // Forward to the sink
         if (m_running) {
             m_basebandSink->getInputMessageQueue()->push(new DSPSignalNotification(notif));

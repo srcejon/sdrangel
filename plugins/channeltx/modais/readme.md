@@ -34,7 +34,7 @@ This specifies the bandwidth of a LPF that is applied to the output signal to li
 
 <h3>6: FM Deviation</h3>
 
-This specifies the maximum frequency deviation. Typically this should be 4.8kHz, giving a modulation index of 0.5 at 9,600 baud.
+This specifies the peak frequency deviation. Typically this should be ±4.8kHz, giving a modulation index of 0.5 at 9,600 baud.
 
 <h3>7: BT Bandwidth</h3>
 

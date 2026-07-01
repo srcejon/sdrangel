@@ -74,8 +74,8 @@ bool DeviceUSRPParams::open(const QString &deviceStr, bool channelNumOnly)
             else if (deviceStr.contains("product=B210"))
             {
                 // Auto-calculation below can be slow, so use hardcoded values for B210
-                m_srRangeRx = uhd::meta_range_t(1e5, 61.444e6);
-                m_srRangeTx = uhd::meta_range_t(1e5, 61.444e6);
+                m_srRangeRx = uhd::meta_range_t(1e5, 61.44e6);
+                m_srRangeTx = uhd::meta_range_t(1e5, 61.44e6);
             }
             else
             {

@@ -775,13 +775,16 @@ if ((NOT LIBDSDCC_FOUND OR LIBDSDCC_EXTERNAL) AND LIBMBE_FOUND)
     endif ()
 endif ((NOT LIBDSDCC_FOUND OR LIBDSDCC_EXTERNAL) AND LIBMBE_FOUND)
 
-if (LINUX AND (NOT LIBSIGMF_FOUND OR LIBSIGMF_EXTERNAL))
+if ((LINUX OR APPLE) AND (NOT LIBSIGMF_FOUND OR LIBSIGMF_EXTERNAL))
     set(LIBSIGMF_LIBRARIES "${EXTERNAL_BUILD_LIBRARIES}/lib${LIB_SUFFIX}/liblibsigmf${CMAKE_SHARED_LIBRARY_SUFFIX}" CACHE INTERNAL "")
     ExternalProject_Add(libsigmf
             GIT_REPOSITORY https://github.com/f4exb/libsigmf.git
             GIT_TAG ${LIBSIGMF_TAG}
             PREFIX "${EXTERNAL_BUILD_LIBRARIES}/libsigmf"
+            INSTALL_DIR "${EXTERNAL_BUILD_LIBRARIES}"
             CMAKE_ARGS ${COMMON_CMAKE_ARGS} -DCMAKE_INSTALL_PREFIX=<INSTALL_DIR>
+            UPDATE_DISCONNECTED TRUE
+            PATCH_COMMAND sed -i "" -e "s/-Werror//g" -e "s/VERSION 2.8/VERSION 3.10/g" <SOURCE_DIR>/external/flatbuffers/CMakeLists.txt
             BUILD_BYPRODUCTS "${LIBSIGMF_LIBRARIES}"
             TEST_COMMAND ""
             )
@@ -790,7 +793,11 @@ if (LINUX AND (NOT LIBSIGMF_FOUND OR LIBSIGMF_EXTERNAL))
     set_global_cache(LIBSIGMF_FOUND ON)
     set(LIBSIGMF_EXTERNAL ON CACHE INTERNAL "")
     set(LIBSIGMF_INCLUDE_DIR "${install_dir}/include" CACHE INTERNAL "")
-endif (LINUX AND (NOT LIBSIGMF_FOUND OR LIBSIGMF_EXTERNAL))
+    if (APPLE)
+        install(FILES "${LIBSIGMF_LIBRARIES}" DESTINATION "${INSTALL_LIB_DIR}")
+        set(MACOS_EXTERNAL_LIBS_FIXUP "${MACOS_EXTERNAL_LIBS_FIXUP};${binary_dir}/")
+    endif ()
+endif ((LINUX OR APPLE) AND (NOT LIBSIGMF_FOUND OR LIBSIGMF_EXTERNAL))
 
 # For APT demodulator
 if(ENABLE_CHANNELRX_DEMODAPT)
@@ -863,8 +870,18 @@ if(ENABLE_FEATURE_STARTRACKER)
         set(CSPICE_LIBRARIES "${SDRANGEL_BINARY_LIB_DIR}/cspice.lib" CACHE INTERNAL "")
     elseif (LINUX)
         # We need a shared library on Linux, as the static library has non PIC code, and we need to link it into a shared library
-        set(CSPICE_LIBRARIES "${EXTERNAL_BUILD_LIBRARIES}/lib${LIB_SUFFIX}/libcspice.so" CACHE INTERNAL "")
-        set(CSPICE_ARGS "-DCSPICE_BUILD_STATIC_LIBRARY=OFF")
+        # ExternalProject cspice currently outputs libcspice.so under
+        #   ${EXTERNAL_BUILD_LIBRARIES}/cspice/src/cspice-build/lib/libcspice.so
+        # so point CSPICE_LIBRARIES there.
+        set(CSPICE_LIBRARIES
+            "${EXTERNAL_BUILD_LIBRARIES}/cspice/src/cspice-build/lib/libcspice.so"
+            CACHE INTERNAL ""
+        )
+        # Disable -Werror=format-security for cspice only: distro hardening flags (e.g. Ubuntu Noble)
+        # inject -Werror=format-security which fails cspice sources that lack -Wformat.
+        set(CSPICE_ARGS "-DCSPICE_BUILD_STATIC_LIBRARY=OFF"
+                        "-DCMAKE_C_FLAGS=-Wno-error=format-security"
+                        "-DCMAKE_CXX_FLAGS=-Wno-error=format-security")
     elseif (APPLE)
         set(CSPICE_LIBRARIES "${EXTERNAL_BUILD_LIBRARIES}/cspice/src/cspice-build/lib/libcspice.a" CACHE INTERNAL "")
     endif()
@@ -897,7 +914,17 @@ if(ENABLE_CHANNELRX_REMOTETCPSINK)
     ExternalProject_Add(flac
             GIT_REPOSITORY https://github.com/xiph/flac.git
             PREFIX "${EXTERNAL_BUILD_LIBRARIES}/flac"
-            CMAKE_ARGS ${COMMON_CMAKE_ARGS} -DINSTALL_MANPAGES=OFF -DBUILD_SHARED_LIBS=ON -DWITH_FORTIFY_SOURCE=OFF -DWITH_STACK_PROTECTOR=PFF -DBUILD_PROGRAMS=OFF -DBUILD_TESTING=OFF -DBUILD_EXAMPLES=OFF -DWITH_OGG=OFF -DBUILD_DOCS=OFF
+            CMAKE_ARGS ${COMMON_CMAKE_ARGS}
+            -DCMAKE_INTERPROCEDURAL_OPTIMIZATION=OFF
+            -DINSTALL_MANPAGES=OFF
+            -DBUILD_SHARED_LIBS=ON
+            -DWITH_FORTIFY_SOURCE=OFF
+            -DWITH_STACK_PROTECTOR=PFF
+            -DBUILD_PROGRAMS=OFF
+            -DBUILD_TESTING=OFF
+            -DBUILD_EXAMPLES=OFF
+            -DWITH_OGG=OFF
+            -DBUILD_DOCS=OFF
             BUILD_BYPRODUCTS "${FLAC_LIBRARIES}"
             INSTALL_COMMAND ""
             TEST_COMMAND ""

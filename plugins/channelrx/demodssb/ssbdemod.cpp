@@ -58,7 +58,8 @@ SSBDemod::SSBDemod(DeviceAPI *deviceAPI) :
         m_basebandSink(nullptr),
         m_running(false),
         m_spectrumVis(SDR_RX_SCALEF),
-        m_basebandSampleRate(0)
+        m_basebandSampleRate(0),
+        m_centerFrequency(0)
 {
 	setObjectName(m_channelId);
 
@@ -166,11 +167,10 @@ void SSBDemod::start()
         &QThread::deleteLater
     );
 
-    if (m_basebandSampleRate != 0) {
-        m_basebandSink->setBasebandSampleRate(m_basebandSampleRate);
-    }
-
     m_thread->start();
+
+    DSPSignalNotification *dspMsg = new DSPSignalNotification(m_basebandSampleRate, m_centerFrequency);
+    m_basebandSink->getInputMessageQueue()->push(dspMsg);
 
     SSBDemodBaseband::MsgConfigureSSBDemodBaseband *msg = SSBDemodBaseband::MsgConfigureSSBDemodBaseband::create(QStringList(), m_settings, true);
     m_basebandSink->getInputMessageQueue()->push(msg);
@@ -208,6 +208,7 @@ bool SSBDemod::handleMessage(const Message& cmd)
         qDebug() << "SSBDemod::handleMessage: DSPSignalNotification";
         DSPSignalNotification& notif = (DSPSignalNotification&) cmd;
         m_basebandSampleRate = notif.getSampleRate();
+        m_centerFrequency = notif.getCenterFrequency();
         // Forward to the sink
         if (m_running) {
             m_basebandSink->getInputMessageQueue()->push(new DSPSignalNotification(notif));

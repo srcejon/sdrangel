@@ -30,7 +30,7 @@ This specifies the bandwidth of a LPF that is applied to the input signal to lim
 
 <h3>5: Dev - Frequency deviation</h3>
 
-Adjusts the expected frequency deviation in 0.1 kHz steps from 1 to 6 kHz. POCSAG uses FSK with a +/- 4.5 kHz shift.
+Adjusts the expected peak frequency deviation in 0.1 kHz steps from 1 to 6 kHz. POCSAG uses FSK with a ±4.5 kHz shift.
 
 <h3>6: Mod - Modulation</h3>
 

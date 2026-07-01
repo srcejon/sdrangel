@@ -575,7 +575,7 @@ void AISDemodGUI::on_rfBW_valueChanged(int value)
 
 void AISDemodGUI::on_fmDev_valueChanged(int value)
 {
-    ui->fmDevText->setText(QString("%1k").arg(value / 10.0, 0, 'f', 1));
+    ui->fmDevText->setText(QString("%1%2k").arg(QChar(0xB1, 0x00)).arg(value / 10.0, 0, 'f', 1));
     m_settings.m_fmDeviation = value * 100.0;
     applySettings(QStringList({"fmDeviation"}));
 }
@@ -894,7 +894,7 @@ void AISDemodGUI::displaySettings()
     ui->rfBWText->setText(QString("%1k").arg(m_settings.m_rfBandwidth / 1000.0, 0, 'f', 1));
     ui->rfBW->setValue(m_settings.m_rfBandwidth / 100.0);
 
-    ui->fmDevText->setText(QString("%1k").arg(m_settings.m_fmDeviation / 1000.0, 0, 'f', 1));
+    ui->fmDevText->setText(QString("%1%2k").arg(QChar(0xB1, 0x00)).arg(m_settings.m_fmDeviation / 1000.0, 0, 'f', 1));
     ui->fmDev->setValue(m_settings.m_fmDeviation / 100.0);
 
     ui->thresholdText->setText(QString("%1").arg(m_settings.m_correlationThreshold));

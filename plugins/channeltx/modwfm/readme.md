@@ -32,7 +32,7 @@ This is the bandwidth in kHz of the modulating signal filtered before modulation
 
 <h3>7: Frequency deviation</h3>
 
-Adjusts the frequency deviation in 1 kHz steps from 0 to 100 kHz
+Adjusts the peak frequency deviation in 1 kHz steps from 0 to 100 kHz
 
 <h3>8: Volume</h3>
 

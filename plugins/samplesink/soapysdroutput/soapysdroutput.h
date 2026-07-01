@@ -119,6 +119,64 @@ public:
         { }
     };
 
+    class MsgGetStreamInfo : public Message {
+        MESSAGE_CLASS_DECLARATION
+
+    public:
+        static MsgGetStreamInfo* create() {
+            return new MsgGetStreamInfo();
+        }
+
+    private:
+        MsgGetStreamInfo() :
+            Message()
+        { }
+    };
+
+    class MsgReportStreamInfo : public Message {
+        MESSAGE_CLASS_DECLARATION
+
+    public:
+        bool     getSuccess() const { return m_success; }
+        bool     getActive() const { return m_active; }
+        uint32_t getUnderflows() const { return m_underflows; }
+        uint32_t getErrors() const { return m_errors; }
+
+        static MsgReportStreamInfo* create(
+                bool     success,
+                bool     active,
+                uint32_t underflows,
+                uint32_t errors
+                )
+        {
+            return new MsgReportStreamInfo(
+                    success,
+                    active,
+                    underflows,
+                    errors
+                    );
+        }
+
+    private:
+        bool     m_success;
+        bool     m_active;
+        uint32_t m_underflows;
+        uint32_t m_errors;
+
+        MsgReportStreamInfo(
+                bool     success,
+                bool     active,
+                uint32_t underflows,
+                uint32_t errors
+                ) :
+            Message(),
+            m_success(success),
+            m_active(active),
+            m_underflows(underflows),
+            m_errors(errors)
+        { }
+    };
+
     SoapySDROutput(DeviceAPI *deviceAPI);
     virtual ~SoapySDROutput();
     virtual void destroy();

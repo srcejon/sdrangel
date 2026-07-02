@@ -1231,13 +1231,21 @@ void CameraPlateSolver::SolverContext::repairFinalMatchCollisions(const QVector<
               });
 
     QSet<int> usedDetections;
+    QSet<int> usedCatalogs;
     for (const SwapCandidate& cand : candidates) {
         if (usedDetections.contains(cand.detectionIndex)) continue;
+        // Guard the catalog star too: without this, two candidates targeting the same catalog
+        // star both apply, and the second overwrites the first's match -- unseating the first's
+        // detection, which stays flagged used but ends up matched to nothing. Candidates are
+        // sorted best-first (strict before relaxed, then ascending distance ratio), so the first
+        // claim on a catalog star is the one to keep.
+        if (usedCatalogs.contains(cand.catalogIndex)) continue;
         const int matchIdx = catalogToMatchIdx.value(cand.catalogIndex, -1);
         if (matchIdx < 0) continue;
         matches[matchIdx].detectionIndex = cand.detectionIndex;
         matches[matchIdx].distancePixels = cand.newDistance;
         usedDetections.insert(cand.detectionIndex);
+        usedCatalogs.insert(cand.catalogIndex);
     }
 }
 

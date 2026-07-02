@@ -11682,10 +11682,16 @@ CameraPlateSolver::SolverContext::Evaluation CameraPlateSolver::SolverContext::r
     const double baseDistortionK1 = calibrate ? candidate.distortionK1 : settings.m_lensDistortionK1;
 
     Evaluation best = candidate;
-    const std::array<double, 4> distortionSweep = {{-0.05, -0.025, 0.0, 0.025}};
+    // Sweep the distortion RELATIVE to the candidate's own K1 (baseDistortionK1), symmetrically.
+    // The previous sweep used fixed ABSOLUTE values {-0.05,-0.025,0,0.025}: a candidate already
+    // refined to e.g. K1=-0.09 was only re-evaluated far from its value and never above it, so the
+    // rescore could not refine a strong barrel candidate around its own K1 (and baseDistortionK1
+    // was unused on the calibrate path). The 0.0 delta re-evaluates at the candidate's exact K1;
+    // best starts as the candidate, so the sweep can only improve on it, never regress.
+    const std::array<double, 5> distortionSweep = {{-0.05, -0.025, 0.0, 0.025, 0.05}};
     for (double distortionDelta : distortionSweep)
     {
-        const double distortionK1 = calibrate ? distortionDelta : baseDistortionK1;
+        const double distortionK1 = calibrate ? (baseDistortionK1 + distortionDelta) : baseDistortionK1;
         Evaluation rescored = evaluatePose(
             settings,
             catalogContext,

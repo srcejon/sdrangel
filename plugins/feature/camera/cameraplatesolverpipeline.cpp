@@ -12349,7 +12349,13 @@ CameraPlateSolver::SolverContext::Evaluation CameraPlateSolver::SolverContext::s
                                 catalogContext,
                                 refProjector,
                                 wideFirstPassCatalogIndices.isEmpty() ? nullptr : &wideFirstPassCatalogIndices);
-                            for (double rollDegrees : wideRollOffsetsOrdered)
+                            // Use fovSearchRollOffsets, which in this branch (wideWeakMode &&
+                            // useStartFov && !useStartElevation && !useStartDirection) is the fine
+                            // 15-deg roll set. It was built for exactly this mode-1 path but was
+                            // previously only referenced from the useStartElevation branch (where it
+                            // resolves to the coarse set), so the fine sweep was never actually used.
+                            // The finer roll granularity closes a mode-1 wide/fisheye coverage gap.
+                            for (double rollDegrees : fovSearchRollOffsets)
                             {
                                 if (isCancellationRequested()) break;
                                 populateBlindGridProjectedCatalog(rollDegrees, guidedFovMatchRadius, refProjector);

@@ -873,6 +873,9 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
                     static const double kCenterGrid[] = { -60.0, -30.0, 0.0, 30.0, 60.0 };
                     static const double kK1Grid[] = { -0.15, -0.10, -0.05, 0.0, 0.05 };
                     for (const double cx : kCenterGrid) {
+                        // 125 full-catalog evaluations; check for cancellation each cx row so a
+                        // cancel request during a slow wide-fisheye solve is honoured promptly.
+                        if (isCancellationRequested()) { return finishCancelled(); }
                         for (const double cy : kCenterGrid) {
                             for (const double k1 : kK1Grid) {
                                 const Evaluation swept = evalLens(seedAnchored, cx, cy, k1);
@@ -891,6 +894,7 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
                 // polishes the principal point to its precise value.
                 for (int pass = 0; pass < 5; ++pass)
                 {
+                    if (isCancellationRequested()) { return finishCancelled(); }
                     const int prevMatches = seedAnchored.matchCount;
                     const Evaluation refined = refinePoseStep(seedAnchored);
                     if (!isBetterSeedAnchored(refined, seedAnchored)) {
@@ -925,6 +929,7 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
                     }};
                     for (int pass = 0; pass < 5; ++pass)
                     {
+                        if (isCancellationRequested()) { return finishCancelled(); }
                         const int prevMatches = seedAnchored.matchCount;
                         const QVector<Match> fixedMatches = uniqueValidMatchesForRefinement(
                             catalogContext, starDetections, seedAnchored.matches, nullptr);

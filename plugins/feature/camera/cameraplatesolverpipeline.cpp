@@ -160,6 +160,10 @@ QByteArray CameraPlateSolver::SolverContext::fetchSirilRangeFromSource(int chunk
     QObject::connect(&timeoutTimer, &QTimer::timeout, &loop, &QEventLoop::quit);
     timeoutTimer.start(30000);
     loop.exec();
+    // A single-shot timer auto-deactivates when it fires, so capture whether it fired BEFORE we
+    // stop it -- otherwise the stop() makes isActive() always false and the timedOut test below
+    // degenerates to !reply->isFinished().
+    const bool timerFired = !timeoutTimer.isActive();
     timeoutTimer.stop();  // stop the timer if the reply finished before it fired
 
     if (m_owner) {
@@ -168,7 +172,7 @@ QByteArray CameraPlateSolver::SolverContext::fetchSirilRangeFromSource(int chunk
     }
 
     QByteArray data;
-    const bool timedOut = !timeoutTimer.isActive() && !reply->isFinished();
+    const bool timedOut = timerFired && !reply->isFinished();
     if (timedOut)
     {
         reply->abort();
@@ -324,7 +328,10 @@ QByteArray CameraPlateSolver::SolverContext::fetchSirilChunkIndex(int chunkIndex
                    << "chunk" << chunkIndex
                    << "expected" << kSirilIndexSize
                    << "got" << indexBytes.size();
-        m_sirilIndexCache.insert(chunkIndex, QByteArray());
+        // Do NOT negative-cache the failure: m_sirilIndexCache is never evicted and is persisted
+        // across solves, so caching an empty result here would permanently blind this sky chunk
+        // after a single transient network error. The chunk set is small/fixed, so re-requesting a
+        // genuinely-missing chunk on the next solve is cheap.
         return {};
     }
 
@@ -467,6 +474,10 @@ void CameraPlateSolver::SolverContext::prefetchSirilMergedRanges(const QVector<S
     {
         if (item && item->reply)
         {
+            // Disconnect from the loop first: abort() can emit finished() synchronously, which would
+            // run finishPending() and set item->reply = nullptr, turning the deleteLater() below into
+            // a null-pointer dereference.
+            QObject::disconnect(item->reply, nullptr, &loop, nullptr);
             item->reply->abort();
             item->reply->deleteLater();
         }

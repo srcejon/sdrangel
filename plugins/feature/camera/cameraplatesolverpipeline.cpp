@@ -993,6 +993,15 @@ QVector<CameraPlateSolver::SolverContext::CatalogStar> CameraPlateSolver::Solver
         *catalogSource = QStringLiteral("Siril SPCC Gaia DR3");
     }
     writeSirilRegionDiskCacheFile(regionCachePath, stars, settings.m_starCatalogDiskCacheSizeGb);
+    // Bound the raw SPCC byte-range disk cache (siril-spcc-cache/v1/ranges/*.bin) with the same
+    // limit as the region cache. This cache is written per byte-range fetch and had no eviction,
+    // so it grew unbounded (observed at 148 GB, filling the disk). Enforced once here at the end of
+    // a network catalog build (all of this solve's ranges are already fetched, so eviction only
+    // drops older regions' files, never this solve's). The index sub-dir is naturally bounded
+    // (<= 48 chunks) and holds .idx files the *.bin evictor ignores, so it is left alone.
+    enforceSirilRegionDiskCacheLimit(
+        QDir(sirilCacheRootDir()).filePath(QStringLiteral("ranges")),
+        settings.m_starCatalogDiskCacheSizeGb);
     qDebug() << "CameraPlateSolver: loaded Siril SPCC Gaia stars"
              << stars.size()
              << "pixels" << pixels.size()

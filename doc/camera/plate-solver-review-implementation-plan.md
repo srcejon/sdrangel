@@ -55,6 +55,18 @@ Rules, unchanged from prior workstreams:
 
 Fix first; each is small and independently committable.
 
+**Status (2026-07-02): D1, D2, D3, D5, D6, D7, D8 landed and validated (REAL 47/48 + FISHEYE
+mode1 35/50 + mode4 40/50 + WIDE 27/36, all verdict sets identical to baseline). D4 ATTEMPTED
+AND REVERTED** — quantizing the three banded sort keys (1e-6 / 0.05 / 0.20) is a valid strict-weak
+ordering but reshuffles near-tie rankings enough to move the corpus: FISHEYE-mode4 40→44 (+4), but
+**WIDE 27→21 (−6)** and FISHEYE-mode1 churned 16 cases at net zero; REAL stayed 47. Some WIDE cases
+were implicitly relying on the (UB) band ordering. The UB is latent (no observed crash on the small
+candidate-pool arrays in MSVC release), so D4 is deferred to a dedicated effort: it needs (a) quantum
+calibration per comparator against the FULL corpus, (b) RAND2 (dense-narrow near-tie regime) in the
+gate — establish a same-branch RAND2 baseline first, and (c) likely splitting the sort-key comparator
+from the pairwise incumbent check (the plan's original intent) rather than quantizing the shared
+function. Fold into WS1b (decision-boundary margins) work.
+
 | # | Item | Where | Class | Validation |
 |---|---|---|---|---|
 | D1 | Fine roll sweep unreachable: built under `!useStartElevation && !useStartDirection`, consumed only in the `useStartElevation` branch. Decide intent: wire `fovSearchRollOffsets` into the guided-fov grid (mode-1) or delete the fine path. | `cameraplatesolverpipeline.cpp:11956`, `:12235` | **Behaviour-affecting** | A/B on FISHEYE mode-1 + WIDE; full suite. This is also the first Phase-5 coverage probe. |

@@ -804,14 +804,32 @@ void CameraStarDetector::applyStarDetection(
     const bool is16Bit = (residual.depth() == CV_16U);
     const double saturationThreshold = is16Bit ? 64000.0 : (hasGray ? 250.0 : 200.0);
 
+    // Phase 3 (star-detector v2) opt-in. When unset the detector is byte-identical to the legacy
+    // path; when set it applies the accuracy fixes (true pixel-count area, ...). Read once.
+    static const bool detectorV2 = qEnvironmentVariableIsSet("SDRANGEL_CAMERA_STAR_DETECTOR_V2");
+
     for (const std::vector<cv::Point>& contour : contours)
     {
-        const double area = cv::contourArea(contour);
+        const cv::Rect box = cv::boundingRect(contour);
+        const double polygonArea = cv::contourArea(contour);
+
+        // V2: use the true filled-pixel count as the blob area. cv::contourArea returns the area of
+        // the pixel-CENTRE polygon -- ~1 for a 2x2 star and 0 for any 1-px-wide blob -- so small
+        // (wide-field/fisheye ~1px PSF) stars were rejected by the minArea gate and biased
+        // fillRatio/SNR/hot-pixel low. The polygon area is retained for the roundness shape metric.
+        cv::Mat contourMask;
+        double area = polygonArea;
+        if (detectorV2)
+        {
+            contourMask = cv::Mat::zeros(box.height, box.width, CV_8UC1);
+            std::vector<std::vector<cv::Point>> pixelAreaContour{contour};
+            cv::drawContours(contourMask, pixelAreaContour, 0, cv::Scalar(255), cv::FILLED, cv::LINE_8, cv::noArray(), INT_MAX, -box.tl());
+            area = static_cast<double>(cv::countNonZero(contourMask));
+        }
         if ((area < m_settings.m_starMinArea) || (area > m_settings.m_starMaxArea)) {
             continue;
         }
 
-        const cv::Rect box = cv::boundingRect(contour);
         const double width = std::max(1, box.width);
         const double height = std::max(1, box.height);
         const double aspectRatio = std::max(width / height, height / width);
@@ -826,7 +844,7 @@ void CameraStarDetector::applyStarDetection(
         }
 
         const double perimeter = std::max(1.0, cv::arcLength(contour, true));
-        const double roundness = std::clamp((4.0 * CV_PI * area) / (perimeter * perimeter), 0.0, 1.0);
+        const double roundness = std::clamp((4.0 * CV_PI * polygonArea) / (perimeter * perimeter), 0.0, 1.0);
         bool saturatedContourCandidate = false;
         if ((roundness < 0.2) && hasGray && (area >= 6.0))
         {
@@ -840,9 +858,12 @@ void CameraStarDetector::applyStarDetection(
             continue;
         }
 
-        cv::Mat contourMask = cv::Mat::zeros(box.height, box.width, CV_8UC1);
-        std::vector<std::vector<cv::Point>> singleContour{contour};
-        cv::drawContours(contourMask, singleContour, 0, cv::Scalar(255), cv::FILLED, cv::LINE_8, cv::noArray(), INT_MAX, -box.tl());
+        if (contourMask.empty())  // already built above under detectorV2
+        {
+            contourMask = cv::Mat::zeros(box.height, box.width, CV_8UC1);
+            std::vector<std::vector<cv::Point>> singleContour{contour};
+            cv::drawContours(contourMask, singleContour, 0, cv::Scalar(255), cv::FILLED, cv::LINE_8, cv::noArray(), INT_MAX, -box.tl());
+        }
 
         const cv::Mat residualRoi = residual(box);
         // gray is empty when the CUDA preprocessing path skipped the download to save a

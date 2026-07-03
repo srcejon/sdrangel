@@ -586,6 +586,7 @@ private slots:
     void on_scaleWidthSpin_valueChanged(int value);
     void on_scaleHeightSpin_valueChanged(int value);
     void on_scaleKeepAspectRatioCheck_toggled(bool checked);
+    void on_scaleJustificationCombo_currentIndexChanged(int index);
     void on_stackDarkFileEdit_editingFinished();
     void on_stackDarkFileButton_clicked();
     void on_stackFlatFileEdit_editingFinished();

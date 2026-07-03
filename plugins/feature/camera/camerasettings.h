@@ -99,6 +99,15 @@ struct CameraSettings
         StackDisplayHistoryTiles
     };
 
+    enum ScaleJustification
+    {
+        ScaleJustifyCenter = 0,
+        ScaleJustifyLeft,
+        ScaleJustifyRight,
+        ScaleJustifyTop,
+        ScaleJustifyBottom
+    };
+
     enum AsiColorImageType
     {
         AsiColorImageTypeRgb24 = 0,
@@ -445,6 +454,7 @@ struct CameraSettings
     int m_scaleWidth;              ///< Scaled output width in pixels; <= 0 disables scaling
     int m_scaleHeight;             ///< Scaled output height in pixels; <= 0 disables scaling
     bool m_scaleKeepAspectRatio;   ///< Preserve aspect ratio within the requested scale size
+    ScaleJustification m_scaleJustification; ///< Placement when keep-aspect scaling leaves padding
     QString m_stackDarkFileName;
     QString m_stackFlatFileName;
     QString m_stackBiasFileName;

@@ -1757,6 +1757,7 @@ void CameraGUI::displaySettings()
     settingsUI()->scaleWidthSpin->setValue(m_settings.m_scaleWidth);
     settingsUI()->scaleHeightSpin->setValue(m_settings.m_scaleHeight);
     settingsUI()->scaleKeepAspectRatioCheck->setChecked(m_settings.m_scaleKeepAspectRatio);
+    settingsUI()->scaleJustificationCombo->setCurrentIndex(static_cast<int>(m_settings.m_scaleJustification));
     updateScaleControls();
     settingsUI()->stackDarkFileEdit->setText(m_settings.m_stackDarkFileName);
     settingsUI()->stackFlatFileEdit->setText(m_settings.m_stackFlatFileName);
@@ -2594,6 +2595,7 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->scaleWidthSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_scaleWidthSpin_valueChanged);
     QObject::connect(settingsUI()->scaleHeightSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_scaleHeightSpin_valueChanged);
     QObject::connect(settingsUI()->scaleKeepAspectRatioCheck, &QCheckBox::toggled, this, &CameraGUI::on_scaleKeepAspectRatioCheck_toggled);
+    QObject::connect(settingsUI()->scaleJustificationCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_scaleJustificationCombo_currentIndexChanged);
     QObject::connect(settingsUI()->stackDarkFileEdit, &QLineEdit::editingFinished, this, &CameraGUI::on_stackDarkFileEdit_editingFinished);
     QObject::connect(settingsUI()->stackDarkFileButton, &QToolButton::clicked, this, &CameraGUI::on_stackDarkFileButton_clicked);
     QObject::connect(settingsUI()->stackFlatFileEdit, &QLineEdit::editingFinished, this, &CameraGUI::on_stackFlatFileEdit_editingFinished);
@@ -3232,6 +3234,8 @@ void CameraGUI::updateScaleControls()
     settingsUI()->scaleOutputHeightLabel->setEnabled(enabled);
     settingsUI()->scaleKeepAspectRatioLabel->setEnabled(enabled);
     settingsUI()->scaleKeepAspectRatioCheck->setEnabled(enabled);
+    settingsUI()->scaleJustificationLabel->setEnabled(enabled && m_settings.m_scaleKeepAspectRatio);
+    settingsUI()->scaleJustificationCombo->setEnabled(enabled && m_settings.m_scaleKeepAspectRatio);
 
     int inputWidth = m_settings.m_cameraNumX > 0 ? m_settings.m_cameraNumX : m_settings.m_resolutionWidth;
     int inputHeight = m_settings.m_cameraNumY > 0 ? m_settings.m_cameraNumY : m_settings.m_resolutionHeight;
@@ -3245,24 +3249,11 @@ void CameraGUI::updateScaleControls()
     if ((inputWidth > 0) && (inputHeight > 0))
     {
         outputSize = QSize(inputWidth, inputHeight);
-        if (m_settings.m_scaleEnabled && (m_settings.m_scaleWidth > 0) && (m_settings.m_scaleHeight > 0))
-        {
-            if (m_settings.m_scaleKeepAspectRatio)
-            {
-                const double scale = std::min(
-                    static_cast<double>(m_settings.m_scaleWidth) / static_cast<double>(inputWidth),
-                    static_cast<double>(m_settings.m_scaleHeight) / static_cast<double>(inputHeight));
-                outputSize = QSize(
-                    std::max(1, static_cast<int>(std::lround(static_cast<double>(inputWidth) * scale))),
-                    std::max(1, static_cast<int>(std::lround(static_cast<double>(inputHeight) * scale))));
-            }
-            else
-            {
-                outputSize = QSize(m_settings.m_scaleWidth, m_settings.m_scaleHeight);
-            }
+        if (m_settings.m_scaleEnabled && (m_settings.m_scaleWidth > 0) && (m_settings.m_scaleHeight > 0)) {
+            outputSize = QSize(m_settings.m_scaleWidth, m_settings.m_scaleHeight);
         }
     }
-    else if (m_settings.m_scaleEnabled && (m_settings.m_scaleWidth > 0) && (m_settings.m_scaleHeight > 0) && !m_settings.m_scaleKeepAspectRatio)
+    else if (m_settings.m_scaleEnabled && (m_settings.m_scaleWidth > 0) && (m_settings.m_scaleHeight > 0))
     {
         outputSize = QSize(m_settings.m_scaleWidth, m_settings.m_scaleHeight);
     }
@@ -6687,6 +6678,16 @@ void CameraGUI::on_scaleKeepAspectRatioCheck_toggled(bool checked)
     m_settings.m_scaleKeepAspectRatio = checked;
     updateScaleControls();
     applySetting("scaleKeepAspectRatio");
+}
+
+void CameraGUI::on_scaleJustificationCombo_currentIndexChanged(int index)
+{
+    m_settings.m_scaleJustification = static_cast<CameraSettings::ScaleJustification>(
+        qBound(static_cast<int>(CameraSettings::ScaleJustifyCenter),
+            index,
+            static_cast<int>(CameraSettings::ScaleJustifyBottom)));
+    updateScaleControls();
+    applySetting("scaleJustification");
 }
 
 void CameraGUI::on_stackDarkFileEdit_editingFinished()

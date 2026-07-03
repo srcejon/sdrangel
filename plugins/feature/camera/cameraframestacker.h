@@ -21,6 +21,7 @@
 
 #include <QObject>
 #include <QMutex>
+#include <QRect>
 #include <QString>
 #include <deque>
 #include <vector>
@@ -172,6 +173,7 @@ private:
     static double medianQualityValue(const std::deque<StackFrameQuality>& qualities, double StackFrameQuality::*member);
     bool canPassThroughFrame(const CameraPipelineFrame& inputFrame) const;
     [[nodiscard]] QSize scaledOutputSize(const QSize& inputSize) const;
+    [[nodiscard]] QRect scaledContentRect(const QSize& inputSize, const QSize& outputSize) const;
     [[nodiscard]] bool applyOutputScaling(CameraPipelineFrame& frame);
     [[nodiscard]] bool applyFrameStacking(CameraPipelineFrame& inputFrame, QImage& outputImage, int& stackCount);
     [[nodiscard]] bool shouldRejectStackFrame(const StackFrameQuality& quality, QString& reason) const;

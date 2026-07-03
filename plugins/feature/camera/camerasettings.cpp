@@ -228,6 +228,7 @@ void CameraSettings::resetToDefaults()
     m_scaleWidth = 0;
     m_scaleHeight = 0;
     m_scaleKeepAspectRatio = true;
+    m_scaleJustification = ScaleJustifyCenter;
     m_stackDarkFileName.clear();
     m_stackFlatFileName.clear();
     m_stackBiasFileName.clear();
@@ -690,6 +691,7 @@ QByteArray CameraSettings::serialize() const
     s.writeFloat(271, m_azimuthOffset);
     s.writeFloat(272, m_elevationOffset);
     s.writeFloat(273, m_rollOffset);
+    s.writeS32(274, static_cast<qint32>(m_scaleJustification));
 
     return s.final();
 }
@@ -1171,6 +1173,12 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readFloat(271, &m_azimuthOffset, 0.0f);
         d.readFloat(272, &m_elevationOffset, 0.0f);
         d.readFloat(273, &m_rollOffset, 0.0f);
+        qint32 scaleJustification = static_cast<qint32>(ScaleJustifyCenter);
+        d.readS32(274, &scaleJustification, scaleJustification);
+        m_scaleJustification = static_cast<ScaleJustification>(qBound(
+            static_cast<qint32>(ScaleJustifyCenter),
+            scaleJustification,
+            static_cast<qint32>(ScaleJustifyBottom)));
         if (isStreamCamera() && m_streamUrl.isEmpty()) {
             m_streamUrl = m_videoFileCameraPath;
         }
@@ -1586,6 +1594,12 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     }
     if (settingsKeys.contains("scaleKeepAspectRatio")) {
         m_scaleKeepAspectRatio = settings.m_scaleKeepAspectRatio;
+    }
+    if (settingsKeys.contains("scaleJustification")) {
+        m_scaleJustification = static_cast<ScaleJustification>(qBound(
+            static_cast<int>(ScaleJustifyCenter),
+            static_cast<int>(settings.m_scaleJustification),
+            static_cast<int>(ScaleJustifyBottom)));
     }
     if (settingsKeys.contains("stackDarkFileName")) {
         m_stackDarkFileName = settings.m_stackDarkFileName;
@@ -2400,6 +2414,9 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("scaleKeepAspectRatio") || force) {
         ostr << " m_scaleKeepAspectRatio: " << m_scaleKeepAspectRatio;
+    }
+    if (settingsKeys.contains("scaleJustification") || force) {
+        ostr << " m_scaleJustification: " << static_cast<int>(m_scaleJustification);
     }
     if (settingsKeys.contains("stackDarkFileName") || force) {
         ostr << " m_stackDarkFileName: " << m_stackDarkFileName.toStdString();

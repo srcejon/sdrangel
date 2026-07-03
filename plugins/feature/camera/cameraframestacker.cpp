@@ -781,7 +781,8 @@ void CameraFrameStacker::applySettings(const CameraSettings& settings, const QLi
     const bool scaleChanged = settingsKeys.contains("scaleEnabled")
         || settingsKeys.contains("scaleWidth")
         || settingsKeys.contains("scaleHeight")
-        || settingsKeys.contains("scaleKeepAspectRatio");
+        || settingsKeys.contains("scaleKeepAspectRatio")
+        || settingsKeys.contains("scaleJustification");
     const bool sourceChanged = force
         || settingsKeys.contains("cameraId")
         || settingsKeys.contains("cameraProtocol")
@@ -1000,26 +1001,63 @@ QSize CameraFrameStacker::scaledOutputSize(const QSize& inputSize) const
     int targetWidth = qBound(1, m_settings.m_scaleWidth, 65535);
     int targetHeight = qBound(1, m_settings.m_scaleHeight, 65535);
 
+    return QSize(targetWidth, targetHeight);
+}
+
+QRect CameraFrameStacker::scaledContentRect(const QSize& inputSize, const QSize& outputSize) const
+{
+    if (inputSize.isEmpty() || outputSize.isEmpty()) {
+        return QRect();
+    }
+
+    QSize contentSize = outputSize;
+
     if (m_settings.m_scaleKeepAspectRatio)
     {
         const double scale = std::min(
-            static_cast<double>(targetWidth) / static_cast<double>(inputSize.width()),
-            static_cast<double>(targetHeight) / static_cast<double>(inputSize.height()));
-        targetWidth = std::max(1, static_cast<int>(std::lround(static_cast<double>(inputSize.width()) * scale)));
-        targetHeight = std::max(1, static_cast<int>(std::lround(static_cast<double>(inputSize.height()) * scale)));
+            static_cast<double>(outputSize.width()) / static_cast<double>(inputSize.width()),
+            static_cast<double>(outputSize.height()) / static_cast<double>(inputSize.height()));
+        contentSize = QSize(
+            std::max(1, static_cast<int>(std::lround(static_cast<double>(inputSize.width()) * scale))),
+            std::max(1, static_cast<int>(std::lround(static_cast<double>(inputSize.height()) * scale))));
     }
 
-    return QSize(targetWidth, targetHeight);
+    const int extraWidth = std::max(0, outputSize.width() - contentSize.width());
+    const int extraHeight = std::max(0, outputSize.height() - contentSize.height());
+    int x = extraWidth / 2;
+    int y = extraHeight / 2;
+
+    switch (m_settings.m_scaleJustification)
+    {
+    case CameraSettings::ScaleJustifyLeft:
+        x = 0;
+        break;
+    case CameraSettings::ScaleJustifyRight:
+        x = extraWidth;
+        break;
+    case CameraSettings::ScaleJustifyTop:
+        y = 0;
+        break;
+    case CameraSettings::ScaleJustifyBottom:
+        y = extraHeight;
+        break;
+    case CameraSettings::ScaleJustifyCenter:
+    default:
+        break;
+    }
+
+    return QRect(QPoint(x, y), contentSize);
 }
 
 bool CameraFrameStacker::applyOutputScaling(CameraPipelineFrame& frame)
 {
     const QSize inputSize = frame.imageSize();
     const QSize targetSize = scaledOutputSize(inputSize);
-    if (targetSize == inputSize) {
+    const QRect contentRect = scaledContentRect(inputSize, targetSize);
+    if ((targetSize == inputSize) && (contentRect.size() == inputSize) && (contentRect.topLeft() == QPoint(0, 0))) {
         return true;
     }
-    if (targetSize.isEmpty()) {
+    if (targetSize.isEmpty() || contentRect.isEmpty()) {
         return false;
     }
 
@@ -1041,10 +1079,20 @@ bool CameraFrameStacker::applyOutputScaling(CameraPipelineFrame& frame)
     }
 
     cv::Mat scaledMat;
-    const bool downscale = (targetSize.width() < inputMat.cols) || (targetSize.height() < inputMat.rows);
+    const bool downscale = (contentRect.width() < inputMat.cols) || (contentRect.height() < inputMat.rows);
     const int interpolation = downscale ? cv::INTER_AREA : cv::INTER_CUBIC;
-    cv::resize(inputMat, scaledMat, cv::Size(targetSize.width(), targetSize.height()), 0.0, 0.0, interpolation);
-    frame.m_image = workingMatToImage(scaledMat);
+    cv::resize(inputMat, scaledMat, cv::Size(contentRect.width(), contentRect.height()), 0.0, 0.0, interpolation);
+
+    if ((contentRect.size() != targetSize) || (contentRect.topLeft() != QPoint(0, 0)))
+    {
+        cv::Mat canvas(targetSize.height(), targetSize.width(), scaledMat.type(), cv::Scalar::all(0));
+        scaledMat.copyTo(canvas(cv::Rect(contentRect.x(), contentRect.y(), contentRect.width(), contentRect.height())));
+        frame.m_image = workingMatToImage(canvas);
+    }
+    else
+    {
+        frame.m_image = workingMatToImage(scaledMat);
+    }
     frame.clearCudaCache();
     return !frame.m_image.isNull();
 }
@@ -1052,14 +1100,30 @@ bool CameraFrameStacker::applyOutputScaling(CameraPipelineFrame& frame)
 #ifdef CAMERA_OPENCV_CUDA_STACKING
 bool CameraFrameStacker::applyOutputScalingCuda(CameraPipelineFrame& frame, const QSize& targetSize)
 {
-    const cv::Size targetCvSize(targetSize.width(), targetSize.height());
+    const QSize inputSize = frame.imageSize();
+    const QRect contentRect = scaledContentRect(inputSize, targetSize);
+    if (contentRect.isEmpty()) {
+        return false;
+    }
+
+    const cv::Size contentCvSize(contentRect.width(), contentRect.height());
     constexpr int interpolation = cv::INTER_LINEAR;
 
     if (frame.hasCudaBgrImage())
     {
         cv::cuda::GpuMat scaledGpu;
-        cv::cuda::resize(frame.m_cudaBgrImage, scaledGpu, targetCvSize, 0.0, 0.0, interpolation, m_cudaStackingStream);
-        frame.m_cudaBgrImage = scaledGpu;
+        cv::cuda::resize(frame.m_cudaBgrImage, scaledGpu, contentCvSize, 0.0, 0.0, interpolation, m_cudaStackingStream);
+        if ((contentRect.size() != targetSize) || (contentRect.topLeft() != QPoint(0, 0)))
+        {
+            cv::cuda::GpuMat canvas(targetSize.height(), targetSize.width(), scaledGpu.type());
+            canvas.setTo(cv::Scalar::all(0), m_cudaStackingStream);
+            scaledGpu.copyTo(canvas(cv::Rect(contentRect.x(), contentRect.y(), contentRect.width(), contentRect.height())), m_cudaStackingStream);
+            frame.m_cudaBgrImage = canvas;
+        }
+        else
+        {
+            frame.m_cudaBgrImage = scaledGpu;
+        }
         frame.m_cudaGrayImage.release();
         frame.clearCpuImage();
         m_cudaStackingStream.waitForCompletion();
@@ -1069,8 +1133,18 @@ bool CameraFrameStacker::applyOutputScalingCuda(CameraPipelineFrame& frame, cons
     if (frame.hasCudaGrayImage())
     {
         cv::cuda::GpuMat scaledGpu;
-        cv::cuda::resize(frame.m_cudaGrayImage, scaledGpu, targetCvSize, 0.0, 0.0, interpolation, m_cudaStackingStream);
-        frame.m_cudaGrayImage = scaledGpu;
+        cv::cuda::resize(frame.m_cudaGrayImage, scaledGpu, contentCvSize, 0.0, 0.0, interpolation, m_cudaStackingStream);
+        if ((contentRect.size() != targetSize) || (contentRect.topLeft() != QPoint(0, 0)))
+        {
+            cv::cuda::GpuMat canvas(targetSize.height(), targetSize.width(), scaledGpu.type());
+            canvas.setTo(cv::Scalar::all(0), m_cudaStackingStream);
+            scaledGpu.copyTo(canvas(cv::Rect(contentRect.x(), contentRect.y(), contentRect.width(), contentRect.height())), m_cudaStackingStream);
+            frame.m_cudaGrayImage = canvas;
+        }
+        else
+        {
+            frame.m_cudaGrayImage = scaledGpu;
+        }
         frame.m_cudaBgrImage.release();
         frame.clearCpuImage();
         m_cudaStackingStream.waitForCompletion();

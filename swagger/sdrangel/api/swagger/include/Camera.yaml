@@ -363,6 +363,9 @@ CameraSettings:
     scaleKeepAspectRatio:
       description: "Fit the scaled output inside the requested size without stretching (1 for yes, 0 for no)"
       type: integer
+    scaleJustification:
+      description: "Placement of the fitted image when keep-aspect scaling leaves padding: 0 center, 1 left, 2 right, 3 top, 4 bottom"
+      type: integer
     stackDarkFileName:
       description: "Dark calibration frame file path"
       type: string

@@ -69,6 +69,26 @@ static constexpr double kTrackedObjectHeatMapLineWidthPixels = 10.0;
 static constexpr float kTrackedObjectHeatMapStrokeDensity = 0.25f;
 static constexpr float kTrackedObjectHeatMapSaturationDensity = 16.0f;
 
+bool imageTransformEquivalent(const CameraPipelineImageTransform& lhs, const CameraPipelineImageTransform& rhs)
+{
+    const bool lhsValid = lhs.isValid();
+    const bool rhsValid = rhs.isValid();
+    if (lhsValid != rhsValid) {
+        return false;
+    }
+    if (!lhsValid) {
+        return true;
+    }
+
+    return lhs.m_opticalSize == rhs.m_opticalSize
+        && lhs.m_opticalToImage.m11() == rhs.m_opticalToImage.m11()
+        && lhs.m_opticalToImage.m12() == rhs.m_opticalToImage.m12()
+        && lhs.m_opticalToImage.m21() == rhs.m_opticalToImage.m21()
+        && lhs.m_opticalToImage.m22() == rhs.m_opticalToImage.m22()
+        && lhs.m_opticalToImage.dx() == rhs.m_opticalToImage.dx()
+        && lhs.m_opticalToImage.dy() == rhs.m_opticalToImage.dy();
+}
+
 struct EquatorialStar
 {
     double rightAscensionDegrees;
@@ -584,12 +604,15 @@ struct SkyProjector
     double distortionK1 = 0.0;
     int width = 0;
     int height = 0;
+    CameraPipelineImageTransform imageTransform;
 
-    static SkyProjector create(const CameraSettings& settings, const QSize& size)
+    static SkyProjector create(const CameraSettings& settings, const QSize& imageSize, const CameraPipelineImageTransform& transform = CameraPipelineImageTransform())
     {
         SkyProjector projector;
-        projector.width = size.width();
-        projector.height = size.height();
+        projector.imageTransform = transform;
+        const QSize projectionSize = transform.opticalSize(imageSize);
+        projector.width = projectionSize.width();
+        projector.height = projectionSize.height();
         projector.lensProjection = settings.m_lensProjection;
 
         if (projector.width <= 0 || projector.height <= 0 || settings.m_fov <= 0.0f) {
@@ -678,8 +701,10 @@ struct SkyProjector
             return false;
         }
 
-        point.setX(principalPointX + normalizedX * 0.5 * static_cast<double>(width));
-        point.setY(principalPointY - normalizedY * 0.5 * static_cast<double>(height));
+        const QPointF opticalPoint(
+            principalPointX + normalizedX * 0.5 * static_cast<double>(width),
+            principalPointY - normalizedY * 0.5 * static_cast<double>(height));
+        point = imageTransform.mapOpticalToImage(opticalPoint);
         return true;
     }
 };
@@ -832,6 +857,7 @@ bool CameraPostProcessor::handleMessage(const Message& cmd)
         m_trackedObjectHeatMap = QImage();
         m_trackedObjectHeatMapDensity.clear();
         m_trackedObjectHeatMapSize = QSize();
+        m_trackedObjectHeatMapTransform.clear();
         m_trackedObjectHeatMapLastPoints.clear();
         m_trackedObjectHeatMapSkipSeed = true;
 
@@ -972,6 +998,7 @@ void CameraPostProcessor::applySettings(const CameraSettings& settings, const QL
         m_trackedObjectHeatMap = QImage();
         m_trackedObjectHeatMapDensity.clear();
         m_trackedObjectHeatMapSize = QSize();
+        m_trackedObjectHeatMapTransform.clear();
         m_trackedObjectHeatMapLastPoints.clear();
         m_trackedObjectHeatMapSkipSeed = false;
     }
@@ -1845,7 +1872,7 @@ static void renderSkyGridLabels(
     }
 }
 
-void CameraPostProcessor::applySkyGridOverlay(QImage& image, bool drawLabels, QVector<PreviewTextLabel> *previewTextLabels) const
+void CameraPostProcessor::applySkyGridOverlay(const CameraPipelineFrame& frame, QImage& image, bool drawLabels, QVector<PreviewTextLabel> *previewTextLabels) const
 {
     PROFILER_START();
 
@@ -1855,7 +1882,7 @@ void CameraPostProcessor::applySkyGridOverlay(QImage& image, bool drawLabels, QV
         return;
     }
 
-    const SkyProjector projector = SkyProjector::create(m_settings, image.size());
+    const SkyProjector projector = SkyProjector::create(m_settings, image.size(), frame.m_imageTransform);
     if (!projector.valid) {
         return;
     }
@@ -1880,6 +1907,16 @@ void CameraPostProcessor::applySkyGridOverlay(QImage& image, bool drawLabels, QV
     key.m_lensCenterOffsetX = m_settings.m_lensCenterOffsetX;
     key.m_lensCenterOffsetY = m_settings.m_lensCenterOffsetY;
     key.m_lensDistortionK1 = m_settings.m_lensDistortionK1;
+    key.m_opticalSize = frame.opticalImageSize();
+    if (frame.m_imageTransform.isValid())
+    {
+        key.m_opticalToImageM11 = frame.m_imageTransform.m_opticalToImage.m11();
+        key.m_opticalToImageM12 = frame.m_imageTransform.m_opticalToImage.m12();
+        key.m_opticalToImageM21 = frame.m_imageTransform.m_opticalToImage.m21();
+        key.m_opticalToImageM22 = frame.m_imageTransform.m_opticalToImage.m22();
+        key.m_opticalToImageDx = frame.m_imageTransform.m_opticalToImage.dx();
+        key.m_opticalToImageDy = frame.m_imageTransform.m_opticalToImage.dy();
+    }
     key.m_latitude = drawEquatorial ? static_cast<double>(m_settings.m_latitude) : 0.0;
     key.m_longitude = drawEquatorial ? static_cast<double>(m_settings.m_longitude) : 0.0;
     key.m_equatorialTimeBucket = drawEquatorial
@@ -1915,7 +1952,7 @@ void CameraPostProcessor::applySkyGridOverlay(QImage& image, bool drawLabels, QV
     PROFILER_STOP(__FUNCTION__);
 }
 
-void CameraPostProcessor::applyConstellationOverlay(QImage& image) const
+void CameraPostProcessor::applyConstellationOverlay(const CameraPipelineFrame& frame, QImage& image) const
 {
     PROFILER_START();
 
@@ -1923,7 +1960,7 @@ void CameraPostProcessor::applyConstellationOverlay(QImage& image) const
         return;
     }
 
-    const SkyProjector projector = SkyProjector::create(m_settings, image.size());
+    const SkyProjector projector = SkyProjector::create(m_settings, image.size(), frame.m_imageTransform);
     if (!projector.valid) {
         return;
     }
@@ -1950,7 +1987,7 @@ void CameraPostProcessor::applyConstellationOverlay(QImage& image) const
     PROFILER_STOP(__FUNCTION__);
 }
 
-void CameraPostProcessor::applyTrackedObjectOverlay(QImage& image, bool drawLabels, QVector<PreviewTextLabel> *previewTextLabels, QVector<CameraPipelineTrackedObject> *trackedObjects)
+void CameraPostProcessor::applyTrackedObjectOverlay(const CameraPipelineFrame& frame, QImage& image, bool drawLabels, QVector<PreviewTextLabel> *previewTextLabels, QVector<CameraPipelineTrackedObject> *trackedObjects)
 {
     PROFILER_START();
 
@@ -1963,7 +2000,8 @@ void CameraPostProcessor::applyTrackedObjectOverlay(QImage& image, bool drawLabe
         if (m_settings.m_trackObjectHeatMap
             && !m_trackedObjectHeatMap.isNull()
             && (m_trackedObjectHeatMap.size() == image.size())
-            && (m_trackedObjectHeatMapSize == image.size()))
+            && (m_trackedObjectHeatMapSize == image.size())
+            && imageTransformEquivalent(m_trackedObjectHeatMapTransform, frame.m_imageTransform))
         {
             QPainter painter(&image);
             painter.drawImage(0, 0, m_trackedObjectHeatMap);
@@ -1971,7 +2009,7 @@ void CameraPostProcessor::applyTrackedObjectOverlay(QImage& image, bool drawLabe
         return;
     }
 
-    const SkyProjector projector = SkyProjector::create(m_settings, image.size());
+    const SkyProjector projector = SkyProjector::create(m_settings, image.size(), frame.m_imageTransform);
     if (!projector.valid) {
         return;
     }
@@ -2007,12 +2045,14 @@ void CameraPostProcessor::applyTrackedObjectOverlay(QImage& image, bool drawLabe
         if ((m_trackedObjectHeatMap.size() != image.size())
             || (m_trackedObjectHeatMap.format() != QImage::Format_ARGB32_Premultiplied)
             || (m_trackedObjectHeatMapDensity.size() != (image.width() * image.height()))
-            || (m_trackedObjectHeatMapSize != image.size()))
+            || (m_trackedObjectHeatMapSize != image.size())
+            || !imageTransformEquivalent(m_trackedObjectHeatMapTransform, frame.m_imageTransform))
         {
             m_trackedObjectHeatMap = QImage(image.size(), QImage::Format_ARGB32_Premultiplied);
             m_trackedObjectHeatMap.fill(Qt::transparent);
             m_trackedObjectHeatMapDensity.fill(0.0f, image.width() * image.height());
             m_trackedObjectHeatMapSize = image.size();
+            m_trackedObjectHeatMapTransform = frame.m_imageTransform;
             m_trackedObjectHeatMapLastPoints.clear();
         }
 
@@ -2265,14 +2305,14 @@ QImage CameraPostProcessor::applyPostProcessing(const CameraPipelineFrame& frame
     if (!frame.m_starDetections.isEmpty()) { 
         applyStarOverlay(result, frame.m_starDetections, drawPreviewText, previewTextLabels); 
     }
-    if (m_settings.m_equatorialGrid || m_settings.m_altAzGrid) { 
-        applySkyGridOverlay(result, drawPreviewText, previewTextLabels); 
+    if (m_settings.m_equatorialGrid || m_settings.m_altAzGrid) {
+        applySkyGridOverlay(frame, result, drawPreviewText, previewTextLabels);
     }
-    if (m_settings.m_constellation) { 
-        applyConstellationOverlay(result); 
+    if (m_settings.m_constellation) {
+        applyConstellationOverlay(frame, result);
     }
-    if (m_settings.m_trackObjects) { 
-        applyTrackedObjectOverlay(result, drawPreviewText, previewTextLabels, trackedObjects); 
+    if (m_settings.m_trackObjects) {
+        applyTrackedObjectOverlay(frame, result, drawPreviewText, previewTextLabels, trackedObjects);
     }
     if (needsSpectrumOverlay) {
         applySpectrumOverlay(result);

@@ -288,6 +288,13 @@ private:
             double m_lensCenterOffsetX = 0.0;
             double m_lensCenterOffsetY = 0.0;
             double m_lensDistortionK1 = 0.0;
+            QSize m_opticalSize;
+            double m_opticalToImageM11 = 1.0;
+            double m_opticalToImageM12 = 0.0;
+            double m_opticalToImageM21 = 0.0;
+            double m_opticalToImageM22 = 1.0;
+            double m_opticalToImageDx = 0.0;
+            double m_opticalToImageDy = 0.0;
             double m_latitude = 0.0;
             double m_longitude = 0.0;
             qint64 m_equatorialTimeBucket = 0;
@@ -307,6 +314,13 @@ private:
                     && m_lensCenterOffsetX == other.m_lensCenterOffsetX
                     && m_lensCenterOffsetY == other.m_lensCenterOffsetY
                     && m_lensDistortionK1 == other.m_lensDistortionK1
+                    && m_opticalSize == other.m_opticalSize
+                    && m_opticalToImageM11 == other.m_opticalToImageM11
+                    && m_opticalToImageM12 == other.m_opticalToImageM12
+                    && m_opticalToImageM21 == other.m_opticalToImageM21
+                    && m_opticalToImageM22 == other.m_opticalToImageM22
+                    && m_opticalToImageDx == other.m_opticalToImageDx
+                    && m_opticalToImageDy == other.m_opticalToImageDy
                     && m_latitude == other.m_latitude
                     && m_longitude == other.m_longitude
                     && m_equatorialTimeBucket == other.m_equatorialTimeBucket;
@@ -346,6 +360,7 @@ private:
     QImage m_trackedObjectHeatMap;
     QVector<float> m_trackedObjectHeatMapDensity;
     QSize m_trackedObjectHeatMapSize;
+    CameraPipelineImageTransform m_trackedObjectHeatMapTransform;
     QHash<QString, QPointF> m_trackedObjectHeatMapLastPoints;
     bool m_trackedObjectHeatMapSkipSeed = false;
     QMutex m_frameMutex;
@@ -378,9 +393,9 @@ private:
     void applySpectrumOverlay(QImage& image) const;
     [[nodiscard]] static const QImage& ensureRgb888(const QImage& image, QImage& convertedImage);
     [[nodiscard]] static cv::Mat wrapRgb888Image(const QImage& image);
-    void applySkyGridOverlay(QImage& image, bool drawLabels, QVector<PreviewTextLabel> *previewTextLabels) const;
-    void applyConstellationOverlay(QImage& image) const;
-    void applyTrackedObjectOverlay(QImage& image, bool drawLabels, QVector<PreviewTextLabel> *previewTextLabels, QVector<CameraPipelineTrackedObject> *trackedObjects = nullptr);
+    void applySkyGridOverlay(const CameraPipelineFrame& frame, QImage& image, bool drawLabels, QVector<PreviewTextLabel> *previewTextLabels) const;
+    void applyConstellationOverlay(const CameraPipelineFrame& frame, QImage& image) const;
+    void applyTrackedObjectOverlay(const CameraPipelineFrame& frame, QImage& image, bool drawLabels, QVector<PreviewTextLabel> *previewTextLabels, QVector<CameraPipelineTrackedObject> *trackedObjects = nullptr);
     void applyDateTimeOverlay(QImage& image, bool drawLabel, QVector<PreviewTextLabel> *previewTextLabels) const;
     void applyTextOverlay(QImage& image, QTextDocument& overlayTextDocument) const;
     [[nodiscard]] QString expandOverlayTextTemplate() const;

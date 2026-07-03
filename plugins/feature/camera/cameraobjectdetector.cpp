@@ -1422,11 +1422,12 @@ void CameraObjectDetector::sendFirstObjectDetectionTarget(const QVector<CameraPi
     const QPointF center(
         static_cast<double>(detection.m_box.left()) + static_cast<double>(detection.m_box.width()) * 0.5,
         static_cast<double>(detection.m_box.top()) + static_cast<double>(detection.m_box.height()) * 0.5);
+    const QPointF projectionCenter = frame.mapImageToOptical(center);
     const CameraSettings projectionSettings = targetProjectionSettings(m_settings, frame);
     double azimuth = 0.0;
     double elevation = 0.0;
 
-    if (!pixelToAltAz(projectionSettings, frame.imageSize(), center, azimuth, elevation)) {
+    if (!pixelToAltAz(projectionSettings, frame.opticalImageSize(), projectionCenter, azimuth, elevation)) {
         return;
     }
 

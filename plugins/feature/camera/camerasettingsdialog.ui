@@ -2,6 +2,9 @@
 <ui version="4.0">
  <class>CameraSettingsDialog</class>
  <widget class="QDialog" name="CameraSettingsDialog">
+  <property name="toolTip">
+   <string>Configures the camera Settings Dialog setting.</string>
+  </property>
   <property name="geometry">
    <rect>
     <x>0</x>
@@ -16,16 +19,25 @@
   <layout class="QVBoxLayout" name="verticalLayout">
    <item>
     <widget class="QTabWidget" name="tabWidget">
+     <property name="toolTip">
+      <string>Switches between camera settings pages.</string>
+     </property>
      <property name="currentIndex">
       <number>0</number>
      </property>
      <widget class="QWidget" name="cameraTab">
+      <property name="toolTip">
+       <string>Camera capture, exposure, gain, focus, and hardware controls.</string>
+      </property>
       <attribute name="title">
        <string>Camera</string>
       </attribute>
       <layout class="QVBoxLayout" name="cameraTabLayout">
        <item alignment="Qt::AlignmentFlag::AlignTop">
         <widget class="QWidget" name="cameraSettingsContainer" native="true">
+         <property name="toolTip">
+          <string>Container for camera capture settings.</string>
+         </property>
          <property name="sizePolicy">
           <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
            <horstretch>0</horstretch>
@@ -130,6 +142,9 @@
           </item>
           <item row="22" column="1">
            <widget class="QSpinBox" name="alpacaFocusPositionSpin">
+            <property name="toolTip">
+             <string>Sets the Alpaca focuser target position.</string>
+            </property>
             <property name="maximum">
              <number>1000000</number>
             </property>
@@ -235,6 +250,9 @@
           </item>
           <item row="22" column="3">
            <widget class="QSpinBox" name="alpacaFocusStepSizeSpin">
+            <property name="toolTip">
+             <string>Sets the focuser step size used for manual focus moves and autofocus sweeps.</string>
+            </property>
             <property name="minimum">
              <number>1</number>
             </property>
@@ -348,6 +366,9 @@
            <layout class="QHBoxLayout" name="captureLayout">
             <item>
              <widget class="QStackedWidget" name="captureValueStack">
+              <property name="toolTip">
+               <string>Shows frame-rate or interval controls for the selected capture mode.</string>
+              </property>
               <property name="sizePolicy">
                <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
                 <horstretch>0</horstretch>
@@ -358,6 +379,9 @@
                <number>0</number>
               </property>
               <widget class="QWidget" name="frameRatePage">
+               <property name="toolTip">
+                <string>Frame-rate controls for video capture mode.</string>
+               </property>
                <layout class="QHBoxLayout" name="captureModeFrameRateLayout">
                 <property name="leftMargin">
                  <number>0</number>
@@ -373,10 +397,16 @@
                 </property>
                 <item>
                  <widget class="QStackedWidget" name="fpsStack">
+                  <property name="toolTip">
+                   <string>Shows the available frame-rate selector for the selected camera.</string>
+                  </property>
                   <property name="currentIndex">
                    <number>0</number>
                   </property>
                   <widget class="QWidget" name="fpsComboPage">
+                   <property name="toolTip">
+                    <string>Frame-rate selector page for enumerated camera frame rates.</string>
+                   </property>
                    <layout class="QHBoxLayout" name="horizontalLayout_5">
                     <property name="leftMargin">
                      <number>0</number>
@@ -400,6 +430,9 @@
                    </layout>
                   </widget>
                   <widget class="QWidget" name="fpsSpinPage">
+                   <property name="toolTip">
+                    <string>Frame-rate selector page for manually entered frame rates.</string>
+                   </property>
                    <layout class="QHBoxLayout" name="horizontalLayout_6">
                     <property name="leftMargin">
                      <number>0</number>
@@ -433,6 +466,9 @@
                </layout>
               </widget>
               <widget class="QWidget" name="intervalPage">
+               <property name="toolTip">
+                <string>Interval controls for still-image capture mode.</string>
+               </property>
                <layout class="QHBoxLayout" name="captureModeIntervalLayout">
                 <property name="leftMargin">
                  <number>0</number>
@@ -683,6 +719,9 @@
           </item>
           <item row="27" column="1">
            <widget class="QDoubleSpinBox" name="autoExposureMinMsSpin">
+            <property name="toolTip">
+             <string>Minimum exposure time the software auto exposure controller may select.</string>
+            </property>
             <property name="suffix">
              <string> ms</string>
             </property>
@@ -706,6 +745,9 @@
           </item>
           <item row="27" column="3">
            <widget class="QDoubleSpinBox" name="autoExposureMaxMsSpin">
+            <property name="toolTip">
+             <string>Maximum exposure time the software auto exposure controller may select.</string>
+            </property>
             <property name="suffix">
              <string> ms</string>
             </property>
@@ -732,6 +774,9 @@
           </item>
           <item row="28" column="1">
            <widget class="QSpinBox" name="autoExposureMinGainSpin">
+            <property name="toolTip">
+             <string>Minimum camera gain the software auto exposure controller may select.</string>
+            </property>
             <property name="maximum">
              <number>100000</number>
             </property>
@@ -746,6 +791,9 @@
           </item>
           <item row="28" column="3">
            <widget class="QSpinBox" name="autoExposureMaxGainSpin">
+            <property name="toolTip">
+             <string>Maximum camera gain the software auto exposure controller may select.</string>
+            </property>
             <property name="maximum">
              <number>100000</number>
             </property>
@@ -785,6 +833,9 @@
           </item>
           <item row="18" column="1">
            <widget class="QCheckBox" name="asiCoolerOnCheck">
+            <property name="toolTip">
+             <string>Enables or disables the ASI camera cooler when the camera supports cooling.</string>
+            </property>
             <property name="text">
              <string/>
             </property>
@@ -892,6 +943,9 @@
           </item>
           <item row="20" column="1">
            <widget class="QSpinBox" name="asiUsbBandwidthSpin">
+            <property name="toolTip">
+             <string>Sets the ASI USB bandwidth limit; higher values can increase frame rate but may be less stable.</string>
+            </property>
             <property name="suffix">
              <string>%</string>
             </property>
@@ -909,6 +963,9 @@
           </item>
           <item row="20" column="3">
            <widget class="QCheckBox" name="asiHighSpeedModeCheck">
+            <property name="toolTip">
+             <string>Enables ASI high speed mode when supported by the camera.</string>
+            </property>
             <property name="text">
              <string/>
             </property>
@@ -923,6 +980,9 @@
           </item>
           <item row="18" column="3">
            <widget class="QSpinBox" name="asiTargetTempSpin">
+            <property name="toolTip">
+             <string>Sets the ASI cooler target temperature in degrees Celsius.</string>
+            </property>
             <property name="minimum">
              <number>-50</number>
             </property>
@@ -957,12 +1017,18 @@
       </layout>
      </widget>
      <widget class="QWidget" name="statusTab">
+      <property name="toolTip">
+       <string>Current camera, sensor, capture, and pipeline status.</string>
+      </property>
       <attribute name="title">
        <string>Status</string>
       </attribute>
       <layout class="QVBoxLayout" name="verticalLayout_3">
        <item alignment="Qt::AlignmentFlag::AlignTop">
         <widget class="QWidget" name="statusContainer" native="true">
+         <property name="toolTip">
+          <string>Container for camera status values.</string>
+         </property>
          <property name="sizePolicy">
           <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
            <horstretch>0</horstretch>
@@ -1182,6 +1248,9 @@
        </item>
        <item>
         <widget class="QWidget" name="cameraTempChartContainer" native="true">
+         <property name="toolTip">
+          <string>Displays the camera temperature history chart.</string>
+         </property>
          <property name="minimumSize">
           <size>
            <width>0</width>
@@ -1206,12 +1275,18 @@
       </layout>
      </widget>
      <widget class="QWidget" name="alpacaTab">
+      <property name="toolTip">
+       <string>Alpaca server and device discovery settings.</string>
+      </property>
       <attribute name="title">
        <string>Alpaca</string>
       </attribute>
       <layout class="QVBoxLayout" name="verticalLayout_6">
        <item alignment="Qt::AlignmentFlag::AlignTop">
         <widget class="QGroupBox" name="alpacaServerSettingsGroup">
+         <property name="toolTip">
+          <string>Settings for connecting to Alpaca camera, focuser, and filter wheel servers.</string>
+         </property>
          <property name="sizePolicy">
           <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
            <horstretch>0</horstretch>
@@ -1223,7 +1298,11 @@
          </property>
          <layout class="QGridLayout" name="gridLayout_10">
           <item row="3" column="1">
-           <widget class="QLineEdit" name="alpacaFocuserHostEdit"/>
+           <widget class="QLineEdit" name="alpacaFocuserHostEdit">
+            <property name="toolTip">
+             <string>Hostname or IP address of the Alpaca focuser server.</string>
+            </property>
+           </widget>
           </item>
           <item row="1" column="3">
            <widget class="QSpinBox" name="alpacaPortSpin">
@@ -1261,6 +1340,9 @@
           </item>
           <item row="3" column="3">
            <widget class="QSpinBox" name="alpacaFocuserPortSpin">
+            <property name="toolTip">
+             <string>TCP port of the Alpaca focuser server.</string>
+            </property>
             <property name="maximum">
              <number>65535</number>
             </property>
@@ -1278,6 +1360,9 @@
           </item>
           <item row="5" column="3">
            <widget class="QSpinBox" name="alpacaFilterWheelPortSpin">
+            <property name="toolTip">
+             <string>TCP port of the Alpaca filter wheel server.</string>
+            </property>
             <property name="maximum">
              <number>65535</number>
             </property>
@@ -1305,7 +1390,11 @@
            </widget>
           </item>
           <item row="5" column="1">
-           <widget class="QLineEdit" name="alpacaFilterWheelHostEdit"/>
+           <widget class="QLineEdit" name="alpacaFilterWheelHostEdit">
+            <property name="toolTip">
+             <string>Hostname or IP address of the Alpaca filter wheel server.</string>
+            </property>
+           </widget>
           </item>
           <item row="3" column="0">
            <widget class="QLabel" name="alpacaFocuserHostLabel">
@@ -1326,6 +1415,9 @@
        </item>
        <item alignment="Qt::AlignmentFlag::AlignTop">
         <widget class="QGroupBox" name="alpacaDevicesGroup">
+         <property name="toolTip">
+          <string>Detected Alpaca devices and optional auxiliary devices.</string>
+         </property>
          <property name="sizePolicy">
           <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
            <horstretch>0</horstretch>
@@ -1338,6 +1430,9 @@
          <layout class="QFormLayout" name="formLayout_3">
           <item row="0" column="0">
            <widget class="QCheckBox" name="alpacaFocuserEnabledCheck">
+            <property name="toolTip">
+             <string>Enables control of an Alpaca focuser alongside the camera.</string>
+            </property>
             <property name="text">
              <string>Use focuser</string>
             </property>
@@ -1352,6 +1447,9 @@
           </item>
           <item row="1" column="0">
            <widget class="QCheckBox" name="alpacaFilterWheelEnabledCheck">
+            <property name="toolTip">
+             <string>Enables control of an Alpaca filter wheel alongside the camera.</string>
+            </property>
             <property name="text">
              <string>Use filter wheel</string>
             </property>
@@ -1383,12 +1481,18 @@
       </layout>
      </widget>
      <widget class="QWidget" name="stackingTab">
+      <property name="toolTip">
+       <string>Calibration, stacking, HDR, and output scaling settings.</string>
+      </property>
       <attribute name="title">
        <string>Cal / Stack</string>
       </attribute>
       <layout class="QVBoxLayout" name="verticalLayout_stacking">
        <item alignment="Qt::AlignmentFlag::AlignTop">
         <widget class="QGroupBox" name="stackCalibrationGroup">
+         <property name="toolTip">
+          <string>Calibration frame files used before stacking.</string>
+         </property>
          <property name="sizePolicy">
           <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
            <horstretch>0</horstretch>
@@ -1500,6 +1604,9 @@
        </item>
        <item alignment="Qt::AlignmentFlag::AlignTop">
         <widget class="QGroupBox" name="stackingGroup">
+         <property name="toolTip">
+          <string>Controls for frame stacking, HDR stacking, alignment, and stack history display.</string>
+         </property>
          <property name="sizePolicy">
           <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
            <horstretch>0</horstretch>
@@ -1610,6 +1717,9 @@
           </item>
           <item row="3" column="1">
            <widget class="QSpinBox" name="stackHdrExposureCountSpin">
+            <property name="toolTip">
+             <string>Number of exposure brackets used for HDR stacking.</string>
+            </property>
             <property name="minimum">
              <number>2</number>
             </property>
@@ -1661,6 +1771,9 @@
            <layout class="QHBoxLayout" name="stackHdrExposure1Layout">
             <item>
              <widget class="QSlider" name="stackHdrExposure1Slider">
+              <property name="toolTip">
+               <string>Exposure time for the first HDR bracket frame.</string>
+              </property>
               <property name="maximum">
                <number>1000</number>
               </property>
@@ -1671,6 +1784,9 @@
             </item>
             <item>
              <widget class="QDoubleSpinBox" name="stackHdrExposure1Spin">
+              <property name="toolTip">
+               <string>Exposure time for the first HDR bracket frame.</string>
+              </property>
               <property name="suffix">
                <string> ms</string>
               </property>
@@ -1692,6 +1808,9 @@
            <layout class="QHBoxLayout" name="stackHdrExposure2Layout">
             <item>
              <widget class="QSlider" name="stackHdrExposure2Slider">
+              <property name="toolTip">
+               <string>Exposure time for the second HDR bracket frame.</string>
+              </property>
               <property name="maximum">
                <number>1000</number>
               </property>
@@ -1702,6 +1821,9 @@
             </item>
             <item>
              <widget class="QDoubleSpinBox" name="stackHdrExposure2Spin">
+              <property name="toolTip">
+               <string>Exposure time for the second HDR bracket frame.</string>
+              </property>
               <property name="suffix">
                <string> ms</string>
               </property>
@@ -1723,6 +1845,9 @@
            <layout class="QHBoxLayout" name="stackHdrExposure3Layout">
             <item>
              <widget class="QSlider" name="stackHdrExposure3Slider">
+              <property name="toolTip">
+               <string>Exposure time for the third HDR bracket frame.</string>
+              </property>
               <property name="maximum">
                <number>1000</number>
               </property>
@@ -1733,6 +1858,9 @@
             </item>
             <item>
              <widget class="QDoubleSpinBox" name="stackHdrExposure3Spin">
+              <property name="toolTip">
+               <string>Exposure time for the third HDR bracket frame.</string>
+              </property>
               <property name="suffix">
                <string> ms</string>
               </property>
@@ -1754,6 +1882,9 @@
            <layout class="QHBoxLayout" name="stackHdrExposure4Layout">
             <item>
              <widget class="QSlider" name="stackHdrExposure4Slider">
+              <property name="toolTip">
+               <string>Exposure time for the fourth HDR bracket frame.</string>
+              </property>
               <property name="maximum">
                <number>1000</number>
               </property>
@@ -1764,6 +1895,9 @@
             </item>
             <item>
              <widget class="QDoubleSpinBox" name="stackHdrExposure4Spin">
+              <property name="toolTip">
+               <string>Exposure time for the fourth HDR bracket frame.</string>
+              </property>
               <property name="suffix">
                <string> ms</string>
               </property>
@@ -1876,6 +2010,9 @@
        </item>
        <item alignment="Qt::AlignmentFlag::AlignTop">
         <widget class="QGroupBox" name="scaleGroup">
+         <property name="toolTip">
+          <string>Controls optional image scaling after stacking.</string>
+         </property>
          <property name="sizePolicy">
           <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
            <horstretch>0</horstretch>
@@ -2052,12 +2189,18 @@
       </layout>
      </widget>
      <widget class="QWidget" name="colourTab">
+      <property name="toolTip">
+       <string>Colour correction and histogram stretch settings.</string>
+      </property>
       <attribute name="title">
        <string>Colour</string>
       </attribute>
       <layout class="QVBoxLayout" name="postProcessingTabLayout">
        <item alignment="Qt::AlignmentFlag::AlignTop">
         <widget class="QGroupBox" name="colorGroup">
+         <property name="toolTip">
+          <string>Colour, brightness, contrast, white balance, saturation, and gamma processing.</string>
+         </property>
          <property name="sizePolicy">
           <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
            <horstretch>0</horstretch>
@@ -2500,6 +2643,9 @@
        </item>
        <item alignment="Qt::AlignmentFlag::AlignTop">
         <widget class="QGroupBox" name="histogramStretchGroup">
+         <property name="toolTip">
+          <string>Histogram stretch controls for improving image contrast.</string>
+         </property>
          <property name="sizePolicy">
           <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
            <horstretch>0</horstretch>
@@ -2525,6 +2671,9 @@
           </item>
           <item row="0" column="1" colspan="2">
            <widget class="QComboBox" name="histogramStretchModeCombo">
+            <property name="toolTip">
+             <string>Selects the histogram stretch curve applied during colour processing.</string>
+            </property>
             <item>
              <property name="text">
               <string>Off</string>
@@ -2566,6 +2715,9 @@
           </item>
           <item row="1" column="1">
            <widget class="QSlider" name="histogramStretchBlackPointSlider">
+            <property name="toolTip">
+             <string>Sets the black point used by histogram stretch.</string>
+            </property>
             <property name="minimum">
              <number>0</number>
             </property>
@@ -2579,6 +2731,9 @@
           </item>
           <item row="1" column="2">
            <widget class="QDoubleSpinBox" name="histogramStretchBlackPointSpin">
+            <property name="toolTip">
+             <string>Sets the black point used by histogram stretch.</string>
+            </property>
             <property name="decimals">
              <number>3</number>
             </property>
@@ -2599,6 +2754,9 @@
           </item>
           <item row="2" column="1">
            <widget class="QSlider" name="histogramStretchWhitePointSlider">
+            <property name="toolTip">
+             <string>Sets the white point used by histogram stretch.</string>
+            </property>
             <property name="minimum">
              <number>0</number>
             </property>
@@ -2615,6 +2773,9 @@
           </item>
           <item row="2" column="2">
            <widget class="QDoubleSpinBox" name="histogramStretchWhitePointSpin">
+            <property name="toolTip">
+             <string>Sets the white point used by histogram stretch.</string>
+            </property>
             <property name="decimals">
              <number>3</number>
             </property>
@@ -2641,6 +2802,9 @@
           </item>
           <item row="3" column="1">
            <widget class="QSlider" name="histogramStretchGammaSlider">
+            <property name="toolTip">
+             <string>Sets the gamma value used by histogram stretch.</string>
+            </property>
             <property name="minimum">
              <number>10</number>
             </property>
@@ -2657,6 +2821,9 @@
           </item>
           <item row="3" column="2">
            <widget class="QDoubleSpinBox" name="histogramStretchGammaSpin">
+            <property name="toolTip">
+             <string>Sets the gamma value used by histogram stretch.</string>
+            </property>
             <property name="decimals">
              <number>2</number>
             </property>
@@ -2683,6 +2850,9 @@
           </item>
           <item row="4" column="1">
            <widget class="QSlider" name="histogramStretchAsinhSlider">
+            <property name="toolTip">
+             <string>Sets the strength of the asinh histogram stretch.</string>
+            </property>
             <property name="minimum">
              <number>1</number>
             </property>
@@ -2699,6 +2869,9 @@
           </item>
           <item row="4" column="2">
            <widget class="QDoubleSpinBox" name="histogramStretchAsinhSpin">
+            <property name="toolTip">
+             <string>Sets the strength of the asinh histogram stretch.</string>
+            </property>
             <property name="decimals">
              <number>2</number>
             </property>
@@ -2725,6 +2898,9 @@
           </item>
           <item row="5" column="1">
            <widget class="QSlider" name="histogramStretchLogSlider">
+            <property name="toolTip">
+             <string>Sets the strength of the logarithmic histogram stretch.</string>
+            </property>
             <property name="minimum">
              <number>1</number>
             </property>
@@ -2741,6 +2917,9 @@
           </item>
           <item row="5" column="2">
            <widget class="QDoubleSpinBox" name="histogramStretchLogSpin">
+            <property name="toolTip">
+             <string>Sets the strength of the logarithmic histogram stretch.</string>
+            </property>
             <property name="decimals">
              <number>2</number>
             </property>
@@ -2808,12 +2987,18 @@
       </layout>
      </widget>
      <widget class="QWidget" name="filter">
+      <property name="toolTip">
+       <string>Filtering, edge detection, flipping, rotation, and CUDA processing settings.</string>
+      </property>
       <attribute name="title">
        <string>Filter</string>
       </attribute>
       <layout class="QVBoxLayout" name="verticalLayout_22">
        <item alignment="Qt::AlignmentFlag::AlignTop">
         <widget class="QGroupBox" name="filterGroup">
+         <property name="toolTip">
+          <string>Blur, sharpen, and edge-filter processing controls.</string>
+         </property>
          <property name="sizePolicy">
           <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
            <horstretch>0</horstretch>
@@ -3037,6 +3222,9 @@
           </item>
           <item row="6" column="1" colspan="2">
            <widget class="QComboBox" name="edgeDisplayModeCombo">
+            <property name="toolTip">
+             <string>Chooses how edge detection output is displayed.</string>
+            </property>
             <item>
              <property name="text">
               <string>Overlay</string>
@@ -3054,6 +3242,9 @@
        </item>
        <item alignment="Qt::AlignmentFlag::AlignTop">
         <widget class="QGroupBox" name="imageGroup">
+         <property name="toolTip">
+          <string>Image orientation, unwarp, and CUDA processing controls.</string>
+         </property>
          <property name="sizePolicy">
           <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
            <horstretch>0</horstretch>
@@ -3191,12 +3382,18 @@
       </layout>
      </widget>
      <widget class="QWidget" name="overlayTab">
+      <property name="toolTip">
+       <string>Image overlay settings.</string>
+      </property>
       <attribute name="title">
        <string>Overlay</string>
       </attribute>
       <layout class="QVBoxLayout" name="verticalLayout_2">
        <item>
         <widget class="QGroupBox" name="spectrumOverlay">
+         <property name="toolTip">
+          <string>Overlay settings for drawing a spectrum over the camera image.</string>
+         </property>
          <property name="title">
           <string>Spectrum Overlay</string>
          </property>
@@ -3302,6 +3499,9 @@
             </item>
             <item>
              <widget class="Line" name="spectrumOffsetLine">
+              <property name="toolTip">
+               <string>Separates related settings.</string>
+              </property>
               <property name="orientation">
                <enum>Qt::Orientation::Vertical</enum>
               </property>
@@ -3363,6 +3563,9 @@
        </item>
        <item>
         <widget class="QGroupBox" name="skyGridOverlay">
+         <property name="toolTip">
+          <string>Overlay settings for sky grids, constellations, and tracked sky objects.</string>
+         </property>
          <property name="title">
           <string>Sky Grid</string>
          </property>
@@ -3480,6 +3683,9 @@
        </item>
        <item>
         <widget class="QGroupBox" name="groupBox_3">
+         <property name="toolTip">
+          <string>Contains settings for aDS-B / Satellite / Star Tracker Overlay.</string>
+         </property>
          <property name="title">
           <string>ADS-B / Satellite / Star Tracker Overlay</string>
          </property>
@@ -3608,6 +3814,9 @@
        </item>
        <item>
         <widget class="QGroupBox" name="dateTimeOverlay">
+         <property name="toolTip">
+          <string>Overlay settings for drawing the date and time on the image.</string>
+         </property>
          <property name="title">
           <string>Date / Time Overlay</string>
          </property>
@@ -3665,6 +3874,9 @@
             </item>
             <item>
              <widget class="Line" name="dateTimeLine">
+              <property name="toolTip">
+               <string>Separates related settings.</string>
+              </property>
               <property name="orientation">
                <enum>Qt::Orientation::Vertical</enum>
               </property>
@@ -3794,6 +4006,9 @@
        </item>
        <item>
         <widget class="QGroupBox" name="textOverlay">
+         <property name="toolTip">
+          <string>Overlay settings for drawing custom text or HTML on the image.</string>
+         </property>
          <property name="title">
           <string>HTML Overlay</string>
          </property>
@@ -3944,6 +4159,11 @@ li.checked::marker { content: &quot;\2612&quot;; }
             </item>
             <item>
              <widget class="Line" name="overlayTextLine">
+              <property name="toolTip">
+               <string>HTML text to render on the image
+
+Use src=file:///path/to/images/logo.png for img tags. http is not supported.</string>
+              </property>
               <property name="orientation">
                <enum>Qt::Orientation::Vertical</enum>
               </property>
@@ -3999,12 +4219,18 @@ li.checked::marker { content: &quot;\2612&quot;; }
       </layout>
      </widget>
      <widget class="QWidget" name="recordingTab">
+      <property name="toolTip">
+       <string>Recording, playback, keogram, and YouTube streaming settings.</string>
+      </property>
       <attribute name="title">
        <string>Recording</string>
       </attribute>
       <layout class="QVBoxLayout" name="recordingTabLayout">
        <item alignment="Qt::AlignmentFlag::AlignTop">
         <widget class="QGroupBox" name="recordingGroup">
+         <property name="toolTip">
+          <string>Image and video recording settings.</string>
+         </property>
          <property name="sizePolicy">
           <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
            <horstretch>0</horstretch>
@@ -4267,6 +4493,9 @@ li.checked::marker { content: &quot;\2612&quot;; }
        </item>
        <item>
         <widget class="QGroupBox" name="groupBox_6">
+         <property name="toolTip">
+          <string>Video and stream playback settings.</string>
+         </property>
          <property name="title">
           <string>Playback</string>
          </property>
@@ -4331,6 +4560,9 @@ li.checked::marker { content: &quot;\2612&quot;; }
        </item>
        <item alignment="Qt::AlignmentFlag::AlignTop">
         <widget class="QGroupBox" name="keogramGroup">
+         <property name="toolTip">
+          <string>Keogram recording settings for 24-hour image strips.</string>
+         </property>
          <property name="sizePolicy">
           <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
            <horstretch>0</horstretch>
@@ -4350,6 +4582,9 @@ li.checked::marker { content: &quot;\2612&quot;; }
           </item>
           <item row="2" column="1">
            <widget class="QComboBox" name="keogramDayModeCombo">
+            <property name="toolTip">
+             <string>Chooses whether the 24-hour keogram runs midnight-to-midnight or midday-to-midday.</string>
+            </property>
             <item>
              <property name="text">
               <string>Midnight to midnight</string>
@@ -4364,6 +4599,9 @@ li.checked::marker { content: &quot;\2612&quot;; }
           </item>
           <item row="1" column="1">
            <widget class="QComboBox" name="keogramDirectionCombo">
+            <property name="toolTip">
+             <string>Chooses whether the keogram samples a horizontal or vertical line through the image.</string>
+            </property>
             <item>
              <property name="text">
               <string>Horizontal</string>
@@ -4460,6 +4698,9 @@ li.checked::marker { content: &quot;\2612&quot;; }
        </item>
        <item alignment="Qt::AlignmentFlag::AlignTop">
         <widget class="QGroupBox" name="youtubeStreamGroup">
+         <property name="toolTip">
+          <string>YouTube live-streaming settings.</string>
+         </property>
          <property name="sizePolicy">
           <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
            <horstretch>0</horstretch>
@@ -4618,16 +4859,25 @@ li.checked::marker { content: &quot;\2612&quot;; }
       </layout>
      </widget>
      <widget class="QWidget" name="detectionTab">
+      <property name="toolTip">
+       <string>Detection, tracking, star detection, and plate-solving settings.</string>
+      </property>
       <attribute name="title">
        <string>Detection</string>
       </attribute>
       <layout class="QVBoxLayout" name="verticalLayout_5">
        <item>
         <widget class="QTabWidget" name="detectionTabWidget">
+         <property name="toolTip">
+          <string>Switches between detection settings pages.</string>
+         </property>
          <property name="currentIndex">
           <number>0</number>
          </property>
          <widget class="QWidget" name="roiTab">
+          <property name="toolTip">
+           <string>Detection region of interest settings.</string>
+          </property>
           <attribute name="title">
            <string>ROI</string>
           </attribute>
@@ -4738,6 +4988,9 @@ li.checked::marker { content: &quot;\2612&quot;; }
            </item>
            <item row="3" column="0" colspan="4">
             <widget class="QGroupBox" name="groupBox_2">
+             <property name="toolTip">
+              <string>Detection region of interest controls.</string>
+             </property>
              <property name="title">
               <string>Exclusion areas</string>
              </property>
@@ -4865,6 +5118,9 @@ li.checked::marker { content: &quot;\2612&quot;; }
           </layout>
          </widget>
          <widget class="QWidget" name="tab">
+          <property name="toolTip">
+           <string>Object detection settings.</string>
+          </property>
           <attribute name="title">
            <string>Object Detection</string>
           </attribute>
@@ -5291,6 +5547,9 @@ car</string>
           </layout>
          </widget>
          <widget class="QWidget" name="tab_2">
+          <property name="toolTip">
+           <string>Motion detection settings.</string>
+          </property>
           <attribute name="title">
            <string>Motion Detection</string>
           </attribute>
@@ -5713,12 +5972,18 @@ car</string>
           </layout>
          </widget>
          <widget class="QWidget" name="tab_3">
+          <property name="toolTip">
+           <string>Star detection and plate-solving settings.</string>
+          </property>
           <attribute name="title">
            <string>Star Detection</string>
           </attribute>
           <layout class="QVBoxLayout" name="verticalLayout_9">
            <item>
             <widget class="QGroupBox" name="groupBox_4">
+             <property name="toolTip">
+              <string>Star detection and plate-solving controls.</string>
+             </property>
              <property name="title">
               <string>Star Detection</string>
              </property>
@@ -5732,6 +5997,9 @@ car</string>
               </item>
               <item row="2" column="3">
                <widget class="QSpinBox" name="starMaxAreaSpin">
+                <property name="toolTip">
+                 <string>Maximum contour area, in pixels, accepted as a star detection.</string>
+                </property>
                 <property name="suffix">
                  <string> px²</string>
                 </property>
@@ -5742,6 +6010,9 @@ car</string>
               </item>
               <item row="0" column="3">
                <widget class="QSpinBox" name="starBackgroundBlurSpin">
+                <property name="toolTip">
+                 <string>Background blur radius used to remove sky glow before thresholding stars.</string>
+                </property>
                 <property name="minimum">
                  <number>1</number>
                 </property>
@@ -5752,6 +6023,9 @@ car</string>
               </item>
               <item row="1" column="1">
                <widget class="QDoubleSpinBox" name="starMaxAspectRatioSpin">
+                <property name="toolTip">
+                 <string>Maximum width-to-height ratio accepted for star detections.</string>
+                </property>
                 <property name="minimum">
                  <double>1.000000000000000</double>
                 </property>
@@ -5793,6 +6067,9 @@ car</string>
               </item>
               <item row="2" column="1">
                <widget class="QSpinBox" name="starMinAreaSpin">
+                <property name="toolTip">
+                 <string>Minimum contour area, in pixels, accepted as a star detection.</string>
+                </property>
                 <property name="suffix">
                  <string> px²</string>
                 </property>
@@ -5803,6 +6080,9 @@ car</string>
               </item>
               <item row="0" column="1">
                <widget class="QSpinBox" name="starThresholdSpin">
+                <property name="toolTip">
+                 <string>Residual brightness threshold used to detect stars.</string>
+                </property>
                 <property name="maximum">
                  <number>255</number>
                 </property>
@@ -5834,6 +6114,9 @@ car</string>
               </item>
               <item row="3" column="3">
                <widget class="QComboBox" name="starDebugViewCombo">
+                <property name="toolTip">
+                 <string>Selects an intermediate star-detection debug image to display.</string>
+                </property>
                 <item>
                  <property name="text">
                   <string>Off</string>
@@ -5866,12 +6149,18 @@ car</string>
            </item>
            <item>
             <widget class="QGroupBox" name="groupBox_5">
+             <property name="toolTip">
+              <string>Plate solver settings and results.</string>
+             </property>
              <property name="title">
               <string>Plate Solving</string>
              </property>
              <layout class="QGridLayout" name="gridLayout_12">
               <item row="3" column="1">
                <widget class="QDoubleSpinBox" name="plateSolveSearchRadiusSpin">
+                <property name="toolTip">
+                 <string>Azimuth/elevation search radius in degrees for guided plate solving.</string>
+                </property>
                 <property name="sizePolicy">
                  <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
                   <horstretch>0</horstretch>
@@ -5899,6 +6188,9 @@ car</string>
                 </property>
                 <item>
                  <widget class="WrappingDateTimeEdit" name="plateSolveDateTimeEdit">
+                  <property name="toolTip">
+                   <string>Custom date and time used for plate solving when capture time is not used.</string>
+                  </property>
                   <property name="displayFormat">
                    <string>yyyy-MM-dd HH:mm:ss</string>
                   </property>
@@ -5955,6 +6247,9 @@ car</string>
               </item>
               <item row="5" column="3">
                <widget class="QDoubleSpinBox" name="plateSolveFinalMatchRadiusSpin">
+                <property name="toolTip">
+                 <string>Final catalog match radius in pixels for accepting a plate solve.</string>
+                </property>
                 <property name="suffix">
                  <string> px</string>
                 </property>
@@ -5985,6 +6280,9 @@ car</string>
               </item>
               <item row="9" column="1">
                <widget class="QComboBox" name="plateSolveLabelModeCombo">
+                <property name="toolTip">
+                 <string>Chooses which catalog information is shown next to solved star labels.</string>
+                </property>
                 <item>
                  <property name="text">
                   <string>Name</string>
@@ -6048,6 +6346,9 @@ car</string>
               </item>
               <item row="1" column="1">
                <widget class="QComboBox" name="plateSolveStartModeCombo">
+                <property name="toolTip">
+                 <string>Chooses the starting assumptions used by the plate solver.</string>
+                </property>
                 <item>
                  <property name="text">
                   <string>Blind</string>
@@ -6087,6 +6388,9 @@ car</string>
               </item>
               <item row="4" column="3">
                <widget class="QDoubleSpinBox" name="plateSolveMaxMagnitudeSpin">
+                <property name="toolTip">
+                 <string>Faintest catalog magnitude loaded for plate solving.</string>
+                </property>
                 <property name="minimum">
                  <double>-2.000000000000000</double>
                 </property>
@@ -6100,6 +6404,9 @@ car</string>
               </item>
               <item row="8" column="1">
                <widget class="QComboBox" name="plateSolveDateTimeModeCombo">
+                <property name="toolTip">
+                 <string>Chooses whether plate solving uses the frame capture time or a custom time.</string>
+                </property>
                 <item>
                  <property name="text">
                   <string>Capture</string>
@@ -6154,6 +6461,9 @@ car</string>
               </item>
               <item row="5" column="1">
                <widget class="QDoubleSpinBox" name="plateSolveMatchRadiusSpin">
+                <property name="toolTip">
+                 <string>Initial catalog match radius in pixels used during plate solving.</string>
+                </property>
                 <property name="suffix">
                  <string> px</string>
                 </property>
@@ -6177,6 +6487,9 @@ car</string>
               </item>
               <item row="4" column="1">
                <widget class="QSpinBox" name="plateSolveMinMatchesSpin">
+                <property name="toolTip">
+                 <string>Minimum number of matched stars required to accept a plate solve.</string>
+                </property>
                 <property name="minimum">
                  <number>2</number>
                 </property>
@@ -6221,6 +6534,9 @@ car</string>
               </item>
               <item row="9" column="3">
                <widget class="QToolButton" name="starColorButton">
+                <property name="toolTip">
+                 <string>Selects the colour used to draw star detections and labels.</string>
+                </property>
                 <property name="text">
                  <string/>
                 </property>
@@ -6254,6 +6570,9 @@ car</string>
            </item>
            <item>
             <widget class="QGroupBox" name="starDetectionGroup">
+             <property name="toolTip">
+              <string>Current star detection and plate-solving status.</string>
+             </property>
              <property name="title">
               <string>Solution</string>
              </property>
@@ -6387,6 +6706,9 @@ car</string>
           </layout>
          </widget>
          <widget class="QWidget" name="tab_4">
+          <property name="toolTip">
+           <string>Difference detection settings.</string>
+          </property>
           <attribute name="title">
            <string>Difference Detection</string>
           </attribute>
@@ -6570,12 +6892,18 @@ car</string>
       </layout>
      </widget>
      <widget class="QWidget" name="positionTab">
+      <property name="toolTip">
+       <string>Location, pointing, field-of-view, and lens model settings.</string>
+      </property>
       <attribute name="title">
        <string>Position</string>
       </attribute>
       <layout class="QVBoxLayout" name="positionTabLayout">
        <item alignment="Qt::AlignmentFlag::AlignTop">
         <widget class="QGroupBox" name="cameraPositionGroup">
+         <property name="toolTip">
+          <string>Observer location used for overlays and plate solving.</string>
+         </property>
          <property name="sizePolicy">
           <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
            <horstretch>0</horstretch>
@@ -6601,6 +6929,9 @@ car</string>
           </item>
           <item row="0" column="1">
            <widget class="QDoubleSpinBox" name="latitudeSpin">
+            <property name="toolTip">
+             <string>Observer latitude in degrees; positive is north.</string>
+            </property>
             <property name="decimals">
              <number>6</number>
             </property>
@@ -6624,6 +6955,9 @@ car</string>
           </item>
           <item row="1" column="1">
            <widget class="QDoubleSpinBox" name="longitudeSpin">
+            <property name="toolTip">
+             <string>Observer longitude in degrees; positive is east.</string>
+            </property>
             <property name="decimals">
              <number>6</number>
             </property>
@@ -6647,6 +6981,9 @@ car</string>
           </item>
           <item row="2" column="1">
            <widget class="QDoubleSpinBox" name="altitudeSpin">
+            <property name="toolTip">
+             <string>Observer altitude above sea level in metres.</string>
+            </property>
             <property name="decimals">
              <number>1</number>
             </property>
@@ -6681,6 +7018,9 @@ Right-click: toggle continual synchronization from My Position.</string>
        </item>
        <item alignment="Qt::AlignmentFlag::AlignTop">
         <widget class="QGroupBox" name="cameraDirectionGroup">
+         <property name="toolTip">
+          <string>Camera pointing direction and offsets used for overlays and plate solving.</string>
+         </property>
          <property name="sizePolicy">
           <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
            <horstretch>0</horstretch>
@@ -6720,6 +7060,9 @@ Right-click: toggle continual synchronization from My Position.</string>
           </item>
           <item row="1" column="1">
            <widget class="QDoubleSpinBox" name="azimuthOffsetSpin">
+            <property name="toolTip">
+             <string>Offset added to the selected direction source azimuth.</string>
+            </property>
             <property name="suffix">
              <string>°</string>
             </property>
@@ -6746,6 +7089,9 @@ Right-click: toggle continual synchronization from My Position.</string>
           </item>
           <item row="2" column="1">
            <widget class="QDoubleSpinBox" name="elevationOffsetSpin">
+            <property name="toolTip">
+             <string>Offset added to the selected direction source elevation.</string>
+            </property>
             <property name="suffix">
              <string>°</string>
             </property>
@@ -6772,6 +7118,9 @@ Right-click: toggle continual synchronization from My Position.</string>
           </item>
           <item row="3" column="1">
            <widget class="QDoubleSpinBox" name="rollOffsetSpin">
+            <property name="toolTip">
+             <string>Offset added to the roll value from the selected direction source.</string>
+            </property>
             <property name="decimals">
              <number>4</number>
             </property>
@@ -6798,6 +7147,9 @@ Right-click: toggle continual synchronization from My Position.</string>
           </item>
           <item row="4" column="1">
            <widget class="QDoubleSpinBox" name="azimuthSpin">
+            <property name="toolTip">
+             <string>Manual camera azimuth in degrees, used when no direction source is selected.</string>
+            </property>
             <property name="decimals">
              <number>4</number>
             </property>
@@ -6821,6 +7173,9 @@ Right-click: toggle continual synchronization from My Position.</string>
           </item>
           <item row="5" column="1">
            <widget class="QDoubleSpinBox" name="elevationSpin">
+            <property name="toolTip">
+             <string>Manual camera elevation in degrees, used when no direction source is selected.</string>
+            </property>
             <property name="decimals">
              <number>4</number>
             </property>
@@ -6844,6 +7199,9 @@ Right-click: toggle continual synchronization from My Position.</string>
           </item>
           <item row="6" column="1">
            <widget class="QDoubleSpinBox" name="rollSpin">
+            <property name="toolTip">
+             <string>Manual camera roll angle in degrees.</string>
+            </property>
             <property name="decimals">
              <number>2</number>
             </property>
@@ -6863,6 +7221,9 @@ Right-click: toggle continual synchronization from My Position.</string>
        </item>
        <item>
         <widget class="QGroupBox" name="lensSensorGroup">
+         <property name="toolTip">
+          <string>Lens, sensor, field-of-view, projection, and distortion settings.</string>
+         </property>
          <property name="title">
           <string>Camera lens and sensor</string>
          </property>
@@ -6876,6 +7237,9 @@ Right-click: toggle continual synchronization from My Position.</string>
           </item>
           <item row="0" column="1">
            <widget class="QComboBox" name="fovModeCombo">
+            <property name="toolTip">
+             <string>Chooses whether field of view is entered directly or calculated from sensor and focal length.</string>
+            </property>
             <item>
              <property name="text">
               <string>Manual</string>
@@ -6897,6 +7261,9 @@ Right-click: toggle continual synchronization from My Position.</string>
           </item>
           <item row="1" column="1">
            <widget class="QDoubleSpinBox" name="fovSpin">
+            <property name="toolTip">
+             <string>Camera field of view in degrees.</string>
+            </property>
             <property name="suffix">
              <string> °</string>
             </property>
@@ -6923,6 +7290,9 @@ Right-click: toggle continual synchronization from My Position.</string>
           </item>
           <item row="2" column="1">
            <widget class="QDoubleSpinBox" name="fovSensorWidthSpin">
+            <property name="toolTip">
+             <string>Sensor width in millimetres used to calculate field of view.</string>
+            </property>
             <property name="suffix">
              <string> mm</string>
             </property>
@@ -6949,6 +7319,9 @@ Right-click: toggle continual synchronization from My Position.</string>
           </item>
           <item row="3" column="1">
            <widget class="QDoubleSpinBox" name="fovSensorHeightSpin">
+            <property name="toolTip">
+             <string>Sensor height in millimetres used to calculate field of view.</string>
+            </property>
             <property name="suffix">
              <string> mm</string>
             </property>
@@ -6975,6 +7348,9 @@ Right-click: toggle continual synchronization from My Position.</string>
           </item>
           <item row="4" column="1">
            <widget class="QDoubleSpinBox" name="fovFocalLengthSpin">
+            <property name="toolTip">
+             <string>Focal length in millimetres used to calculate field of view.</string>
+            </property>
             <property name="suffix">
              <string> mm</string>
             </property>
@@ -7001,6 +7377,9 @@ Right-click: toggle continual synchronization from My Position.</string>
           </item>
           <item row="5" column="1">
            <widget class="QComboBox" name="lensProjectionCombo">
+            <property name="toolTip">
+             <string>Projection model used to map image pixels to sky directions.</string>
+            </property>
             <item>
              <property name="text">
               <string>Rectilinear</string>
@@ -7027,6 +7406,9 @@ Right-click: toggle continual synchronization from My Position.</string>
           </item>
           <item row="6" column="1">
            <widget class="QDoubleSpinBox" name="lensCenterOffsetXSpin">
+            <property name="toolTip">
+             <string>Horizontal lens centre offset in pixels.</string>
+            </property>
             <property name="decimals">
              <number>1</number>
             </property>
@@ -7050,6 +7432,9 @@ Right-click: toggle continual synchronization from My Position.</string>
           </item>
           <item row="7" column="1">
            <widget class="QDoubleSpinBox" name="lensCenterOffsetYSpin">
+            <property name="toolTip">
+             <string>Vertical lens centre offset in pixels.</string>
+            </property>
             <property name="decimals">
              <number>1</number>
             </property>
@@ -7073,6 +7458,9 @@ Right-click: toggle continual synchronization from My Position.</string>
           </item>
           <item row="8" column="1">
            <widget class="QDoubleSpinBox" name="lensDistortionK1Spin">
+            <property name="toolTip">
+             <string>Radial distortion coefficient used by the lens projection model.</string>
+            </property>
             <property name="decimals">
              <number>4</number>
             </property>
@@ -7092,6 +7480,9 @@ Right-click: toggle continual synchronization from My Position.</string>
        </item>
        <item alignment="Qt::AlignmentFlag::AlignTop">
         <widget class="QGroupBox" name="groupBox">
+         <property name="toolTip">
+          <string>Online weather map API settings.</string>
+         </property>
          <property name="sizePolicy">
           <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
            <horstretch>0</horstretch>
@@ -7138,6 +7529,9 @@ Right-click: toggle continual synchronization from My Position.</string>
    </item>
    <item>
     <widget class="QDialogButtonBox" name="buttonBox">
+     <property name="toolTip">
+      <string>Accepts, applies, or cancels changes in the camera settings dialog.</string>
+     </property>
      <property name="standardButtons">
       <set>QDialogButtonBox::StandardButton::Close</set>
      </property>

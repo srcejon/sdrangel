@@ -30,6 +30,7 @@
 #include <QSharedPointer>
 #include <QSize>
 #include <QString>
+#include <QTransform>
 #include <QVector>
 
 #include <opencv2/imgproc.hpp>
@@ -186,6 +187,124 @@ struct CameraPipelineStacking
 };
 
 /**
+ * \brief Maps between the optical image coordinates and the current frame image.
+ *
+ * Stages such as output scaling can place the real image inside a larger canvas. Later
+ * stages still need the original optical coordinate system for plate solving and sky
+ * projection, while overlays need to be drawn in the displayed frame coordinates.
+ */
+struct CameraPipelineImageTransform
+{
+    QSize m_opticalSize;
+    QTransform m_opticalToImage;
+    bool m_enabled = false;
+
+    void clear()
+    {
+        m_opticalSize = QSize();
+        m_opticalToImage.reset();
+        m_enabled = false;
+    }
+
+    bool isValid() const
+    {
+        return m_enabled
+            && !m_opticalSize.isEmpty()
+            && m_opticalToImage.isAffine()
+            && m_opticalToImage.isInvertible();
+    }
+
+    QSize opticalSize(const QSize& imageSize) const
+    {
+        return isValid() ? m_opticalSize : imageSize;
+    }
+
+    void setScaled(const QSize& opticalSize, const QRect& contentRect)
+    {
+        clear();
+        if (opticalSize.isEmpty() || contentRect.isEmpty()) {
+            return;
+        }
+
+        m_opticalSize = opticalSize;
+        m_opticalToImage.translate(contentRect.x(), contentRect.y());
+        m_opticalToImage.scale(
+            static_cast<double>(contentRect.width()) / static_cast<double>(opticalSize.width()),
+            static_cast<double>(contentRect.height()) / static_cast<double>(opticalSize.height()));
+        m_enabled = true;
+    }
+
+    void applyImageTransform(const QTransform& oldImageToNewImage)
+    {
+        if (!isValid()) {
+            return;
+        }
+
+        m_opticalToImage = oldImageToNewImage * m_opticalToImage;
+    }
+
+    void applyFlip(bool flipX, bool flipY, const QSize& imageSize)
+    {
+        if (!isValid() || imageSize.isEmpty() || (!flipX && !flipY)) {
+            return;
+        }
+
+        const QTransform transform(
+            flipX ? -1.0 : 1.0,
+            0.0,
+            0.0,
+            0.0,
+            flipY ? -1.0 : 1.0,
+            0.0,
+            flipX ? imageSize.width() - 1 : 0.0,
+            flipY ? imageSize.height() - 1 : 0.0,
+            1.0);
+        applyImageTransform(transform);
+    }
+
+    void applyRotation(int degrees, const QSize& imageSize)
+    {
+        if (!isValid() || imageSize.isEmpty()) {
+            return;
+        }
+
+        QTransform transform;
+        switch (degrees)
+        {
+        case 90:
+            transform = QTransform(0.0, 1.0, 0.0, -1.0, 0.0, 0.0, imageSize.height() - 1, 0.0, 1.0);
+            break;
+        case 180:
+            transform = QTransform(-1.0, 0.0, 0.0, 0.0, -1.0, 0.0, imageSize.width() - 1, imageSize.height() - 1, 1.0);
+            break;
+        case 270:
+            transform = QTransform(0.0, -1.0, 0.0, 1.0, 0.0, 0.0, 0.0, imageSize.width() - 1, 1.0);
+            break;
+        case 0:
+        default:
+            return;
+        }
+        applyImageTransform(transform);
+    }
+
+    QPointF mapOpticalToImage(const QPointF& point) const
+    {
+        return isValid() ? m_opticalToImage.map(point) : point;
+    }
+
+    QPointF mapImageToOptical(const QPointF& point) const
+    {
+        if (!isValid()) {
+            return point;
+        }
+
+        bool invertible = false;
+        const QTransform imageToOptical = m_opticalToImage.inverted(&invertible);
+        return invertible ? imageToOptical.map(point) : point;
+    }
+};
+
+/**
  * \brief The unit of data flowing through the camera processing pipeline.
  *
  * Carries everything about one captured (or played-back) frame as it travels from image
@@ -236,6 +355,7 @@ struct CameraPipelineFrame
     QVector<CameraPipelineDetection> m_detections;
     QVector<CameraPipelineStarDetection> m_starDetections;
     CameraPipelinePlateSolve m_plateSolve;
+    CameraPipelineImageTransform m_imageTransform;
     bool m_saveCurrentImage = false;
     CameraPipelineStacking m_stack;
     BayerPattern m_bayerPattern = BayerNone;
@@ -324,6 +444,21 @@ struct CameraPipelineFrame
         }
 #endif
         return QSize();
+    }
+
+    QSize opticalImageSize() const
+    {
+        return m_imageTransform.opticalSize(imageSize());
+    }
+
+    QPointF mapOpticalToImage(const QPointF& point) const
+    {
+        return m_imageTransform.mapOpticalToImage(point);
+    }
+
+    QPointF mapImageToOptical(const QPointF& point) const
+    {
+        return m_imageTransform.mapImageToOptical(point);
     }
 
     void clearCpuImage()

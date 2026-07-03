@@ -581,13 +581,41 @@ void CameraStarDetector::processNewFrame(const CameraPipelineFramePtr& frame)
     if (m_settings.m_plateSolve && !frame->m_starDetections.isEmpty())
     {
         reportPlateSolveStatus(true);
-        const QSize solveImageSize = frame->imageSize();
+        QVector<CameraPipelineStarDetection> solveDetections = frame->m_starDetections;
+        const bool solveInOpticalCoordinates = frame->m_imageTransform.isValid();
+        if (solveInOpticalCoordinates)
+        {
+            for (CameraPipelineStarDetection& detection : solveDetections) {
+                detection.m_center = frame->mapImageToOptical(detection.m_center);
+            }
+        }
+
+        const QSize solveImageSize = frame->opticalImageSize();
         const CameraPlateSolveResult plateSolveResult = m_plateSolver.solve(
             m_settings,
             solveImageSize,
             frame->m_captureDateTime,
-            frame->m_starDetections);
+            solveDetections);
         reportPlateSolveStatus(false);
+
+        if (solveInOpticalCoordinates)
+        {
+            const int count = std::min(frame->m_starDetections.size(), solveDetections.size());
+            for (int i = 0; i < count; ++i)
+            {
+                const QPointF imageCenter = frame->m_starDetections[i].m_center;
+                frame->m_starDetections[i] = solveDetections[i];
+                frame->m_starDetections[i].m_center = imageCenter;
+                if (frame->m_starDetections[i].m_solved && !solveDetections[i].m_projectedCenter.isNull()) {
+                    frame->m_starDetections[i].m_projectedCenter = frame->mapOpticalToImage(solveDetections[i].m_projectedCenter);
+                }
+            }
+        }
+        else
+        {
+            frame->m_starDetections = solveDetections;
+        }
+
         frame->m_plateSolve.m_solved = plateSolveResult.m_solved;
         frame->m_plateSolve.m_matchedStars = plateSolveResult.m_matchedStars;
         frame->m_plateSolve.m_detectedStarsConsidered = plateSolveResult.m_detectedStarsConsidered;

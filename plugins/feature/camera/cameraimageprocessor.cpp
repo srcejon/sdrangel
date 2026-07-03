@@ -127,6 +127,7 @@ void CameraImageProcessor::LastInputFrame::clear()
     m_hdrExposureIndex = -1;
     m_hdrExposureCount = 0;
     m_stack = CameraPipelineStacking();
+    m_imageTransform.clear();
     m_bayerPattern = CameraPipelineFrame::BayerNone;
     m_rawInputBayerPattern = CameraPipelineFrame::BayerNone;
 #ifdef CAMERA_OPENCV_CUDA_IMAGE_PROCESSING
@@ -421,6 +422,7 @@ void CameraImageProcessor::storeLastInputFrame(const CameraPipelineFrame& frame)
     cachedFrame.m_hdrExposureIndex = frame.m_hdrExposureIndex;
     cachedFrame.m_hdrExposureCount = frame.m_hdrExposureCount;
     cachedFrame.m_stack = frame.m_stack;
+    cachedFrame.m_imageTransform = frame.m_imageTransform;
     cachedFrame.m_bayerPattern = frame.m_bayerPattern;
     cachedFrame.m_rawInputBayerPattern = frame.m_rawInputBayerPattern;
 #ifdef CAMERA_OPENCV_CUDA_IMAGE_PROCESSING
@@ -449,6 +451,7 @@ CameraPipelineFramePtr CameraImageProcessor::createFrameFromLastInput() const
     frame->m_hdrExposureIndex = m_lastInputFrame.m_hdrExposureIndex;
     frame->m_hdrExposureCount = m_lastInputFrame.m_hdrExposureCount;
     frame->m_stack = m_lastInputFrame.m_stack;
+    frame->m_imageTransform = m_lastInputFrame.m_imageTransform;
     frame->m_bayerPattern = m_lastInputFrame.m_bayerPattern;
     frame->m_rawInputBayerPattern = m_lastInputFrame.m_rawInputBayerPattern;
 #ifdef CAMERA_OPENCV_CUDA_IMAGE_PROCESSING
@@ -698,11 +701,16 @@ void CameraImageProcessor::applyImageProcessingCpu(CameraPipelineFrame& frame)
         convertBgrTo8Bit(bgrMat);
         applyCannyEdge(bgrMat);
     }
-    if (needsFlip) {
+    if (needsFlip)
+    {
+        frame.m_imageTransform.applyFlip(m_settings.m_flipX, m_settings.m_flipY, QSize(bgrMat.cols, bgrMat.rows));
         applyFlip(bgrMat);
     }
-    if (needsRotation) {
+    if (needsRotation)
+    {
+        const QSize preRotationSize(bgrMat.cols, bgrMat.rows);
         applyRotation(bgrMat);
+        frame.m_imageTransform.applyRotation(m_settings.m_imageRotation, preRotationSize);
     }
     if (needsBrightContrast) {
         applyBrightnessContrast(bgrMat);
@@ -836,13 +844,17 @@ void CameraImageProcessor::applyImageProcessingCuda(CameraPipelineFrame& frame)
         }
         if (needsFlip)
         {
+            frame.m_imageTransform.applyFlip(m_settings.m_flipX, m_settings.m_flipY, QSize(bgrGpu.cols, bgrGpu.rows));
             const int flipCode = m_settings.m_flipX && m_settings.m_flipY ? -1 : (m_settings.m_flipX ? 1 : 0);
             cv::cuda::GpuMat flippedGpu;
             cv::cuda::flip(bgrGpu, flippedGpu, flipCode, m_cudaStream);
             bgrGpu = flippedGpu;
         }
-        if (needsRotation) {
+        if (needsRotation)
+        {
+            const QSize preRotationSize(bgrGpu.cols, bgrGpu.rows);
             applyRotationCuda(bgrGpu, m_cudaStream);
+            frame.m_imageTransform.applyRotation(m_settings.m_imageRotation, preRotationSize);
         }
         if (needsBrightContrast) {
             const double brightnessScale = maxValueForDepth(bgrGpu.depth()) / 255.0;

@@ -94,6 +94,7 @@ private:
         int m_hdrExposureIndex = -1;
         int m_hdrExposureCount = 0;
         CameraPipelineStacking m_stack;
+        CameraPipelineImageTransform m_imageTransform;
         CameraPipelineFrame::BayerPattern m_bayerPattern = CameraPipelineFrame::BayerNone;
         CameraPipelineFrame::BayerPattern m_rawInputBayerPattern = CameraPipelineFrame::BayerNone;
 #ifdef CAMERA_OPENCV_CUDA_IMAGE_PROCESSING

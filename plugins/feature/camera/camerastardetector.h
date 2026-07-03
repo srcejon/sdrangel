@@ -108,7 +108,7 @@ private:
     // detector preserves 16-bit precision in the residual and centroid weighting; the
     // saturation cutoff is scaled accordingly. When empty the detector falls back to the
     // legacy 8-bit pipeline derived from bgrMat.
-    void applyStarDetection(
+    [[nodiscard]] bool applyStarDetection(
         const cv::Mat& bgrMat,
 #ifdef CAMERA_OPENCV_CUDA_DETECTION
         const cv::cuda::GpuMat* bgrGpu,

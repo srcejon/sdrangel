@@ -528,7 +528,7 @@ void CameraStarDetector::processNewFrame(const CameraPipelineFramePtr& frame)
     if (m_settings.m_starDetect)
     {
         cv::Mat starDebugMask;
-        applyStarDetection(
+        bool detectedStars = applyStarDetection(
             bgrMat,
 #ifdef CAMERA_OPENCV_CUDA_DETECTION
             cachedBgrGpu,
@@ -537,6 +537,24 @@ void CameraStarDetector::processNewFrame(const CameraPipelineFramePtr& frame)
             highBitDepthGray,
             frame->m_starDetections,
             (m_settings.m_starDebugView != CameraSettings::StarDebugViewOff) ? &starDebugMask : nullptr);
+        if (!detectedStars)
+        {
+            if (!materializeStarCpuInput()) {
+                return;
+            }
+            detectedStars = applyStarDetection(
+                bgrMat,
+#ifdef CAMERA_OPENCV_CUDA_DETECTION
+                cachedBgrGpu,
+#endif
+                detectionRoi,
+                highBitDepthGray,
+                frame->m_starDetections,
+                (m_settings.m_starDebugView != CameraSettings::StarDebugViewOff) ? &starDebugMask : nullptr);
+            if (!detectedStars) {
+                return;
+            }
+        }
 
         if (!starDebugMask.empty())
         {
@@ -741,7 +759,7 @@ bool CameraStarDetector::applyStarPreprocessingCuda(const cv::Mat& bgrMat, const
 }
 #endif
 
-void CameraStarDetector::applyStarDetection(
+bool CameraStarDetector::applyStarDetection(
     const cv::Mat& bgrMat,
 #ifdef CAMERA_OPENCV_CUDA_DETECTION
     const cv::cuda::GpuMat* sourceBgrGpu,
@@ -776,7 +794,7 @@ void CameraStarDetector::applyStarDetection(
         {
             qWarning() << "CameraStarDetector: CUDA star preprocessing failed and no CPU image is available";
             PROFILER_STOP(__FUNCTION__);
-            return;
+            return false;
         }
         applyStarPreprocessing(bgrMat, roi, highBitDepthGray, gray, residual, thresholdMask, residualNoiseSigma, debugMask);
     }
@@ -1071,4 +1089,5 @@ void CameraStarDetector::applyStarDetection(
     }
 
     PROFILER_STOP(__FUNCTION__);
+    return true;
 }

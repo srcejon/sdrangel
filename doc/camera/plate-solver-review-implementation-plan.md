@@ -140,6 +140,29 @@ distribution of **every** case). Flag-gate the package behind one env var
 (`SDRANGEL_CAMERA_STAR_DETECTOR_V2=1`) during development; land items individually once green.
 Full five-corpus run after **each** item; FISHEYE mode-1/mode-4 are the success metrics, REAL the gate.
 
+**Status (2026-07-03): S1 landed flag-gated (default OFF, byte-identical); S3 tried + reverted; V2
+NOT default-eligible — no REAL-safe win found.** Measured under the flag:
+- **S1 (true pixel-count area)** alone: FISHEYE mode1 35→38 (+3), mode4 40→45 (+5), WIDE 27 (net 0),
+  but **REAL 47→43 (−4)** — recovering small blobs adds noise/galaxy-structure false positives that
+  confuse dense/real fields (narrow-3, wide-9, m101, m51-2). Committed flag-gated (103f19600).
+- **S1+S3 (correct half-normal σ from the positive residual)**: REAL recovered only to 45 (−2), and
+  the higher σ → higher 4σ threshold **killed the fisheye gain** (mode1 back to 35, mode4 41) and
+  **regressed WIDE 27→21 (−6)**. Root cause: the 4σ multiplier was calibrated against the
+  *underestimated* legacy σ, so correcting σ over-thresholds — the two are coupled and must be
+  re-tuned together. S3 reverted (net-negative even flag-gated).
+- **Conclusion:** every V2 variant regresses REAL, the trustworthy gate. The synthetic-fisheye
+  movement is largely oracle churn (consistent with `plate-solver-notes.md`: "remaining synthetic
+  mode-1 failures are dominated by test-corpus quality issues… REAL is the trustworthy gate"). So
+  the fisheye gap is NOT closeable via these detector changes without a real regression. S1 stays a
+  documented opt-in experiment; do not flip the V2 default. A genuine attempt would need to (a) fix σ
+  AND re-calibrate the threshold multiplier jointly, (b) add quality-gated small-star recovery so
+  only high-confidence faint stars are admitted, and (c) validate on a *trustworthy* fisheye corpus
+  (real fisheye frames, not the weak-oracle synthetic set) — a research loop, not a quick fix.
+
+Remaining unattempted items (S2/S4/S5/S6/S8/S9/S10) are held behind the same conclusion: without a
+trustworthy fisheye gate and a σ+threshold co-calibration, they risk the same REAL-for-synthetic
+trade. Revisit only with a real-fisheye validation corpus.
+
 1. S1 Pixel-count areas: replace `findContours`+`contourArea`+per-contour `drawContours` with one
    `connectedComponentsWithStats` pass (fixes area-0 rejection of 1-px-wide blobs, fixes `fillRatio`
    bias, removes per-blob allocation — the perf item S7 falls out for free).

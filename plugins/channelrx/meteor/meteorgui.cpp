@@ -259,7 +259,7 @@ void MeteorGUI::setupUi(RollupContents *rollupContents)
     m_clearDetections->setToolTip("Clear detections");
     m_clearDetections->setMaximumWidth(28);
 
-    m_detectionsTable->setColumnCount(9);
+    m_detectionsTable->setColumnCount(11);
     const QStringList detectionHeaders = {
         "Time (local)",
         "Peak (dB)",
@@ -269,7 +269,9 @@ void MeteorGUI::setupUi(RollupContents *rollupContents)
         "Center (Hz)",
         "Span (Hz)",
         "Drift (Hz)",
-        "Rate (Hz)"
+        "Rate (Hz)",
+        "Mag",
+        "Flux"
     };
     const QStringList detectionHeaderTooltips = {
         "Local date and time when the meteor pulse started",
@@ -280,7 +282,9 @@ void MeteorGUI::setupUi(RollupContents *rollupContents)
         "Estimated center frequency of the pulse relative to channel center in hertz",
         "Estimated frequency span across the pulse in hertz",
         "Estimated start-to-end frequency drift across the pulse in hertz",
-        "Meteor channel detector sample rate in hertz"
+        "Meteor channel detector sample rate in hertz",
+        "Camera photometry magnitude for camera-object meteor detections",
+        "Camera photometry flux for camera-object meteor detections"
     };
 
     for (int i = 0; i < detectionHeaders.size(); i++)
@@ -1209,6 +1213,8 @@ void MeteorGUI::addDetection(const MeteorDemodSink::MsgMeteorDetected& detection
     m_detectionsTable->setItem(row, 6, makeTableItem(QString::number(detection.getFrequencySpan(), 'f', 1), detection.getFrequencySpan()));
     m_detectionsTable->setItem(row, 7, makeTableItem(QString::number(detection.getFrequencyDrift(), 'f', 1), detection.getFrequencyDrift()));
     m_detectionsTable->setItem(row, 8, makeTableItem(QString::number(detection.getSampleRate()), detection.getSampleRate()));
+    m_detectionsTable->setItem(row, 9, makeTableItem(QString()));
+    m_detectionsTable->setItem(row, 10, makeTableItem(QString()));
     m_detectionsTable->setSortingEnabled(sortingEnabled);
 
     updateCounters();
@@ -1249,6 +1255,12 @@ void MeteorGUI::addCameraDetection(const Meteor::MsgCameraMeteorDetected& detect
     m_detectionsTable->setItem(row, 6, makeTableItem(QString()));
     m_detectionsTable->setItem(row, 7, makeTableItem(QString()));
     m_detectionsTable->setItem(row, 8, makeTableItem(QString()));
+    m_detectionsTable->setItem(row, 9, detection.hasMagnitude()
+        ? makeTableItem(QString::number(detection.getMagnitude(), 'f', 2), detection.getMagnitude())
+        : makeTableItem(QString()));
+    m_detectionsTable->setItem(row, 10, detection.hasFlux()
+        ? makeTableItem(QString::number(detection.getFlux(), 'g', 6), detection.getFlux())
+        : makeTableItem(QString()));
     m_detectionsTable->setSortingEnabled(sortingEnabled);
 
     updateCounters();

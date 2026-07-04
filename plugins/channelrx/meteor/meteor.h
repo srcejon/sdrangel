@@ -75,20 +75,44 @@ public:
     public:
         const QDateTime& getDateTimeUtc() const { return m_dateTimeUtc; }
         double getDurationS() const { return m_durationS; }
+        bool hasMagnitude() const { return m_hasMagnitude; }
+        double getMagnitude() const { return m_magnitude; }
+        bool hasFlux() const { return m_hasFlux; }
+        double getFlux() const { return m_flux; }
 
-        static MsgCameraMeteorDetected* create(const QDateTime& dateTimeUtc, double durationS)
+        static MsgCameraMeteorDetected* create(
+            const QDateTime& dateTimeUtc,
+            double durationS,
+            bool hasMagnitude,
+            double magnitude,
+            bool hasFlux,
+            double flux)
         {
-            return new MsgCameraMeteorDetected(dateTimeUtc, durationS);
+            return new MsgCameraMeteorDetected(dateTimeUtc, durationS, hasMagnitude, magnitude, hasFlux, flux);
         }
 
     private:
         QDateTime m_dateTimeUtc;
         double m_durationS;
+        bool m_hasMagnitude;
+        double m_magnitude;
+        bool m_hasFlux;
+        double m_flux;
 
-        MsgCameraMeteorDetected(const QDateTime& dateTimeUtc, double durationS) :
+        MsgCameraMeteorDetected(
+            const QDateTime& dateTimeUtc,
+            double durationS,
+            bool hasMagnitude,
+            double magnitude,
+            bool hasFlux,
+            double flux) :
             Message(),
             m_dateTimeUtc(dateTimeUtc),
-            m_durationS(durationS)
+            m_durationS(durationS),
+            m_hasMagnitude(hasMagnitude),
+            m_magnitude(magnitude),
+            m_hasFlux(hasFlux),
+            m_flux(flux)
         {}
     };
 
@@ -168,13 +192,22 @@ private:
     int m_basebandSampleRate;
     qint64 m_centerFrequency;
     AvailableChannelOrFeatureHandler m_eventSourceHandler;
-    QMap<const QObject*, QDateTime> m_cameraMeteorStartTimes;
+    struct CameraMeteorEvent
+    {
+        QDateTime m_startTimeUtc;
+        bool m_hasMagnitude = false;
+        double m_magnitude = 0.0;
+        bool m_hasFlux = false;
+        double m_flux = 0.0;
+    };
+    QMap<const QObject*, CameraMeteorEvent> m_cameraMeteorEvents;
 
     virtual bool handleMessage(const Message& cmd);
     void applySettings(const MeteorSettings& settings, const QStringList& settingsKeys, bool force = false);
     void handleEventMessageQueue(MessageQueue *messageQueue);
     void handleEvent(const MainCore::MsgEvent& eventMessage);
     static QMap<QString, QString> parseEventDataFields(const QString& data);
+    static bool parseEventDoubleField(const QMap<QString, QString>& fields, const QString& name, double& value);
     static bool isMeteorObjectEvent(const MainCore::MsgEvent& eventMessage);
 
 private slots:

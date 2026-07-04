@@ -215,8 +215,14 @@ void Meteor::handleEvent(const MainCore::MsgEvent& eventMessage)
 
     if (eventMessage.getEvent() == MainCore::MsgEvent::CameraObjectDetectedEvent)
     {
-        if (!m_cameraMeteorStartTimes.contains(source)) {
-            m_cameraMeteorStartTimes.insert(source, eventTime);
+        if (!m_cameraMeteorEvents.contains(source))
+        {
+            const QMap<QString, QString> fields = parseEventDataFields(eventMessage.getData());
+            CameraMeteorEvent cameraEvent;
+            cameraEvent.m_startTimeUtc = eventTime.toUTC();
+            cameraEvent.m_hasMagnitude = parseEventDoubleField(fields, QStringLiteral("magnitude"), cameraEvent.m_magnitude);
+            cameraEvent.m_hasFlux = parseEventDoubleField(fields, QStringLiteral("flux"), cameraEvent.m_flux);
+            m_cameraMeteorEvents.insert(source, cameraEvent);
         }
 
         return;
@@ -226,16 +232,16 @@ void Meteor::handleEvent(const MainCore::MsgEvent& eventMessage)
         return;
     }
 
-    const auto startIt = m_cameraMeteorStartTimes.find(source);
+    const auto startIt = m_cameraMeteorEvents.find(source);
 
-    if (startIt == m_cameraMeteorStartTimes.end()) {
+    if (startIt == m_cameraMeteorEvents.end()) {
         return;
     }
 
-    const QDateTime startTime = startIt.value();
-    m_cameraMeteorStartTimes.erase(startIt);
+    const CameraMeteorEvent cameraEvent = startIt.value();
+    m_cameraMeteorEvents.erase(startIt);
 
-    const qint64 durationMSecs = startTime.msecsTo(eventTime);
+    const qint64 durationMSecs = cameraEvent.m_startTimeUtc.msecsTo(eventTime);
 
     if (durationMSecs < 0) {
         return;
@@ -244,8 +250,12 @@ void Meteor::handleEvent(const MainCore::MsgEvent& eventMessage)
     if (getMessageQueueToGUI())
     {
         getMessageQueueToGUI()->push(MsgCameraMeteorDetected::create(
-            startTime.toUTC(),
-            (double) durationMSecs / 1000.0));
+            cameraEvent.m_startTimeUtc,
+            (double) durationMSecs / 1000.0,
+            cameraEvent.m_hasMagnitude,
+            cameraEvent.m_magnitude,
+            cameraEvent.m_hasFlux,
+            cameraEvent.m_flux));
     }
 }
 
@@ -278,6 +288,19 @@ QMap<QString, QString> Meteor::parseEventDataFields(const QString& data)
     }
 
     return fields;
+}
+
+bool Meteor::parseEventDoubleField(const QMap<QString, QString>& fields, const QString& name, double& value)
+{
+    const QString text = fields.value(name).trimmed();
+
+    if (text.isEmpty()) {
+        return false;
+    }
+
+    bool ok = false;
+    value = text.toDouble(&ok);
+    return ok;
 }
 
 bool Meteor::isMeteorObjectEvent(const MainCore::MsgEvent& eventMessage)

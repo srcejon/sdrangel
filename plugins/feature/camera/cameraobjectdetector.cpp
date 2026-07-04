@@ -697,9 +697,9 @@ void CameraObjectDetector::applySettings(const CameraSettings& settings, const Q
         clearObjectDetectionState();
     }
 
-    if (!force && !m_captureActive && yoloDetectionSettingsChanged(settingsKeys) && m_lastInputFrame)
+    if (!force && !m_captureActive && yoloDetectionSettingsChanged(settingsKeys) && m_lastInputFrame.hasImageData())
     {
-        CameraPipelineFramePtr frame = m_lastInputFrame;
+        CameraPipelineFramePtr frame(new CameraPipelineFrame(m_lastInputFrame));
         frame->m_manualPreviewFrame = true;
         submitFrame(frame);
     }
@@ -718,7 +718,8 @@ void CameraObjectDetector::processNewFrame(const CameraPipelineFramePtr& frame)
         return;
     }
 
-    m_lastInputFrame = frame;
+    m_lastInputFrame = *frame;
+    m_lastInputFrame.m_detections.clear();
 
     frame->m_detections.clear();
 

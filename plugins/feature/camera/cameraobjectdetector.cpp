@@ -697,7 +697,12 @@ void CameraObjectDetector::applySettings(const CameraSettings& settings, const Q
         clearObjectDetectionState();
     }
 
-    if (!force && !m_captureActive && yoloDetectionSettingsChanged(settingsKeys) && m_lastInputFrame.hasImageData())
+    const bool canReprocessLastFrame = !m_captureActive
+        || m_lastInputFrame.m_manualPreviewFrame
+        || (m_lastInputFrame.m_playbackPositionMs >= 0)
+        || (m_lastInputFrame.m_playbackFrameNumber > 0);
+
+    if (!force && canReprocessLastFrame && yoloDetectionSettingsChanged(settingsKeys) && m_lastInputFrame.hasImageData())
     {
         CameraPipelineFramePtr frame(new CameraPipelineFrame(m_lastInputFrame));
         frame->m_manualPreviewFrame = true;

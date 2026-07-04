@@ -6302,6 +6302,11 @@ car</string>
                 </property>
                 <item>
                  <property name="text">
+                  <string>None</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
                   <string>Name</string>
                  </property>
                 </item>

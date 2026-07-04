@@ -217,7 +217,8 @@ struct CameraSettings
 
     enum PlateSolveLabelMode
     {
-        PlateSolveLabelName = 0,
+        PlateSolveLabelNone = 0,
+        PlateSolveLabelName,
         PlateSolveLabelNameMagnitude,
         PlateSolveLabelNameMagnitudeSpectralType
     };

@@ -367,7 +367,7 @@ static QString formatRightAscensionDegrees(double value)
 
 static QString formatSolvedStarLabel(const CameraSettings& settings, const CameraPipelineStarDetection& detection)
 {
-    if (!detection.m_solved || detection.m_label.isEmpty()) {
+    if (!detection.m_solved || settings.m_plateSolveLabelMode == CameraSettings::PlateSolveLabelNone || detection.m_label.isEmpty()) {
         return QString();
     }
     // "Hide synthetic names": skip stars whose only name is the synthesized Gaia coordinate label
@@ -424,13 +424,13 @@ static QString formatMeteorPhotometryLabel(const CameraPipelineMeteorPhotometry 
         if (meteor->m_saturated) {
             prefix = QStringLiteral("<");
         }
-        return QStringLiteral("\nmag %1%2")
+        return QStringLiteral("mag %1%2")
             .arg(prefix)
             .arg(meteor->m_magnitude, 0, 'f', 2);
     }
 
     if (meteor->m_flux > 0.0) {
-        return QStringLiteral("\nflux %1").arg(meteor->m_flux, 0, 'g', 3);
+        return QStringLiteral("flux %1").arg(meteor->m_flux, 0, 'g', 3);
     }
 
     return QString();
@@ -1397,14 +1397,23 @@ void CameraPostProcessor::applyDetectionOverlay(QImage& image, const QVector<Cam
         }
 
         const QString label = detection.m_label
-            + QStringLiteral(" %1%").arg(static_cast<int>(detection.m_score * 100.0f + 0.5f))
-            + formatMeteorPhotometryLabel(findMeteorPhotometryForDetection(detection, meteorPhotometry));
-        const QSize textSize = fontMetrics.size(Qt::TextSingleLine, label);
+            + QStringLiteral(" %1%").arg(static_cast<int>(detection.m_score * 100.0f + 0.5f));
+        const QString meteorLabel = formatMeteorPhotometryLabel(findMeteorPhotometryForDetection(detection, meteorPhotometry));
+        const QString fullLabel = meteorLabel.isEmpty() ? label : label + QChar('\n') + meteorLabel;
+        const QStringList labelLines = fullLabel.split(QChar('\n'));
+        int textWidth = 0;
+        int lineCount = 0;
+        for (const QString& line : labelLines)
+        {
+            textWidth = std::max(textWidth, fontMetrics.horizontalAdvance(line));
+            ++lineCount;
+        }
+        const int textHeight = std::max(1, lineCount) * fontMetrics.lineSpacing();
         QRect labelRect(
             box.left(),
-            std::max(0, box.top() - textSize.height() - 4),
-            textSize.width() + 6,
-            textSize.height() + 4);
+            std::max(0, box.top() - textHeight - 6),
+            textWidth + 6,
+            textHeight + 4);
         if (labelRect.right() >= image.width()) {
             labelRect.moveRight(image.width() - 1);
         }
@@ -1416,14 +1425,14 @@ void CameraPostProcessor::applyDetectionOverlay(QImage& image, const QVector<Cam
         {
             const QPointF labelPoint(
                 labelRect.left() - 4.0,
-                labelRect.top() + fontMetrics.lineSpacing() + 4.0);
-            drawOutlinedLabel(painter, image.rect(), labelPoint, label, m_settings.m_yoloBoxColor, fontMetrics);
+                labelRect.top() + std::max(1, lineCount) * fontMetrics.lineSpacing() + 4.0);
+            drawOutlinedLabel(painter, image.rect(), labelPoint, fullLabel, m_settings.m_yoloBoxColor, fontMetrics);
         }
         else
         {
             appendTopLeftPreviewTextLabel(
                 previewTextLabels,
-                label,
+                fullLabel,
                 labelRect.topLeft(),
                 m_settings.m_yoloBoxColor,
                 font.family(),

@@ -831,9 +831,10 @@ CameraSettings:
     plateSolveLabelMode:
       description: >
         Plate solve label mode
-          * 0 - Name
-          * 1 - Name/magnitude
-          * 2 - Name/magnitude/spectral type
+          * 0 - None
+          * 1 - Name
+          * 2 - Name/magnitude
+          * 3 - Name/magnitude/spectral type
       type: integer
     plateSolveUseCaptureDateTime:
       description: "Use frame capture date/time for plate solving; when 0 use plateSolveDateTime (1 for yes, 0 for no)"

@@ -917,7 +917,7 @@ Selects whether the solve date/time uses the capture time or a Custom value. Whe
 
 <h4>11. Labels</h4>
 
-Selects whether solved stars are labelled by Name, Name + magnitude or Name + magnitude + spectral class.
+Selects whether solved stars are labelled by None, Name, Name + magnitude or Name + magnitude + spectral class.
 
 <h4>12. Colour</h4>
 

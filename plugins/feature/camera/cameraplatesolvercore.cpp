@@ -3306,8 +3306,19 @@ void CameraPlateSolver::SolverContext::storeVisibleCatalogCache(const CameraSett
     cache.insert(key, {visibleStars, visibleStarIndexByCatalogIndex});
 }
 
+// File-local: the P-A seed cache's catalog-generation stamp. Monotonic within a process, not
+// Date/Random-based (deterministic/resume-safe). Only populateVisibleCatalogContext bumps it.
+static quint64 nextVisibleStarsGeneration()
+{
+    static std::atomic<quint64> counter{0};
+    return counter.fetch_add(1, std::memory_order_relaxed) + 1;
+}
+
 void CameraPlateSolver::SolverContext::populateVisibleCatalogContext(PlateSolveCatalogContext& context, const CameraSettings& settings, const QDateTime& captureDateTimeUtc, double maxMagnitude, bool allowCache)
 {
+    // Every assignment to context.visibleStars happens in this function, so stamping a fresh
+    // generation on each populate is a sound cache-invalidation signal for the P-A seed-prior cache.
+    context.visibleStarsGeneration = nextVisibleStarsGeneration();
     if (allowCache
         && loadVisibleCatalogCache(
             settings,

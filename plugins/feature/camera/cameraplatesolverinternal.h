@@ -131,6 +131,10 @@ struct PlateSolveCatalogContext
     QString catalogSource;
     QVector<VisibleCatalogStar> visibleStars;
     QHash<int, int> visibleStarIndexByCatalogIndex;
+    // Monotonic id stamped whenever visibleStars is (re)populated (populateVisibleCatalogContext).
+    // Used by the evaluateFinalMatchPass seed-prior cache (P-A) to detect a catalog rebuild: two
+    // distinct-content contexts never share a generation because that is the single assignment site.
+    quint64 visibleStarsGeneration = 0;
 };
 
 struct CandidatePair
@@ -381,6 +385,35 @@ int m_brightnessRankGeneration = 0;
 QVector<int> m_detectionMatchGeneration;
 QVector<int> m_catalogMatchGeneration;
 int m_matchGeneration = 0;
+
+// P-A: per-(catalog,seed,detections) cache of the candidate-INDEPENDENT seed-prior work that
+// evaluateFinalMatchPass would otherwise recompute on every call (it runs hundreds of times per
+// solve). Covers the seed-radial projector + the O(V) seed projection of every visible star, the
+// sorted detection radii, and the sorted bright-detection list -- all functions of settings, the
+// direction-seed reference, the detections and the visible catalog only. Rebuilt only when the
+// guard changes; the stored values are bit-identical to the former inline computation.
+struct FinalPassSeedCache
+{
+    bool valid = false;
+    quint64 catalogGeneration = 0;
+    int detectionCount = -1;
+    bool useNarrowGuidedBrightPrior = false;
+    bool useSeedRadialPrior = false;
+    double refAz = 0.0, refEl = 0.0, refRoll = 0.0, refFov = 0.0;
+    double lensCx = 0.0, lensCy = 0.0, lensK1 = 0.0;
+    SkyProjector seedRadialProjector;
+    QPointF seedRadialCenter;
+    QVector<QPointF> seedPoints;      // parallel to catalogContext.visibleStars (only when useSeedRadialPrior)
+    QVector<quint8> seedPointValid;   // parallel to catalogContext.visibleStars
+    QVector<double> sortedDetectionRadii;
+    QVector<int> brightDetectionIndices;  // all-detections filtered+sorted (only when useNarrowGuidedBrightPrior)
+};
+FinalPassSeedCache m_finalPassSeedCache;
+
+// Build-or-reuse m_finalPassSeedCache for the given inputs and return it. Bit-identical to the
+// former inline computation in evaluateFinalMatchPass.
+const FinalPassSeedCache& finalPassSeedCache(const CameraSettings& settings, const PlateSolveCatalogContext& catalogContext, const QSize& imageSize, const QVector<CameraPipelineStarDetection>& starDetections);
+
 struct ProfileTiming
 {
     qint64 totalMs = 0;

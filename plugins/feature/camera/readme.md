@@ -24,6 +24,7 @@ The Camera plugin also supports a variety of post-processing, detection and over
 * YOLO AI object detection (CPU, OpenCV CUDA or TensorRT acceleration)
 * Motion detection
 * Star detection and plate solving
+* Meteor apparent magnitude calculation, based on measaured flux relative to reference stars
 * Difference detection between images
 * ADS-B, AIS, satellite and star tracker item overlay
 * Date/time and custom HTML overlay

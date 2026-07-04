@@ -2224,16 +2224,22 @@ void CameraGUI::sendDisplayedFrameEvents(const QVector<QRect>& motionBoxes, cons
 
     QSet<QString> displayedObjectClasses;
     QHash<QString, QRect> displayedObjectBoxes;
+    QHash<QString, float> displayedObjectConfidences;
     QHash<QString, CameraPipelineMeteorPhotometry> displayedMeteorPhotometry;
     for (const CameraPipelineDetection& detection : detections)
     {
         if (!detection.m_label.isEmpty())
         {
             displayedObjectClasses.insert(detection.m_label);
-            if (!displayedObjectBoxes.contains(detection.m_label)) {
+            bool representativeDetection = false;
+            if (!displayedObjectBoxes.contains(detection.m_label)
+                || (detection.m_score > displayedObjectConfidences.value(detection.m_label, -1.0f)))
+            {
                 displayedObjectBoxes.insert(detection.m_label, detection.m_box);
+                displayedObjectConfidences.insert(detection.m_label, detection.m_score);
+                representativeDetection = true;
             }
-            if (detection.m_label.trimmed().compare(QStringLiteral("meteor"), Qt::CaseInsensitive) == 0)
+            if (representativeDetection && detection.m_label.trimmed().compare(QStringLiteral("meteor"), Qt::CaseInsensitive) == 0)
             {
                 const CameraPipelineMeteorPhotometry *bestMeteor = nullptr;
                 int bestArea = 0;
@@ -2247,7 +2253,7 @@ void CameraGUI::sendDisplayedFrameEvents(const QVector<QRect>& motionBoxes, cons
                         bestMeteor = &meteor;
                     }
                 }
-                if (bestMeteor && !displayedMeteorPhotometry.contains(detection.m_label)) {
+                if (bestMeteor) {
                     displayedMeteorPhotometry.insert(detection.m_label, *bestMeteor);
                 }
             }
@@ -2259,12 +2265,13 @@ void CameraGUI::sendDisplayedFrameEvents(const QVector<QRect>& motionBoxes, cons
         if (!m_displayedObjectEventClasses.contains(className))
         {
             const QRect box = displayedObjectBoxes.value(className);
-            QString eventData = QStringLiteral("name=%1,x=%2,y=%3,width=%4,height=%5")
+            QString eventData = QStringLiteral("name=%1,x=%2,y=%3,width=%4,height=%5,confidence=%6")
                 .arg(className)
                 .arg(box.x())
                 .arg(box.y())
                 .arg(box.width())
-                .arg(box.height());
+                .arg(box.height())
+                .arg(displayedObjectConfidences.value(className, 0.0f), 0, 'g', 6);
             if (displayedMeteorPhotometry.contains(className))
             {
                 const CameraPipelineMeteorPhotometry meteor = displayedMeteorPhotometry.value(className);

@@ -246,6 +246,18 @@ struct FinalMatchPassEvaluation
     double sparseGuidedAnchorRmsErrorPixels = std::numeric_limits<double>::infinity();
     double sparseGuidedAnchorBrightnessRankError = std::numeric_limits<double>::infinity();
     double sparseGuidedAnchorMeanMagnitude = std::numeric_limits<double>::infinity();
+
+    // P-C: derived gate/score values the ranking comparator would otherwise recompute for both
+    // sides on every pairwise comparison (the incumbent's are re-derived once per candidate). These
+    // are pure functions of (settings, [starDetections,] this evaluation), so evaluateFinalMatchPass
+    // computes them once when the pass is fully populated and sets cachedGatesValid; the cached*
+    // accessors read them, falling back to direct computation when the flag is unset (e.g. an
+    // early-return pass). Bit-identical to recomputing.
+    bool cachedGatesValid = false;
+    bool cachedStrongDenseNarrowGuided = false;
+    double cachedFinalMatchPassScore = 0.0;
+    double cachedNarrowGuidedBrightConsistencyScore = 0.0;
+    double cachedNarrowGuidedSeedConsistencyScore = 0.0;
 };
 
 struct CandidateRefinementResult
@@ -1784,6 +1796,25 @@ double sparseGuidedAnchorRankingScore(const FinalMatchPassEvaluation& evaluation
 double namedBrightAnchorEvidenceScore(const FinalMatchPassEvaluation& evaluation);
 
 double finalMatchPassScore(const CameraSettings& settings, const FinalMatchPassEvaluation& evaluation);
+
+// P-C accessors: return the cached derived value when evaluateFinalMatchPass populated it,
+// otherwise compute it directly. Bit-identical; only avoids the per-comparison recomputation.
+bool cachedHasStrongDenseNarrowGuidedFinalPass(const CameraSettings& settings, const FinalMatchPassEvaluation& e)
+{
+    return e.cachedGatesValid ? e.cachedStrongDenseNarrowGuided : hasStrongDenseNarrowGuidedFinalPass(settings, e);
+}
+double cachedFinalMatchPassScore(const CameraSettings& settings, const FinalMatchPassEvaluation& e)
+{
+    return e.cachedGatesValid ? e.cachedFinalMatchPassScore : finalMatchPassScore(settings, e);
+}
+double cachedNarrowGuidedBrightConsistencyScore(const CameraSettings& settings, const FinalMatchPassEvaluation& e)
+{
+    return e.cachedGatesValid ? e.cachedNarrowGuidedBrightConsistencyScore : narrowGuidedBrightConsistencyScore(settings, e);
+}
+double cachedNarrowGuidedSeedConsistencyScore(const CameraSettings& settings, const FinalMatchPassEvaluation& e)
+{
+    return e.cachedGatesValid ? e.cachedNarrowGuidedSeedConsistencyScore : narrowGuidedSeedConsistencyScore(settings, e);
+}
 
 double narrowGuidedEvidenceScore(const CameraSettings& settings, const FinalMatchPassEvaluation& evaluation);
 

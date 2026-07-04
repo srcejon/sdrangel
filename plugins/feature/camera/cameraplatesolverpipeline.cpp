@@ -9275,6 +9275,15 @@ CameraPlateSolver::SolverContext::FinalMatchPassEvaluation CameraPlateSolver::So
         finalPass.pose.meanCatalogMagnitude = finalPass.meanCatalogMagnitude;
     }
 
+    // P-C: memoize the derived gate/score values that the ranking comparator would otherwise
+    // recompute for both sides on every pairwise comparison. Pure functions of (settings, this
+    // pass); computed once here now that finalPass is fully populated.
+    finalPass.cachedStrongDenseNarrowGuided = hasStrongDenseNarrowGuidedFinalPass(settings, finalPass);
+    finalPass.cachedFinalMatchPassScore = finalMatchPassScore(settings, finalPass);
+    finalPass.cachedNarrowGuidedBrightConsistencyScore = narrowGuidedBrightConsistencyScore(settings, finalPass);
+    finalPass.cachedNarrowGuidedSeedConsistencyScore = narrowGuidedSeedConsistencyScore(settings, finalPass);
+    finalPass.cachedGatesValid = true;
+
     return finalPass;
 }
 
@@ -10069,18 +10078,18 @@ bool CameraPlateSolver::SolverContext::isBetterWeakModeFinalMatchPass(const Came
             && (bestMatches >= std::max(settings.m_plateSolveMinMatches + 6, 10));
         if (candidateHasStrongNamedAnchorSet != bestHasStrongNamedAnchorSet) {
             const bool candidateHasStrongDenseGuidedSupport =
-                hasStrongDenseNarrowGuidedFinalPass(settings, candidate);
+                cachedHasStrongDenseNarrowGuidedFinalPass(settings, candidate);
             const bool bestHasStrongDenseGuidedSupport =
-                hasStrongDenseNarrowGuidedFinalPass(settings, best);
+                cachedHasStrongDenseNarrowGuidedFinalPass(settings, best);
             if (candidateHasStrongDenseGuidedSupport != bestHasStrongDenseGuidedSupport) {
                 return candidateHasStrongDenseGuidedSupport;
             }
             return candidateHasStrongNamedAnchorSet;
         }
         const bool candidateHasStrongDenseGuidedSupport =
-            hasStrongDenseNarrowGuidedFinalPass(settings, candidate);
+            cachedHasStrongDenseNarrowGuidedFinalPass(settings, candidate);
         const bool bestHasStrongDenseGuidedSupport =
-            hasStrongDenseNarrowGuidedFinalPass(settings, best);
+            cachedHasStrongDenseNarrowGuidedFinalPass(settings, best);
         if (candidateHasStrongDenseGuidedSupport != bestHasStrongDenseGuidedSupport) {
             return candidateHasStrongDenseGuidedSupport;
         }
@@ -10119,8 +10128,8 @@ bool CameraPlateSolver::SolverContext::isBetterWeakModeFinalMatchPass(const Came
             && seedConsistencyComparableSupport
             && seedConsistencyComparableRms)
         {
-            const double candidateSeedConsistency = narrowGuidedSeedConsistencyScore(settings, candidate);
-            const double bestSeedConsistency = narrowGuidedSeedConsistencyScore(settings, best);
+            const double candidateSeedConsistency = cachedNarrowGuidedSeedConsistencyScore(settings, candidate);
+            const double bestSeedConsistency = cachedNarrowGuidedSeedConsistencyScore(settings, best);
             const double seedConsistencyDelta = candidateSeedConsistency - bestSeedConsistency;
             if (std::fabs(seedConsistencyDelta) >= 1.5) {
                 return seedConsistencyDelta > 0.0;
@@ -10318,8 +10327,8 @@ bool CameraPlateSolver::SolverContext::isBetterWeakModeFinalMatchPass(const Came
                 && (candidate.rmsErrorPixels <= (best.rmsErrorPixels + rmsTolerance))
                 && (best.rmsErrorPixels <= (candidate.rmsErrorPixels + rmsTolerance)))
             {
-                const double candidateBrightScore = narrowGuidedBrightConsistencyScore(settings, candidate);
-                const double bestBrightScore = narrowGuidedBrightConsistencyScore(settings, best);
+                const double candidateBrightScore = cachedNarrowGuidedBrightConsistencyScore(settings, candidate);
+                const double bestBrightScore = cachedNarrowGuidedBrightConsistencyScore(settings, best);
                 if (std::fabs(candidateBrightScore - bestBrightScore) <= 1.0) {
                     return actualMatchDelta > 0;
                 }
@@ -10492,8 +10501,8 @@ bool CameraPlateSolver::SolverContext::isBetterWeakModeFinalMatchPass(const Came
 
     if (m_useWideCatalogMagnitudePreference || m_useDirectionSeedPreference)
     {
-        const double candidateScore = finalMatchPassScore(settings, candidate);
-        const double bestScore = finalMatchPassScore(settings, best);
+        const double candidateScore = cachedFinalMatchPassScore(settings, candidate);
+        const double bestScore = cachedFinalMatchPassScore(settings, best);
         const double scoreScale = std::max({
             1e-9,
             std::fabs(candidateScore),
@@ -10506,8 +10515,8 @@ bool CameraPlateSolver::SolverContext::isBetterWeakModeFinalMatchPass(const Came
 
     if (isLowMagnitudeNarrowGuidedSolve(settings) && narrowGuidedActualMatchCountsAreClose)
     {
-        const double candidateBrightScore = narrowGuidedBrightConsistencyScore(settings, candidate);
-        const double bestBrightScore = narrowGuidedBrightConsistencyScore(settings, best);
+        const double candidateBrightScore = cachedNarrowGuidedBrightConsistencyScore(settings, candidate);
+        const double bestBrightScore = cachedNarrowGuidedBrightConsistencyScore(settings, best);
         if (std::fabs(candidateBrightScore - bestBrightScore) > 0.35) {
             return candidateBrightScore > bestBrightScore;
         }

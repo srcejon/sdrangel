@@ -2170,6 +2170,23 @@
             </item>
            </widget>
           </item>
+          <item row="5" column="0">
+           <widget class="QLabel" name="scaleCenterOffsetTitleLabel">
+            <property name="text">
+             <string>Center offset</string>
+            </property>
+           </widget>
+          </item>
+          <item row="5" column="1">
+           <widget class="QLabel" name="scaleCenterOffsetLabel">
+            <property name="toolTip">
+             <string>Signed pixel offset of the fitted image centre from the scaled output centre; use these values as lens centre offsets when replaying the scaled video</string>
+            </property>
+            <property name="text">
+             <string>x: -, y: -</string>
+            </property>
+           </widget>
+          </item>
          </layout>
         </widget>
        </item>

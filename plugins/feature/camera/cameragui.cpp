@@ -2223,10 +2223,15 @@ void CameraGUI::sendDisplayedFrameEvents(const QVector<QRect>& motionBoxes, cons
     }
 
     QSet<QString> displayedObjectClasses;
+    QHash<QString, QRect> displayedObjectBoxes;
     for (const CameraPipelineDetection& detection : detections)
     {
-        if (!detection.m_label.isEmpty()) {
+        if (!detection.m_label.isEmpty())
+        {
             displayedObjectClasses.insert(detection.m_label);
+            if (!displayedObjectBoxes.contains(detection.m_label)) {
+                displayedObjectBoxes.insert(detection.m_label, detection.m_box);
+            }
         }
     }
 
@@ -2234,9 +2239,15 @@ void CameraGUI::sendDisplayedFrameEvents(const QVector<QRect>& motionBoxes, cons
     {
         if (!m_displayedObjectEventClasses.contains(className))
         {
+            const QRect box = displayedObjectBoxes.value(className);
             pendingEvents.append({
                 MainCore::MsgEvent::EventType::CameraObjectDetectedEvent,
-                QStringLiteral("name=%1").arg(className)
+                QStringLiteral("name=%1,x=%2,y=%3,width=%4,height=%5")
+                    .arg(className)
+                    .arg(box.x())
+                    .arg(box.y())
+                    .arg(box.width())
+                    .arg(box.height())
             });
         }
     }
@@ -3236,6 +3247,8 @@ void CameraGUI::updateScaleControls()
     settingsUI()->scaleKeepAspectRatioCheck->setEnabled(enabled);
     settingsUI()->scaleJustificationLabel->setEnabled(enabled && m_settings.m_scaleKeepAspectRatio);
     settingsUI()->scaleJustificationCombo->setEnabled(enabled && m_settings.m_scaleKeepAspectRatio);
+    settingsUI()->scaleCenterOffsetTitleLabel->setEnabled(enabled && m_settings.m_scaleKeepAspectRatio);
+    settingsUI()->scaleCenterOffsetLabel->setEnabled(enabled && m_settings.m_scaleKeepAspectRatio);
 
     int inputWidth = m_settings.m_cameraNumX > 0 ? m_settings.m_cameraNumX : m_settings.m_resolutionWidth;
     int inputHeight = m_settings.m_cameraNumY > 0 ? m_settings.m_cameraNumY : m_settings.m_resolutionHeight;
@@ -3262,11 +3275,57 @@ void CameraGUI::updateScaleControls()
     {
         settingsUI()->scaleOutputWidthLabel->setText(tr("Output: %1 px").arg(outputSize.width()));
         settingsUI()->scaleOutputHeightLabel->setText(tr("Output: %1 px").arg(outputSize.height()));
+
+        if (enabled && m_settings.m_scaleKeepAspectRatio && (inputWidth > 0) && (inputHeight > 0))
+        {
+            const double scale = std::min(
+                static_cast<double>(outputSize.width()) / static_cast<double>(inputWidth),
+                static_cast<double>(outputSize.height()) / static_cast<double>(inputHeight));
+            const QSize contentSize(
+                std::max(1, static_cast<int>(std::lround(static_cast<double>(inputWidth) * scale))),
+                std::max(1, static_cast<int>(std::lround(static_cast<double>(inputHeight) * scale))));
+            const int extraWidth = std::max(0, outputSize.width() - contentSize.width());
+            const int extraHeight = std::max(0, outputSize.height() - contentSize.height());
+            int x = extraWidth / 2;
+            int y = extraHeight / 2;
+
+            switch (m_settings.m_scaleJustification)
+            {
+            case CameraSettings::ScaleJustifyLeft:
+                x = 0;
+                break;
+            case CameraSettings::ScaleJustifyRight:
+                x = extraWidth;
+                break;
+            case CameraSettings::ScaleJustifyTop:
+                y = 0;
+                break;
+            case CameraSettings::ScaleJustifyBottom:
+                y = extraHeight;
+                break;
+            case CameraSettings::ScaleJustifyCenter:
+            default:
+                break;
+            }
+
+            const double centerOffsetX = static_cast<double>(x) + static_cast<double>(contentSize.width()) * 0.5
+                - static_cast<double>(outputSize.width()) * 0.5;
+            const double centerOffsetY = static_cast<double>(y) + static_cast<double>(contentSize.height()) * 0.5
+                - static_cast<double>(outputSize.height()) * 0.5;
+            settingsUI()->scaleCenterOffsetLabel->setText(tr("x: %1 px, y: %2 px")
+                .arg(centerOffsetX, 0, 'f', 1)
+                .arg(centerOffsetY, 0, 'f', 1));
+        }
+        else
+        {
+            settingsUI()->scaleCenterOffsetLabel->setText(tr("x: 0.0 px, y: 0.0 px"));
+        }
     }
     else
     {
         settingsUI()->scaleOutputWidthLabel->setText(tr("Output: -"));
         settingsUI()->scaleOutputHeightLabel->setText(tr("Output: -"));
+        settingsUI()->scaleCenterOffsetLabel->setText(tr("x: -, y: -"));
     }
 }
 

@@ -27,6 +27,7 @@
 #include "meteor.h"
 
 MESSAGE_CLASS_DEFINITION(Meteor::MsgConfigureMeteor, Message)
+MESSAGE_CLASS_DEFINITION(Meteor::MsgCameraMeteorDetected, Message)
 
 const char * const Meteor::m_channelIdURI = "sdrangel.channel.meteor";
 const char * const Meteor::m_channelId = "Meteor";
@@ -36,7 +37,11 @@ Meteor::Meteor(DeviceAPI *deviceAPI) :
     m_deviceAPI(deviceAPI),
     m_spectrumVis(SDR_RX_SCALEF),
     m_basebandSampleRate(0),
-    m_centerFrequency(0)
+    m_centerFrequency(0),
+    m_eventSourceHandler(
+        QStringList({QStringLiteral("sdrangel.feature.camera")}),
+        QStringList({QStringLiteral("event")}),
+        QStringLiteral("F"))
 {
     setObjectName(m_channelId);
 
@@ -57,6 +62,15 @@ Meteor::Meteor(DeviceAPI *deviceAPI) :
         this,
         &Meteor::handleIndexInDeviceSetChanged
     );
+
+    QObject::connect(
+        &m_eventSourceHandler,
+        &AvailableChannelOrFeatureHandler::messageEnqueued,
+        this,
+        &Meteor::eventMessageEnqueued,
+        Qt::QueuedConnection
+    );
+    m_eventSourceHandler.scanAvailableChannelsAndFeatures();
 }
 
 Meteor::~Meteor()
@@ -155,10 +169,137 @@ bool Meteor::handleMessage(const Message& cmd)
 
         return true;
     }
+    else if (MainCore::MsgEvent::match(cmd))
+    {
+        handleEvent((const MainCore::MsgEvent&) cmd);
+        return true;
+    }
     else
     {
         return false;
     }
+}
+
+void Meteor::eventMessageEnqueued(MessageQueue *messageQueue)
+{
+    handleEventMessageQueue(messageQueue);
+}
+
+void Meteor::handleEventMessageQueue(MessageQueue *messageQueue)
+{
+    Message *message;
+
+    while ((message = messageQueue->pop()) != nullptr)
+    {
+        if (MainCore::MsgEvent::match(*message)) {
+            handleEvent((const MainCore::MsgEvent&) *message);
+        }
+
+        delete message;
+    }
+}
+
+void Meteor::handleEvent(const MainCore::MsgEvent& eventMessage)
+{
+    if (!isMeteorObjectEvent(eventMessage)) {
+        return;
+    }
+
+    QDateTime eventTime = eventMessage.getDateTime();
+
+    if (!eventTime.isValid()) {
+        eventTime = QDateTime::currentDateTimeUtc();
+    }
+
+    const QObject *source = eventMessage.getPipeSource();
+
+    if (eventMessage.getEvent() == MainCore::MsgEvent::CameraObjectDetectedEvent)
+    {
+        if (!m_cameraMeteorStartTimes.contains(source)) {
+            m_cameraMeteorStartTimes.insert(source, eventTime);
+        }
+
+        return;
+    }
+
+    if (eventMessage.getEvent() != MainCore::MsgEvent::CameraObjectLostEvent) {
+        return;
+    }
+
+    const auto startIt = m_cameraMeteorStartTimes.find(source);
+
+    if (startIt == m_cameraMeteorStartTimes.end()) {
+        return;
+    }
+
+    const QDateTime startTime = startIt.value();
+    m_cameraMeteorStartTimes.erase(startIt);
+
+    const qint64 durationMSecs = startTime.msecsTo(eventTime);
+
+    if (durationMSecs < 0) {
+        return;
+    }
+
+    if (getMessageQueueToGUI())
+    {
+        getMessageQueueToGUI()->push(MsgCameraMeteorDetected::create(
+            startTime.toUTC(),
+            (double) durationMSecs / 1000.0));
+    }
+}
+
+QMap<QString, QString> Meteor::parseEventDataFields(const QString& data)
+{
+    QMap<QString, QString> fields;
+    const QStringList entries = data.split(',', Qt::SkipEmptyParts);
+
+    for (const QString& entry : entries)
+    {
+        const int separator = entry.indexOf('=');
+
+        if (separator <= 0) {
+            continue;
+        }
+
+        const QString name = entry.left(separator).trimmed().toLower();
+        QString value = entry.mid(separator + 1).trimmed();
+
+        if (((value.startsWith(QLatin1Char('"')) && value.endsWith(QLatin1Char('"')))
+            || (value.startsWith(QLatin1Char('\'')) && value.endsWith(QLatin1Char('\''))))
+            && (value.size() >= 2))
+        {
+            value = value.mid(1, value.size() - 2);
+        }
+
+        if (!name.isEmpty()) {
+            fields.insert(name, value);
+        }
+    }
+
+    return fields;
+}
+
+bool Meteor::isMeteorObjectEvent(const MainCore::MsgEvent& eventMessage)
+{
+    if ((eventMessage.getEvent() != MainCore::MsgEvent::CameraObjectDetectedEvent)
+        && (eventMessage.getEvent() != MainCore::MsgEvent::CameraObjectLostEvent))
+    {
+        return false;
+    }
+
+    const QMap<QString, QString> fields = parseEventDataFields(eventMessage.getData());
+    QString objectClass = fields.value(QStringLiteral("class"));
+
+    if (objectClass.isEmpty()) {
+        objectClass = fields.value(QStringLiteral("name"));
+    }
+
+    if (objectClass.isEmpty()) {
+        objectClass = fields.value(QStringLiteral("label"));
+    }
+
+    return objectClass.compare(QStringLiteral("meteor"), Qt::CaseInsensitive) == 0;
 }
 
 void Meteor::setCenterFrequency(qint64 frequency)

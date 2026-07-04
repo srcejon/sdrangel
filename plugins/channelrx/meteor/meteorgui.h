@@ -171,6 +171,7 @@ private:
     void updateAbsoluteCenterFrequency();
     void updateVisualSampleRate();
     void addDetection(const MeteorDemodSink::MsgMeteorDetected& detection);
+    void addCameraDetection(const Meteor::MsgCameraMeteorDetected& detection);
     void updateCounters();
     void updateHistogram();
     void updateColorgramme();

@@ -18,18 +18,23 @@
 #ifndef INCLUDE_METEOR_H
 #define INCLUDE_METEOR_H
 
+#include <QDateTime>
+#include <QMap>
 #include <QThread>
 
+#include "availablechannelorfeaturehandler.h"
 #include "channel/channelapi.h"
 #include "dsp/basebandsamplesink.h"
 #include "dsp/scopevis.h"
 #include "dsp/spectrumvis.h"
+#include "maincore.h"
 #include "util/message.h"
 
 #include "meteorbaseband.h"
 #include "meteorsettings.h"
 
 class DeviceAPI;
+class MessageQueue;
 
 namespace SWGSDRangel {
     class SWGChannelSettings;
@@ -61,6 +66,29 @@ public:
             m_settings(settings),
             m_settingsKeys(settingsKeys),
             m_force(force)
+        {}
+    };
+
+    class MsgCameraMeteorDetected : public Message {
+        MESSAGE_CLASS_DECLARATION
+
+    public:
+        const QDateTime& getDateTimeUtc() const { return m_dateTimeUtc; }
+        double getDurationS() const { return m_durationS; }
+
+        static MsgCameraMeteorDetected* create(const QDateTime& dateTimeUtc, double durationS)
+        {
+            return new MsgCameraMeteorDetected(dateTimeUtc, durationS);
+        }
+
+    private:
+        QDateTime m_dateTimeUtc;
+        double m_durationS;
+
+        MsgCameraMeteorDetected(const QDateTime& dateTimeUtc, double durationS) :
+            Message(),
+            m_dateTimeUtc(dateTimeUtc),
+            m_durationS(durationS)
         {}
     };
 
@@ -139,11 +167,18 @@ private:
     ScopeVis m_scopeVis;
     int m_basebandSampleRate;
     qint64 m_centerFrequency;
+    AvailableChannelOrFeatureHandler m_eventSourceHandler;
+    QMap<const QObject*, QDateTime> m_cameraMeteorStartTimes;
 
     virtual bool handleMessage(const Message& cmd);
     void applySettings(const MeteorSettings& settings, const QStringList& settingsKeys, bool force = false);
+    void handleEventMessageQueue(MessageQueue *messageQueue);
+    void handleEvent(const MainCore::MsgEvent& eventMessage);
+    static QMap<QString, QString> parseEventDataFields(const QString& data);
+    static bool isMeteorObjectEvent(const MainCore::MsgEvent& eventMessage);
 
 private slots:
+    void eventMessageEnqueued(MessageQueue *messageQueue);
     void handleIndexInDeviceSetChanged(int index);
 };
 

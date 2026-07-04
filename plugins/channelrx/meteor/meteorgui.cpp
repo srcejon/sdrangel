@@ -438,6 +438,12 @@ bool MeteorGUI::handleMessage(const Message& message)
         addDetection(detection);
         return true;
     }
+    else if (Meteor::MsgCameraMeteorDetected::match(message))
+    {
+        const Meteor::MsgCameraMeteorDetected& detection = (const Meteor::MsgCameraMeteorDetected&) message;
+        addCameraDetection(detection);
+        return true;
+    }
     else if (MeteorDemodSink::MsgMeteorDataCollected::match(message))
     {
         const MeteorDemodSink::MsgMeteorDataCollected& data = (const MeteorDemodSink::MsgMeteorDataCollected&) message;
@@ -1203,6 +1209,46 @@ void MeteorGUI::addDetection(const MeteorDemodSink::MsgMeteorDetected& detection
     m_detectionsTable->setItem(row, 6, makeTableItem(QString::number(detection.getFrequencySpan(), 'f', 1), detection.getFrequencySpan()));
     m_detectionsTable->setItem(row, 7, makeTableItem(QString::number(detection.getFrequencyDrift(), 'f', 1), detection.getFrequencyDrift()));
     m_detectionsTable->setItem(row, 8, makeTableItem(QString::number(detection.getSampleRate()), detection.getSampleRate()));
+    m_detectionsTable->setSortingEnabled(sortingEnabled);
+
+    updateCounters();
+    updateHistogram();
+    updateColorgramme();
+    m_glSpectrum->getSpectrumView()->update();
+}
+
+void MeteorGUI::addCameraDetection(const Meteor::MsgCameraMeteorDetected& detection)
+{
+    const QDateTime utcTime = detection.getDateTimeUtc().toUTC();
+    const QDateTime localTime = utcTime.toLocalTime();
+    const QDate date = localTime.date();
+    const int hour = localTime.time().hour();
+
+    if (!m_hourlyCounts.contains(date)) {
+        m_hourlyCounts[date] = QVector<int>(24, 0);
+    }
+
+    markHourData(date, hour);
+    m_hourlyCounts[date][hour]++;
+    m_totalCount++;
+
+    const bool sortingEnabled = m_detectionsTable->isSortingEnabled();
+    m_detectionsTable->setSortingEnabled(false);
+    const int row = m_detectionsTable->rowCount();
+    m_detectionsTable->insertRow(row);
+
+    QTableWidgetItem *timeItem = makeTableItem(localTime.toString("yyyy-MM-dd HH:mm:ss.zzz"), localTime.toMSecsSinceEpoch());
+    timeItem->setData(DetectionSampleUtcMSecsRole, utcTime.toMSecsSinceEpoch());
+    timeItem->setData(DetectionDisplayUtcMSecsRole, utcTime.toMSecsSinceEpoch());
+    m_detectionsTable->setItem(row, 0, timeItem);
+    m_detectionsTable->setItem(row, 1, makeTableItem(QString()));
+    m_detectionsTable->setItem(row, 2, makeTableItem(QString()));
+    m_detectionsTable->setItem(row, 3, makeTableItem(QString()));
+    m_detectionsTable->setItem(row, 4, makeTableItem(QString::number(detection.getDurationS() * 1000.0, 'f', 1), detection.getDurationS()));
+    m_detectionsTable->setItem(row, 5, makeTableItem(QString()));
+    m_detectionsTable->setItem(row, 6, makeTableItem(QString()));
+    m_detectionsTable->setItem(row, 7, makeTableItem(QString()));
+    m_detectionsTable->setItem(row, 8, makeTableItem(QString()));
     m_detectionsTable->setSortingEnabled(sortingEnabled);
 
     updateCounters();

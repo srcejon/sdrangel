@@ -702,7 +702,7 @@ bool CameraGUI::handleMessage(const Message& message)
         }
 
         // Send events first, to make Scheduler response as fast as possible
-        sendDisplayedFrameEvents(report.getMotionBoxes(), report.getDetections(), report.getTrackedObjects(), report.getImage().size(), report.getCaptureDateTime());
+        sendDisplayedFrameEvents(report.getMotionBoxes(), report.getDetections(), report.getMeteorPhotometry(), report.getTrackedObjects(), report.getImage().size(), report.getCaptureDateTime());
 
         const qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
         QSize oldSize = m_lastImage.size();
@@ -2186,7 +2186,7 @@ void CameraGUI::updateImageWidget()
     updateMotionExclusionPreview();
 }
 
-void CameraGUI::sendDisplayedFrameEvents(const QVector<QRect>& motionBoxes, const QVector<CameraPipelineDetection>& detections, const QVector<CameraPipelineTrackedObject>& trackedObjects, const QSize& imageSize, const QDateTime& captureDateTime)
+void CameraGUI::sendDisplayedFrameEvents(const QVector<QRect>& motionBoxes, const QVector<CameraPipelineDetection>& detections, const QVector<CameraPipelineMeteorPhotometry>& meteorPhotometry, const QVector<CameraPipelineTrackedObject>& trackedObjects, const QSize& imageSize, const QDateTime& captureDateTime)
 {
     if (!m_camera) {
         return;
@@ -2224,6 +2224,7 @@ void CameraGUI::sendDisplayedFrameEvents(const QVector<QRect>& motionBoxes, cons
 
     QSet<QString> displayedObjectClasses;
     QHash<QString, QRect> displayedObjectBoxes;
+    QHash<QString, CameraPipelineMeteorPhotometry> displayedMeteorPhotometry;
     for (const CameraPipelineDetection& detection : detections)
     {
         if (!detection.m_label.isEmpty())
@@ -2231,6 +2232,24 @@ void CameraGUI::sendDisplayedFrameEvents(const QVector<QRect>& motionBoxes, cons
             displayedObjectClasses.insert(detection.m_label);
             if (!displayedObjectBoxes.contains(detection.m_label)) {
                 displayedObjectBoxes.insert(detection.m_label, detection.m_box);
+            }
+            if (detection.m_label.trimmed().compare(QStringLiteral("meteor"), Qt::CaseInsensitive) == 0)
+            {
+                const CameraPipelineMeteorPhotometry *bestMeteor = nullptr;
+                int bestArea = 0;
+                for (const CameraPipelineMeteorPhotometry& meteor : meteorPhotometry)
+                {
+                    const QRect intersection = detection.m_box.intersected(meteor.m_box);
+                    const int area = intersection.width() * intersection.height();
+                    if (area > bestArea)
+                    {
+                        bestArea = area;
+                        bestMeteor = &meteor;
+                    }
+                }
+                if (bestMeteor && !displayedMeteorPhotometry.contains(detection.m_label)) {
+                    displayedMeteorPhotometry.insert(detection.m_label, *bestMeteor);
+                }
             }
         }
     }
@@ -2240,14 +2259,36 @@ void CameraGUI::sendDisplayedFrameEvents(const QVector<QRect>& motionBoxes, cons
         if (!m_displayedObjectEventClasses.contains(className))
         {
             const QRect box = displayedObjectBoxes.value(className);
+            QString eventData = QStringLiteral("name=%1,x=%2,y=%3,width=%4,height=%5")
+                .arg(className)
+                .arg(box.x())
+                .arg(box.y())
+                .arg(box.width())
+                .arg(box.height());
+            if (displayedMeteorPhotometry.contains(className))
+            {
+                const CameraPipelineMeteorPhotometry meteor = displayedMeteorPhotometry.value(className);
+                eventData += QStringLiteral(",flux=%1,background=%2,backgroundSigma=%3,referenceStars=%4,zeroPoint=%5,zeroPointRms=%6,saturated=%7")
+                    .arg(meteor.m_flux, 0, 'g', 12)
+                    .arg(meteor.m_background, 0, 'g', 12)
+                    .arg(meteor.m_backgroundSigma, 0, 'g', 12)
+                    .arg(meteor.m_referenceStars)
+                    .arg(meteor.m_zeroPoint, 0, 'g', 12)
+                    .arg(meteor.m_zeroPointRms, 0, 'g', 12)
+                    .arg(meteor.m_saturated ? 1 : 0);
+                if (meteor.m_validMagnitude)
+                {
+                    eventData += QStringLiteral(",magnitude=%1,magnitudeError=%2")
+                        .arg(meteor.m_magnitude, 0, 'g', 12)
+                        .arg(meteor.m_magnitudeError, 0, 'g', 12);
+                }
+                if (!meteor.m_failureReason.isEmpty()) {
+                    eventData += QStringLiteral(",photometryStatus=%1").arg(meteor.m_failureReason);
+                }
+            }
             pendingEvents.append({
                 MainCore::MsgEvent::EventType::CameraObjectDetectedEvent,
-                QStringLiteral("name=%1,x=%2,y=%3,width=%4,height=%5")
-                    .arg(className)
-                    .arg(box.x())
-                    .arg(box.y())
-                    .arg(box.width())
-                    .arg(box.height())
+                eventData
             });
         }
     }

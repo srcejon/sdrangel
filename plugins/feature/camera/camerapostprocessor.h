@@ -120,6 +120,7 @@ public:
         const QVector<PreviewRectItem>& getPreviewRectItems() const { return m_previewRectItems; }
         const QVector<QRect>& getMotionBoxes() const { return m_motionBoxes; }
         const QVector<CameraPipelineDetection>& getDetections() const { return m_detections; }
+        const QVector<CameraPipelineMeteorPhotometry>& getMeteorPhotometry() const { return m_meteorPhotometry; }
         const QVector<CameraPipelineTrackedObject>& getTrackedObjects() const { return m_trackedObjects; }
         const QDateTime& getCaptureDateTime() const { return m_captureDateTime; }
         quint64 getCaptureEpoch() const { return m_captureEpoch; }
@@ -132,6 +133,7 @@ public:
                                       const CameraPipelinePlateSolve& plateSolve,
                                       const QVector<QRect>& motionBoxes,
                                       const QVector<CameraPipelineDetection>& detections,
+                                      const QVector<CameraPipelineMeteorPhotometry>& meteorPhotometry,
                                       const QVector<CameraPipelineTrackedObject>& trackedObjects,
                                       const QDateTime& captureDateTime,
                                       quint64 captureEpoch,
@@ -147,6 +149,7 @@ public:
                 plateSolve,
                 motionBoxes,
                 detections,
+                meteorPhotometry,
                 trackedObjects,
                 captureDateTime,
                 captureEpoch,
@@ -163,6 +166,7 @@ public:
         CameraPipelinePlateSolve m_plateSolve;
         QVector<QRect> m_motionBoxes;
         QVector<CameraPipelineDetection> m_detections;
+        QVector<CameraPipelineMeteorPhotometry> m_meteorPhotometry;
         QVector<CameraPipelineTrackedObject> m_trackedObjects;
         QDateTime m_captureDateTime;
         quint64 m_captureEpoch;
@@ -177,6 +181,7 @@ public:
                        const CameraPipelinePlateSolve& plateSolve,
                        const QVector<QRect>& motionBoxes,
                        const QVector<CameraPipelineDetection>& detections,
+                       const QVector<CameraPipelineMeteorPhotometry>& meteorPhotometry,
                        const QVector<CameraPipelineTrackedObject>& trackedObjects,
                        const QDateTime& captureDateTime,
                        quint64 captureEpoch,
@@ -191,6 +196,7 @@ public:
             m_plateSolve(plateSolve),
             m_motionBoxes(motionBoxes),
             m_detections(detections),
+            m_meteorPhotometry(meteorPhotometry),
             m_trackedObjects(trackedObjects),
             m_captureDateTime(captureDateTime),
             m_captureEpoch(captureEpoch),
@@ -386,7 +392,7 @@ private:
         QVector<PreviewRectItem> *previewRectItems = nullptr,
         QVector<CameraPipelineTrackedObject> *trackedObjects = nullptr);
     void applyMotionOverlay(QImage& image, const QVector<QRect>& motionBoxes, bool drawBoxes, QVector<PreviewRectItem> *previewRectItems) const;
-    void applyDetectionOverlay(QImage& image, const QVector<CameraPipelineDetection>& detections, bool drawLabels, QVector<PreviewTextLabel> *previewTextLabels, QVector<PreviewRectItem> *previewRectItems) const;
+    void applyDetectionOverlay(QImage& image, const QVector<CameraPipelineDetection>& detections, const QVector<CameraPipelineMeteorPhotometry>& meteorPhotometry, bool drawLabels, QVector<PreviewTextLabel> *previewTextLabels, QVector<PreviewRectItem> *previewRectItems) const;
     void applyStarOverlay(QImage& image, const QVector<CameraPipelineStarDetection>& starDetections, bool drawLabels, QVector<PreviewTextLabel> *previewTextLabels) const;
     void applyPreviewRectItems(QImage& image, const QVector<PreviewRectItem>& items) const;
     void applyPreviewTextLabels(QImage& image, const QVector<PreviewTextLabel>& labels) const;

@@ -380,7 +380,7 @@ private:
     void updateCameraStatusDisplay();
     void updateCameraSubframeControls();
     void updateImageWidget();
-    void sendDisplayedFrameEvents(const QVector<QRect>& motionBoxes, const QVector<CameraPipelineDetection>& detections, const QVector<CameraPipelineTrackedObject>& trackedObjects, const QSize& imageSize, const QDateTime& captureDateTime);
+    void sendDisplayedFrameEvents(const QVector<QRect>& motionBoxes, const QVector<CameraPipelineDetection>& detections, const QVector<CameraPipelineMeteorPhotometry>& meteorPhotometry, const QVector<CameraPipelineTrackedObject>& trackedObjects, const QSize& imageSize, const QDateTime& captureDateTime);
     void updatePreviewOverlayItems();
     void clearPreviewOverlayItems();
     void updateCaptureModeControls();

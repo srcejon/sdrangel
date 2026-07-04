@@ -71,6 +71,31 @@ struct CameraPipelineTrackedObject
 };
 
 /**
+ * \brief Photometry result for one detected meteor object.
+ *
+ * Produced from a YOLO "meteor" detection by measuring the calibrated frame pixels inside
+ * the detection box, subtracting a robust local background and calibrating against solved
+ * reference stars from the same frame when available.
+ */
+struct CameraPipelineMeteorPhotometry
+{
+    QRect m_box;
+    QPointF m_center;
+    double m_flux = 0.0;
+    double m_background = 0.0;
+    double m_backgroundSigma = 0.0;
+    double m_magnitude = 0.0;
+    double m_magnitudeError = 0.0;
+    double m_zeroPoint = 0.0;
+    double m_zeroPointRms = 0.0;
+    int m_referenceStars = 0;
+    int m_signalPixels = 0;
+    bool m_validMagnitude = false;
+    bool m_saturated = false;
+    QString m_failureReason;
+};
+
+/**
  * \brief Per-channel RGB histogram bins for a frame.
  *
  * Holds the red/green/blue bin counts computed during image processing and is
@@ -353,6 +378,7 @@ struct CameraPipelineFrame
     int m_hdrExposureCount = 0;
     QVector<QRect> m_motionBoxes;
     QVector<CameraPipelineDetection> m_detections;
+    QVector<CameraPipelineMeteorPhotometry> m_meteorPhotometry;
     QVector<CameraPipelineStarDetection> m_starDetections;
     CameraPipelinePlateSolve m_plateSolve;
     CameraPipelineImageTransform m_imageTransform;

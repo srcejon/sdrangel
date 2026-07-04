@@ -391,6 +391,51 @@ static QString formatSolvedStarLabel(const CameraSettings& settings, const Camer
     return label;
 }
 
+static const CameraPipelineMeteorPhotometry* findMeteorPhotometryForDetection(const CameraPipelineDetection& detection, const QVector<CameraPipelineMeteorPhotometry>& meteorPhotometry)
+{
+    if (detection.m_label.trimmed().compare(QStringLiteral("meteor"), Qt::CaseInsensitive) != 0) {
+        return nullptr;
+    }
+
+    const CameraPipelineMeteorPhotometry *best = nullptr;
+    int bestArea = 0;
+    for (const CameraPipelineMeteorPhotometry& meteor : meteorPhotometry)
+    {
+        const QRect intersection = detection.m_box.intersected(meteor.m_box);
+        const int area = intersection.width() * intersection.height();
+        if (area > bestArea)
+        {
+            bestArea = area;
+            best = &meteor;
+        }
+    }
+    return best;
+}
+
+static QString formatMeteorPhotometryLabel(const CameraPipelineMeteorPhotometry *meteor)
+{
+    if (!meteor) {
+        return QString();
+    }
+
+    if (meteor->m_validMagnitude)
+    {
+        QString prefix;
+        if (meteor->m_saturated) {
+            prefix = QStringLiteral("<");
+        }
+        return QStringLiteral("\nmag %1%2")
+            .arg(prefix)
+            .arg(meteor->m_magnitude, 0, 'f', 2);
+    }
+
+    if (meteor->m_flux > 0.0) {
+        return QStringLiteral("\nflux %1").arg(meteor->m_flux, 0, 'g', 3);
+    }
+
+    return QString();
+}
+
 static void drawOutlinedLabel(QPainter& painter,
                               const QRect& imageRect,
                               const QPointF& point,
@@ -1268,6 +1313,7 @@ void CameraPostProcessor::reportFrameToGUI(const QImage& image, const CameraPipe
             frame.m_plateSolve,
             frame.m_motionBoxes,
             frame.m_detections,
+            frame.m_meteorPhotometry,
             trackedObjects,
             frame.m_captureDateTime,
             frame.m_captureEpoch,
@@ -1314,7 +1360,7 @@ void CameraPostProcessor::applyMotionOverlay(QImage& image, const QVector<QRect>
     PROFILER_STOP(__FUNCTION__);
 }
 
-void CameraPostProcessor::applyDetectionOverlay(QImage& image, const QVector<CameraPipelineDetection>& detections, bool drawLabels, QVector<PreviewTextLabel> *previewTextLabels, QVector<PreviewRectItem> *previewRectItems) const
+void CameraPostProcessor::applyDetectionOverlay(QImage& image, const QVector<CameraPipelineDetection>& detections, const QVector<CameraPipelineMeteorPhotometry>& meteorPhotometry, bool drawLabels, QVector<PreviewTextLabel> *previewTextLabels, QVector<PreviewRectItem> *previewRectItems) const
 {
     PROFILER_START();
 
@@ -1350,7 +1396,9 @@ void CameraPostProcessor::applyDetectionOverlay(QImage& image, const QVector<Cam
             previewRectItems->append(item);
         }
 
-        const QString label = detection.m_label + QStringLiteral(" %1%").arg(static_cast<int>(detection.m_score * 100.0f + 0.5f));
+        const QString label = detection.m_label
+            + QStringLiteral(" %1%").arg(static_cast<int>(detection.m_score * 100.0f + 0.5f))
+            + formatMeteorPhotometryLabel(findMeteorPhotometryForDetection(detection, meteorPhotometry));
         const QSize textSize = fontMetrics.size(Qt::TextSingleLine, label);
         QRect labelRect(
             box.left(),
@@ -2300,7 +2348,7 @@ QImage CameraPostProcessor::applyPostProcessing(const CameraPipelineFrame& frame
         applyMotionOverlay(result, frame.m_motionBoxes, drawPreviewText, previewRectItems); 
     }
     if (m_settings.m_yoloEnabled && !frame.m_detections.isEmpty()) { 
-        applyDetectionOverlay(result, frame.m_detections, drawPreviewText, previewTextLabels, previewRectItems); 
+        applyDetectionOverlay(result, frame.m_detections, frame.m_meteorPhotometry, drawPreviewText, previewTextLabels, previewRectItems);
     }
     if (!frame.m_starDetections.isEmpty()) { 
         applyStarOverlay(result, frame.m_starDetections, drawPreviewText, previewTextLabels); 

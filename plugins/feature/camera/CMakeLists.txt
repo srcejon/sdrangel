@@ -14,6 +14,7 @@ set(camera_SOURCES
     cameraframestacker.cpp
     cameraimageutils.cpp
     cameraimagepool.cpp
+    camerameteorphotometer.cpp
     cameraimageprocessor.cpp
     cameramediaplaybackstate.cpp
     cameramediaplaybackcontroller.cpp
@@ -47,6 +48,7 @@ set(camera_HEADERS
     cameraframestacker.h
     cameraimageutils.h
     cameraimagepool.h
+    camerameteorphotometer.h
     cameraaudiobytequeue.h
     cameraimageprocessor.h
     cameramediaplaybackstate.h

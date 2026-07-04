@@ -725,8 +725,10 @@ void CameraObjectDetector::processNewFrame(const CameraPipelineFramePtr& frame)
 
     m_lastInputFrame = *frame;
     m_lastInputFrame.m_detections.clear();
+    m_lastInputFrame.m_meteorPhotometry.clear();
 
     frame->m_detections.clear();
+    frame->m_meteorPhotometry.clear();
 
     if (!m_settings.m_yoloEnabled || m_settings.m_yoloModelPath.isEmpty())
     {
@@ -749,6 +751,7 @@ void CameraObjectDetector::processNewFrame(const CameraPipelineFramePtr& frame)
     const cv::Rect detectionRoi = resolveDetectionRoi(bgrMat.size());
 
     runYoloDetections(bgrMat, detectionRoi, frame->m_detections);
+    m_meteorPhotometer.processFrame(*frame);
 
     const QDateTime detectionTime = frame->m_captureDateTime.isValid() ? frame->m_captureDateTime : QDateTime::currentDateTime();
     processObjectDetections(frame->m_detections, detectionTime, *frame);

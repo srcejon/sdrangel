@@ -224,7 +224,7 @@ The solution gives the direction the camera is pointing, field-of-view and lens 
 
 <h3>30: Item overlay</h3>
 
-Overlays ADS-B, AIS, satellite, star tracker and other items sent to the Map feature on the camera image.
+Overlays ADS-B, AIS, satellite, star tracker and other items sent to the Map feature on the camera image. Options can show recent tracks, a heat map, and the line-of-sight range to each item in km.
 
 ![ADS-B overlay](../../../doc/img/Camera_plugin_adsb_overlay.png)
 

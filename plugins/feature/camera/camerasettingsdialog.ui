@@ -3747,6 +3747,16 @@
              </widget>
             </item>
             <item>
+             <widget class="QCheckBox" name="trackObjectRangeCheck">
+              <property name="toolTip">
+               <string>Append the line-of-sight range to each tracked object label in kilometres</string>
+              </property>
+              <property name="text">
+               <string>Range</string>
+              </property>
+             </widget>
+            </item>
+            <item>
              <widget class="QToolButton" name="trackObjectClearHeatMapButton">
               <property name="toolTip">
                <string>Clear tracked object heat map</string>

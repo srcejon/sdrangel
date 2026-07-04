@@ -631,6 +631,9 @@ CameraSettings:
     trackObjectHeatMap:
       description: "Draw a persistent heat map from tracked overlay object positions (1 for yes, 0 for no)"
       type: integer
+    trackObjectRange:
+      description: "Append tracked object line-of-sight range in km to labels (1 for yes, 0 for no)"
+      type: integer
     gridLabelFontFamily:
       description: "Font family for sky grid labels"
       type: string

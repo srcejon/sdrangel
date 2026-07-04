@@ -2265,12 +2265,17 @@ void CameraPostProcessor::applyTrackedObjectOverlay(const CameraPipelineFrame& f
             trackedObjects->append(trackedObject);
         }
 
+        QString label = object.m_label;
+        if (m_settings.m_trackObjectRange && std::isfinite(azEl.getDistance())) {
+            label += QStringLiteral("\nRange %1 km").arg(azEl.getDistance() / 1000.0, 0, 'f', 1);
+        }
+
         if (drawLabels) {
-            drawOutlinedLabel(painter, image.rect(), point, object.m_label, m_settings.m_trackObjectColor, fontMetrics);
+            drawOutlinedLabel(painter, image.rect(), point, label, m_settings.m_trackObjectColor, fontMetrics);
         } else {
             appendOutlinedPreviewTextLabel(
                 previewTextLabels,
-                object.m_label,
+                label,
                 point,
                 m_settings.m_trackObjectColor,
                 font.family(),

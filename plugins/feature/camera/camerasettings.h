@@ -530,6 +530,7 @@ struct CameraSettings
     bool m_trackObjects;      ///< Draw ADS-B / satellite tracked object overlay
     bool m_trackObjectTrails; ///< Draw recent tracks for ADS-B / satellite tracked objects
     bool m_trackObjectHeatMap; ///< Draw a heat map from recent tracked object positions
+    bool m_trackObjectRange; ///< Append range to tracked object labels
     double m_trackObjectMinElevation; ///< Minimum elevation in degrees for tracked object overlay
     QColor m_trackObjectColor; ///< Colour for tracked object labels
     QString m_trackObjectFontFamily; ///< QPainter font family for tracked object labels

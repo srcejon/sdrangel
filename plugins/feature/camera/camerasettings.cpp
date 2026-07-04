@@ -300,6 +300,7 @@ void CameraSettings::resetToDefaults()
     m_trackObjects = false;
     m_trackObjectTrails = false;
     m_trackObjectHeatMap = false;
+    m_trackObjectRange = false;
     m_trackObjectMinElevation = 0.0;
     m_trackObjectColor = QColor(80, 255, 80);
     m_trackObjectFontFamily.clear();
@@ -692,6 +693,7 @@ QByteArray CameraSettings::serialize() const
     s.writeFloat(272, m_elevationOffset);
     s.writeFloat(273, m_rollOffset);
     s.writeS32(274, static_cast<qint32>(m_scaleJustification));
+    s.writeBool(275, m_trackObjectRange);
 
     return s.final();
 }
@@ -1075,6 +1077,7 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readBool(156, &m_trackObjects, false);
         d.readBool(238, &m_trackObjectTrails, false);
         d.readBool(239, &m_trackObjectHeatMap, false);
+        d.readBool(275, &m_trackObjectRange, false);
         d.readDouble(157, &m_trackObjectMinElevation, 0.0);
         m_trackObjectMinElevation = qBound(m_minNormalized, m_trackObjectMinElevation, static_cast<double>(m_maxElevation));
         uint32_t trackObjectColorRgba = QColor(80, 255, 80).rgba();
@@ -2019,6 +2022,9 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     if (settingsKeys.contains("trackObjectHeatMap")) {
         m_trackObjectHeatMap = settings.m_trackObjectHeatMap;
     }
+    if (settingsKeys.contains("trackObjectRange")) {
+        m_trackObjectRange = settings.m_trackObjectRange;
+    }
     if (settingsKeys.contains("trackObjectMinElevation")) {
         m_trackObjectMinElevation = qBound(m_minNormalized, settings.m_trackObjectMinElevation, static_cast<double>(m_maxElevation));
     }
@@ -2810,6 +2816,9 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("trackObjectHeatMap") || force) {
         ostr << " m_trackObjectHeatMap: " << m_trackObjectHeatMap;
+    }
+    if (settingsKeys.contains("trackObjectRange") || force) {
+        ostr << " m_trackObjectRange: " << m_trackObjectRange;
     }
     if (settingsKeys.contains("trackObjectMinElevation") || force) {
         ostr << " m_trackObjectMinElevation: " << m_trackObjectMinElevation;

@@ -5447,6 +5447,26 @@ void CameraGUI::updateAsiCapabilities(const CameraWorker::MsgReportAsiCameraInfo
 
 void CameraGUI::updateCameraSubframeControls()
 {
+    QSignalBlocker numXBlocker(settingsUI()->cameraNumXSpin);
+    QSignalBlocker numYBlocker(settingsUI()->cameraNumYSpin);
+    QSignalBlocker startXBlocker(settingsUI()->cameraStartXSpin);
+    QSignalBlocker startYBlocker(settingsUI()->cameraStartYSpin);
+
+    if ((m_alpacaCameraSizeX <= 0) || (m_alpacaCameraSizeY <= 0))
+    {
+        settingsUI()->cameraNumXSpin->setMinimum(0);
+        settingsUI()->cameraNumYSpin->setMinimum(0);
+        settingsUI()->cameraNumXSpin->setMaximum(65535);
+        settingsUI()->cameraNumYSpin->setMaximum(65535);
+        settingsUI()->cameraStartXSpin->setMaximum(65535);
+        settingsUI()->cameraStartYSpin->setMaximum(65535);
+        settingsUI()->cameraNumXSpin->setValue(m_settings.m_cameraNumX);
+        settingsUI()->cameraNumYSpin->setValue(m_settings.m_cameraNumY);
+        settingsUI()->cameraStartXSpin->setValue(m_settings.m_cameraStartX);
+        settingsUI()->cameraStartYSpin->setValue(m_settings.m_cameraStartY);
+        return;
+    }
+
     const int maxSubframeX = std::max(1, m_alpacaCameraSizeX / std::max(1, m_settings.m_cameraBinX));
     const int maxSubframeY = std::max(1, m_alpacaCameraSizeY / std::max(1, m_settings.m_cameraBinY));
     const int startX = qBound(0, m_settings.m_cameraStartX, maxSubframeX - 1);

@@ -83,6 +83,19 @@ function. Fold into WS1b (decision-boundary margins) work.
 Do these **before** the accuracy phases: they cut suite wall-clock, which multiplies through every
 later validation run. Split into two sub-tiers.
 
+**Status (2026-07-04): P-A and P-C landed bit-identical; P-B already present; P-E/P-F/P-G deferred.**
+- **P-A DONE (621ec44b9):** per-solve `FinalPassSeedCache` (guarded by a catalog `visibleStarsGeneration`
+  stamp + seed-ref params + detection count). Measured −15..−25% per-case solve time on dense
+  narrow-guided cases (cluster-m7 7027→5279ms, galaxy-m31 5606→4236ms); verdict sets identical.
+- **P-C DONE (35168e347):** memoized the four pure per-eval gate/score values the pairwise ranking
+  comparator recomputed for the incumbent every comparison (`hasStrongDenseNarrowGuidedFinalPass`,
+  `finalMatchPassScore`, `narrowGuidedBrightConsistencyScore`, `narrowGuidedSeedConsistencyScore`),
+  cached at the end of `evaluateFinalMatchPass` with a `cachedGatesValid` flag + fallback accessors;
+  verdict sets identical.
+- **P-B:** already implemented in current code (the seed-radial loop uses `matchedDetectionByCatalog`).
+- **P-E/P-F/P-G:** deferred — recon showed non-bit-identical wrinkles (P-F normalize is ULP-affecting;
+  P-E changes the failure result's catalog fields; P-G's deferred metrics need an equality check).
+
 **2a — bit-identical (caching / lookup replacement); verdict sets must not change:**
 
 - P-A `evaluateFinalMatchPass` candidate-independent recomputation: cache per solve (member scratch)

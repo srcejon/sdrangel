@@ -26,12 +26,12 @@
 #include <QFile>
 #include <QFileDialog>
 #include <QFileInfo>
+#include <QFontMetrics>
 #include <QHeaderView>
 #include <QLabel>
 #include <QLocale>
 #include <QMenu>
 #include <QMessageBox>
-#include <QPainter>
 #include <QPushButton>
 #include <QSpinBox>
 #include <QStandardPaths>
@@ -171,6 +171,10 @@ MeteorGUI::~MeteorGUI()
     saveAutomaticRMOBReports();
     disconnect(&MainCore::instance()->getMasterTimer(), SIGNAL(timeout()), this, SLOT(tick()));
     m_glSpectrum->setPaintGLCallback(nullptr);
+    for (QLabel *label : m_detectionOverlayLabels) {
+        delete label;
+    }
+    m_detectionOverlayLabels.clear();
     delete ui;
 }
 
@@ -1762,13 +1766,16 @@ void MeteorGUI::drawDetectionOverlays(GLSpectrumView *spectrumView)
     }
 
     if (labelOverlays.isEmpty()) {
+        hideDetectionOverlayLabels();
         return;
     }
 
     const double frequencyPerPixel = spectrumView->waterfallFrequencyPerPixel();
     const double timePerPixel = spectrumView->waterfallTimePerPixel();
 
-    if ((frequencyPerPixel <= 0.0) || (timePerPixel <= 0.0)) {
+    if ((frequencyPerPixel <= 0.0) || (timePerPixel <= 0.0))
+    {
+        hideDetectionOverlayLabels();
         return;
     }
 
@@ -1800,12 +1807,11 @@ void MeteorGUI::drawDetectionOverlays(GLSpectrumView *spectrumView)
 
     if (onePixelFraction <= 0.0f)
     {
+        hideDetectionOverlayLabels();
         return;
     }
 
-    QPainter painter(spectrumView);
-    painter.setRenderHint(QPainter::TextAntialiasing, true);
-    const QFontMetrics fontMetrics(painter.font());
+    const QFontMetrics fontMetrics(spectrumView->font());
     const int rightMargin = fontMetrics.horizontalAdvance("000");
     const int waterfallWidth = std::max(1, (int) std::round(1.0 / onePixelFraction));
     const int waterfallHeight = std::max(1, (int) std::round(1.0 / timePerPixel));
@@ -1827,10 +1833,12 @@ void MeteorGUI::drawDetectionOverlays(GLSpectrumView *spectrumView)
     }
     else if (!(spectrumSettings.m_displayWaterfall || spectrumSettings.m_display3DSpectrogram))
     {
+        hideDetectionOverlayLabels();
         return;
     }
 
     waterfallTop = std::clamp(waterfallTop, 0, std::max(0, spectrumView->height() - waterfallHeight));
+    int labelIndex = 0;
 
     for (const LabelOverlay& overlay : labelOverlays)
     {
@@ -1869,9 +1877,31 @@ void MeteorGUI::drawDetectionOverlays(GLSpectrumView *spectrumView)
         labelY = std::clamp(labelY, 0, std::max(0, spectrumView->height() - labelHeight));
         const QRect labelRect(labelX, labelY, labelWidth, labelHeight);
 
-        painter.fillRect(labelRect, QColor(0, 0, 0, 190));
-        painter.setPen(color);
-        painter.drawText(labelRect.adjusted(3, 1, -3, -1), Qt::AlignCenter, label);
+        if (labelIndex >= m_detectionOverlayLabels.size())
+        {
+            QLabel *labelWidget = new QLabel(spectrumView);
+            labelWidget->setAttribute(Qt::WA_TransparentForMouseEvents, true);
+            labelWidget->setAlignment(Qt::AlignCenter);
+            labelWidget->setStyleSheet("QLabel { color: rgb(255, 190, 0); background-color: rgba(0, 0, 0, 190); padding: 1px 3px; }");
+            m_detectionOverlayLabels.push_back(labelWidget);
+        }
+
+        QLabel *labelWidget = m_detectionOverlayLabels[labelIndex++];
+        labelWidget->setText(label);
+        labelWidget->setGeometry(labelRect);
+        labelWidget->show();
+        labelWidget->raise();
+    }
+
+    for (int i = labelIndex; i < m_detectionOverlayLabels.size(); i++) {
+        m_detectionOverlayLabels[i]->hide();
+    }
+}
+
+void MeteorGUI::hideDetectionOverlayLabels()
+{
+    for (QLabel *label : m_detectionOverlayLabels) {
+        label->hide();
     }
 }
 

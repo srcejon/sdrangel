@@ -128,6 +128,7 @@ private:
     QChart *m_hourlyChart;
     GLSpectrum *m_glSpectrum;
     GLSpectrumGUI *m_spectrumGUI;
+    QVector<QLabel *> m_detectionOverlayLabels;
 
     int m_totalCount;
     bool m_highlightAllDetectionOverlays;
@@ -185,6 +186,7 @@ private:
     qint64 rmobReportFrequency() const;
     QString rmobReceiverName() const;
     void drawDetectionOverlays(GLSpectrumView *spectrumView);
+    void hideDetectionOverlayLabels();
     QString detectionOverlayLabel(const DetectionOverlay& detection) const;
     void applyDetectionsColumnVisibility();
     void saveDetectionsColumnVisibility();

@@ -155,6 +155,13 @@ REAL/FISHEYE/WIDE. No REAL regression — the "Harden wide-9, then default-on" p
   false-positives. **Next: A/B the mixture vs faLogOdds on RAND2 (wrong-roll aliases) + the
   garbage/near-boundary negatives** — wrong poses should score low, correct high. Until that
   separation is demonstrated, 1b/1c stay blocked. The mixture is now well-formed and stays shadow-only.
+  **Negatives measured (2026-07-05):** guided neg-blobs (garbage) scores mixture 49073 — INSIDE the
+  correct-solve range (narrow-3 10551 … wide-1 41k) — while still being rejected by the existing gate
+  stack. So the mixture is a useful *feature* but NOT a sufficient single-scalar accept/reject gate;
+  1b/1c/1d must COMBINE it with the current checks, not replace them with it. Separately, blind
+  neg-blobs solves `solved=true` in BOTH V2-on and legacy (identical) — a PRE-EXISTING blind-mode
+  garbage false positive at the solver level (harness still flags it FAIL), unrelated to V2 or the
+  1a/A1 work; tracked as its own robustness item.
 - **1b Use it for candidate *selection* first** (ranking, not accept/reject): the notes already
   identified verifier-driven selection as the principled fix for the catalog-depth instability
   (m51@16's roll-58 crowd-out) and pollux is the same wrong-roll class. A/B against 0d + REAL.

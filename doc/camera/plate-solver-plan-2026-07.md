@@ -87,9 +87,18 @@ existing bright stars' metadata matters too). Resolution: since the small-star p
 a wide/fisheye phenomenon, apply V2 ONLY in wide (fov>=30) / fisheye-projection contexts, narrow
 rectilinear untouched. **Result: REAL 47->46 (only wide-9), FISHEYE mode1 +3 / mode4 +5, WIDE 0, real
 TREx 0/16 -> solving.** V2-off byte-identical. Same fisheye gain as full-V2 at 1 REAL regression instead
-of 4. **Default-on is blocked only by wide-9** (metadata drift on its delicate near-zenith solve; not
-SNR-gate-fixable) — a single-case hardening follow-up (fold into WS2 near-zenith / the wide band-aids).
-Decision pending: land default-on accepting wide-9, keep flag-gated, or harden wide-9 first.
+of 4.
+
+**A2 SHIPPED default-on (commit d259d9cdb).** The wide-9 block was diagnosed as a weak-oracle mode-2
+azimuth alias, not metadata drift: the seed-anchored candidate finds the true azimuth but is pinned by
+`lockSeedDirection` and loses to a higher-match alias. Fixed by extending the rot-vec LM to
+elevation-seeded wide fisheye (commit 26839fe13), which unpins and refines in the camera frame — wide-9
+then solves cleanly (az 39.9, rms 6.30, 187 matched). With that in place V2 was flipped to default-on
+with a `SDRANGEL_CAMERA_STAR_DETECTOR_DISABLE_V2` kill-switch. **Final validated numbers:** default
+(V2-on) REAL **47/48** (verdict set identical to the pre-V2 baseline — wide-9 passes either way),
+synthetic FISHEYE mode1 35->38, mode4 40->45, WIDE 27 (net 0, one swap wide30-003↔wide30b-001), real
+all-sky corpus solving; kill-switch (DISABLE_V2=1) reproduces the legacy baseline byte-identical across
+REAL/FISHEYE/WIDE. No REAL regression — the "Harden wide-9, then default-on" plan is complete.
 
 ### Track 0 — Measurement first (the unlock; do before any further solver tuning)
 

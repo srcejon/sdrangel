@@ -81,17 +81,20 @@ public:
 
     public:
         const QImage& getImage() const { return m_image; }
+        const QString& getDeviceId() const { return m_deviceId; }
 
-        static MsgSpectrumFrame* create(const QImage& image)
+        static MsgSpectrumFrame* create(const QString& deviceId, const QImage& image)
         {
-            return new MsgSpectrumFrame(image);
+            return new MsgSpectrumFrame(deviceId, image);
         }
 
     private:
+        QString m_deviceId;
         QImage m_image;
 
-        MsgSpectrumFrame(const QImage& image) :
+        MsgSpectrumFrame(const QString& deviceId, const QImage& image) :
             Message(),
+            m_deviceId(deviceId),
             m_image(image)
         { }
     };
@@ -388,7 +391,7 @@ private:
     QDateTime m_captureDateTime;
     bool m_captureActive = false;
     quint64 m_captureEpoch = 0;
-    QImage m_spectrumViewImage;
+    QHash<QString, QImage> m_spectrumViewImages;
     QVector<WindowOverlayFrame> m_windowOverlayFrames;
     Weather *m_weather = nullptr;
     float m_weatherTemperature = std::numeric_limits<float>::quiet_NaN();

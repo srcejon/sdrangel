@@ -271,13 +271,20 @@ private:
     CameraHistogramDialog *m_histogramDialog;
     QProgressDialog *m_tensorRtProgressDialog = nullptr;
     QWidget *m_windowOverlaysTab = nullptr;
+    QTableWidget *m_spectrumOverlaysTable = nullptr;
+    QPushButton *m_spectrumOverlayAddButton = nullptr;
+    QPushButton *m_spectrumOverlayRemoveButton = nullptr;
+    QPushButton *m_spectrumOverlayUpButton = nullptr;
+    QPushButton *m_spectrumOverlayDownButton = nullptr;
     QTableWidget *m_windowOverlaysTable = nullptr;
     QPushButton *m_windowOverlayAddButton = nullptr;
     QPushButton *m_windowOverlayRemoveButton = nullptr;
     QPushButton *m_windowOverlayUpButton = nullptr;
     QPushButton *m_windowOverlayDownButton = nullptr;
     QTimer m_windowOverlayCaptureTimer;
+    bool m_updatingSpectrumOverlaysTable = false;
     bool m_updatingWindowOverlaysTable = false;
+    QStringList m_spectrumOverlayDeviceIds;
     QVector<qint64> m_windowOverlayLastCaptureMs;
     QVector<CameraPostProcessor::WindowOverlayFrame> m_windowOverlayCapturedFrames;
     bool m_alpacaHasNamedGains;   // true if gains list has named entries
@@ -413,6 +420,9 @@ private:
     void updateHdrStackingControls();
     void updateScaleControls();
     void createWindowOverlaysTab();
+    void updateSpectrumOverlaysTable();
+    void updateSpectrumOverlayControls();
+    void applySpectrumOverlaysFromTable();
     void updateWindowOverlaysTable();
     void updateWindowOverlayControls();
     void updateWindowOverlayCaptureTimer();
@@ -793,10 +803,6 @@ private slots:
     void on_motionExclusionRemoveButton_clicked();
     void on_motionExclusionTable_itemChanged(QTableWidgetItem *item);
     void on_spectrumOverlayButton_toggled(bool checked);
-    void on_spectrumDeviceCombo_currentIndexChanged(int index);
-    void on_spectrumOffsetXSlider_valueChanged(int value);
-    void on_spectrumOffsetYSlider_valueChanged(int value);
-    void on_spectrumScaleSpin_valueChanged(double value);
     void on_yoloButton_toggled(bool checked);
     void on_yoloModelPathCombo_currentIndexChanged(int index);
     void on_yoloModelPathEdit_editingFinished();

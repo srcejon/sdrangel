@@ -44,6 +44,7 @@
 #include <QGraphicsPixmapItem>
 #include <QGraphicsView>
 #include <QGraphicsRectItem>
+#include <QGroupBox>
 #include <QHeaderView>
 #include <QHBoxLayout>
 #include <QInputDialog>
@@ -999,16 +1000,8 @@ bool CameraGUI::handleMessage(const Message& message)
     else if (CameraWorker::MsgReportAvailableDevices::match(message))
     {
         const CameraWorker::MsgReportAvailableDevices& report = (CameraWorker::MsgReportAvailableDevices&) message;
-        const QString currentDevice = m_settings.m_spectrumDevice;
-
-        settingsUI()->spectrumDeviceCombo->blockSignals(true);
-        settingsUI()->spectrumDeviceCombo->clear();
-        for (const QString& id : report.getDeviceLongIds()) {
-            settingsUI()->spectrumDeviceCombo->addItem(id);
-        }
-        const int idx = settingsUI()->spectrumDeviceCombo->findText(currentDevice);
-        settingsUI()->spectrumDeviceCombo->setCurrentIndex(idx >= 0 ? idx : 0);
-        settingsUI()->spectrumDeviceCombo->blockSignals(false);
+        m_spectrumOverlayDeviceIds = report.getDeviceLongIds();
+        updateSpectrumOverlaysTable();
 
         return true;
     }
@@ -1955,19 +1948,10 @@ void CameraGUI::displaySettings()
     settingsUI()->hideSyntheticNamesCheck->setChecked(m_settings.m_plateSolveLabelHideSyntheticNames);
     updateColorButton(settingsUI()->overlayTextColorButton, m_settings.m_overlayTextColor);
     updateColorButton(settingsUI()->motionBoxColorButton, m_settings.m_motionBoxColor);
-    ui->spectrumOverlayButton->setChecked(m_settings.m_overlaySpectrum);
-    {
-        // Select the saved device in the spectrum combo
-        const int idx = settingsUI()->spectrumDeviceCombo->findText(m_settings.m_spectrumDevice);
-        settingsUI()->spectrumDeviceCombo->blockSignals(true);
-        settingsUI()->spectrumDeviceCombo->setCurrentIndex(idx >= 0 ? idx : 0);
-        settingsUI()->spectrumDeviceCombo->blockSignals(false);
-    }
-    settingsUI()->spectrumOffsetXSlider->setValue(m_settings.m_spectrumOffsetX);
-    settingsUI()->spectrumOffsetXValue->setText(QString::number(m_settings.m_spectrumOffsetX));
-    settingsUI()->spectrumOffsetYSlider->setValue(m_settings.m_spectrumOffsetY);
-    settingsUI()->spectrumOffsetYValue->setText(QString::number(m_settings.m_spectrumOffsetY));
-    settingsUI()->spectrumScaleSpin->setValue(m_settings.m_spectrumScale);
+    ui->spectrumOverlayButton->setChecked(std::any_of(m_settings.m_spectrumOverlays.cbegin(), m_settings.m_spectrumOverlays.cend(), [](const CameraSettings::SpectrumOverlay& overlay) {
+        return overlay.m_enabled && !overlay.m_device.isEmpty();
+    }));
+    updateSpectrumOverlaysTable();
     updateWindowOverlaysTable();
     updateWindowOverlayCaptureTimer();
     {
@@ -2198,8 +2182,6 @@ void CameraGUI::updateImageWidget()
     settingsUI()->overlayTextPosYSlider->setMaximum(maxY);
     settingsUI()->dateTimePosXSlider->setMaximum(maxX);
     settingsUI()->dateTimePosYSlider->setMaximum(maxY);
-    settingsUI()->spectrumOffsetXSlider->setMaximum(maxX);
-    settingsUI()->spectrumOffsetYSlider->setMaximum(maxY);
     updateMotionExclusionPreview();
 }
 
@@ -2466,7 +2448,7 @@ void CameraGUI::updatePreviewOverlayItems()
         pixmapItem->setTransformationMode(qAbs(overlay.m_scale - 1.0) > 1e-4
             ? Qt::SmoothTransformation
             : Qt::FastTransformation);
-        pixmapItem->setZValue(1.1);
+        pixmapItem->setZValue(1.7);
         m_previewOverlayItems.append(pixmapItem);
     }
 
@@ -2879,10 +2861,6 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->motionExclusionRemoveButton, &QToolButton::clicked, this, &CameraGUI::on_motionExclusionRemoveButton_clicked);
     QObject::connect(settingsUI()->motionExclusionTable, &QTableWidget::itemChanged, this, &CameraGUI::on_motionExclusionTable_itemChanged);
     QObject::connect(ui->spectrumOverlayButton, &QToolButton::toggled, this, &CameraGUI::on_spectrumOverlayButton_toggled);
-    QObject::connect(settingsUI()->spectrumDeviceCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_spectrumDeviceCombo_currentIndexChanged);
-    QObject::connect(settingsUI()->spectrumOffsetXSlider, &QSlider::valueChanged, this, &CameraGUI::on_spectrumOffsetXSlider_valueChanged);
-    QObject::connect(settingsUI()->spectrumOffsetYSlider, &QSlider::valueChanged, this, &CameraGUI::on_spectrumOffsetYSlider_valueChanged);
-    QObject::connect(settingsUI()->spectrumScaleSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_spectrumScaleSpin_valueChanged);
     QObject::connect(ui->yoloButton, &QToolButton::toggled, this, &CameraGUI::on_yoloButton_toggled);
     QObject::connect(settingsUI()->yoloModelPathCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_yoloModelPathCombo_currentIndexChanged);
     if (settingsUI()->yoloModelPathCombo->lineEdit()) {
@@ -3445,6 +3423,46 @@ void CameraGUI::createWindowOverlaysTab()
     m_windowOverlaysTab = new QWidget(m_settingsDialog);
     QVBoxLayout *mainLayout = new QVBoxLayout(m_windowOverlaysTab);
 
+    if (settingsUI()->spectrumOverlay) {
+        settingsUI()->spectrumOverlay->hide();
+    }
+
+    QGroupBox *spectrumGroup = new QGroupBox(tr("Spectrum Overlays"), m_windowOverlaysTab);
+    QVBoxLayout *spectrumLayout = new QVBoxLayout(spectrumGroup);
+    m_spectrumOverlaysTable = new QTableWidget(spectrumGroup);
+    m_spectrumOverlaysTable->setColumnCount(5);
+    m_spectrumOverlaysTable->setHorizontalHeaderLabels({
+        tr("On"),
+        tr("Device"),
+        tr("X"),
+        tr("Y"),
+        tr("Scale")
+    });
+    m_spectrumOverlaysTable->setSelectionBehavior(QAbstractItemView::SelectRows);
+    m_spectrumOverlaysTable->setSelectionMode(QAbstractItemView::SingleSelection);
+    m_spectrumOverlaysTable->verticalHeader()->setVisible(false);
+    m_spectrumOverlaysTable->horizontalHeader()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
+    m_spectrumOverlaysTable->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
+    m_spectrumOverlaysTable->horizontalHeader()->setSectionResizeMode(2, QHeaderView::ResizeToContents);
+    m_spectrumOverlaysTable->horizontalHeader()->setSectionResizeMode(3, QHeaderView::ResizeToContents);
+    m_spectrumOverlaysTable->horizontalHeader()->setSectionResizeMode(4, QHeaderView::ResizeToContents);
+    spectrumLayout->addWidget(m_spectrumOverlaysTable);
+
+    QHBoxLayout *spectrumButtonLayout = new QHBoxLayout();
+    m_spectrumOverlayAddButton = new QPushButton(tr("Add"), spectrumGroup);
+    m_spectrumOverlayRemoveButton = new QPushButton(tr("Remove"), spectrumGroup);
+    m_spectrumOverlayUpButton = new QPushButton(tr("Up"), spectrumGroup);
+    m_spectrumOverlayDownButton = new QPushButton(tr("Down"), spectrumGroup);
+    spectrumButtonLayout->addWidget(m_spectrumOverlayAddButton);
+    spectrumButtonLayout->addWidget(m_spectrumOverlayRemoveButton);
+    spectrumButtonLayout->addWidget(m_spectrumOverlayUpButton);
+    spectrumButtonLayout->addWidget(m_spectrumOverlayDownButton);
+    spectrumButtonLayout->addStretch(1);
+    spectrumLayout->addLayout(spectrumButtonLayout);
+    mainLayout->addWidget(spectrumGroup);
+
+    QGroupBox *windowGroup = new QGroupBox(tr("Window Overlays"), m_windowOverlaysTab);
+    QVBoxLayout *windowLayout = new QVBoxLayout(windowGroup);
     m_windowOverlaysTable = new QTableWidget(m_windowOverlaysTab);
     m_windowOverlaysTable->setColumnCount(7);
     m_windowOverlaysTable->setHorizontalHeaderLabels({
@@ -3466,22 +3484,71 @@ void CameraGUI::createWindowOverlaysTab()
     m_windowOverlaysTable->horizontalHeader()->setSectionResizeMode(4, QHeaderView::ResizeToContents);
     m_windowOverlaysTable->horizontalHeader()->setSectionResizeMode(5, QHeaderView::ResizeToContents);
     m_windowOverlaysTable->horizontalHeader()->setSectionResizeMode(6, QHeaderView::ResizeToContents);
-    mainLayout->addWidget(m_windowOverlaysTable);
+    windowLayout->addWidget(m_windowOverlaysTable);
 
     QHBoxLayout *buttonLayout = new QHBoxLayout();
-    m_windowOverlayAddButton = new QPushButton(tr("Add"), m_windowOverlaysTab);
-    m_windowOverlayRemoveButton = new QPushButton(tr("Remove"), m_windowOverlaysTab);
-    m_windowOverlayUpButton = new QPushButton(tr("Up"), m_windowOverlaysTab);
-    m_windowOverlayDownButton = new QPushButton(tr("Down"), m_windowOverlaysTab);
+    m_windowOverlayAddButton = new QPushButton(tr("Add"), windowGroup);
+    m_windowOverlayRemoveButton = new QPushButton(tr("Remove"), windowGroup);
+    m_windowOverlayUpButton = new QPushButton(tr("Up"), windowGroup);
+    m_windowOverlayDownButton = new QPushButton(tr("Down"), windowGroup);
     buttonLayout->addWidget(m_windowOverlayAddButton);
     buttonLayout->addWidget(m_windowOverlayRemoveButton);
     buttonLayout->addWidget(m_windowOverlayUpButton);
     buttonLayout->addWidget(m_windowOverlayDownButton);
     buttonLayout->addStretch(1);
-    mainLayout->addLayout(buttonLayout);
+    windowLayout->addLayout(buttonLayout);
+    mainLayout->addWidget(windowGroup);
 
     settingsUI()->tabWidget->addTab(m_windowOverlaysTab, tr("Window Overlays"));
 
+    connect(m_spectrumOverlaysTable, &QTableWidget::itemSelectionChanged, this, &CameraGUI::updateSpectrumOverlayControls);
+    connect(m_spectrumOverlayAddButton, &QPushButton::clicked, this, [this]() {
+        CameraSettings::SpectrumOverlay overlay;
+        if (!m_spectrumOverlayDeviceIds.isEmpty()) {
+            overlay.m_device = m_spectrumOverlayDeviceIds.first();
+        }
+        m_settings.m_spectrumOverlays.append(overlay);
+        updateSpectrumOverlaysTable();
+        applySpectrumOverlaysFromTable();
+    });
+    connect(m_spectrumOverlayRemoveButton, &QPushButton::clicked, this, [this]() {
+        if (!m_spectrumOverlaysTable) {
+            return;
+        }
+        const int row = m_spectrumOverlaysTable->currentRow();
+        if (row < 0 || row >= m_settings.m_spectrumOverlays.size()) {
+            return;
+        }
+        m_settings.m_spectrumOverlays.removeAt(row);
+        updateSpectrumOverlaysTable();
+        applySpectrumOverlaysFromTable();
+    });
+    connect(m_spectrumOverlayUpButton, &QPushButton::clicked, this, [this]() {
+        if (!m_spectrumOverlaysTable) {
+            return;
+        }
+        const int row = m_spectrumOverlaysTable->currentRow();
+        if (row <= 0 || row >= m_settings.m_spectrumOverlays.size()) {
+            return;
+        }
+        m_settings.m_spectrumOverlays.swapItemsAt(row, row - 1);
+        updateSpectrumOverlaysTable();
+        m_spectrumOverlaysTable->selectRow(row - 1);
+        applySpectrumOverlaysFromTable();
+    });
+    connect(m_spectrumOverlayDownButton, &QPushButton::clicked, this, [this]() {
+        if (!m_spectrumOverlaysTable) {
+            return;
+        }
+        const int row = m_spectrumOverlaysTable->currentRow();
+        if (row < 0 || row >= m_settings.m_spectrumOverlays.size() - 1) {
+            return;
+        }
+        m_settings.m_spectrumOverlays.swapItemsAt(row, row + 1);
+        updateSpectrumOverlaysTable();
+        m_spectrumOverlaysTable->selectRow(row + 1);
+        applySpectrumOverlaysFromTable();
+    });
     connect(m_windowOverlaysTable, &QTableWidget::itemSelectionChanged, this, &CameraGUI::updateWindowOverlayControls);
     connect(m_windowOverlayAddButton, &QPushButton::clicked, this, [this]() {
         CameraSettings::WindowOverlay overlay;
@@ -3543,9 +3610,156 @@ void CameraGUI::createWindowOverlaysTab()
     });
     connect(settingsUI()->tabWidget, &QTabWidget::currentChanged, this, [this](int index) {
         if (settingsUI()->tabWidget->widget(index) == m_windowOverlaysTab) {
+            updateSpectrumOverlaysTable();
             updateWindowOverlaysTable();
         }
     });
+}
+
+void CameraGUI::updateSpectrumOverlaysTable()
+{
+    if (!m_spectrumOverlaysTable || m_updatingSpectrumOverlaysTable) {
+        return;
+    }
+
+    m_updatingSpectrumOverlaysTable = true;
+    const int selectedRow = m_spectrumOverlaysTable->currentRow();
+    m_spectrumOverlaysTable->setRowCount(m_settings.m_spectrumOverlays.size());
+
+    for (int row = 0; row < m_settings.m_spectrumOverlays.size(); ++row)
+    {
+        const CameraSettings::SpectrumOverlay& overlay = m_settings.m_spectrumOverlays.at(row);
+
+        QCheckBox *enabledCheck = new QCheckBox(m_spectrumOverlaysTable);
+        enabledCheck->setChecked(overlay.m_enabled);
+        enabledCheck->setToolTip(tr("Enable this spectrum overlay"));
+        m_spectrumOverlaysTable->setCellWidget(row, 0, enabledCheck);
+        connect(enabledCheck, &QCheckBox::toggled, this, [this]() { applySpectrumOverlaysFromTable(); });
+
+        QComboBox *deviceCombo = new QComboBox(m_spectrumOverlaysTable);
+        deviceCombo->setToolTip(tr("SDRangel device set whose spectrum view is overlaid"));
+        deviceCombo->addItem(tr("Select device"), QString());
+        bool selectedDeviceFound = overlay.m_device.isEmpty();
+        for (const QString& deviceId : m_spectrumOverlayDeviceIds)
+        {
+            const int index = deviceCombo->count();
+            deviceCombo->addItem(deviceId, deviceId);
+            if (deviceId == overlay.m_device)
+            {
+                deviceCombo->setCurrentIndex(index);
+                selectedDeviceFound = true;
+            }
+        }
+        if (!selectedDeviceFound)
+        {
+            const int index = deviceCombo->count();
+            deviceCombo->addItem(tr("Missing: %1").arg(overlay.m_device), overlay.m_device);
+            deviceCombo->setCurrentIndex(index);
+        }
+        m_spectrumOverlaysTable->setCellWidget(row, 1, deviceCombo);
+        connect(deviceCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int) { applySpectrumOverlaysFromTable(); });
+
+        QSpinBox *xSpin = new QSpinBox(m_spectrumOverlaysTable);
+        xSpin->setRange(CameraSettings::m_minSignedUiPixelOffset, CameraSettings::m_maxSignedUiPixelOffset);
+        xSpin->setValue(overlay.m_offsetX);
+        xSpin->setSuffix(tr(" px"));
+        xSpin->setToolTip(tr("Horizontal overlay position in image pixels"));
+        m_spectrumOverlaysTable->setCellWidget(row, 2, xSpin);
+        connect(xSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, [this]() { applySpectrumOverlaysFromTable(); });
+
+        QSpinBox *ySpin = new QSpinBox(m_spectrumOverlaysTable);
+        ySpin->setRange(CameraSettings::m_minSignedUiPixelOffset, CameraSettings::m_maxSignedUiPixelOffset);
+        ySpin->setValue(overlay.m_offsetY);
+        ySpin->setSuffix(tr(" px"));
+        ySpin->setToolTip(tr("Vertical overlay position in image pixels"));
+        m_spectrumOverlaysTable->setCellWidget(row, 3, ySpin);
+        connect(ySpin, QOverload<int>::of(&QSpinBox::valueChanged), this, [this]() { applySpectrumOverlaysFromTable(); });
+
+        QDoubleSpinBox *scaleSpin = new QDoubleSpinBox(m_spectrumOverlaysTable);
+        scaleSpin->setRange(CameraSettings::m_minSpectrumScale, CameraSettings::m_maxSpectrumScale);
+        scaleSpin->setDecimals(2);
+        scaleSpin->setSingleStep(0.1);
+        scaleSpin->setValue(overlay.m_scale);
+        scaleSpin->setToolTip(tr("Scale factor applied to the spectrum overlay"));
+        m_spectrumOverlaysTable->setCellWidget(row, 4, scaleSpin);
+        connect(scaleSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this]() { applySpectrumOverlaysFromTable(); });
+    }
+
+    if ((selectedRow >= 0) && (selectedRow < m_spectrumOverlaysTable->rowCount())) {
+        m_spectrumOverlaysTable->selectRow(selectedRow);
+    } else if (m_spectrumOverlaysTable->rowCount() > 0) {
+        m_spectrumOverlaysTable->selectRow(0);
+    }
+
+    m_updatingSpectrumOverlaysTable = false;
+    updateSpectrumOverlayControls();
+}
+
+void CameraGUI::updateSpectrumOverlayControls()
+{
+    const int row = m_spectrumOverlaysTable ? m_spectrumOverlaysTable->currentRow() : -1;
+    const bool hasRow = row >= 0 && row < m_settings.m_spectrumOverlays.size();
+    if (m_spectrumOverlayRemoveButton) {
+        m_spectrumOverlayRemoveButton->setEnabled(hasRow);
+    }
+    if (m_spectrumOverlayUpButton) {
+        m_spectrumOverlayUpButton->setEnabled(hasRow && row > 0);
+    }
+    if (m_spectrumOverlayDownButton) {
+        m_spectrumOverlayDownButton->setEnabled(hasRow && row < m_settings.m_spectrumOverlays.size() - 1);
+    }
+}
+
+void CameraGUI::applySpectrumOverlaysFromTable()
+{
+    if (!m_spectrumOverlaysTable || m_updatingSpectrumOverlaysTable) {
+        return;
+    }
+
+    QList<CameraSettings::SpectrumOverlay> overlays;
+    overlays.reserve(m_spectrumOverlaysTable->rowCount());
+
+    for (int row = 0; row < m_spectrumOverlaysTable->rowCount(); ++row)
+    {
+        CameraSettings::SpectrumOverlay overlay;
+        if (QCheckBox *enabledCheck = qobject_cast<QCheckBox*>(m_spectrumOverlaysTable->cellWidget(row, 0))) {
+            overlay.m_enabled = enabledCheck->isChecked();
+        }
+        if (QComboBox *deviceCombo = qobject_cast<QComboBox*>(m_spectrumOverlaysTable->cellWidget(row, 1))) {
+            overlay.m_device = deviceCombo->itemData(deviceCombo->currentIndex()).toString();
+        }
+        if (QSpinBox *xSpin = qobject_cast<QSpinBox*>(m_spectrumOverlaysTable->cellWidget(row, 2))) {
+            overlay.m_offsetX = xSpin->value();
+        }
+        if (QSpinBox *ySpin = qobject_cast<QSpinBox*>(m_spectrumOverlaysTable->cellWidget(row, 3))) {
+            overlay.m_offsetY = ySpin->value();
+        }
+        if (QDoubleSpinBox *scaleSpin = qobject_cast<QDoubleSpinBox*>(m_spectrumOverlaysTable->cellWidget(row, 4))) {
+            overlay.m_scale = scaleSpin->value();
+        }
+        overlays.append(overlay);
+    }
+
+    m_settings.m_spectrumOverlays = overlays;
+    const bool anyEnabled = std::any_of(m_settings.m_spectrumOverlays.cbegin(), m_settings.m_spectrumOverlays.cend(), [](const CameraSettings::SpectrumOverlay& overlay) {
+        return overlay.m_enabled && !overlay.m_device.isEmpty();
+    });
+    m_settings.m_overlaySpectrum = anyEnabled;
+    if (anyEnabled)
+    {
+        const auto firstEnabled = std::find_if(m_settings.m_spectrumOverlays.cbegin(), m_settings.m_spectrumOverlays.cend(), [](const CameraSettings::SpectrumOverlay& overlay) {
+            return overlay.m_enabled && !overlay.m_device.isEmpty();
+        });
+        m_settings.m_spectrumDevice = firstEnabled->m_device;
+        m_settings.m_spectrumOffsetX = firstEnabled->m_offsetX;
+        m_settings.m_spectrumOffsetY = firstEnabled->m_offsetY;
+        m_settings.m_spectrumScale = firstEnabled->m_scale;
+    }
+    {
+        const QSignalBlocker blocker(ui->spectrumOverlayButton);
+        ui->spectrumOverlayButton->setChecked(anyEnabled);
+    }
+    applySetting("spectrumOverlays");
 }
 
 void CameraGUI::updateWindowOverlaysTable()
@@ -9417,34 +9631,37 @@ void CameraGUI::on_motionExclusionTable_itemChanged(QTableWidgetItem *item)
 
 void CameraGUI::on_spectrumOverlayButton_toggled(bool checked)
 {
+    if (checked && m_settings.m_spectrumOverlays.isEmpty())
+    {
+        CameraSettings::SpectrumOverlay overlay;
+        if (!m_spectrumOverlayDeviceIds.isEmpty()) {
+            overlay.m_device = m_spectrumOverlayDeviceIds.first();
+        }
+        m_settings.m_spectrumOverlays.append(overlay);
+    }
+    else
+    {
+        for (CameraSettings::SpectrumOverlay& overlay : m_settings.m_spectrumOverlays) {
+            overlay.m_enabled = checked;
+        }
+    }
+
+    updateSpectrumOverlaysTable();
     m_settings.m_overlaySpectrum = checked;
-    applySetting("overlaySpectrum");
-}
-
-void CameraGUI::on_spectrumDeviceCombo_currentIndexChanged(int index)
-{
-    m_settings.m_spectrumDevice = settingsUI()->spectrumDeviceCombo->itemText(index);
-    applySetting("spectrumDevice");
-}
-
-void CameraGUI::on_spectrumOffsetXSlider_valueChanged(int value)
-{
-    m_settings.m_spectrumOffsetX = value;
-    settingsUI()->spectrumOffsetXValue->setText(QString::number(value));
-    applySetting("spectrumOffsetX");
-}
-
-void CameraGUI::on_spectrumOffsetYSlider_valueChanged(int value)
-{
-    m_settings.m_spectrumOffsetY = value;
-    settingsUI()->spectrumOffsetYValue->setText(QString::number(value));
-    applySetting("spectrumOffsetY");
-}
-
-void CameraGUI::on_spectrumScaleSpin_valueChanged(double value)
-{
-    m_settings.m_spectrumScale = value;
-    applySetting("spectrumScale");
+    if (checked)
+    {
+        const auto firstEnabled = std::find_if(m_settings.m_spectrumOverlays.cbegin(), m_settings.m_spectrumOverlays.cend(), [](const CameraSettings::SpectrumOverlay& overlay) {
+            return overlay.m_enabled && !overlay.m_device.isEmpty();
+        });
+        if (firstEnabled != m_settings.m_spectrumOverlays.cend())
+        {
+            m_settings.m_spectrumDevice = firstEnabled->m_device;
+            m_settings.m_spectrumOffsetX = firstEnabled->m_offsetX;
+            m_settings.m_spectrumOffsetY = firstEnabled->m_offsetY;
+            m_settings.m_spectrumScale = firstEnabled->m_scale;
+        }
+    }
+    applySetting("spectrumOverlays");
 }
 
 void CameraGUI::on_yoloButton_toggled(bool checked)

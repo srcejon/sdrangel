@@ -686,7 +686,7 @@ private:
     // outlive the playback controller.
     CameraMediaPlaybackController m_playback;
     QTimer m_statusTimer;   // polls camerastate + ccdtemperature
-    QObject *m_spectrumPipeSource; ///< Cached pointer to the DeviceAPI of the selected spectrum device
+    QHash<const QObject*, QString> m_spectrumPipeSourceIds; ///< Cached spectrum-view pipe source to device ID map
 #ifdef ASICAMERA_FOUND
     CameraAsiController m_asi;
     QElapsedTimer m_asiVideoCadenceTimer;

@@ -118,6 +118,59 @@ QStringList deserializeStringList(const QString& json)
     return values;
 }
 
+QString serializeSpectrumOverlays(const QList<CameraSettings::SpectrumOverlay>& overlays)
+{
+    QJsonArray array;
+
+    for (const CameraSettings::SpectrumOverlay& overlay : overlays)
+    {
+        QJsonObject object;
+        object.insert(QStringLiteral("enabled"), overlay.m_enabled);
+        object.insert(QStringLiteral("device"), overlay.m_device);
+        object.insert(QStringLiteral("offsetX"), overlay.m_offsetX);
+        object.insert(QStringLiteral("offsetY"), overlay.m_offsetY);
+        object.insert(QStringLiteral("scale"), overlay.m_scale);
+        array.append(object);
+    }
+
+    return QString::fromUtf8(QJsonDocument(array).toJson(QJsonDocument::Compact));
+}
+
+QList<CameraSettings::SpectrumOverlay> deserializeSpectrumOverlays(const QString& json)
+{
+    QList<CameraSettings::SpectrumOverlay> overlays;
+    const QJsonDocument document = QJsonDocument::fromJson(json.toUtf8());
+
+    if (!document.isArray()) {
+        return overlays;
+    }
+
+    const QJsonArray array = document.array();
+    for (const QJsonValue& value : array)
+    {
+        if (!value.isObject()) {
+            continue;
+        }
+
+        const QJsonObject object = value.toObject();
+        CameraSettings::SpectrumOverlay overlay;
+        overlay.m_enabled = object.value(QStringLiteral("enabled")).toBool(true);
+        overlay.m_device = object.value(QStringLiteral("device")).toString();
+        overlay.m_offsetX = qBound(CameraSettings::m_minSignedUiPixelOffset,
+                                   object.value(QStringLiteral("offsetX")).toInt(0),
+                                   CameraSettings::m_maxSignedUiPixelOffset);
+        overlay.m_offsetY = qBound(CameraSettings::m_minSignedUiPixelOffset,
+                                   object.value(QStringLiteral("offsetY")).toInt(0),
+                                   CameraSettings::m_maxSignedUiPixelOffset);
+        overlay.m_scale = qBound(CameraSettings::m_minSpectrumScale,
+                                 object.value(QStringLiteral("scale")).toDouble(1.0),
+                                 CameraSettings::m_maxSpectrumScale);
+        overlays.append(overlay);
+    }
+
+    return overlays;
+}
+
 QString serializeWindowOverlays(const QList<CameraSettings::WindowOverlay>& overlays)
 {
     QJsonArray array;
@@ -452,6 +505,7 @@ void CameraSettings::resetToDefaults()
     m_spectrumOffsetX = 0;
     m_spectrumOffsetY = 0;
     m_spectrumScale = 1.0;
+    m_spectrumOverlays.clear();
     m_windowOverlays.clear();
     m_yoloEnabled = false;
     m_yoloModelPath.clear();
@@ -625,6 +679,7 @@ QByteArray CameraSettings::serialize() const
     s.writeS32(136, m_spectrumOffsetX);
     s.writeS32(137, m_spectrumOffsetY);
     s.writeDouble(138, m_spectrumScale);
+    s.writeString(278, serializeSpectrumOverlays(m_spectrumOverlays));
     s.writeString(139, m_dateTimeFormat);
     s.writeS32(140, m_dateTimePosX);
     s.writeS32(141, m_dateTimePosY);
@@ -1124,6 +1179,30 @@ bool CameraSettings::deserialize(const QByteArray& data)
         m_spectrumOffsetY = qBound(m_minSignedUiPixelOffset, m_spectrumOffsetY, m_maxSignedUiPixelOffset);
         d.readDouble(138, &m_spectrumScale, 1.0);
         m_spectrumScale = qBound(m_minSpectrumScale, m_spectrumScale, m_maxSpectrumScale);
+        QString spectrumOverlayJson;
+        d.readString(278, &spectrumOverlayJson, QString());
+        m_spectrumOverlays = deserializeSpectrumOverlays(spectrumOverlayJson);
+        if (m_spectrumOverlays.isEmpty() && m_overlaySpectrum && !m_spectrumDevice.isEmpty())
+        {
+            SpectrumOverlay overlay;
+            overlay.m_enabled = m_overlaySpectrum;
+            overlay.m_device = m_spectrumDevice;
+            overlay.m_offsetX = m_spectrumOffsetX;
+            overlay.m_offsetY = m_spectrumOffsetY;
+            overlay.m_scale = m_spectrumScale;
+            m_spectrumOverlays.append(overlay);
+        }
+        const auto firstEnabledSpectrumOverlay = std::find_if(m_spectrumOverlays.cbegin(), m_spectrumOverlays.cend(), [](const SpectrumOverlay& overlay) {
+            return overlay.m_enabled && !overlay.m_device.isEmpty();
+        });
+        m_overlaySpectrum = firstEnabledSpectrumOverlay != m_spectrumOverlays.cend();
+        if (firstEnabledSpectrumOverlay != m_spectrumOverlays.cend())
+        {
+            m_spectrumDevice = firstEnabledSpectrumOverlay->m_device;
+            m_spectrumOffsetX = firstEnabledSpectrumOverlay->m_offsetX;
+            m_spectrumOffsetY = firstEnabledSpectrumOverlay->m_offsetY;
+            m_spectrumScale = firstEnabledSpectrumOverlay->m_scale;
+        }
         QString windowOverlayJson;
         d.readString(277, &windowOverlayJson, QString());
         m_windowOverlays = deserializeWindowOverlays(windowOverlayJson);
@@ -2055,6 +2134,43 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     if (settingsKeys.contains("spectrumScale")) {
         m_spectrumScale = qBound(m_minSpectrumScale, settings.m_spectrumScale, m_maxSpectrumScale);
     }
+    if (!settingsKeys.contains("spectrumOverlays")
+        && (settingsKeys.contains("overlaySpectrum")
+            || settingsKeys.contains("spectrumDevice")
+            || settingsKeys.contains("spectrumOffsetX")
+            || settingsKeys.contains("spectrumOffsetY")
+            || settingsKeys.contains("spectrumScale")))
+    {
+        if (m_spectrumOverlays.isEmpty()) {
+            m_spectrumOverlays.append(SpectrumOverlay());
+        }
+        SpectrumOverlay& overlay = m_spectrumOverlays[0];
+        overlay.m_enabled = m_overlaySpectrum;
+        overlay.m_device = m_spectrumDevice;
+        overlay.m_offsetX = m_spectrumOffsetX;
+        overlay.m_offsetY = m_spectrumOffsetY;
+        overlay.m_scale = m_spectrumScale;
+    }
+    if (settingsKeys.contains("spectrumOverlays")) {
+        m_spectrumOverlays = settings.m_spectrumOverlays;
+        for (SpectrumOverlay& overlay : m_spectrumOverlays)
+        {
+            overlay.m_offsetX = qBound(m_minSignedUiPixelOffset, overlay.m_offsetX, m_maxSignedUiPixelOffset);
+            overlay.m_offsetY = qBound(m_minSignedUiPixelOffset, overlay.m_offsetY, m_maxSignedUiPixelOffset);
+            overlay.m_scale = qBound(m_minSpectrumScale, overlay.m_scale, m_maxSpectrumScale);
+        }
+        const auto firstEnabled = std::find_if(m_spectrumOverlays.cbegin(), m_spectrumOverlays.cend(), [](const SpectrumOverlay& overlay) {
+            return overlay.m_enabled && !overlay.m_device.isEmpty();
+        });
+        m_overlaySpectrum = firstEnabled != m_spectrumOverlays.cend();
+        if (firstEnabled != m_spectrumOverlays.cend())
+        {
+            m_spectrumDevice = firstEnabled->m_device;
+            m_spectrumOffsetX = firstEnabled->m_offsetX;
+            m_spectrumOffsetY = firstEnabled->m_offsetY;
+            m_spectrumScale = firstEnabled->m_scale;
+        }
+    }
     if (settingsKeys.contains("windowOverlays")) {
         m_windowOverlays = settings.m_windowOverlays;
         for (WindowOverlay& overlay : m_windowOverlays)
@@ -2862,6 +2978,9 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("spectrumScale") || force) {
         ostr << " m_spectrumScale: " << m_spectrumScale;
+    }
+    if (settingsKeys.contains("spectrumOverlays") || force) {
+        ostr << " m_spectrumOverlays: " << m_spectrumOverlays.size();
     }
     if (settingsKeys.contains("windowOverlays") || force) {
         ostr << " m_windowOverlays: " << m_windowOverlays.size();

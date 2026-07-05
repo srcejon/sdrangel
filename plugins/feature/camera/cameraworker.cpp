@@ -99,8 +99,7 @@ CameraWorker::CameraWorker() :
     m_alpaca(),
     m_qtAudio(this),
     m_playback(&m_qtAudio, &m_settings, this),
-    m_statusTimer(this),
-    m_spectrumPipeSource(nullptr)
+    m_statusTimer(this)
 #ifdef ASICAMERA_FOUND
     ,
     m_asi(),
@@ -270,18 +269,20 @@ void CameraWorker::onAvailableDevicesChanged(const QStringList& renameFrom, cons
     (void) removed;
     (void) added;
 
-    // Re-resolve the selected device pointer in case the device list changed
-    m_spectrumPipeSource = nullptr;
-    if (!m_settings.m_spectrumDevice.isEmpty())
+    // Re-resolve selected spectrum view pipe sources in case the device list changed
+    m_spectrumPipeSourceIds.clear();
+    QSet<QString> selectedSpectrumDevices;
+    for (const CameraSettings::SpectrumOverlay& overlay : m_settings.m_spectrumOverlays)
     {
-        const AvailableDeviceList& devices = m_availableDeviceHandler.getAvailableDeviceList();
-        for (const auto& device : devices)
-        {
-            if (device.getLongId() == m_settings.m_spectrumDevice)
-            {
-                m_spectrumPipeSource = device.m_object;
-                break;
-            }
+        if (overlay.m_enabled && !overlay.m_device.isEmpty()) {
+            selectedSpectrumDevices.insert(overlay.m_device);
+        }
+    }
+    const AvailableDeviceList& devices = m_availableDeviceHandler.getAvailableDeviceList();
+    for (const auto& device : devices)
+    {
+        if (selectedSpectrumDevices.contains(device.getLongId())) {
+            m_spectrumPipeSourceIds.insert(device.m_object, device.getLongId());
         }
     }
 
@@ -1041,9 +1042,9 @@ bool CameraWorker::handleMessage(const Message& cmd)
     else if (MainCore::MsgImage::match(cmd))
     {
         MainCore::MsgImage& imgMsg = (MainCore::MsgImage&) cmd;
-        // Only accept images from the selected device; if none is selected, accept all
-        if ((!m_spectrumPipeSource || imgMsg.getPipeSource() == m_spectrumPipeSource) && m_postProcessorInputMessageQueue) {
-            m_postProcessorInputMessageQueue->push(CameraPostProcessor::MsgSpectrumFrame::create(imgMsg.getImage()));
+        const QString deviceId = m_spectrumPipeSourceIds.value(imgMsg.getPipeSource());
+        if (!deviceId.isEmpty() && m_postProcessorInputMessageQueue) {
+            m_postProcessorInputMessageQueue->push(CameraPostProcessor::MsgSpectrumFrame::create(deviceId, imgMsg.getImage()));
         }
         return true;
     }
@@ -1286,25 +1287,27 @@ void CameraWorker::applySettings(const CameraSettings& settings, const QList<QSt
     }
 #endif
 
-    // Resolve the device object pointer when spectrumDevice setting changes
-    if (force || settingsKeys.contains("spectrumDevice"))
+    // Resolve the device object pointers when spectrum overlay settings change
+    if (force || settingsKeys.contains("spectrumOverlays") || settingsKeys.contains("spectrumDevice"))
     {
-        m_spectrumPipeSource = nullptr;
-        if (!m_settings.m_spectrumDevice.isEmpty())
+        m_spectrumPipeSourceIds.clear();
+        QSet<QString> selectedSpectrumDevices;
+        for (const CameraSettings::SpectrumOverlay& overlay : m_settings.m_spectrumOverlays)
         {
-            const AvailableDeviceList& devices = m_availableDeviceHandler.getAvailableDeviceList();
-            for (const auto& device : devices)
-            {
-                if (device.getLongId() == m_settings.m_spectrumDevice)
-                {
-                    m_spectrumPipeSource = device.m_object;
-                    break;
-                }
+            if (overlay.m_enabled && !overlay.m_device.isEmpty()) {
+                selectedSpectrumDevices.insert(overlay.m_device);
             }
         }
-        // When the device changes, clear the cached image to avoid showing a stale overlay
+        const AvailableDeviceList& devices = m_availableDeviceHandler.getAvailableDeviceList();
+        for (const auto& device : devices)
+        {
+            if (selectedSpectrumDevices.contains(device.getLongId())) {
+                m_spectrumPipeSourceIds.insert(device.m_object, device.getLongId());
+            }
+        }
+        // When the selected devices change, clear cached images to avoid showing stale overlays
         if (m_postProcessorInputMessageQueue) {
-            m_postProcessorInputMessageQueue->push(CameraPostProcessor::MsgSpectrumFrame::create(QImage()));
+            m_postProcessorInputMessageQueue->push(CameraPostProcessor::MsgSpectrumFrame::create(QString(), QImage()));
         }
     }
 

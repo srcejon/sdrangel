@@ -895,7 +895,24 @@ bool CameraPostProcessor::handleMessage(const Message& cmd)
     else if (MsgSpectrumFrame::match(cmd))
     {
         MsgSpectrumFrame& frameMsg = (MsgSpectrumFrame&) cmd;
-        m_spectrumViewImage = frameMsg.getImage();
+        if (frameMsg.getDeviceId().isEmpty() && frameMsg.getImage().isNull()) {
+            m_spectrumViewImages.clear();
+        } else if (frameMsg.getImage().isNull()) {
+            m_spectrumViewImages.remove(frameMsg.getDeviceId());
+        } else {
+            m_spectrumViewImages.insert(frameMsg.getDeviceId(), frameMsg.getImage());
+        }
+
+        if (!m_lastFrame.m_image.isNull())
+        {
+            m_lastFrame.m_manualPreviewFrame = true;
+            QVector<PreviewTextLabel> previewTextLabels;
+            QVector<PreviewRectItem> previewRectItems;
+            QVector<CameraPipelineTrackedObject> trackedObjects;
+            const QImage preview = applyPostProcessing(m_lastFrame, false, &previewTextLabels, &previewRectItems, &trackedObjects, false);
+            reportFrameToGUI(preview, m_lastFrame, previewTextLabels, previewRectItems, trackedObjects);
+        }
+
         return true;
     }
     else if (MsgWindowOverlayFrames::match(cmd))
@@ -1007,7 +1024,7 @@ void CameraPostProcessor::applySettings(const CameraSettings& settings, const QL
         "overlayFontFamily", "overlayFontScale",
         "motionBoxColor", "starColor", "showStarDetectionBoxes",
         "plateSolveLabelMode", "plateSolveLabelHideSyntheticNames", "yoloEnabled",
-        "overlaySpectrum", "spectrumDevice", "spectrumOffsetX", "spectrumOffsetY", "spectrumScale", "windowOverlays",
+        "overlaySpectrum", "spectrumDevice", "spectrumOffsetX", "spectrumOffsetY", "spectrumScale", "spectrumOverlays", "windowOverlays",
         "latitude", "longitude", "altitude", "azimuth", "elevation", "roll", "fov",
         "lensProjection", "lensCenterOffsetX", "lensCenterOffsetY", "lensDistortionK1", "owmAPIKey",
         "yoloBoxColor"
@@ -1066,8 +1083,8 @@ void CameraPostProcessor::applySettings(const CameraSettings& settings, const QL
         m_trackedObjectHeatMapSkipSeed = false;
     }
 
-    if (force || settingsKeys.contains("spectrumDevice")) {
-        m_spectrumViewImage = QImage();
+    if (force || settingsKeys.contains("spectrumOverlays") || settingsKeys.contains("spectrumDevice")) {
+        m_spectrumViewImages.clear();
     }
 
     if (force || settingsKeys.contains("windowOverlays")) {
@@ -1637,18 +1654,27 @@ void CameraPostProcessor::applySpectrumOverlay(QImage& image) const
 {
     PROFILER_START();
 
-    if (m_spectrumViewImage.isNull()) {
-        return;
-    }
-
-    const QImage specSrc = normaliseOverlayImageForComposition(m_spectrumViewImage, m_settings.m_spectrumScale);
-    if (specSrc.isNull()) {
-        return;
-    }
-
     QPainter painter(&image);
     painter.setCompositionMode(QPainter::CompositionMode_SourceOver);
-    painter.drawImage(m_settings.m_spectrumOffsetX, m_settings.m_spectrumOffsetY, specSrc);
+
+    for (const CameraSettings::SpectrumOverlay& overlay : m_settings.m_spectrumOverlays)
+    {
+        if (!overlay.m_enabled || overlay.m_device.isEmpty()) {
+            continue;
+        }
+
+        const QImage spectrumImage = m_spectrumViewImages.value(overlay.m_device);
+        if (spectrumImage.isNull()) {
+            continue;
+        }
+
+        const QImage specSrc = normaliseOverlayImageForComposition(spectrumImage, overlay.m_scale);
+        if (specSrc.isNull()) {
+            continue;
+        }
+
+        painter.drawImage(overlay.m_offsetX, overlay.m_offsetY, specSrc);
+    }
     PROFILER_STOP(__FUNCTION__);
 }
 
@@ -1680,13 +1706,22 @@ QVector<CameraPostProcessor::WindowOverlayFrame> CameraPostProcessor::currentIma
 {
     QVector<WindowOverlayFrame> overlays;
 
-    if (m_settings.m_overlaySpectrum && !m_spectrumViewImage.isNull())
+    for (const CameraSettings::SpectrumOverlay& overlay : m_settings.m_spectrumOverlays)
     {
+        if (!overlay.m_enabled || overlay.m_device.isEmpty()) {
+            continue;
+        }
+
+        const QImage spectrumImage = m_spectrumViewImages.value(overlay.m_device);
+        if (spectrumImage.isNull()) {
+            continue;
+        }
+
         WindowOverlayFrame frame;
-        frame.m_image = m_spectrumViewImage;
-        frame.m_offsetX = m_settings.m_spectrumOffsetX;
-        frame.m_offsetY = m_settings.m_spectrumOffsetY;
-        frame.m_scale = m_settings.m_spectrumScale;
+        frame.m_image = spectrumImage;
+        frame.m_offsetX = overlay.m_offsetX;
+        frame.m_offsetY = overlay.m_offsetY;
+        frame.m_scale = overlay.m_scale;
         overlays.append(frame);
     }
 
@@ -2414,7 +2449,15 @@ QImage CameraPostProcessor::applyPostProcessing(
     PROFILER_START();
 
     const QImage& input = frame.m_image;
-    const bool needsSpectrumOverlay = m_settings.m_overlaySpectrum && !m_spectrumViewImage.isNull();
+    bool needsSpectrumOverlay = false;
+    for (const CameraSettings::SpectrumOverlay& overlay : m_settings.m_spectrumOverlays)
+    {
+        if (overlay.m_enabled && !overlay.m_device.isEmpty() && !m_spectrumViewImages.value(overlay.m_device).isNull())
+        {
+            needsSpectrumOverlay = true;
+            break;
+        }
+    }
     const bool needsWindowOverlays = !m_windowOverlayFrames.isEmpty();
     const QString expandedOverlayText = expandOverlayTextTemplate();
     // Build the overlay text document once with font/style/HTML used for both the

@@ -244,6 +244,15 @@ struct CameraSettings
         double m_captureFps = 2.0;
     };
 
+    struct SpectrumOverlay
+    {
+        bool m_enabled = true;
+        QString m_device;
+        int m_offsetX = 0;
+        int m_offsetY = 0;
+        double m_scale = 1.0;
+    };
+
     enum FovMode
     {
         FovModeDirect = 0,
@@ -618,11 +627,12 @@ struct CameraSettings
     PlateSolveApplyMode m_plateSolveApplyMode; ///< Which solved values should be copied back into camera settings
     int    m_starCatalogDiskCacheSizeGb; ///< Maximum Siril/Gaia region disk cache size in GB; 0 = unlimited
     // Spectrum overlay settings
-    bool   m_overlaySpectrum;   ///< Enable overlaying the spectrum view image on the post-processed frame
-    QString m_spectrumDevice;   ///< Long ID of the device whose spectrum view to overlay (e.g. "R0 HackRF")
-    int    m_spectrumOffsetX;   ///< X offset (px) for the top-left corner of the spectrum overlay: -4096..4096
-    int    m_spectrumOffsetY;   ///< Y offset (px) for the top-left corner of the spectrum overlay: -4096..4096
-    double m_spectrumScale;     ///< Scale factor applied to the spectrum image before compositing: 0.1..4.0
+    bool   m_overlaySpectrum;   ///< Legacy single-spectrum enable flag; m_spectrumOverlays is the active model
+    QString m_spectrumDevice;   ///< Legacy single-spectrum device; m_spectrumOverlays is the active model
+    int    m_spectrumOffsetX;   ///< Legacy single-spectrum X offset; m_spectrumOverlays is the active model
+    int    m_spectrumOffsetY;   ///< Legacy single-spectrum Y offset; m_spectrumOverlays is the active model
+    double m_spectrumScale;     ///< Legacy single-spectrum scale; m_spectrumOverlays is the active model
+    QList<SpectrumOverlay> m_spectrumOverlays; ///< Spectrum view captures to composite over the post-processed frame
     QList<WindowOverlay> m_windowOverlays; ///< GUI window or rollup captures to composite over the post-processed frame
 
     // YOLO object-detection settings

@@ -1810,11 +1810,27 @@ void MeteorGUI::drawDetectionOverlays(GLSpectrumView *spectrumView)
     const int waterfallWidth = std::max(1, (int) std::round(1.0 / onePixelFraction));
     const int waterfallHeight = std::max(1, (int) std::round(1.0 / timePerPixel));
     const int leftMargin = std::clamp(spectrumView->width() - rightMargin - waterfallWidth, 0, spectrumView->width());
-    int waterfallTop = fontMetrics.ascent() * 2;
+    const SpectrumSettings spectrumSettings = m_spectrumVis->getSettings();
+    const int topMargin = fontMetrics.ascent() * 2;
+    const int bottomMargin = fontMetrics.ascent();
+    const int frequencyScaleHeight = fontMetrics.height() * 3;
+    int waterfallTop = topMargin;
 
-    if (waterfallTop + waterfallHeight > spectrumView->height()) {
-        waterfallTop = std::max(0, spectrumView->height() - waterfallHeight - fontMetrics.height() * 3);
+    if ((spectrumSettings.m_displayWaterfall || spectrumSettings.m_display3DSpectrogram)
+        && (spectrumSettings.m_displayHistogram || spectrumSettings.m_displayMaxHold || spectrumSettings.m_displayCurrent))
+    {
+        if (spectrumSettings.m_invertedWaterfall)
+        {
+            const int histogramHeight = spectrumView->height() - topMargin - waterfallHeight - frequencyScaleHeight - bottomMargin;
+            waterfallTop = topMargin + std::max(0, histogramHeight) + frequencyScaleHeight + 1;
+        }
     }
+    else if (!(spectrumSettings.m_displayWaterfall || spectrumSettings.m_display3DSpectrogram))
+    {
+        return;
+    }
+
+    waterfallTop = std::clamp(waterfallTop, 0, std::max(0, spectrumView->height() - waterfallHeight));
 
     for (const LabelOverlay& overlay : labelOverlays)
     {

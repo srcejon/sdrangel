@@ -1850,6 +1850,7 @@ void CameraGUI::displaySettings()
     ui->invertColorsButton->setChecked(m_settings.m_invertColors);
     ui->overlayDateTimeButton->setChecked(m_settings.m_overlayDateTime);
     settingsUI()->dateTimeFormatEdit->setText(m_settings.m_dateTimeFormat);
+    settingsUI()->dateTimeUtcButton->setChecked(m_settings.m_dateTimeUtc);
     settingsUI()->dateTimePosXSlider->setValue(m_settings.m_dateTimePosX);
     settingsUI()->dateTimePosXValue->setText(QString::number(m_settings.m_dateTimePosX));
     settingsUI()->dateTimePosYSlider->setValue(m_settings.m_dateTimePosY);
@@ -2732,6 +2733,7 @@ void CameraGUI::makeUIConnections()
     QObject::connect(ui->overlayDateTimeButton, &QToolButton::toggled, this, &CameraGUI::on_overlayDateTimeButton_toggled);
     QObject::connect(settingsUI()->dateTimeColorButton, &QToolButton::clicked, this, &CameraGUI::on_dateTimeColorButton_clicked);
     QObject::connect(settingsUI()->dateTimeFormatEdit, &QLineEdit::editingFinished, this, &CameraGUI::on_dateTimeFormatEdit_editingFinished);
+    QObject::connect(settingsUI()->dateTimeUtcButton, &QToolButton::toggled, this, &CameraGUI::on_dateTimeUtcButton_toggled);
     QObject::connect(settingsUI()->dateTimePosXSlider, &QSlider::valueChanged, this, &CameraGUI::on_dateTimePosXSlider_valueChanged);
     QObject::connect(settingsUI()->dateTimePosYSlider, &QSlider::valueChanged, this, &CameraGUI::on_dateTimePosYSlider_valueChanged);
     QObject::connect(ui->equatorialGridButton, &QToolButton::toggled, this, &CameraGUI::on_equatorialGridCheck_toggled);
@@ -2850,6 +2852,7 @@ void CameraGUI::makeUIConnections()
     QObject::connect(ui->zoomInButton, &QToolButton::clicked, this, &CameraGUI::on_zoomInButton_clicked);
     QObject::connect(ui->zoomOutButton, &QToolButton::clicked, this, &CameraGUI::on_zoomOutButton_clicked);
     QObject::connect(ui->fitInViewButton, &QToolButton::clicked, this, &CameraGUI::on_fitInViewButton_clicked);
+    QObject::connect(ui->fitWindowToImageButton, &QToolButton::clicked, this, &CameraGUI::on_fitWindowToImageButton_clicked);
     QObject::connect(ui->audioMute, &QToolButton::toggled, this, &CameraGUI::on_audioMute_toggled);
     QObject::connect(ui->audioPreviewVolumeDial, &QDial::valueChanged, this, &CameraGUI::on_audioPreviewVolumeDial_valueChanged);
     QObject::connect(settingsUI()->whiteBalanceCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_whiteBalanceCombo_currentIndexChanged);
@@ -7878,6 +7881,12 @@ void CameraGUI::on_dateTimeFormatEdit_editingFinished()
     applySetting("dateTimeFormat");
 }
 
+void CameraGUI::on_dateTimeUtcButton_toggled(bool checked)
+{
+    m_settings.m_dateTimeUtc = checked;
+    applySetting("dateTimeUtc");
+}
+
 void CameraGUI::on_dateTimePosXSlider_valueChanged(int value)
 {
     m_settings.m_dateTimePosX = value;
@@ -9280,6 +9289,24 @@ void CameraGUI::on_fitInViewButton_clicked()
     if (m_imagePixmapItem && !m_imagePixmapItem->image().isNull()) {
         ui->imageView->fitInView(m_imagePixmapItem, Qt::KeepAspectRatio);
     }
+}
+
+void CameraGUI::on_fitWindowToImageButton_clicked()
+{
+    if (!m_imagePixmapItem || m_imagePixmapItem->image().isNull()) {
+        return;
+    }
+
+    ui->imageView->resetTransform();
+
+    const QSize imageSize = m_imagePixmapItem->image().size();
+    const QSize viewportSize = ui->imageView->viewport()->size();
+    QSize targetSize = size() + QSize(imageSize.width() - viewportSize.width(),
+                                      imageSize.height() - viewportSize.height());
+
+    targetSize = targetSize.expandedTo(minimumSizeHint()).expandedTo(minimumSize());
+    resize(targetSize);
+    ui->imageView->centerOn(m_imagePixmapItem);
 }
 
 void CameraGUI::on_audioMute_toggled(bool checked)

@@ -4012,7 +4012,7 @@
             </property>
            </widget>
           </item>
-          <item row="0" column="1" colspan="4">
+          <item row="0" column="1" colspan="3">
            <widget class="QLineEdit" name="dateTimeFormatEdit">
             <property name="sizePolicy">
              <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
@@ -4025,6 +4025,19 @@
             </property>
             <property name="text">
              <string>yyyy-MM-dd hh:mm:ss</string>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="4">
+           <widget class="QToolButton" name="dateTimeUtcButton">
+            <property name="toolTip">
+             <string>Display the date/time overlay in UTC rather than local time</string>
+            </property>
+            <property name="text">
+             <string>UTC</string>
+            </property>
+            <property name="checkable">
+             <bool>true</bool>
             </property>
            </widget>
           </item>

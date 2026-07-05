@@ -577,6 +577,9 @@ CameraSettings:
     dateTimeFormat:
       description: "QDateTime::toString format string for the date/time overlay (e.g. 'yyyy-MM-dd hh:mm:ss')"
       type: string
+    dateTimeUtc:
+      description: "Display the date/time overlay in UTC rather than local time (1 for yes, 0 for no)"
+      type: integer
     dateTimePosX:
       description: "X pixel offset from the left edge for the date/time overlay: 0 to 4096"
       type: integer

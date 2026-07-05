@@ -123,35 +123,39 @@ Zooms out from the image display.
 
 Resizes the image view so the current image fits in the available display area.
 
-<h3>17: Save current image</h3>
+<h3>17: Fit window to image</h3>
+
+Resizes the camera feature window so the current image is displayed at 1:1 scale.
+
+<h3>18: Save current image</h3>
 
 Saves the currently displayed image to a JPEG or PNG file.
 
-<h3>18: Save images</h3>
+<h3>19: Save images</h3>
 
 When checked, saves captured images using the image basename and record mode configured in the Recording tab in the Camera Settings dialog.
 
-<h3>19: Record video</h3>
+<h3>20: Record video</h3>
 
 When checked, records video using the video basename and record mode configured in the Recording tab in the Camera Settings dialog.
 
-<h3>20: Generate keogram</h3>
+<h3>21: Generate keogram</h3>
 
 When checked, accumulates a keogram (a long-duration strip image built from one column or row per sample) using the Keogram settings in the Recording tab.
 
-<h3>21: Stream to YouTube Live</h3>
+<h3>22: Stream to YouTube Live</h3>
 
 When checked, streams the captured video to YouTube Live. The YouTube Live URL and stream key need to be set in the Recording tab in the Camera Settings dialog.
 
-<h3>22: Image stacking</h3>
+<h3>23: Image stacking</h3>
 
 Enables image stacking using the stacking settings in the Cal / Stack tab in the Camera Settings dialog.
 
-<h3>23: Invert colours</h3>
+<h3>24: Invert colours</h3>
 
 Inverts the displayed image colours.
 
-<h3>24: Histogram</h3>
+<h3>25: Histogram</h3>
 
 Opens the histogram window for the current image.
 
@@ -159,7 +163,7 @@ Opens the histogram window for the current image.
 
 The histogram shows a count of the number of pixels with a given value, for red, green and blue.
 
-<h3>25: Object detection</h3>
+<h3>26: Object detection</h3>
 
 Check to enable object detection. This uses an AI model to detect objects such as people or cars within an image, drawing a bounding box around them.
 
@@ -171,7 +175,7 @@ The YOLO ONNX model to use must be set in the Object Detection sub-tab in the Ca
 
 When an object is detected an event will be emitted that can be used by the Scheduler feature to perform user-defined actions.
 
-<h3>26: Object detection history</h3>
+<h3>27: Object detection history</h3>
 
 Opens the object detection history dialog.
 
@@ -183,7 +187,7 @@ If the source is `video:` or `images:`, the position column will indicate the ti
 Pressing 'Clear history' will clear the detection history.
 Pressing 'Save to CSV' will show a file dialog to select a filename to save the detection history to in CSV format.
 
-<h3>27: Motion detection</h3>
+<h3>28: Motion detection</h3>
 
 Check to enable motion detection, which highlights parts of the image that are moving by drawing a bounding box around them. This can be used to detect aircraft, satellites, meteors, wildlife or people, without needing an AI model.
 
@@ -197,7 +201,7 @@ How sensitive the detection is, and how it deals with noise and small or brief m
 
 When motion is detected, an event is emitted that can be used by the Scheduler feature to perform user-defined actions, such as starting a recording or running a command. A second event is emitted when the motion stops.
 
-<h3>28: Difference mask</h3>
+<h3>29: Difference mask</h3>
 
 Enables display of differences from previous images using the Difference Detection settings.
 There are settings to control how large the difference must be and how many differences there should be in a region for it to be visible, and how much to dilate the region so nearby similar pixels are also visible.
@@ -206,7 +210,7 @@ In this image, difference detection shows a satellite flare, while hiding backgr
 
 ![Difference dection](../../../doc/img/Camera_plugin_difference_detection.png)
 
-<h3>29: Star detection and plate solving</h3>
+<h3>30: Star detection and plate solving</h3>
 
 Enables star detection and plate solving.
 This can be used to display labels showing the names of stars detected within an image, or to work out the direction a camera is pointing.
@@ -222,7 +226,7 @@ The solution gives the direction the camera is pointing, field-of-view and lens 
 
 ![Plate solving result](../../../doc/img/Camera_plugin_plate_solve_result.png)
 
-<h3>30: Item overlay</h3>
+<h3>31: Item overlay</h3>
 
 Overlays ADS-B, AIS, satellite, star tracker and other items sent to the Map feature on the camera image. Options can show recent tracks, a heat map, and the line-of-sight range to each item in km.
 
@@ -230,11 +234,11 @@ Overlays ADS-B, AIS, satellite, star tracker and other items sent to the Map fea
 
 For this to work, the position and direction of the camera must be set in the Camera Settings dialog.
 
-<h3>31: Date/time overlay</h3>
+<h3>32: Date/time overlay</h3>
 
 Overlays the configured date and time string on the image.
 
-<h3>32: HTML overlay</h3>
+<h3>33: HTML overlay</h3>
 
 Overlays the configured HTML on the image.
 
@@ -242,29 +246,29 @@ Overlays the configured HTML on the image.
 
 FIXME variable substituions.
 
-<h3>33: Spectrum overlay</h3>
+<h3>34: Spectrum overlay</h3>
 
 Overlays a spectrum view from a selected SDRangel device set on the image.
 
 ![Spectrum overlay](../../../doc/img/Camera_plugin_spectrum_overlay.png)
 
-<h3>34: Azimuthal grid overlay</h3>
+<h3>35: Azimuthal grid overlay</h3>
 
 Overlays the azimuth/elevation sky grid.
 
 ![Azimuthal grid overlay](../../../doc/img/Camera_plugin_azimuthal_grid.png)
 
-<h3>35: Equatorial grid overlay</h3>
+<h3>36: Equatorial grid overlay</h3>
 
 Overlays the right ascension/declination equatorial sky grid.
 
 ![Equatorial grid overlay](../../../doc/img/Camera_plugin_equatorial_grid.png)
 
-<h3>36: Constellation overlay</h3>
+<h3>37: Constellation overlay</h3>
 
 Overlays the selected constellation stars. This can be used to help determine the camera's pose.
 
-<h3>37: Image display</h3>
+<h3>38: Image display</h3>
 
 Displays the captured image, including enabled post-processing, detection results and overlays.
 
@@ -656,7 +660,7 @@ Show tracks displays the recent track for each tracked overlay object, and Heat 
 
 <h4>10. Date/time Format</h4>
 
-Sets the `QDateTime` format string (e.g. `yyyy-MM-dd hh:mm:ss`) used by the date/time overlay.
+Sets the `QDateTime` format string (e.g. `yyyy-MM-dd hh:mm:ss`) used by the date/time overlay. The UTC button displays the overlay timestamp in UTC rather than local time.
 
 <h4>11. Date/time Font / colour</h4>
 

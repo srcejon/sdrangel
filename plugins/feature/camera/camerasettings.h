@@ -518,6 +518,7 @@ struct CameraSettings
     bool m_overlayDateTime;   ///< Draw current date/time on frame
     QColor m_dateTimeColor;   ///< Colour for the date/time overlay text
     QString m_dateTimeFormat; ///< QDateTime::toString format string, e.g. "yyyy-MM-dd hh:mm:ss"
+    bool m_dateTimeUtc;       ///< Display date/time overlay in UTC instead of local time
     int m_dateTimePosX;       ///< X pixel offset from left for date/time text: 0..4096
     int m_dateTimePosY;       ///< Y pixel offset from top for date/time text: 0..4096 (0 = auto bottom)
     bool m_equatorialGrid;    ///< Draw equatorial sky grid overlay

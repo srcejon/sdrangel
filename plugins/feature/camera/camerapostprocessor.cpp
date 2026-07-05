@@ -978,7 +978,7 @@ void CameraPostProcessor::applySettings(const CameraSettings& settings, const QL
 
     static const QStringList kPostProcessingKeys = {
         "overlayDateTime", "dateTimeColor",
-        "dateTimeFormat", "dateTimePosX", "dateTimePosY",
+        "dateTimeFormat", "dateTimeUtc", "dateTimePosX", "dateTimePosY",
         "equatorialGrid", "equatorialGridColor",
         "altAzGrid", "altAzGridColor",
         "constellation", "constellationColor", "constellationOverlay",
@@ -1644,7 +1644,8 @@ void CameraPostProcessor::applyDateTimeOverlay(QImage& image, bool drawLabel, QV
     const QString fmt = m_settings.m_dateTimeFormat.isEmpty()
                         ? QStringLiteral("yyyy-MM-dd hh:mm:ss")
                         : m_settings.m_dateTimeFormat;
-    const QString text = m_captureDateTime.toString(fmt);
+    const QDateTime displayDateTime = m_settings.m_dateTimeUtc ? m_captureDateTime.toUTC() : m_captureDateTime.toLocalTime();
+    const QString text = displayDateTime.toString(fmt);
     QFont font;
     if (!m_settings.m_overlayFontFamily.isEmpty()) {
         font.setFamily(m_settings.m_overlayFontFamily);

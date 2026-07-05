@@ -288,6 +288,7 @@ void CameraSettings::resetToDefaults()
     m_overlayDateTime = false;
     m_dateTimeColor = Qt::white;
     m_dateTimeFormat = QStringLiteral("yyyy-MM-dd hh:mm:ss");
+    m_dateTimeUtc = false;
     m_dateTimePosX = 4;
     m_dateTimePosY = 0;
     m_equatorialGrid = false;
@@ -693,6 +694,7 @@ QByteArray CameraSettings::serialize() const
     s.writeFloat(272, m_elevationOffset);
     s.writeFloat(273, m_rollOffset);
     s.writeS32(274, static_cast<qint32>(m_scaleJustification));
+    s.writeBool(276, m_dateTimeUtc);
     s.writeBool(275, m_trackObjectRange);
 
     return s.final();
@@ -1057,6 +1059,7 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readDouble(138, &m_spectrumScale, 1.0);
         m_spectrumScale = qBound(m_minSpectrumScale, m_spectrumScale, m_maxSpectrumScale);
         d.readString(139, &m_dateTimeFormat, "yyyy-MM-dd hh:mm:ss");
+        d.readBool(276, &m_dateTimeUtc, false);
         d.readS32(140, &m_dateTimePosX, 4);
         d.readS32(141, &m_dateTimePosY, 0);
         m_dateTimePosX = qBound(m_minUiPixelOffset, m_dateTimePosX, m_maxUiPixelOffset);
@@ -1986,6 +1989,9 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     if (settingsKeys.contains("dateTimeFormat")) {
         m_dateTimeFormat = settings.m_dateTimeFormat;
     }
+    if (settingsKeys.contains("dateTimeUtc")) {
+        m_dateTimeUtc = settings.m_dateTimeUtc;
+    }
     if (settingsKeys.contains("dateTimePosX")) {
         m_dateTimePosX = qBound(m_minUiPixelOffset, settings.m_dateTimePosX, m_maxUiPixelOffset);
     }
@@ -2780,6 +2786,9 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("dateTimeFormat") || force) {
         ostr << " m_dateTimeFormat: " << m_dateTimeFormat.toStdString();
+    }
+    if (settingsKeys.contains("dateTimeUtc") || force) {
+        ostr << " m_dateTimeUtc: " << m_dateTimeUtc;
     }
     if (settingsKeys.contains("dateTimePosX") || force) {
         ostr << " m_dateTimePosX: " << m_dateTimePosX;

@@ -664,6 +664,7 @@ private slots:
     void on_overlayDateTimeButton_toggled(bool checked);
     void on_dateTimeColorButton_clicked();
     void on_dateTimeFormatEdit_editingFinished();
+    void on_dateTimeUtcButton_toggled(bool checked);
     void on_dateTimePosXSlider_valueChanged(int value);
     void on_dateTimePosYSlider_valueChanged(int value);
     void on_equatorialGridCheck_toggled(bool checked);
@@ -777,6 +778,7 @@ private slots:
     void on_zoomInButton_clicked();
     void on_zoomOutButton_clicked();
     void on_fitInViewButton_clicked();
+    void on_fitWindowToImageButton_clicked();
     void on_audioMute_toggled(bool checked);
     void on_audioPreviewVolumeDial_valueChanged(int value);
     void audioSelect(const QPoint& p);

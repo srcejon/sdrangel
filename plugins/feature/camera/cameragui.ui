@@ -369,6 +369,16 @@
        </widget>
       </item>
       <item>
+       <widget class="QToolButton" name="fitWindowToImageButton">
+        <property name="toolTip">
+         <string>Resize window for 1:1 image display</string>
+        </property>
+        <property name="text">
+         <string>1:1</string>
+        </property>
+       </widget>
+      </item>
+      <item>
        <widget class="Line" name="line">
         <property name="orientation">
          <enum>Qt::Orientation::Vertical</enum>

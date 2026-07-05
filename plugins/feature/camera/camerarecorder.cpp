@@ -35,6 +35,8 @@ MESSAGE_CLASS_DEFINITION(CameraRecorder::MsgSetVideoRecordingEnabled, Message)
 MESSAGE_CLASS_DEFINITION(CameraRecorder::MsgReportSaveVideoState, Message)
 MESSAGE_CLASS_DEFINITION(CameraRecorder::MsgReportSaveImageState, Message)
 MESSAGE_CLASS_DEFINITION(CameraRecorder::MsgReportKeogram, Message)
+MESSAGE_CLASS_DEFINITION(CameraRecorder::MsgReportPreRecordPreview, Message)
+MESSAGE_CLASS_DEFINITION(CameraRecorder::MsgRequestPreRecordPreview, Message)
 MESSAGE_CLASS_DEFINITION(CameraRecorder::MsgAudioSamples, Message)
 
 namespace {
@@ -268,6 +270,12 @@ bool CameraRecorder::handleMessage(const Message& cmd)
     {
         const MsgAudioSamples& audioMsg = (const MsgAudioSamples&) cmd;
         appendAudioSamples(audioMsg.getPcmS16Stereo(), audioMsg.getSampleRate(), audioMsg.getContentPositionMs());
+        return true;
+    }
+    else if (MsgRequestPreRecordPreview::match(cmd))
+    {
+        const MsgRequestPreRecordPreview& previewMsg = (const MsgRequestPreRecordPreview&) cmd;
+        reportPreRecordPreviewFrame(previewMsg.getOffsetMs());
         return true;
     }
     else if (Camera::MsgCaptureActive::match(cmd))
@@ -1119,6 +1127,42 @@ void CameraRecorder::flushPreRecordFrames(const QImage& currentCalibratedImage, 
 
     m_preRecordVideoFrames.clear();
     m_preRecordBufferFlushed = true;
+}
+
+void CameraRecorder::reportPreRecordPreviewFrame(qint64 offsetMs)
+{
+    if (!m_msgQueueToGUI) {
+        return;
+    }
+
+    if (m_preRecordVideoFrames.empty())
+    {
+        m_msgQueueToGUI->push(MsgReportPreRecordPreview::create(QImage(), 0, 0));
+        return;
+    }
+
+    const double frameRate = std::max(0.001, m_settings.getCaptureFrameRate());
+    const qint64 bufferDurationMs = static_cast<qint64>(
+        (static_cast<double>(m_preRecordVideoFrames.size()) / frameRate) * 1000.0 + 0.5);
+    const qint64 boundedOffsetMs = qBound<qint64>(0, offsetMs, bufferDurationMs);
+    const int offsetFrames = qBound(
+        0,
+        static_cast<int>(std::llround((static_cast<double>(boundedOffsetMs) * frameRate) / 1000.0)),
+        static_cast<int>(m_preRecordVideoFrames.size()) - 1);
+    const int frameIndex = qBound(
+        0,
+        static_cast<int>(m_preRecordVideoFrames.size()) - 1 - offsetFrames,
+        static_cast<int>(m_preRecordVideoFrames.size()) - 1);
+    const BufferedVideoFrame& bufferedFrame = m_preRecordVideoFrames[frameIndex];
+    const QImage& previewImage = !bufferedFrame.m_processedImage.isNull()
+        ? bufferedFrame.m_processedImage
+        : (!bufferedFrame.m_filteredImage.isNull()
+            ? bufferedFrame.m_filteredImage
+            : bufferedFrame.m_calibratedImage);
+    const qint64 actualOffsetMs = static_cast<qint64>(
+        (static_cast<double>(static_cast<int>(m_preRecordVideoFrames.size()) - 1 - frameIndex) / frameRate) * 1000.0 + 0.5);
+
+    m_msgQueueToGUI->push(MsgReportPreRecordPreview::create(previewImage, actualOffsetMs, bufferDurationMs));
 }
 
 QDateTime CameraRecorder::keogramWindowStartUtc(const QDateTime& captureDateTime) const

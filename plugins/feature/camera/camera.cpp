@@ -453,6 +453,13 @@ void Camera::submitRecorderAudioSamples(const QByteArray& pcmS16Stereo, int samp
     }
 }
 
+void Camera::requestPreRecordPreview(qint64 offsetMs)
+{
+    if (m_recorder) {
+        m_recorder->getInputMessageQueue()->push(CameraRecorder::MsgRequestPreRecordPreview::create(offsetMs));
+    }
+}
+
 void Camera::submitWindowOverlayFrames(const QVector<CameraPostProcessor::WindowOverlayFrame>& frames)
 {
     if (m_postProcessor) {

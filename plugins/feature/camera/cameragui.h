@@ -235,7 +235,6 @@ private:
     double m_lastPlateSolveCenterOffsetY = 0.0;
     double m_lastPlateSolveDistortionK1 = 0.0;
     QString m_lastPlateSolveCatalogSource;
-
     Camera* m_camera;
     MessageQueue m_inputMessageQueue;
     QTimer m_statusTimer;
@@ -261,6 +260,7 @@ private:
     QVector<CameraPostProcessor::PreviewTextLabel> m_lastPreviewTextLabels;
     QVector<CameraPostProcessor::PreviewRectItem> m_lastPreviewRectItems;
     QVector<CameraPostProcessor::WindowOverlayFrame> m_lastPreviewImageOverlays;
+    qint64 m_previewPreRecordOffsetMs = 0;
     QList<CameraDetectionHistoryEntry> m_detectionHistory;
     int m_lastStackCount = 1;
     int m_lastStackQueuedCount = 0;
@@ -409,6 +409,9 @@ private:
     void updateCameraStatusDisplay();
     void updateCameraSubframeControls();
     void updateImageWidget();
+    bool hasLivePreRecordPreview() const;
+    void updatePreviewPreRecordSlider();
+    void setPreviewPreRecordOffset(qint64 offsetMs);
     void updateImageViewSmoothing();
     void sendDisplayedFrameEvents(const QVector<QRect>& motionBoxes, const QVector<CameraPipelineDetection>& detections, const QVector<CameraPipelineMeteorPhotometry>& meteorPhotometry, const QVector<CameraPipelineTrackedObject>& trackedObjects, const QSize& imageSize, const QDateTime& captureDateTime);
     void updatePreviewOverlayItems();

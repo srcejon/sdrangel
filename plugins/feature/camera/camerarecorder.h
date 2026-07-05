@@ -154,6 +154,52 @@ public:
         { }
     };
 
+    class MsgReportPreRecordPreview : public Message {
+        MESSAGE_CLASS_DECLARATION
+
+    public:
+        const QImage& getImage() const { return m_image; }
+        qint64 getOffsetMs() const { return m_offsetMs; }
+        qint64 getBufferDurationMs() const { return m_bufferDurationMs; }
+
+        static MsgReportPreRecordPreview* create(const QImage& image, qint64 offsetMs, qint64 bufferDurationMs)
+        {
+            return new MsgReportPreRecordPreview(image, offsetMs, bufferDurationMs);
+        }
+
+    private:
+        QImage m_image;
+        qint64 m_offsetMs;
+        qint64 m_bufferDurationMs;
+
+        MsgReportPreRecordPreview(const QImage& image, qint64 offsetMs, qint64 bufferDurationMs) :
+            Message(),
+            m_image(image),
+            m_offsetMs(offsetMs),
+            m_bufferDurationMs(bufferDurationMs)
+        { }
+    };
+
+    class MsgRequestPreRecordPreview : public Message {
+        MESSAGE_CLASS_DECLARATION
+
+    public:
+        qint64 getOffsetMs() const { return m_offsetMs; }
+
+        static MsgRequestPreRecordPreview* create(qint64 offsetMs)
+        {
+            return new MsgRequestPreRecordPreview(offsetMs);
+        }
+
+    private:
+        qint64 m_offsetMs;
+
+        MsgRequestPreRecordPreview(qint64 offsetMs) :
+            Message(),
+            m_offsetMs(offsetMs)
+        { }
+    };
+
     class MsgAudioSamples : public Message {
         MESSAGE_CLASS_DECLARATION
 
@@ -288,6 +334,7 @@ private:
     void trimPreRecordBuffer();
     void appendPreRecordFrame(const QImage& calibratedImage, const QImage& filteredImage, const QImage& processedImage);
     void flushPreRecordFrames(const QImage& currentCalibratedImage, const QImage& currentFilteredImage, const QImage& currentProcessedImage, double frameRate);
+    void reportPreRecordPreviewFrame(qint64 offsetMs);
     void updateKeogram(const QImage& calibratedImage, const QDateTime& captureDateTime);
     void resetKeogram();
     [[nodiscard]] QDateTime keogramWindowStartUtc(const QDateTime& captureDateTime) const;

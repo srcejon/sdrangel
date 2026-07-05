@@ -314,6 +314,7 @@ public:
     CameraFrameAligner* getFrameAligner() { return m_frameAligner; }
     MessageQueue* getDetectorInputMessageQueue() { return m_objectDetector ? m_objectDetector->getInputMessageQueue() : nullptr; }
     void submitRecorderAudioSamples(const QByteArray& pcmS16Stereo, int sampleRate);
+    void requestPreRecordPreview(qint64 offsetMs);
     void submitWindowOverlayFrames(const QVector<CameraPostProcessor::WindowOverlayFrame>& frames);
     void setMessageQueueToGUI(MessageQueue *queue) override;
 

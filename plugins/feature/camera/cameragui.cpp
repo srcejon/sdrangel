@@ -524,10 +524,12 @@ bool CameraGUI::handleMessage(const Message& message)
         const Camera::MsgStartStop& cfg = (Camera::MsgStartStop&) message;
         m_captureActive = cfg.getStartStop();
         m_captureEpoch = cfg.getCaptureEpoch();
+        m_previewPreRecordOffsetMs = 0;
         m_displayedMotionEventActive = false;
         m_displayedObjectEventClasses.clear();
         m_displayedTrackedObjectsInView.clear();
         discardQueuedReportFrames(*getInputMessageQueue(), false);
+        updateVideoFileControls();
 
         if (!sameCameraIdentity(previousCamera, selectedCameraFromSettings())) {
             resetCameraStatus();
@@ -708,6 +710,12 @@ bool CameraGUI::handleMessage(const Message& message)
             return true;
         }
 
+        if (!report.isManualPreviewFrame() && hasLivePreRecordPreview() && (m_previewPreRecordOffsetMs > 0))
+        {
+            m_camera->requestPreRecordPreview(m_previewPreRecordOffsetMs);
+            return true;
+        }
+
         // Send events first, to make Scheduler response as fast as possible
         sendDisplayedFrameEvents(report.getMotionBoxes(), report.getDetections(), report.getMeteorPhotometry(), report.getTrackedObjects(), report.getImage().size(), report.getCaptureDateTime());
 
@@ -752,6 +760,7 @@ bool CameraGUI::handleMessage(const Message& message)
         settingsUI()->pipelineFpsLabel->setText(
             m_lastPipelineFps > 0.0 ? QString::number(m_lastPipelineFps, 'f', 1) : "-");
         updateVideoPreRecordBufferMemoryLabel();
+        updatePreviewPreRecordSlider();
         updateScaleControls();
         m_lastPlateSolved = report.isPlateSolved();
         m_lastPlateSolvedMatches = report.getPlateSolvedMatches();
@@ -855,9 +864,13 @@ bool CameraGUI::handleMessage(const Message& message)
     {
         const CameraRecorder::MsgReportSaveVideoState& report = (CameraRecorder::MsgReportSaveVideoState&) message;
         m_settings.m_saveVideo = report.getSaveVideo();
+        if (m_settings.m_saveVideo) {
+            m_previewPreRecordOffsetMs = 0;
+        }
         ui->saveVideoCheck->blockSignals(true);
         ui->saveVideoCheck->setChecked(m_settings.m_saveVideo);
         ui->saveVideoCheck->blockSignals(false);
+        updateVideoFileControls();
         applySetting("saveVideo");
         return true;
     }
@@ -875,6 +888,28 @@ bool CameraGUI::handleMessage(const Message& message)
     {
         const CameraRecorder::MsgReportKeogram& report = (CameraRecorder::MsgReportKeogram&) message;
         updateKeogramPreview(report.getImage(), report.getFileName(), report.getVisible());
+        return true;
+    }
+    else if (CameraRecorder::MsgReportPreRecordPreview::match(message))
+    {
+        const CameraRecorder::MsgReportPreRecordPreview& report = (CameraRecorder::MsgReportPreRecordPreview&) message;
+        if (!hasLivePreRecordPreview() || report.getImage().isNull()) {
+            return true;
+        }
+
+        QSize oldSize = m_lastImage.size();
+        m_lastImage = report.getImage();
+        m_lastHistogramData = CameraHistogramData();
+        m_lastStarDetections.clear();
+        m_lastPreviewTextLabels.clear();
+        m_lastPreviewRectItems.clear();
+        m_lastPreviewImageOverlays.clear();
+        updateImageWidget();
+        m_previewPreRecordOffsetMs = report.getOffsetMs();
+        updatePreviewPreRecordSlider();
+        if ((oldSize != m_lastImage.size()) && ui->imageView->transform().isIdentity()) {
+            ui->imageView->fitInView(m_imagePixmapItem, Qt::KeepAspectRatio);
+        }
         return true;
     }
     else if (CameraWorker::MsgReportAlpacaCameraInfo::match(message))
@@ -2188,6 +2223,48 @@ void CameraGUI::updateImageWidget()
     updateMotionExclusionPreview();
 }
 
+bool CameraGUI::hasLivePreRecordPreview() const
+{
+    return !m_settings.isFileCamera()
+        && m_captureActive
+        && !m_settings.m_saveVideo
+        && (m_settings.m_videoPreRecordBufferSeconds > 0);
+}
+
+void CameraGUI::updatePreviewPreRecordSlider()
+{
+    if (!hasLivePreRecordPreview()) {
+        return;
+    }
+
+    const qint64 maxOffsetMs = std::max(1, m_settings.m_videoPreRecordBufferSeconds * 1000);
+    const int sliderValue = PlaybackPositionSliderMaximum - static_cast<int>(
+        (qBound<qint64>(0, m_previewPreRecordOffsetMs, maxOffsetMs) * PlaybackPositionSliderMaximum) / maxOffsetMs);
+    {
+        const QSignalBlocker blocker(ui->playbackPositionSlider);
+        ui->playbackPositionSlider->setValue(qBound(0, sliderValue, PlaybackPositionSliderMaximum));
+    }
+
+    ui->playbackPositionLabel->setText(m_previewPreRecordOffsetMs <= 0
+        ? tr("Live")
+        : tr("-%1s").arg(QString::number(static_cast<double>(m_previewPreRecordOffsetMs) / 1000.0, 'f', 1)));
+}
+
+void CameraGUI::setPreviewPreRecordOffset(qint64 offsetMs)
+{
+    if (!hasLivePreRecordPreview()) {
+        return;
+    }
+
+    const qint64 maxOffsetMs = std::max(1, m_settings.m_videoPreRecordBufferSeconds * 1000);
+    m_previewPreRecordOffsetMs = qBound<qint64>(0, offsetMs, maxOffsetMs);
+    updatePreviewPreRecordSlider();
+
+    if (m_previewPreRecordOffsetMs > 0) {
+        m_camera->requestPreRecordPreview(m_previewPreRecordOffsetMs);
+    }
+}
+
 void CameraGUI::updateImageViewSmoothing()
 {
     const QTransform transform = ui->imageView->transform();
@@ -3152,6 +3229,7 @@ void CameraGUI::updateVideoFileControls()
     const bool hasVideoFile = fileCameraSelected && m_settings.hasFileCameraSource();
     const qint64 playbackDurationMs = imageSequenceSelected ? imageSequenceDurationMs() : m_playbackDurationMs;
     const bool hasPlaybackPosition = hasVideoFile && !streamSelected && (playbackDurationMs > 0);
+    const bool livePreRecordPreview = hasLivePreRecordPreview();
 
     if (fileCameraSelected)
     {
@@ -3175,10 +3253,21 @@ void CameraGUI::updateVideoFileControls()
     setVisibleEnabled(ui->playPauseVideo, fileCameraSelected, hasVideoFile);
     setVisibleEnabled(ui->loopVideo, fileCameraSelected && !streamSelected, hasVideoFile);
     setVisibleEnabled(ui->playbackRateSpin, fileCameraSelected && !streamSelected, hasVideoFile);
-    setVisibleEnabled(ui->playbackPositionSlider, fileCameraSelected, hasPlaybackPosition);
-    setVisibleEnabled(ui->playbackPositionLabel, fileCameraSelected, hasPlaybackPosition);
+    setVisibleEnabled(ui->playbackPositionSlider, fileCameraSelected || livePreRecordPreview, hasPlaybackPosition || livePreRecordPreview);
+    setVisibleEnabled(ui->playbackPositionLabel, fileCameraSelected || livePreRecordPreview, hasPlaybackPosition || livePreRecordPreview);
     ui->videoLine->setVisible(fileCameraSelected);
-    if (!fileCameraSelected || !hasVideoFile) {
+    if (livePreRecordPreview)
+    {
+        ui->playbackPositionSlider->setToolTip(tr("Preview offset in the pre-record buffer; right is live"));
+        ui->playbackPositionLabel->setToolTip(tr("Current pre-record preview offset"));
+        updatePreviewPreRecordSlider();
+    }
+    else
+    {
+        ui->playbackPositionSlider->setToolTip(tr("Playback position for file camera video playback"));
+        ui->playbackPositionLabel->setToolTip(tr("Current playback position"));
+    }
+    if (!livePreRecordPreview && (!fileCameraSelected || !hasVideoFile)) {
         ui->playbackPositionLabel->setText(imageSequenceSelected ? QStringLiteral("0/0") : QStringLiteral("00:00:00"));
     }
     updateVideoPreRecordBufferMemoryLabel();
@@ -6663,6 +6752,14 @@ void CameraGUI::on_playbackAudioOffsetSpin_valueChanged(int value)
 
 void CameraGUI::on_playbackPositionSlider_sliderMoved(int value)
 {
+    if (hasLivePreRecordPreview())
+    {
+        const int maxOffsetMs = std::max(1, m_settings.m_videoPreRecordBufferSeconds * 1000);
+        const qint64 offsetMs = (static_cast<qint64>(PlaybackPositionSliderMaximum - value) * maxOffsetMs) / PlaybackPositionSliderMaximum;
+        setPreviewPreRecordOffset(offsetMs);
+        return;
+    }
+
     if (m_settings.isImageFileSequenceCamera())
     {
         const int count = m_settings.m_imageFileCameraPaths.size();
@@ -6685,6 +6782,12 @@ void CameraGUI::on_playbackPositionSlider_sliderMoved(int value)
 
 void CameraGUI::on_playbackPositionSlider_sliderReleased()
 {
+    if (hasLivePreRecordPreview())
+    {
+        on_playbackPositionSlider_sliderMoved(ui->playbackPositionSlider->value());
+        return;
+    }
+
     if (m_settings.isImageFileSequenceCamera())
     {
         on_playbackPositionSlider_sliderMoved(ui->playbackPositionSlider->value());
@@ -7338,6 +7441,10 @@ void CameraGUI::on_imagePathButton_clicked()
 void CameraGUI::on_saveVideoCheck_toggled(bool checked)
 {
     m_settings.m_saveVideo = checked;
+    if (checked) {
+        m_previewPreRecordOffsetMs = 0;
+    }
+    updateVideoFileControls();
     applySetting("saveVideo");
 }
 
@@ -7542,7 +7649,11 @@ void CameraGUI::on_streamBufferingSecondsSpin_valueChanged(double value)
 void CameraGUI::on_videoPreRecordBufferSpin_valueChanged(int value)
 {
     m_settings.m_videoPreRecordBufferSeconds = value;
+    if (value <= 0) {
+        m_previewPreRecordOffsetMs = 0;
+    }
     updateVideoPreRecordBufferMemoryLabel();
+    updateVideoFileControls();
     applySetting("videoPreRecordBufferSeconds");
 }
 

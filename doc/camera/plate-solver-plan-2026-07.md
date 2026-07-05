@@ -119,6 +119,20 @@ REAL/FISHEYE/WIDE. No REAL regression — the "Harden wide-9, then default-on" p
   20–30 real all-sky/wide frames (the rig exists — the `stars-wide-*` sources) across pointings/
   times, with named-anchor validation like the REAL suite. This is the gate every fisheye
   accuracy item (detector V2 package, quad-epsilon, FoV sweeps, k2 re-probe) is blocked on.
+  **COMMITTED as a durable benchmark (2026-07-05, commit 029f69659).** TREx 180° all-sky fisheye
+  (20 rows) + GMN/RMS wide rectilinear (6 rows), with their external ground truth (GMN platepars incl.
+  fitted distortion + star_list, CALSTARS, metadata, READMEs); the large frames/skymaps/masks stay
+  gitignored (the CSV rows carry the derived anchors). **It is a hard CHALLENGE set, not a green gate:
+  current pass rate trex 4/20 + gmn 3/6 = 7/26** — it documents where the solver still fails on real
+  fisheye/wide and is the Track-2 accuracy target. **k1-fit outcome (definitive):** attempted to
+  populate real nonzero k1 from the GMN platepars, but the solver's OWN joint lens recovery returns
+  **k1 = 0** on every passing GMN case (AU000C/D/G solve at k1=0). An empirical platepar `star_list` fit
+  gave spurious ~0.05–0.10 only because the optical axis had to be approximated (the platepar `RA_d` is
+  not the star-frame centre; a proximity-weighted axis fakes a radial trend). So **the real corpus has
+  near-zero residual k1 in the solver's rectilinear/fisheye convention — there is nothing meaningful to
+  populate**, which also confirms why A3's k1-sweep had no target. A proper platepar→k1 fit would have
+  to solve axis + k1 jointly, and even then the solver already recovers it. Follow-up worth more than
+  k1: triage the 19 failing rows (solver-failure vs strict named-anchor oracle) to sharpen the gate.
 - **0c Richer per-run metrics.** Emit per-case CSV (verdict, pose deltas vs truth where known,
   rms, matches, timeMs) instead of grepping PASS/FAIL. Binary verdicts hide accuracy drift; per-case
   timeMs is the only timing signal robust to this machine's mid-run sleeps.

@@ -78,6 +78,19 @@ Findings that already change priorities:
   wrong pose ~75%). Measurable against ground truth for the first time. Confounds to remove first:
   the approximate near-zenith TREx seed and the equidistant-fisheye lens-model match.
 
+**A2 landed (context-gated detector-V2, commit d2305e6d9, still flag-gated).** Iterated the package:
+the fisheye benefit and the narrow-REAL regression are the SAME mechanism (the pixel-count area
+differs ~20% from the polygon area for every blob, and the dense-narrow solver heuristics are co-tuned
+around the legacy polygon area). Admission-vs-metadata separation was tried and reverted — it protects
+REAL but loses the fisheye gain (the recovered stars need usable metadata to be matched, and the
+existing bright stars' metadata matters too). Resolution: since the small-star problem is specifically
+a wide/fisheye phenomenon, apply V2 ONLY in wide (fov>=30) / fisheye-projection contexts, narrow
+rectilinear untouched. **Result: REAL 47->46 (only wide-9), FISHEYE mode1 +3 / mode4 +5, WIDE 0, real
+TREx 0/16 -> solving.** V2-off byte-identical. Same fisheye gain as full-V2 at 1 REAL regression instead
+of 4. **Default-on is blocked only by wide-9** (metadata drift on its delicate near-zenith solve; not
+SNR-gate-fixable) — a single-case hardening follow-up (fold into WS2 near-zenith / the wide band-aids).
+Decision pending: land default-on accepting wide-9, keep flag-gated, or harden wide-9 first.
+
 ### Track 0 — Measurement first (the unlock; do before any further solver tuning)
 
 - **0a Hermetic catalog for the harness.** Snapshot the Siril region/range cache the corpus needs

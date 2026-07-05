@@ -712,9 +712,11 @@ bool CameraGUI::handleMessage(const Message& message)
             return true;
         }
 
-        if (!report.isManualPreviewFrame() && hasLivePreRecordPreview() && (m_previewPreRecordOffsetMs > 0))
+        if (hasLivePreRecordPreview() && (m_previewPreRecordOffsetMs > 0))
         {
-            m_camera->requestPreRecordPreview(m_previewPreRecordOffsetMs);
+            if (!report.isManualPreviewFrame()) {
+                m_camera->requestPreRecordPreview(m_previewPreRecordOffsetMs);
+            }
             return true;
         }
 

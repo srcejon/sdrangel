@@ -15,6 +15,7 @@
 // along with this program. If not, see <http://www.gnu.org/licenses/>.          //
 ///////////////////////////////////////////////////////////////////////////////////
 
+#include <algorithm>
 #include <sstream>
 
 #include <QColor>
@@ -45,6 +46,7 @@ void MeteorSettings::resetToDefaults()
     m_maxFrequencyDrift = 50.0f;
     m_detectionsTableColumnHidden = 0;
     m_detectionBoxPaddingPixels = 4;
+    m_detectionLabelMode = DetectionLabelNone;
     m_rgbColor = QColor(255, 170, 0).rgb();
     m_title = "Meteor";
     m_streamIndex = 0;
@@ -67,6 +69,7 @@ QByteArray MeteorSettings::serialize() const
     s.writeFloat(9, m_maxFrequencyDrift);
     s.writeU32(10, m_detectionsTableColumnHidden);
     s.writeS32(11, m_detectionBoxPaddingPixels);
+    s.writeS32(12, (int) m_detectionLabelMode);
 
     s.writeU32(21, m_rgbColor);
     s.writeString(22, m_title);
@@ -121,6 +124,11 @@ bool MeteorSettings::deserialize(const QByteArray& data)
         d.readFloat(9, &m_maxFrequencyDrift, 50.0f);
         d.readU32(10, &m_detectionsTableColumnHidden, 0);
         d.readS32(11, &m_detectionBoxPaddingPixels, 4);
+        d.readS32(12, (int *) &m_detectionLabelMode, (int) DetectionLabelNone);
+        m_detectionLabelMode = (DetectionLabelMode) std::clamp(
+            (int) m_detectionLabelMode,
+            (int) DetectionLabelNone,
+            (int) DetectionLabelRight);
 
         d.readU32(21, &m_rgbColor, QColor(255, 170, 0).rgb());
         d.readString(22, &m_title, "Meteor");
@@ -199,6 +207,9 @@ void MeteorSettings::applySettings(const QStringList& settingsKeys, const Meteor
     if (settingsKeys.contains("detectionBoxPaddingPixels")) {
         m_detectionBoxPaddingPixels = settings.m_detectionBoxPaddingPixels;
     }
+    if (settingsKeys.contains("detectionLabelMode")) {
+        m_detectionLabelMode = settings.m_detectionLabelMode;
+    }
     if (settingsKeys.contains("rgbColor")) {
         m_rgbColor = settings.m_rgbColor;
     }
@@ -252,6 +263,9 @@ QString MeteorSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("detectionBoxPaddingPixels") || force) {
         ostr << " m_detectionBoxPaddingPixels: " << m_detectionBoxPaddingPixels;
+    }
+    if (settingsKeys.contains("detectionLabelMode") || force) {
+        ostr << " m_detectionLabelMode: " << (int) m_detectionLabelMode;
     }
     if (settingsKeys.contains("streamIndex") || force) {
         ostr << " m_streamIndex: " << m_streamIndex;

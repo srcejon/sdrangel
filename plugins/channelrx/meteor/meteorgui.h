@@ -37,14 +37,11 @@
 class BasebandSampleSink;
 class ButtonSwitch;
 class DeviceUISet;
-class GLScope;
-class GLScopeGUI;
 class GLSpectrum;
 class GLSpectrumGUI;
 class GLSpectrumView;
 class PluginAPI;
 class RollupContents;
-class ScopeVis;
 class SpectrumVis;
 class ValueDialZ;
 
@@ -106,7 +103,6 @@ private:
 
     Meteor* m_meteor;
     SpectrumVis* m_spectrumVis;
-    ScopeVis* m_scopeVis;
     MessageQueue m_inputMessageQueue;
 
     QComboBox *m_frequencyMode;
@@ -120,6 +116,7 @@ private:
     QDoubleSpinBox *m_maxFrequencyDrift;
     ButtonSwitch *m_highlightAllDetections;
     QSpinBox *m_detectionBoxPadding;
+    QComboBox *m_detectionLabels;
     QLabel *m_totalCountText;
     QLabel *m_hourCountText;
     QPushButton *m_saveDetections;
@@ -131,8 +128,6 @@ private:
     QChart *m_hourlyChart;
     GLSpectrum *m_glSpectrum;
     GLSpectrumGUI *m_spectrumGUI;
-    GLScope *m_glScope;
-    GLScopeGUI *m_scopeGUI;
 
     int m_totalCount;
     bool m_highlightAllDetectionOverlays;
@@ -148,6 +143,7 @@ private:
         double m_centerFrequency;
         double m_frequencySpan;
         double m_frequencyDrift;
+        double m_peakPowerDB;
     };
 
     QVector<DetectionOverlay> m_detectionOverlays;
@@ -158,7 +154,6 @@ private:
     virtual ~MeteorGUI();
 
     void setupUi(RollupContents *rollupContents);
-    void setupScope();
     void setupSpectrum();
     void blockApplySettings(bool block);
     void applySetting(const QString& settingsKey);
@@ -190,6 +185,7 @@ private:
     qint64 rmobReportFrequency() const;
     QString rmobReceiverName() const;
     void drawDetectionOverlays(GLSpectrumView *spectrumView);
+    QString detectionOverlayLabel(const DetectionOverlay& detection) const;
     void applyDetectionsColumnVisibility();
     void saveDetectionsColumnVisibility();
     QSet<quint64> selectedDetectionOverlayIds() const;
@@ -211,6 +207,7 @@ private slots:
     void on_maxFrequencyDrift_valueChanged(double value);
     void on_highlightAllDetections_toggled(bool checked);
     void on_detectionBoxPadding_valueChanged(int value);
+    void on_detectionLabels_currentIndexChanged(int index);
     void on_saveDetections_clicked();
     void on_saveColorgramme_clicked();
     void on_clearDetections_clicked();

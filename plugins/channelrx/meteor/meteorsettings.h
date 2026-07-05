@@ -40,6 +40,11 @@ struct MeteorSettings
     float m_maxFrequencyDrift;
     quint32 m_detectionsTableColumnHidden;
     int m_detectionBoxPaddingPixels;
+    enum DetectionLabelMode {
+        DetectionLabelNone,
+        DetectionLabelTop,
+        DetectionLabelRight
+    } m_detectionLabelMode;
 
     quint32 m_rgbColor;
     QString m_title;

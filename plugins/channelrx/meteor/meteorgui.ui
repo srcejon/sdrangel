@@ -201,6 +201,16 @@
     <item row="4" column="1" colspan="2">
      <widget class="QSpinBox" name="detectionBoxPadding"/>
     </item>
+    <item row="4" column="3">
+     <widget class="QLabel" name="detectionLabelsLabel">
+      <property name="text">
+       <string>Labels</string>
+      </property>
+     </widget>
+    </item>
+    <item row="4" column="4" colspan="2">
+     <widget class="QComboBox" name="detectionLabels"/>
+    </item>
    </layout>
   </widget>
   <widget class="QWidget" name="detectionsContainer" native="true">
@@ -494,55 +504,6 @@
     </item>
    </layout>
   </widget>
-  <widget class="QWidget" name="scopeContainer" native="true">
-   <property name="geometry">
-    <rect>
-     <x>0</x>
-     <y>785</y>
-     <width>390</width>
-     <height>210</height>
-    </rect>
-   </property>
-   <property name="sizePolicy">
-    <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
-     <horstretch>0</horstretch>
-     <verstretch>0</verstretch>
-    </sizepolicy>
-   </property>
-   <property name="windowTitle">
-    <string>Scope</string>
-   </property>
-   <layout class="QVBoxLayout" name="scopeLayout">
-    <property name="spacing">
-     <number>2</number>
-    </property>
-    <property name="leftMargin">
-     <number>2</number>
-    </property>
-    <property name="topMargin">
-     <number>2</number>
-    </property>
-    <property name="rightMargin">
-     <number>2</number>
-    </property>
-    <property name="bottomMargin">
-     <number>2</number>
-    </property>
-    <item>
-     <widget class="GLScope" name="glScope" native="true">
-      <property name="minimumSize">
-       <size>
-        <width>0</width>
-        <height>180</height>
-       </size>
-      </property>
-     </widget>
-    </item>
-    <item>
-     <widget class="GLScopeGUI" name="scopeGUI" native="true"/>
-    </item>
-   </layout>
-  </widget>
  </widget>
  <customwidgets>
   <customwidget>
@@ -577,18 +538,6 @@
    <class>GLSpectrumGUI</class>
    <extends>QWidget</extends>
    <header>gui/glspectrumgui.h</header>
-   <container>1</container>
-  </customwidget>
-  <customwidget>
-   <class>GLScope</class>
-   <extends>QWidget</extends>
-   <header>gui/glscope.h</header>
-   <container>1</container>
-  </customwidget>
-  <customwidget>
-   <class>GLScopeGUI</class>
-   <extends>QWidget</extends>
-   <header>gui/glscopegui.h</header>
    <container>1</container>
   </customwidget>
  </customwidgets>

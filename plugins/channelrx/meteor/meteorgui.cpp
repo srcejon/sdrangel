@@ -31,6 +31,7 @@
 #include <QLocale>
 #include <QMenu>
 #include <QMessageBox>
+#include <QPainter>
 #include <QPushButton>
 #include <QSpinBox>
 #include <QStandardPaths>
@@ -42,14 +43,11 @@
 #include "device/deviceapi.h"
 #include "channel/channelwebapiutils.h"
 #include "dsp/dspcommands.h"
-#include "dsp/glscopesettings.h"
 #include "dsp/spectrumsettings.h"
 #include "gui/basicchannelsettingsdialog.h"
 #include "gui/buttonswitch.h"
 #include "gui/dialogpositioner.h"
 #include "gui/dialpopup.h"
-#include "gui/glscope.h"
-#include "gui/glscopegui.h"
 #include "gui/glspectrum.h"
 #include "gui/glspectrumgui.h"
 #include "gui/rollupcontents.h"
@@ -117,7 +115,6 @@ MeteorGUI::MeteorGUI(PluginAPI* pluginAPI, DeviceUISet *deviceUISet, BasebandSam
     m_tickCount(0),
     m_meteor(reinterpret_cast<Meteor*>(rxChannel)),
     m_spectrumVis(nullptr),
-    m_scopeVis(nullptr),
     m_hourlyChart(nullptr),
     m_totalCount(0),
     m_highlightAllDetectionOverlays(true),
@@ -135,10 +132,8 @@ MeteorGUI::MeteorGUI(PluginAPI* pluginAPI, DeviceUISet *deviceUISet, BasebandSam
 
     m_meteor->setMessageQueueToGUI(getInputMessageQueue());
     m_spectrumVis = m_meteor->getSpectrumVis();
-    m_scopeVis = m_meteor->getScopeVis();
 
     setupSpectrum();
-    setupScope();
 
     connect(&MainCore::instance()->getMasterTimer(), SIGNAL(timeout()), this, SLOT(tick()));
 
@@ -153,7 +148,6 @@ MeteorGUI::MeteorGUI(PluginAPI* pluginAPI, DeviceUISet *deviceUISet, BasebandSam
     setTitleColor(m_channelMarker.getColor());
     m_settings.setChannelMarker(&m_channelMarker);
     m_settings.setSpectrumGUI(m_spectrumGUI);
-    m_settings.setScopeGUI(m_scopeGUI);
     m_settings.setRollupState(&m_rollupState);
 
     m_deviceUISet->addChannelMarker(&m_channelMarker);
@@ -177,7 +171,6 @@ MeteorGUI::~MeteorGUI()
     saveAutomaticRMOBReports();
     disconnect(&MainCore::instance()->getMasterTimer(), SIGNAL(timeout()), this, SLOT(tick()));
     m_glSpectrum->setPaintGLCallback(nullptr);
-    m_glScope->disconnectTimer();
     delete ui;
 }
 
@@ -196,6 +189,7 @@ void MeteorGUI::setupUi(RollupContents *rollupContents)
     m_maxFrequencyDrift = ui->maxFrequencyDrift;
     m_highlightAllDetections = ui->highlightAllDetections;
     m_detectionBoxPadding = ui->detectionBoxPadding;
+    m_detectionLabels = ui->detectionLabels;
     m_totalCountText = ui->totalCountText;
     m_hourCountText = ui->hourCountText;
     m_saveDetections = ui->saveDetections;
@@ -206,8 +200,6 @@ void MeteorGUI::setupUi(RollupContents *rollupContents)
     m_hourlyChartView = ui->hourlyChartView;
     m_glSpectrum = ui->glSpectrum;
     m_spectrumGUI = ui->spectrumGUI;
-    m_glScope = ui->glScope;
-    m_scopeGUI = ui->scopeGUI;
 
     m_frequencyMode->addItem("df");
     m_frequencyMode->addItem("f");
@@ -247,6 +239,9 @@ void MeteorGUI::setupUi(RollupContents *rollupContents)
     m_detectionBoxPadding->setRange(0, 100);
     m_detectionBoxPadding->setSuffix(" px");
     m_detectionBoxPadding->setToolTip("Extra waterfall bounding box width in pixels on each side of the detected frequency range");
+
+    m_detectionLabels->addItems(QStringList({"None", "Top", "Right"}));
+    m_detectionLabels->setToolTip("Display peak power and duration labels on waterfall detection boxes");
 
     m_saveDetections->setIcon(QIcon(":/save.png"));
     m_saveDetections->setToolTip("Save detections to CSV");
@@ -327,7 +322,6 @@ void MeteorGUI::setupUi(RollupContents *rollupContents)
 
     m_hourlyChartView->setMinimumHeight(180);
     m_glSpectrum->setMinimumHeight(180);
-    m_glScope->setMinimumHeight(180);
 }
 
 void MeteorGUI::setupSpectrum()
@@ -347,72 +341,6 @@ void MeteorGUI::setupSpectrum()
     m_glSpectrum->setPaintGLCallback([this](GLSpectrumView *spectrumView) {
         drawDetectionOverlays(spectrumView);
     });
-}
-
-void MeteorGUI::setupScope()
-{
-    m_scopeVis->setGLScope(m_glScope);
-    m_scopeVis->setSpectrumVis(m_spectrumVis);
-    m_glScope->connectTimer(MainCore::instance()->getMasterTimer());
-    m_scopeGUI->setBuddies(m_scopeVis->getInputMessageQueue(), m_scopeVis, m_glScope);
-    m_scopeGUI->setStreams(QStringList({"IQ", "Power dB", "LPF power dB", "Meteor", "Noise floor dB"}));
-    m_scopeGUI->setPreTrigger(1);
-    m_scopeGUI->setDisplayMode(GLScopeSettings::DisplayX);
-
-    GLScopeSettings::TraceData traceDataI;
-    traceDataI.m_streamIndex = 0;
-    traceDataI.m_projectionType = Projector::ProjectionReal;
-    traceDataI.m_amp = 1.0f;
-    traceDataI.setColor(Qt::yellow);
-    m_scopeGUI->changeTrace(0, traceDataI);
-
-    GLScopeSettings::TraceData traceDataQ;
-    traceDataQ.m_streamIndex = 0;
-    traceDataQ.m_projectionType = Projector::ProjectionImag;
-    traceDataQ.m_amp = 1.0f;
-    traceDataQ.setColor(Qt::cyan);
-    m_scopeGUI->addTrace(traceDataQ);
-
-    GLScopeSettings::TraceData traceDataPower;
-    traceDataPower.m_streamIndex = 1;
-    traceDataPower.m_projectionType = Projector::ProjectionReal;
-    traceDataPower.m_amp = 0.02f;
-    traceDataPower.m_ofs = -50.0f;
-    traceDataPower.setColor(Qt::green);
-    m_scopeGUI->addTrace(traceDataPower);
-
-    GLScopeSettings::TraceData traceDataFiltered;
-    traceDataFiltered.m_streamIndex = 2;
-    traceDataFiltered.m_projectionType = Projector::ProjectionReal;
-    traceDataFiltered.m_amp = 0.02f;
-    traceDataFiltered.m_ofs = -50.0f;
-    traceDataFiltered.setColor(QColor(255, 128, 0));
-    m_scopeGUI->addTrace(traceDataFiltered);
-
-    GLScopeSettings::TraceData traceDataMeteor;
-    traceDataMeteor.m_streamIndex = 3;
-    traceDataMeteor.m_projectionType = Projector::ProjectionReal;
-    traceDataMeteor.m_amp = 1.0f;
-    traceDataMeteor.m_ofs = -0.5f;
-    traceDataMeteor.setColor(Qt::red);
-    m_scopeGUI->addTrace(traceDataMeteor);
-
-    GLScopeSettings::TraceData traceDataNoiseFloor;
-    traceDataNoiseFloor.m_streamIndex = 4;
-    traceDataNoiseFloor.m_projectionType = Projector::ProjectionReal;
-    traceDataNoiseFloor.m_amp = 0.02f;
-    traceDataNoiseFloor.m_ofs = -50.0f;
-    traceDataNoiseFloor.setColor(QColor(180, 120, 255));
-    m_scopeGUI->addTrace(traceDataNoiseFloor);
-
-    GLScopeSettings::TriggerData triggerData;
-    triggerData.m_streamIndex = 3;
-    triggerData.m_triggerLevel = 0.5f;
-    triggerData.m_triggerLevelCoarse = 50;
-    triggerData.m_triggerPositiveEdge = true;
-    m_scopeGUI->changeTrigger(0, triggerData);
-    m_scopeGUI->focusOnTrace(0);
-    m_scopeGUI->focusOnTrigger(0);
 }
 
 bool MeteorGUI::handleMessage(const Message& message)
@@ -632,6 +560,16 @@ void MeteorGUI::on_detectionBoxPadding_valueChanged(int value)
 {
     m_settings.m_detectionBoxPaddingPixels = value;
     applySetting("detectionBoxPaddingPixels");
+    m_glSpectrum->getSpectrumView()->update();
+}
+
+void MeteorGUI::on_detectionLabels_currentIndexChanged(int index)
+{
+    m_settings.m_detectionLabelMode = (MeteorSettings::DetectionLabelMode) std::clamp(
+        index,
+        (int) MeteorSettings::DetectionLabelNone,
+        (int) MeteorSettings::DetectionLabelRight);
+    applySetting("detectionLabelMode");
     m_glSpectrum->getSpectrumView()->update();
 }
 
@@ -1094,6 +1032,10 @@ void MeteorGUI::displaySettings()
     m_maxDuration->setValue(m_settings.m_maxDurationMS);
     m_maxFrequencyDrift->setValue(m_settings.m_maxFrequencyDrift);
     m_detectionBoxPadding->setValue(m_settings.m_detectionBoxPaddingPixels);
+    m_detectionLabels->setCurrentIndex(std::clamp(
+        (int) m_settings.m_detectionLabelMode,
+        (int) MeteorSettings::DetectionLabelNone,
+        (int) MeteorSettings::DetectionLabelRight));
     applyDetectionsColumnVisibility();
 
     updateVisualSampleRate();
@@ -1116,6 +1058,7 @@ void MeteorGUI::makeUIConnections()
     QObject::connect(m_maxFrequencyDrift, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &MeteorGUI::on_maxFrequencyDrift_valueChanged);
     QObject::connect(m_highlightAllDetections, &ButtonSwitch::toggled, this, &MeteorGUI::on_highlightAllDetections_toggled);
     QObject::connect(m_detectionBoxPadding, QOverload<int>::of(&QSpinBox::valueChanged), this, &MeteorGUI::on_detectionBoxPadding_valueChanged);
+    QObject::connect(m_detectionLabels, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &MeteorGUI::on_detectionLabels_currentIndexChanged);
     QObject::connect(m_saveDetections, &QPushButton::clicked, this, &MeteorGUI::on_saveDetections_clicked);
     QObject::connect(m_saveColorgramme, &QPushButton::clicked, this, &MeteorGUI::on_saveColorgramme_clicked);
     QObject::connect(m_clearDetections, &QPushButton::clicked, this, &MeteorGUI::on_clearDetections_clicked);
@@ -1156,8 +1099,6 @@ void MeteorGUI::updateAbsoluteCenterFrequency()
 void MeteorGUI::updateVisualSampleRate()
 {
     m_glSpectrum->setSampleRate(m_settings.m_channelSampleRate);
-    m_scopeVis->setLiveRate(m_settings.m_channelSampleRate);
-    m_scopeGUI->setSampleRate(m_settings.m_channelSampleRate);
 
     DSPSignalNotification *msg = new DSPSignalNotification(m_settings.m_channelSampleRate, 0);
     m_spectrumVis->getInputMessageQueue()->push(msg);
@@ -1189,7 +1130,8 @@ void MeteorGUI::addDetection(const MeteorDemodSink::MsgMeteorDetected& detection
         detection.getDisplayDurationS(),
         detection.getCenterFrequency(),
         detection.getFrequencySpan(),
-        detection.getFrequencyDrift()
+        detection.getFrequencyDrift(),
+        detection.getPeakPowerDB()
     });
 
     while (m_detectionOverlays.size() > 200) {
@@ -1766,6 +1708,15 @@ void MeteorGUI::drawDetectionOverlays(GLSpectrumView *spectrumView)
     const QSet<quint64> selectedIds = m_highlightAllDetectionOverlays
         ? QSet<quint64>()
         : selectedDetectionOverlayIds();
+    struct LabelOverlay
+    {
+        const DetectionOverlay *m_detection;
+        float m_xMin;
+        float m_yStart;
+        float m_xMax;
+        float m_yEnd;
+    };
+    QVector<LabelOverlay> labelOverlays;
 
     for (const DetectionOverlay& detection : m_detectionOverlays)
     {
@@ -1804,7 +1755,119 @@ void MeteorGUI::drawDetectionOverlays(GLSpectrumView *spectrumView)
         yStart = std::clamp(yStart - paddingY, 0.0f, 1.0f);
         yEnd = std::clamp(yEnd + paddingY, 0.0f, 1.0f);
         spectrumView->drawWaterfallOverlayBox(xMin, yStart, xMax, yEnd, color, 1.0f);
+
+        if (m_settings.m_detectionLabelMode != MeteorSettings::DetectionLabelNone) {
+            labelOverlays.push_back({&detection, xMin, yStart, xMax, yEnd});
+        }
     }
+
+    if (labelOverlays.isEmpty()) {
+        return;
+    }
+
+    const double frequencyPerPixel = spectrumView->waterfallFrequencyPerPixel();
+    const double timePerPixel = spectrumView->waterfallTimePerPixel();
+
+    if ((frequencyPerPixel <= 0.0) || (timePerPixel <= 0.0)) {
+        return;
+    }
+
+    float onePixelFraction = 0.0f;
+
+    for (const LabelOverlay& overlay : labelOverlays)
+    {
+        const double frequency = overlay.m_detection->m_centerFrequency;
+        float x = 0.0f;
+        float xPlus = 0.0f;
+        float xMinus = 0.0f;
+
+        if (spectrumView->waterfallFrequencyToX(frequency, x)
+            && spectrumView->waterfallFrequencyToX(frequency + frequencyPerPixel, xPlus)
+            && (xPlus > x))
+        {
+            onePixelFraction = xPlus - x;
+            break;
+        }
+
+        if (spectrumView->waterfallFrequencyToX(frequency - frequencyPerPixel, xMinus)
+            && spectrumView->waterfallFrequencyToX(frequency, x)
+            && (x > xMinus))
+        {
+            onePixelFraction = x - xMinus;
+            break;
+        }
+    }
+
+    if (onePixelFraction <= 0.0f)
+    {
+        return;
+    }
+
+    QPainter painter(spectrumView);
+    painter.setRenderHint(QPainter::TextAntialiasing, true);
+    const QFontMetrics fontMetrics(painter.font());
+    const int rightMargin = fontMetrics.horizontalAdvance("000");
+    const int waterfallWidth = std::max(1, (int) std::round(1.0 / onePixelFraction));
+    const int waterfallHeight = std::max(1, (int) std::round(1.0 / timePerPixel));
+    const int leftMargin = std::clamp(spectrumView->width() - rightMargin - waterfallWidth, 0, spectrumView->width());
+    int waterfallTop = fontMetrics.ascent() * 2;
+
+    if (waterfallTop + waterfallHeight > spectrumView->height()) {
+        waterfallTop = std::max(0, spectrumView->height() - waterfallHeight - fontMetrics.height() * 3);
+    }
+
+    for (const LabelOverlay& overlay : labelOverlays)
+    {
+        const QString label = detectionOverlayLabel(*overlay.m_detection);
+
+        if (label.isEmpty()) {
+            continue;
+        }
+
+        const int textWidth = fontMetrics.horizontalAdvance(label);
+        const int textHeight = fontMetrics.height();
+        const int labelWidth = textWidth + 6;
+        const int labelHeight = textHeight + 4;
+        const int boxLeft = leftMargin + (int) std::round(std::min(overlay.m_xMin, overlay.m_xMax) * waterfallWidth);
+        const int boxRight = leftMargin + (int) std::round(std::max(overlay.m_xMin, overlay.m_xMax) * waterfallWidth);
+        const int boxTop = waterfallTop + (int) std::round(std::min(overlay.m_yStart, overlay.m_yEnd) * waterfallHeight);
+        const int boxBottom = waterfallTop + (int) std::round(std::max(overlay.m_yStart, overlay.m_yEnd) * waterfallHeight);
+        int labelX = boxLeft + (boxRight - boxLeft - labelWidth) / 2;
+        int labelY = boxTop - labelHeight - 2;
+
+        if (m_settings.m_detectionLabelMode == MeteorSettings::DetectionLabelRight)
+        {
+            labelX = boxRight + 3;
+            labelY = boxTop + (boxBottom - boxTop - labelHeight) / 2;
+
+            if (labelX + labelWidth > spectrumView->width()) {
+                labelX = boxLeft - labelWidth - 3;
+            }
+        }
+        else if (labelY < 0)
+        {
+            labelY = boxBottom + 2;
+        }
+
+        labelX = std::clamp(labelX, 0, std::max(0, spectrumView->width() - labelWidth));
+        labelY = std::clamp(labelY, 0, std::max(0, spectrumView->height() - labelHeight));
+        const QRect labelRect(labelX, labelY, labelWidth, labelHeight);
+
+        painter.fillRect(labelRect, QColor(0, 0, 0, 190));
+        painter.setPen(color);
+        painter.drawText(labelRect.adjusted(3, 1, -3, -1), Qt::AlignCenter, label);
+    }
+}
+
+QString MeteorGUI::detectionOverlayLabel(const DetectionOverlay& detection) const
+{
+    const QString duration = QString("%1 ms").arg(detection.m_durationS * 1000.0, 0, 'f', 0);
+
+    if (std::isfinite(detection.m_peakPowerDB)) {
+        return QString("%1 dB  %2").arg(detection.m_peakPowerDB, 0, 'f', 1).arg(duration);
+    }
+
+    return duration;
 }
 
 int MeteorGUI::sampleRateIndex(int sampleRate) const

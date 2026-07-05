@@ -133,6 +133,13 @@ REAL/FISHEYE/WIDE. No REAL regression — the "Harden wide-9, then default-on" p
   populate**, which also confirms why A3's k1-sweep had no target. A proper platepar→k1 fit would have
   to solve axis + k1 jointly, and even then the solver already recovers it. Follow-up worth more than
   k1: triage the 19 failing rows (solver-failure vs strict named-anchor oracle) to sharpen the gate.
+  **Triage done (2026-07-06):** of the 19 fails, **16 are solved=1 but oracle-rejected** (9
+  position-mismatch, 7 missing-stars) and only **3 are genuine search failures** (solved=0). So the
+  corpus is chiefly an ACCURACY gate: the solver finds a pose but the named anchors land off. The
+  position-mismatches concentrate in the TREx 180° fisheye — pose accuracy degrades at the field edge
+  where the real lens deviates from a pure equidistant model. This is a Track-2 projection-accuracy
+  signal (edge distortion), NOT a seeding gap. Next: measure the per-anchor error magnitudes to split
+  "borderline oracle (25-40px, tighten model)" from "real pose error (100px+)".
 - **0c Richer per-run metrics.** Emit per-case CSV (verdict, pose deltas vs truth where known,
   rms, matches, timeMs) instead of grepping PASS/FAIL. Binary verdicts hide accuracy drift; per-case
   timeMs is the only timing signal robust to this machine's mid-run sleeps.
@@ -185,6 +192,14 @@ REAL/FISHEYE/WIDE. No REAL regression — the "Harden wide-9, then default-on" p
   false-positives. **Next: A/B the mixture vs faLogOdds on RAND2 (wrong-roll aliases) + the
   garbage/near-boundary negatives** — wrong poses should score low, correct high. Until that
   separation is demonstrated, 1b/1c stay blocked. The mixture is now well-formed and stays shadow-only.
+  **Wrong-FoV discriminator REFUTED by measurement (2026-07-06):** the mixture does NOT separate the
+  wrong-FoV false positives either — pollux@0.4 scores 16070 (ABOVE the correct-solve minimum 10551) and
+  narrow-5@6.0 scores 465891 (matched 629 stars at the wrong scale, mid-range among correct solves). A
+  grossly-wrong trusted FoV on a deep field yields a large SELF-CONSISTENT coincidental match set, which
+  the mixture (rewards matched, unmatched contribute 0) rates highly. So neither a mixture floor nor the
+  per-match faLogOdds fixes the wrong-FoV gap; it needs a dedicated FoV-plausibility check (e.g. matched
+  angular spread vs pixel spread, or bright-star geometric scale consistency), which is a separate,
+  higher-risk mechanism deferred as its own item. The mixture verifier remains shadow-only.
   **Negatives measured (2026-07-05):** guided neg-blobs (garbage) scores mixture 49073 — INSIDE the
   correct-solve range (narrow-3 10551 … wide-1 41k) — while still being rejected by the existing gate
   stack. So the mixture is a useful *feature* but NOT a sufficient single-scalar accept/reject gate;

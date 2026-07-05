@@ -54,6 +54,30 @@ statistical verifier vs our 145 gates).
 
 ## Updated plan
 
+### Progress (2026-07-05): real corpus built + first findings
+
+Track 0b is under way and already paying off. Staged real-data corpus in
+`plugins/feature/camera/test/images-real-fisheye-staging/` (gitignored, like the synthetic sets):
+- **GMN/RMS Perth** wide-field (6 cameras, platepar ground truth incl. distortion) →
+  `star-tests-real-gmn.csv`; **UCalgary TREx RGB** 180° fisheye (skymap az/el ground truth) →
+  `star-tests-real-trex.csv`. Anchors derived rigorously (platepar star_list poly-fit / skymap
+  inversion + peak-snap, all visually verified); method + caveats in the corpus README.
+
+Findings that already change priorities:
+- **GMN 4/6 PASS.** Every frame `solved=true`; only the external anchors caught the wrong poses —
+  demonstrating on real data that a self-consistent oracle over-passes. Discovered the **GMN roll
+  convention: solver roll = −platepar `rotation_from_horiz`** (az/el map directly).
+- **The star DETECTOR, not the plate solver, is the first fisheye bottleneck.** Raw TREx frames give
+  `detections=1..3, solved=false` (0/16) — the S1 ~1-2 px area-gate bug — vs 200–760 with a plain 4σ
+  detector. With a contrast stretch the detector recovers 40–76 and the solver attempts real solves.
+- **Detector-V2 (S1) is VALIDATED on real fisheye.** Stretched LUCK subset: V2 off → 1/4 PASS; V2 on
+  → 3/4 (60–76 det). This is the trustworthy evidence the synthetic oracle could not give: the S1
+  fix that regressed synthetic-REAL genuinely helps the real fisheye regime. → **A2 is now a green
+  light** (as a jointly-tuned package that protects narrow REAL), not a deferred maybe.
+- **A residual real fisheye-accuracy gap remains** (full TREx V2-on = 4/16; solver solves but to a
+  wrong pose ~75%). Measurable against ground truth for the first time. Confounds to remove first:
+  the approximate near-zenith TREx seed and the equidistant-fisheye lens-model match.
+
 ### Track 0 — Measurement first (the unlock; do before any further solver tuning)
 
 - **0a Hermetic catalog for the harness.** Snapshot the Siril region/range cache the corpus needs

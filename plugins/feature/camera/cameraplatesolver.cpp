@@ -1863,6 +1863,15 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
             poseFalseAlarmLogOdds(catalogContext, selectedFinalPass, imageSize, finalMatchRadius,
                 static_cast<int>(starDetections.size()))
             * 1000.0)));
+    // SHADOW MODE (Track 1a): the astrometry.net per-detection mixture verifier, recorded alongside
+    // faLogOdds so the two can be compared against the heuristic accept/reject bands across the
+    // corpus. Also not gating -- the success criterion is cleaner accept/reject separation than the
+    // per-match sum before it is wired into any decision.
+    recordProfileMetric(QStringLiteral("verify.mixtureLogOddsMilli"),
+        static_cast<qint64>(std::llround(
+            poseVerificationLogOdds(catalogContext, selectedFinalPass, imageSize, finalMatchRadius,
+                static_cast<int>(starDetections.size()))
+            * 1000.0)));
 
     const bool selectedWideBrightAnchorAccepted =
         hasAcceptableWideBrightAnchorSupport(settings, starDetections, selectedFinalPass);

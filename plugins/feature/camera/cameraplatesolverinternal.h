@@ -1593,6 +1593,15 @@ static bool gateAblationDisabled(const char* token);
 
 static double poseFalseAlarmLogOdds(const PlateSolveCatalogContext& catalogContext, const FinalMatchPassEvaluation& finalPass, const QSize& imageSize, double matchRadiusPixels, int detectionCount);
 
+// Track 1a (SHADOW, not yet gating): astrometry.net-style verification log-odds. Unlike
+// poseFalseAlarmLogOdds (a per-match SUM that grows with match count, so dense and sparse solves
+// aren't comparable) this is a per-DETECTION foreground/background mixture with a distractor
+// fraction (Sutherland-Saunders): every matched detection contributes a bounded +ve foreground vs
+// background log-ratio, and every UNMATCHED detection contributes log(distractorFraction) < 0, so a
+// dense wrong solve that leaves most detections unmatched is penalised. Recorded to the profile
+// (verify.mixtureLogOddsMilli) for corpus comparison against the heuristic accept/reject bands.
+static double poseVerificationLogOdds(const PlateSolveCatalogContext& catalogContext, const FinalMatchPassEvaluation& finalPass, const QSize& imageSize, double matchRadiusPixels, int detectionCount);
+
 // (WS3 2026-06-19) hasOverwhelmingFaintGuidedSupport was removed: it bypassed the brightness
 // acceptance gates for faint anchor-less fields, but ablation showed it casts no deciding vote on
 // REAL + RAND2 (the faint synthetic regime) + FISHEYE + negatives, even jointly with the other two

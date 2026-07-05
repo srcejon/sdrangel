@@ -168,6 +168,59 @@ double CameraPlateSolver::SolverContext::poseFalseAlarmLogOdds(const PlateSolveC
     return logOdds;
 }
 
+double CameraPlateSolver::SolverContext::poseVerificationLogOdds(const PlateSolveCatalogContext& catalogContext, const FinalMatchPassEvaluation& finalPass, const QSize& imageSize, double matchRadiusPixels, int detectionCount)
+{
+    Q_UNUSED(catalogContext);
+    if (!finalPass.projectorValid
+        || finalPass.finalMatches.isEmpty()
+        || (imageSize.width() <= 0)
+        || (imageSize.height() <= 0)
+        || (matchRadiusPixels <= 0.0)
+        || (detectionCount <= 0))
+    {
+        return 0.0;
+    }
+
+    // Astrometry.net-style Bayesian verification (Lang et al. 2010, after Sutherland & Saunders
+    // 1992). Decide, per field detection, between:
+    //   H1 (this WCS is correct): the detection is either a real star drawn from a narrow Gaussian
+    //       around a catalogue position, or a distractor drawn uniformly over the image;
+    //   H0 (random WCS): the detection is uniform over the image.
+    // Per matched detection the H1/H0 density ratio is
+    //   (1-f) * A/(2*pi*sigma^2) * exp(-d^2/2sigma^2) + f
+    // and per UNMATCHED detection it is just f (the distractor fraction), i.e. log(f) < 0. Summing
+    // the logs over ALL detections normalises for field density: a dense wrong solve that leaves
+    // most detections unmatched is penalised, so sparse-correct and dense-correct solves become
+    // comparable (which the per-match sum in poseFalseAlarmLogOdds cannot do).
+    constexpr double kDistractorFraction = 0.25;
+    const double area = static_cast<double>(imageSize.width()) * static_cast<double>(imageSize.height());
+    // Positional-uncertainty scale: real matches sit inside the radius but carry pose-model error,
+    // so r/2 (as in poseFalseAlarmLogOdds) is the effective 1-sigma.
+    const double sigma = std::max(1.0, matchRadiusPixels * 0.5);
+    const double twoSigmaSquared = 2.0 * sigma * sigma;
+    const double foregroundPeak = area / (kPi * twoSigmaSquared); // A / (2*pi*sigma^2)
+
+    int matchedDetections = 0;
+    double logOdds = 0.0;
+    for (const Match& match : finalPass.finalMatches)
+    {
+        const double d = match.distancePixels;
+        if (d > matchRadiusPixels) {
+            continue; // shouldn't happen for an accepted match; skip defensively
+        }
+        ++matchedDetections;
+        const double foreground = (1.0 - kDistractorFraction) * foregroundPeak
+            * std::exp(-(d * d) / twoSigmaSquared);
+        logOdds += std::log(foreground + kDistractorFraction);
+    }
+
+    // Every remaining detection is, under H1, a distractor: ratio f, so log(f) each. Clamp in case
+    // finalMatches carries more entries than there are distinct detections.
+    const int unmatchedDetections = std::max(0, detectionCount - matchedDetections);
+    logOdds += static_cast<double>(unmatchedDetections) * std::log(kDistractorFraction);
+    return logOdds;
+}
+
 double CameraPlateSolver::SolverContext::detectionMatchWeight(const CameraPipelineStarDetection& detection)
 {
     const double centroidUncertainty = std::isfinite(static_cast<double>(detection.m_centroidUncertainty))

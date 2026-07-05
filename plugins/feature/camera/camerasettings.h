@@ -543,7 +543,7 @@ struct CameraSettings
     bool m_invertColors;      ///< Invert all colour channels
     bool m_overlayDateTime;   ///< Draw current date/time on frame
     QColor m_dateTimeColor;   ///< Colour for the date/time overlay text
-    QString m_dateTimeFormat; ///< QDateTime::toString format string, e.g. "yyyy-MM-dd hh:mm:ss"
+    QString m_dateTimeFormat; ///< QDateTime::toString format, or template text with a date/time format in {...}
     bool m_dateTimeUtc;       ///< Display date/time overlay in UTC instead of local time
     int m_dateTimePosX;       ///< X pixel offset from left for date/time text: 0..4096
     int m_dateTimePosY;       ///< Y pixel offset from top for date/time text: 0..4096 (0 = auto bottom)

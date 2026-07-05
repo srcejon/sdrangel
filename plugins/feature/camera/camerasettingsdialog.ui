@@ -4021,7 +4021,7 @@
              </sizepolicy>
             </property>
             <property name="toolTip">
-             <string>Date/time format string (e.g. yyyy-MM-dd hh:mm:ss)</string>
+             <string>Date/time overlay text. Without braces, this is a Qt date/time format, e.g. yyyy-MM-dd hh:mm:ss. Use {yyyy-MM-dd hh:mm:ss} to insert the formatted date/time into literal text. Use {{ and }} for literal braces.</string>
             </property>
             <property name="text">
              <string>yyyy-MM-dd hh:mm:ss</string>

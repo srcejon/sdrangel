@@ -90,6 +90,55 @@ bool imageTransformEquivalent(const CameraPipelineImageTransform& lhs, const Cam
         && lhs.m_opticalToImage.dy() == rhs.m_opticalToImage.dy();
 }
 
+QString formatDateTimeOverlayText(const QDateTime& dateTime, const QString& format)
+{
+    const QString safeFormat = format.isEmpty()
+        ? QStringLiteral("yyyy-MM-dd hh:mm:ss")
+        : format;
+
+    if (!safeFormat.contains(QLatin1Char('{')) && !safeFormat.contains(QLatin1Char('}'))) {
+        return dateTime.toString(safeFormat);
+    }
+
+    QString text;
+    text.reserve(safeFormat.size() + 16);
+
+    for (int i = 0; i < safeFormat.size();)
+    {
+        const QChar ch = safeFormat.at(i);
+
+        if ((ch == QLatin1Char('{')) && (i + 1 < safeFormat.size()) && (safeFormat.at(i + 1) == QLatin1Char('{')))
+        {
+            text.append(QLatin1Char('{'));
+            i += 2;
+            continue;
+        }
+
+        if ((ch == QLatin1Char('}')) && (i + 1 < safeFormat.size()) && (safeFormat.at(i + 1) == QLatin1Char('}')))
+        {
+            text.append(QLatin1Char('}'));
+            i += 2;
+            continue;
+        }
+
+        if (ch == QLatin1Char('{'))
+        {
+            const int close = safeFormat.indexOf(QLatin1Char('}'), i + 1);
+            if (close > i + 1)
+            {
+                text.append(dateTime.toString(safeFormat.mid(i + 1, close - i - 1)));
+                i = close + 1;
+                continue;
+            }
+        }
+
+        text.append(ch);
+        ++i;
+    }
+
+    return text;
+}
+
 struct EquatorialStar
 {
     double rightAscensionDegrees;
@@ -1774,11 +1823,8 @@ cv::Mat CameraPostProcessor::wrapRgb888Image(const QImage& image)
 void CameraPostProcessor::applyDateTimeOverlay(QImage& image, bool drawLabel, QVector<PreviewTextLabel> *previewTextLabels) const
 {
     PROFILER_START();
-    const QString fmt = m_settings.m_dateTimeFormat.isEmpty()
-                        ? QStringLiteral("yyyy-MM-dd hh:mm:ss")
-                        : m_settings.m_dateTimeFormat;
     const QDateTime displayDateTime = m_settings.m_dateTimeUtc ? m_captureDateTime.toUTC() : m_captureDateTime.toLocalTime();
-    const QString text = displayDateTime.toString(fmt);
+    const QString text = formatDateTimeOverlayText(displayDateTime, m_settings.m_dateTimeFormat);
     QFont font;
     if (!m_settings.m_overlayFontFamily.isEmpty()) {
         font.setFamily(m_settings.m_overlayFontFamily);

@@ -807,19 +807,37 @@ void CameraStarDetector::applyStarDetection(
     // Phase 3 (star-detector v2) opt-in. When unset the detector is byte-identical to the legacy
     // path; when set it applies the accuracy fixes (true pixel-count area, ...). Read once.
     static const bool detectorV2 = qEnvironmentVariableIsSet("SDRANGEL_CAMERA_STAR_DETECTOR_V2");
+    // V2 quality gate (A2): the minimum SNR a star recovered ONLY by the true pixel-count area
+    // (one the legacy polygon-area would have rejected at the minArea gate) must have to be admitted.
+    // This keeps confident faint point sources -- which help wide/fisheye recall -- while blocking
+    // the low-SNR noise / faint galaxy-structure blobs that regressed dense narrow REAL fields when
+    // small-star recovery was unconditional. Env-tunable so the bar can be swept without rebuilding.
+    static const double v2RecoveredMinSnr = []() {
+        bool ok = false;
+        const double v = qEnvironmentVariable("SDRANGEL_CAMERA_STAR_DETECTOR_V2_MINSNR").toDouble(&ok);
+        return ok ? v : 0.0;   // 0 = off; context-gating (v2Active) protects narrow REAL now
+    }();
 
     for (const std::vector<cv::Point>& contour : contours)
     {
         const cv::Rect box = cv::boundingRect(contour);
         const double polygonArea = cv::contourArea(contour);
 
-        // V2: use the true filled-pixel count as the blob area. cv::contourArea returns the area of
-        // the pixel-CENTRE polygon -- ~1 for a 2x2 star and 0 for any 1-px-wide blob -- so small
-        // (wide-field/fisheye ~1px PSF) stars were rejected by the minArea gate and biased
-        // fillRatio/SNR/hot-pixel low. The polygon area is retained for the roundness shape metric.
-        cv::Mat contourMask;
+        // V2 uses the true filled-pixel count as the blob area (cv::contourArea gives the
+        // pixel-CENTRE polygon area -- ~1 for a 2x2 star, 0 for a 1-px-wide blob -- which rejects
+        // real ~1px stars at the minArea gate and biases their fillRatio/SNR/hot-pixel). This is the
+        // "more correct" area and it delivers the real wide/fisheye recall gain (validated on the
+        // GMN/TREx real corpus), but the pixel count and the polygon count differ ~20% for EVERY
+        // blob, and the dense narrow-field solver heuristics are co-tuned around the legacy polygon
+        // area -- feeding them the corrected area regressed real narrow/galaxy fields. Since the
+        // small-star problem is specifically a wide/fisheye phenomenon (tiny PSFs), apply V2 ONLY in
+        // wide or fisheye contexts and leave narrow rectilinear fields on the legacy area untouched.
+        const bool v2Active = detectorV2
+            && ((m_settings.m_lensProjection != CameraSettings::LensProjectionRectilinear)
+                || (m_settings.m_fov >= 30.0f));
         double area = polygonArea;
-        if (detectorV2)
+        cv::Mat contourMask;
+        if (v2Active)
         {
             contourMask = cv::Mat::zeros(box.height, box.width, CV_8UC1);
             std::vector<std::vector<cv::Point>> pixelAreaContour{contour};
@@ -982,6 +1000,20 @@ void CameraStarDetector::applyStarDetection(
         detection.m_aspectRatio = static_cast<float>(aspectRatio);
         detection.m_saturated = saturated;
         detection.m_hotPixelSuspect = hotPixelSuspect;
+
+        // Optional V2 quality gate (A2, off by default): in a V2 (wide/fisheye) context, reject a
+        // star recovered only by the pixel-count area (legacy polygon-area would have rejected it at
+        // minArea) unless it clears an SNR bar. Off by default because context-gating already
+        // protects narrow REAL; retained env-tunable in case wide/fisheye REAL needs noise filtering.
+        // Saturated cores are exempt (unreliable SNR but real bright stars).
+        if (v2Active
+            && (v2RecoveredMinSnr > 0.0)
+            && !saturated
+            && (polygonArea < static_cast<double>(m_settings.m_starMinArea))
+            && (snr < v2RecoveredMinSnr))
+        {
+            continue;
+        }
         starDetections.append(detection);
 
         if (!finalMask.empty()) {

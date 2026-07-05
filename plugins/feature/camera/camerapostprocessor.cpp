@@ -547,6 +547,58 @@ static void drawOutlinedLabel(QPainter& painter,
     painter.restore();
 }
 
+static void drawShadowedLabel(QPainter& painter,
+                              const QRect& imageRect,
+                              const QPointF& point,
+                              const QString& text,
+                              const QColor& color,
+                              const QFontMetrics& fontMetrics)
+{
+    if (text.isEmpty()) {
+        return;
+    }
+
+    const QStringList lines = text.split(QChar('\n'));
+    int textWidth = 0;
+    int lineCount = 0;
+    for (const QString& line : lines)
+    {
+        textWidth = std::max(textWidth, fontMetrics.horizontalAdvance(line));
+        lineCount++;
+    }
+    if (lineCount <= 0) {
+        return;
+    }
+
+    QPointF labelPoint = point + QPointF(4.0, -4.0);
+    QRect targetRect(
+        qRound(labelPoint.x()),
+        qRound(labelPoint.y()) - lineCount * fontMetrics.lineSpacing(),
+        textWidth + 4,
+        lineCount * fontMetrics.lineSpacing() + 2);
+
+    if (!imageRect.adjusted(0, 0, -1, -1).intersects(targetRect)) {
+        return;
+    }
+
+    painter.save();
+    auto drawLines = [&](const QPoint& offset, const QColor& penColor)
+    {
+        painter.setPen(penColor);
+        const int baseX = targetRect.left();
+        int baselineY = targetRect.top() + fontMetrics.ascent();
+        for (const QString& line : lines)
+        {
+            painter.drawText(baseX + offset.x(), baselineY + offset.y(), line);
+            baselineY += fontMetrics.lineSpacing();
+        }
+    };
+
+    drawLines(QPoint(1, 1), Qt::black);
+    drawLines(QPoint(0, 0), color);
+    painter.restore();
+}
+
 static void appendOutlinedPreviewTextLabel(QVector<CameraPostProcessor::PreviewTextLabel> *labels,
                                            const QString& text,
                                            const QPointF& point,
@@ -2451,7 +2503,7 @@ void CameraPostProcessor::applyTrackedObjectOverlay(const CameraPipelineFrame& f
         }
 
         if (drawLabels) {
-            drawOutlinedLabel(painter, image.rect(), point, label, m_settings.m_trackObjectColor, fontMetrics);
+            drawShadowedLabel(painter, image.rect(), point, label, m_settings.m_trackObjectColor, fontMetrics);
         } else {
             appendOutlinedPreviewTextLabel(
                 previewTextLabels,

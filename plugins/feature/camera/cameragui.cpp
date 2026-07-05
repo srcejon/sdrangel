@@ -524,7 +524,9 @@ bool CameraGUI::handleMessage(const Message& message)
         const Camera::MsgStartStop& cfg = (Camera::MsgStartStop&) message;
         m_captureActive = cfg.getStartStop();
         m_captureEpoch = cfg.getCaptureEpoch();
-        m_previewPreRecordOffsetMs = 0;
+        if (m_captureActive) {
+            m_previewPreRecordOffsetMs = 0;
+        }
         m_displayedMotionEventActive = false;
         m_displayedObjectEventClasses.clear();
         m_displayedTrackedObjectsInView.clear();
@@ -896,6 +898,9 @@ bool CameraGUI::handleMessage(const Message& message)
         if (!hasLivePreRecordPreview() || report.getImage().isNull()) {
             return true;
         }
+        if ((m_previewPreRecordOffsetMs <= 0) && (report.getOffsetMs() > 0)) {
+            return true;
+        }
 
         QSize oldSize = m_lastImage.size();
         m_lastImage = report.getImage();
@@ -905,7 +910,6 @@ bool CameraGUI::handleMessage(const Message& message)
         m_lastPreviewRectItems.clear();
         m_lastPreviewImageOverlays.clear();
         updateImageWidget();
-        m_previewPreRecordOffsetMs = report.getOffsetMs();
         updatePreviewPreRecordSlider();
         if ((oldSize != m_lastImage.size()) && ui->imageView->transform().isIdentity()) {
             ui->imageView->fitInView(m_imagePixmapItem, Qt::KeepAspectRatio);
@@ -2226,9 +2230,9 @@ void CameraGUI::updateImageWidget()
 bool CameraGUI::hasLivePreRecordPreview() const
 {
     return !m_settings.isFileCamera()
-        && m_captureActive
         && !m_settings.m_saveVideo
-        && (m_settings.m_videoPreRecordBufferSeconds > 0);
+        && (m_settings.m_videoPreRecordBufferSeconds > 0)
+        && (m_captureActive || !m_lastImage.isNull() || (m_previewPreRecordOffsetMs > 0));
 }
 
 void CameraGUI::updatePreviewPreRecordSlider()
@@ -2260,7 +2264,7 @@ void CameraGUI::setPreviewPreRecordOffset(qint64 offsetMs)
     m_previewPreRecordOffsetMs = qBound<qint64>(0, offsetMs, maxOffsetMs);
     updatePreviewPreRecordSlider();
 
-    if (m_previewPreRecordOffsetMs > 0) {
+    if ((m_previewPreRecordOffsetMs > 0) || !m_captureActive) {
         m_camera->requestPreRecordPreview(m_previewPreRecordOffsetMs);
     }
 }

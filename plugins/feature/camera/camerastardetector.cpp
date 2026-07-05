@@ -804,9 +804,12 @@ void CameraStarDetector::applyStarDetection(
     const bool is16Bit = (residual.depth() == CV_16U);
     const double saturationThreshold = is16Bit ? 64000.0 : (hasGray ? 250.0 : 200.0);
 
-    // Phase 3 (star-detector v2) opt-in. When unset the detector is byte-identical to the legacy
-    // path; when set it applies the accuracy fixes (true pixel-count area, ...). Read once.
-    static const bool detectorV2 = qEnvironmentVariableIsSet("SDRANGEL_CAMERA_STAR_DETECTOR_V2");
+    // Phase 3 (star-detector v2): DEFAULT ON. Applies the true pixel-count blob area in wide/fisheye
+    // contexts (see v2Active below) so ~1px stars are recovered. Validated to keep REAL at 47 (after
+    // the wide-9 mode-2 rot-vec fix) while improving synthetic fisheye (mode1 +3, mode4 +5) and
+    // getting the real all-sky fisheye corpus solving. Kill-switch SDRANGEL_CAMERA_STAR_DETECTOR_DISABLE_V2
+    // reverts to the legacy detector (byte-identical) for A/B. Read once.
+    static const bool detectorV2 = !qEnvironmentVariableIsSet("SDRANGEL_CAMERA_STAR_DETECTOR_DISABLE_V2");
     // V2 quality gate (A2): the minimum SNR a star recovered ONLY by the true pixel-count area
     // (one the legacy polygon-area would have rejected at the minArea gate) must have to be admitted.
     // This keeps confident faint point sources -- which help wide/fisheye recall -- while blocking

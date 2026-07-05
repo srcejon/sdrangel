@@ -8235,7 +8235,30 @@ bool CameraPlateSolver::SolverContext::hasAcceptableWideBrightAnchorSupport(cons
             || (brightDetectionsAgree && brightProjectedStarsAgree);
     }
 
-    return brightDetectionsAgree
+    // Wide direction-less (FoV / FoV+elevation start, no azimuth prior) brightness-consistency
+    // floor. The bright-detection / bright-projected agreement above is evadable by structured-blob
+    // garbage: a wrong wide pose over neg-blobs (uniform detection flux) can land 5 of its 8 bright
+    // blobs on bright catalog stars and even match 2 bright projected stars, satisfying the tests
+    // below, while its detection<->catalog brightness ordering stays scrambled (brightnessRankError
+    // ~0.29-0.32). Genuine wide-fisheye solves separate cleanly: every one that carries a high rank
+    // error matches >= 7 bright detections (dense all-sky fisheye, e.g. stars-wide-3 at rankError
+    // 0.30 / 8 bright matched), and the only genuine direction-less solves that lean on <= 5 bright
+    // matches keep a consistent ordering (<= 0.21). So require either >= 6 matched bright detections
+    // or a consistent brightness ordering; neg-blobs has neither.
+    //
+    // The floor is scoped to the direction-less start modes. When the user supplies an azimuth/
+    // elevation prior (FovAzEl and up) the pose is already pinned, so the search cannot wander onto
+    // a brightness-scrambled garbage basin; there the floor only risks vetoing a genuinely faint
+    // guided field whose correct pose legitimately matches few bright stars with a high rank error
+    // (e.g. synth-fisheye-044 in mode 4: 4 bright matched, rankError 0.35).
+    const bool brightnessOrderingSupported =
+        plateSolveStartUsesDirection(settings)
+        || (evaluation.matchedBrightDetections >= 6)
+        || !std::isfinite(evaluation.brightnessRankError)
+        || (evaluation.brightnessRankError <= 0.25);
+
+    return brightnessOrderingSupported
+        && brightDetectionsAgree
         && (brightProjectedStarsAgree || (evaluation.matchedBrightDetections >= 4));
 }
 

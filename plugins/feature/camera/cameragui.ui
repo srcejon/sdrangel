@@ -645,6 +645,20 @@
        </widget>
       </item>
       <item>
+       <widget class="ButtonSwitch" name="windowOverlayButton">
+        <property name="toolTip">
+         <string>Overlay SDRangel windows</string>
+        </property>
+        <property name="text">
+         <string/>
+        </property>
+        <property name="icon">
+         <iconset resource="cameraicons.qrc">
+          <normaloff>:/camera/icons/layers.png</normaloff>:/camera/icons/layers.png</iconset>
+        </property>
+       </widget>
+      </item>
+      <item>
        <widget class="ButtonSwitch" name="altAzGridButton">
         <property name="toolTip">
          <string>Overlay azimuthal grid</string>

@@ -1951,6 +1951,9 @@ void CameraGUI::displaySettings()
     ui->spectrumOverlayButton->setChecked(std::any_of(m_settings.m_spectrumOverlays.cbegin(), m_settings.m_spectrumOverlays.cend(), [](const CameraSettings::SpectrumOverlay& overlay) {
         return overlay.m_enabled && !overlay.m_device.isEmpty();
     }));
+    ui->windowOverlayButton->setChecked(std::any_of(m_settings.m_windowOverlays.cbegin(), m_settings.m_windowOverlays.cend(), [](const CameraSettings::WindowOverlay& overlay) {
+        return overlay.m_enabled && !overlay.m_windowClass.isEmpty();
+    }));
     updateSpectrumOverlaysTable();
     updateWindowOverlaysTable();
     updateWindowOverlayCaptureTimer();
@@ -2861,6 +2864,7 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->motionExclusionRemoveButton, &QToolButton::clicked, this, &CameraGUI::on_motionExclusionRemoveButton_clicked);
     QObject::connect(settingsUI()->motionExclusionTable, &QTableWidget::itemChanged, this, &CameraGUI::on_motionExclusionTable_itemChanged);
     QObject::connect(ui->spectrumOverlayButton, &QToolButton::toggled, this, &CameraGUI::on_spectrumOverlayButton_toggled);
+    QObject::connect(ui->windowOverlayButton, &QToolButton::toggled, this, &CameraGUI::on_windowOverlayButton_toggled);
     QObject::connect(ui->yoloButton, &QToolButton::toggled, this, &CameraGUI::on_yoloButton_toggled);
     QObject::connect(settingsUI()->yoloModelPathCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_yoloModelPathCombo_currentIndexChanged);
     if (settingsUI()->yoloModelPathCombo->lineEdit()) {
@@ -3885,6 +3889,11 @@ void CameraGUI::updateWindowOverlayControls()
     if (m_windowOverlayDownButton) {
         m_windowOverlayDownButton->setEnabled(hasRow && row < m_settings.m_windowOverlays.size() - 1);
     }
+    const bool anyEnabled = std::any_of(m_settings.m_windowOverlays.cbegin(), m_settings.m_windowOverlays.cend(), [](const CameraSettings::WindowOverlay& overlay) {
+        return overlay.m_enabled && !overlay.m_windowClass.isEmpty();
+    });
+    const QSignalBlocker blocker(ui->windowOverlayButton);
+    ui->windowOverlayButton->setChecked(anyEnabled);
 }
 
 void CameraGUI::updateWindowOverlayCaptureTimer()
@@ -3960,6 +3969,13 @@ void CameraGUI::applyWindowOverlaysFromTable()
     m_settings.m_windowOverlays = overlays;
     m_windowOverlayCapturedFrames.clear();
     m_windowOverlayLastCaptureMs.clear();
+    const bool anyEnabled = std::any_of(m_settings.m_windowOverlays.cbegin(), m_settings.m_windowOverlays.cend(), [](const CameraSettings::WindowOverlay& overlay) {
+        return overlay.m_enabled && !overlay.m_windowClass.isEmpty();
+    });
+    {
+        const QSignalBlocker blocker(ui->windowOverlayButton);
+        ui->windowOverlayButton->setChecked(anyEnabled);
+    }
     applySetting("windowOverlays");
     updateWindowOverlayCaptureTimer();
     captureWindowOverlays();
@@ -9662,6 +9678,30 @@ void CameraGUI::on_spectrumOverlayButton_toggled(bool checked)
         }
     }
     applySetting("spectrumOverlays");
+}
+
+void CameraGUI::on_windowOverlayButton_toggled(bool checked)
+{
+    if (checked && m_settings.m_windowOverlays.isEmpty())
+    {
+        CameraSettings::WindowOverlay overlay;
+        const QList<QMdiSubWindow*> windows = availableWindowOverlayWindows();
+        if (!windows.isEmpty())
+        {
+            overlay.m_windowClass = windowOverlayClassName(windows.first());
+            overlay.m_windowTitle = windows.first()->windowTitle();
+        }
+        m_settings.m_windowOverlays.append(overlay);
+    }
+
+    for (CameraSettings::WindowOverlay& overlay : m_settings.m_windowOverlays) {
+        overlay.m_enabled = checked;
+    }
+
+    updateWindowOverlaysTable();
+    applySetting("windowOverlays");
+    updateWindowOverlayCaptureTimer();
+    captureWindowOverlays();
 }
 
 void CameraGUI::on_yoloButton_toggled(bool checked)

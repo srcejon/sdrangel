@@ -803,6 +803,7 @@ private slots:
     void on_motionExclusionRemoveButton_clicked();
     void on_motionExclusionTable_itemChanged(QTableWidgetItem *item);
     void on_spectrumOverlayButton_toggled(bool checked);
+    void on_windowOverlayButton_toggled(bool checked);
     void on_yoloButton_toggled(bool checked);
     void on_yoloModelPathCombo_currentIndexChanged(int index);
     void on_yoloModelPathEdit_editingFinished();

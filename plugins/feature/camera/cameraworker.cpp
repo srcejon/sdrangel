@@ -617,8 +617,18 @@ void CameraWorker::maybeAdjustAutoExposureGain(const CameraPipelineFrame& frame)
     const double maxChange = qBound(0.01, m_settings.m_autoExposureMaxChangePercent / 100.0, 1.0);
     const double maxLogChange = std::log(1.0 + maxChange);
     const double error = std::log(target / measured);
-    const double saturationHighLimit = target >= 0.95 ? 0.12 : 0.04;
-    const double saturationLowLimit = target >= 0.95 ? 0.08 : 0.02;
+    double saturationLowLimit = 0.02;
+    double saturationHighLimit = 0.04;
+    if (target >= 0.85)
+    {
+        saturationLowLimit = 0.08;
+        saturationHighLimit = 0.12;
+    }
+    else if (target >= 0.70)
+    {
+        saturationLowLimit = 0.05;
+        saturationHighLimit = 0.08;
+    }
     if (m_autoExposure.m_saturatedFraction > saturationHighLimit) {
         ++m_autoExposure.m_saturatedFrames;
     } else if ((m_autoExposure.m_saturatedFraction < saturationLowLimit) || (error > 0.0)) {
@@ -687,6 +697,15 @@ void CameraWorker::maybeAdjustAutoExposureGain(const CameraPipelineFrame& frame)
         return;
     }
 
+    if (saturated && (error > deadband))
+    {
+        m_autoExposure.m_adjustDirection = 0;
+        m_autoExposure.m_adjustDirectionFrames = 0;
+        logAutoExposure("highlight-limited", 1.0, m_settings.m_exposureTimeMs, m_settings.m_cameraGain);
+        reportAutoExposureGainToGUI(m_autoExposure.m_brightness, m_autoExposure.m_saturatedFraction);
+        return;
+    }
+
     const int adjustDirection = saturated ? -1 : (error > 0.0 ? 1 : -1);
     if (m_autoExposure.m_adjustDirection == adjustDirection) {
         ++m_autoExposure.m_adjustDirectionFrames;
@@ -706,6 +725,15 @@ void CameraWorker::maybeAdjustAutoExposureGain(const CameraPipelineFrame& frame)
     }
 
     double factor = std::exp(qBound(-maxLogChange, correctionError * 0.35, maxLogChange));
+
+    if (!saturated && (error > 0.0) && (m_autoExposure.m_saturatedFraction > saturationLowLimit))
+    {
+        const double headroom = qBound(
+            0.05,
+            (saturationHighLimit - m_autoExposure.m_saturatedFraction) / std::max(0.001, saturationHighLimit - saturationLowLimit),
+            1.0);
+        factor = std::min(factor, std::exp(maxLogChange * headroom));
+    }
 
     if (saturated)
     {

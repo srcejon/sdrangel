@@ -2279,6 +2279,16 @@ void CameraGUI::updateImageViewSmoothing()
         && qFuzzyIsNull(transform.m12())
         && qFuzzyIsNull(transform.m21());
     ui->imageView->setRenderHint(QPainter::SmoothPixmapTransform, !exactOneToOne);
+
+    for (QGraphicsItem *item : m_previewOverlayItems)
+    {
+        if (QGraphicsPixmapItem *pixmapItem = qgraphicsitem_cast<QGraphicsPixmapItem*>(item))
+        {
+            pixmapItem->setTransformationMode(!exactOneToOne || (qAbs(pixmapItem->scale() - 1.0) > 1e-4)
+                ? Qt::SmoothTransformation
+                : Qt::FastTransformation);
+        }
+    }
 }
 
 void CameraGUI::sendDisplayedFrameEvents(const QVector<QRect>& motionBoxes, const QVector<CameraPipelineDetection>& detections, const QVector<CameraPipelineMeteorPhotometry>& meteorPhotometry, const QVector<CameraPipelineTrackedObject>& trackedObjects, const QSize& imageSize, const QDateTime& captureDateTime)
@@ -2531,9 +2541,10 @@ void CameraGUI::updatePreviewOverlayItems()
         QGraphicsPixmapItem *pixmapItem = m_imageScene->addPixmap(pixmap);
         pixmapItem->setPos(overlay.m_offsetX, overlay.m_offsetY);
         pixmapItem->setScale(overlay.m_scale);
-        pixmapItem->setTransformationMode(qAbs(overlay.m_scale - 1.0) > 1e-4
-            ? Qt::SmoothTransformation
-            : Qt::FastTransformation);
+        pixmapItem->setTransformationMode(ui->imageView->renderHints().testFlag(QPainter::SmoothPixmapTransform)
+            || (qAbs(overlay.m_scale - 1.0) > 1e-4)
+                ? Qt::SmoothTransformation
+                : Qt::FastTransformation);
         pixmapItem->setZValue(1.7);
         m_previewOverlayItems.append(pixmapItem);
     }

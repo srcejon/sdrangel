@@ -128,6 +128,22 @@ REAL/FISHEYE/WIDE. No REAL regression — the "Harden wide-9, then default-on" p
   wide-guided fisheye gate shipped with zero coverage until mode-4 rows were added). Add the
   wrong-FoV and more near-boundary negatives WS3 identified as missing — they're what reclassified
   `residual` from "inert" to "load-bearing".
+  **PARTLY DONE (2026-07-05, commit pending).** Harness now supports an `expectSolved` column: a row
+  with `expectSolved=0` PASSES iff the solver REJECTS it, so negatives are proper standing gates
+  instead of being read inverted (REAL byte-identical — rows without the column default to
+  `expectSolved=true`). Added `test/star-tests-negatives-fov.csv` (grossly-wrong trusted FoV on real
+  fields). **It immediately earned its keep — two findings:** (1) **wrong-FoV FALSE POSITIVES** — the
+  solver *accepts* a spurious solve at a grossly wrong trusted FoV on DEEP fields: pollux (true 1.27°)
+  solves at FoV 0.4°, stars-narrow-5 (true 1.29°) solves at FoV 6.0°. This is a depth-induced FoV-alias
+  (the deep catalog offers enough coincidental matches at the wrong scale), analogous to the
+  depth-induced roll-alias — the real gap the `fov` gate should close. The two too-far-the-other-way
+  cases (pollux 5.0°, narrow-5 0.35°) correctly reject. (2) **cost/fragility** — a grossly-wrong FoV on
+  a deep field is pathologically expensive (pollux@5° took 51 s, matched 544 before rejecting) and the
+  run intermittently aborts; extreme-FoV inputs stress the search. The mixture verifier (1a) is the
+  natural discriminator for the false positives (a wrong-scale solve should score low) — the fix task
+  should A/B it there. Follow-ups: fix the wrong-FoV accept gap; add fast SPARSE-field wrong-FoV
+  negatives (deep fields are too slow for a routine gate); convert the garbage negatives to
+  `expectSolved=0` too.
 
 ### Track 1 — Acceptance/selection modernization (the astrometry.net lesson)
 

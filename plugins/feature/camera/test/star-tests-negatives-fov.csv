@@ -1,0 +1,5 @@
+image,time,latitude,longitude,altitude,azimuth,elevation,roll,fov,projection,cx,cy,k1,stars,plateSolveMaxMagnitude,plateSolveStartMode,roiX,roiY,roiW,roiH,expectedRoll,expectedRollTolerance,starPositions,expectSolved
+"images/pollux.jpg",2026-03-18 21:12:59,51.368900,-0.121389,0.0,215.79,63.11,0.0,5.0,"rectilinear",0.0,0.0,0.0,"",15,3,0,0,0,0,,,,0
+"images/pollux.jpg",2026-03-18 21:12:59,51.368900,-0.121389,0.0,215.79,63.11,0.0,0.4,"rectilinear",0.0,0.0,0.0,"",15,3,0,0,0,0,,,,0
+"images/stars-narrow-5.jpg",2026-01-28 23:40:22,51.366299,-0.125000,100.0,199.02,58.41,15.34,6.0,"rectilinear",0.0,0.0,0.0,"",16.0,3,0,0,0,0,,,,0
+"images/stars-narrow-5.jpg",2026-01-28 23:40:22,51.366299,-0.125000,100.0,199.02,58.41,15.34,0.35,"rectilinear",0.0,0.0,0.0,"",16.0,3,0,0,0,0,,,,0

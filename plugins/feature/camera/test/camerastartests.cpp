@@ -115,6 +115,11 @@ struct StarTestCase
     double maxMagnitude = std::numeric_limits<double>::quiet_NaN();
     double expectedRoll = std::numeric_limits<double>::quiet_NaN();
     double expectedRollTolerance = std::numeric_limits<double>::quiet_NaN();
+    // Negative-test support (Track 0e): a row may declare it EXPECTS to be rejected (garbage,
+    // wrong-FoV, near-boundary wrong time/place). When false the case PASSES iff the solver returns
+    // solved=false, so negatives are proper standing gates instead of being read inverted. Optional
+    // column "expectSolved" (1/true default, 0/false for a negative).
+    bool expectSolved = true;
     CameraSettings::PlateSolveStartMode plateSolveStartMode = CameraSettings::PlateSolveStartFovAzElRollLens;
     int roiX = 0;
     int roiY = 0;
@@ -921,6 +926,16 @@ bool readTestCases(const QString& csvPath, QVector<StarTestCase>& testCases)
         }
         test.expectedRoll = parseOptionalDouble(header, fields, QStringLiteral("expectedRoll"), lineNumber, &ok);
         test.expectedRollTolerance = parseOptionalDouble(header, fields, QStringLiteral("expectedRollTolerance"), lineNumber, &ok);
+        const int expectSolvedIndex = header.indexOf(QStringLiteral("expectSolved"));
+        if (expectSolvedIndex >= 0)
+        {
+            const QString expectSolvedValue = fields.value(expectSolvedIndex).trimmed().toLower();
+            if (!expectSolvedValue.isEmpty()) {
+                test.expectSolved = !((expectSolvedValue == QStringLiteral("0"))
+                    || (expectSolvedValue == QStringLiteral("false"))
+                    || (expectSolvedValue == QStringLiteral("no")));
+            }
+        }
         if (std::isfinite(test.expectedRollTolerance) && (test.expectedRollTolerance < 0.0))
         {
             std::cerr << "Line " << lineNumber << ": expectedRollTolerance cannot be negative\n";
@@ -1911,7 +1926,11 @@ int runTests(const QString& csvPath, const QString& outputDirectory)
             diagnosticCatalog);
         const QStringList poseMismatches = expectedPoseMismatches(test, result.frame);
         const bool solved = result.frame->m_plateSolve.m_solved;
-        const bool pass = solved && missing.isEmpty() && positionMismatches.isEmpty() && poseMismatches.isEmpty();
+        // A negative row (expectSolved=false) passes iff the solver correctly REJECTS it. A positive
+        // row passes on a correct, well-anchored solve as before.
+        const bool pass = test.expectSolved
+            ? (solved && missing.isEmpty() && positionMismatches.isEmpty() && poseMismatches.isEmpty())
+            : (!solved);
         if (!pass) {
             ++failures;
         }

@@ -261,6 +261,39 @@ P-A/P-C removed the redundant-recompute tier. Next, in order:
   merges: rollAliasCheck's 12 final passes, rescue pass-1, the recenter-ladder batches, the
   125-point lens grid. The worker-context pattern exists; P-A's cache is per-context (thread-safe
   by construction).
+  **ASSESSED (2026-07-06) — no safe quick win; here is the map for the dedicated effort.** The
+  proven deterministic pattern is `QThreadPool` + per-worker `SolverContext(m_owner)` +
+  `copySearchStateFrom(*this)` + serial index-order merge (see `buildBrightPairBlindSeeds` ~6147 and
+  the `evaluateRecoveryPosesParallel` lambda in solve() ~1309, already used for rollRecovery/fovPinned).
+  Applying it to the remaining stages runs into two walls:
+  (1) **The 64s is in `searchBestPose`'s core** (narrow-guided multi-hypothesis, blind grids), which is
+  NOT a pure map — it is riddled with early-exit `break`s and candidate-pool mutation, so a naive
+  parallel map evaluates poses the serial version skips and the keep-best diverges. Safe parallelism
+  there needs restructuring to split the pure evaluate-grid phase from the early-exit refinement.
+  (2) **The clean map+reduce stages are either small-N or state-uncertain.** `hasCompetitiveRollAlias`
+  (~10682) IS a clean map+reduce (12 independent rollOffsets → `evaluateFinalMatchPass` + a reduction:
+  keep-best-adoptable-by-logOdds first-on-tie / OR-ambiguous / last-ambiguous-reason, no cross-iteration
+  break) — but at only 12 items × ~12 ms across ~94 calls, per-call threadpool spawn overhead would eat
+  the ~11 s. The **125-point lens grid** (cameraplatesolver.cpp ~872, pure `evalLens` argmax via
+  `isBetterSeedAnchored`, no early-exit) is the best-shaped safe target (N=125, ~1.25 s/wide-case), BUT
+  it is only byte-identical if `evaluatePose` is state-PURE across the 125 sequential calls — if it
+  accumulates search state (e.g. `m_weakModeNormalizationPixels` via max()) that a later call reads, the
+  serial loop is order-dependent and per-worker copies diverge.
+  **AUDIT + EMPIRICAL TRIAL DONE (2026-07-06) — lens grid is safe but a NET SLOWDOWN; reverted.** The
+  purity audit PASSED: the copied scoring-preference members are written only in solve()/searchBestPose
+  setup (~190, ~12073), never during pose evaluation, and `evaluatePose`'s only member write is its own
+  per-context projected-catalog scratch (overwritten each call). So the lens grid WAS parallelized with
+  the per-worker-context + serial index-order argmax pattern and **validated byte-identical (REAL 47/48
+  IDENTICAL)** — determinism is fine. BUT it ran **~1.7x SLOWER** on every wide case (wide-7 238->382 ms,
+  wide-8 246->429, wide-9 2670->4731): the grid is a cheap, frequently-reinvoked stage, so the
+  per-invocation `QThreadPool` spawn + `copySearchStateFrom` per worker dominates the ~ms of compute
+  saved. Reverted. **Conclusion (now empirical): the safe/clean stages are NOT worth parallelizing — the
+  wide lens path is already fast (~240 ms) and is not the bottleneck; the 64 s is in the NARROW-guided
+  `searchBestPose`, which is early-exit-laden and cannot be parallelized without restructuring its pure
+  evaluate-grid phase apart from the refinement, AND using a persistent/shared thread pool (not
+  one-per-call) to avoid the spawn overhead this trial exposed.** That is the genuine T2 effort — a
+  focused project, not a drop-in; a rushed version risks the byte-identical GUI==harness guarantee
+  (the WS1a saga).
 - **T3 ULP-affecting micro-items** (projectVector trig elimination; **pin the Wahba convention
   with a unit test** and delete the 4× fallback) — one at a time, full A/B, revert on any REAL delta.
 - Skip P-E/P-F/P-G (documented non-bit-identical wrinkles, marginal value).

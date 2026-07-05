@@ -202,6 +202,16 @@ REAL/FISHEYE/WIDE. No REAL regression — the "Harden wide-9, then default-on" p
 P-A/P-C removed the redundant-recompute tier. Next, in order:
 - **T1 Re-profile** (post-P-A/P-C) on the slowest cases; the prior ranking (outer retry ladder ~30 s
   worst case, rollAliasCheck, acceptance, rollRecovery) predates these changes.
+  **DONE (2026-07-05, aggregated across REAL from profileSummary).** `searchBestPose` DOMINATES:
+  64.3 s total / 684 ms avg — ~3.5× the next stage. Then search.guided-direction 18.2 s (a subset of
+  searchBestPose), acceptance 13.8 s, rollAliasCheck 13.2 s (12 passes), rollRecoveryFinalPass 13.0 s
+  (already parallel), full-refine 12.3 s, solve.catalog 11.6 s (I/O, now offline), fovPinnedFinalPass
+  5.6 s, coarse-refine 1.9 s. **Implication:** the biggest win is parallelizing/pruning searchBestPose
+  itself, but that is the core multi-hypothesis search with the ULP-divergence history — highest value,
+  highest determinism risk. The safe T2 targets (rollAliasCheck 12 passes, the lens grid) are each only
+  ~13 s, so a determinism-preserving win there is modest. A go/no-go on accepting parallelism in
+  searchBestPose (with deterministic index-order reductions + a byte-identical REAL gate) is the real
+  decision.
 - **T2 Parallelize the embarrassingly-parallel serial stages** with deterministic index-order
   merges: rollAliasCheck's 12 final passes, rescue pass-1, the recenter-ladder batches, the
   125-point lens grid. The worker-context pattern exists; P-A's cache is per-context (thread-safe

@@ -224,6 +224,15 @@ QString CameraPlateSolver::SolverContext::stripQuotedField(const QString& value)
 
 QString CameraPlateSolver::SolverContext::downloadedCatalogDir()
 {
+    // Track 0a: point every catalog + Siril cache path at a versioned snapshot dir instead of the
+    // per-user AppData location. Combined with SDRANGEL_CAMERA_PLATE_SOLVER_OFFLINE this makes a
+    // solve fully reproducible from a frozen cache, so the harness is a hermetic gate. The override
+    // is the equivalent of the AppData ".../camera" dir (it holds siril-spcc-cache/, the base
+    // catalog files, etc.).
+    const QByteArray overrideDir = qgetenv("SDRANGEL_CAMERA_PLATE_SOLVER_CACHE_DIR");
+    if (!overrideDir.isEmpty()) {
+        return QString::fromLocal8Bit(overrideDir);
+    }
     const QString baseDir = QStandardPaths::standardLocations(QStandardPaths::AppDataLocation).value(0);
     return QDir(baseDir).filePath(QString::fromUtf8(kDownloadedCatalogDir));
 }

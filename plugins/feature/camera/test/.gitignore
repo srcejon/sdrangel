@@ -5,3 +5,7 @@ vs-profile/
 star-tests-synthetic*.csv
 images-synthetic*/
 synth-*.log
+
+# Track 0a — portable hermetic Siril-catalog snapshot (regenerable Gaia SPCC data,
+# built on demand by refresh-catalog-snapshot.ps1, not committed)
+catalog-snapshot/

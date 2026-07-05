@@ -102,10 +102,19 @@ REAL/FISHEYE/WIDE. No REAL regression — the "Harden wide-9, then default-on" p
 
 ### Track 0 — Measurement first (the unlock; do before any further solver tuning)
 
-- **0a Hermetic catalog for the harness.** Snapshot the Siril region/range cache the corpus needs
-  into a versioned local archive; add a harness env (`..._OFFLINE=1`) that fails loudly on any
-  network miss instead of fetching. Kills the pollux-class nondeterminism, makes REAL a true
-  hermetic gate, and makes RAND2 runnable without re-downloading. *Cheap; highest value per line.*
+- **0a Hermetic catalog for the harness. SHIPPED** (commit pending, worktree `-review`). Added the
+  offline gate `SDRANGEL_CAMERA_PLATE_SOLVER_OFFLINE`: both Siril SPCC network egress points
+  (`fetchSirilRangeFromSource`, `prefetchSirilMergedRanges`) refuse+`qWarning` on a cache miss instead
+  of fetching, so any incompleteness fails loudly. Added `SDRANGEL_CAMERA_PLATE_SOLVER_CACHE_DIR` to
+  point the whole catalog root at a versioned snapshot. Tooling: `test/hermetic.ps1` (run a split
+  offline, report offline-miss count + baseline diff) and `test/refresh-catalog-snapshot.ps1` (build a
+  portable REAL-subset snapshot — the full AppData cache is ~11 GB of accumulated ranges, so the
+  snapshot is gitignored/regenerable like the corpus images). **Verified:** 32/48 REAL cases use the
+  Siril SPCC (Gaia DR3) path; under OFFLINE all 48 solve from the warm cache with ZERO network requests
+  and the verdict set IDENTICAL to the online baseline — REAL is now a hermetic gate and pollux's 1
+  failure is confirmed deterministic (frozen cache), not a network artifact. *Cheap; highest value per
+  line.* Follow-on: build+commit-or-archive the portable snapshot so a fresh checkout is hermetic too
+  (currently hermetic against this machine's warm AppData cache).
 - **0b Real-fisheye corpus.** The synthetic fisheye oracle is disqualified for tuning. Capture
   20–30 real all-sky/wide frames (the rig exists — the `stars-wide-*` sources) across pointings/
   times, with named-anchor validation like the REAL suite. This is the gate every fisheye

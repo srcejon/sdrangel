@@ -20,6 +20,18 @@
 
 // Solve pipeline: catalog fetch/build, seed generation, pose evaluation + matching (non-static SolverContext members, WS5).
 
+// Track 0a: hermetic-catalog offline mode. When SDRANGEL_CAMERA_PLATE_SOLVER_OFFLINE is set the
+// solver must NOT reach the network -- every Siril SPCC byte-range request that misses the
+// on-disk/in-memory cache fails loudly instead of silently fetching. This turns the test corpus
+// into a reproducible gate: given a warmed cache, a solve is a pure function of the frozen bytes,
+// so the pollux-class nondeterminism (a silent re-fetch returning subtly different catalog data)
+// can no longer perturb results. Read once per process (the harness sets the env before launch).
+static bool sirilOfflineModeEnabled()
+{
+    static const bool offline = qEnvironmentVariableIntValue("SDRANGEL_CAMERA_PLATE_SOLVER_OFFLINE") != 0;
+    return offline;
+}
+
 void CameraPlateSolver::SolverContext::clearProfileTimings()
 {
     m_profileTimingOrder.clear();
@@ -123,6 +135,15 @@ QVector<CameraPlateSolver::SolverContext::CatalogStar> CameraPlateSolver::Solver
 
 QByteArray CameraPlateSolver::SolverContext::fetchSirilRangeFromSource(int chunkIndex, qint64 firstByte, qint64 lastByte, int sourceIndex)
 {
+    // Track 0a: in offline mode a cache miss is a hard, visible failure -- never a silent fetch.
+    if (sirilOfflineModeEnabled())
+    {
+        qWarning().nospace() << "CameraPlateSolver: OFFLINE -- refusing Siril SPCC network fetch (cache miss)"
+                   << " source=" << sirilSpccSourceName(sourceIndex)
+                   << " chunk=" << chunkIndex << " bytes=" << firstByte << "-" << lastByte;
+        return {};
+    }
+
     if (!m_networkManager)
     {
         qWarning() << "CameraPlateSolver: Siril SPCC range request has no active network manager"
@@ -376,6 +397,18 @@ void CameraPlateSolver::SolverContext::prefetchSirilMergedRanges(const QVector<S
     }
 
     if (missingRanges.isEmpty()) {
+        return;
+    }
+
+    // Track 0a: in offline mode do not open any network requests for the missing ranges. Each is
+    // reported so an incomplete snapshot is obvious; the downstream per-range fetch refuses too
+    // (fetchSirilRangeFromSource) and the catalog load fails loudly rather than silently fetching.
+    if (sirilOfflineModeEnabled())
+    {
+        const SirilMergedRange& first = missingRanges.first();
+        qWarning().nospace() << "CameraPlateSolver: OFFLINE -- " << missingRanges.size()
+                   << " Siril SPCC range(s) missing from cache; not fetching. First: chunk="
+                   << first.chunkIndex << " bytes=" << first.firstByte << "-" << first.lastByte;
         return;
     }
 

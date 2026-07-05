@@ -2430,9 +2430,36 @@ void CameraPlateSolver::requestCancellation()
     }
 }
 
+// R1: default hard wall-clock budget for one top-level solve() (ms). The slowest legitimate
+// solve in the corpus is the dense narrow-7 field at ~30s; this 120s ceiling is >4x that, so
+// it never trips a real solve but caps a pathological or gate-ablated runaway (WS3 pass-2 found
+// the rollAlias reject is one ablation away from a multi-minute solve). 0 disables the bound.
+static constexpr qint64 kDefaultSolveBudgetMs = 120000;
+
+static qint64 resolveSolveBudgetMs()
+{
+    const QByteArray budgetOverride = qgetenv("SDRANGEL_CAMERA_PLATE_SOLVER_BUDGET_MS");
+    if (!budgetOverride.isEmpty()) {
+        bool ok = false;
+        const qint64 value = budgetOverride.toLongLong(&ok);
+        if (ok && (value >= 0)) {
+            return value;
+        }
+    }
+    return kDefaultSolveBudgetMs;
+}
+
 bool CameraPlateSolver::isCancellationRequested() const
 {
-    return m_cancelRequested.load();
+    if (m_cancelRequested.load()) {
+        return true;
+    }
+    // R1: a top-level solve that blows its wall-clock budget is treated as cancelled, so every
+    // existing checkpoint (inner solve, worker contexts, outer retry ladders) unwinds and the
+    // solve returns best-so-far instead of running for minutes. The budget is far above the
+    // slowest legitimate solve, so this never affects a real result.
+    const qint64 budgetMs = m_solveBudgetMs.load();
+    return (budgetMs > 0) && m_solveWallClock.isValid() && (m_solveWallClock.elapsed() > budgetMs);
 }
 
 // The configured Az/El search radius is an upper bound on how far the true pointing might
@@ -2459,6 +2486,11 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
     // from a previous solve doesn't block subsequent ones.
     m_cancelRequested.store(false);
     m_cancelNetworkRequests.store(false);
+    // R1: arm the per-solve wall-clock deadline. Started here on the solver thread before any
+    // worker threads spawn; isCancellationRequested() reports true once it is exceeded so the
+    // solve is provably time-bounded regardless of input or acceptance-gate configuration.
+    m_solveBudgetMs.store(resolveSolveBudgetMs());
+    m_solveWallClock.start();
 
     // Dump every setting that drives the solve so a GUI run and a test-harness run
     // can be diffed line-for-line when they disagree on the same image. Split across

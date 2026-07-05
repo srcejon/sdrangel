@@ -47,6 +47,7 @@ constexpr bool kPipelineLatencyDebug = false;
 }
 
 MESSAGE_CLASS_DEFINITION(CameraPostProcessor::MsgSpectrumFrame, Message)
+MESSAGE_CLASS_DEFINITION(CameraPostProcessor::MsgWindowOverlayFrames, Message)
 MESSAGE_CLASS_DEFINITION(CameraPostProcessor::MsgReportFrame, Message)
 MESSAGE_CLASS_DEFINITION(CameraPostProcessor::MsgClearTrackedObjectHeatMap, Message)
 MESSAGE_CLASS_DEFINITION(CameraPostProcessor::MsgSaveCurrentImage, Message)
@@ -897,6 +898,23 @@ bool CameraPostProcessor::handleMessage(const Message& cmd)
         m_spectrumViewImage = frameMsg.getImage();
         return true;
     }
+    else if (MsgWindowOverlayFrames::match(cmd))
+    {
+        MsgWindowOverlayFrames& frameMsg = (MsgWindowOverlayFrames&) cmd;
+        m_windowOverlayFrames = frameMsg.getFrames();
+
+        if (!m_lastFrame.m_image.isNull())
+        {
+            m_lastFrame.m_manualPreviewFrame = true;
+            QVector<PreviewTextLabel> previewTextLabels;
+            QVector<PreviewRectItem> previewRectItems;
+            QVector<CameraPipelineTrackedObject> trackedObjects;
+            const QImage preview = applyPostProcessing(m_lastFrame, false, &previewTextLabels, &previewRectItems, &trackedObjects);
+            reportFrameToGUI(preview, m_lastFrame, previewTextLabels, previewRectItems, trackedObjects);
+        }
+
+        return true;
+    }
     else if (MsgClearTrackedObjectHeatMap::match(cmd))
     {
         m_trackedObjectHeatMap = QImage();
@@ -989,7 +1007,7 @@ void CameraPostProcessor::applySettings(const CameraSettings& settings, const QL
         "overlayFontFamily", "overlayFontScale",
         "motionBoxColor", "starColor", "showStarDetectionBoxes",
         "plateSolveLabelMode", "plateSolveLabelHideSyntheticNames", "yoloEnabled",
-        "overlaySpectrum", "spectrumDevice", "spectrumOffsetX", "spectrumOffsetY", "spectrumScale",
+        "overlaySpectrum", "spectrumDevice", "spectrumOffsetX", "spectrumOffsetY", "spectrumScale", "windowOverlays",
         "latitude", "longitude", "altitude", "azimuth", "elevation", "roll", "fov",
         "lensProjection", "lensCenterOffsetX", "lensCenterOffsetY", "lensDistortionK1", "owmAPIKey",
         "yoloBoxColor"
@@ -1050,6 +1068,10 @@ void CameraPostProcessor::applySettings(const CameraSettings& settings, const QL
 
     if (force || settingsKeys.contains("spectrumDevice")) {
         m_spectrumViewImage = QImage();
+    }
+
+    if (force || settingsKeys.contains("windowOverlays")) {
+        m_windowOverlayFrames.clear();
     }
 
     if (force || settingsKeys.contains("owmAPIKey") || settingsKeys.contains("latitude") || settingsKeys.contains("longitude"))
@@ -1625,6 +1647,36 @@ void CameraPostProcessor::applySpectrumOverlay(QImage& image) const
     QPainter painter(&image);
     painter.setCompositionMode(QPainter::CompositionMode_SourceOver);
     painter.drawImage(m_settings.m_spectrumOffsetX, m_settings.m_spectrumOffsetY, specSrc);
+    PROFILER_STOP(__FUNCTION__);
+}
+
+void CameraPostProcessor::applyWindowOverlays(QImage& image) const
+{
+    PROFILER_START();
+
+    QPainter painter(&image);
+    painter.setCompositionMode(QPainter::CompositionMode_SourceOver);
+
+    for (const WindowOverlayFrame& frame : m_windowOverlayFrames)
+    {
+        if (frame.m_image.isNull()) {
+            continue;
+        }
+
+        QImage overlayImage = frame.m_image;
+        if (qAbs(frame.m_scale - 1.0) > 1e-4)
+        {
+            const int width = static_cast<int>(std::round(overlayImage.width() * frame.m_scale));
+            const int height = static_cast<int>(std::round(overlayImage.height() * frame.m_scale));
+            if (width <= 0 || height <= 0) {
+                continue;
+            }
+            overlayImage = overlayImage.scaled(width, height, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+        }
+
+        painter.drawImage(frame.m_offsetX, frame.m_offsetY, overlayImage);
+    }
+
     PROFILER_STOP(__FUNCTION__);
 }
 
@@ -2311,6 +2363,7 @@ QImage CameraPostProcessor::applyPostProcessing(const CameraPipelineFrame& frame
 
     const QImage& input = frame.m_image;
     const bool needsSpectrumOverlay = m_settings.m_overlaySpectrum && !m_spectrumViewImage.isNull();
+    const bool needsWindowOverlays = !m_windowOverlayFrames.isEmpty();
     const QString expandedOverlayText = expandOverlayTextTemplate();
     // Build the overlay text document once with font/style/HTML used for both the
     // empty-check and rendering, so we only call QTextDocument::setHtml() once per frame.
@@ -2336,7 +2389,8 @@ QImage CameraPostProcessor::applyPostProcessing(const CameraPipelineFrame& frame
         || !frame.m_motionBoxes.isEmpty()
         || (m_settings.m_yoloEnabled && !frame.m_detections.isEmpty())
         || !frame.m_starDetections.isEmpty()
-        || needsSpectrumOverlay;
+        || needsSpectrumOverlay
+        || needsWindowOverlays;
 
     if (!needsAny) {
         return input;
@@ -2379,6 +2433,9 @@ QImage CameraPostProcessor::applyPostProcessing(const CameraPipelineFrame& frame
     }
     if (needsSpectrumOverlay) {
         applySpectrumOverlay(result);
+    }
+    if (needsWindowOverlays) {
+        applyWindowOverlays(result);
     }
     if (m_settings.m_overlayDateTime) {
         applyDateTimeOverlay(result, drawPreviewText, previewTextLabels); 

@@ -69,7 +69,10 @@ class QLabel;
 class QDialog;
 class QDoubleSpinBox;
 class QGraphicsRectItem;
+class QMdiSubWindow;
 class QProgressDialog;
+class QPushButton;
+class QTableWidget;
 class QTableWidgetItem;
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
 class QCamera;
@@ -190,6 +193,14 @@ private:
         AccessoryAlpacaPortRole
     };
 
+    enum WindowOverlayComboRole
+    {
+        WindowOverlayClassRole = Qt::UserRole + 200,
+        WindowOverlayTitleRole,
+        WindowOverlayRegionObjectNameRole,
+        WindowOverlayRegionTitleRole
+    };
+
     Ui::CameraGUI* ui;
     PluginAPI* m_pluginAPI;
     FeatureUISet* m_featureUISet;
@@ -258,6 +269,16 @@ private:
     CameraDetectionHistory *m_detectionHistoryDialog;
     CameraHistogramDialog *m_histogramDialog;
     QProgressDialog *m_tensorRtProgressDialog = nullptr;
+    QWidget *m_windowOverlaysTab = nullptr;
+    QTableWidget *m_windowOverlaysTable = nullptr;
+    QPushButton *m_windowOverlayAddButton = nullptr;
+    QPushButton *m_windowOverlayRemoveButton = nullptr;
+    QPushButton *m_windowOverlayUpButton = nullptr;
+    QPushButton *m_windowOverlayDownButton = nullptr;
+    QTimer m_windowOverlayCaptureTimer;
+    bool m_updatingWindowOverlaysTable = false;
+    QVector<qint64> m_windowOverlayLastCaptureMs;
+    QVector<CameraPostProcessor::WindowOverlayFrame> m_windowOverlayCapturedFrames;
     bool m_alpacaHasNamedGains;   // true if gains list has named entries
     bool m_alpacaHasNamedOffsets; // true if offsets list has named entries
     int m_alpacaCameraSizeX;
@@ -389,6 +410,19 @@ private:
     void updateHdrExposureControls();
     void updateHdrStackingControls();
     void updateScaleControls();
+    void createWindowOverlaysTab();
+    void updateWindowOverlaysTable();
+    void updateWindowOverlayControls();
+    void updateWindowOverlayCaptureTimer();
+    void applyWindowOverlaysFromTable();
+    void updateWindowOverlayRegionCombo(int row);
+    void captureWindowOverlays();
+    QList<QMdiSubWindow*> availableWindowOverlayWindows() const;
+    QMdiSubWindow* findWindowOverlayWindow(const CameraSettings::WindowOverlay& overlay) const;
+    QWidget* findWindowOverlayCaptureWidget(QMdiSubWindow* window, const CameraSettings::WindowOverlay& overlay) const;
+    int windowOverlayRowForWidget(const QWidget *widget) const;
+    static QString windowOverlayClassName(const QMdiSubWindow *window);
+    static QString windowOverlayDisplayName(const QMdiSubWindow *window);
     void updateVideoFileControls();
     void updateVideoPreRecordBufferMemoryLabel();
     void submitQtImageFrame(const QImage& image, qint64 playbackPositionMs = -1, int playbackFrameNumber = -1);

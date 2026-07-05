@@ -24,6 +24,7 @@
 #include <QIODevice>
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QJsonObject>
 #include <sstream>
 
 #include "util/simpleserializer.h"
@@ -115,6 +116,69 @@ QStringList deserializeStringList(const QString& json)
         }
     }
     return values;
+}
+
+QString serializeWindowOverlays(const QList<CameraSettings::WindowOverlay>& overlays)
+{
+    QJsonArray array;
+
+    for (const CameraSettings::WindowOverlay& overlay : overlays)
+    {
+        QJsonObject object;
+        object.insert(QStringLiteral("enabled"), overlay.m_enabled);
+        object.insert(QStringLiteral("windowClass"), overlay.m_windowClass);
+        object.insert(QStringLiteral("windowTitle"), overlay.m_windowTitle);
+        object.insert(QStringLiteral("regionObjectName"), overlay.m_regionObjectName);
+        object.insert(QStringLiteral("regionTitle"), overlay.m_regionTitle);
+        object.insert(QStringLiteral("offsetX"), overlay.m_offsetX);
+        object.insert(QStringLiteral("offsetY"), overlay.m_offsetY);
+        object.insert(QStringLiteral("scale"), overlay.m_scale);
+        object.insert(QStringLiteral("captureFps"), overlay.m_captureFps);
+        array.append(object);
+    }
+
+    return QString::fromUtf8(QJsonDocument(array).toJson(QJsonDocument::Compact));
+}
+
+QList<CameraSettings::WindowOverlay> deserializeWindowOverlays(const QString& json)
+{
+    QList<CameraSettings::WindowOverlay> overlays;
+    const QJsonDocument document = QJsonDocument::fromJson(json.toUtf8());
+
+    if (!document.isArray()) {
+        return overlays;
+    }
+
+    const QJsonArray array = document.array();
+    for (const QJsonValue& value : array)
+    {
+        if (!value.isObject()) {
+            continue;
+        }
+
+        const QJsonObject object = value.toObject();
+        CameraSettings::WindowOverlay overlay;
+        overlay.m_enabled = object.value(QStringLiteral("enabled")).toBool(true);
+        overlay.m_windowClass = object.value(QStringLiteral("windowClass")).toString();
+        overlay.m_windowTitle = object.value(QStringLiteral("windowTitle")).toString();
+        overlay.m_regionObjectName = object.value(QStringLiteral("regionObjectName")).toString();
+        overlay.m_regionTitle = object.value(QStringLiteral("regionTitle")).toString();
+        overlay.m_offsetX = qBound(CameraSettings::m_minSignedUiPixelOffset,
+                                   object.value(QStringLiteral("offsetX")).toInt(0),
+                                   CameraSettings::m_maxSignedUiPixelOffset);
+        overlay.m_offsetY = qBound(CameraSettings::m_minSignedUiPixelOffset,
+                                   object.value(QStringLiteral("offsetY")).toInt(0),
+                                   CameraSettings::m_maxSignedUiPixelOffset);
+        overlay.m_scale = qBound(CameraSettings::m_minWindowOverlayScale,
+                                 object.value(QStringLiteral("scale")).toDouble(1.0),
+                                 CameraSettings::m_maxWindowOverlayScale);
+        overlay.m_captureFps = qBound(CameraSettings::m_minWindowOverlayFps,
+                                      object.value(QStringLiteral("captureFps")).toDouble(2.0),
+                                      CameraSettings::m_maxWindowOverlayFps);
+        overlays.append(overlay);
+    }
+
+    return overlays;
 }
 }
 
@@ -388,6 +452,7 @@ void CameraSettings::resetToDefaults()
     m_spectrumOffsetX = 0;
     m_spectrumOffsetY = 0;
     m_spectrumScale = 1.0;
+    m_windowOverlays.clear();
     m_yoloEnabled = false;
     m_yoloModelPath.clear();
     m_yoloLabelsPath.clear();
@@ -696,6 +761,7 @@ QByteArray CameraSettings::serialize() const
     s.writeS32(274, static_cast<qint32>(m_scaleJustification));
     s.writeBool(276, m_dateTimeUtc);
     s.writeBool(275, m_trackObjectRange);
+    s.writeString(277, serializeWindowOverlays(m_windowOverlays));
 
     return s.final();
 }
@@ -1058,6 +1124,9 @@ bool CameraSettings::deserialize(const QByteArray& data)
         m_spectrumOffsetY = qBound(m_minSignedUiPixelOffset, m_spectrumOffsetY, m_maxSignedUiPixelOffset);
         d.readDouble(138, &m_spectrumScale, 1.0);
         m_spectrumScale = qBound(m_minSpectrumScale, m_spectrumScale, m_maxSpectrumScale);
+        QString windowOverlayJson;
+        d.readString(277, &windowOverlayJson, QString());
+        m_windowOverlays = deserializeWindowOverlays(windowOverlayJson);
         d.readString(139, &m_dateTimeFormat, "yyyy-MM-dd hh:mm:ss");
         d.readBool(276, &m_dateTimeUtc, false);
         d.readS32(140, &m_dateTimePosX, 4);
@@ -1986,6 +2055,16 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     if (settingsKeys.contains("spectrumScale")) {
         m_spectrumScale = qBound(m_minSpectrumScale, settings.m_spectrumScale, m_maxSpectrumScale);
     }
+    if (settingsKeys.contains("windowOverlays")) {
+        m_windowOverlays = settings.m_windowOverlays;
+        for (WindowOverlay& overlay : m_windowOverlays)
+        {
+            overlay.m_offsetX = qBound(m_minSignedUiPixelOffset, overlay.m_offsetX, m_maxSignedUiPixelOffset);
+            overlay.m_offsetY = qBound(m_minSignedUiPixelOffset, overlay.m_offsetY, m_maxSignedUiPixelOffset);
+            overlay.m_scale = qBound(m_minWindowOverlayScale, overlay.m_scale, m_maxWindowOverlayScale);
+            overlay.m_captureFps = qBound(m_minWindowOverlayFps, overlay.m_captureFps, m_maxWindowOverlayFps);
+        }
+    }
     if (settingsKeys.contains("dateTimeFormat")) {
         m_dateTimeFormat = settings.m_dateTimeFormat;
     }
@@ -2783,6 +2862,9 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("spectrumScale") || force) {
         ostr << " m_spectrumScale: " << m_spectrumScale;
+    }
+    if (settingsKeys.contains("windowOverlays") || force) {
+        ostr << " m_windowOverlays: " << m_windowOverlays.size();
     }
     if (settingsKeys.contains("dateTimeFormat") || force) {
         ostr << " m_dateTimeFormat: " << m_dateTimeFormat.toStdString();

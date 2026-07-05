@@ -24,6 +24,7 @@
 
 #include <QAction>
 #include <QApplication>
+#include <QAbstractItemView>
 #include <QCheckBox>
 #include <QClipboard>
 #include <QColorDialog>
@@ -42,9 +43,12 @@
 #include <QGraphicsSimpleTextItem>
 #include <QGraphicsView>
 #include <QGraphicsRectItem>
+#include <QHeaderView>
+#include <QHBoxLayout>
 #include <QInputDialog>
 #include <QLabel>
 #include <QMenu>
+#include <QMdiSubWindow>
 #include <QMouseEvent>
 #include <QLineEdit>
 #include <QNetworkReply>
@@ -61,6 +65,7 @@
 #include <QStandardItemModel>
 #include <QTableWidget>
 #include <QTableWidgetItem>
+#include <QTabWidget>
 #include <QTextStream>
 #include <QTimer>
 #include <QWheelEvent>
@@ -1119,6 +1124,7 @@ CameraGUI::CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *
     new DialogPositioner(m_settingsDialog, false);
     initialiseVideoRecordBitrateCombo();
     initialiseYouTubeBitrateCombo();
+    createWindowOverlaysTab();
 
 #ifndef CAMERA_TENSORRT_YOLO
     if (QStandardItemModel *yoloTargetModel = qobject_cast<QStandardItemModel*>(settingsUI()->yoloTargetCombo->model()))
@@ -1186,6 +1192,7 @@ CameraGUI::CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *
 
     connect(&m_statusTimer, &QTimer::timeout, this, &CameraGUI::updateStatus);
     connect(&m_imageSequenceTimer, &QTimer::timeout, this, &CameraGUI::advanceImageSequenceFrame);
+    connect(&m_windowOverlayCaptureTimer, &QTimer::timeout, this, &CameraGUI::captureWindowOverlays);
     connect(m_settingsDialog, &QDialog::finished, this, &CameraGUI::onSettingsDialogFinished);
     connect(&m_qtStillCaptureTimer, &QTimer::timeout, this, &CameraGUI::triggerQtStillCapture);
     connect(&m_dlm, &HttpDownloadManagerGUI::downloadComplete, this, &CameraGUI::handleYoloDownloadComplete);
@@ -1216,6 +1223,8 @@ CameraGUI::CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *
 
     displaySettings();
     applyAllSettings();
+    updateWindowOverlayCaptureTimer();
+    captureWindowOverlays();
     makeUIConnections();
     m_resizer.enableChildMouseTracking();
 
@@ -1956,6 +1965,8 @@ void CameraGUI::displaySettings()
     settingsUI()->spectrumOffsetYSlider->setValue(m_settings.m_spectrumOffsetY);
     settingsUI()->spectrumOffsetYValue->setText(QString::number(m_settings.m_spectrumOffsetY));
     settingsUI()->spectrumScaleSpin->setValue(m_settings.m_spectrumScale);
+    updateWindowOverlaysTable();
+    updateWindowOverlayCaptureTimer();
     {
         const bool yoloEnabled = m_settings.m_yoloEnabled;
         QComboBox *modelPathCombo = settingsUI()->yoloModelPathCombo;
@@ -3380,6 +3391,583 @@ void CameraGUI::updateScaleControls()
         settingsUI()->scaleOutputHeightLabel->setText(tr("Output: -"));
         settingsUI()->scaleCenterOffsetLabel->setText(tr("x: -, y: -"));
     }
+}
+
+void CameraGUI::createWindowOverlaysTab()
+{
+    if (!m_settingsDialog || m_windowOverlaysTab) {
+        return;
+    }
+
+    m_windowOverlaysTab = new QWidget(m_settingsDialog);
+    QVBoxLayout *mainLayout = new QVBoxLayout(m_windowOverlaysTab);
+
+    m_windowOverlaysTable = new QTableWidget(m_windowOverlaysTab);
+    m_windowOverlaysTable->setColumnCount(7);
+    m_windowOverlaysTable->setHorizontalHeaderLabels({
+        tr("On"),
+        tr("Window"),
+        tr("Area"),
+        tr("X"),
+        tr("Y"),
+        tr("Scale"),
+        tr("FPS")
+    });
+    m_windowOverlaysTable->setSelectionBehavior(QAbstractItemView::SelectRows);
+    m_windowOverlaysTable->setSelectionMode(QAbstractItemView::SingleSelection);
+    m_windowOverlaysTable->verticalHeader()->setVisible(false);
+    m_windowOverlaysTable->horizontalHeader()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
+    m_windowOverlaysTable->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
+    m_windowOverlaysTable->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Stretch);
+    m_windowOverlaysTable->horizontalHeader()->setSectionResizeMode(3, QHeaderView::ResizeToContents);
+    m_windowOverlaysTable->horizontalHeader()->setSectionResizeMode(4, QHeaderView::ResizeToContents);
+    m_windowOverlaysTable->horizontalHeader()->setSectionResizeMode(5, QHeaderView::ResizeToContents);
+    m_windowOverlaysTable->horizontalHeader()->setSectionResizeMode(6, QHeaderView::ResizeToContents);
+    mainLayout->addWidget(m_windowOverlaysTable);
+
+    QHBoxLayout *buttonLayout = new QHBoxLayout();
+    m_windowOverlayAddButton = new QPushButton(tr("Add"), m_windowOverlaysTab);
+    m_windowOverlayRemoveButton = new QPushButton(tr("Remove"), m_windowOverlaysTab);
+    m_windowOverlayUpButton = new QPushButton(tr("Up"), m_windowOverlaysTab);
+    m_windowOverlayDownButton = new QPushButton(tr("Down"), m_windowOverlaysTab);
+    buttonLayout->addWidget(m_windowOverlayAddButton);
+    buttonLayout->addWidget(m_windowOverlayRemoveButton);
+    buttonLayout->addWidget(m_windowOverlayUpButton);
+    buttonLayout->addWidget(m_windowOverlayDownButton);
+    buttonLayout->addStretch(1);
+    mainLayout->addLayout(buttonLayout);
+
+    settingsUI()->tabWidget->addTab(m_windowOverlaysTab, tr("Window Overlays"));
+
+    connect(m_windowOverlaysTable, &QTableWidget::itemSelectionChanged, this, &CameraGUI::updateWindowOverlayControls);
+    connect(m_windowOverlayAddButton, &QPushButton::clicked, this, [this]() {
+        CameraSettings::WindowOverlay overlay;
+        const QList<QMdiSubWindow*> windows = availableWindowOverlayWindows();
+        if (!windows.isEmpty())
+        {
+            overlay.m_windowClass = windowOverlayClassName(windows.first());
+            overlay.m_windowTitle = windows.first()->windowTitle();
+        }
+        m_settings.m_windowOverlays.append(overlay);
+        updateWindowOverlaysTable();
+        applySetting("windowOverlays");
+        updateWindowOverlayCaptureTimer();
+        captureWindowOverlays();
+    });
+    connect(m_windowOverlayRemoveButton, &QPushButton::clicked, this, [this]() {
+        if (!m_windowOverlaysTable) {
+            return;
+        }
+        const int row = m_windowOverlaysTable->currentRow();
+        if (row < 0 || row >= m_settings.m_windowOverlays.size()) {
+            return;
+        }
+        m_settings.m_windowOverlays.removeAt(row);
+        updateWindowOverlaysTable();
+        applySetting("windowOverlays");
+        updateWindowOverlayCaptureTimer();
+        captureWindowOverlays();
+    });
+    connect(m_windowOverlayUpButton, &QPushButton::clicked, this, [this]() {
+        if (!m_windowOverlaysTable) {
+            return;
+        }
+        const int row = m_windowOverlaysTable->currentRow();
+        if (row <= 0 || row >= m_settings.m_windowOverlays.size()) {
+            return;
+        }
+        m_settings.m_windowOverlays.swapItemsAt(row, row - 1);
+        updateWindowOverlaysTable();
+        m_windowOverlaysTable->selectRow(row - 1);
+        applySetting("windowOverlays");
+        updateWindowOverlayCaptureTimer();
+        captureWindowOverlays();
+    });
+    connect(m_windowOverlayDownButton, &QPushButton::clicked, this, [this]() {
+        if (!m_windowOverlaysTable) {
+            return;
+        }
+        const int row = m_windowOverlaysTable->currentRow();
+        if (row < 0 || row >= m_settings.m_windowOverlays.size() - 1) {
+            return;
+        }
+        m_settings.m_windowOverlays.swapItemsAt(row, row + 1);
+        updateWindowOverlaysTable();
+        m_windowOverlaysTable->selectRow(row + 1);
+        applySetting("windowOverlays");
+        updateWindowOverlayCaptureTimer();
+        captureWindowOverlays();
+    });
+    connect(settingsUI()->tabWidget, &QTabWidget::currentChanged, this, [this](int index) {
+        if (settingsUI()->tabWidget->widget(index) == m_windowOverlaysTab) {
+            updateWindowOverlaysTable();
+        }
+    });
+}
+
+void CameraGUI::updateWindowOverlaysTable()
+{
+    if (!m_windowOverlaysTable || m_updatingWindowOverlaysTable) {
+        return;
+    }
+
+    m_updatingWindowOverlaysTable = true;
+    const int selectedRow = m_windowOverlaysTable->currentRow();
+    m_windowOverlaysTable->setRowCount(m_settings.m_windowOverlays.size());
+    const QList<QMdiSubWindow*> windows = availableWindowOverlayWindows();
+
+    for (int row = 0; row < m_settings.m_windowOverlays.size(); ++row)
+    {
+        const CameraSettings::WindowOverlay& overlay = m_settings.m_windowOverlays.at(row);
+
+        QCheckBox *enabledCheck = new QCheckBox(m_windowOverlaysTable);
+        enabledCheck->setChecked(overlay.m_enabled);
+        enabledCheck->setToolTip(tr("Enable this window capture overlay"));
+        m_windowOverlaysTable->setCellWidget(row, 0, enabledCheck);
+        connect(enabledCheck, &QCheckBox::toggled, this, [this]() { applyWindowOverlaysFromTable(); });
+
+        QComboBox *windowCombo = new QComboBox(m_windowOverlaysTable);
+        windowCombo->setToolTip(tr("SDRangel window to capture"));
+        windowCombo->addItem(tr("Select window"), QString());
+        bool selectedWindowFound = overlay.m_windowClass.isEmpty() && overlay.m_windowTitle.isEmpty();
+        for (QMdiSubWindow *window : windows)
+        {
+            const int index = windowCombo->count();
+            windowCombo->addItem(windowOverlayDisplayName(window));
+            windowCombo->setItemData(index, windowOverlayClassName(window), WindowOverlayClassRole);
+            windowCombo->setItemData(index, window->windowTitle(), WindowOverlayTitleRole);
+            if ((windowOverlayClassName(window) == overlay.m_windowClass)
+                && (window->windowTitle() == overlay.m_windowTitle))
+            {
+                windowCombo->setCurrentIndex(index);
+                selectedWindowFound = true;
+            }
+        }
+        if (!selectedWindowFound)
+        {
+            const int index = windowCombo->count();
+            windowCombo->addItem(tr("Missing: %1").arg(overlay.m_windowTitle));
+            windowCombo->setItemData(index, overlay.m_windowClass, WindowOverlayClassRole);
+            windowCombo->setItemData(index, overlay.m_windowTitle, WindowOverlayTitleRole);
+            windowCombo->setCurrentIndex(index);
+        }
+        m_windowOverlaysTable->setCellWidget(row, 1, windowCombo);
+
+        QComboBox *regionCombo = new QComboBox(m_windowOverlaysTable);
+        regionCombo->setToolTip(tr("Capture the whole window or a named rollup within it"));
+        m_windowOverlaysTable->setCellWidget(row, 2, regionCombo);
+
+        QSpinBox *xSpin = new QSpinBox(m_windowOverlaysTable);
+        xSpin->setRange(CameraSettings::m_minSignedUiPixelOffset, CameraSettings::m_maxSignedUiPixelOffset);
+        xSpin->setValue(overlay.m_offsetX);
+        xSpin->setSuffix(tr(" px"));
+        xSpin->setToolTip(tr("Horizontal overlay position in image pixels"));
+        m_windowOverlaysTable->setCellWidget(row, 3, xSpin);
+        connect(xSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, [this]() { applyWindowOverlaysFromTable(); });
+
+        QSpinBox *ySpin = new QSpinBox(m_windowOverlaysTable);
+        ySpin->setRange(CameraSettings::m_minSignedUiPixelOffset, CameraSettings::m_maxSignedUiPixelOffset);
+        ySpin->setValue(overlay.m_offsetY);
+        ySpin->setSuffix(tr(" px"));
+        ySpin->setToolTip(tr("Vertical overlay position in image pixels"));
+        m_windowOverlaysTable->setCellWidget(row, 4, ySpin);
+        connect(ySpin, QOverload<int>::of(&QSpinBox::valueChanged), this, [this]() { applyWindowOverlaysFromTable(); });
+
+        QDoubleSpinBox *scaleSpin = new QDoubleSpinBox(m_windowOverlaysTable);
+        scaleSpin->setRange(CameraSettings::m_minWindowOverlayScale, CameraSettings::m_maxWindowOverlayScale);
+        scaleSpin->setDecimals(2);
+        scaleSpin->setSingleStep(0.1);
+        scaleSpin->setValue(overlay.m_scale);
+        scaleSpin->setToolTip(tr("Scale factor applied to the captured window"));
+        m_windowOverlaysTable->setCellWidget(row, 5, scaleSpin);
+        connect(scaleSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this]() { applyWindowOverlaysFromTable(); });
+
+        QDoubleSpinBox *fpsSpin = new QDoubleSpinBox(m_windowOverlaysTable);
+        fpsSpin->setRange(CameraSettings::m_minWindowOverlayFps, CameraSettings::m_maxWindowOverlayFps);
+        fpsSpin->setDecimals(1);
+        fpsSpin->setSingleStep(0.5);
+        fpsSpin->setValue(overlay.m_captureFps);
+        fpsSpin->setSuffix(tr(" fps"));
+        fpsSpin->setToolTip(tr("How often to refresh this captured overlay"));
+        m_windowOverlaysTable->setCellWidget(row, 6, fpsSpin);
+        connect(fpsSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this]() { applyWindowOverlaysFromTable(); });
+
+        updateWindowOverlayRegionCombo(row);
+        connect(windowCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int) {
+            const int row = windowOverlayRowForWidget(qobject_cast<QWidget*>(sender()));
+            if (row >= 0) {
+                updateWindowOverlayRegionCombo(row);
+            }
+            applyWindowOverlaysFromTable();
+        });
+        connect(regionCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int) {
+            applyWindowOverlaysFromTable();
+        });
+    }
+
+    if ((selectedRow >= 0) && (selectedRow < m_windowOverlaysTable->rowCount())) {
+        m_windowOverlaysTable->selectRow(selectedRow);
+    } else if (m_windowOverlaysTable->rowCount() > 0) {
+        m_windowOverlaysTable->selectRow(0);
+    }
+
+    m_updatingWindowOverlaysTable = false;
+    updateWindowOverlayControls();
+}
+
+void CameraGUI::updateWindowOverlayControls()
+{
+    const int row = m_windowOverlaysTable ? m_windowOverlaysTable->currentRow() : -1;
+    const bool hasRow = row >= 0 && row < m_settings.m_windowOverlays.size();
+    if (m_windowOverlayRemoveButton) {
+        m_windowOverlayRemoveButton->setEnabled(hasRow);
+    }
+    if (m_windowOverlayUpButton) {
+        m_windowOverlayUpButton->setEnabled(hasRow && row > 0);
+    }
+    if (m_windowOverlayDownButton) {
+        m_windowOverlayDownButton->setEnabled(hasRow && row < m_settings.m_windowOverlays.size() - 1);
+    }
+}
+
+void CameraGUI::updateWindowOverlayCaptureTimer()
+{
+    double maxFps = 0.0;
+    for (const CameraSettings::WindowOverlay& overlay : m_settings.m_windowOverlays)
+    {
+        if (overlay.m_enabled && !overlay.m_windowClass.isEmpty()) {
+            maxFps = std::max(maxFps, overlay.m_captureFps);
+        }
+    }
+
+    if (maxFps <= 0.0)
+    {
+        m_windowOverlayCaptureTimer.stop();
+        m_windowOverlayCapturedFrames.clear();
+        m_windowOverlayLastCaptureMs.clear();
+        if (m_camera) {
+            m_camera->submitWindowOverlayFrames({});
+        }
+        return;
+    }
+
+    const int intervalMs = qBound(33, static_cast<int>(std::floor(1000.0 / maxFps)), 10000);
+    if (m_windowOverlayCaptureTimer.interval() != intervalMs) {
+        m_windowOverlayCaptureTimer.setInterval(intervalMs);
+    }
+    if (!m_windowOverlayCaptureTimer.isActive()) {
+        m_windowOverlayCaptureTimer.start();
+    }
+}
+
+void CameraGUI::applyWindowOverlaysFromTable()
+{
+    if (!m_windowOverlaysTable || m_updatingWindowOverlaysTable) {
+        return;
+    }
+
+    QList<CameraSettings::WindowOverlay> overlays;
+    overlays.reserve(m_windowOverlaysTable->rowCount());
+
+    for (int row = 0; row < m_windowOverlaysTable->rowCount(); ++row)
+    {
+        CameraSettings::WindowOverlay overlay;
+        if (QCheckBox *enabledCheck = qobject_cast<QCheckBox*>(m_windowOverlaysTable->cellWidget(row, 0))) {
+            overlay.m_enabled = enabledCheck->isChecked();
+        }
+        if (QComboBox *windowCombo = qobject_cast<QComboBox*>(m_windowOverlaysTable->cellWidget(row, 1)))
+        {
+            overlay.m_windowClass = windowCombo->itemData(windowCombo->currentIndex(), WindowOverlayClassRole).toString();
+            overlay.m_windowTitle = windowCombo->itemData(windowCombo->currentIndex(), WindowOverlayTitleRole).toString();
+        }
+        if (QComboBox *regionCombo = qobject_cast<QComboBox*>(m_windowOverlaysTable->cellWidget(row, 2)))
+        {
+            overlay.m_regionObjectName = regionCombo->itemData(regionCombo->currentIndex(), WindowOverlayRegionObjectNameRole).toString();
+            overlay.m_regionTitle = regionCombo->itemData(regionCombo->currentIndex(), WindowOverlayRegionTitleRole).toString();
+        }
+        if (QSpinBox *xSpin = qobject_cast<QSpinBox*>(m_windowOverlaysTable->cellWidget(row, 3))) {
+            overlay.m_offsetX = xSpin->value();
+        }
+        if (QSpinBox *ySpin = qobject_cast<QSpinBox*>(m_windowOverlaysTable->cellWidget(row, 4))) {
+            overlay.m_offsetY = ySpin->value();
+        }
+        if (QDoubleSpinBox *scaleSpin = qobject_cast<QDoubleSpinBox*>(m_windowOverlaysTable->cellWidget(row, 5))) {
+            overlay.m_scale = scaleSpin->value();
+        }
+        if (QDoubleSpinBox *fpsSpin = qobject_cast<QDoubleSpinBox*>(m_windowOverlaysTable->cellWidget(row, 6))) {
+            overlay.m_captureFps = fpsSpin->value();
+        }
+        overlays.append(overlay);
+    }
+
+    m_settings.m_windowOverlays = overlays;
+    m_windowOverlayCapturedFrames.clear();
+    m_windowOverlayLastCaptureMs.clear();
+    applySetting("windowOverlays");
+    updateWindowOverlayCaptureTimer();
+    captureWindowOverlays();
+}
+
+void CameraGUI::updateWindowOverlayRegionCombo(int row)
+{
+    if (!m_windowOverlaysTable || row < 0 || row >= m_windowOverlaysTable->rowCount()) {
+        return;
+    }
+
+    QComboBox *windowCombo = qobject_cast<QComboBox*>(m_windowOverlaysTable->cellWidget(row, 1));
+    QComboBox *regionCombo = qobject_cast<QComboBox*>(m_windowOverlaysTable->cellWidget(row, 2));
+    if (!windowCombo || !regionCombo) {
+        return;
+    }
+
+    const QString desiredObjectName = row < m_settings.m_windowOverlays.size()
+        ? m_settings.m_windowOverlays.at(row).m_regionObjectName
+        : QString();
+    const QString desiredTitle = row < m_settings.m_windowOverlays.size()
+        ? m_settings.m_windowOverlays.at(row).m_regionTitle
+        : QString();
+
+    const QSignalBlocker blocker(regionCombo);
+    regionCombo->clear();
+    regionCombo->addItem(tr("Entire window"));
+    regionCombo->setItemData(0, QString(), WindowOverlayRegionObjectNameRole);
+    regionCombo->setItemData(0, QString(), WindowOverlayRegionTitleRole);
+    int selectedIndex = 0;
+
+    CameraSettings::WindowOverlay windowIdentity;
+    windowIdentity.m_windowClass = windowCombo->itemData(windowCombo->currentIndex(), WindowOverlayClassRole).toString();
+    windowIdentity.m_windowTitle = windowCombo->itemData(windowCombo->currentIndex(), WindowOverlayTitleRole).toString();
+
+    if (QMdiSubWindow *window = findWindowOverlayWindow(windowIdentity))
+    {
+        if (RollupContents *rollups = window->findChild<RollupContents*>())
+        {
+            const QObjectList children = rollups->children();
+            for (QObject *object : children)
+            {
+                QWidget *child = qobject_cast<QWidget*>(object);
+                if (!child || child->parentWidget() != rollups || qobject_cast<QDialog*>(child)) {
+                    continue;
+                }
+
+                const QString title = child->windowTitle().trimmed();
+                const QString objectName = child->objectName().trimmed();
+                if (title.isEmpty() && objectName.isEmpty()) {
+                    continue;
+                }
+
+                const int index = regionCombo->count();
+                regionCombo->addItem(title.isEmpty() ? objectName : title);
+                regionCombo->setItemData(index, objectName, WindowOverlayRegionObjectNameRole);
+                regionCombo->setItemData(index, title, WindowOverlayRegionTitleRole);
+
+                if ((!desiredObjectName.isEmpty() && objectName == desiredObjectName)
+                    || (desiredObjectName.isEmpty() && !desiredTitle.isEmpty() && title == desiredTitle))
+                {
+                    selectedIndex = index;
+                }
+            }
+        }
+    }
+
+    if (selectedIndex == 0 && (!desiredObjectName.isEmpty() || !desiredTitle.isEmpty()))
+    {
+        const int index = regionCombo->count();
+        regionCombo->addItem(tr("Missing: %1").arg(desiredTitle.isEmpty() ? desiredObjectName : desiredTitle));
+        regionCombo->setItemData(index, desiredObjectName, WindowOverlayRegionObjectNameRole);
+        regionCombo->setItemData(index, desiredTitle, WindowOverlayRegionTitleRole);
+        selectedIndex = index;
+    }
+
+    regionCombo->setCurrentIndex(selectedIndex);
+}
+
+void CameraGUI::captureWindowOverlays()
+{
+    if (!m_camera) {
+        return;
+    }
+
+    if (m_windowOverlayCapturedFrames.size() != m_settings.m_windowOverlays.size())
+    {
+        m_windowOverlayCapturedFrames.resize(m_settings.m_windowOverlays.size());
+        m_windowOverlayLastCaptureMs.resize(m_settings.m_windowOverlays.size());
+        std::fill(m_windowOverlayLastCaptureMs.begin(), m_windowOverlayLastCaptureMs.end(), 0);
+    }
+
+    const qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
+    bool changed = false;
+
+    for (int i = 0; i < m_settings.m_windowOverlays.size(); ++i)
+    {
+        const CameraSettings::WindowOverlay& overlay = m_settings.m_windowOverlays.at(i);
+        CameraPostProcessor::WindowOverlayFrame& cachedFrame = m_windowOverlayCapturedFrames[i];
+
+        if (!overlay.m_enabled || overlay.m_windowClass.isEmpty())
+        {
+            if (!cachedFrame.m_image.isNull()) {
+                cachedFrame.m_image = QImage();
+                changed = true;
+            }
+            continue;
+        }
+
+        cachedFrame.m_offsetX = overlay.m_offsetX;
+        cachedFrame.m_offsetY = overlay.m_offsetY;
+        cachedFrame.m_scale = overlay.m_scale;
+
+        const int intervalMs = qBound(1, static_cast<int>(std::floor(1000.0 / overlay.m_captureFps)), 10000);
+        if ((m_windowOverlayLastCaptureMs[i] != 0) && (nowMs - m_windowOverlayLastCaptureMs[i] < intervalMs)) {
+            continue;
+        }
+
+        QMdiSubWindow *window = findWindowOverlayWindow(overlay);
+        QWidget *captureWidget = findWindowOverlayCaptureWidget(window, overlay);
+        if (!captureWidget || !captureWidget->isVisible())
+        {
+            if (!cachedFrame.m_image.isNull()) {
+                cachedFrame.m_image = QImage();
+                changed = true;
+            }
+            continue;
+        }
+
+        const QPixmap pixmap = captureWidget->grab();
+        if (!pixmap.isNull())
+        {
+            cachedFrame.m_image = pixmap.toImage();
+            m_windowOverlayLastCaptureMs[i] = nowMs;
+            changed = true;
+        }
+    }
+
+    if (!changed) {
+        return;
+    }
+
+    QVector<CameraPostProcessor::WindowOverlayFrame> frames;
+    for (const CameraPostProcessor::WindowOverlayFrame& frame : m_windowOverlayCapturedFrames)
+    {
+        if (!frame.m_image.isNull()) {
+            frames.append(frame);
+        }
+    }
+    m_camera->submitWindowOverlayFrames(frames);
+}
+
+QList<QMdiSubWindow*> CameraGUI::availableWindowOverlayWindows() const
+{
+    QList<QMdiSubWindow*> windows;
+    const QWidgetList widgets = QApplication::allWidgets();
+    for (QWidget *widget : widgets)
+    {
+        QMdiSubWindow *window = qobject_cast<QMdiSubWindow*>(widget);
+        if (!window || window == this || !window->isVisible()) {
+            continue;
+        }
+
+        if (!window->inherits("FeatureGUI")
+            && !window->inherits("ChannelGUI")
+            && !window->inherits("DeviceGUI")
+            && !window->inherits("MainSpectrumGUI"))
+        {
+            continue;
+        }
+
+        windows.append(window);
+    }
+
+    std::sort(windows.begin(), windows.end(), [](const QMdiSubWindow *lhs, const QMdiSubWindow *rhs) {
+        return windowOverlayDisplayName(lhs).localeAwareCompare(windowOverlayDisplayName(rhs)) < 0;
+    });
+    return windows;
+}
+
+QMdiSubWindow* CameraGUI::findWindowOverlayWindow(const CameraSettings::WindowOverlay& overlay) const
+{
+    for (QMdiSubWindow *window : availableWindowOverlayWindows())
+    {
+        if ((windowOverlayClassName(window) == overlay.m_windowClass)
+            && (window->windowTitle() == overlay.m_windowTitle))
+        {
+            return window;
+        }
+    }
+    return nullptr;
+}
+
+QWidget* CameraGUI::findWindowOverlayCaptureWidget(QMdiSubWindow* window, const CameraSettings::WindowOverlay& overlay) const
+{
+    if (!window) {
+        return nullptr;
+    }
+
+    if (overlay.m_regionObjectName.isEmpty() && overlay.m_regionTitle.isEmpty()) {
+        return window;
+    }
+
+    if (RollupContents *rollups = window->findChild<RollupContents*>())
+    {
+        const QObjectList children = rollups->children();
+        for (QObject *object : children)
+        {
+            QWidget *child = qobject_cast<QWidget*>(object);
+            if (!child || child->parentWidget() != rollups || qobject_cast<QDialog*>(child)) {
+                continue;
+            }
+
+            if ((!overlay.m_regionObjectName.isEmpty() && child->objectName() == overlay.m_regionObjectName)
+                || (overlay.m_regionObjectName.isEmpty() && !overlay.m_regionTitle.isEmpty() && child->windowTitle() == overlay.m_regionTitle))
+            {
+                return child;
+            }
+        }
+    }
+
+    return window;
+}
+
+int CameraGUI::windowOverlayRowForWidget(const QWidget *widget) const
+{
+    if (!m_windowOverlaysTable) {
+        return -1;
+    }
+
+    const QWidget *candidate = widget;
+    while (candidate)
+    {
+        for (int row = 0; row < m_windowOverlaysTable->rowCount(); ++row)
+        {
+            for (int col = 0; col < m_windowOverlaysTable->columnCount(); ++col)
+            {
+                if (m_windowOverlaysTable->cellWidget(row, col) == candidate) {
+                    return row;
+                }
+            }
+        }
+        candidate = candidate->parentWidget();
+    }
+
+    return -1;
+}
+
+QString CameraGUI::windowOverlayClassName(const QMdiSubWindow *window)
+{
+    return window ? QString::fromLatin1(window->metaObject()->className()) : QString();
+}
+
+QString CameraGUI::windowOverlayDisplayName(const QMdiSubWindow *window)
+{
+    if (!window) {
+        return QString();
+    }
+
+    const QString title = window->windowTitle().trimmed();
+    const QString objectName = window->objectName().trimmed();
+    const QString name = !title.isEmpty() ? title : objectName;
+    return name.isEmpty()
+        ? windowOverlayClassName(window)
+        : QStringLiteral("%1: %2").arg(windowOverlayClassName(window), name);
 }
 
 bool CameraGUI::isHdrStackingActiveForQt() const
@@ -9371,6 +9959,7 @@ void CameraGUI::on_zoomSpin_valueChanged(double value)
 void CameraGUI::on_cameraSettingsButton_clicked()
 {
     updateCameraSettingsVisibility();
+    updateWindowOverlaysTable();
     m_settingsDialog->shrinkToVisibleContent();
     m_settingsDialog->show();
     m_settingsDialog->shrinkToVisibleContent();

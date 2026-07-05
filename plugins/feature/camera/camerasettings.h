@@ -231,6 +231,19 @@ struct CameraSettings
         PlateSolveCatalogSirilAstroGaia
     };
 
+    struct WindowOverlay
+    {
+        bool m_enabled = true;
+        QString m_windowClass;
+        QString m_windowTitle;
+        QString m_regionObjectName;
+        QString m_regionTitle;
+        int m_offsetX = 0;
+        int m_offsetY = 0;
+        double m_scale = 1.0;
+        double m_captureFps = 2.0;
+    };
+
     enum FovMode
     {
         FovModeDirect = 0,
@@ -343,6 +356,10 @@ struct CameraSettings
     static constexpr double m_maxLensDistortionK1 = 1.0;
     static constexpr double m_minSpectrumScale = 0.1;
     static constexpr double m_maxSpectrumScale = 4.0;
+    static constexpr double m_minWindowOverlayScale = 0.1;
+    static constexpr double m_maxWindowOverlayScale = 4.0;
+    static constexpr double m_minWindowOverlayFps = 0.1;
+    static constexpr double m_maxWindowOverlayFps = 30.0;
     static constexpr double m_minExposureCompensation = -2.0;
     static constexpr double m_maxExposureCompensation = 2.0;
     static constexpr double m_minZoomFactor = 1.0;
@@ -606,6 +623,7 @@ struct CameraSettings
     int    m_spectrumOffsetX;   ///< X offset (px) for the top-left corner of the spectrum overlay: -4096..4096
     int    m_spectrumOffsetY;   ///< Y offset (px) for the top-left corner of the spectrum overlay: -4096..4096
     double m_spectrumScale;     ///< Scale factor applied to the spectrum image before compositing: 0.1..4.0
+    QList<WindowOverlay> m_windowOverlays; ///< GUI window or rollup captures to composite over the post-processed frame
 
     // YOLO object-detection settings
     bool   m_yoloEnabled;        ///< Run YOLO ONNX inference and draw bounding boxes

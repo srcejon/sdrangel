@@ -68,6 +68,14 @@ public:
         double m_lineWidth = 2.0;
     };
 
+    struct WindowOverlayFrame
+    {
+        QImage m_image;
+        int m_offsetX = 0;
+        int m_offsetY = 0;
+        double m_scale = 1.0;
+    };
+
     class MsgSpectrumFrame : public Message {
         MESSAGE_CLASS_DECLARATION
 
@@ -85,6 +93,26 @@ public:
         MsgSpectrumFrame(const QImage& image) :
             Message(),
             m_image(image)
+        { }
+    };
+
+    class MsgWindowOverlayFrames : public Message {
+        MESSAGE_CLASS_DECLARATION
+
+    public:
+        const QVector<WindowOverlayFrame>& getFrames() const { return m_frames; }
+
+        static MsgWindowOverlayFrames* create(const QVector<WindowOverlayFrame>& frames)
+        {
+            return new MsgWindowOverlayFrames(frames);
+        }
+
+    private:
+        QVector<WindowOverlayFrame> m_frames;
+
+        MsgWindowOverlayFrames(const QVector<WindowOverlayFrame>& frames) :
+            Message(),
+            m_frames(frames)
         { }
     };
 
@@ -355,6 +383,7 @@ private:
     bool m_captureActive = false;
     quint64 m_captureEpoch = 0;
     QImage m_spectrumViewImage;
+    QVector<WindowOverlayFrame> m_windowOverlayFrames;
     Weather *m_weather = nullptr;
     float m_weatherTemperature = std::numeric_limits<float>::quiet_NaN();
     float m_weatherPressure = std::numeric_limits<float>::quiet_NaN();
@@ -397,6 +426,7 @@ private:
     void applyPreviewRectItems(QImage& image, const QVector<PreviewRectItem>& items) const;
     void applyPreviewTextLabels(QImage& image, const QVector<PreviewTextLabel>& labels) const;
     void applySpectrumOverlay(QImage& image) const;
+    void applyWindowOverlays(QImage& image) const;
     [[nodiscard]] static const QImage& ensureRgb888(const QImage& image, QImage& convertedImage);
     [[nodiscard]] static cv::Mat wrapRgb888Image(const QImage& image);
     void applySkyGridOverlay(const CameraPipelineFrame& frame, QImage& image, bool drawLabels, QVector<PreviewTextLabel> *previewTextLabels) const;

@@ -41,6 +41,7 @@
 #include <QFileInfo>
 #include <QFontDatabase>
 #include <QGraphicsSimpleTextItem>
+#include <QGraphicsPixmapItem>
 #include <QGraphicsView>
 #include <QGraphicsRectItem>
 #include <QHeaderView>
@@ -716,6 +717,7 @@ bool CameraGUI::handleMessage(const Message& message)
         m_lastStarDetections = report.getStarDetections();
         m_lastPreviewTextLabels = report.getPreviewTextLabels();
         m_lastPreviewRectItems = report.getPreviewRectItems();
+        m_lastPreviewImageOverlays = report.getPreviewImageOverlays();
         m_lastStackCount = report.getStackCount();
         m_lastStackQueuedCount = report.getStackQueuedCount();
         m_lastStackDroppedCount = report.getStackDroppedCount();
@@ -1456,6 +1458,7 @@ void CameraGUI::resetCameraStatus()
     m_lastStarDetections.clear();
     m_lastPreviewTextLabels.clear();
     m_lastPreviewRectItems.clear();
+    m_lastPreviewImageOverlays.clear();
     clearPreviewOverlayItems();
     settingsUI()->pipelineFpsLabel->setText("-");
     settingsUI()->plateSolveStatusLabel->setText("-");
@@ -2180,12 +2183,13 @@ void CameraGUI::updateImageWidget()
     // Paint the (pooled) frame directly — no per-frame QPixmap::fromImage alloc.
     m_imagePixmapItem->setImage(m_lastImage);
     m_imageScene->setSceneRect(QRectF(m_lastImage.rect()));
-    updatePreviewOverlayItems();
 
     // Fit the image in the view (preserving aspect ratio) only when no zoom has been applied
     if (ui->imageView->transform().isIdentity()) {
         ui->imageView->fitInView(m_imagePixmapItem, Qt::KeepAspectRatio);
     }
+    updateImageViewSmoothing();
+    updatePreviewOverlayItems();
 
     // Update max overlay positions according to size of image
     const int maxX = m_lastImage.width();
@@ -2197,6 +2201,16 @@ void CameraGUI::updateImageWidget()
     settingsUI()->spectrumOffsetXSlider->setMaximum(maxX);
     settingsUI()->spectrumOffsetYSlider->setMaximum(maxY);
     updateMotionExclusionPreview();
+}
+
+void CameraGUI::updateImageViewSmoothing()
+{
+    const QTransform transform = ui->imageView->transform();
+    const bool exactOneToOne = qFuzzyCompare(transform.m11(), 1.0)
+        && qFuzzyCompare(transform.m22(), 1.0)
+        && qFuzzyIsNull(transform.m12())
+        && qFuzzyIsNull(transform.m21());
+    ui->imageView->setRenderHint(QPainter::SmoothPixmapTransform, !exactOneToOne);
 }
 
 void CameraGUI::sendDisplayedFrameEvents(const QVector<QRect>& motionBoxes, const QVector<CameraPipelineDetection>& detections, const QVector<CameraPipelineMeteorPhotometry>& meteorPhotometry, const QVector<CameraPipelineTrackedObject>& trackedObjects, const QSize& imageSize, const QDateTime& captureDateTime)
@@ -2421,11 +2435,40 @@ void CameraGUI::updatePreviewOverlayItems()
 {
     clearPreviewOverlayItems();
 
-    if (!m_imageScene || m_lastImage.isNull() || (m_lastPreviewTextLabels.isEmpty() && m_lastPreviewRectItems.isEmpty())) {
+    if (!m_imageScene
+        || m_lastImage.isNull()
+        || (m_lastPreviewImageOverlays.isEmpty() && m_lastPreviewTextLabels.isEmpty() && m_lastPreviewRectItems.isEmpty()))
+    {
         return;
     }
 
     const QRect imageRect(QPoint(0, 0), m_lastImage.size());
+
+    for (const CameraPostProcessor::WindowOverlayFrame& overlay : m_lastPreviewImageOverlays)
+    {
+        if (overlay.m_image.isNull()) {
+            continue;
+        }
+
+        QPixmap pixmap = QPixmap::fromImage(overlay.m_image);
+        pixmap.setDevicePixelRatio(std::max(1.0, static_cast<double>(overlay.m_image.devicePixelRatio())));
+        const QSizeF logicalSize(
+            static_cast<double>(pixmap.width()) / static_cast<double>(pixmap.devicePixelRatio()) * overlay.m_scale,
+            static_cast<double>(pixmap.height()) / static_cast<double>(pixmap.devicePixelRatio()) * overlay.m_scale);
+        const QRectF overlayRect(QPointF(overlay.m_offsetX, overlay.m_offsetY), logicalSize);
+        if (!QRectF(imageRect).intersects(overlayRect)) {
+            continue;
+        }
+
+        QGraphicsPixmapItem *pixmapItem = m_imageScene->addPixmap(pixmap);
+        pixmapItem->setPos(overlay.m_offsetX, overlay.m_offsetY);
+        pixmapItem->setScale(overlay.m_scale);
+        pixmapItem->setTransformationMode(qAbs(overlay.m_scale - 1.0) > 1e-4
+            ? Qt::SmoothTransformation
+            : Qt::FastTransformation);
+        pixmapItem->setZValue(1.1);
+        m_previewOverlayItems.append(pixmapItem);
+    }
 
     for (const CameraPostProcessor::PreviewRectItem& previewRect : m_lastPreviewRectItems)
     {
@@ -3836,6 +3879,7 @@ void CameraGUI::captureWindowOverlays()
         if (!pixmap.isNull())
         {
             cachedFrame.m_image = pixmap.toImage();
+            cachedFrame.m_image.setDevicePixelRatio(std::max(1.0, static_cast<double>(pixmap.devicePixelRatio())));
             m_windowOverlayLastCaptureMs[i] = nowMs;
             changed = true;
         }
@@ -9734,6 +9778,7 @@ bool CameraGUI::eventFilter(QObject *watched, QEvent *event)
             const QWheelEvent *wheelEvent = static_cast<QWheelEvent*>(event);
             const double factor = (wheelEvent->angleDelta().y() > 0) ? 1.25 : 1.0 / 1.25;
             ui->imageView->scale(factor, factor);
+            updateImageViewSmoothing();
             return true;
         }
 
@@ -9864,11 +9909,13 @@ bool CameraGUI::eventFilter(QObject *watched, QEvent *event)
 void CameraGUI::on_zoomInButton_clicked()
 {
     ui->imageView->scale(1.25, 1.25);
+    updateImageViewSmoothing();
 }
 
 void CameraGUI::on_zoomOutButton_clicked()
 {
     ui->imageView->scale(1.0 / 1.25, 1.0 / 1.25);
+    updateImageViewSmoothing();
 }
 
 void CameraGUI::on_fitInViewButton_clicked()
@@ -9877,6 +9924,7 @@ void CameraGUI::on_fitInViewButton_clicked()
     if (m_imagePixmapItem && !m_imagePixmapItem->image().isNull()) {
         ui->imageView->fitInView(m_imagePixmapItem, Qt::KeepAspectRatio);
     }
+    updateImageViewSmoothing();
 }
 
 void CameraGUI::on_fitWindowToImageButton_clicked()
@@ -9886,6 +9934,7 @@ void CameraGUI::on_fitWindowToImageButton_clicked()
     }
 
     ui->imageView->resetTransform();
+    updateImageViewSmoothing();
 
     const QSize imageSize = m_imagePixmapItem->image().size();
     const QSize viewportSize = ui->imageView->viewport()->size();

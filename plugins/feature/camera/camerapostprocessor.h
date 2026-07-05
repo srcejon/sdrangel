@@ -146,6 +146,7 @@ public:
         const QString& getPlateSolveCatalogSource() const { return m_plateSolve.m_catalogSource; }
         const QVector<PreviewTextLabel>& getPreviewTextLabels() const { return m_previewTextLabels; }
         const QVector<PreviewRectItem>& getPreviewRectItems() const { return m_previewRectItems; }
+        const QVector<WindowOverlayFrame>& getPreviewImageOverlays() const { return m_previewImageOverlays; }
         const QVector<QRect>& getMotionBoxes() const { return m_motionBoxes; }
         const QVector<CameraPipelineDetection>& getDetections() const { return m_detections; }
         const QVector<CameraPipelineMeteorPhotometry>& getMeteorPhotometry() const { return m_meteorPhotometry; }
@@ -167,7 +168,8 @@ public:
                                       quint64 captureEpoch,
                                       bool manualPreviewFrame,
                                       const QVector<PreviewTextLabel>& previewTextLabels,
-                                      const QVector<PreviewRectItem>& previewRectItems)
+                                      const QVector<PreviewRectItem>& previewRectItems,
+                                      const QVector<WindowOverlayFrame>& previewImageOverlays)
         {
             return new MsgReportFrame(
                 image,
@@ -183,7 +185,8 @@ public:
                 captureEpoch,
                 manualPreviewFrame,
                 previewTextLabels,
-                previewRectItems);
+                previewRectItems,
+                previewImageOverlays);
         }
 
     private:
@@ -201,6 +204,7 @@ public:
         bool m_manualPreviewFrame;
         QVector<PreviewTextLabel> m_previewTextLabels;
         QVector<PreviewRectItem> m_previewRectItems;
+        QVector<WindowOverlayFrame> m_previewImageOverlays;
 
         MsgReportFrame(const QImage& image,
                        const CameraHistogramData& histogramData,
@@ -215,7 +219,8 @@ public:
                        quint64 captureEpoch,
                        bool manualPreviewFrame,
                        const QVector<PreviewTextLabel>& previewTextLabels,
-                       const QVector<PreviewRectItem>& previewRectItems) :
+                       const QVector<PreviewRectItem>& previewRectItems,
+                       const QVector<WindowOverlayFrame>& previewImageOverlays) :
             Message(),
             m_image(image),
             m_histogramData(histogramData),
@@ -230,7 +235,8 @@ public:
             m_captureEpoch(captureEpoch),
             m_manualPreviewFrame(manualPreviewFrame),
             m_previewTextLabels(previewTextLabels),
-            m_previewRectItems(previewRectItems)
+            m_previewRectItems(previewRectItems),
+            m_previewImageOverlays(previewImageOverlays)
         { }
     };
 
@@ -419,7 +425,8 @@ private:
         bool drawPreviewText = true,
         QVector<PreviewTextLabel> *previewTextLabels = nullptr,
         QVector<PreviewRectItem> *previewRectItems = nullptr,
-        QVector<CameraPipelineTrackedObject> *trackedObjects = nullptr);
+        QVector<CameraPipelineTrackedObject> *trackedObjects = nullptr,
+        bool drawImageOverlays = true);
     void applyMotionOverlay(QImage& image, const QVector<QRect>& motionBoxes, bool drawBoxes, QVector<PreviewRectItem> *previewRectItems) const;
     void applyDetectionOverlay(QImage& image, const QVector<CameraPipelineDetection>& detections, const QVector<CameraPipelineMeteorPhotometry>& meteorPhotometry, bool drawLabels, QVector<PreviewTextLabel> *previewTextLabels, QVector<PreviewRectItem> *previewRectItems) const;
     void applyStarOverlay(QImage& image, const QVector<CameraPipelineStarDetection>& starDetections, bool drawLabels, QVector<PreviewTextLabel> *previewTextLabels) const;
@@ -427,6 +434,9 @@ private:
     void applyPreviewTextLabels(QImage& image, const QVector<PreviewTextLabel>& labels) const;
     void applySpectrumOverlay(QImage& image) const;
     void applyWindowOverlays(QImage& image) const;
+    [[nodiscard]] QVector<WindowOverlayFrame> currentImageOverlays() const;
+    [[nodiscard]] static QSize overlayCompositionSize(const QImage& image, double scale);
+    [[nodiscard]] static QImage normaliseOverlayImageForComposition(const QImage& image, double scale);
     [[nodiscard]] static const QImage& ensureRgb888(const QImage& image, QImage& convertedImage);
     [[nodiscard]] static cv::Mat wrapRgb888Image(const QImage& image);
     void applySkyGridOverlay(const CameraPipelineFrame& frame, QImage& image, bool drawLabels, QVector<PreviewTextLabel> *previewTextLabels) const;

@@ -32,6 +32,7 @@
 #include <QOpenGLShaderProgram>
 #include <QOpenGLFunctions>
 #include <QPainter>
+#include <QPixmap>
 #include <QFontDatabase>
 #include <QWindow>
 #include <QGestureEvent>
@@ -6086,7 +6087,9 @@ void GLSpectrumView::sendDisplayToPipe()
 
         if (!messagePipes.isEmpty())
         {
-            QImage image = grab().toImage();
+            const QPixmap pixmap = grab();
+            QImage image = pixmap.toImage();
+            image.setDevicePixelRatio(pixmap.devicePixelRatio());
 
             for (const auto& pipe : messagePipes)
             {

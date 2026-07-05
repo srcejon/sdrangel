@@ -260,6 +260,7 @@ private:
     QVector<CameraPipelineStarDetection> m_lastStarDetections;
     QVector<CameraPostProcessor::PreviewTextLabel> m_lastPreviewTextLabels;
     QVector<CameraPostProcessor::PreviewRectItem> m_lastPreviewRectItems;
+    QVector<CameraPostProcessor::WindowOverlayFrame> m_lastPreviewImageOverlays;
     QList<CameraDetectionHistoryEntry> m_detectionHistory;
     int m_lastStackCount = 1;
     int m_lastStackQueuedCount = 0;
@@ -401,6 +402,7 @@ private:
     void updateCameraStatusDisplay();
     void updateCameraSubframeControls();
     void updateImageWidget();
+    void updateImageViewSmoothing();
     void sendDisplayedFrameEvents(const QVector<QRect>& motionBoxes, const QVector<CameraPipelineDetection>& detections, const QVector<CameraPipelineMeteorPhotometry>& meteorPhotometry, const QVector<CameraPipelineTrackedObject>& trackedObjects, const QSize& imageSize, const QDateTime& captureDateTime);
     void updatePreviewOverlayItems();
     void clearPreviewOverlayItems();

@@ -909,7 +909,7 @@ bool CameraPostProcessor::handleMessage(const Message& cmd)
             QVector<PreviewTextLabel> previewTextLabels;
             QVector<PreviewRectItem> previewRectItems;
             QVector<CameraPipelineTrackedObject> trackedObjects;
-            const QImage preview = applyPostProcessing(m_lastFrame, false, &previewTextLabels, &previewRectItems, &trackedObjects);
+            const QImage preview = applyPostProcessing(m_lastFrame, false, &previewTextLabels, &previewRectItems, &trackedObjects, false);
             reportFrameToGUI(preview, m_lastFrame, previewTextLabels, previewRectItems, trackedObjects);
         }
 
@@ -930,7 +930,7 @@ bool CameraPostProcessor::handleMessage(const Message& cmd)
             QVector<PreviewTextLabel> previewTextLabels;
             QVector<PreviewRectItem> previewRectItems;
             QVector<CameraPipelineTrackedObject> trackedObjects;
-            const QImage preview = applyPostProcessing(m_lastFrame, false, &previewTextLabels, &previewRectItems, &trackedObjects);
+            const QImage preview = applyPostProcessing(m_lastFrame, false, &previewTextLabels, &previewRectItems, &trackedObjects, false);
             reportFrameToGUI(preview, m_lastFrame, previewTextLabels, previewRectItems, trackedObjects);
         }
 
@@ -1084,7 +1084,7 @@ void CameraPostProcessor::applySettings(const CameraSettings& settings, const QL
         QVector<PreviewTextLabel> previewTextLabels;
         QVector<PreviewRectItem> previewRectItems;
         QVector<CameraPipelineTrackedObject> trackedObjects;
-        const QImage preview = applyPostProcessing(m_lastFrame, false, &previewTextLabels, &previewRectItems, &trackedObjects);
+        const QImage preview = applyPostProcessing(m_lastFrame, false, &previewTextLabels, &previewRectItems, &trackedObjects, false);
         reportFrameToGUI(preview, m_lastFrame, previewTextLabels, previewRectItems, trackedObjects);
     }
 }
@@ -1127,7 +1127,7 @@ void CameraPostProcessor::weatherUpdated(float temperature, float pressure, floa
         QVector<PreviewTextLabel> previewTextLabels;
         QVector<PreviewRectItem> previewRectItems;
         QVector<CameraPipelineTrackedObject> trackedObjects;
-        const QImage preview = applyPostProcessing(m_lastFrame, false, &previewTextLabels, &previewRectItems, &trackedObjects);
+        const QImage preview = applyPostProcessing(m_lastFrame, false, &previewTextLabels, &previewRectItems, &trackedObjects, false);
         reportFrameToGUI(preview, m_lastFrame, previewTextLabels, previewRectItems, trackedObjects);
     }
 }
@@ -1272,8 +1272,9 @@ void CameraPostProcessor::processNewFrame(const CameraPipelineFramePtr& frame)
     QVector<PreviewTextLabel> previewTextLabels;
     QVector<PreviewRectItem> previewRectItems;
     QVector<CameraPipelineTrackedObject> trackedObjects;
-    const QImage preview = applyPostProcessing(*frame, false, &previewTextLabels, &previewRectItems, &trackedObjects);
-    if (!previewTextLabels.isEmpty() || !previewRectItems.isEmpty())
+    const QImage preview = applyPostProcessing(*frame, false, &previewTextLabels, &previewRectItems, &trackedObjects, false);
+    const QVector<WindowOverlayFrame> previewImageOverlays = currentImageOverlays();
+    if (!previewTextLabels.isEmpty() || !previewRectItems.isEmpty() || !previewImageOverlays.isEmpty())
     {
         // Pooled deep copy of the preview so the rect/text items are drawn onto a
         // separate buffer from the one sent to the GUI (recycled, not malloc'd
@@ -1289,6 +1290,11 @@ void CameraPostProcessor::processNewFrame(const CameraPipelineFramePtr& frame)
         else
         {
             processed = preview.copy();
+        }
+        if (!previewImageOverlays.isEmpty())
+        {
+            applySpectrumOverlay(processed);
+            applyWindowOverlays(processed);
         }
         applyPreviewRectItems(processed, previewRectItems);
         applyPreviewTextLabels(processed, previewTextLabels);
@@ -1341,7 +1347,8 @@ void CameraPostProcessor::reportFrameToGUI(const QImage& image, const CameraPipe
             frame.m_captureEpoch,
             frame.m_manualPreviewFrame,
             previewTextLabels,
-            previewRectItems));
+            previewRectItems,
+            currentImageOverlays()));
     }
 }
 
@@ -1634,14 +1641,9 @@ void CameraPostProcessor::applySpectrumOverlay(QImage& image) const
         return;
     }
 
-    QImage specSrc = m_spectrumViewImage;
-    if (qAbs(m_settings.m_spectrumScale - 1.0) > 1e-4)
-    {
-        const int sw = static_cast<int>(specSrc.width() * m_settings.m_spectrumScale);
-        const int sh = static_cast<int>(specSrc.height() * m_settings.m_spectrumScale);
-        if (sw > 0 && sh > 0) {
-            specSrc = specSrc.scaled(sw, sh, Qt::KeepAspectRatio, Qt::SmoothTransformation);
-        }
+    const QImage specSrc = normaliseOverlayImageForComposition(m_spectrumViewImage, m_settings.m_spectrumScale);
+    if (specSrc.isNull()) {
+        return;
     }
 
     QPainter painter(&image);
@@ -1663,21 +1665,65 @@ void CameraPostProcessor::applyWindowOverlays(QImage& image) const
             continue;
         }
 
-        QImage overlayImage = frame.m_image;
-        if (qAbs(frame.m_scale - 1.0) > 1e-4)
-        {
-            const int width = static_cast<int>(std::round(overlayImage.width() * frame.m_scale));
-            const int height = static_cast<int>(std::round(overlayImage.height() * frame.m_scale));
-            if (width <= 0 || height <= 0) {
-                continue;
-            }
-            overlayImage = overlayImage.scaled(width, height, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+        const QImage overlayImage = normaliseOverlayImageForComposition(frame.m_image, frame.m_scale);
+        if (overlayImage.isNull()) {
+            continue;
         }
 
         painter.drawImage(frame.m_offsetX, frame.m_offsetY, overlayImage);
     }
 
     PROFILER_STOP(__FUNCTION__);
+}
+
+QVector<CameraPostProcessor::WindowOverlayFrame> CameraPostProcessor::currentImageOverlays() const
+{
+    QVector<WindowOverlayFrame> overlays;
+
+    if (m_settings.m_overlaySpectrum && !m_spectrumViewImage.isNull())
+    {
+        WindowOverlayFrame frame;
+        frame.m_image = m_spectrumViewImage;
+        frame.m_offsetX = m_settings.m_spectrumOffsetX;
+        frame.m_offsetY = m_settings.m_spectrumOffsetY;
+        frame.m_scale = m_settings.m_spectrumScale;
+        overlays.append(frame);
+    }
+
+    overlays += m_windowOverlayFrames;
+    return overlays;
+}
+
+QSize CameraPostProcessor::overlayCompositionSize(const QImage& image, double scale)
+{
+    if (image.isNull()) {
+        return QSize();
+    }
+
+    const double devicePixelRatio = std::max(1.0, static_cast<double>(image.devicePixelRatio()));
+    const double safeScale = std::max(0.0, scale);
+    return QSize(
+        std::max(1, static_cast<int>(std::round(static_cast<double>(image.width()) * safeScale / devicePixelRatio))),
+        std::max(1, static_cast<int>(std::round(static_cast<double>(image.height()) * safeScale / devicePixelRatio))));
+}
+
+QImage CameraPostProcessor::normaliseOverlayImageForComposition(const QImage& image, double scale)
+{
+    const QSize targetSize = overlayCompositionSize(image, scale);
+    if (!targetSize.isValid()) {
+        return QImage();
+    }
+
+    QImage source = image;
+    source.setDevicePixelRatio(1.0);
+
+    if (source.size() == targetSize) {
+        return source;
+    }
+
+    QImage scaled = source.scaled(targetSize, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
+    scaled.setDevicePixelRatio(1.0);
+    return scaled;
 }
 
 const QImage& CameraPostProcessor::ensureRgb888(const QImage& image, QImage& convertedImage)
@@ -2357,7 +2403,13 @@ void CameraPostProcessor::applyTextOverlay(QImage& image, QTextDocument& overlay
     PROFILER_STOP(__FUNCTION__);
 }
 
-QImage CameraPostProcessor::applyPostProcessing(const CameraPipelineFrame& frame, bool drawPreviewText, QVector<PreviewTextLabel> *previewTextLabels, QVector<PreviewRectItem> *previewRectItems, QVector<CameraPipelineTrackedObject> *trackedObjects)
+QImage CameraPostProcessor::applyPostProcessing(
+    const CameraPipelineFrame& frame,
+    bool drawPreviewText,
+    QVector<PreviewTextLabel> *previewTextLabels,
+    QVector<PreviewRectItem> *previewRectItems,
+    QVector<CameraPipelineTrackedObject> *trackedObjects,
+    bool drawImageOverlays)
 {
     PROFILER_START();
 
@@ -2389,8 +2441,8 @@ QImage CameraPostProcessor::applyPostProcessing(const CameraPipelineFrame& frame
         || !frame.m_motionBoxes.isEmpty()
         || (m_settings.m_yoloEnabled && !frame.m_detections.isEmpty())
         || !frame.m_starDetections.isEmpty()
-        || needsSpectrumOverlay
-        || needsWindowOverlays;
+        || (drawImageOverlays && needsSpectrumOverlay)
+        || (drawImageOverlays && needsWindowOverlays);
 
     if (!needsAny) {
         return input;
@@ -2431,10 +2483,10 @@ QImage CameraPostProcessor::applyPostProcessing(const CameraPipelineFrame& frame
     if (m_settings.m_trackObjects) {
         applyTrackedObjectOverlay(frame, result, drawPreviewText, previewTextLabels, trackedObjects);
     }
-    if (needsSpectrumOverlay) {
+    if (drawImageOverlays && needsSpectrumOverlay) {
         applySpectrumOverlay(result);
     }
-    if (needsWindowOverlays) {
+    if (drawImageOverlays && needsWindowOverlays) {
         applyWindowOverlays(result);
     }
     if (m_settings.m_overlayDateTime) {

@@ -136,6 +136,25 @@ REAL/FISHEYE/WIDE. No REAL regression — the "Harden wide-9, then default-on" p
   astrometry.net implements it), normalized so sparse-correct and dense-correct solves are
   comparable. Keep it in shadow mode; success criterion = clean separation of the WS3 accept/reject
   bands that the current formulation fails.
+  **DONE (shadow) + measured; NOT ready to gate (commit b7956006d).** `poseVerificationLogOdds`
+  implements the per-detection mixture and is recorded as `verify.mixtureLogOddsMilli` alongside
+  `faLogOdds`; REAL verdict set IDENTICAL. **Finding (via the 0c metrics + shadow log):** the
+  DETECTION-basis mixture does not separate — it goes *more* negative for several correct deep-field
+  solves (stars-narrow-3 mix −31361, ngc-2403 −141356, galaxy-m101-1 −94647) than for the pollux
+  FAIL (−23216). Cause: deep/nebular fields return hundreds of detections below catalog depth that
+  can never match, and the per-unmatched-detection penalty `log(f)` scales with raw detection count,
+  so it over-penalizes correct dense solves. **Corrected (commit pending):** the bug was charging
+  `log(f)` per unmatched detection — under the proper model an unmatched detection is background under
+  BOTH hypotheses, so it carries ZERO evidence. Dropping that term (matched detections contribute
+  `log(1 + fg/rho_bg)` against the empirical background density; unmatched contribute nothing) fixes
+  the over-penalty: every correct REAL solve is now positive (narrow-3 −31361→10551, ngc-2403
+  −141356→98965, m101 −94647→103111). **But REAL cannot demonstrate accept/reject separation:** its
+  one FAIL (pollux, mixture 92001) sits mid-range among the passes because pollux fails the harness's
+  *named-anchor oracle* (a specific expected star missing), not a false-alarm test — its match quality
+  is genuinely good, so no verifier should reject it. A verifier's value shows only on wrong-*pose*
+  false-positives. **Next: A/B the mixture vs faLogOdds on RAND2 (wrong-roll aliases) + the
+  garbage/near-boundary negatives** — wrong poses should score low, correct high. Until that
+  separation is demonstrated, 1b/1c stay blocked. The mixture is now well-formed and stays shadow-only.
 - **1b Use it for candidate *selection* first** (ranking, not accept/reject): the notes already
   identified verifier-driven selection as the principled fix for the catalog-depth instability
   (m51@16's roll-58 crowd-out) and pollux is the same wrong-roll class. A/B against 0d + REAL.

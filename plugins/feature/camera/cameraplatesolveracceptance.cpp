@@ -182,25 +182,27 @@ double CameraPlateSolver::SolverContext::poseVerificationLogOdds(const PlateSolv
     }
 
     // Astrometry.net-style Bayesian verification (Lang et al. 2010, after Sutherland & Saunders
-    // 1992). Decide, per field detection, between:
-    //   H1 (this WCS is correct): the detection is either a real star drawn from a narrow Gaussian
-    //       around a catalogue position, or a distractor drawn uniformly over the image;
-    //   H0 (random WCS): the detection is uniform over the image.
-    // Per matched detection the H1/H0 density ratio is
-    //   (1-f) * A/(2*pi*sigma^2) * exp(-d^2/2sigma^2) + f
-    // and per UNMATCHED detection it is just f (the distractor fraction), i.e. log(f) < 0. Summing
-    // the logs over ALL detections normalises for field density: a dense wrong solve that leaves
-    // most detections unmatched is penalised, so sparse-correct and dense-correct solves become
-    // comparable (which the per-match sum in poseFalseAlarmLogOdds cannot do).
-    constexpr double kDistractorFraction = 0.25;
+    // 1992). Per FIELD detection, compare:
+    //   H1 (this WCS is correct): background density rho_bg + a foreground Gaussian bump wherever a
+    //       reference star projects;
+    //   H0 (random WCS): background density rho_bg everywhere.
+    // The per-detection likelihood ratio is 1 + foreground/rho_bg for a matched detection and
+    //   exactly 1 (log 0) for an unmatched one -- an unmatched detection is background under BOTH
+    // hypotheses, so it carries no evidence. (An earlier revision wrongly charged log(f) per
+    // unmatched detection; the shadow log showed that over-penalised correct deep/nebular fields
+    // whose detector returns hundreds of sub-catalogue-depth detections -- e.g. stars-narrow-3,
+    // ngc-2403 scored below the pollux false solve. Dropping that term is the correct model.)
+    // rho_bg is the empirical detection density, so a dense field automatically discounts each
+    // match: a chance coincidence sits near background (ratio ~1, log ~0) while a genuine tight
+    // match rises far above it, which is what separates a correct solve from a dense wrong one.
+    constexpr double kForegroundDetectability = 0.75; // (1-f): prob. a projected star is a real, detectable source
     const double area = static_cast<double>(imageSize.width()) * static_cast<double>(imageSize.height());
     // Positional-uncertainty scale: real matches sit inside the radius but carry pose-model error,
     // so r/2 (as in poseFalseAlarmLogOdds) is the effective 1-sigma.
     const double sigma = std::max(1.0, matchRadiusPixels * 0.5);
     const double twoSigmaSquared = 2.0 * sigma * sigma;
-    const double foregroundPeak = area / (kPi * twoSigmaSquared); // A / (2*pi*sigma^2)
+    const double backgroundDensity = std::max(1.0, static_cast<double>(detectionCount)) / area;
 
-    int matchedDetections = 0;
     double logOdds = 0.0;
     for (const Match& match : finalPass.finalMatches)
     {
@@ -208,16 +210,10 @@ double CameraPlateSolver::SolverContext::poseVerificationLogOdds(const PlateSolv
         if (d > matchRadiusPixels) {
             continue; // shouldn't happen for an accepted match; skip defensively
         }
-        ++matchedDetections;
-        const double foreground = (1.0 - kDistractorFraction) * foregroundPeak
-            * std::exp(-(d * d) / twoSigmaSquared);
-        logOdds += std::log(foreground + kDistractorFraction);
+        // Foreground positional density of one reference star: (1/(2*pi*sigma^2)) exp(-d^2/2sigma^2).
+        const double foregroundDensity = std::exp(-(d * d) / twoSigmaSquared) / (kPi * twoSigmaSquared);
+        logOdds += std::log(1.0 + kForegroundDetectability * foregroundDensity / backgroundDensity);
     }
-
-    // Every remaining detection is, under H1, a distractor: ratio f, so log(f) each. Clamp in case
-    // finalMatches carries more entries than there are distinct detections.
-    const int unmatchedDetections = std::max(0, detectionCount - matchedDetections);
-    logOdds += static_cast<double>(unmatchedDetections) * std::log(kDistractorFraction);
     return logOdds;
 }
 

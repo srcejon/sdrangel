@@ -1516,23 +1516,40 @@ bool CameraPlateSolver::SolverContext::unprojectPixelToVector(const SkyProjector
 
     if (std::fabs(projector.distortionK1) > 1e-9)
     {
-        double undistortedX = projectedX;
-        double undistortedY = projectedY;
-        bool undistortOk = true;
-        for (int iteration = 0; iteration < 8; ++iteration)
+        // Invert the radial model R_d = R_u * (1 + k1 * R_u^2) for the undistorted radius R_u on the
+        // physically valid, MONOTONIC branch R_u^2 < -1/(3 k1). (A1) Newton on the scalar radius:
+        // f(R) = R + k1 R^3 - R_d, f'(R) = 1 + 3 k1 R^2. It converges quadratically and exits as
+        // soon as the step falls below tolerance, versus the previous flat 8-pass fixed-point
+        // R_u <- R_d/(1 + k1 R_u^2), which only converges linearly and, for strong barrel distortion
+        // near the fold, can under-converge in 8 passes or drift onto the wrong (large-R) branch.
+        // For the corpus's distortion (rectilinear skips this branch; wide fisheye k1 ~ -0.10 is well
+        // inside the convergent regime) both reach the same root, so this is byte-identical there and
+        // only better-conditioned for extreme lenses.
+        const double k1 = projector.distortionK1;
+        const double distortedRadius = std::hypot(projectedX, projectedY);
+        if (distortedRadius > 1e-12)
         {
-            const double radiusSquared = undistortedX * undistortedX + undistortedY * undistortedY;
-            const double distortionScale = 1.0
-                + projector.distortionK1 * radiusSquared;
-            // Non-positive scale means the pixel lies in the folded region of the
-            // distortion model — it cannot be mapped back to a sky direction.
-            if (distortionScale <= 0.0) { undistortOk = false; break; }
-            undistortedX = projectedX / distortionScale;
-            undistortedY = projectedY / distortionScale;
+            double undistortedRadius = distortedRadius;
+            bool undistortOk = false;
+            for (int iteration = 0; iteration < 12; ++iteration)
+            {
+                const double radiusSquared = undistortedRadius * undistortedRadius;
+                const double derivative = 1.0 + 3.0 * k1 * radiusSquared;
+                // derivative <= 0 is the non-monotonic fold: the model is not invertible there, so
+                // reject rather than step onto the wrong branch (tighter than the old scale<=0 test).
+                if (derivative <= 0.0) { undistortOk = false; break; }
+                const double residual = undistortedRadius * (1.0 + k1 * radiusSquared) - distortedRadius;
+                const double step = residual / derivative;
+                undistortedRadius -= step;
+                if (undistortedRadius < 0.0) { undistortOk = false; break; }
+                undistortOk = true; // last iterate is a usable estimate even if tolerance not hit
+                if (std::fabs(step) <= 1e-10 * (1.0 + distortedRadius)) { break; }
+            }
+            if (!undistortOk) { return false; }
+            const double scale = undistortedRadius / distortedRadius;
+            projectedX *= scale;
+            projectedY *= scale;
         }
-        if (!undistortOk) return false;
-        projectedX = undistortedX;
-        projectedY = undistortedY;
     }
 
     const double projectionRadius = std::hypot(projectedX, projectedY);

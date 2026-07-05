@@ -184,6 +184,18 @@ REAL/FISHEYE/WIDE. No REAL regression — the "Harden wide-9, then default-on" p
   (bounded ×3 cost) instead of k1=0, targeting the documented `codeMatches=0` root cause on 160°
   fisheyes — the Tetra3-style answer, and the already-refuted alternative (loosen epsilon) stays
   refuted.
+  **RULED OUT by measurement (2026-07-05) — do NOT implement as specified.** Two independent blockers:
+  (1) NO corpus has a nonzero k1 — synthetic fisheye mode1, real TREx, and real GMN rows are ALL k1=0
+  (their curvature is the equidistant/equisolid *projection*, which the blind unproject already inverts
+  because the projection TYPE is known in blind mode; k1 is a separate radial term that is simply zero).
+  So a k1 sweep has nothing to sweep and cannot be validated. (2) Even the premise is wrong: on
+  FISHEYE-mode1, `vectorQuadCodeMatches=0` for 49/50 cases AND yet 38/50 PASS — of those 38, only ONE
+  used vector-quad; the other 37 solve via **brightpair** (the distortion-robust blind seeder). So
+  vector-quad is not the blind-fisheye path at all — fixing its codes would duplicate brightpair, not
+  add recall. The 12 mode1 FAILs are the previously-investigated Cat-C cases (weak oracle / clustered
+  named anchors / genuinely sparse), not a seeding-code failure. **To ever revisit A3 meaningfully you
+  first need real blind-fisheye rows with a FITTED nonzero k1** (the GMN platepars carry distortion
+  coefficients that were set to 0 during row construction — populating them is a 0b/0e corpus task).
 
 ### Track 3 — Performance (continue the proven tier)
 

@@ -69,6 +69,20 @@ hard problems plus housekeeping, in priority order:
   run RAND2 offline (chunked) with the shadow metrics and compare mixture/faLogOdds on correct vs
   wrong-roll cases. Separates → 1b (verifier-driven candidate *selection*) becomes viable for the
   catalog-depth-instability class. Doesn't → close 1b/1c as blocked pending a better formulation.
+  **DONE (2026-07-06) — it SEPARATES; 1b is unblocked (with a caveat).** On the RAND2 cases that solved
+  offline (cache-limited to 67/150, but the split is what matters): correct (PASS, n=67) mixture
+  min 7407 / p25 10562 / median 12489 / max 405k; wrong-pose-accepted (FAIL-but-solved, n=4) mixture
+  6459–9786 — **all 4 below the correct p25, 0/4 overlap**; faLogOdds separates the same way (wrong
+  ≤5376 vs correct p25 7466). This is the wrong-ROLL class, exactly what 1b targets, and it vindicates
+  the original premise. **Reconciles the earlier "mixture is not a gate" negatives:** neg-blobs
+  (garbage) and wrong-FoV (wrong-scale) score HIGH because they have coincidentally-good match sets;
+  the wrong-ROLL class has genuinely worse star agreement and scores LOW. So the mixture is a
+  discriminator for candidate SELECTION within a case (rank correct-roll above wrong-roll), NOT a
+  universal accept/reject gate. **1b action:** wire the mixture as the ranking key for competing
+  direction-seeded candidates (the roll-alias / catalog-depth-instability class), NOT as a global
+  floor. Caveat: only 4 wrong cases here (offline cache limit) — confirm on a warmed-cache RAND2 run
+  (P5) before committing a selection change. The elevation-seed/blind-grid faLogOdds compare from
+  P2's fix (wide rotation-alias defense) is the same mechanism applied to a different regime.
 - **P4 — T2: searchBestPose restructure (dedicated session, high care).** The 64 s bottleneck.
   Spec: batch-parallel evaluation of the guided-direction grid (~18 s first target) in CANONICAL
   order with the serial reduction/early-exit logic applied post-batch (byte-identical by

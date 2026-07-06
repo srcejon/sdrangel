@@ -82,6 +82,19 @@ hard problems plus housekeeping, in priority order:
   the anchor derivation, not the roll-alias defense. (Bright-weighted faLogOdds cannot arbitrate
   rotations in a dense all-sky field regardless — a wrong rotation still lands many bright catalogue
   stars — so the wide rotation-alias defense was the wrong lever even if the anchors were right.)
+  **CORRECTION (same session): the anchor-miscalibration hypothesis is WEAKENED — do not assume a
+  corpus bug.** Consistency check: within the luck camera, frames 060030 and 090030 PASS while 030030
+  and 120030 FAIL. A systematic per-camera anchor roll offset would fail ALL luck frames, so luck's
+  anchors are sound (the per-frame roll differences are just sidereal sky rotation over the capture
+  times). So the failing frames are GENUINE wrong-roll acceptances: on these (likely sparse/noisy)
+  all-sky frames the solver lands on a roll that out-scores the true roll on EVERY available metric
+  (faLogOdds, match count, rms) — the true pose genuinely fits worse in the data. This is the same
+  no-clean-discriminator wall hit by the mixture verifier (garbage), the wrong-FoV FPs, and the P1
+  completeness heuristic: for these hard data-limited cases there is no scale/rotation-independent
+  signal that separates right from wrong. **Realistic conclusion: the remaining TREx fisheye failures
+  are largely intractable with the current feature set — not a quick fix and possibly not worth
+  chasing.** The one concrete residual action is still worth doing: spot-check 1–2 TREx anchors
+  astrometrically to rule the corpus fully in or out before writing them off.
 - **P3 — Verifier separation study on RAND2 (~1 h compute, no risk).** 1b/1c are blocked on
   demonstrating wrong-pose separation. RAND2's known wrong-roll/alias tail is the right labelled set:
   run RAND2 offline (chunked) with the shadow metrics and compare mixture/faLogOdds on correct vs

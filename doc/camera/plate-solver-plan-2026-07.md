@@ -27,6 +27,19 @@ hard problems plus housekeeping, in priority order:
   signature for the two FPs (e.g. matched/candidates fraction — narrow-5@6.0 matched only 629/8580 =
   7%) so the escape doesn't cost seconds on every legitimate solve. Validate: both committed
   wrong-FoV negatives reject, REAL/RAND2 unregressed, per-case timeMs bounded.
+  **IMPLEMENTED then REFUTED by RAND2 (2026-07-06) — reverted.** Built the escape exactly as specced:
+  a completeness trigger (matched/detection < 0.05 OR matched/candidate < 0.10), re-solve at a
+  ratio-estimated FoV ×{1,0.7,1.4}, adopt only a healthy result, else REJECT the wrong-scale solve.
+  On the two FPs it worked beautifully — narrow-5@6.0 RECOVERED the true pose (fov 6.0→1.27, rms 1.37,
+  507 matches) and pollux@0.4 was rejected — and REAL was byte-identical (escape fired 0×). BUT RAND2
+  broke it: a correct SPARSE deep field has the SAME low matched/detection as a wrong-small-scale solve
+  (synth-rand-a-001: 5/5 candidates matched at rms 0.375 — a perfect solve — yet m/det 0.032 → falsely
+  rejected), and a-002/003 got dragged to wrong wider FoVs and adopted. The completeness signal
+  OVERLAPS correct sparse solves (pollux 0.027 vs rand-a-001 0.032) — not separable. **A real wrong-FoV
+  fix needs a SCALE-INDEPENDENT verifier (the true pose's inter-star angular geometry matches the
+  catalogue at exactly one scale; a wrong scale mismatches), not a match-completeness heuristic — this
+  is the same normalized-verifier gap as Track 1, now with a second hard corpus (the FPs) to gate it.**
+  Do not re-attempt the completeness heuristic.
 - **P2 — TREx wrong-pose: true-pose diagnostic (~1–2 h, no risk — measurement only).** The fisheye
   failures are wrong-pose ACCEPTANCES (Track 0b triage). Split search-vs-acceptance the established
   way: take 3–4 failing TREx rows, add mode-4 (FovAzElRoll) variants seeded with the skymap-derived
@@ -62,6 +75,17 @@ hard problems plus housekeeping, in priority order:
   construction; wasted evals past an early exit are the price), using a PERSISTENT pool (member of
   CameraPlateSolver, not per-call — the per-call spawn overhead is what made the lens-grid trial
   1.7× slower). Gate: REAL byte-identical + per-case timeMs down on narrow-7/dense cases.
+  **DONE (2026-07-06, commit pending).** Parallelised the guided-direction grid: the no-early-stop
+  branch (`!allowGuidedEarlyStop`, the dominant cost) is a fixed evaluation set, so it is flattened to
+  a `(fov,el,az,roll)` point list, evaluated on per-worker `SolverContext`s (each builds its own
+  blind-grid cache per cell, `evaluatePoseFromPrecomputedCatalog` is write-free), then the reduction
+  (logging, candidate-pool insertion, best-tracking) is REPLAYED serially in canonical order — the
+  same code path as the serial `evaluateSeedFromCache`, so byte-identical by construction. The
+  early-stop branch keeps the original serial loop. Used the existing `refinementWorkerThreadCount`
+  sizing (not a per-call `QThreadPool` object churned each solve, unlike the failed lens-grid trial —
+  here one pool per searchBestPose call over ~thousands of evals amortises). **Measured: guided-direction
+  25958→5932 ms across REAL (4.4×), REAL 47/48 byte-identical.** (Note: further gains want the
+  persistent-member pool + parallelising the elevation-seed and blind grids too — follow-on.)
 - **P5 — Housekeeping (fill-in).** 0d stratified ~20-case RAND2 fast gate; convert
   `robustness-neg*.csv` to `expectSolved=0` and add fast sparse-field wrong-FoV negatives (deep-field
   ones take ~50 s each); build+archive the portable hermetic catalog snapshot so a fresh checkout is

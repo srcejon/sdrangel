@@ -12348,6 +12348,150 @@ CameraPlateSolver::SolverContext::Evaluation CameraPlateSolver::SolverContext::s
             && useStartRoll;
         const QVector<double> directionOffsets = buildGuidedDirectionOffsets(coarseSearchRadius);
         const QVector<double> rollOffsets = buildGuidedRollOffsets();
+
+        // T2 (P4): the no-early-stop guided grid (mode-3 narrow etc., the dominant searchBestPose
+        // cost) is a FIXED set of evaluations — guidedSatisfied can never fire when
+        // !allowGuidedEarlyStop, so the loop has no data-dependent exits. That makes it safe to
+        // split into (a) a parallel, per-worker-context evaluation of every (fov,el,az,roll) grid
+        // point (each worker owns its blind-grid cache/scratch; evaluatePoseFromPrecomputedCatalog
+        // reads only that and the shared read-only inputs), then (b) a SERIAL replay of the
+        // reduction — logging, sparse-pair promotion, candidate-pool insertion, best-tracking — in
+        // the exact canonical fov→el→az→roll order of the serial loop, on this context. The replay
+        // is the same code path evaluateSeedFromCache runs serially, so the result is
+        // byte-identical by construction (only under mid-run cancellation can the set of completed
+        // evaluations differ, and a cancelled solve's result is discarded anyway). The early-stop
+        // mode keeps the original serial loop: its exits are data-dependent and it is cheap.
+        struct GuidedGridPoint
+        {
+            double azimuthDegrees = 0.0;
+            double elevationDegrees = 0.0;
+            double rollDegrees = 0.0;
+            double fovDegrees = 0.0;
+            int cellIndex = -1;
+        };
+        QVector<GuidedGridPoint> gridPoints;
+        if (!allowGuidedEarlyStop)
+        {
+            gridPoints.reserve(static_cast<qsizetype>(coarseFovOffsetsOrdered.size())
+                * directionOffsets.size() * directionOffsets.size() * rollOffsets.size());
+            int cellIndex = 0;
+            for (double fovFactor : coarseFovOffsetsOrdered)
+            {
+                for (double elOffset : directionOffsets)
+                {
+                    for (double azOffset : directionOffsets)
+                    {
+                        const double fovDegrees = std::max(
+                            static_cast<double>(CameraSettings::m_minFov),
+                            static_cast<double>(settings.m_fov) + fovFactor * coarseFovRadius);
+                        for (double rollOffset : rollOffsets)
+                        {
+                            GuidedGridPoint point;
+                            point.azimuthDegrees = settings.m_azimuth + azOffset;
+                            point.elevationDegrees = settings.m_elevation + elOffset;
+                            point.rollDegrees = settings.m_roll + rollOffset;
+                            point.fovDegrees = fovDegrees;
+                            point.cellIndex = cellIndex;
+                            gridPoints.append(point);
+                        }
+                        ++cellIndex;
+                    }
+                }
+            }
+        }
+        const int guidedGridThreads = gridPoints.isEmpty() ? 1
+            : refinementWorkerThreadCount(
+                static_cast<int>(gridPoints.size()),
+                estimateRefinementWorkUnits(
+                    static_cast<int>(gridPoints.size()),
+                    catalogContext.visibleStars.size(),
+                    detectionIndices.size()));
+
+        if (!allowGuidedEarlyStop && (guidedGridThreads > 1))
+        {
+            const int pointCount = static_cast<int>(gridPoints.size());
+            const int rollCount = std::max(1, static_cast<int>(rollOffsets.size()));
+            QVector<Evaluation> gridResults(pointCount);
+            QThreadPool guidedGridPool;
+            guidedGridPool.setMaxThreadCount(guidedGridThreads);
+            for (int workerIndex = 0; workerIndex < guidedGridThreads; ++workerIndex)
+            {
+                guidedGridPool.start(QRunnable::create([&, workerIndex]() {
+                    SolverContext workerContext(m_owner);
+                    workerContext.copySearchStateFrom(*this);
+                    int cachedCellIndex = -1;
+                    // Stride by CELL so each worker builds a cell's blind-grid cache once and
+                    // reuses it across that cell's rolls, mirroring the serial loop's cost shape.
+                    const int cellCount = (pointCount + rollCount - 1) / rollCount;
+                    for (int cell = workerIndex; cell < cellCount; cell += guidedGridThreads)
+                    {
+                        if (workerContext.isCancellationRequested()) {
+                            break;
+                        }
+                        const int firstPoint = cell * rollCount;
+                        const int lastPoint = std::min(pointCount, firstPoint + rollCount);
+                        const GuidedGridPoint& cellPoint = gridPoints[firstPoint];
+                        const SkyProjector refProjector = createProjector(
+                            settings,
+                            imageSize,
+                            cellPoint.azimuthDegrees,
+                            cellPoint.elevationDegrees,
+                            0.0,
+                            cellPoint.fovDegrees,
+                            fixedCenterOffsetX,
+                            fixedCenterOffsetY,
+                            fixedDistortionK1);
+                        if (cachedCellIndex != cellPoint.cellIndex)
+                        {
+                            workerContext.buildBlindGridCache(
+                                catalogContext,
+                                refProjector,
+                                guidedFirstPassCatalogIndices);
+                            cachedCellIndex = cellPoint.cellIndex;
+                        }
+                        for (int pointIndex = firstPoint; pointIndex < lastPoint; ++pointIndex)
+                        {
+                            if (workerContext.isCancellationRequested()) {
+                                break;
+                            }
+                            const GuidedGridPoint& point = gridPoints[pointIndex];
+                            workerContext.populateBlindGridProjectedCatalog(
+                                point.rollDegrees, guidedSeedMatchRadius, refProjector);
+                            gridResults[pointIndex] = workerContext.evaluatePoseFromPrecomputedCatalog(
+                                settings, catalogContext, starDetections, detectionIndices,
+                                point.azimuthDegrees, point.elevationDegrees, point.rollDegrees,
+                                point.fovDegrees,
+                                fixedCenterOffsetX, fixedCenterOffsetY, fixedDistortionK1,
+                                guidedSeedMatchRadius);
+                        }
+                    }
+                }));
+            }
+            guidedGridPool.waitForDone();
+
+            // Serial replay of the reduction in canonical order — identical code path to the
+            // serial evaluateSeedFromCache (promoteSparseGuidedPair disabled there too).
+            for (int pointIndex = 0; pointIndex < pointCount; ++pointIndex)
+            {
+                if (isCancellationRequested()) {
+                    break;
+                }
+                const Evaluation& candidate = gridResults[pointIndex];
+                logPlateSolveEvaluation("guided-direction", candidate);
+                if (keepMultipleCandidates) {
+                    insertDistinctEvaluationCandidate(
+                        *candidatePool, candidate, maxMultiHypothesisCandidates,
+                        useWeakModeScoring, "guided-direction", interestingWeakModeMatchCount,
+                        weakModeCandidatePoolMinMatches, useGuidedDirectionScoring);
+                }
+                if (isBetterEvaluationForMode(candidate, best, useWeakModeScoring, useGuidedDirectionScoring)) {
+                    best = candidate;
+                    logPlateSolveEvaluation("guided-direction", best, true);
+                }
+            }
+        }
+        else
+        {
         for (double fovFactor : coarseFovOffsetsOrdered)
         {
             if (isCancellationRequested()) break;
@@ -12399,6 +12543,7 @@ CameraPlateSolver::SolverContext::Evaluation CameraPlateSolver::SolverContext::s
                     }
                 }
             }
+        }
         }
         logSearchProfile("guided-direction", stageStartMs);
     }

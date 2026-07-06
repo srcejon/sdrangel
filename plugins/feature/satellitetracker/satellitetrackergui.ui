@@ -193,7 +193,7 @@
         <item>
          <spacer name="buttonHorizontalSpacer">
           <property name="orientation">
-           <enum>Qt::Horizontal</enum>
+           <enum>Qt::Orientation::Horizontal</enum>
           </property>
           <property name="sizeHint" stdset="0">
            <size>
@@ -576,7 +576,7 @@
     <item>
      <widget class="QTableWidget" name="satTable">
       <property name="editTriggers">
-       <set>QAbstractItemView::NoEditTriggers</set>
+       <set>QAbstractItemView::EditTrigger::NoEditTriggers</set>
       </property>
       <column>
        <property name="text">
@@ -716,6 +716,14 @@
         <string>Norad catalog identifier for the satellite</string>
        </property>
       </column>
+      <column>
+       <property name="text">
+        <string>Error</string>
+       </property>
+       <property name="toolTip">
+        <string>Details any errors calculating satellites position</string>
+       </property>
+      </column>
      </widget>
     </item>
    </layout>
@@ -734,15 +742,15 @@
    <container>1</container>
   </customwidget>
   <customwidget>
-   <class>QChartView</class>
-   <extends>QGraphicsView</extends>
-   <header>QtCharts</header>
-  </customwidget>
-  <customwidget>
    <class>WrappingDateTimeEdit</class>
    <extends>QDateTimeEdit</extends>
    <header>gui/wrappingdatetimeedit.h</header>
    <container>1</container>
+  </customwidget>
+  <customwidget>
+   <class>QChartView</class>
+   <extends>QGraphicsView</extends>
+   <header>QtCharts</header>
   </customwidget>
  </customwidgets>
  <tabstops>

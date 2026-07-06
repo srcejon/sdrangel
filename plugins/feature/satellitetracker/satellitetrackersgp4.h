@@ -47,6 +47,7 @@ struct SatelliteState {
     double m_rangeRate;                 // km/s
     double m_speed;
     double m_period;
+    QString m_error;
     QList<SatellitePass> m_passes;              // Used in worker and GUI threads
     QList<QGeoCoordinate *> m_groundTrack;      // These used only in worker thread
     QList<QDateTime *> m_groundTrackDateTime;

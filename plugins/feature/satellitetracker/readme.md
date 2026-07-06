@@ -198,6 +198,7 @@ The table contains:
 * The free space path loss to the satellite, at the default frequency.
 * The one-way propagation delay to the satellite from the antenna location in milliseconds.
 * The NORAD catalogue identifier for the satellite.
+* An error message if there was a problem computing the position of the satellite.
 
 Rows can be ordered by left clicking column headers.
 Columns can be hidden by right clicking on the header and unchecking them.

@@ -81,6 +81,8 @@ private:
     QHash<QString, SatNogsSatellite *> m_satellites;
     SatelliteState *m_targetSatState;
 
+    QHash<QString, std::array<QTableWidgetItem*, SAT_COL_COLUMNS>> m_satTableItems;
+
     int m_plotPass;
 
     QChart m_emptyChart;
@@ -115,7 +117,8 @@ private:
         SAT_COL_DOPPLER,
         SAT_COL_PATH_LOSS,
         SAT_COL_DELAY,
-        SAT_COL_NORAD_ID
+        SAT_COL_NORAD_ID,
+        SAT_COL_ERROR
     };
 
     explicit SatelliteTrackerGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *feature, QWidget* parent = nullptr);

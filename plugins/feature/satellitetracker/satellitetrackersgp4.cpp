@@ -503,6 +503,7 @@ void getSatelliteState(QDateTime dateTime,
         OrbitalElements ele(tle);
         satState->m_speed = eci.Velocity().Magnitude();
         satState->m_period = ele.Period();
+        satState->m_error = "";
         if (noOfPasses > 0)
         {
             satState->m_passes.clear();
@@ -526,14 +527,14 @@ void getSatelliteState(QDateTime dateTime,
     }
     catch (SatelliteException& se)
     {
-        qDebug() << "getSatelliteState:SatelliteException " << satState->m_name << ": " << se.what();
+        satState->m_error = se.what();
     }
     catch (DecayedException& de)
     {
-        qDebug() << "getSatelliteState:DecayedException " << satState->m_name << ": " << de.what();
+        satState->m_error = "Decayed";
     }
     catch (TleException& tlee)
     {
-        qDebug() << "getSatelliteState:TleException " << satState->m_name << ": " << tlee.what() << "\n" << tle0 << "\n" << tle1 << "\n" << tle2;
+        satState->m_error = QString("TLE error: %1").arg(tlee.what());
     }
 }

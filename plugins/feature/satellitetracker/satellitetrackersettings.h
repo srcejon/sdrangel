@@ -34,7 +34,7 @@ class Serializable;
 #define DEFAULT_AOS_SPEECH              "${name} is visible for ${duration} minutes. Max elevation, ${elevation} degrees."
 #define DEFAULT_LOS_SPEECH              "${name} is no longer visible."
 
-#define SAT_COL_COLUMNS 18
+#define SAT_COL_COLUMNS 19
 
 struct SatelliteTrackerSettings
 {

@@ -205,6 +205,17 @@ REAL/FISHEYE/WIDE. No REAL regression — the "Harden wide-9, then default-on" p
   false-positives. **Next: A/B the mixture vs faLogOdds on RAND2 (wrong-roll aliases) + the
   garbage/near-boundary negatives** — wrong poses should score low, correct high. Until that
   separation is demonstrated, 1b/1c stay blocked. The mixture is now well-formed and stays shadow-only.
+  **Wrong-FoV gap is FUNDAMENTAL — no photometric gate fixes it (2026-07-06, second pass).** Chased a
+  `brightDetectionMagnitudeError` discriminator (search candidates for the wrong-FoV FP show magErr ~7,
+  vs <=1.5 for any correct solve) and added a magErr>3.0 reject to the narrow brightness gate. It was a
+  NO-OP: REAL/FISHEYE/WIDE byte-identical AND both FPs still solved. Root cause: the high magErr is only
+  in REJECTED search candidates; the FINAL ACCEPTED pose has acceptable magErr, rank error, and
+  geometry — a grossly-wrong TRUSTED FoV produces a *fully self-consistent* wrong solve that passes every
+  photometric gate (it matches a coherent set of catalogue stars at the wrong scale). Reverted. **So the
+  only real fix is FoV-RANGE VERIFICATION — don't fully trust the seed FoV; search a bounded FoV range
+  and adopt the best-verified scale (astrometry.net does not trust an input scale). That is a design
+  change with regression/perf risk to legitimate trusted-FoV solves, deferred as its own item.** The
+  earlier mixture attempt below is also part of this refutation.
   **Wrong-FoV discriminator REFUTED by measurement (2026-07-06):** the mixture does NOT separate the
   wrong-FoV false positives either — pollux@0.4 scores 16070 (ABOVE the correct-solve minimum 10551) and
   narrow-5@6.0 scores 465891 (matched 629 stars at the wrong scale, mid-range among correct solves). A

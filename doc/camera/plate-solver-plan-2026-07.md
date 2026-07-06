@@ -246,6 +246,18 @@ real (mode 4/5/6 or synthetic with a trustworthy render roll — NOT mode-3 plac
   (8-bit RGB, ~6–13 bright stars/frame), not color in principle; a higher-bit-depth camera *might* do
   better. Verdict: color could serve as a WEAK PRIOR alongside geometry, but will not by itself break
   the wrong-roll degeneracy. Deliverables kept: color_probe.py + color_probe_results.csv (92 rows).
+  **DEEP-STACK FOLLOW-UP (2026-07-06) — the 0.22 was a real color ceiling, NOT SNR-limited, so MORE
+  8-bit TREx data will not help.** Re-ran with a full ~20-frame per-minute median stack (drift 0.65px
+  < 1px so no registration needed): pooled |trueCorr| moved only 0.22→0.27 (well-populated 0.33→0.36),
+  still far below 0.5, and the SNR≥5 star count was UNCHANGED at 92 — the limiter is the NUMBER of
+  Vmag<3.5 stars above 30° per fisheye frame (~6–13), not photon noise, and the true-pose color scatter
+  is a SYSTEMATIC (camera spectral response + 8-bit quantization) that averaging can't remove. Where
+  stars are plentiful (n≥13) color DOES reach |ρ|≈0.8 — so color is viable IN PRINCIPLE, just not with
+  this camera's few-bright-stars/8-bit data. **CONCLUSION on downloading more data: it does NOT help
+  the accuracy problem** — pollux is a bad image, TREx's lens is already known (skymap), and color's
+  ceiling is the camera hardware, not exposure/quantity. Real progress needs a DIFFERENT sensor
+  (higher bit depth + more resolved bright stars) or the skymap-intrinsics code path — not more frames.
+  Deep-stack deliverables: color_probe.py (`--deep`/`--stack N`/`--noreg`) + color_probe_results_deepstack.csv.
 
 **NET (2026-07-06): every lever — verification, search-expansion, selection-reranking, better lens
 model, color ID — has now been measured and none cracks the all-sky rotation class with the current

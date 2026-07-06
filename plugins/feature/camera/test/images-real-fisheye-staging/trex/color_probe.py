@@ -22,11 +22,24 @@ Outputs: color_probe_results.csv (per star) and color_probe_scatter.png.
 """
 import os
 import re
+import sys
 import math
 import numpy as np
 import h5py
 from scipy.io import readsav
 from scipy.stats import spearmanr
+
+# ---------------------------------------------------------------------------
+# stacking mode (set from argv in main):
+#   default  -> +-2-frame temporal mean centered on the frame nearest :30
+#   --deep   -> median stack of ALL frames in the cube (registered)
+#   --stack N-> median stack of N frames centered on :30 (registered if N>5)
+# The stack combine is a per-channel MEDIAN, which lifts SNR AND rejects
+# satellites / cosmic rays / aircraft that a plain mean would smear in.
+STACK_MODE = "mean2"       # "mean2" | "deep" | int N
+REGISTER = True            # integer-pixel align frames to the first before stack
+CSV_OUT = "color_probe_results.csv"
+SCATTER_OUT = "color_probe_scatter.png"
 
 HYG = os.path.join(os.environ.get("APPDATA", ""),
                    "f4exb", "SDRangel", "camera", "hyg_v42.csv")
@@ -162,17 +175,96 @@ def parse_h5_name(name):
     return site, (y, mo, d, h, mi)
 
 
+def _bright_star_seeds(lum0, n=6, margin=20, minpeak=None):
+    """Pick up to n bright, isolated local maxima in a single luminance frame
+    (used as registration references). Returns [(x,y)]."""
+    H, W = lum0.shape
+    bg = np.median(lum0)
+    if minpeak is None:
+        minpeak = bg + 8.0 * (np.std(lum0) + 1e-6)
+    flat = lum0.copy()
+    flat[:margin, :] = -1; flat[-margin:, :] = -1
+    flat[:, :margin] = -1; flat[:, -margin:] = -1
+    seeds = []
+    work = flat.copy()
+    for _ in range(n):
+        iy, ix = np.unravel_index(np.argmax(work), work.shape)
+        if work[iy, ix] < minpeak:
+            break
+        seeds.append((int(ix), int(iy)))
+        work[max(0, iy - 12):iy + 13, max(0, ix - 12):ix + 13] = -1
+    return seeds
+
+
+def _centroid(lum, x, y, half=4):
+    sub = lum[y - half:y + half + 1, x - half:x + half + 1]
+    bg = np.median(lum[y - 2 * half:y + 2 * half + 1,
+                       x - 2 * half:x + 2 * half + 1])
+    w = np.clip(sub - bg, 0, None).astype(np.float64)
+    if w.sum() < 1:
+        return None
+    yy, xx = np.mgrid[y - half:y + half + 1, x - half:x + half + 1]
+    return (w * xx).sum() / w.sum(), (w * yy).sum() / w.sum()
+
+
+def register_and_stack(imgs, frame_idxs):
+    """Median-stack the selected frames per-channel, after integer-pixel
+    registration of each frame to the first via a consensus of bright-star
+    centroid shifts. Returns (stacked (H,W,3), drift_px)."""
+    H, W, C, N = imgs.shape
+    sel = [i for i in frame_idxs if 0 <= i < N]
+    lum = imgs.astype(np.float32).sum(axis=2)     # (H,W,N)
+    seeds = _bright_star_seeds(lum[:, :, sel[0]])
+    # measure per-frame shift (consensus median of star centroid deltas)
+    ref = {s: _centroid(lum[:, :, sel[0]], *s) for s in seeds}
+    shifts = {sel[0]: (0, 0)}
+    max_drift = 0.0
+    for i in sel[1:]:
+        dxs, dys = [], []
+        for s in seeds:
+            c0 = ref[s]
+            c1 = _centroid(lum[:, :, i], *s)
+            if c0 and c1:
+                dxs.append(c1[0] - c0[0]); dys.append(c1[1] - c0[1])
+        if dxs:
+            mdx, mdy = float(np.median(dxs)), float(np.median(dys))
+        else:
+            mdx, mdy = 0.0, 0.0
+        max_drift = max(max_drift, math.hypot(mdx, mdy))
+        shifts[i] = (int(round(-mdx)), int(round(-mdy)))  # shift back to ref
+    # apply integer shifts and median-combine per channel
+    if REGISTER and max_drift >= 1.0:
+        chans = []
+        for c in range(C):
+            stack = np.empty((len(sel), H, W), np.float32)
+            for k, i in enumerate(sel):
+                sx, sy = shifts[i]
+                stack[k] = np.roll(np.roll(imgs[:, :, c, i].astype(np.float32),
+                                           sy, axis=0), sx, axis=1)
+            chans.append(np.median(stack, axis=0))
+        out = np.stack(chans, axis=2)
+        method = "registered-median"
+    else:
+        out = np.median(imgs[:, :, :, sel].astype(np.float32), axis=3)
+        method = "median-noreg"
+    return out, max_drift, method
+
+
 def open_h5_rgb(name):
-    """Return linear RGB (H,W,3) = temporal mean of the frame nearest :30 and
-    its +-2 neighbours (sky rotates <0.4px in 15s; noise drops by ~sqrt(5),
-    which materially improves the faint color measurement), plus the UTC
-    string and the (y,mo,d,h,mi,s) of the chosen central frame."""
+    """Return linear RGB (H,W,3) combined per STACK_MODE, plus UTC string,
+    central-frame index, measured full-minute drift (px) and stack method.
+
+    mean2: +-2-frame temporal mean centered on :30 (baseline).
+    deep : median stack of ALL cube frames, registered.
+    int N: median stack of N frames centered on :30, registered if N>5.
+    """
     if not os.path.exists(name):
-        return None, None, None
+        return None, None, None, None, None
     with h5py.File(name, "r") as f:
         imgs = f["data/images"][:]            # (H, W, 3, frames)
         ts = [t.decode() if isinstance(t, bytes) else str(t)
               for t in f["data/timestamp"][:]]
+    N = imgs.shape[3]
     secs = []
     for t in ts:
         try:
@@ -180,9 +272,20 @@ def open_h5_rgb(name):
         except Exception:
             secs.append(999.0)
     idx = int(np.argmin([abs(sv - 30.0) for sv in secs]))
-    lo, hi = max(0, idx - 2), min(imgs.shape[3], idx + 3)
-    frame = imgs[:, :, :, lo:hi].astype(np.float32).mean(axis=3)  # (H,W,3)
-    return frame, ts[idx], idx
+
+    if STACK_MODE == "mean2":
+        lo, hi = max(0, idx - 2), min(N, idx + 3)
+        frame = imgs[:, :, :, lo:hi].astype(np.float32).mean(axis=3)
+        # still measure drift for the report, but don't register a 5-frame mean
+        _, drift, _ = register_and_stack(imgs, list(range(lo, hi)))
+        return frame, ts[idx], idx, drift, "mean2(+-2)"
+    if STACK_MODE == "deep":
+        sel = list(range(N))
+    else:
+        half = int(STACK_MODE) // 2
+        sel = list(range(max(0, idx - half), min(N, idx + half + 1)))
+    frame, drift, method = register_and_stack(imgs, sel)
+    return frame, ts[idx], idx, drift, f"{method}(n={len(sel)})"
 
 
 # ---------------------------------------------------------------------------
@@ -245,7 +348,7 @@ def main():
     for png in FRAMES:
         site, (y, mo, d, h, mi) = parse_h5_name(png)
         lat, lon = SITE_LATLON[site]
-        rgb, ts, idx = open_h5_rgb(png)
+        rgb, ts, idx, drift, method = open_h5_rgb(png)
         if rgb is None:
             print(f"{png}: h5 MISSING -- skipped")
             continue
@@ -329,16 +432,18 @@ def main():
             if not math.isnan(c):
                 randCorrs.append(c)
         randCorr = float(np.median(randCorrs)) if randCorrs else float("nan")
-        # pooled random null: one random draw per kept star, pairing the
+        # pooled random null: several random draws per kept star, pairing the
         # measured color at a random valid pixel with THAT star's B-V. Skip
-        # empty-sky draws (undefined color) so lengths stay matched -- pairing
-        # a valid meas with its bv, exactly as the true/roll pools do.
+        # empty-sky draws (undefined color) so lengths stay matched. Multiple
+        # draws per star keep the pooled null a stable ~0 (a single draw per
+        # star is small-N and correlates by chance).
         for bv in bv_list:
-            iy, ix = valid_yx[RNG.integers(len(valid_yx))]
-            meas, snr, ok = sample_color(rgb, ix, iy)
-            if ok and meas is not None:
-                pooled["rand"][0].append(meas)
-                pooled["rand"][1].append(bv)
+            for _ in range(5):
+                iy, ix = valid_yx[RNG.integers(len(valid_yx))]
+                meas, snr, ok = sample_color(rgb, ix, iy)
+                if ok and meas is not None:
+                    pooled["rand"][0].append(meas)
+                    pooled["rand"][1].append(bv)
 
         for m, bv in zip(meas_true, bv_list):
             pooled["true"][0].append(m)
@@ -362,11 +467,13 @@ def main():
         per_frame.append(dict(frame=png, site=site, n=n, trueCorr=trueCorr,
                               rollCorr=rollCorr, randCorr=randCorr,
                               gap_true=gap_true, ok_true=ok_true,
-                              gap_r90=gap_r90, ok_r90=ok_r90))
+                              gap_r90=gap_r90, ok_r90=ok_r90,
+                              drift=drift, method=method))
         print(f"{png}  n={n:2d}  trueCorr={trueCorr:+.3f}  "
               f"roll90={rollCorr[90]:+.3f}  rand={randCorr:+.3f}  "
               f"blueRedGap true={gap_true:+.3f}({'Y' if ok_true else 'n'}) "
-              f"r90={gap_r90:+.3f}({'Y' if ok_r90 else 'n'})")
+              f"r90={gap_r90:+.3f}({'Y' if ok_r90 else 'n'})  "
+              f"drift={drift:.2f}px {method}")
 
         for i, (name, mag, bv, px, py, mt) in enumerate(kept):
             rows.append(dict(frame=png, star=name, vmag=mag, bv=bv,
@@ -375,7 +482,7 @@ def main():
 
     # -----------------------------------------------------------------------
     # write per-star csv
-    with open("color_probe_results.csv", "w", encoding="utf-8", newline="\n") as f:
+    with open(CSV_OUT, "w", encoding="utf-8", newline="\n") as f:
         f.write("frame,star,vmag,catalogBV,truePixelX,truePixelY,"
                 "measuredColor_true,measuredColor_roll90,kept\n")
         for r in rows:
@@ -400,7 +507,15 @@ def main():
     for r in ROLLS:
         print(f"pooled roll{r:3d}Corr: {corr(pooled_roll[r]):+.3f} "
               f"(N={len(pooled_roll[r][0])})")
-    print(f"pooled randCorr: {corr(pooled['rand']):+.3f}")
+    # pooled null = median of the robust per-frame nulls (each a 30-draw
+    # median). The raw corr over the pooled random-pair list is unreliable
+    # (repeated-bv tie blocks + occasional real-star hits make it wander), so
+    # report the per-frame-aggregate as the trustworthy pooled baseline.
+    _rc = [pf["randCorr"] for pf in per_frame
+           if not math.isnan(pf["randCorr"])]
+    print(f"pooled randCorr (median of per-frame nulls): "
+          f"{np.median(_rc):+.3f}  [raw pooled-pair corr "
+          f"{corr(pooled['rand']):+.3f}, unreliable]")
 
     tc = [pf["trueCorr"] for pf in per_frame if not math.isnan(pf["trueCorr"])]
     r90 = [pf["rollCorr"][90] for pf in per_frame
@@ -441,13 +556,31 @@ def main():
         ax[1].set_xlabel("catalog B-V"); ax[1].set_ylabel("measured (B-R)/(B+R)")
         ax[1].axhline(0, color="k", lw=0.5)
         fig.tight_layout()
-        fig.savefig("color_probe_scatter.png", dpi=110)
-        print("\nwrote color_probe_scatter.png")
+        fig.savefig(SCATTER_OUT, dpi=110)
+        print(f"\nwrote {SCATTER_OUT}")
     except Exception as e:
         print(f"\n(scatter skipped: {e})")
 
-    print("wrote color_probe_results.csv")
+    drifts = [pf["drift"] for pf in per_frame if pf.get("drift") is not None]
+    if drifts:
+        print(f"\nregistration: full-minute star drift median {np.median(drifts):.2f}px "
+              f"(min {min(drifts):.2f}, max {max(drifts):.2f}); "
+              f"method e.g. {per_frame[0]['method']}")
+    print(f"wrote {CSV_OUT}")
 
 
 if __name__ == "__main__":
+    if "--deep" in sys.argv:
+        STACK_MODE = "deep"
+        CSV_OUT = "color_probe_results_deepstack.csv"
+        SCATTER_OUT = "color_probe_scatter_deepstack.png"
+    for a in sys.argv[1:]:
+        if a.startswith("--stack"):
+            STACK_MODE = a.split("=", 1)[1] if "=" in a else sys.argv[
+                sys.argv.index(a) + 1]
+            CSV_OUT = f"color_probe_results_stack{STACK_MODE}.csv"
+            SCATTER_OUT = f"color_probe_scatter_stack{STACK_MODE}.png"
+    if "--noreg" in sys.argv:
+        REGISTER = False
+    print(f"[stack mode: {STACK_MODE}, register: {REGISTER}]")
     main()

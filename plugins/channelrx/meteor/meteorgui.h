@@ -133,6 +133,9 @@ private:
     int m_totalCount;
     bool m_highlightAllDetectionOverlays;
     quint64 m_nextDetectionOverlayId;
+    bool m_detectionOverlayWindowValid;
+    QDateTime m_detectionOverlayWindowStartUtc;
+    QDateTime m_detectionOverlayWindowEndUtc;
     QMap<QDate, QVector<int> > m_hourlyCounts;
     QMap<QDate, QVector<bool> > m_hourlyData;
 

@@ -118,7 +118,8 @@ MeteorGUI::MeteorGUI(PluginAPI* pluginAPI, DeviceUISet *deviceUISet, BasebandSam
     m_hourlyChart(nullptr),
     m_totalCount(0),
     m_highlightAllDetectionOverlays(true),
-    m_nextDetectionOverlayId(1)
+    m_nextDetectionOverlayId(1),
+    m_detectionOverlayWindowValid(false)
 {
     setAttribute(Qt::WA_DeleteOnClose, true);
     m_helpURL = "plugins/channelrx/meteor/readme.md";
@@ -557,6 +558,7 @@ void MeteorGUI::on_maxFrequencyDrift_valueChanged(double value)
 void MeteorGUI::on_highlightAllDetections_toggled(bool checked)
 {
     m_highlightAllDetectionOverlays = checked;
+    m_detectionOverlayWindowValid = false;
     m_glSpectrum->getSpectrumView()->update();
 }
 
@@ -836,7 +838,9 @@ void MeteorGUI::on_clearDetections_clicked()
     m_hourlyData.clear();
     m_detectionOverlays.clear();
     m_nextDetectionOverlayId = 1;
+    m_detectionOverlayWindowValid = false;
     m_detectionsTable->setRowCount(0);
+    hideDetectionOverlayLabels();
     updateCounters();
     updateHistogram();
     updateColorgramme();
@@ -1128,19 +1132,29 @@ void MeteorGUI::addDetection(const MeteorDemodSink::MsgMeteorDetected& detection
     m_totalCount++;
 
     const quint64 overlayId = m_nextDetectionOverlayId++;
-    m_detectionOverlays.push_back({
+    const DetectionOverlay overlay = {
         overlayId,
-        detection.getDisplayDateTimeUtc(),
+        displayTimeUtc,
         detection.getDisplayDurationS(),
         detection.getCenterFrequency(),
         detection.getFrequencySpan(),
         detection.getFrequencyDrift(),
         detection.getPeakPowerDB()
-    });
+    };
+    const qint64 overlayStartMSecs = overlay.m_startTimeUtc.toMSecsSinceEpoch();
+    const auto insertIt = std::upper_bound(
+        m_detectionOverlays.cbegin(),
+        m_detectionOverlays.cend(),
+        overlayStartMSecs,
+        [](qint64 targetMSecs, const DetectionOverlay& detection) {
+            return targetMSecs < detection.m_startTimeUtc.toMSecsSinceEpoch();
+        });
+    m_detectionOverlays.insert((int) std::distance(m_detectionOverlays.cbegin(), insertIt), overlay);
 
     while (m_detectionOverlays.size() > 200) {
         m_detectionOverlays.removeFirst();
     }
+    m_detectionOverlayWindowValid = false;
 
     const bool sortingEnabled = m_detectionsTable->isSortingEnabled();
     m_detectionsTable->setSortingEnabled(false);
@@ -1698,6 +1712,7 @@ void MeteorGUI::deleteSelectedDetections()
                 m_detectionOverlays.removeAt(i);
             }
         }
+        m_detectionOverlayWindowValid = false;
     }
 
     updateCounters();
@@ -1721,48 +1736,116 @@ void MeteorGUI::drawDetectionOverlays(GLSpectrumView *spectrumView)
         float m_yEnd;
     };
     QVector<LabelOverlay> labelOverlays;
+    QDateTime visibleStartUtc;
+    QDateTime visibleEndUtc;
 
-    for (const DetectionOverlay& detection : m_detectionOverlays)
+    if (!m_highlightAllDetectionOverlays && selectedIds.isEmpty())
     {
-        if (!m_highlightAllDetectionOverlays && !selectedIds.contains(detection.m_id)) {
-            continue;
-        }
+        hideDetectionOverlayLabels();
+        m_detectionOverlayWindowValid = false;
+        return;
+    }
 
-        const QDateTime endTimeUtc = detection.m_startTimeUtc.addMSecs((qint64) std::ceil(detection.m_durationS * 1000.0));
-        float yStart = 0.0f;
-        float yEnd = 0.0f;
+    auto scanOverlays = [&](int beginIndex, int endIndex) -> int
+    {
+        int visibleCount = 0;
 
-        if (!spectrumView->waterfallTimeToY(detection.m_startTimeUtc, yStart)
-            || !spectrumView->waterfallTimeToY(endTimeUtc, yEnd))
+        for (int i = beginIndex; i < endIndex; i++)
         {
-            continue;
+            const DetectionOverlay& detection = m_detectionOverlays[i];
+
+            if (!m_highlightAllDetectionOverlays && !selectedIds.contains(detection.m_id)) {
+                continue;
+            }
+
+            const QDateTime endTimeUtc = detection.m_startTimeUtc.addMSecs((qint64) std::ceil(detection.m_durationS * 1000.0));
+            float yStart = 0.0f;
+            float yEnd = 0.0f;
+
+            if (!spectrumView->waterfallTimeToY(detection.m_startTimeUtc, yStart)
+                || !spectrumView->waterfallTimeToY(endTimeUtc, yEnd))
+            {
+                continue;
+            }
+
+            const int paddingPixels = std::max(0, m_settings.m_detectionBoxPaddingPixels);
+            const double minHalfWidthHz = std::max(2.0, (double) m_settings.m_channelSampleRate * 0.0025);
+            const double paddingHz = paddingPixels * spectrumView->waterfallFrequencyPerPixel();
+            const float paddingY = (float) (paddingPixels * spectrumView->waterfallTimePerPixel());
+            const double halfBandwidth = std::max({
+                std::fabs(detection.m_frequencySpan) * 0.5,
+                std::fabs(detection.m_frequencyDrift) * 0.5,
+                minHalfWidthHz
+            }) + paddingHz;
+            float xMin = 0.0f;
+            float xMax = 0.0f;
+
+            if (!spectrumView->waterfallFrequencyToX(detection.m_centerFrequency - halfBandwidth, xMin)
+                || !spectrumView->waterfallFrequencyToX(detection.m_centerFrequency + halfBandwidth, xMax))
+            {
+                continue;
+            }
+
+            yStart = std::clamp(yStart - paddingY, 0.0f, 1.0f);
+            yEnd = std::clamp(yEnd + paddingY, 0.0f, 1.0f);
+            spectrumView->drawWaterfallOverlayBox(xMin, yStart, xMax, yEnd, color, 1.0f);
+
+            if (m_settings.m_detectionLabelMode != MeteorSettings::DetectionLabelNone) {
+                labelOverlays.push_back({&detection, xMin, yStart, xMax, yEnd});
+            }
+
+            if (!visibleStartUtc.isValid() || (detection.m_startTimeUtc < visibleStartUtc)) {
+                visibleStartUtc = detection.m_startTimeUtc;
+            }
+
+            if (!visibleEndUtc.isValid() || (endTimeUtc > visibleEndUtc)) {
+                visibleEndUtc = endTimeUtc;
+            }
+
+            visibleCount++;
         }
 
-        const int paddingPixels = std::max(0, m_settings.m_detectionBoxPaddingPixels);
-        const double minHalfWidthHz = std::max(2.0, (double) m_settings.m_channelSampleRate * 0.0025);
-        const double paddingHz = paddingPixels * spectrumView->waterfallFrequencyPerPixel();
-        const float paddingY = (float) (paddingPixels * spectrumView->waterfallTimePerPixel());
-        const double halfBandwidth = std::max({
-            std::fabs(detection.m_frequencySpan) * 0.5,
-            std::fabs(detection.m_frequencyDrift) * 0.5,
-            minHalfWidthHz
-        }) + paddingHz;
-        float xMin = 0.0f;
-        float xMax = 0.0f;
+        return visibleCount;
+    };
 
-        if (!spectrumView->waterfallFrequencyToX(detection.m_centerFrequency - halfBandwidth, xMin)
-            || !spectrumView->waterfallFrequencyToX(detection.m_centerFrequency + halfBandwidth, xMax))
-        {
-            continue;
-        }
+    int visibleCount = 0;
 
-        yStart = std::clamp(yStart - paddingY, 0.0f, 1.0f);
-        yEnd = std::clamp(yEnd + paddingY, 0.0f, 1.0f);
-        spectrumView->drawWaterfallOverlayBox(xMin, yStart, xMax, yEnd, color, 1.0f);
+    if (m_detectionOverlayWindowValid && !m_detectionOverlays.isEmpty())
+    {
+        const qint64 windowPaddingMSecs = std::max(1000, m_settings.m_maxDurationMS + 1000);
+        const qint64 windowStartMSecs = m_detectionOverlayWindowStartUtc.addMSecs(-windowPaddingMSecs).toMSecsSinceEpoch();
+        const qint64 windowEndMSecs = m_detectionOverlayWindowEndUtc.addMSecs(windowPaddingMSecs).toMSecsSinceEpoch();
+        const auto beginIt = std::lower_bound(
+            m_detectionOverlays.cbegin(),
+            m_detectionOverlays.cend(),
+            windowStartMSecs,
+            [](const DetectionOverlay& detection, qint64 targetMSecs) {
+                return detection.m_startTimeUtc.toMSecsSinceEpoch() < targetMSecs;
+            });
+        const auto endIt = std::upper_bound(
+            m_detectionOverlays.cbegin(),
+            m_detectionOverlays.cend(),
+            windowEndMSecs,
+            [](qint64 targetMSecs, const DetectionOverlay& detection) {
+                return targetMSecs < detection.m_startTimeUtc.toMSecsSinceEpoch();
+            });
+        visibleCount = scanOverlays((int) std::distance(m_detectionOverlays.cbegin(), beginIt), (int) std::distance(m_detectionOverlays.cbegin(), endIt));
+    }
 
-        if (m_settings.m_detectionLabelMode != MeteorSettings::DetectionLabelNone) {
-            labelOverlays.push_back({&detection, xMin, yStart, xMax, yEnd});
-        }
+    if ((visibleCount == 0) && !m_detectionOverlays.isEmpty()) {
+        visibleCount = scanOverlays(0, m_detectionOverlays.size());
+    }
+
+    if ((visibleCount > 0) && visibleStartUtc.isValid() && visibleEndUtc.isValid())
+    {
+        const qint64 windowPaddingMSecs = std::max(1000, m_settings.m_maxDurationMS + 1000);
+        m_detectionOverlayWindowStartUtc = visibleStartUtc.addMSecs(-windowPaddingMSecs);
+        m_detectionOverlayWindowEndUtc = visibleEndUtc.addMSecs(windowPaddingMSecs);
+        m_detectionOverlayWindowValid = true;
+    }
+    else
+    {
+        m_detectionOverlayWindowValid = false;
     }
 
     if (labelOverlays.isEmpty()) {

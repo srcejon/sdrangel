@@ -140,6 +140,19 @@ REAL/FISHEYE/WIDE. No REAL regression — the "Harden wide-9, then default-on" p
   where the real lens deviates from a pure equidistant model. This is a Track-2 projection-accuracy
   signal (edge distortion), NOT a seeding gap. Next: measure the per-anchor error magnitudes to split
   "borderline oracle (25-40px, tighten model)" from "real pose error (100px+)".
+  **Per-anchor measurement DONE (2026-07-06) — the edge-distortion hypothesis is REFUTED; it is
+  wrong-pose acceptance.** Parsed the 25 mismatched TREx anchors (`position mismatches:` lines, 553x480
+  frames): **19/25 are gross (>=100px)**, only 2 borderline. Errors are large at ALL radii (inner
+  meanErr 72px, mid 209px, edge 196px) — NOT an edge-growing pattern, so a higher-order radial term (k2)
+  would not fix it. Shift-vector analysis on the only statistically-meaningful frame (6 anchors) is
+  SCATTERED (mean shift 36px vs 205px scatter), i.e. the anchors land in different wrong directions —
+  the solved POSE is in a wrong basin, not a uniformly-offset/edge-warped correct pose. (The anchors are
+  trustworthy: overlays trace coherent constellations.) **Conclusion: the fisheye failures are wrong-pose
+  ACCEPTANCES on hard 180deg all-sky frames — the solver accepts a plausible-looking but wrong pose that
+  matches many stars coincidentally, the same class as the wrong-FoV/roll aliases. The fix is better
+  all-sky search (find the true basin) or better wrong-pose rejection (verification), NOT a distortion
+  model.** This redirects Track 2 away from k2/distortion and toward the Track-1 verifier problem (which
+  the shadow measurements show the mixture cannot yet solve — garbage/wrong-scale poses score high).
 - **0c Richer per-run metrics.** Emit per-case CSV (verdict, pose deltas vs truth where known,
   rms, matches, timeMs) instead of grepping PASS/FAIL. Binary verdicts hide accuracy drift; per-case
   timeMs is the only timing signal robust to this machine's mid-run sleeps.

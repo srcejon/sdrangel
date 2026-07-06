@@ -165,6 +165,23 @@ vectors: true-pose residuals fit a smooth radial/rotation field, coincidence res
 hold-out prediction. Extending the dump with compact per-match residuals for finalists is the next
 concrete step; also worth re-running collection on RAND2 (adds the wrong-roll class at scale).
 
+**VERIFIER PROGRAM — CONCLUDING SUMMARY (2026-07-06, after the Tier-2 strengthened test).** With the
+corpus doubled (trex2: 10 new frames, 3 PASS — same rotation-alias failure class confirmed by pose
+deltas), the combined all-sky labelled set (17 RIGHT / 437 WRONG cluster-finalists) settles bpFrac:
+the population-level signal is real (RIGHT p10 0.12 vs WRONG median 0.00) but the decisive
+WITHIN-CASE ranking test fails — max-bpFrac picks the RIGHT finalist in only **1/5** cases where one
+exists. That was the last designed feature. Program totals: ~45k labelled candidates; features
+evaluated = count, rms, tightness ladder, multi-radius excess-over-chance, brightness fractions both
+directions, magErr, rank error, mixture, faLogOdds, residual-field coherence, hold-out; wiring
+attempts gate-refuted = P1 FoV-escape (RAND2), P2-fix wide alias adoption (winner out-scores truth),
+1b mid-selection (RAND2: 66 vs 67). **Conclusion: with match-statistics features, all-sky rotation
+selection is NOT solvable — the information is not in the match set at this star density and lens
+accuracy. The narrow wrong-roll class is already handled at the final level (rollAlias adopt). Stop
+verifier feature work; the remaining paths are physical, not statistical: (a) a better lens model for
+all-sky (reduce the true pose's 8–11px residual band so tightness separates), or (b) external
+bright-star identification (match the handful of first-magnitude stars by absolute brightness +
+pattern, independent of the solve).** The labelled dataset + tooling stay for future re-tests.
+
 **v2 DONE (2026-07-06): residual-field coherence REFUTED for all-sky; missed-bright-prediction is
 the first (weak) all-sky signal.** The dump now carries subsampled per-match residual vectors
 (`res=x:y:dx:dy;…`, finalists only) and the study computes field-coherence R² + even/odd hold-out

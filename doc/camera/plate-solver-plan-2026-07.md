@@ -293,6 +293,22 @@ skymap-as-fixed-intrinsics path, a fit of the solver's EXACT parametric projecto
 Validate mirror-OFF byte-identical on REAL/FISHEYE/WIDE (none are mirrored) and the TREx gain with it
 ON. This is now the top forward item, above the P0 merge.
 
+**PROTOTYPE RESULT (2026-07-07) — projector-only mirror is PARTIAL; the complete fix is IMAGE-LEVEL.**
+An env-gated (`SDRANGEL_CAMERA_PLATE_SOLVER_MIRROR_X`) reflection of the pixel x-axis in
+createProjector/unprojectPixelToVector (x'=(width-1)-x) was validated **byte-identical OFF** on
+REAL 47/48, FISHEYE-mode1 44, mode4 45, WIDE 27, and improved TREx with it ON — but only **4→6/20**
+(trex2 unchanged 3/10), well short of the image-flip's **4→10 / 3→5**. The gap is diagnostic: the
+seed matchers (bright-triangle / vector-quad) build shape codes from RAW DETECTION-PIXEL geometry,
+whose CHIRALITY a projector-only mirror doesn't change — so fewer seeds fire and fewer frames reach
+the true pose. Flipping the whole IMAGE flips detection chirality too, which is why it's complete.
+**Conclusion: productionise as an image-level horizontal flip before detection (provably complete,
+4→10), not a projector-only mirror.** The env prototype was reverted (tree clean); the finding stands.
+Productization options for Jon to pick: (a) flip the input QImage at the solve entry when a
+mirror/`m_flipX` flag is set, and flip returned pixel coords back (self-contained, complete); (b) make
+the solver honor the existing `m_flipX`/`m_flipY` display flags the same way (ties solve to display so
+overlays align); (c) AUTO-handedness — solve both ways, keep the tighter — for users who don't know
+their camera is mirrored. Recommended: (a)+(c). Then layer the fixed-intrinsics finishing step.
+
 **CORRECTION to the earlier "every lever measured, investigation closed at evidence floor" line: that
 stands for the NARROW dense-field cases (pollux/RAND2) and for COLOR, but is WRONG for the all-sky
 TREx class — those failures were a handedness bug with a concrete fix, not a fundamental limit.**

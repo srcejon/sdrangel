@@ -1118,7 +1118,7 @@ void CameraPostProcessor::applySettings(const CameraSettings& settings, const QL
         "equatorialGrid", "equatorialGridColor",
         "altAzGrid", "altAzGridColor",
         "constellation", "constellationColor", "constellationOverlay",
-        "trackObjects", "trackObjectTrails", "trackObjectHeatMap", "trackObjectMinElevation", "trackObjectColor", "trackObjectFontFamily", "trackObjectFontScale",
+        "trackObjects", "trackObjectTrails", "trackObjectHeatMap", "trackObjectMinElevation", "trackObjectMaxRangeKm", "trackObjectColor", "trackObjectFontFamily", "trackObjectFontScale",
         "gridLabelFontFamily", "gridLabelFontScale",
         "overlayText", "overlayTextString", "overlayTextColor",
         "overlayTextFontFamily", "overlayTextFontScale", "overlayTextPosX", "overlayTextPosY",
@@ -1164,6 +1164,7 @@ void CameraPostProcessor::applySettings(const CameraSettings& settings, const QL
 
     if (force
         || settingsKeys.contains("trackObjectMinElevation")
+        || settingsKeys.contains("trackObjectMaxRangeKm")
         || settingsKeys.contains("latitude")
         || settingsKeys.contains("longitude")
         || settingsKeys.contains("altitude")
@@ -2318,7 +2319,13 @@ void CameraPostProcessor::applyTrackedObjectOverlay(const CameraPipelineFrame& f
     const QFontMetrics fontMetrics(font);
     painter.setPen(QPen(m_settings.m_trackObjectColor, 2.0));
 
-    auto projectTrackPoint = [this, &projector](const TrackedMapObject::TrackPoint& trackPoint, QPointF& imagePoint) -> bool {
+    auto rangeAllowed = [this](double distanceMeters) -> bool {
+        return (m_settings.m_trackObjectMaxRangeKm <= 0.0)
+            || (!std::isfinite(distanceMeters))
+            || ((distanceMeters / 1000.0) <= m_settings.m_trackObjectMaxRangeKm);
+    };
+
+    auto projectTrackPoint = [this, &projector, &rangeAllowed](const TrackedMapObject::TrackPoint& trackPoint, QPointF& imagePoint) -> bool {
         AzEl trackAzEl;
         trackAzEl.setLocation(m_settings.m_latitude, m_settings.m_longitude, m_settings.m_altitude);
         trackAzEl.setTarget(trackPoint.m_latitude, trackPoint.m_longitude, trackPoint.m_altitude);
@@ -2326,6 +2333,7 @@ void CameraPostProcessor::applyTrackedObjectOverlay(const CameraPipelineFrame& f
         return std::isfinite(trackAzEl.getAzimuth())
             && std::isfinite(trackAzEl.getElevation())
             && (trackAzEl.getElevation() >= m_settings.m_trackObjectMinElevation)
+            && rangeAllowed(trackAzEl.getDistance())
             && projector.projectAltAz(trackAzEl.getAzimuth(), trackAzEl.getElevation(), imagePoint);
     };
 
@@ -2445,7 +2453,11 @@ void CameraPostProcessor::applyTrackedObjectOverlay(const CameraPipelineFrame& f
         azEl.setLocation(m_settings.m_latitude, m_settings.m_longitude, m_settings.m_altitude);
         azEl.setTarget(object.m_latitude, object.m_longitude, object.m_altitude);
         azEl.calculate();
-        if (!std::isfinite(azEl.getAzimuth()) || !std::isfinite(azEl.getElevation()) || (azEl.getElevation() < m_settings.m_trackObjectMinElevation)) {
+        if (!std::isfinite(azEl.getAzimuth())
+            || !std::isfinite(azEl.getElevation())
+            || (azEl.getElevation() < m_settings.m_trackObjectMinElevation)
+            || !rangeAllowed(azEl.getDistance()))
+        {
             continue;
         }
 

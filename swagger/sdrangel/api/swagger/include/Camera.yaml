@@ -621,6 +621,10 @@ CameraSettings:
       description: "Minimum elevation in degrees for tracked objects"
       type: number
       format: double
+    trackObjectMaxRangeKm:
+      description: "Maximum line-of-sight range in km for tracked objects; 0 disables range filtering"
+      type: number
+      format: double
     trackObjectColor:
       description: "Tracked object label colour as 0xRRGGBB integer"
       type: integer

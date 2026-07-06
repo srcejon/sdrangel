@@ -3724,7 +3724,7 @@
             </property>
            </widget>
           </item>
-          <item row="0" column="2" colspan="2">
+          <item row="2" column="0" colspan="4">
            <layout class="QHBoxLayout" name="trackObjectOverlayOptionsLayout">
             <item>
              <widget class="QCheckBox" name="trackObjectTrailsCheck">
@@ -3833,6 +3833,38 @@
             </property>
             <property name="singleStep">
              <double>1.000000000000000</double>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="2">
+           <widget class="QLabel" name="trackObjectMaxRangeLabel">
+            <property name="text">
+             <string>Max range</string>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="3">
+           <widget class="QDoubleSpinBox" name="trackObjectMaxRangeSpin">
+            <property name="toolTip">
+             <string>Maximum line-of-sight range in kilometres for tracked object overlays. Set to 0 for no maximum.</string>
+            </property>
+            <property name="specialValueText">
+             <string>Unlimited</string>
+            </property>
+            <property name="suffix">
+             <string> km</string>
+            </property>
+            <property name="decimals">
+             <number>1</number>
+            </property>
+            <property name="minimum">
+             <double>0.000000000000000</double>
+            </property>
+            <property name="maximum">
+             <double>1000000.000000000000000</double>
+            </property>
+            <property name="singleStep">
+             <double>10.000000000000000</double>
             </property>
            </widget>
           </item>

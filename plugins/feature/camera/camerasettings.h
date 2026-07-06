@@ -559,6 +559,7 @@ struct CameraSettings
     bool m_trackObjectHeatMap; ///< Draw a heat map from recent tracked object positions
     bool m_trackObjectRange; ///< Append range to tracked object labels
     double m_trackObjectMinElevation; ///< Minimum elevation in degrees for tracked object overlay
+    double m_trackObjectMaxRangeKm; ///< Maximum range in km for tracked object overlay; 0 disables filtering
     QColor m_trackObjectColor; ///< Colour for tracked object labels
     QString m_trackObjectFontFamily; ///< QPainter font family for tracked object labels
     double m_trackObjectFontScale; ///< Font point size for tracked object labels: 4.0..144.0

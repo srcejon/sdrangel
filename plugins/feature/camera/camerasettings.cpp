@@ -420,6 +420,7 @@ void CameraSettings::resetToDefaults()
     m_trackObjectHeatMap = false;
     m_trackObjectRange = false;
     m_trackObjectMinElevation = 0.0;
+    m_trackObjectMaxRangeKm = 0.0;
     m_trackObjectColor = QColor(80, 255, 80);
     m_trackObjectFontFamily.clear();
     m_trackObjectFontScale = 9.0;
@@ -817,6 +818,7 @@ QByteArray CameraSettings::serialize() const
     s.writeBool(276, m_dateTimeUtc);
     s.writeBool(275, m_trackObjectRange);
     s.writeString(277, serializeWindowOverlays(m_windowOverlays));
+    s.writeDouble(279, m_trackObjectMaxRangeKm);
 
     return s.final();
 }
@@ -1231,6 +1233,8 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readBool(275, &m_trackObjectRange, false);
         d.readDouble(157, &m_trackObjectMinElevation, 0.0);
         m_trackObjectMinElevation = qBound(m_minNormalized, m_trackObjectMinElevation, static_cast<double>(m_maxElevation));
+        d.readDouble(279, &m_trackObjectMaxRangeKm, 0.0);
+        m_trackObjectMaxRangeKm = std::max(0.0, m_trackObjectMaxRangeKm);
         uint32_t trackObjectColorRgba = QColor(80, 255, 80).rgba();
         d.readU32(158, &trackObjectColorRgba, QColor(80, 255, 80).rgba());
         m_trackObjectColor = QColor::fromRgba(trackObjectColorRgba);
@@ -2229,6 +2233,9 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     if (settingsKeys.contains("trackObjectMinElevation")) {
         m_trackObjectMinElevation = qBound(m_minNormalized, settings.m_trackObjectMinElevation, static_cast<double>(m_maxElevation));
     }
+    if (settingsKeys.contains("trackObjectMaxRangeKm")) {
+        m_trackObjectMaxRangeKm = std::max(0.0, settings.m_trackObjectMaxRangeKm);
+    }
     if (settingsKeys.contains("trackObjectColor")) {
         m_trackObjectColor = settings.m_trackObjectColor;
     }
@@ -3032,6 +3039,9 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("trackObjectMinElevation") || force) {
         ostr << " m_trackObjectMinElevation: " << m_trackObjectMinElevation;
+    }
+    if (settingsKeys.contains("trackObjectMaxRangeKm") || force) {
+        ostr << " m_trackObjectMaxRangeKm: " << m_trackObjectMaxRangeKm;
     }
     if (settingsKeys.contains("trackObjectColor") || force) {
         ostr << " m_trackObjectColor: " << m_trackObjectColor.name().toStdString();

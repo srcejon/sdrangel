@@ -24,6 +24,7 @@
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QRegularExpression>
+#include <QtAlgorithms>
 
 struct SatNogsTransmitter {
 
@@ -169,7 +170,8 @@ struct SatNogsSatellite {
     QList<SatNogsTransmitter *> m_transmitters;
     SatNogsTLE *m_tle;
 
-    SatNogsSatellite(const QJsonObject& obj)
+    SatNogsSatellite(const QJsonObject& obj) :
+        m_tle(nullptr)
     {
         m_noradCatId = obj["norad_cat_id"].toInt();
         m_name = obj["name"].toString();
@@ -187,10 +189,11 @@ struct SatNogsSatellite {
         m_website = obj["website"].toString();
         m_operator = obj["operator"].toString();
         m_countries = obj["countries"].toString();
-        m_tle = nullptr;
     }
 
-    SatNogsSatellite(SatNogsTLE *tle)
+    SatNogsSatellite(SatNogsTLE *tle) :
+        m_noradCatId(tle->m_noradCatId),
+        m_tle(tle)
     {
         // Extract names from TLE
         // tle0 is of the form:
@@ -205,8 +208,13 @@ struct SatNogsSatellite {
             if ((groups.size() >= 4) && (groups[3] != "-") && !groups[3].isEmpty())
                 m_names = QStringList({groups[3].trimmed()});
             m_noradCatId = tle->m_tle2.mid(2, 5).toInt();
-            m_tle = tle;
         }
+    }
+
+    ~SatNogsSatellite()
+    {
+        qDeleteAll(m_transmitters);
+        delete m_tle;
     }
 
     QString toString()

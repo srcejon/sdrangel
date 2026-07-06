@@ -202,19 +202,56 @@ strength at truth vs the selected/best pose. Two runs:
   the CSV-"true" roll fits ~10 loosely — i.e. the RAND2 offline corpus cannot be trusted for this
   question (starvation + high-elevation az/roll degeneracy + possible render-roll convention).
 - **REAL (48, HYG local catalogue — trustworthy, no starvation):** forcing recovery makes REAL
-  *worse*, 46/48 vs 47/48 (regresses m101), and pollux still fails. Per-case: **pollux's true pose IS
-  reached — a candidate at roll 0 matches 157 stars — but a wrong-roll pose matches 238** at the same
-  loose rms (~16); **m101's** roll-87 pose matches 178 at rms 13.2 vs the true pose's 94 at 16.4.
-  So in these dense narrow fields wrong rolls fit *more* stars at *similar-or-lower* rms.
+  *worse*, 46/48 vs 47/48 (regresses m101), and pollux still fails.
 
-**Conclusion (trustworthy data): the wrong-roll class is a DISCRIMINATION limit — the true pose is
-not the match-statistics winner — which is precisely why BOTH search-expansion (this ablation) and
-selection-reranking (1b) fail, and why forcing more search is net-harmful. The `selectionHasStrongSupport`
-gate is PROTECTIVE and stays. No code change is warranted.** This is the same wall the verifier
-program hit, now confirmed from the search side too: the remaining levers are physical (better lens
-model to shrink the true pose's residual band so it becomes the tightest fit, or absolute bright-star
-identification), not more search or more re-ranking. Ablation flag reverted (byte-identical);
-`rollrecovery_reach.py` kept as the durable diagnostic.
+**AGGREGATE conclusion (stands): forcing more roll search is net-harmful on trustworthy data, so
+`selectionHasStrongSupport` is PROTECTIVE and stays; no code change warranted.** This matches the
+verifier program's wall from the search side.
+
+**PER-CASE narrative CORRECTED (2026-07-06, roll-truth + FoV/roll sweeps) — do NOT cite the earlier
+"true pose out-competed by a wrong roll" story for pollux/m101; it rested on a labelling flaw.**
+`rollrecovery_reach.py` compared each candidate's roll to the CSV `roll` column, but for **mode-3
+(FovAzEl) rows that column is a PLACEHOLDER (0), not the true roll** — mode 3 does not seed roll.
+Consequences once corrected:
+- **m101's true roll is ~87°** (its mode-6 CurrentSettingsOnly row carries roll=87.2 and PASSES). So
+  the "wrong-roll 178-match pose at roll 87" I had flagged is actually the CORRECT pose, and it IS the
+  match-count winner (178 > the roll-0 alias's 94). m101 is NOT a discrimination example — it solves
+  correctly in normal operation; only *forced* recovery destabilised it.
+- **pollux has no tight solution at ANY pose or scale — it is a hard/degenerate image, not a
+  discrimination case.** A mode-4 roll sweep (−165…180° step 15) and a mode-3 FoV sweep (0.6…2.8°)
+  both hold **rms ≈ 15.6–16.7 at every roll and every FoV**; match count just scales with field size
+  (14→463 stars falling inside the 24px radius) while rms never approaches the ~2px of a real lock. So
+  the 157-vs-238 "true vs wrong" was two equally-loose ~16px coincidental fits — there is no tight true
+  pose being out-competed. pollux's single validation anchor (Pollux itself, centre) can't constrain
+  roll regardless.
+So on the trustworthy REAL corpus there is NO clean "true tight pose loses to a wrong pose" case; the
+genuine discrimination failures are the **all-sky TREx fisheye** wrong-roll acceptances, plus the
+verifier program's feature-space result. State it that narrowly. Ablation flag reverted
+(byte-identical); `rollrecovery_reach.py` kept but its roll labels are only valid where CSV roll is
+real (mode 4/5/6 or synthetic with a trustworthy render roll — NOT mode-3 placeholders).
+
+**PHYSICAL-LEVER PROBES (2026-07-06) — BOTH refuted for their target; measured, not assumed.**
+- **Lever A (better lens model): REFUTED for the narrow cases.** The pollux sweeps above show rms flat
+  ~16 across all rolls AND all FoVs — no distortion/scale sweet spot exists to shrink, and a 1.27°
+  rectilinear field has negligible radial distortion anyway. Lever A's only real domain is all-sky
+  fisheye — and there the TREx *skymap already provides a near-exact per-pixel lens* (Tier-2 used it),
+  so "better lens model" for TREx is DATA PLUMBING (feed the skymap/OcamCalib intrinsics as fixed
+  per-camera calibration) not a modelling breakthrough; it helps only calibrated cameras, not blind.
+- **Lever B (absolute bright-star ID via COLOR): REFUTED as a standalone roll discriminator on TREx.**
+  Probe (`images-real-fisheye-staging/trex/color_probe.py`, samples RAW LINEAR h5 RGB, not the stretched
+  PNG; 12 frames, 92 bright stars el>30°): pooled Spearman |measuredColor vs catalog B–V| = **0.22**
+  (best-populated frames 0.33), correct sign, some frames −0.6/−0.7 — but **below the 0.5 bar**, and the
+  apparent "collapse at wrong roll" is mostly a PRESENCE/geometry cue (73% of roll-90 positions land on
+  empty sky), which is exactly what the solver already uses and what fails. Limiter = data quality
+  (8-bit RGB, ~6–13 bright stars/frame), not color in principle; a higher-bit-depth camera *might* do
+  better. Verdict: color could serve as a WEAK PRIOR alongside geometry, but will not by itself break
+  the wrong-roll degeneracy. Deliverables kept: color_probe.py + color_probe_results.csv (92 rows).
+
+**NET (2026-07-06): every lever — verification, search-expansion, selection-reranking, better lens
+model, color ID — has now been measured and none cracks the all-sky rotation class with the current
+cameras/corpus. The accuracy investigation is closed at its evidence floor. Genuinely new signal would
+require BETTER DATA (higher-bit-depth RGB for color; a per-camera fisheye calibration for TREx-class
+rigs), not more algorithm on the existing frames.**
 
 **v2 DONE (2026-07-06): residual-field coherence REFUTED for all-sky; missed-bright-prediction is
 the first (weak) all-sky signal.** The dump now carries subsampled per-match residual vectors

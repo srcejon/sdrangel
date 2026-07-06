@@ -58,14 +58,14 @@ protected:
     QString m_name;             // Name of the satellite
     QDateTime m_aos;            // Time of next AOS
     QDateTime m_los;            // Time of next LOS
-    QTimer m_aosTimer;
-    QTimer m_losTimer;
-    QTimer m_dopplerTimer;
+    QDateTime m_nextDoppler;    // Time of next Doppler correction
     QList<int> m_initFrequencyOffset;
     QList<int> m_doppler;       // How much doppler we've applied to a channel
     SatelliteState m_satState;
-    bool m_hasSignalledAOS;    // For pass specified by m_aos and m_los
-    QMetaObject::Connection m_connection;
+    bool m_hasSignalledAOS;     // For pass specified by m_aos and m_los
+    bool m_aosScheduled = false;
+    bool m_losScheduled = false;
+    bool m_dopplerScheduled = false;
 
     friend SatelliteTrackerWorker;
 };
@@ -117,11 +117,13 @@ private:
     SatelliteTrackerSettings m_settings;
     QRecursiveMutex m_mutex;
     QTimer m_pollTimer;
+    QTimer m_schedulerTimer;
     QHash<QString, SatNogsSatellite *> m_satellites;
     QHash<QString, SatWorkerState *> m_workerState;
     bool m_recalculatePasses;           //!< Recalculate passes as something has changed
     bool m_flipRotation;                //!< Use 180 elevation to avoid 360/0 degree discontinutiy
     bool m_extendedAzRotation;          //!< Use 450+ degree azimuth to avoid 360/0 degree discontinuity
+    bool m_running;
     QDateTime m_lastUpdateDateTime;
 
     bool handleMessage(const Message& cmd);
@@ -139,10 +141,10 @@ private:
         double lon,
         double altitude,
         double rotation,
-        QList<QGeoCoordinate *> *track = nullptr,
-        QList<QDateTime *> *trackDateTime = nullptr,
-        QList<QGeoCoordinate *> *predictedTrack = nullptr,
-        QList<QDateTime *> *predictedTrackDateTime = nullptr
+        QList<QGeoCoordinate> *track = nullptr,
+        QList<QDateTime> *trackDateTime = nullptr,
+        QList<QGeoCoordinate> *predictedTrack = nullptr,
+        QList<QDateTime> *predictedTrackDateTime = nullptr
     );
     void applyDeviceAOSSettings(const QString& name);
     void startStopSinks(bool start);
@@ -152,11 +154,13 @@ private:
     void enableDoppler(SatWorkerState *satWorkerState);
     void disableDoppler(SatWorkerState *satWorkerState);
     void sendEvent(const SatWorkerState *satWorkerState, bool aos);
+    void rescheduleTimer();
 
 private slots:
     void stopWork();
     void handleInputMessages();
     void update();
+    void schedulerTick();
     void aos(SatWorkerState *satWorkerState);
     void los(SatWorkerState *satWorkerState);
     void doppler(SatWorkerState *satWorkerState);

@@ -123,37 +123,42 @@ bool SatelliteTrackerGUI::handleMessage(const Message& message)
     {
         PROFILER_START();
         SatelliteTrackerReport::MsgReportSat& satReport = (SatelliteTrackerReport::MsgReportSat&) message;
-        SatelliteState *satState = satReport.getSatelliteState();
+        const QList<SatelliteState>& satStates = satReport.getSatelliteStates();
 
-        if (satState->m_name == m_settings.m_target)
+        ui->satTable->setUpdatesEnabled(false);
+        ui->satTable->setSortingEnabled(false);
+
+        for (const SatelliteState& satState : satStates)
         {
-            delete m_targetSatState;
-            m_targetSatState = satState;
-
-            ui->azimuth->setText(convertDegreesToText(satState->m_azimuth));
-            ui->elevation->setText(convertDegreesToText(satState->m_elevation));
-            plotChart();
-
-            if (satState->m_passes.size() > 0)
+            if (satState.m_name == m_settings.m_target)
             {
-                const SatellitePass &pass = satState->m_passes[0];
-                bool geostationary = !pass.m_aos.isValid() && !pass.m_los.isValid();
+                delete m_targetSatState;
+                m_targetSatState = new SatelliteState(satState);
 
-                if ((m_nextTargetAOS != pass.m_aos) || (m_nextTargetLOS != pass.m_los) || (geostationary != m_geostationarySatVisible))
+                ui->azimuth->setText(convertDegreesToText(satState.m_azimuth));
+                ui->elevation->setText(convertDegreesToText(satState.m_elevation));
+                plotChart();
+
+                if (satState.m_passes.size() > 0)
                 {
-                    m_nextTargetAOS = pass.m_aos;
-                    m_nextTargetLOS = pass.m_los;
-                    m_geostationarySatVisible = geostationary;
-                    updateTimeToAOS();
+                    const SatellitePass &pass = satState.m_passes[0];
+                    bool geostationary = !pass.m_aos.isValid() && !pass.m_los.isValid();
+
+                    if ((m_nextTargetAOS != pass.m_aos) || (m_nextTargetLOS != pass.m_los) || (geostationary != m_geostationarySatVisible))
+                    {
+                        m_nextTargetAOS = pass.m_aos;
+                        m_nextTargetLOS = pass.m_los;
+                        m_geostationarySatVisible = geostationary;
+                        updateTimeToAOS();
+                    }
                 }
             }
+
+            updateTable(&satState);
         }
 
-        updateTable(satState);
-
-        if (satState->m_name != m_settings.m_target) {
-            delete satState;
-        }
+        ui->satTable->setSortingEnabled(true);
+        ui->satTable->setUpdatesEnabled(true);
 
         PROFILER_STOP("SatelliteTrackerGUI::handleMessage::MsgReportSat");
         return true;
@@ -161,7 +166,7 @@ bool SatelliteTrackerGUI::handleMessage(const Message& message)
     else if (SatelliteTrackerReport::MsgReportAOS::match(message))
     {
         SatelliteTrackerReport::MsgReportAOS& aosReport = (SatelliteTrackerReport::MsgReportAOS&) message;
-        aos(aosReport.getSpeech());
+        aos(aosReport.getName(), aosReport.getSpeech());
         return true;
     }
     else if (SatelliteTrackerReport::MsgReportTarget::match(message))
@@ -358,6 +363,7 @@ SatelliteTrackerGUI::SatelliteTrackerGUI(PluginAPI* pluginAPI, FeatureUISet *fea
 
 SatelliteTrackerGUI::~SatelliteTrackerGUI()
 {
+    delete m_targetSatState;
     delete ui;
 }
 
@@ -442,10 +448,13 @@ void SatelliteTrackerGUI::onMenuDialogCalled(const QPoint &p)
     resetContextMenuType();
 }
 
-void SatelliteTrackerGUI::aos(const QString &speech)
+void SatelliteTrackerGUI::aos(const QString &satName, const QString &speech)
 {
-    // Call plotChart() to start the periodic updates with sat position in polar chart
-    plotChart();
+    if (satName == m_settings.m_target)
+    {
+        // Call plotChart() to start the periodic updates with sat position in polar chart
+        plotChart();
+    }
     // Give speech notification of pass
     if (!speech.isEmpty()) 
     {
@@ -1444,7 +1453,7 @@ static double propagationDelay(double distance)
 }
 
 // Update satellite data table with latest data for the satellite
-void SatelliteTrackerGUI::updateTable(SatelliteState *satState)
+void SatelliteTrackerGUI::updateTable(const SatelliteState *satState)
 {
     std::array<QTableWidgetItem *, SAT_COL_COLUMNS> *items;
 
@@ -1453,8 +1462,7 @@ void SatelliteTrackerGUI::updateTable(SatelliteState *satState)
     {
         std::array<QTableWidgetItem*, SAT_COL_COLUMNS> newItems;
         
-        // Add a new row
-        ui->satTable->setSortingEnabled(false);
+        // Add a new row (sorting disabled in calling function)
         int row = ui->satTable->rowCount();
         ui->satTable->setRowCount(row + 1);
 
@@ -1474,7 +1482,6 @@ void SatelliteTrackerGUI::updateTable(SatelliteState *satState)
             ui->satTable->setItem(row, i, newItems[i]);
         }
 
-        ui->satTable->setSortingEnabled(true);
         // Static columns
         newItems[SAT_COL_NAME]->setText(satState->m_name);
 
@@ -1494,13 +1501,8 @@ void SatelliteTrackerGUI::updateTable(SatelliteState *satState)
         }
 
         m_satTableItems.insert(satState->m_name, newItems);
-        items = &newItems;
     }
-    else
-    {
-        // Update existing row        
-        items = &m_satTableItems[satState->m_name];
-    }
+    items = &m_satTableItems[satState->m_name];
 
     if (satState->m_error.isEmpty())
     {
@@ -1752,4 +1754,3 @@ void SatelliteTrackerGUI::makeUIConnections()
     QObject::connect(ui->satTable->horizontalHeader(), &QHeaderView::sortIndicatorChanged, this, &SatelliteTrackerGUI::on_satTableHeader_sortIndicatorChanged);
     QObject::connect(ui->deviceFeatureSelect, qOverload<int>(&QComboBox::currentIndexChanged), this, &SatelliteTrackerGUI::on_deviceFeatureSelect_currentIndexChanged);
 }
-

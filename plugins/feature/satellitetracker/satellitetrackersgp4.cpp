@@ -53,8 +53,8 @@ static DateTime qDateTimeToDateTime(QDateTime qdt)
 void getGroundTrack(QDateTime dateTime,
                         const QString& tle0, const QString& tle1, const QString& tle2,
                         int steps, bool forward,
-                        QList<QGeoCoordinate *>& coordinates,
-                        QList<QDateTime *>& coordinateDateTimes)
+                        QList<QGeoCoordinate>& coordinates,
+                        QList<QDateTime>& coordinateDateTimes)
 {
     Tle tle = Tle(tle0.toStdString(), tle1.toStdString(), tle2.toStdString());
     SGP4 sgp4(tle);
@@ -106,13 +106,10 @@ void getGroundTrack(QDateTime dateTime,
         // Convert satellite position to geodetic coordinates (lat and long)
         CoordGeodetic geo = eci.ToGeodetic();
 
-        QGeoCoordinate *coord = new QGeoCoordinate(Units::radiansToDegrees(geo.latitude),
-                                                   Units::radiansToDegrees(geo.longitude),
-                                                   geo.altitude * 1000.0);
-        coordinates.append(coord);
-
-        QDateTime *coordDateTime = new QDateTime(dateTimeToQDateTime(currentTime));
-        coordinateDateTimes.append(coordDateTime);
+        coordinates.append(QGeoCoordinate(Units::radiansToDegrees(geo.latitude),
+                                          Units::radiansToDegrees(geo.longitude),
+                                          geo.altitude * 1000.0));
+        coordinateDateTimes.append(dateTimeToQDateTime(currentTime));
 
         // 2D map is stretched at poles, so use finer steps
         if (std::abs(Units::radiansToDegrees(geo.latitude)) >= 70)
@@ -514,13 +511,9 @@ void getSatelliteState(QDateTime dateTime,
                                                 noOfPasses);
         }
 
-        qDeleteAll(satState->m_groundTrack);
         satState->m_groundTrack.clear();
-        qDeleteAll(satState->m_groundTrackDateTime);
         satState->m_groundTrackDateTime.clear();
-        qDeleteAll(satState->m_predictedGroundTrack);
         satState->m_predictedGroundTrack.clear();
-        qDeleteAll(satState->m_predictedGroundTrackDateTime);
         satState->m_predictedGroundTrackDateTime.clear();
         getGroundTrack(dateTime, tle0, tle1, tle2, groundTrackSteps, false, satState->m_groundTrack, satState->m_groundTrackDateTime);
         getGroundTrack(dateTime, tle0, tle1, tle2, groundTrackSteps, true, satState->m_predictedGroundTrack, satState->m_predictedGroundTrackDateTime);

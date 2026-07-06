@@ -76,6 +76,7 @@ SatelliteTracker::~SatelliteTracker()
     delete m_networkManager;
     stop();
     qDeleteAll(m_satState);
+    qDeleteAll(m_satellites);
 }
 
 void SatelliteTracker::start()
@@ -160,14 +161,17 @@ bool SatelliteTracker::handleMessage(const Message& cmd)
     {
         // Save latest satellite state for Web report
         SatelliteTrackerReport::MsgReportSat& satReport = (SatelliteTrackerReport::MsgReportSat&) cmd;
-        SatelliteState *satState = satReport.getSatelliteState();
-        if (m_satState.contains(satState->m_name))
+        const QList<SatelliteState>& satStates = satReport.getSatelliteStates();
+        for (const SatelliteState& satState : satStates)
         {
-            delete m_satState.value(satState->m_name);
-            m_satState.remove(satState->m_name);
-        }
-        if (m_settings.m_satellites.contains(satState->m_name)) {
-            m_satState.insert(satState->m_name, satState);
+            if (m_satState.contains(satState.m_name))
+            {
+                delete m_satState.value(satState.m_name);
+                m_satState.remove(satState.m_name);
+            }
+            if (m_settings.m_satellites.contains(satState.m_name)) {
+                m_satState.insert(satState.m_name, new SatelliteState(satState));
+            }
         }
         return true;
     }

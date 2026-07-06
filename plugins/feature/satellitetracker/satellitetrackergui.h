@@ -124,7 +124,7 @@ private:
     explicit SatelliteTrackerGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *feature, QWidget* parent = nullptr);
     virtual ~SatelliteTrackerGUI();
 
-    void aos(const QString &speech);
+    void aos(const QString& satName, const QString &speech);
     void los(const QString &speech);
 
     void blockApplySettings(bool block);
@@ -137,7 +137,7 @@ private:
     void plotAzElChart();
     void plotPolarChart();
     void resizeTable();
-    void updateTable(SatelliteState *satState);
+    void updateTable(const SatelliteState *satState);
     void updateSelectedSats();
     QAction *createCheckableItem(QString& text, int idx, bool checked);
     void updateTimeToAOS();

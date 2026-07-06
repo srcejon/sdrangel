@@ -18,6 +18,7 @@
 // along with this program. If not, see <http://www.gnu.org/licenses/>.          //
 ///////////////////////////////////////////////////////////////////////////////////
 
+#include <climits>
 #include <cmath>
 
 #include <QDebug>
@@ -34,6 +35,7 @@
 #include "webapi/webapiadapterinterface.h"
 
 #include "util/units.h"
+#include "util/profiler.h"
 #include "device/deviceset.h"
 #include "device/deviceapi.h"
 #include "channel/channelapi.h"
@@ -52,17 +54,40 @@ MESSAGE_CLASS_DEFINITION(SatelliteTrackerReport::MsgReportAOS, Message)
 MESSAGE_CLASS_DEFINITION(SatelliteTrackerReport::MsgReportLOS, Message)
 MESSAGE_CLASS_DEFINITION(SatelliteTrackerReport::MsgReportTarget, Message)
 
+// We don't want to send the passes and ground track to the GUI thread as it is not needed there and it is a lot of data.
+static SatelliteState createSatelliteReportState(const SatelliteState& source)
+{
+    SatelliteState report;
+    report.m_name = source.m_name;
+    report.m_latitude = source.m_latitude;
+    report.m_longitude = source.m_longitude;
+    report.m_altitude = source.m_altitude;
+    report.m_azimuth = source.m_azimuth;
+    report.m_elevation = source.m_elevation;
+    report.m_range = source.m_range;
+    report.m_rangeRate = source.m_rangeRate;
+    report.m_speed = source.m_speed;
+    report.m_period = source.m_period;
+    report.m_error = source.m_error;
+    report.m_passes = source.m_passes;
+    return report;
+}
+
 SatelliteTrackerWorker::SatelliteTrackerWorker(SatelliteTracker* satelliteTracker, WebAPIAdapterInterface *webAPIAdapterInterface) :
     m_satelliteTracker(satelliteTracker),
     m_webAPIAdapterInterface(webAPIAdapterInterface),
     m_msgQueueToFeature(nullptr),
     m_msgQueueToGUI(nullptr),
     m_pollTimer(this),
+    m_schedulerTimer(this),
     m_recalculatePasses(true),
     m_flipRotation(false),
-    m_extendedAzRotation(false)
+    m_extendedAzRotation(false),
+    m_running(false)
 {
     connect(&m_pollTimer, SIGNAL(timeout()), this, SLOT(update()));
+    connect(&m_schedulerTimer, &QTimer::timeout, this, &SatelliteTrackerWorker::schedulerTick);
+    m_schedulerTimer.setSingleShot(true);
 }
 
 SatelliteTrackerWorker::~SatelliteTrackerWorker()
@@ -86,37 +111,25 @@ void SatelliteTrackerWorker::startWork()
 {
     qDebug() << "SatelliteTrackerWorker::startWork";
     QMutexLocker mutexLocker(&m_mutex);
+    m_running = true;
     connect(&m_inputMessageQueue, SIGNAL(messageEnqueued()), this, SLOT(handleInputMessages()));
     m_recalculatePasses = true;
 
      m_pollTimer.start((int)round(m_settings.m_updatePeriod*1000.0));
-    // Resume doppler timers
-    QHashIterator<QString, SatWorkerState *> itr(m_workerState);
-    while (itr.hasNext())
-    {
-        itr.next();
-        SatWorkerState *satWorkerState = itr.value();
-        if (satWorkerState->m_dopplerTimer.interval() > 0)
-            satWorkerState->m_dopplerTimer.start();
-    }
 
     // Handle any messages already on the queue
     handleInputMessages();
+    rescheduleTimer();
 }
 
 void SatelliteTrackerWorker::stopWork()
 {
     qDebug() << "SatelliteTrackerWorker::stopWork";
     QMutexLocker mutexLocker(&m_mutex);
+    m_running = false;
     disconnect(&m_inputMessageQueue, SIGNAL(messageEnqueued()), this, SLOT(handleInputMessages()));
     m_pollTimer.stop();
-    // Stop doppler timers
-    QHashIterator<QString, SatWorkerState *> itr(m_workerState);
-    while (itr.hasNext())
-    {
-        itr.next();
-        itr.value()->m_dopplerTimer.stop();
-    }
+    m_schedulerTimer.stop();
 }
 
 void SatelliteTrackerWorker::handleInputMessages()
@@ -215,12 +228,6 @@ void SatelliteTrackerWorker::applySettings(const SatelliteTrackerSettings& setti
         {
             SatWorkerState *satWorkerState = new SatWorkerState(settings.m_satellites[i]);
             m_workerState.insert(settings.m_satellites[i], satWorkerState);
-            connect(&satWorkerState->m_aosTimer, &QTimer::timeout, [this, satWorkerState]() {
-                aos(satWorkerState);
-            });
-            connect(&satWorkerState->m_losTimer, &QTimer::timeout, [this, satWorkerState]() {
-                los(satWorkerState);
-            });
             m_recalculatePasses = true;
         }
     }
@@ -246,6 +253,8 @@ void SatelliteTrackerWorker::applySettings(const SatelliteTrackerSettings& setti
     } else {
         m_settings.applySettings(settingsKeys, settings);
     }
+
+    rescheduleTimer();
 }
 
 void SatelliteTrackerWorker::removeFromMap(QString id)
@@ -269,10 +278,10 @@ void SatelliteTrackerWorker::sendToMap(
     double lon,
     double altitude,
     double rotation,
-    QList<QGeoCoordinate *> *track,
-    QList<QDateTime *> *trackDateTime,
-    QList<QGeoCoordinate *> *predictedTrack,
-    QList<QDateTime *> *predictedTrackDateTime
+    QList<QGeoCoordinate> *track,
+    QList<QDateTime> *trackDateTime,
+    QList<QGeoCoordinate> *predictedTrack,
+    QList<QDateTime> *predictedTrackDateTime
 )
 {
     for (const auto& pipe : mapMessagePipes)
@@ -297,11 +306,11 @@ void SatelliteTrackerWorker::sendToMap(
             for (int i = 0; i < track->size(); i++)
             {
                 SWGSDRangel::SWGMapCoordinate* p = new SWGSDRangel::SWGMapCoordinate();
-                QGeoCoordinate *c = track->at(i);
-                p->setLatitude(c->latitude());
-                p->setLongitude(c->longitude());
-                p->setAltitude(c->altitude());
-                p->setDateTime(new QString(trackDateTime->at(i)->toString(Qt::ISODate)));
+                const QGeoCoordinate& c = track->at(i);
+                p->setLatitude(c.latitude());
+                p->setLongitude(c.longitude());
+                p->setAltitude(c.altitude());
+                p->setDateTime(new QString(trackDateTime->at(i).toString(Qt::ISODate)));
                 mapTrack->append(p);
             }
             swgMapItem->setTrack(mapTrack);
@@ -312,11 +321,11 @@ void SatelliteTrackerWorker::sendToMap(
             for (int i = 0; i < predictedTrack->size(); i++)
             {
                 SWGSDRangel::SWGMapCoordinate* p = new SWGSDRangel::SWGMapCoordinate();
-                QGeoCoordinate *c = predictedTrack->at(i);
-                p->setLatitude(c->latitude());
-                p->setLongitude(c->longitude());
-                p->setAltitude(c->altitude());
-                p->setDateTime(new QString(predictedTrackDateTime->at(i)->toString(Qt::ISODate)));
+                const QGeoCoordinate& c = predictedTrack->at(i);
+                p->setLatitude(c.latitude());
+                p->setLongitude(c.longitude());
+                p->setAltitude(c.altitude());
+                p->setDateTime(new QString(predictedTrackDateTime->at(i).toString(Qt::ISODate)));
                 mapTrack->append(p);
             }
             swgMapItem->setPredictedTrack(mapTrack);
@@ -327,8 +336,104 @@ void SatelliteTrackerWorker::sendToMap(
     }
 }
 
+void SatelliteTrackerWorker::rescheduleTimer()
+{
+    if (!m_running)
+    {
+        m_schedulerTimer.stop();
+        return;
+    }
+
+    const QDateTime now = m_satelliteTracker->currentDateTimeUtc();
+    QDateTime nextEvent;
+
+    auto updateNextEvent = [&nextEvent](const QDateTime& dateTime)
+    {
+        if (dateTime.isValid() && (!nextEvent.isValid() || (dateTime < nextEvent))) {
+            nextEvent = dateTime;
+        }
+    };
+
+    QHashIterator<QString, SatWorkerState *> itr(m_workerState);
+    while (itr.hasNext())
+    {
+        itr.next();
+        SatWorkerState *satWorkerState = itr.value();
+
+        if (m_settings.m_dateTimeSelect == SatelliteTrackerSettings::NOW)
+        {
+            if (satWorkerState->m_aosScheduled) {
+                updateNextEvent(satWorkerState->m_aos);
+            }
+
+            if (satWorkerState->m_losScheduled) {
+                updateNextEvent(satWorkerState->m_los);
+            }
+        }
+
+        if (satWorkerState->m_dopplerScheduled) {
+            updateNextEvent(satWorkerState->m_nextDoppler);
+        }
+    }
+
+    if (nextEvent.isValid())
+    {
+        const qint64 msecsToNextEvent = now.msecsTo(nextEvent);
+        const int interval = (int) qMin<qint64>(qMax<qint64>(msecsToNextEvent, 1), INT_MAX);
+        m_schedulerTimer.start(interval);
+    }
+    else
+    {
+        m_schedulerTimer.stop();
+    }
+}
+
+void SatelliteTrackerWorker::schedulerTick()
+{
+    const QDateTime now = m_satelliteTracker->currentDateTimeUtc();
+
+    QHashIterator<QString, SatWorkerState *> itr(m_workerState);
+    while (itr.hasNext())
+    {
+        itr.next();
+        SatWorkerState *satWorkerState = itr.value();
+
+        if (m_settings.m_dateTimeSelect == SatelliteTrackerSettings::NOW)
+        {
+            if (satWorkerState->m_aosScheduled && satWorkerState->m_aos.isValid() && (satWorkerState->m_aos <= now))
+            {
+                satWorkerState->m_aosScheduled = false;
+                aos(satWorkerState);
+            }
+
+            if (satWorkerState->m_losScheduled && satWorkerState->m_los.isValid() && (satWorkerState->m_los <= now))
+            {
+                satWorkerState->m_losScheduled = false;
+                los(satWorkerState);
+                satWorkerState->m_hasSignalledAOS = false;
+            }
+        }
+
+        if (satWorkerState->m_dopplerScheduled && satWorkerState->m_nextDoppler.isValid() && (satWorkerState->m_nextDoppler <= now))
+        {
+            const int dopplerPeriodMs = qMax(1, (int) round(m_settings.m_dopplerPeriod * 1000.0f));
+            doppler(satWorkerState);
+            satWorkerState->m_nextDoppler = now.addMSecs(dopplerPeriodMs);
+        }
+    }
+
+    rescheduleTimer();
+}
+
 void SatelliteTrackerWorker::update()
 {
+    PROFILER_START();
+
+    bool droppedReport = false;
+    const int maxQueueSize = 10;
+    QList<SatelliteState> reportSatStates;
+    reportSatStates.reserve(m_workerState.size());
+
     // Get date and time to calculate position at
     QDateTime qdt;
     if (m_settings.m_dateTime == "")
@@ -376,16 +481,20 @@ void SatelliteTrackerWorker::update()
                             qDebug() << "SatelliteTrackerWorker: Current time: " << qdt.toString(Qt::ISODateWithMs);
                             qDebug() << "SatelliteTrackerWorker: New AOS: " << name << " new: " << satWorkerState->m_satState.m_passes[0].m_aos << " old: " << satWorkerState->m_aos;
                             qDebug() << "SatelliteTrackerWorker: New LOS: " << name << " new: " << satWorkerState->m_satState.m_passes[0].m_los << " old: " << satWorkerState->m_los;
+
+                            const bool losWasScheduled = satWorkerState->m_losScheduled;
+                            const qint64 previousLosRemaining = qdt.msecsTo(satWorkerState->m_los);
+
                             satWorkerState->m_aos = satWorkerState->m_satState.m_passes[0].m_aos;
                             satWorkerState->m_los = satWorkerState->m_satState.m_passes[0].m_los;
                             satWorkerState->m_hasSignalledAOS = false;
+                            satWorkerState->m_aosScheduled = false;
+                            satWorkerState->m_losScheduled = false;
                             if (satWorkerState->m_aos.isValid())
                             {
                                 if (satWorkerState->m_aos > qdt)
                                 {
-                                    satWorkerState->m_aosTimer.setInterval(satWorkerState->m_aos.toMSecsSinceEpoch() - qdt.toMSecsSinceEpoch());
-                                    satWorkerState->m_aosTimer.setSingleShot(true);
-                                    satWorkerState->m_aosTimer.start();
+                                    satWorkerState->m_aosScheduled = true;
                                 }
                                 else if (qdt < satWorkerState->m_los)
                                     aos(satWorkerState);
@@ -395,21 +504,18 @@ void SatelliteTrackerWorker::update()
                             }
                             if (satWorkerState->m_los.isValid() && (satWorkerState->m_los > qdt))
                             {
-                                if (satWorkerState->m_losTimer.isActive()) {
-                                    qDebug() << "SatelliteTrackerWorker::update m_losTimer.remainingTime: " << satWorkerState->m_losTimer.remainingTime();
+                                if (losWasScheduled) {
+                                    qDebug() << "SatelliteTrackerWorker::update m_los remaining time: " << previousLosRemaining;
                                 }
                                 // We can detect a new AOS for a satellite, a little bit before the LOS has occurred
                                 // Allow for 5s here (1s doesn't appear to be enough in some cases)
-                                if (satWorkerState->m_losTimer.isActive() && (satWorkerState->m_losTimer.remainingTime() <= 5000))
+                                if (losWasScheduled && (previousLosRemaining <= 5000))
                                 {
-                                    satWorkerState->m_losTimer.stop();
                                     // LOS hasn't been called yet - do so, before we reset timer
                                     los(satWorkerState);
                                 }
                                 qDebug() << "SatelliteTrackerWorker:: Interval to LOS " << (satWorkerState->m_los.toMSecsSinceEpoch() - qdt.toMSecsSinceEpoch());
-                                satWorkerState->m_losTimer.setInterval(satWorkerState->m_los.toMSecsSinceEpoch() - qdt.toMSecsSinceEpoch());
-                                satWorkerState->m_losTimer.setSingleShot(true);
-                                satWorkerState->m_losTimer.start();
+                                satWorkerState->m_losScheduled = true;
                             }
                         }
                     }
@@ -438,8 +544,8 @@ void SatelliteTrackerWorker::update()
                 {
                     satWorkerState->m_aos = QDateTime();
                     satWorkerState->m_los = QDateTime();
-                    satWorkerState->m_aosTimer.stop();
-                    satWorkerState->m_losTimer.stop();
+                    satWorkerState->m_aosScheduled = false;
+                    satWorkerState->m_losScheduled = false;
                 }
 
                 // Send Az/El of target to Rotator Controllers, if elevation above horizon
@@ -552,20 +658,62 @@ void SatelliteTrackerWorker::update()
                     }
                 }
 
-                // Send to GUI
-                if (getMessageQueueToGUI())
-                    getMessageQueueToGUI()->push(SatelliteTrackerReport::MsgReportSat::create(new SatelliteState(satWorkerState->m_satState)));
-
-                // Sent to Feature for Web report
-                if (m_msgQueueToFeature)
-                    m_msgQueueToFeature->push(SatelliteTrackerReport::MsgReportSat::create(new SatelliteState(satWorkerState->m_satState)));
+                reportSatStates.append(createSatelliteReportState(satWorkerState->m_satState));
             }
             else
                 qDebug() << "SatelliteTrackerWorker::update: No TLE for " << sat->m_name << ". Can't compute position.";
         }
     }
+
+    if (!reportSatStates.isEmpty())
+    {
+        // Send to GUI
+        if (getMessageQueueToGUI())
+        {
+            if (getMessageQueueToGUI()->size() < maxQueueSize)
+            {
+                getMessageQueueToGUI()->push(SatelliteTrackerReport::MsgReportSat::create(reportSatStates));
+            }
+            else
+            {
+                qDebug() << "SatelliteTrackerWorker::update: GUI message queue full. Dropping reports for " << reportSatStates.size() << " satellites";
+                droppedReport = true;
+            }
+        }
+
+        // Sent to Feature for Web report
+        if (m_msgQueueToFeature)
+        {
+            if (m_msgQueueToFeature->size() < maxQueueSize)
+            {
+                m_msgQueueToFeature->push(SatelliteTrackerReport::MsgReportSat::create(reportSatStates));
+            }
+            else
+            {
+                qDebug() << "SatelliteTrackerWorker::update: Feature message queue full. Dropping reports for " << reportSatStates.size() << " satellites";
+                droppedReport = true;
+            }
+        }
+    }
+
     m_lastUpdateDateTime = qdt;
     m_recalculatePasses = false;
+    rescheduleTimer();
+
+    // If we dropped a report because GUI/feature queues were fairly full, double update period to stop from overloading them
+    if (droppedReport)
+    {
+        m_settings.m_updatePeriod *= 2.0f;
+        const int guiQueueSize = getMessageQueueToGUI() ? getMessageQueueToGUI()->size() : -1;
+        const int featureQueueSize = m_msgQueueToFeature ? m_msgQueueToFeature->size() : -1;
+        qDebug() << "SatelliteTrackerWorker::update: Dropped report. Doubling update period:" << m_settings.m_updatePeriod << "s"
+            << "GUI Queue size:" << guiQueueSize
+            << "Feature queue size:" << featureQueueSize
+            << "maxQueueSize:" << maxQueueSize;
+        m_pollTimer.setInterval((int)round(m_settings.m_updatePeriod * 1000.0));
+    }
+
+    PROFILER_STOP(__FUNCTION__);
 }
 
 void SatelliteTrackerWorker::aos(SatWorkerState *satWorkerState)
@@ -835,22 +983,24 @@ void SatelliteTrackerWorker::enableDoppler(SatWorkerState *satWorkerState)
         if (requiresDoppler)
         {
             qDebug() << "SatelliteTrackerWorker::applyDeviceAOSSettings: Enabling doppler for " << satWorkerState->m_name;
-            satWorkerState->m_dopplerTimer.setInterval(m_settings.m_dopplerPeriod * 1000);
-            satWorkerState->m_dopplerTimer.start();
-            disconnect(satWorkerState->m_connection);
-            satWorkerState->m_connection = connect(&satWorkerState->m_dopplerTimer, &QTimer::timeout, [this, satWorkerState]() {
-                doppler(satWorkerState);
-            });
+            const int dopplerPeriodMs = qMax(1, (int) round(m_settings.m_dopplerPeriod * 1000.0f));
+            satWorkerState->m_nextDoppler = m_satelliteTracker->currentDateTimeUtc().addMSecs(dopplerPeriodMs);
+            satWorkerState->m_dopplerScheduled = true;
+            rescheduleTimer();
+        }
+        else
+        {
+            satWorkerState->m_nextDoppler = QDateTime();
+            satWorkerState->m_dopplerScheduled = false;
+            rescheduleTimer();
         }
     }
 }
 
 void SatelliteTrackerWorker::disableDoppler(SatWorkerState *satWorkerState)
 {
-    // Stop Doppler timer, and set interval to 0, so we don't restart it in start()
-    satWorkerState->m_dopplerTimer.stop();
-    satWorkerState->m_dopplerTimer.setInterval(0);
-    disconnect(satWorkerState->m_connection);
+    satWorkerState->m_nextDoppler = QDateTime();
+    satWorkerState->m_dopplerScheduled = false;
     // Remove doppler correction from any channel
     if (satWorkerState->m_doppler.size() > 0)
     {
@@ -893,6 +1043,7 @@ void SatelliteTrackerWorker::disableDoppler(SatWorkerState *satWorkerState)
             }
         }
     }
+    rescheduleTimer();
 }
 
 void SatelliteTrackerWorker::doppler(SatWorkerState *satWorkerState)
@@ -1070,4 +1221,3 @@ bool SatWorkerState::hasAOS(const QDateTime& currentTime)
 {
     return (m_aos <= currentTime) && (m_los > currentTime);
 }
-

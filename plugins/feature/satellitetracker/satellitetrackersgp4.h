@@ -38,21 +38,21 @@ struct SatellitePass {
 
 struct SatelliteState {
     QString m_name;
-    double m_latitude;                  // Degrees
-    double m_longitude;                 // Degrees
-    double m_altitude;                  // km
-    double m_azimuth;                   // Degrees
-    double m_elevation;                 // Degrees
-    double m_range;                     // km
-    double m_rangeRate;                 // km/s
-    double m_speed;
-    double m_period;
+    double m_latitude = 0.0;            // Degrees
+    double m_longitude = 0.0;           // Degrees
+    double m_altitude = 0.0;            // km
+    double m_azimuth = 0.0;             // Degrees
+    double m_elevation = 0.0;           // Degrees
+    double m_range = 0.0;               // km
+    double m_rangeRate = 0.0;           // km/s
+    double m_speed = 0.0;
+    double m_period = 0.0;
     QString m_error;
     QList<SatellitePass> m_passes;              // Used in worker and GUI threads
-    QList<QGeoCoordinate *> m_groundTrack;      // These used only in worker thread
-    QList<QDateTime *> m_groundTrackDateTime;
-    QList<QGeoCoordinate *> m_predictedGroundTrack;
-    QList<QDateTime *> m_predictedGroundTrackDateTime;
+    QList<QGeoCoordinate> m_groundTrack;        // These used only in worker thread
+    QList<QDateTime> m_groundTrackDateTime;
+    QList<QGeoCoordinate> m_predictedGroundTrack;
+    QList<QDateTime> m_predictedGroundTrackDateTime;
 };
 
 void getGroundTrack(QDateTime dateTime,

@@ -33,19 +33,19 @@ public:
         MESSAGE_CLASS_DECLARATION
 
     public:
-        SatelliteState* getSatelliteState() const { return m_satState; }
+        const QList<SatelliteState>& getSatelliteStates() const { return m_satStates; }
 
-        static MsgReportSat* create(SatelliteState* satState)
+        static MsgReportSat* create(const QList<SatelliteState>& satStates)
         {
-            return new MsgReportSat(satState);
+            return new MsgReportSat(satStates);
         }
 
     private:
-        SatelliteState* m_satState;
+        QList<SatelliteState> m_satStates;
 
-        MsgReportSat(SatelliteState* satState) :
+        MsgReportSat(const QList<SatelliteState>& satStates) :
             Message(),
-            m_satState(satState)
+            m_satStates(satStates)
         {
         }
     };

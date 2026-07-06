@@ -9340,6 +9340,51 @@ CameraPlateSolver::SolverContext::FinalMatchPassEvaluation CameraPlateSolver::So
     finalPass.cachedNarrowGuidedSeedConsistencyScore = narrowGuidedSeedConsistencyScore(settings, finalPass);
     finalPass.cachedGatesValid = true;
 
+    // Verifier-study instrumentation (Tier 1): dump one machine-readable line per final-pass
+    // candidate so an OFFLINE study can label each pose right/wrong against the corpus truth and
+    // evaluate discriminator features (excess-over-chance at a radius ladder, brightness agreement,
+    // residual structure) across every failure class at once. Raw quantities only — features are
+    // engineered offline. Off by default; enabling changes logging only, never behaviour.
+    static const bool candidateDumpEnabled =
+        qEnvironmentVariableIsSet("SDRANGEL_CAMERA_PLATE_SOLVER_CANDIDATE_DUMP");
+    if (candidateDumpEnabled && finalPass.projectorValid)
+    {
+        // Match-tightness ladder: counts within fixed absolute radii. Chance matches distribute
+        // with density ~r (CDF ~r^2), correct matches concentrate at small r, so the ladder is
+        // what lets the offline study compute excess-over-chance at the informative radius
+        // (a single-radius count saturates in dense fields for right AND wrong poses alike).
+        int within2 = 0, within4 = 0, within8 = 0, within16 = 0;
+        for (const Match& match : finalPass.finalMatches)
+        {
+            if (match.distancePixels <= 2.0) ++within2;
+            if (match.distancePixels <= 4.0) ++within4;
+            if (match.distancePixels <= 8.0) ++within8;
+            if (match.distancePixels <= 16.0) ++within16;
+        }
+        qDebug().noquote().nospace()
+            << "CandidateDump,az=" << QString::number(finalPass.pose.azimuthDegrees, 'f', 3)
+            << ",el=" << QString::number(finalPass.pose.elevationDegrees, 'f', 3)
+            << ",roll=" << QString::number(finalPass.pose.rollDegrees, 'f', 3)
+            << ",fov=" << QString::number(finalPass.pose.fovDegrees, 'f', 4)
+            << ",cx=" << QString::number(finalPass.pose.centerOffsetXPixels, 'f', 1)
+            << ",cy=" << QString::number(finalPass.pose.centerOffsetYPixels, 'f', 1)
+            << ",k1=" << QString::number(finalPass.pose.distortionK1, 'f', 4)
+            << ",D=" << detectionIndices.size()
+            << ",C=" << finalPass.projectedStars.size()
+            << ",M=" << finalPass.finalMatches.size()
+            << ",m2=" << within2 << ",m4=" << within4 << ",m8=" << within8 << ",m16=" << within16
+            << ",rms=" << QString::number(finalPass.rmsErrorPixels, 'f', 2)
+            << ",med=" << QString::number(finalPass.medianErrorPixels, 'f', 2)
+            << ",max=" << QString::number(finalPass.maxErrorPixels, 'f', 2)
+            << ",r=" << QString::number(finalMatchRadius, 'f', 1)
+            << ",W=" << imageSize.width() << ",H=" << imageSize.height()
+            << ",bD=" << finalPass.brightDetections << ",mBD=" << finalPass.matchedBrightDetections
+            << ",bP=" << finalPass.brightProjectedStars << ",mBP=" << finalPass.matchedBrightProjectedStars
+            << ",magErr=" << QString::number(finalPass.brightDetectionMagnitudeError, 'f', 3)
+            << ",rank=" << (std::isfinite(finalPass.brightnessRankError)
+                ? QString::number(finalPass.brightnessRankError, 'f', 3) : QStringLiteral("inf"));
+    }
+
     return finalPass;
 }
 

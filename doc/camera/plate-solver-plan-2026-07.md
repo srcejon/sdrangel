@@ -139,6 +139,32 @@ hard problems plus housekeeping, in priority order:
 P1/P2/P3 are independent of each other; P2 and P3 are pure measurement and can interleave with
 anything; P4 is standalone and should not share a session with behaviour-affecting solver changes.
 
+### Verifier study Tier 1 (2026-07-06): per-candidate labelled dataset — first results
+
+Infrastructure landed: `SDRANGEL_CAMERA_PLATE_SOLVER_CANDIDATE_DUMP=1` makes `evaluateFinalMatchPass`
+emit one machine-readable line per final-pass candidate (pose, D/C/M, match-tightness ladder
+m2/m4/m8/m16, rms/med/max, radius, image size, bright stats — raw quantities only, features are
+engineered offline). `test/verifier_study.py` labels candidates against corpus truth (a PASSING
+case's anchor-certified accepted pose upgrades to full-pose truth incl. roll; FAIL cases can only
+mint WRONG labels; negative rows are WRONG-throughout), reconstructs PowerShell's 120-col stderr
+wrapping, clusters candidates into pose hypotheses (best-M evaluation per cluster = "finalist"),
+and reports per-class separation. One collection run (REAL + TREx + negatives) = 44.5k labelled
+candidates → ~2.9k labelled finalists.
+
+**Findings (finalists, M>=6):** (1) **Excess-over-chance at the radius ladder (`eocBest`) has real
+within-case RANKING value in the narrow regime** — real/RIGHT median 1.8 with p90 182 vs real/WRONG
+median 0.1 p90 11, wrongscale/WRONG rarely exceeds ~1. Corroborates P3: verifier-as-selection (1b)
+is supported by 1.9k finalists, not just 4 cases. (2) **All-sky rotations remain inseparable**
+(allsky RIGHT −0.1 vs WRONG −0.5, tightness identical): with C≈776 candidates on a 553×480 frame
+the chance model saturates, and the real lens-model error spreads TRUE matches into the same
+8–11px band as coincidences — count/tightness features cannot work there even in principle.
+(3) Naive per-evaluation labelling conflates pose correctness with evaluation-stage fit quality —
+the cluster-finalist granularity is the right one (lesson baked into the script). **v2 path:** the
+all-sky class needs features absent from this dump — residual-field coherence (per-match dx,dy
+vectors: true-pose residuals fit a smooth radial/rotation field, coincidence residuals don't) and
+hold-out prediction. Extending the dump with compact per-match residuals for finalists is the next
+concrete step; also worth re-running collection on RAND2 (adds the wrong-roll class at scale).
+
 ## What the recent work established (evidence, not opinion)
 
 Landed on `plate-solver-review` (all validated, REAL never below the 47/48 branch baseline):

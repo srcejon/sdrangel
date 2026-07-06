@@ -411,6 +411,24 @@ REAL/FISHEYE/WIDE. No REAL regression — the "Harden wide-9, then default-on" p
 - **1b Use it for candidate *selection* first** (ranking, not accept/reject): the notes already
   identified verifier-driven selection as the principled fix for the catalog-depth instability
   (m51@16's roll-58 crowd-out) and pollux is the same wrong-roll class. A/B against 0d + REAL.
+  **IMPLEMENTED (2026-07-06, uncommitted pending RAND2 A/B).** In `applyRefinementResult`'s refined-
+  finalist keep-best (cameraplatesolver.cpp ~1116): for narrow direction-seeded solves with UNKNOWN
+  roll, when challenger and incumbent finalists disagree on roll by >5°, a bright-weighted
+  faLogOdds margin ≥15 (the proven rollAlias adopt margin) overrides the count/score comparator in
+  either direction (adopt a bright-better challenger / veto a bright-worse one); non-decisive
+  comparisons keep legacy order exactly. REAL: 47/48 IDENTICAL, override fired 0× (inert there).
+  Decision gate: post-1b RAND2 vs the pre-1b baseline (collected with the candidate dump) — expected
+  effect is on the wrong-roll tail (a-005/c-009 class); any PASS→FAIL = revert.
+  **REFUTED BY THE GATE (2026-07-06) — reverted.** Post-1b RAND2: 66/150 vs baseline 67 — one loss
+  (synth-rand-c-011), ZERO gains, with the override firing 529 times. Why the offline separation
+  didn't transfer: the P3/Tier-1 statistics hold at the FINALIST level, but the keep-best injection
+  point sees mid-refinement comparisons whose statistics differ, and the wrong-roll FAILURES mostly
+  lose before this comparison (no gains available there), while perturbing 529 comparisons flipped
+  one previously-good downstream chain. **Key realisation: final-level verifier arbitration ALREADY
+  exists and is shipped — `hasCompetitiveRollAlias`'s bright-logOdds adopt path is exactly 1b applied
+  at the correct (fully-refined, final) level.** So 1b-as-mid-selection is closed; the verifier
+  program's remaining lever is extending the FINAL-level arbitration's reach (more alias hypotheses
+  at final level), not reranking mid-pipeline. Do not re-attempt the keep-best injection.
 - **1c Then revisit D4 properly:** rank on the single verifier scalar with deterministic
   tie-breaks. This *replaces* the arbitrary band ordering rather than trying to faithfully
   preserve it (D4 proved the current order is load-bearing but meaningless — the fix is a

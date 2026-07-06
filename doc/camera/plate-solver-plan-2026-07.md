@@ -185,10 +185,36 @@ pattern, independent of the solve).** The labelled dataset + tooling stay for fu
 eocBest picks the RIGHT finalist in **21/21** testable cases — but RIGHT labels exist only for
 PASSING cases (certified poses), so this shows eocBest *perfectly agrees with already-correct
 selections* (it would be a safe final-level confirmation) while the FAILING cases contribute no
-RIGHT finalists at all. **Therefore the wrong-roll failures are SEARCH failures — the correct roll
-never enters the finalist pool — not selection failures.** This explains every selection-level
-refutation at once (P3 separation but 1b zero gains; 21/21 only on passes). Any future work on this
-class must generate the missing right-roll candidates (search), not re-rank existing ones.
+RIGHT finalists at all. This explains every selection-level refutation at once (P3 separation but 1b
+zero gains; 21/21 only on passes).
+
+**CORRECTED BY THE rollRecovery ABLATION (2026-07-06) — it is a DISCRIMINATION limit, not a search
+gate.** I added a behaviour-inert `SDRANGEL_CAMERA_PLATE_SOLVER_FORCE_ROLL_RECOVERY` flag that
+bypasses the `selectionHasStrongSupport` gate so the 21-offset roll grid runs on the failing tail,
+plus `rollrecovery_reach.py` which labels each dumped candidate against exact CSV truth (reach = a
+candidate at the true az/el/roll/fov; select = the accepted verdict at truth) AND compares fit
+strength at truth vs the selected/best pose. Two runs:
+- **RAND2 (83 offline fails):** forcing recovery flips 0/83 to PASS; the true pose is geometrically
+  "reached" 83/83 but its median match count is **1** — because RAND2 is 100% Siril and OFFLINE
+  starves the true-pose sky region of catalogue. This is the same offline artifact as the 67/150
+  number, NOT evidence about search. (The apparent "search failure" in the prior insight was reading
+  this starvation.) Several fails also show a wrong-roll pose with 30–73 matches at rms 0.2–1.8 while
+  the CSV-"true" roll fits ~10 loosely — i.e. the RAND2 offline corpus cannot be trusted for this
+  question (starvation + high-elevation az/roll degeneracy + possible render-roll convention).
+- **REAL (48, HYG local catalogue — trustworthy, no starvation):** forcing recovery makes REAL
+  *worse*, 46/48 vs 47/48 (regresses m101), and pollux still fails. Per-case: **pollux's true pose IS
+  reached — a candidate at roll 0 matches 157 stars — but a wrong-roll pose matches 238** at the same
+  loose rms (~16); **m101's** roll-87 pose matches 178 at rms 13.2 vs the true pose's 94 at 16.4.
+  So in these dense narrow fields wrong rolls fit *more* stars at *similar-or-lower* rms.
+
+**Conclusion (trustworthy data): the wrong-roll class is a DISCRIMINATION limit — the true pose is
+not the match-statistics winner — which is precisely why BOTH search-expansion (this ablation) and
+selection-reranking (1b) fail, and why forcing more search is net-harmful. The `selectionHasStrongSupport`
+gate is PROTECTIVE and stays. No code change is warranted.** This is the same wall the verifier
+program hit, now confirmed from the search side too: the remaining levers are physical (better lens
+model to shrink the true pose's residual band so it becomes the tightest fit, or absolute bright-star
+identification), not more search or more re-ranking. Ablation flag reverted (byte-identical);
+`rollrecovery_reach.py` kept as the durable diagnostic.
 
 **v2 DONE (2026-07-06): residual-field coherence REFUTED for all-sky; missed-bright-prediction is
 the first (weak) all-sky signal.** The dump now carries subsampled per-match residual vectors

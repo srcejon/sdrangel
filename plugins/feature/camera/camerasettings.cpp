@@ -421,6 +421,8 @@ void CameraSettings::resetToDefaults()
     m_trackObjectRange = false;
     m_trackObjectMinElevation = 0.0;
     m_trackObjectMaxRangeKm = 0.0;
+    m_trackObjectLabelDisplay = TrackObjectLabelAlways;
+    m_trackObjectLabelDetectionRadius = 64.0;
     m_trackObjectColor = QColor(80, 255, 80);
     m_trackObjectFontFamily.clear();
     m_trackObjectFontScale = 9.0;
@@ -819,6 +821,8 @@ QByteArray CameraSettings::serialize() const
     s.writeBool(275, m_trackObjectRange);
     s.writeString(277, serializeWindowOverlays(m_windowOverlays));
     s.writeDouble(279, m_trackObjectMaxRangeKm);
+    s.writeS32(280, static_cast<qint32>(m_trackObjectLabelDisplay));
+    s.writeDouble(281, m_trackObjectLabelDetectionRadius);
 
     return s.final();
 }
@@ -1235,6 +1239,14 @@ bool CameraSettings::deserialize(const QByteArray& data)
         m_trackObjectMinElevation = qBound(m_minNormalized, m_trackObjectMinElevation, static_cast<double>(m_maxElevation));
         d.readDouble(279, &m_trackObjectMaxRangeKm, 0.0);
         m_trackObjectMaxRangeKm = std::max(0.0, m_trackObjectMaxRangeKm);
+        qint32 trackObjectLabelDisplay = static_cast<qint32>(TrackObjectLabelAlways);
+        d.readS32(280, &trackObjectLabelDisplay, trackObjectLabelDisplay);
+        m_trackObjectLabelDisplay = static_cast<TrackObjectLabelDisplay>(qBound(
+            static_cast<qint32>(TrackObjectLabelAlways),
+            trackObjectLabelDisplay,
+            static_cast<qint32>(TrackObjectLabelNearDetection)));
+        d.readDouble(281, &m_trackObjectLabelDetectionRadius, 64.0);
+        m_trackObjectLabelDetectionRadius = std::max(0.0, m_trackObjectLabelDetectionRadius);
         uint32_t trackObjectColorRgba = QColor(80, 255, 80).rgba();
         d.readU32(158, &trackObjectColorRgba, QColor(80, 255, 80).rgba());
         m_trackObjectColor = QColor::fromRgba(trackObjectColorRgba);
@@ -2236,6 +2248,12 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     if (settingsKeys.contains("trackObjectMaxRangeKm")) {
         m_trackObjectMaxRangeKm = std::max(0.0, settings.m_trackObjectMaxRangeKm);
     }
+    if (settingsKeys.contains("trackObjectLabelDisplay")) {
+        m_trackObjectLabelDisplay = settings.m_trackObjectLabelDisplay;
+    }
+    if (settingsKeys.contains("trackObjectLabelDetectionRadius")) {
+        m_trackObjectLabelDetectionRadius = std::max(0.0, settings.m_trackObjectLabelDetectionRadius);
+    }
     if (settingsKeys.contains("trackObjectColor")) {
         m_trackObjectColor = settings.m_trackObjectColor;
     }
@@ -3042,6 +3060,12 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("trackObjectMaxRangeKm") || force) {
         ostr << " m_trackObjectMaxRangeKm: " << m_trackObjectMaxRangeKm;
+    }
+    if (settingsKeys.contains("trackObjectLabelDisplay") || force) {
+        ostr << " m_trackObjectLabelDisplay: " << static_cast<int>(m_trackObjectLabelDisplay);
+    }
+    if (settingsKeys.contains("trackObjectLabelDetectionRadius") || force) {
+        ostr << " m_trackObjectLabelDetectionRadius: " << m_trackObjectLabelDetectionRadius;
     }
     if (settingsKeys.contains("trackObjectColor") || force) {
         ostr << " m_trackObjectColor: " << m_trackObjectColor.name().toStdString();

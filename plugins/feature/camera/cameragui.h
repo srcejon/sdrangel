@@ -730,6 +730,8 @@ private slots:
     void on_trackObjectClearHeatMapButton_clicked();
     void on_trackObjectMinElevationSpin_valueChanged(double value);
     void on_trackObjectMaxRangeSpin_valueChanged(double value);
+    void on_trackObjectLabelDisplayCombo_currentIndexChanged(int index);
+    void on_trackObjectLabelDetectionRadiusSpin_valueChanged(double value);
     void on_trackObjectColorButton_clicked();
     void on_trackObjectFontCombo_currentFontChanged(const QFont& font);
     void on_trackObjectFontScaleSpin_valueChanged(double value);

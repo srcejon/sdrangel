@@ -1118,7 +1118,7 @@ void CameraPostProcessor::applySettings(const CameraSettings& settings, const QL
         "equatorialGrid", "equatorialGridColor",
         "altAzGrid", "altAzGridColor",
         "constellation", "constellationColor", "constellationOverlay",
-        "trackObjects", "trackObjectTrails", "trackObjectHeatMap", "trackObjectMinElevation", "trackObjectMaxRangeKm", "trackObjectColor", "trackObjectFontFamily", "trackObjectFontScale",
+        "trackObjects", "trackObjectTrails", "trackObjectHeatMap", "trackObjectMinElevation", "trackObjectMaxRangeKm", "trackObjectLabelDisplay", "trackObjectLabelDetectionRadius", "trackObjectColor", "trackObjectFontFamily", "trackObjectFontScale",
         "gridLabelFontFamily", "gridLabelFontScale",
         "overlayText", "overlayTextString", "overlayTextColor",
         "overlayTextFontFamily", "overlayTextFontScale", "overlayTextPosX", "overlayTextPosY",
@@ -1165,6 +1165,8 @@ void CameraPostProcessor::applySettings(const CameraSettings& settings, const QL
     if (force
         || settingsKeys.contains("trackObjectMinElevation")
         || settingsKeys.contains("trackObjectMaxRangeKm")
+        || settingsKeys.contains("trackObjectLabelDisplay")
+        || settingsKeys.contains("trackObjectLabelDetectionRadius")
         || settingsKeys.contains("latitude")
         || settingsKeys.contains("longitude")
         || settingsKeys.contains("altitude")
@@ -2325,6 +2327,25 @@ void CameraPostProcessor::applyTrackedObjectOverlay(const CameraPipelineFrame& f
             || ((distanceMeters / 1000.0) <= m_settings.m_trackObjectMaxRangeKm);
     };
 
+    auto labelVisible = [this, &frame](const QPointF& point) -> bool {
+        if (m_settings.m_trackObjectLabelDisplay == CameraSettings::TrackObjectLabelAlways) {
+            return true;
+        }
+
+        const double maxDistance = std::max(0.0, m_settings.m_trackObjectLabelDetectionRadius);
+        const double maxDistanceSquared = maxDistance * maxDistance;
+        for (const CameraPipelineDetection& detection : frame.m_detections)
+        {
+            const QPointF detectionCenter = detection.m_box.center();
+            const double dx = point.x() - detectionCenter.x();
+            const double dy = point.y() - detectionCenter.y();
+            if ((dx * dx + dy * dy) <= maxDistanceSquared) {
+                return true;
+            }
+        }
+        return false;
+    };
+
     auto projectTrackPoint = [this, &projector, &rangeAllowed](const TrackedMapObject::TrackPoint& trackPoint, QPointF& imagePoint) -> bool {
         AzEl trackAzEl;
         trackAzEl.setLocation(m_settings.m_latitude, m_settings.m_longitude, m_settings.m_altitude);
@@ -2509,21 +2530,24 @@ void CameraPostProcessor::applyTrackedObjectOverlay(const CameraPipelineFrame& f
             trackedObjects->append(trackedObject);
         }
 
-        QString label = object.m_label;
-        if (m_settings.m_trackObjectRange && std::isfinite(azEl.getDistance())) {
-            label += QStringLiteral("\nRange %1 km").arg(azEl.getDistance() / 1000.0, 0, 'f', 1);
-        }
+        if (labelVisible(point))
+        {
+            QString label = object.m_label;
+            if (m_settings.m_trackObjectRange && std::isfinite(azEl.getDistance())) {
+                label += QStringLiteral("\nRange %1 km").arg(azEl.getDistance() / 1000.0, 0, 'f', 1);
+            }
 
-        if (drawLabels) {
-            drawShadowedLabel(painter, image.rect(), point, label, m_settings.m_trackObjectColor, fontMetrics);
-        } else {
-            appendOutlinedPreviewTextLabel(
-                previewTextLabels,
-                label,
-                point,
-                m_settings.m_trackObjectColor,
-                font.family(),
-                font.pointSizeF());
+            if (drawLabels) {
+                drawShadowedLabel(painter, image.rect(), point, label, m_settings.m_trackObjectColor, fontMetrics);
+            } else {
+                appendOutlinedPreviewTextLabel(
+                    previewTextLabels,
+                    label,
+                    point,
+                    m_settings.m_trackObjectColor,
+                    font.family(),
+                    font.pointSizeF());
+            }
         }
     }
 

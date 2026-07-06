@@ -47,6 +47,33 @@ good for roll-diversity). Known contaminants to expect when building corpus rows
 aurora/airglow structure (esp. yknf), horizon trees, an occulting boom (pina), and the low
 resolution (~0.4°/pixel — bright-star anchors only; ~200–700 detectable star-like peaks).
 
+## Tier-2 extension (2026-07-06): star-tests-real-trex2.csv / metadata2.csv
+
+Ten more frames for the already-calibrated sites from NEW clear nights
+(2025-12-16/18/23/24, 2026-01-12/24, 2026-02-10/19), fetched with
+`fetch_trex2.py` and anchored with `derive_trex2_anchors.py` (both in this
+dir — the pipeline is now durable). PNGs use the standard corpus stretch
+DN[median-1, median+30] -> [0, 255] on the RGB channel mean.
+
+Anchor derivation (see script header for details): HYG names/positions,
+sidereal alt/az, skymap per-pixel az/el prediction (median error ~2 px),
+two-pass snap with per-frame median-residual correction, per-site hot-pixel
+masks (static min-stack + intermittent count-based, celestial-pole exempt so
+Polaris survives), temporal-mean persistence over the .h5 minute (kills noise
+maxima / satellites / cosmic rays), and ambiguity + brighter-interloper
+rejection (kills e.g. Jupiter-for-Pollux misidentifications, Jan 2026 has
+Jupiter in Gemini). Self-check: rerunning the pipeline on the original corpus
+frames reproduces every recovered star-tests-real-trex.csv anchor at d=0 px
+(one intentional disagreement: rabb 2026-01-15 Mirach — the old anchor
+(87,230) has no persistent flux in the .h5 minute; the real peak is (87,236)).
+
+Overlays: `overlay2_<frame>.png` (red cross = anchor, all eyeballed).
+`trex_pina_20260122/20260125_*.png` are kept clear frames that failed the
+>=3-anchors->300px-spread gate (faint / east-field prediction offsets); they
+also feed the pina hot-pixel mask. Site pointing rows (az/el/fov) in
+star-tests-real-trex2.csv are copied per-site from star-tests-real-trex.csv;
+mode-3 rows only.
+
 ## Caveats / next steps
 
 - These are the LOW-RESOLUTION real-fisheye regime (553×480). They complement — not replace —

@@ -165,6 +165,24 @@ vectors: true-pose residuals fit a smooth radial/rotation field, coincidence res
 hold-out prediction. Extending the dump with compact per-match residuals for finalists is the next
 concrete step; also worth re-running collection on RAND2 (adds the wrong-roll class at scale).
 
+**v2 DONE (2026-07-06): residual-field coherence REFUTED for all-sky; missed-bright-prediction is
+the first (weak) all-sky signal.** The dump now carries subsampled per-match residual vectors
+(`res=x:y:dx:dy;…`, finalists only) and the study computes field-coherence R² + even/odd hold-out
+(linear+radial 5-term basis, tiny built-in least-squares). Result on cluster-finalists (M≥10):
+allsky RIGHT R² 0.10 vs WRONG 0.11, hold-out 1.12 vs 1.13 — **identical**. Why the physics didn't
+transfer: at 24 px greedy matching in ~776-candidate density, even the TRUE pose's match set is
+contamination-dominated, so its residual field is as noisy as a wrong pose's; the smooth lens-error
+signal is swamped by wrong correspondences. (In the narrow regime coherence does show a tail:
+real/RIGHT p90 0.72 vs WRONG 0.21 — but eocBest is stronger there anyway.) **The one feature with
+any all-sky signal is `bpFrac` (missed-bright-prediction, already in the v1 dump): allsky RIGHT
+median 0.12 (p10 0.12) vs WRONG median 0.00 (p90 0.25)** — wrong rotations explain the detections
+(bdFrac 1.0 for everyone: dense mag-6 catalog) but strand the brightest PREDICTED stars on empty
+sky, exactly the designed asymmetry. Overlapping and only n=6 RIGHT finalists, so: usable as a
+within-case RANKING input at best, and needs more RIGHT all-sky data (Tier-2: more TREx frames)
+before any solver wiring. **Verifier program status: narrow regime → eocBest/mixture ranking (1b)
+is validated and implementable; all-sky regime → only bpFrac shows signal, pursue via ranking +
+more data; single-scalar cross-class gating remains impossible with match-statistics features.**
+
 ## What the recent work established (evidence, not opinion)
 
 Landed on `plate-solver-review` (all validated, REAL never below the 47/48 branch baseline):

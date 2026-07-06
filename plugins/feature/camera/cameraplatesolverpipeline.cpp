@@ -9382,7 +9382,48 @@ CameraPlateSolver::SolverContext::FinalMatchPassEvaluation CameraPlateSolver::So
             << ",bP=" << finalPass.brightProjectedStars << ",mBP=" << finalPass.matchedBrightProjectedStars
             << ",magErr=" << QString::number(finalPass.brightDetectionMagnitudeError, 'f', 3)
             << ",rank=" << (std::isfinite(finalPass.brightnessRankError)
-                ? QString::number(finalPass.brightnessRankError, 'f', 3) : QStringLiteral("inf"));
+                ? QString::number(finalPass.brightnessRankError, 'f', 3) : QStringLiteral("inf"))
+            << [&]() -> QString {
+                // v2: per-match residual VECTORS for finalist-grade candidates, so the offline
+                // study can compute residual-FIELD coherence — the one feature with a physical
+                // reason to separate all-sky rotations (true-pose residuals are a smooth function
+                // of image position: lens-model error + slight rotation; coincidence residuals are
+                // not). Subsampled to <=48 matches; x:y = detection position, dx:dy = detection
+                // minus projected catalogue position.
+                if (finalPass.finalMatches.size() < 6) {
+                    return QString();
+                }
+                QHash<int, QPointF> projectedByCatalog;
+                projectedByCatalog.reserve(finalPass.projectedStars.size());
+                for (const ProjectedCatalogStar& star : finalPass.projectedStars) {
+                    projectedByCatalog.insert(star.catalogIndex, star.point);
+                }
+                QString residuals = QStringLiteral(",res=");
+                const int matchCount = static_cast<int>(finalPass.finalMatches.size());
+                const int stride = std::max(1, matchCount / 48);
+                bool first = true;
+                for (int i = 0; i < matchCount; i += stride)
+                {
+                    const Match& match = finalPass.finalMatches[i];
+                    if ((match.detectionIndex < 0) || (match.detectionIndex >= starDetections.size())
+                        || !projectedByCatalog.contains(match.catalogIndex))
+                    {
+                        continue;
+                    }
+                    const QPointF detection = starDetections[match.detectionIndex].m_center;
+                    const QPointF projected = projectedByCatalog.value(match.catalogIndex);
+                    if (!first) {
+                        residuals += QLatin1Char(';');
+                    }
+                    first = false;
+                    residuals += QStringLiteral("%1:%2:%3:%4")
+                        .arg(detection.x(), 0, 'f', 0)
+                        .arg(detection.y(), 0, 'f', 0)
+                        .arg(detection.x() - projected.x(), 0, 'f', 2)
+                        .arg(detection.y() - projected.y(), 0, 'f', 2);
+                }
+                return residuals;
+            }();
     }
 
     return finalPass;

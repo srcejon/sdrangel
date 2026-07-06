@@ -111,6 +111,98 @@ def signed_poisson_llr(observed, lam):
     return llr if observed >= lam else -llr
 
 
+def parse_residuals(raw):
+    """res=x:y:dx:dy;... -> list of (x, y, dx, dy)."""
+    out = []
+    for chunk in raw.split(";"):
+        parts = chunk.split(":")
+        if len(parts) != 4:
+            continue
+        try:
+            out.append(tuple(float(p) for p in parts))
+        except ValueError:
+            continue
+    return out
+
+
+def solve_least_squares(rows_a, rows_b):
+    """Tiny normal-equations solver: minimize |A p - b|; returns p or None."""
+    n = len(rows_a[0])
+    ata = [[0.0] * n for _ in range(n)]
+    atb = [0.0] * n
+    for a, b in zip(rows_a, rows_b):
+        for i in range(n):
+            atb[i] += a[i] * b
+            for j in range(n):
+                ata[i][j] += a[i] * a[j]
+    # Gaussian elimination with partial pivoting
+    m = [row[:] + [atb[i]] for i, row in enumerate(ata)]
+    for col in range(n):
+        pivot = max(range(col, n), key=lambda r2: abs(m[r2][col]))
+        if abs(m[pivot][col]) < 1e-12:
+            return None
+        m[col], m[pivot] = m[pivot], m[col]
+        for r2 in range(n):
+            if r2 == col:
+                continue
+            f = m[r2][col] / m[col][col]
+            for c2 in range(col, n + 1):
+                m[r2][c2] -= f * m[col][c2]
+    return [m[i][n] / m[i][i] for i in range(n)]
+
+
+def field_coherence(residuals, w, h):
+    """Fit residual vectors to a smooth linear+radial field of image position.
+
+    True-pose residuals are dominated by lens-model error (radial) plus small rotation/scale
+    error (linear in position) -> the smooth field explains most variance. Coincidence-match
+    residuals are ~independent of position -> it explains ~basis/2M (chance level).
+    Returns (r2, holdout_ratio): r2 = variance explained on all matches; holdout_ratio =
+    post-fit rms on held-out half / pre-fit rms on held-out half (fit on even indices only).
+    """
+    if len(residuals) < 10:
+        return 0.0, 1.0
+    cx, cy = w / 2.0, h / 2.0
+    scale = max(w, h) / 2.0
+
+    def basis(x, y):
+        xn, yn = (x - cx) / scale, (y - cy) / scale
+        r2 = xn * xn + yn * yn
+        return [1.0, xn, yn, r2 * xn, r2 * yn]
+
+    def fit_and_score(fit_set, eval_set):
+        arows, bx, by = [], [], []
+        for (x, y, dx, dy) in fit_set:
+            arows.append(basis(x, y))
+            bx.append(dx)
+            by.append(dy)
+        px = solve_least_squares(arows, bx)
+        py = solve_least_squares(arows, by)
+        if px is None or py is None:
+            return None
+        pre = post = 0.0
+        for (x, y, dx, dy) in eval_set:
+            b = basis(x, y)
+            mx = sum(pi * bi for pi, bi in zip(px, b))
+            my = sum(pi * bi for pi, bi in zip(py, b))
+            pre += dx * dx + dy * dy
+            post += (dx - mx) ** 2 + (dy - my) ** 2
+        return pre, post
+
+    full = fit_and_score(residuals, residuals)
+    r2 = 0.0
+    if full and full[0] > 0:
+        r2 = max(0.0, 1.0 - full[1] / full[0])
+    even = residuals[0::2]
+    odd = residuals[1::2]
+    holdout = 1.0
+    if len(even) >= 8 and len(odd) >= 4:
+        ho = fit_and_score(even, odd)
+        if ho and ho[0] > 0:
+            holdout = math.sqrt(ho[1] / ho[0])
+    return r2, holdout
+
+
 def engineer_features(c):
     D, C = c["D"], c["C"]
     area = float(c["W"] * c["H"])
@@ -132,6 +224,11 @@ def engineer_features(c):
     # Bright agreement
     feats["bdFrac"] = (c["mBD"] / c["bD"]) if c["bD"] > 0 else 1.0
     feats["bpFrac"] = (c["mBP"] / c["bP"]) if c["bP"] > 0 else 1.0
+    # v2: residual-field coherence (only present when the dump carried per-match residuals)
+    if c.get("res"):
+        feats["coherR2"], feats["holdout"] = field_coherence(c["res"], c["W"], c["H"])
+    else:
+        feats["coherR2"], feats["holdout"] = 0.0, 1.0
     return feats
 
 
@@ -177,6 +274,8 @@ def main():
                         }
                     except (KeyError, ValueError):
                         continue
+                    if "res" in raw:
+                        cand["res"] = parse_residuals(raw["res"])
                     pending.append(cand)
                     continue
                 v = VERDICT_RE.match(line)
@@ -225,7 +324,7 @@ def main():
     right = [r for r in all_rows if r["label"] == "RIGHT"]
     wrong = [r for r in all_rows if r["label"] == "WRONG"]
     print(f"labelled candidates: RIGHT={len(right)} WRONG={len(wrong)} -> {out_csv}")
-    for feat in ("eocBest", "eoc4", "eoc8", "eocR", "tight4x", "bdFrac", "bpFrac"):
+    for feat in ("eocBest", "eoc4", "eoc8", "eocR", "tight4x", "bdFrac", "bpFrac", "coherR2", "holdout"):
         rv = [r[feat] for r in right]
         wv = [w[feat] for w in wrong]
         if not rv or not wv:

@@ -49,7 +49,7 @@ struct SatelliteState {
     double m_period = 0.0;
     QString m_error;
     QList<SatellitePass> m_passes;              // Used in worker and GUI threads
-    QList<QGeoCoordinate> m_groundTrack;        // These used only in worker thread
+    QList<QGeoCoordinate> m_groundTrack;        // These used only in worker thread, to send to Map
     QList<QDateTime> m_groundTrackDateTime;
     QList<QGeoCoordinate> m_predictedGroundTrack;
     QList<QDateTime> m_predictedGroundTrackDateTime;
@@ -64,7 +64,8 @@ void getSatelliteState(QDateTime dateTime,
                         double latitude, double longitude, double altitude,
                         int predictionPeriod, int minAOSElevationDeg, int minPassElevationDeg,
                         QTime passStartTime, QTime passFinishTime, bool utc,
-                        int noOfPasses, int groundTrackSteps, SatelliteState *satState);
+                        int noOfPasses, 
+                        bool calcGroundTrack, int groundTrackSteps, SatelliteState *satState);
 
 void getPassAzEl(QLineSeries *azimuth, QLineSeries *elevation, QLineSeries *polar,
                         const QString& tle0, const QString& tle1, const QString& tle2,

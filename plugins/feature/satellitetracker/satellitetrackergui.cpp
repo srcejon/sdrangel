@@ -18,8 +18,14 @@
 ///////////////////////////////////////////////////////////////////////////////////
 
 #include <cmath>
+#include <limits>
+#include <QAbstractTableModel>
+#include <QHeaderView>
 #include <QMessageBox>
 #include <QLineEdit>
+#include <QSignalBlocker>
+#include <QSortFilterProxyModel>
+#include <QTableView>
 
 #include <QtCharts/QChartView>
 #include <QtCharts/QLineSeries>
@@ -47,6 +53,470 @@
 #include "satelliteselectiondialog.h"
 #include "satelliteradiocontroldialog.h"
 #include "satellitetrackersgp4.h"
+
+namespace
+{
+    enum SatelliteTableRole {
+        SortRole = Qt::UserRole + 1
+    };
+
+    struct SatelliteTableColumn {
+        const char *m_title;
+        const char *m_toolTip;
+        const char *m_widthHint;
+    };
+
+    const SatelliteTableColumn satelliteTableColumns[SAT_COL_COLUMNS] = {
+        {"Satellite", "Satellite name", "Satellite123"},
+        {"Az", "Azimuth in degrees to satellite from antenna location", "360"},
+        {"El", "Elevation in degrees to satellite from antenna location", "-90"},
+        {"Next", "Time until next event", "99:99:99 AOS"},
+        {"Dur", "Duration of next pass", "9:99:99"},
+        {"AOS", "Time of next AOS (Acquisition of signal)", "+1 10:17"},
+        {"LOS", "Time of next LOS (Loss of signal)", "+1 10:17"},
+        {"Max El.", "Maximum elevation in degrees of next satellite pass", "90"},
+        {"Dir", "Direction of the next pass", "^"},
+        {"Latitude (\302\260)", "", "-90.0"},
+        {"Longitude (\302\260)", "", "-180.0"},
+        {"Alt (km)", "Satellite altitude in kilometres", "50000"},
+        {"Range (km)", "Range to satellite in kilometres", "50000"},
+        {"Range rate (km/s)", "Speed of satellite towards antenna location in kilometers per second", "10.0"},
+        {"Doppler (Hz)", "Receive Doppler shift in Hertz (At frequency set in settings)", "10000"},
+        {"Path loss (dB)", "Free space loss of signal in decibels (At frequency set in settings)", "100"},
+        {"Delay (ms)", "Propagation delay of a signal from the antenna to the satellite in milliseconds (assuming line-of-sight)", "100"},
+        {"Norad ID", "Norad catalog identifier for the satellite", "123456"},
+        {"Error", "Details any errors calculating satellites position", "Decayed"}
+    };
+
+    QString formatDaysTimeForTable(qint64 days, const QDateTime& dateTime, bool utc, const QString& dateFormat)
+    {
+        QDateTime dt = utc ? dateTime.toUTC() : dateTime.toLocalTime();
+
+        if (std::abs(days) > 10) {
+            return dt.date().toString(dateFormat);
+        } else if (days == 0) {
+            return dt.time().toString("hh:mm");
+        } else if (days > 0) {
+            return dt.time().toString(QString("hh:mm +%1").arg(days));
+        } else {
+            return dt.time().toString(QString("hh:mm %1").arg(days));
+        }
+    }
+
+    QString formatSecondsAsHHMMSSForTable(qint64 seconds)
+    {
+        char const* sign = "";
+
+        if (seconds < 0)
+        {
+            sign = "-";
+            seconds = -seconds;
+        }
+
+        int minutes = seconds / 60;
+        seconds = seconds % 60;
+        int hours = minutes / 60;
+        minutes = minutes % 60;
+
+        if (hours > 0) {
+            return QString("%1%2:%3:%4").arg(sign).arg(hours).arg(minutes, 2, 10, QChar('0')).arg(seconds, 2, 10, QChar('0'));
+        } else {
+            return QString("%1%2:%3").arg(sign).arg(minutes).arg(seconds, 2, 10, QChar('0'));
+        }
+    }
+}
+
+#define SPEED_OF_LIGHT 299792458.0
+
+// Frequency in Hz, speed in m/s
+static double doppler(double frequency, double speed)
+{
+    return frequency * speed / SPEED_OF_LIGHT;
+}
+
+// Frequency in Hz, speed in m/s
+static double freeSpaceLoss(double frequency, double distance)
+{
+    return 20.0 * log10(distance) + 20 * log10(frequency) + 20 * log10(4*M_PI/SPEED_OF_LIGHT);
+}
+
+// Distance in m, delay in s
+static double propagationDelay(double distance)
+{
+    return distance / SPEED_OF_LIGHT;
+}
+
+class SatelliteTrackerGUI::SatelliteTableModel : public QAbstractTableModel
+{
+public:
+    explicit SatelliteTableModel(QObject *parent = nullptr) :
+        QAbstractTableModel(parent),
+        m_utc(false),
+        m_defaultFrequency(0.0)
+    {
+    }
+
+    void configure(bool utc, const QString& dateFormat, double defaultFrequency)
+    {
+        m_utc = utc;
+        m_dateFormat = dateFormat;
+        m_defaultFrequency = defaultFrequency;
+    }
+
+    int rowCount(const QModelIndex& parent = QModelIndex()) const override
+    {
+        return parent.isValid() ? 0 : m_rows.size();
+    }
+
+    int columnCount(const QModelIndex& parent = QModelIndex()) const override
+    {
+        return parent.isValid() ? 0 : SAT_COL_COLUMNS;
+    }
+
+    QVariant headerData(int section, Qt::Orientation orientation, int role) const override
+    {
+        if ((orientation != Qt::Horizontal) || (section < 0) || (section >= SAT_COL_COLUMNS)) {
+            return QVariant();
+        }
+
+        if (role == Qt::DisplayRole) {
+            return satelliteTableColumns[section].m_title;
+        } else if (role == Qt::ToolTipRole) {
+            return satelliteTableColumns[section].m_toolTip;
+        } else {
+            return QVariant();
+        }
+    }
+
+    QVariant data(const QModelIndex& index, int role) const override
+    {
+        if (!index.isValid() || (index.row() < 0) || (index.row() >= m_rows.size())) {
+            return QVariant();
+        }
+
+        const SatelliteTableRow& row = m_rows[index.row()];
+        const int column = index.column();
+
+        if (role == Qt::TextAlignmentRole)
+        {
+            switch (column)
+            {
+            case SAT_COL_AZ:
+            case SAT_COL_EL:
+            case SAT_COL_TNE:
+            case SAT_COL_DUR:
+            case SAT_COL_MAX_EL:
+            case SAT_COL_LATITUDE:
+            case SAT_COL_LONGITUDE:
+            case SAT_COL_ALT:
+            case SAT_COL_RANGE:
+            case SAT_COL_RANGE_RATE:
+            case SAT_COL_DOPPLER:
+            case SAT_COL_PATH_LOSS:
+            case SAT_COL_DELAY:
+                return QVariant::fromValue(Qt::Alignment(Qt::AlignRight | Qt::AlignVCenter));
+            default:
+                return QVariant();
+            }
+        }
+
+        if (role == SortRole) {
+            return sortData(row, column);
+        }
+
+        if (role != Qt::DisplayRole) {
+            return QVariant();
+        }
+
+        switch (column)
+        {
+        case SAT_COL_NAME:
+            return row.m_name;
+        case SAT_COL_AZ:
+            return row.m_hasPosition ? QVariant(row.m_azimuth) : QVariant();
+        case SAT_COL_EL:
+            return row.m_hasPosition ? QVariant(row.m_elevation) : QVariant();
+        case SAT_COL_TNE:
+            return row.m_hasPosition ? row.m_nextEvent : QString();
+        case SAT_COL_DUR:
+            return row.m_hasPosition ? row.m_duration : QString();
+        case SAT_COL_AOS:
+            return row.m_hasPosition ? row.m_aos : QString();
+        case SAT_COL_LOS:
+            return row.m_hasPosition ? row.m_los : QString();
+        case SAT_COL_MAX_EL:
+            return row.m_hasMaxElevation ? QVariant(row.m_maxElevation) : QVariant();
+        case SAT_COL_DIR:
+            return row.m_hasPosition ? row.m_direction : QString();
+        case SAT_COL_LATITUDE:
+            return row.m_hasPosition ? QVariant(row.m_latitude) : QVariant();
+        case SAT_COL_LONGITUDE:
+            return row.m_hasPosition ? QVariant(row.m_longitude) : QVariant();
+        case SAT_COL_ALT:
+            return row.m_hasPosition ? QVariant(row.m_altitude) : QVariant();
+        case SAT_COL_RANGE:
+            return row.m_hasPosition ? QVariant(row.m_range) : QVariant();
+        case SAT_COL_RANGE_RATE:
+            return row.m_hasPosition ? row.m_rangeRate : QString();
+        case SAT_COL_DOPPLER:
+            return row.m_hasPosition ? QVariant(row.m_doppler) : QVariant();
+        case SAT_COL_PATH_LOSS:
+            return row.m_hasPosition ? row.m_pathLoss : QString();
+        case SAT_COL_DELAY:
+            return row.m_hasPosition ? row.m_delay : QString();
+        case SAT_COL_NORAD_ID:
+            return row.m_hasNoradId ? QVariant(row.m_noradId) : QVariant();
+        case SAT_COL_ERROR:
+            return row.m_error;
+        default:
+            return QVariant();
+        }
+    }
+
+    QString satelliteNameAt(int row) const
+    {
+        if ((row < 0) || (row >= m_rows.size())) {
+            return QString();
+        }
+
+        return m_rows[row].m_name;
+    }
+
+    void removeSatellite(const QString& name)
+    {
+        const auto it = m_rowByName.constFind(name);
+
+        if (it == m_rowByName.constEnd()) {
+            return;
+        }
+
+        const int row = it.value();
+        beginRemoveRows(QModelIndex(), row, row);
+        m_rows.removeAt(row);
+        m_rowByName.remove(name);
+
+        for (int i = row; i < m_rows.size(); ++i) {
+            m_rowByName[m_rows[i].m_name] = i;
+        }
+
+        endRemoveRows();
+    }
+
+    void updateSatellite(const SatelliteState& satState, const SatNogsSatellite *satellite, const QDateTime& currentDateTime)
+    {
+        SatelliteTableRow row = makeRow(satState, satellite, currentDateTime);
+        auto it = m_rowByName.find(row.m_name);
+
+        if (it == m_rowByName.end())
+        {
+            const int newRow = m_rows.size();
+            beginInsertRows(QModelIndex(), newRow, newRow);
+            m_rows.append(row);
+            m_rowByName.insert(row.m_name, newRow);
+            endInsertRows();
+        }
+        else
+        {
+            const int existingRow = it.value();
+            m_rows[existingRow] = row;
+            emit dataChanged(index(existingRow, 0), index(existingRow, SAT_COL_COLUMNS - 1),
+                {Qt::DisplayRole, Qt::TextAlignmentRole, SortRole});
+        }
+    }
+
+private:
+    struct SatelliteTableRow
+    {
+        QString m_name;
+        bool m_hasPosition = false;
+        bool m_hasPass = false;
+        bool m_hasMaxElevation = false;
+        bool m_hasNoradId = false;
+        int m_azimuth = 0;
+        int m_elevation = 0;
+        QString m_nextEvent;
+        qint64 m_nextEventSeconds = std::numeric_limits<qint64>::max();
+        QString m_duration;
+        qint64 m_durationSeconds = std::numeric_limits<qint64>::max();
+        QString m_aos;
+        QDateTime m_aosSort;
+        QString m_los;
+        QDateTime m_losSort;
+        int m_maxElevation = 0;
+        QString m_direction;
+        double m_latitude = 0.0;
+        double m_longitude = 0.0;
+        int m_altitude = 0;
+        int m_range = 0;
+        QString m_rangeRate;
+        double m_rangeRateSort = 0.0;
+        int m_doppler = 0;
+        QString m_pathLoss;
+        double m_pathLossSort = 0.0;
+        QString m_delay;
+        double m_delaySort = 0.0;
+        int m_noradId = 0;
+        QString m_error;
+    };
+
+    SatelliteTableRow makeRow(const SatelliteState& satState, const SatNogsSatellite *satellite, const QDateTime& currentDateTime) const
+    {
+        SatelliteTableRow row;
+        row.m_name = satState.m_name;
+
+        if (satellite != nullptr)
+        {
+            row.m_hasNoradId = true;
+            row.m_noradId = satellite->m_noradCatId;
+        }
+
+        row.m_error = satState.m_error;
+
+        if (!satState.m_error.isEmpty()) {
+            return row;
+        }
+
+        row.m_hasPosition = true;
+        row.m_azimuth = (int) round(satState.m_azimuth);
+        row.m_elevation = (int) round(satState.m_elevation);
+
+        if (!satState.m_passes.isEmpty())
+        {
+            const SatellitePass& pass = satState.m_passes[0];
+            const qint64 secondsToAOS = currentDateTime.secsTo(pass.m_aos);
+            const qint64 secondsToLOS = currentDateTime.secsTo(pass.m_los);
+            const int daysToAOS = currentDateTime.daysTo(pass.m_aos);
+            const int daysToLOS = currentDateTime.daysTo(pass.m_los);
+
+            row.m_hasPass = true;
+            row.m_hasMaxElevation = true;
+
+            if (pass.m_aos > currentDateTime)
+            {
+                row.m_nextEventSeconds = secondsToAOS;
+                row.m_nextEvent = formatSecondsAsHHMMSSForTable(secondsToAOS) + " AOS";
+            }
+            else
+            {
+                row.m_nextEventSeconds = secondsToLOS;
+                row.m_nextEvent = formatSecondsAsHHMMSSForTable(secondsToLOS) + " LOS";
+            }
+
+            row.m_durationSeconds = pass.m_aos.secsTo(pass.m_los);
+            row.m_duration = formatSecondsAsHHMMSSForTable(row.m_durationSeconds);
+            row.m_aos = formatDaysTimeForTable(daysToAOS, pass.m_aos, m_utc, m_dateFormat);
+            row.m_aosSort = pass.m_aos;
+            row.m_los = formatDaysTimeForTable(daysToLOS, pass.m_los, m_utc, m_dateFormat);
+            row.m_losSort = pass.m_los;
+            row.m_maxElevation = (int) round(pass.m_maxElevation);
+            row.m_direction = pass.m_northToSouth ? QString(QChar(0x2193)) : QString(QChar(0x2191));
+        }
+
+        row.m_latitude = satState.m_latitude;
+        row.m_longitude = satState.m_longitude;
+        row.m_altitude = (int) round(satState.m_altitude);
+        row.m_range = (int) round(satState.m_range);
+        row.m_rangeRateSort = satState.m_rangeRate;
+        row.m_rangeRate = QString::number(satState.m_rangeRate, 'f', 3);
+        row.m_doppler = (int) round(-doppler(m_defaultFrequency, satState.m_rangeRate * 1000.0));
+        row.m_pathLossSort = freeSpaceLoss(m_defaultFrequency, satState.m_range * 1000.0);
+        row.m_pathLoss = QString::number(row.m_pathLossSort, 'f', 1);
+        row.m_delaySort = propagationDelay(satState.m_range * 1000.0) * 1000.0;
+        row.m_delay = QString::number(row.m_delaySort, 'f', 1);
+
+        return row;
+    }
+
+    QVariant sortData(const SatelliteTableRow& row, int column) const
+    {
+        if ((column != SAT_COL_NAME) && (column != SAT_COL_NORAD_ID) && (column != SAT_COL_ERROR) && !row.m_hasPosition) {
+            return QVariant();
+        }
+
+        switch (column)
+        {
+        case SAT_COL_NAME:
+            return row.m_name;
+        case SAT_COL_AZ:
+            return row.m_azimuth;
+        case SAT_COL_EL:
+            return row.m_elevation;
+        case SAT_COL_TNE:
+            return row.m_hasPass ? QVariant(row.m_nextEventSeconds) : QVariant();
+        case SAT_COL_DUR:
+            return row.m_hasPass ? QVariant(row.m_durationSeconds) : QVariant();
+        case SAT_COL_AOS:
+            return row.m_hasPass ? QVariant(row.m_aosSort) : QVariant();
+        case SAT_COL_LOS:
+            return row.m_hasPass ? QVariant(row.m_losSort) : QVariant();
+        case SAT_COL_MAX_EL:
+            return row.m_hasMaxElevation ? QVariant(row.m_maxElevation) : QVariant();
+        case SAT_COL_DIR:
+            return row.m_direction;
+        case SAT_COL_LATITUDE:
+            return row.m_latitude;
+        case SAT_COL_LONGITUDE:
+            return row.m_longitude;
+        case SAT_COL_ALT:
+            return row.m_altitude;
+        case SAT_COL_RANGE:
+            return row.m_range;
+        case SAT_COL_RANGE_RATE:
+            return row.m_rangeRateSort;
+        case SAT_COL_DOPPLER:
+            return row.m_doppler;
+        case SAT_COL_PATH_LOSS:
+            return row.m_pathLossSort;
+        case SAT_COL_DELAY:
+            return row.m_delaySort;
+        case SAT_COL_NORAD_ID:
+            return row.m_hasNoradId ? QVariant(row.m_noradId) : QVariant();
+        case SAT_COL_ERROR:
+            return row.m_error;
+        default:
+            return QVariant();
+        }
+    }
+
+    QVector<SatelliteTableRow> m_rows;
+    QHash<QString, int> m_rowByName;
+    bool m_utc;
+    QString m_dateFormat;
+    double m_defaultFrequency;
+};
+
+class SatelliteTrackerGUI::SatelliteTableSortProxy : public QSortFilterProxyModel
+{
+public:
+    explicit SatelliteTableSortProxy(QObject *parent = nullptr) :
+        QSortFilterProxyModel(parent)
+    {
+    }
+
+protected:
+    bool lessThan(const QModelIndex& sourceLeft, const QModelIndex& sourceRight) const override
+    {
+        const QVariant left = sourceModel()->data(sourceLeft, SortRole);
+        const QVariant right = sourceModel()->data(sourceRight, SortRole);
+
+        if (!left.isValid() || !right.isValid()) {
+            return left.isValid() && !right.isValid();
+        }
+
+        switch (sourceLeft.column())
+        {
+        case SAT_COL_NAME:
+        case SAT_COL_DIR:
+        case SAT_COL_ERROR:
+            return QString::localeAwareCompare(left.toString(), right.toString()) < 0;
+        case SAT_COL_AOS:
+        case SAT_COL_LOS:
+            return left.toDateTime() < right.toDateTime();
+        default:
+            return left.toDouble() < right.toDouble();
+        }
+    }
+};
 
 SatelliteTrackerGUI* SatelliteTrackerGUI::create(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *feature)
 {
@@ -125,8 +595,9 @@ bool SatelliteTrackerGUI::handleMessage(const Message& message)
         SatelliteTrackerReport::MsgReportSat& satReport = (SatelliteTrackerReport::MsgReportSat&) message;
         const QList<SatelliteState>& satStates = satReport.getSatelliteStates();
 
+        const QDateTime currentDateTime = m_satelliteTracker->currentDateTime();
         ui->satTable->setUpdatesEnabled(false);
-        ui->satTable->setSortingEnabled(false);
+        m_satTableProxy->setDynamicSortFilter(false);
 
         for (const SatelliteState& satState : satStates)
         {
@@ -154,10 +625,13 @@ bool SatelliteTrackerGUI::handleMessage(const Message& message)
                 }
             }
 
-            updateTable(&satState);
+            updateTable(&satState, currentDateTime);
         }
 
-        ui->satTable->setSortingEnabled(true);
+        m_satTableProxy->setDynamicSortFilter(true);
+        if (m_settings.m_columnSort >= 0) {
+            m_satTableProxy->sort(m_settings.m_columnSort, m_settings.m_columnSortOrder);
+        }
         ui->satTable->setUpdatesEnabled(true);
 
         PROFILER_STOP("SatelliteTrackerGUI::handleMessage::MsgReportSat");
@@ -227,13 +701,7 @@ void SatelliteTrackerGUI::updateSelectedSats()
         if (idx == -1)
         {
             ui->target->removeItem(i);
-            QList<QTableWidgetItem *> matches = ui->satTable->findItems(name, Qt::MatchExactly);
-
-            for (int j = 0; j < matches.length(); j++) {
-                ui->satTable->removeRow(ui->satTable->row(matches[j]));
-            }
-
-            m_satTableItems.remove(name);
+            m_satTableModel->removeSatellite(name);
         }
         else
         {
@@ -288,6 +756,8 @@ SatelliteTrackerGUI::SatelliteTrackerGUI(PluginAPI* pluginAPI, FeatureUISet *fea
     m_lastFeatureState(0),
     m_lastUpdatingSatData(false),
     m_targetSatState(nullptr),
+    m_satTableModel(nullptr),
+    m_satTableProxy(nullptr),
     m_plotPass(0),
     m_lineChart(nullptr),
     m_polarChart(nullptr),
@@ -323,17 +793,25 @@ SatelliteTrackerGUI::SatelliteTrackerGUI(PluginAPI* pluginAPI, FeatureUISet *fea
     ui->dateTime->setDateTime(m_satelliteTracker->currentDateTime());
     ui->deviceFeatureSelect->setVisible(false);
 
-    resizeTable();
+    m_satTableModel = new SatelliteTableModel(this);
+    m_satTableModel->configure(m_settings.m_utc, m_settings.m_dateFormat, m_settings.m_defaultFrequency);
+    m_satTableProxy = new SatelliteTableSortProxy(this);
+    m_satTableProxy->setSourceModel(m_satTableModel);
+    m_satTableProxy->setDynamicSortFilter(true);
+    ui->satTable->setModel(m_satTableProxy);
+    ui->satTable->setSelectionBehavior(QAbstractItemView::SelectRows);
+    ui->satTable->setSelectionMode(QAbstractItemView::SingleSelection);
     // Allow user to reorder columns
     ui->satTable->horizontalHeader()->setSectionsMovable(true);
     // Allow user to sort table by clicking on headers
     ui->satTable->setSortingEnabled(true);
+    resizeTable();
     // Add context menu to allow hiding/showing of columns
     menu = new QMenu(ui->satTable);
 
-    for (int i = 0; i < ui->satTable->horizontalHeader()->count(); i++)
+    for (int i = 0; i < m_satTableModel->columnCount(); i++)
     {
-        QString text = ui->satTable->horizontalHeaderItem(i)->text();
+        QString text = m_satTableModel->headerData(i, Qt::Horizontal, Qt::DisplayRole).toString();
         menu->addAction(createCheckableItem(text, i, true));
     }
 
@@ -401,7 +879,12 @@ void SatelliteTrackerGUI::displaySettings()
     ui->dateTime->setVisible(m_settings.m_dateTimeSelect == SatelliteTrackerSettings::CUSTOM);
     ui->autoTarget->setChecked(m_settings.m_autoTarget);
     ui->darkTheme->setChecked(m_settings.m_chartsDarkTheme);
-    ui->satTable->horizontalHeader()->setSortIndicator(m_settings.m_columnSort, m_settings.m_columnSortOrder);
+    m_satTableModel->configure(m_settings.m_utc, m_settings.m_dateFormat, m_settings.m_defaultFrequency);
+    if (m_settings.m_columnSort >= 0)
+    {
+        ui->satTable->horizontalHeader()->setSortIndicator(m_settings.m_columnSort, m_settings.m_columnSortOrder);
+        m_satTableProxy->sort(m_settings.m_columnSort, m_settings.m_columnSortOrder);
+    }
     getRollupContents()->restoreState(m_rollupState);
     plotChart();
     blockApplySettings(false);
@@ -561,6 +1044,8 @@ void SatelliteTrackerGUI::on_displaySettings_clicked()
         m_settingsKeys.append("minPassElevation");
         m_settingsKeys.append("rotatorMaxAzimuth");
         m_settingsKeys.append("rotatorMaxElevation");
+        m_settingsKeys.append("azimuthOffset");
+        m_settingsKeys.append("elevationOffset");
         m_settingsKeys.append("aosSpeech");
         m_settingsKeys.append("losSpeech");
         m_settingsKeys.append("aosCommand");
@@ -573,6 +1058,7 @@ void SatelliteTrackerGUI::on_displaySettings_clicked()
         m_settingsKeys.append("drawRotators");
         m_settingsKeys.append("dateFormat");
         m_settingsKeys.append("utc");
+        m_settingsKeys.append("drawOnMap");
         m_settingsKeys.append("tles");
         m_settingsKeys.append("replayEnabled");
         m_settingsKeys.append("replayStartDateTime");
@@ -1311,29 +1797,33 @@ void SatelliteTrackerGUI::plotAzElChart()
 
 void SatelliteTrackerGUI::resizeTable()
 {
-    // Fill table with a row of dummy data that will size the columns nicely
-    int row = ui->satTable->rowCount();
-    ui->satTable->setRowCount(row + 1);
-    ui->satTable->setItem(row, SAT_COL_NAME, new QTableWidgetItem("Satellite123"));
-    ui->satTable->setItem(row, SAT_COL_AZ, new QTableWidgetItem("360"));
-    ui->satTable->setItem(row, SAT_COL_EL, new QTableWidgetItem("-90"));
-    ui->satTable->setItem(row, SAT_COL_TNE, new QTableWidgetItem("99:99:99 AOS"));
-    ui->satTable->setItem(row, SAT_COL_DUR, new QTableWidgetItem("9:99:99"));
-    ui->satTable->setItem(row, SAT_COL_AOS, new QTableWidgetItem("+1 10:17"));
-    ui->satTable->setItem(row, SAT_COL_LOS, new QTableWidgetItem("+1 10:17"));
-    ui->satTable->setItem(row, SAT_COL_MAX_EL, new QTableWidgetItem("90"));
-    ui->satTable->setItem(row, SAT_COL_DIR, new QTableWidgetItem("^"));
-    ui->satTable->setItem(row, SAT_COL_LATITUDE, new QTableWidgetItem("-90.0"));
-    ui->satTable->setItem(row, SAT_COL_LONGITUDE, new QTableWidgetItem("-180.0"));
-    ui->satTable->setItem(row, SAT_COL_ALT, new QTableWidgetItem("50000"));
-    ui->satTable->setItem(row, SAT_COL_RANGE, new QTableWidgetItem("50000"));
-    ui->satTable->setItem(row, SAT_COL_RANGE_RATE, new QTableWidgetItem("10.0"));
-    ui->satTable->setItem(row, SAT_COL_DOPPLER, new QTableWidgetItem("10000"));
-    ui->satTable->setItem(row, SAT_COL_PATH_LOSS, new QTableWidgetItem("100"));
-    ui->satTable->setItem(row, SAT_COL_NORAD_ID, new QTableWidgetItem("123456"));
-    ui->satTable->setItem(row, SAT_COL_ERROR, new QTableWidgetItem("Decayed"));
-    ui->satTable->resizeColumnsToContents();
-    ui->satTable->setRowCount(row);
+    QHeaderView *header = ui->satTable->horizontalHeader();
+    QSignalBlocker blocker(header);
+    const QFontMetrics metrics(ui->satTable->font());
+
+    for (int column = 0; column < SAT_COL_COLUMNS; ++column)
+    {
+        int width = m_settings.m_columnSizes[column];
+
+        if (width <= 0)
+        {
+            width = qMax(
+                metrics.horizontalAdvance(QString::fromUtf8(satelliteTableColumns[column].m_title)),
+                metrics.horizontalAdvance(QString::fromUtf8(satelliteTableColumns[column].m_widthHint))
+            ) + 24;
+        }
+
+        header->resizeSection(column, width);
+    }
+
+    for (int logical = 0; logical < SAT_COL_COLUMNS; ++logical)
+    {
+        const int visual = m_settings.m_columnIndexes[logical];
+
+        if ((visual >= 0) && (visual < SAT_COL_COLUMNS) && (header->visualIndex(logical) != visual)) {
+            header->moveSection(header->visualIndex(logical), visual);
+        }
+    }
 }
 
 // As we only have limited space in table, display time plus number of days to AOS/LOS
@@ -1381,216 +1871,31 @@ QString SatelliteTrackerGUI::formatSecondsAsHHMMSS(qint64 seconds)
     }
 }
 
-// Table item showing some text, but sorted by datetime set as user data
-class DateTimeSortedTableWidgetItem : public QTableWidgetItem {
-public:
-    bool operator<(const QTableWidgetItem& other) const
-    {
-        QVariant v1 = data(Qt::UserRole);
-        QVariant v2 = other.data(Qt::UserRole);
-
-        if (v1.isValid() && v2.isValid()) {
-            return v1.toDateTime() < v2.toDateTime();
-        } else {
-            return false;
-        }
-    }
-};
-
-// Handle sorting for next column, which can have times as HH:MM:SS or MM:SS
-class NextEventTableWidgetItem : public QTableWidgetItem
-{
-public:
-    bool operator<(const QTableWidgetItem &other) const override
-    {
-        QString t1 = text();
-        QString t2 = other.text();
-        int t1Colons = t1.count(":");
-        int t2Colons = t2.count(":");
-
-        if (t1Colons == t2Colons)
-        {
-            QCollator coll;
-            coll.setNumericMode(true);
-            return coll.compare(t1, t2) < 0;
-        }
-        else
-        {
-            return t1Colons < t2Colons;
-        }
-    }
-};
-
-class NaturallySortedTableWidgetItem : public QTableWidgetItem
-{
-public:
-    bool operator<(const QTableWidgetItem &other) const override
-    {
-        QCollator coll;
-        coll.setNumericMode(true);
-        return coll.compare(text() , other.text()) < 0;
-    }
-};
-
-#define SPEED_OF_LIGHT 299792458.0
-
-// Frequency in Hz, speed in m/s
-static double doppler(double frequency, double speed)
-{
-    return frequency * speed / SPEED_OF_LIGHT;
-}
-
-// Frequency in Hz, speed in m/s
-static double freeSpaceLoss(double frequency, double distance)
-{
-    return 20.0 * log10(distance) + 20 * log10(frequency) + 20 * log10(4*M_PI/SPEED_OF_LIGHT);
-}
-
-// Distance in m, delay in s
-static double propagationDelay(double distance)
-{
-    return distance / SPEED_OF_LIGHT;
-}
-
 // Update satellite data table with latest data for the satellite
-void SatelliteTrackerGUI::updateTable(const SatelliteState *satState)
+void SatelliteTrackerGUI::updateTable(const SatelliteState *satState, const QDateTime& currentDateTime)
 {
-    std::array<QTableWidgetItem *, SAT_COL_COLUMNS> *items;
-
-    // Does the table already contain this satellite?
-    if (!m_satTableItems.contains(satState->m_name))
-    {
-        std::array<QTableWidgetItem*, SAT_COL_COLUMNS> newItems;
-        
-        // Add a new row (sorting disabled in calling function)
-        int row = ui->satTable->rowCount();
-        ui->satTable->setRowCount(row + 1);
-
-        for (int i = 0; i < SAT_COL_COLUMNS; i++)
-        {
-            if ((i == SAT_COL_AOS) || (i == SAT_COL_LOS)) {
-                newItems[i] = new DateTimeSortedTableWidgetItem();
-            } else if ((i == SAT_COL_NAME) || (i == SAT_COL_NORAD_ID) || (i == SAT_COL_ERROR)) {
-                newItems[i] = new QTableWidgetItem();
-            } else if (i == SAT_COL_TNE) {
-                newItems[i] = new NextEventTableWidgetItem();
-            } else {
-                newItems[i] = new NaturallySortedTableWidgetItem();
-            }
-
-            newItems[i]->setToolTip(ui->satTable->horizontalHeaderItem(i)->toolTip());
-            ui->satTable->setItem(row, i, newItems[i]);
-        }
-
-        // Static columns
-        newItems[SAT_COL_NAME]->setText(satState->m_name);
-
-        if (m_satellites.contains(satState->m_name))
-        {
-            SatNogsSatellite *sat = m_satellites.value(satState->m_name);
-            newItems[SAT_COL_NORAD_ID]->setData(Qt::DisplayRole, sat->m_noradCatId);
-        }
-
-        // Text alignment
-        for (int col : {SAT_COL_AZ, SAT_COL_EL, SAT_COL_TNE, SAT_COL_DUR, SAT_COL_MAX_EL,
-            SAT_COL_LATITUDE, SAT_COL_LONGITUDE,
-            SAT_COL_ALT, SAT_COL_RANGE, SAT_COL_RANGE_RATE, SAT_COL_DOPPLER,
-            SAT_COL_PATH_LOSS, SAT_COL_DELAY})
-        {
-            newItems[col]->setTextAlignment(Qt::AlignRight|Qt::AlignVCenter);
-        }
-
-        m_satTableItems.insert(satState->m_name, newItems);
-    }
-    items = &m_satTableItems[satState->m_name];
-
-    if (satState->m_error.isEmpty())
-    {
-        (*items)[SAT_COL_AZ]->setData(Qt::DisplayRole, (int)round(satState->m_azimuth));
-        (*items)[SAT_COL_EL]->setData(Qt::DisplayRole, (int)round(satState->m_elevation));
-
-        if (satState->m_passes.size() > 0)
-        {
-            // Get number of days to AOS/LOS
-            QDateTime currentDateTime = m_satelliteTracker->currentDateTime();
-            int daysToAOS = currentDateTime.daysTo(satState->m_passes[0].m_aos);
-            int daysToLOS = currentDateTime.daysTo(satState->m_passes[0].m_los);
-
-            if (satState->m_passes[0].m_aos > currentDateTime) {
-                (*items)[SAT_COL_TNE]->setText(formatSecondsAsHHMMSS(currentDateTime.secsTo(satState->m_passes[0].m_aos)) + " AOS");
-            }
-            else {
-                (*items)[SAT_COL_TNE]->setText(formatSecondsAsHHMMSS(currentDateTime.secsTo(satState->m_passes[0].m_los)) + " LOS");
-            }
-
-            (*items)[SAT_COL_DUR]->setText(formatSecondsAsHHMMSS(satState->m_passes[0].m_aos.secsTo(satState->m_passes[0].m_los)));
-            (*items)[SAT_COL_AOS]->setText(formatDaysTime(daysToAOS, satState->m_passes[0].m_aos));
-            (*items)[SAT_COL_AOS]->setData(Qt::UserRole, satState->m_passes[0].m_aos);
-            (*items)[SAT_COL_LOS]->setText(formatDaysTime(daysToLOS, satState->m_passes[0].m_los));
-            (*items)[SAT_COL_LOS]->setData(Qt::UserRole, satState->m_passes[0].m_los);
-            (*items)[SAT_COL_MAX_EL]->setData(Qt::DisplayRole, (int)round(satState->m_passes[0].m_maxElevation));
-
-            if (satState->m_passes[0].m_northToSouth) {
-                (*items)[SAT_COL_DIR]->setText(QString("%1").arg(QChar(0x2193))); // Down arrow
-            }
-            else {
-                (*items)[SAT_COL_DIR]->setText(QString("%1").arg(QChar(0x2191))); // Up arrow
-            }
-        }
-        else
-        {
-            (*items)[SAT_COL_TNE]->setText("");
-            (*items)[SAT_COL_DUR]->setText("");
-            (*items)[SAT_COL_AOS]->setText("");
-            (*items)[SAT_COL_LOS]->setText("");
-            (*items)[SAT_COL_MAX_EL]->setData(Qt::DisplayRole, QVariant());
-            (*items)[SAT_COL_DIR]->setText("");
-        }
-
-        (*items)[SAT_COL_LATITUDE]->setData(Qt::DisplayRole, satState->m_latitude);
-        (*items)[SAT_COL_LONGITUDE]->setData(Qt::DisplayRole, satState->m_longitude);
-        (*items)[SAT_COL_ALT]->setData(Qt::DisplayRole, (int)round(satState->m_altitude));
-        (*items)[SAT_COL_RANGE]->setData(Qt::DisplayRole, (int)round(satState->m_range));
-        (*items)[SAT_COL_RANGE_RATE]->setData(Qt::DisplayRole, QString::number(satState->m_rangeRate, 'f', 3));
-        (*items)[SAT_COL_DOPPLER]->setData(Qt::DisplayRole, (int)round(-doppler(m_settings.m_defaultFrequency, satState->m_rangeRate * 1000.0)));
-        (*items)[SAT_COL_PATH_LOSS]->setData(Qt::DisplayRole, QString::number(freeSpaceLoss(m_settings.m_defaultFrequency, satState->m_range * 1000.0), 'f', 1));
-        (*items)[SAT_COL_DELAY]->setData(Qt::DisplayRole, QString::number(propagationDelay(satState->m_range * 1000.0) * 1000.0, 'f', 1));
-        (*items)[SAT_COL_ERROR]->setText("");
-    }
-    else
-    {
-        (*items)[SAT_COL_AZ]->setText("");
-        (*items)[SAT_COL_EL]->setText("");
-        (*items)[SAT_COL_TNE]->setText("");
-        (*items)[SAT_COL_DUR]->setText("");
-        (*items)[SAT_COL_AOS]->setText("");
-        (*items)[SAT_COL_LOS]->setText("");
-        (*items)[SAT_COL_MAX_EL]->setData(Qt::DisplayRole, QVariant());
-        (*items)[SAT_COL_DIR]->setText("");
-        (*items)[SAT_COL_LATITUDE]->setText("");
-        (*items)[SAT_COL_LONGITUDE]->setText("");
-        (*items)[SAT_COL_ALT]->setText("");
-        (*items)[SAT_COL_RANGE]->setText("");
-        (*items)[SAT_COL_RANGE_RATE]->setText("");
-        (*items)[SAT_COL_DOPPLER]->setText("");
-        (*items)[SAT_COL_PATH_LOSS]->setText("");
-        (*items)[SAT_COL_DELAY]->setText("");
-        (*items)[SAT_COL_ERROR]->setText(satState->m_error);
-    }
+    m_satTableModel->updateSatellite(*satState, m_satellites.value(satState->m_name, nullptr), currentDateTime);
 }
 
-void SatelliteTrackerGUI::on_satTable_cellDoubleClicked(int row, int column)
+void SatelliteTrackerGUI::on_satTable_doubleClicked(const QModelIndex& index)
 {
-    (void) column;
+    if (!index.isValid()) {
+        return;
+    }
 
-    QString sat = ui->satTable->item(row, SAT_COL_NAME)->text();
-    FeatureWebAPIUtils::mapFind(sat);
+    const QModelIndex sourceIndex = m_satTableProxy->mapToSource(index);
+    const QString sat = m_satTableModel->satelliteNameAt(sourceIndex.row());
+
+    if (!sat.isEmpty()) {
+        FeatureWebAPIUtils::mapFind(sat);
+    }
 }
 
 void SatelliteTrackerGUI::on_satTableHeader_sortIndicatorChanged(int logicalIndex, Qt::SortOrder order)
 {
     m_settings.m_columnSort = logicalIndex;
     m_settings.m_columnSortOrder = order;
+    m_satTableProxy->sort(logicalIndex, order);
     m_settingsKeys.append("columnSort");
     m_settingsKeys.append("columnSortOrder");
 
@@ -1750,7 +2055,7 @@ void SatelliteTrackerGUI::makeUIConnections()
     QObject::connect(ui->nextPass, &QToolButton::clicked, this, &SatelliteTrackerGUI::on_nextPass_clicked);
     QObject::connect(ui->prevPass, &QToolButton::clicked, this, &SatelliteTrackerGUI::on_prevPass_clicked);
     QObject::connect(ui->darkTheme, &QToolButton::clicked, this, &SatelliteTrackerGUI::on_darkTheme_clicked);
-    QObject::connect(ui->satTable, &QTableWidget::cellDoubleClicked, this, &SatelliteTrackerGUI::on_satTable_cellDoubleClicked);
+    QObject::connect(ui->satTable, &QTableView::doubleClicked, this, &SatelliteTrackerGUI::on_satTable_doubleClicked);
     QObject::connect(ui->satTable->horizontalHeader(), &QHeaderView::sortIndicatorChanged, this, &SatelliteTrackerGUI::on_satTableHeader_sortIndicatorChanged);
     QObject::connect(ui->deviceFeatureSelect, qOverload<int>(&QComboBox::currentIndexChanged), this, &SatelliteTrackerGUI::on_deviceFeatureSelect_currentIndexChanged);
 }

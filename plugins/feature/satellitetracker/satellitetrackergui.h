@@ -38,6 +38,8 @@
 class PluginAPI;
 class FeatureUISet;
 class SatelliteTracker;
+class QModelIndex;
+class QSortFilterProxyModel;
 struct SatelliteState;
 
 namespace Ui {
@@ -81,7 +83,10 @@ private:
     QHash<QString, SatNogsSatellite *> m_satellites;
     SatelliteState *m_targetSatState;
 
-    QHash<QString, std::array<QTableWidgetItem*, SAT_COL_COLUMNS>> m_satTableItems;
+    class SatelliteTableModel;
+    class SatelliteTableSortProxy;
+    SatelliteTableModel *m_satTableModel;
+    SatelliteTableSortProxy *m_satTableProxy;
 
     int m_plotPass;
 
@@ -137,7 +142,7 @@ private:
     void plotAzElChart();
     void plotPolarChart();
     void resizeTable();
-    void updateTable(const SatelliteState *satState);
+    void updateTable(const SatelliteState *satState, const QDateTime& currentDateTime);
     void updateSelectedSats();
     QAction *createCheckableItem(QString& text, int idx, bool checked);
     void updateTimeToAOS();
@@ -172,7 +177,7 @@ private slots:
     void on_nextPass_clicked();
     void on_prevPass_clicked();
     void on_darkTheme_clicked(bool checked);
-    void on_satTable_cellDoubleClicked(int row, int column);
+    void on_satTable_doubleClicked(const QModelIndex& index);
     void satTable_sectionMoved(int logicalIndex, int oldVisualIndex, int newVisualIndex);
     void satTable_sectionResized(int logicalIndex, int oldSize, int newSize);
     void on_satTableHeader_sortIndicatorChanged(int logicalIndex, Qt::SortOrder order);

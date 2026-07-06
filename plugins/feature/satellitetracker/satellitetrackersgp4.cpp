@@ -471,7 +471,8 @@ void getSatelliteState(QDateTime dateTime,
                         double latitude, double longitude, double altitude,
                         int predictionPeriod, int minAOSElevationDeg, int minPassElevationDeg,
                         QTime passStartTime, QTime passFinishTime, bool utc,
-                        int noOfPasses, int groundTrackSteps, SatelliteState *satState)
+                        int noOfPasses, 
+                        bool calcGroundTrack, int groundTrackSteps, SatelliteState *satState)
 {
     try
     {
@@ -515,8 +516,11 @@ void getSatelliteState(QDateTime dateTime,
         satState->m_groundTrackDateTime.clear();
         satState->m_predictedGroundTrack.clear();
         satState->m_predictedGroundTrackDateTime.clear();
-        getGroundTrack(dateTime, tle0, tle1, tle2, groundTrackSteps, false, satState->m_groundTrack, satState->m_groundTrackDateTime);
-        getGroundTrack(dateTime, tle0, tle1, tle2, groundTrackSteps, true, satState->m_predictedGroundTrack, satState->m_predictedGroundTrackDateTime);
+        if (calcGroundTrack)
+        {
+            getGroundTrack(dateTime, tle0, tle1, tle2, groundTrackSteps, false, satState->m_groundTrack, satState->m_groundTrackDateTime);
+            getGroundTrack(dateTime, tle0, tle1, tle2, groundTrackSteps, true, satState->m_predictedGroundTrack, satState->m_predictedGroundTrackDateTime);
+        }
     }
     catch (SatelliteException& se)
     {

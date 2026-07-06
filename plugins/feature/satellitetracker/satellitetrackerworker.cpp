@@ -467,7 +467,8 @@ void SatelliteTrackerWorker::update()
                                     m_settings.m_latitude, m_settings.m_longitude, m_settings.m_heightAboveSeaLevel/1000.0,
                                     m_settings.m_predictionPeriod, m_settings.m_minAOSElevation, m_settings.m_minPassElevation,
                                     m_settings.m_passStartTime, m_settings.m_passFinishTime, m_settings.m_utc,
-                                    noOfPasses, m_settings.m_groundTrackPoints, &satWorkerState->m_satState);
+                                    noOfPasses,
+                                    m_settings.m_drawOnMap, m_settings.m_groundTrackPoints, &satWorkerState->m_satState);
 
                 // Update AOS/LOS
                 if (satWorkerState->m_satState.m_passes.size() > 0)

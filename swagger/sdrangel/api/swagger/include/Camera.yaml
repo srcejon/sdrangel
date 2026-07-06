@@ -625,6 +625,16 @@ CameraSettings:
       description: "Maximum line-of-sight range in km for tracked objects; 0 disables range filtering"
       type: number
       format: double
+    trackObjectLabelDisplay:
+      description: >
+        Tracked object label display mode
+          * 0 - Always
+          * 1 - Only when the projected item is close to a detected object
+      type: integer
+    trackObjectLabelDetectionRadius:
+      description: "Maximum pixel distance from a detected object center for showing tracked object labels"
+      type: number
+      format: double
     trackObjectColor:
       description: "Tracked object label colour as 0xRRGGBB integer"
       type: integer

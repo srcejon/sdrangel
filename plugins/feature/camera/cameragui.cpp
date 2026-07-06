@@ -1911,6 +1911,9 @@ void CameraGUI::displaySettings()
     settingsUI()->trackObjectRangeCheck->setChecked(m_settings.m_trackObjectRange);
     settingsUI()->trackObjectMinElevationSpin->setValue(m_settings.m_trackObjectMinElevation);
     settingsUI()->trackObjectMaxRangeSpin->setValue(m_settings.m_trackObjectMaxRangeKm);
+    settingsUI()->trackObjectLabelDisplayCombo->setCurrentIndex(static_cast<int>(m_settings.m_trackObjectLabelDisplay));
+    settingsUI()->trackObjectLabelDetectionRadiusSpin->setValue(m_settings.m_trackObjectLabelDetectionRadius);
+    settingsUI()->trackObjectLabelDetectionRadiusSpin->setEnabled(m_settings.m_trackObjectLabelDisplay == CameraSettings::TrackObjectLabelNearDetection);
     settingsUI()->trackObjectFontCombo->setCurrentText(m_settings.m_trackObjectFontFamily);
     settingsUI()->trackObjectFontScaleSpin->setValue(m_settings.m_trackObjectFontScale);
     settingsUI()->gridLabelFontCombo->setCurrentText(m_settings.m_gridLabelFontFamily);
@@ -2884,6 +2887,8 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->trackObjectClearHeatMapButton, &QToolButton::clicked, this, &CameraGUI::on_trackObjectClearHeatMapButton_clicked);
     QObject::connect(settingsUI()->trackObjectMinElevationSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_trackObjectMinElevationSpin_valueChanged);
     QObject::connect(settingsUI()->trackObjectMaxRangeSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_trackObjectMaxRangeSpin_valueChanged);
+    QObject::connect(settingsUI()->trackObjectLabelDisplayCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_trackObjectLabelDisplayCombo_currentIndexChanged);
+    QObject::connect(settingsUI()->trackObjectLabelDetectionRadiusSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_trackObjectLabelDetectionRadiusSpin_valueChanged);
     QObject::connect(settingsUI()->trackObjectColorButton, &QToolButton::clicked, this, &CameraGUI::on_trackObjectColorButton_clicked);
     QObject::connect(settingsUI()->trackObjectFontCombo, &QFontComboBox::currentFontChanged, this, &CameraGUI::on_trackObjectFontCombo_currentFontChanged);
     QObject::connect(settingsUI()->trackObjectFontScaleSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_trackObjectFontScaleSpin_valueChanged);
@@ -8994,6 +8999,22 @@ void CameraGUI::on_trackObjectMaxRangeSpin_valueChanged(double value)
 {
     m_settings.m_trackObjectMaxRangeKm = value;
     applySetting("trackObjectMaxRangeKm");
+}
+
+void CameraGUI::on_trackObjectLabelDisplayCombo_currentIndexChanged(int index)
+{
+    m_settings.m_trackObjectLabelDisplay = static_cast<CameraSettings::TrackObjectLabelDisplay>(qBound(
+        static_cast<int>(CameraSettings::TrackObjectLabelAlways),
+        index,
+        static_cast<int>(CameraSettings::TrackObjectLabelNearDetection)));
+    settingsUI()->trackObjectLabelDetectionRadiusSpin->setEnabled(m_settings.m_trackObjectLabelDisplay == CameraSettings::TrackObjectLabelNearDetection);
+    applySetting("trackObjectLabelDisplay");
+}
+
+void CameraGUI::on_trackObjectLabelDetectionRadiusSpin_valueChanged(double value)
+{
+    m_settings.m_trackObjectLabelDetectionRadius = value;
+    applySetting("trackObjectLabelDetectionRadius");
 }
 
 void CameraGUI::on_trackObjectColorButton_clicked()

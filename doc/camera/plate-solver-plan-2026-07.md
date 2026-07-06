@@ -64,6 +64,24 @@ hard problems plus housekeeping, in priority order:
   (measured rotation errors are 60–125°, i.e. within the offsets' reach after refine). Validate on
   TREx mode-3 (expect several of the 7 to fix), REAL wide rows (near-zenith — must not start
   rejecting correct solves), FISHEYE-mode4, WIDE.
+  **FIX ATTEMPTED + REFUTED — and the refutation flips the diagnosis: the TREx anchors are probably
+  MISCALIBRATED, not the solver wrong (2026-07-06).** Extended the alias-adoption path to wide
+  (adopt-only, narrow rejection skipped) + a 10° wide roll grid so competitors survive the filter;
+  REAL stayed byte-identical. But on the failing TREx mode-3 cases the adoption never fires because the
+  **winner OUT-SCORES the anchor-"true" rotation on bright-weighted faLogOdds** (luck_20251220_1200:
+  winner roll −126 faLogOdds 36.3 vs the roll-133 competitor — the true rotation per the anchors —
+  only 26.2). Three facts together indict the corpus, not the solver: (1) the winner's az/el already
+  equal the seed truth (240.3/86.7 vs 242.9/86.03) — only ROLL differs; (2) the winner is a genuine
+  52-match fit that the solver's own faLogOdds/score prefer over the anchor rotation; (3) the anchor
+  errors are PURE rotations about the image centre. That is the exact signature of a per-camera ROLL
+  offset baked into the skymap→pixel anchor derivation (the TREx `.sav` skymap's rotation reference),
+  i.e. the solver is finding the correct pose and the committed anchors are rotated. **Next (before any
+  more fisheye solver work): validate the TREx anchors** — re-derive them / independently astrometric-
+  check one frame, or diff the per-camera solver-roll-vs-anchor-roll offset for consistency within a
+  camera. If confirmed, TREx's 4/20 is a corpus bug and the real solver pass rate is much higher; fix
+  the anchor derivation, not the roll-alias defense. (Bright-weighted faLogOdds cannot arbitrate
+  rotations in a dense all-sky field regardless — a wrong rotation still lands many bright catalogue
+  stars — so the wide rotation-alias defense was the wrong lever even if the anchors were right.)
 - **P3 — Verifier separation study on RAND2 (~1 h compute, no risk).** 1b/1c are blocked on
   demonstrating wrong-pose separation. RAND2's known wrong-roll/alias tail is the right labelled set:
   run RAND2 offline (chunked) with the shadow metrics and compare mixture/faLogOdds on correct vs

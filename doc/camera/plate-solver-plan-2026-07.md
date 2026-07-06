@@ -181,6 +181,14 @@ verifier feature work; the remaining paths are physical, not statistical: (a) a 
 all-sky (reduce the true pose's 8–11px residual band so tightness separates), or (b) external
 bright-star identification (match the handful of first-magnitude stars by absolute brightness +
 pattern, independent of the solve).** The labelled dataset + tooling stay for future re-tests.
+**CLOSING INSIGHT (RAND2 dump, 224k candidates):** in the narrow regime, within-case ranking by
+eocBest picks the RIGHT finalist in **21/21** testable cases — but RIGHT labels exist only for
+PASSING cases (certified poses), so this shows eocBest *perfectly agrees with already-correct
+selections* (it would be a safe final-level confirmation) while the FAILING cases contribute no
+RIGHT finalists at all. **Therefore the wrong-roll failures are SEARCH failures — the correct roll
+never enters the finalist pool — not selection failures.** This explains every selection-level
+refutation at once (P3 separation but 1b zero gains; 21/21 only on passes). Any future work on this
+class must generate the missing right-roll candidates (search), not re-rank existing ones.
 
 **v2 DONE (2026-07-06): residual-field coherence REFUTED for all-sky; missed-bright-prediction is
 the first (weak) all-sky signal.** The dump now carries subsampled per-match residual vectors

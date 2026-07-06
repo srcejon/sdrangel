@@ -33,6 +33,24 @@ hard problems plus housekeeping, in priority order:
   truth, and run. Solver accepts truth → search problem (wrong basin outscores true one on real
   all-sky data). Solver rejects truth → acceptance problem (gates mistuned for real fisheye). The
   outcome defines the actual fisheye work; do not start solver changes before this.
+  **DIAGNOSTIC DONE (2026-07-06) — it is ONE phenomenon: rotation-about-boresight aliases with NO
+  alias defense on wide fields.** The TREx rows are mode-3/mode-1 pairs; mode 3 already trusts the
+  truth direction, so no new runs were needed. Mode split: mode-3 (truth az/el) 2 PASS / 7
+  wrong-pose-accepted / 1 not-solved; mode-1 (blind) 2 PASS / 8 wrong-pose-accepted. The mode-3
+  failures divide into boresight-correct cases (azD 0.4–2.6°) and az-alias cases (azD 29–114° at el
+  83–88.5°) — but near zenith an azimuth error IS a rotation about the boresight, and the
+  boresight-correct cases show the smoking gun: **anchor displacements are pure rotations about the
+  image centre at constant radius** (eltanin: 301 px error = 101° rotation, radius 198→192 px;
+  mirach: −64°/−125° rotations, radius 190→158/174 px). All TREx cameras point near-zenith, mode 3
+  pins the boresight, and rotation is the one unconstrained DOF. **Code-level root cause:
+  `hasCompetitiveRollAlias` early-returns for `!isNarrowField` — the entire rotation-alias defense
+  (and the rollRecovery pass, same gate) is narrow-only, so wide all-sky solves accept whichever
+  rotation matches most faint stars coincidentally.** The defined fix: extend the rotation-alias
+  check (bright-weighted faLogOdds compare, the proven narrow mechanism) to wide direction-seeded
+  solves, with a per-alias roll refinement so the coarse 30° offsets converge onto the true rotation
+  (measured rotation errors are 60–125°, i.e. within the offsets' reach after refine). Validate on
+  TREx mode-3 (expect several of the 7 to fix), REAL wide rows (near-zenith — must not start
+  rejecting correct solves), FISHEYE-mode4, WIDE.
 - **P3 — Verifier separation study on RAND2 (~1 h compute, no risk).** 1b/1c are blocked on
   demonstrating wrong-pose separation. RAND2's known wrong-roll/alias tail is the right labelled set:
   run RAND2 offline (chunked) with the shadow metrics and compare mixture/faLogOdds on correct vs

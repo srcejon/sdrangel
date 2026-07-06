@@ -259,6 +259,44 @@ real (mode 4/5/6 or synthetic with a trustworthy render roll — NOT mode-3 plac
   (higher bit depth + more resolved bright stars) or the skymap-intrinsics code path — not more frames.
   Deep-stack deliverables: color_probe.py (`--deep`/`--stack N`/`--noreg`) + color_probe_results_deepstack.csv.
 
+**★ ROOT CAUSE OF THE ALL-SKY FAILURES FOUND (2026-07-07) — it's a HANDEDNESS/MIRROR bug, NOT a
+discrimination limit. This overturns "accuracy investigation closed."** While prototyping the
+skymap-as-fixed-intrinsics path, a fit of the solver's EXACT parametric projector to the TREx skymaps
+(`images-real-fisheye-staging/trex/skymap_fit.py`) showed:
+- **MIRRORED equidistant reproduces the skymap at 0.26px median** (max 0.9px), with clean physical
+  near-zenith params (halfHFov 87.3°, k1 −0.046). **Non-mirrored fits at 184px for ANY projection
+  type or fov.** (An earlier unbounded fit's "equisolid 2.7px" was an ARTIFACT — the optimiser
+  absorbing the mirror via a flipped boresight; with an explicit mirror flag + physical bounds the
+  truth is unambiguous: the lens is equidistant, the IMAGE is mirrored.)
+- **Mechanism:** the solver's projector is orientation-PRESERVING (a rotation, no reflection). An
+  up-looking all-sky camera images the sky REFLECTED, so no pure roll/pose can fit it — the solver
+  lands on the least-bad wrong-roll pose at 6–14px. This is exactly the "genuine wrong-roll
+  acceptances at 100–200px anchor error" the TREx failures always showed.
+- **END-TO-END CONFIRMED:** horizontally flipping the TREx images (+ anchor x→W−1−x) and re-solving:
+  **trex 4→10/20 PASS, trex2 3→5/10**, with rms dropping widely (trex2 median passing rms 12.8→8.5;
+  luck-0223 12.8→6.8, luck-0115 12.9→6.1). The residual (still ~6–14px, not 0.26px) is the solver's
+  blind fit not nailing fov/k1/pp — which is where the FIXED-INTRINSICS finishing step closes the gap.
+- **The solver IGNORES the existing `m_flipX`/`m_flipY` settings** (they only drive the display/capture
+  pipeline: camera.cpp / cameraimageprocessor.cpp; the solver never reads them). So a user who flips
+  their all-sky feed for display still solves against un-flipped geometry — or, as here, the saved
+  frames are mirrored and nothing corrects it.
+
+**FIX (the real, cheap, high-value one — the first genuine accuracy win of this arc):**
+1. **Mirror-aware projection** — negate the x-axis pixel mapping in createProjector/unprojectPixelToVector
+   when the image is mirrored. Minimal (a sign gated on a flag), byte-identical when off. Wire it to
+   the existing `m_flipX` (make the solver honor the flip settings) and/or a lens "mirrored" flag.
+2. **Auto-handedness** for blind/uncertain solves — try both mirror states, keep the tighter fit — so
+   users who don't know their camera is mirrored still solve. (All up-looking all-sky cameras have
+   this property; it's a general feature, not a TREx quirk.)
+3. **Fixed intrinsics** (the original P-lever) as the finishing step — feed the skymap-fitted
+   equidistant fov/k1/pp so the mirror-corrected solve tightens from ~8px to ~1px and passes broadly.
+Validate mirror-OFF byte-identical on REAL/FISHEYE/WIDE (none are mirrored) and the TREx gain with it
+ON. This is now the top forward item, above the P0 merge.
+
+**CORRECTION to the earlier "every lever measured, investigation closed at evidence floor" line: that
+stands for the NARROW dense-field cases (pollux/RAND2) and for COLOR, but is WRONG for the all-sky
+TREx class — those failures were a handedness bug with a concrete fix, not a fundamental limit.**
+
 **NET (2026-07-06): every lever — verification, search-expansion, selection-reranking, better lens
 model, color ID — has now been measured and none cracks the all-sky rotation class with the current
 cameras/corpus. The accuracy investigation is closed at its evidence floor. Genuinely new signal would

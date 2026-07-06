@@ -6,6 +6,52 @@ what was done and what was settled. This plan reflects what the 2026-07 review i
 actually *proved*, compares the design against other plate solvers, and reorders priorities
 accordingly.
 
+## Next steps (planned 2026-07-06, after the Tracks 0/1/2 sweep)
+
+The tracks below carry the detailed findings; this is the forward queue. Everything tractable has
+landed (R1 budget, 0a hermetic, 0b real corpus, 0c metrics, 0e negatives, 1a shadow verifier, A1
+Newton undistortion, A2 detector-V2 default-on, neg-blobs floor). What remains are three root-caused
+hard problems plus housekeeping, in priority order:
+
+- **P0 — Bank the branch (~30 min, low risk).** Merge `plate-solver-review` →
+  `copilot/create-camera-feature-plugin` (~19 validated commits, zero REAL regression) and rebuild
+  `featurecamera.dll` so the GUI picks up detector-V2 default-on, the neg-blobs brightness floor, and
+  the R1 solve budget. The worktree branched from the camera branch, so this should be near
+  fast-forward; verify with git first.
+- **P1 — Wrong-FoV: FoV-escape retry (~half day, medium risk).** Both photometric-gate attempts are
+  refuted (see Track 1a): a grossly-wrong TRUSTED FoV yields a fully self-consistent wrong solve. The
+  tractable shape is NOT a gate but an ESCAPE, modelled on the existing depth-escape/deepen-escape
+  ladder: after a narrow trusted-FoV solve, re-solve at FoV ×{0.25, 0.5, 2, 4} and adopt an
+  alternative only if decisively better (matches/rms/faLogOdds margin — the same adopt style as
+  rollAliasCheck). First action is a MEASUREMENT: from the 0c metrics + logs, find a cheap trigger
+  signature for the two FPs (e.g. matched/candidates fraction — narrow-5@6.0 matched only 629/8580 =
+  7%) so the escape doesn't cost seconds on every legitimate solve. Validate: both committed
+  wrong-FoV negatives reject, REAL/RAND2 unregressed, per-case timeMs bounded.
+- **P2 — TREx wrong-pose: true-pose diagnostic (~1–2 h, no risk — measurement only).** The fisheye
+  failures are wrong-pose ACCEPTANCES (Track 0b triage). Split search-vs-acceptance the established
+  way: take 3–4 failing TREx rows, add mode-4 (FovAzElRoll) variants seeded with the skymap-derived
+  truth, and run. Solver accepts truth → search problem (wrong basin outscores true one on real
+  all-sky data). Solver rejects truth → acceptance problem (gates mistuned for real fisheye). The
+  outcome defines the actual fisheye work; do not start solver changes before this.
+- **P3 — Verifier separation study on RAND2 (~1 h compute, no risk).** 1b/1c are blocked on
+  demonstrating wrong-pose separation. RAND2's known wrong-roll/alias tail is the right labelled set:
+  run RAND2 offline (chunked) with the shadow metrics and compare mixture/faLogOdds on correct vs
+  wrong-roll cases. Separates → 1b (verifier-driven candidate *selection*) becomes viable for the
+  catalog-depth-instability class. Doesn't → close 1b/1c as blocked pending a better formulation.
+- **P4 — T2: searchBestPose restructure (dedicated session, high care).** The 64 s bottleneck.
+  Spec: batch-parallel evaluation of the guided-direction grid (~18 s first target) in CANONICAL
+  order with the serial reduction/early-exit logic applied post-batch (byte-identical by
+  construction; wasted evals past an early exit are the price), using a PERSISTENT pool (member of
+  CameraPlateSolver, not per-call — the per-call spawn overhead is what made the lens-grid trial
+  1.7× slower). Gate: REAL byte-identical + per-case timeMs down on narrow-7/dense cases.
+- **P5 — Housekeeping (fill-in).** 0d stratified ~20-case RAND2 fast gate; convert
+  `robustness-neg*.csv` to `expectSolved=0` and add fast sparse-field wrong-FoV negatives (deep-field
+  ones take ~50 s each); build+archive the portable hermetic catalog snapshot so a fresh checkout is
+  hermetic; keep the plan/memory current.
+
+P1/P2/P3 are independent of each other; P2 and P3 are pure measurement and can interleave with
+anything; P4 is standalone and should not share a session with behaviour-affecting solver changes.
+
 ## What the recent work established (evidence, not opinion)
 
 Landed on `plate-solver-review` (all validated, REAL never below the 47/48 branch baseline):

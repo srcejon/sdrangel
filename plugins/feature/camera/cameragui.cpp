@@ -2023,9 +2023,12 @@ void CameraGUI::displaySettings()
     ui->spectrumOverlayButton->setChecked(std::any_of(m_settings.m_spectrumOverlays.cbegin(), m_settings.m_spectrumOverlays.cend(), [](const CameraSettings::SpectrumOverlay& overlay) {
         return overlay.m_enabled && !overlay.m_device.isEmpty();
     }));
-    ui->windowOverlayButton->setChecked(std::any_of(m_settings.m_windowOverlays.cbegin(), m_settings.m_windowOverlays.cend(), [](const CameraSettings::WindowOverlay& overlay) {
-        return overlay.m_enabled && !overlay.m_windowClass.isEmpty();
-    }));
+    {
+        const QSignalBlocker blocker(ui->windowOverlayButton);
+        ui->windowOverlayButton->setChecked(std::any_of(m_settings.m_windowOverlays.cbegin(), m_settings.m_windowOverlays.cend(), [](const CameraSettings::WindowOverlay& overlay) {
+            return overlay.m_enabled && !overlay.m_windowClass.isEmpty();
+        }));
+    }
     updateSpectrumOverlaysTable();
     updateWindowOverlaysTable();
     updateWindowOverlayCaptureTimer();

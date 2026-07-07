@@ -897,6 +897,7 @@ public:
 
      public:
 
+         // New event types must be appended: Scheduler rules serialize the event type as its integer index
          enum EventType {
              SatelliteAOSEvent,          // Data: name=ISS
              SatelliteLOSEvent,
@@ -908,7 +909,7 @@ public:
              StarRiseEvent,              // Data: name=Sun,azimuth=1234.4,elevation=0.4
              StarSetEvent,
              MeteorScatterEvent,         // Data: power=4.3,duration=3.4
-             CameraObjectDetectedEvent,  // Data: class=person
+             CameraObjectDetectedEvent,  // Data: name=class,confidence=55,x=5,y=20,width=100,height=50 (first box only),flux=10,magnitude=3 (meteor only)
              CameraObjectLostEvent,
              CameraMotionDetectedEvent,  // Data: boxes=10,x=5,y=20,width=100,height=50 (first box only)
              CameraMotionStoppedEvent,
@@ -918,7 +919,9 @@ public:
              SquelchOpenEvent,           // AM/NFM/WFM - No Data
              SquelchClosedEvent,
              CTCSSEvent,                 // Data: freqeuncy=67.0
-             DCSEvent,                   // Data: code=032
+             DCSEvent,                   // Data: code=032             
+             CameraCloudCoverageHighEvent, // Data: coverage=82.4,threshold=80.0,night=1
+             CameraCloudCoverageLowEvent,
          };
 
          const QObject *getPipeSource() const { return m_pipeSource; }

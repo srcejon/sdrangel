@@ -250,7 +250,7 @@ void CameraCloudDetector::processNewFrame(const CameraPipelineFramePtr& frame)
     m_framesSinceUpdate = 0;
 
     if (m_msgQueueToFeature && frame->m_cloud.m_valid) {
-        m_msgQueueToFeature->push(MsgReportCloudCoverage::create(frame->m_cloud.m_coveragePercent, frame->m_cloud.m_night));
+        m_msgQueueToFeature->push(MsgReportCloudCoverage::create(frame->m_cloud.m_coveragePercent, frame->m_cloud.m_night, frame->m_captureDateTime));
     }
 
     if (!cloudDebugMask.empty())

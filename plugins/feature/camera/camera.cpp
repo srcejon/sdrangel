@@ -32,6 +32,8 @@
 #include "SWGCameraReport.h"
 #include "SWGCameraActions.h"
 
+#include "maincore.h"
+#include "pipes/messagepipes.h"
 #include "settings/serializable.h"
 #include "util/messagequeue.h"
 
@@ -355,6 +357,8 @@ void Camera::start()
 
     const quint64 captureEpoch = ++m_captureEpoch;
     m_state = StRunning;
+    // First coverage report of the new capture emits an event describing the initial sky state
+    m_cloudEventTracker.reset();
 
     if (m_worker) {
         m_worker->getInputMessageQueue()->push(CameraWorker::MsgStartStop::create(true, captureEpoch));
@@ -565,6 +569,37 @@ bool Camera::handleMessage(const Message& cmd)
         const CameraCloudDetector::MsgReportCloudCoverage& report = (const CameraCloudDetector::MsgReportCloudCoverage&) cmd;
         m_lastCloudCoveragePercent = report.getCoveragePercent();
         m_lastCloudCoverageValid = true;
+
+        // Emit Scheduler events when coverage crosses the event threshold. This runs in the
+        // feature (not the GUI) so it also works in server mode; the tracker resets at
+        // capture start, so the first report describes the initial sky state.
+        const CameraCloudEventTracker::Event event =
+            m_cloudEventTracker.update(report.getCoveragePercent(), m_settings.m_cloudEventThreshold);
+        if (event != CameraCloudEventTracker::None)
+        {
+            QList<ObjectPipe*> eventPipes;
+            MainCore::instance()->getMessagePipes().getMessagePipes(this, "event", eventPipes);
+            if (!eventPipes.isEmpty())
+            {
+                const QDateTime eventTime = report.getCaptureDateTime().isValid()
+                    ? report.getCaptureDateTime()
+                    : QDateTime::currentDateTime();
+                const QString eventData = QStringLiteral("coverage=%1,threshold=%2,night=%3")
+                    .arg(report.getCoveragePercent(), 0, 'f', 1)
+                    .arg(m_settings.m_cloudEventThreshold, 0, 'f', 1)
+                    .arg(report.isNight() ? 1 : 0);
+                const MainCore::MsgEvent::EventType eventType = (event == CameraCloudEventTracker::High)
+                    ? MainCore::MsgEvent::EventType::CameraCloudCoverageHighEvent
+                    : MainCore::MsgEvent::EventType::CameraCloudCoverageLowEvent;
+                for (const ObjectPipe *pipe : eventPipes)
+                {
+                    MessageQueue *messageQueue = qobject_cast<MessageQueue*>(pipe->m_element);
+                    if (messageQueue) {
+                        messageQueue->push(MainCore::MsgEvent::create(this, eventTime, eventType, eventData));
+                    }
+                }
+            }
+        }
         return true;
     }
 
@@ -1151,6 +1186,7 @@ void Camera::webapiFormatFeatureSettings(
     swg->setCloudFilterStars(settings.m_cloudFilterStars ? 1 : 0);
     swg->setCloudFilterMotion(settings.m_cloudFilterMotion ? 1 : 0);
     swg->setCloudMotionOverlapThreshold(settings.m_cloudMotionOverlapThreshold);
+    swg->setCloudEventThreshold(settings.m_cloudEventThreshold);
     swg->setStarDetect(settings.m_starDetect ? 1 : 0);
     swg->setStarThreshold(settings.m_starThreshold);
     swg->setStarBackgroundBlur(settings.m_starBackgroundBlur);
@@ -1947,6 +1983,9 @@ void Camera::webapiUpdateFeatureSettings(
     }
     if (featureSettingsKeys.contains("cloudMotionOverlapThreshold")) {
         settings.m_cloudMotionOverlapThreshold = swg->getCloudMotionOverlapThreshold();
+    }
+    if (featureSettingsKeys.contains("cloudEventThreshold")) {
+        settings.m_cloudEventThreshold = swg->getCloudEventThreshold();
     }
     if (featureSettingsKeys.contains("starDetect")) {
         settings.m_starDetect = swg->getStarDetect() != 0;

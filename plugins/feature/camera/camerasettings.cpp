@@ -480,6 +480,7 @@ void CameraSettings::resetToDefaults()
     m_cloudFilterStars = true;
     m_cloudFilterMotion = true;
     m_cloudMotionOverlapThreshold = 0.6;
+    m_cloudEventThreshold = 80.0;
     m_starDetect = false;
     m_starThreshold = 24;
     m_starBackgroundBlur = 12;
@@ -855,6 +856,7 @@ QByteArray CameraSettings::serialize() const
     s.writeBool(295, m_cloudFilterMotion);
     s.writeDouble(296, m_cloudMotionOverlapThreshold);
     s.writeS32(297, m_cloudTextureThreshold);
+    s.writeDouble(298, m_cloudEventThreshold);
 
     return s.final();
 }
@@ -1207,6 +1209,8 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readBool(295, &m_cloudFilterMotion, true);
         d.readDouble(296, &m_cloudMotionOverlapThreshold, 0.6);
         d.readS32(297, &m_cloudTextureThreshold, 3);
+        d.readDouble(298, &m_cloudEventThreshold, 80.0);
+        m_cloudEventThreshold = qBound(m_minCoveragePercent, m_cloudEventThreshold, m_maxCoveragePercent);
         m_cloudDayThreshold = qBound(m_minCloudRatioThreshold, m_cloudDayThreshold, m_maxCloudRatioThreshold);
         m_cloudTextureThreshold = qBound(m_minThreshold8Bit, m_cloudTextureThreshold, m_maxThreshold8Bit);
         m_cloudNightThreshold = qBound(m_minThreshold8Bit, m_cloudNightThreshold, m_maxThreshold8Bit);
@@ -2169,6 +2173,9 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     if (settingsKeys.contains("cloudMotionOverlapThreshold")) {
         m_cloudMotionOverlapThreshold = qBound(m_minNormalized, settings.m_cloudMotionOverlapThreshold, m_maxNormalized);
     }
+    if (settingsKeys.contains("cloudEventThreshold")) {
+        m_cloudEventThreshold = qBound(m_minCoveragePercent, settings.m_cloudEventThreshold, m_maxCoveragePercent);
+    }
     if (settingsKeys.contains("starDetect")) {
         m_starDetect = settings.m_starDetect;
     }
@@ -3076,6 +3083,9 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("cloudMotionOverlapThreshold") || force) {
         ostr << " m_cloudMotionOverlapThreshold: " << m_cloudMotionOverlapThreshold;
+    }
+    if (settingsKeys.contains("cloudEventThreshold") || force) {
+        ostr << " m_cloudEventThreshold: " << m_cloudEventThreshold;
     }
     if (settingsKeys.contains("starDetect") || force) {
         ostr << " m_starDetect: " << m_starDetect;

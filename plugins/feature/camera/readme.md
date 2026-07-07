@@ -247,6 +247,8 @@ When OpenCV CUDA support is available and enabled, the full-resolution part of c
 
 Cloud-classified regions can be tinted on the image with a configurable colour, and the coverage percentage is shown on the Cloud Detection sub-tab in the Camera Settings dialog and reported via the API.
 
+When the coverage percentage rises to the configured event threshold, a Camera Cloud Coverage High event is emitted that can be used by the Scheduler feature to perform user-defined actions, such as pausing recordings or sending notifications. A Camera Cloud Coverage Low event is emitted when coverage falls back 10 points below the threshold (the gap prevents coverage hovering around the threshold from repeatedly triggering). When capture starts, an event describing the initial sky state is emitted, so automation immediately knows whether the sky is clear or overcast. These events are emitted by the feature itself, so they also work in server mode.
+
 <h3>31: Item overlay</h3>
 
 Overlays ADS-B, AIS, satellite, star tracker and other items sent to the Map feature on the camera image. Options can show recent tracks, a heat map, and the line-of-sight range to each item in km.
@@ -956,6 +958,10 @@ Selects an intermediate cloud detection stage (Background, Signal, Thresholded, 
 Shows the percentage of the evaluated sky classified as cloud in the latest analysed frame, and whether the day or night path classified it. Regions inside motion exclusion rectangles and borders added by output scaling are not evaluated.
 
 A chart below the settings plots the coverage percentage over time, sampled every few seconds against the frame's capture time (so it also works for video and image playback). Up to 24 hours of history is kept; the bin button clears the chart.
+
+<h4>15. Event threshold</h4>
+
+Sets the coverage percentage at which a Camera Cloud Coverage High event is emitted to the Scheduler. The matching Low event is emitted when coverage falls 10 points below this. An event describing the initial sky state is emitted when capture starts.
 
 On the Star Detection sub-tab:
 

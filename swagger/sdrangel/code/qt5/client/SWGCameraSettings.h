@@ -699,6 +699,9 @@ public:
     double getCloudMotionOverlapThreshold();
     void setCloudMotionOverlapThreshold(double cloud_motion_overlap_threshold);
 
+    double getCloudEventThreshold();
+    void setCloudEventThreshold(double cloud_event_threshold);
+
     qint32 getStarDetect();
     void setStarDetect(qint32 star_detect);
 
@@ -1515,6 +1518,9 @@ private:
 
     double cloud_motion_overlap_threshold;
     bool m_cloud_motion_overlap_threshold_isSet;
+
+    double cloud_event_threshold;
+    bool m_cloud_event_threshold_isSet;
 
     qint32 star_detect;
     bool m_star_detect_isSet;

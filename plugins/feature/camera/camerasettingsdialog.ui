@@ -6484,6 +6484,35 @@ car</string>
              </property>
             </widget>
            </item>
+           <item row="7" column="2">
+            <widget class="QLabel" name="cloudEventThresholdLabel">
+             <property name="text">
+              <string>Event threshold</string>
+             </property>
+            </widget>
+           </item>
+           <item row="7" column="3">
+            <widget class="QDoubleSpinBox" name="cloudEventThresholdSpin">
+             <property name="toolTip">
+              <string>Coverage percentage at which a Camera Cloud Coverage High event is emitted to the Scheduler. The Low event is emitted when coverage falls 10 points below this. An event describing the initial sky state is emitted when capture starts</string>
+             </property>
+             <property name="suffix">
+              <string> %</string>
+             </property>
+             <property name="decimals">
+              <number>1</number>
+             </property>
+             <property name="maximum">
+              <double>100.000000000000000</double>
+             </property>
+             <property name="singleStep">
+              <double>5.000000000000000</double>
+             </property>
+             <property name="value">
+              <double>80.000000000000000</double>
+             </property>
+            </widget>
+           </item>
            <item row="8" column="0">
             <widget class="QLabel" name="cloudCoverageTitleLabel">
              <property name="text">

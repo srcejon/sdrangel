@@ -1980,6 +1980,7 @@ void CameraGUI::displaySettings()
     settingsUI()->cloudFilterStarsCheck->setChecked(m_settings.m_cloudFilterStars);
     settingsUI()->cloudFilterMotionCheck->setChecked(m_settings.m_cloudFilterMotion);
     settingsUI()->cloudMotionOverlapSpin->setValue(m_settings.m_cloudMotionOverlapThreshold);
+    settingsUI()->cloudEventThresholdSpin->setValue(m_settings.m_cloudEventThreshold);
     ui->starDetectButton->setChecked(m_settings.m_starDetect);
     settingsUI()->starThresholdSpin->setValue(m_settings.m_starThreshold);
     settingsUI()->starBackgroundBlurSpin->setValue(m_settings.m_starBackgroundBlur);
@@ -2975,6 +2976,7 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->cloudFilterStarsCheck, &QCheckBox::toggled, this, &CameraGUI::on_cloudFilterStarsCheck_toggled);
     QObject::connect(settingsUI()->cloudFilterMotionCheck, &QCheckBox::toggled, this, &CameraGUI::on_cloudFilterMotionCheck_toggled);
     QObject::connect(settingsUI()->cloudMotionOverlapSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_cloudMotionOverlapSpin_valueChanged);
+    QObject::connect(settingsUI()->cloudEventThresholdSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_cloudEventThresholdSpin_valueChanged);
     QObject::connect(settingsUI()->cloudColorButton, &QToolButton::clicked, this, &CameraGUI::on_cloudColorButton_clicked);
     QObject::connect(settingsUI()->starThresholdSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_starThresholdSpin_valueChanged);
     QObject::connect(settingsUI()->starBackgroundBlurSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_starBackgroundBlurSpin_valueChanged);
@@ -9695,6 +9697,12 @@ void CameraGUI::on_cloudMotionOverlapSpin_valueChanged(double value)
 {
     m_settings.m_cloudMotionOverlapThreshold = value;
     applySetting("cloudMotionOverlapThreshold");
+}
+
+void CameraGUI::on_cloudEventThresholdSpin_valueChanged(double value)
+{
+    m_settings.m_cloudEventThreshold = value;
+    applySetting("cloudEventThreshold");
 }
 
 void CameraGUI::on_cloudColorButton_clicked()

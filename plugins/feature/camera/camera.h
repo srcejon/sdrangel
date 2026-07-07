@@ -352,6 +352,7 @@ private:
     // may read them from a different thread than handleMessage
     std::atomic<float> m_lastCloudCoveragePercent{0.0f};
     std::atomic<bool> m_lastCloudCoverageValid{false};
+    CameraCloudEventTracker m_cloudEventTracker;
 
     void start();
     void stop();

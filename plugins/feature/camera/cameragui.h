@@ -795,6 +795,7 @@ private slots:
     void on_cloudFilterStarsCheck_toggled(bool checked);
     void on_cloudFilterMotionCheck_toggled(bool checked);
     void on_cloudMotionOverlapSpin_valueChanged(double value);
+    void on_cloudEventThresholdSpin_valueChanged(double value);
     void on_cloudColorButton_clicked();
     void on_starDetectButton_toggled(bool checked);
     void on_starThresholdSpin_valueChanged(int value);

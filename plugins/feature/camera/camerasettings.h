@@ -373,6 +373,8 @@ struct CameraSettings
     static constexpr int m_maxCloudBackgroundBlur = 128;
     static constexpr int m_minCloudUpdateInterval = 1;
     static constexpr int m_maxCloudUpdateInterval = 600;
+    static constexpr double m_minCoveragePercent = 0.0;
+    static constexpr double m_maxCoveragePercent = 100.0;
     static constexpr double m_minStarAspectRatio = 1.0;
     static constexpr double m_maxStarAspectRatio = 10.0;
     static constexpr double m_minPlateSolveMagnitude = -2.0;
@@ -648,6 +650,7 @@ struct CameraSettings
     bool   m_cloudFilterStars;  ///< Drop star detections whose centroid falls inside the cloud mask
     bool   m_cloudFilterMotion; ///< Suppress motion boxes that substantially overlap the cloud mask
     double m_cloudMotionOverlapThreshold; ///< Cloud overlap fraction at which a motion box is suppressed: 0.0..1.0
+    double m_cloudEventThreshold; ///< Coverage percentage at which a Scheduler coverage-high event is emitted (low again 10 points below): 0..100
     bool   m_starDetect;        ///< Enable star detection
     int    m_starThreshold;     ///< Threshold on the star residual image
     int    m_starBackgroundBlur; ///< Radius used to estimate the smooth sky background

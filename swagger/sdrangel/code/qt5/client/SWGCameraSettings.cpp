@@ -464,6 +464,8 @@ SWGCameraSettings::SWGCameraSettings() {
     m_cloud_filter_motion_isSet = false;
     cloud_motion_overlap_threshold = 0.0;
     m_cloud_motion_overlap_threshold_isSet = false;
+    cloud_event_threshold = 0.0;
+    m_cloud_event_threshold_isSet = false;
     star_detect = 0;
     m_star_detect_isSet = false;
     star_threshold = 0;
@@ -1014,6 +1016,8 @@ SWGCameraSettings::init() {
     m_cloud_filter_motion_isSet = false;
     cloud_motion_overlap_threshold = 0.0;
     m_cloud_motion_overlap_threshold_isSet = false;
+    cloud_event_threshold = 0.0;
+    m_cloud_event_threshold_isSet = false;
     star_detect = 0;
     m_star_detect_isSet = false;
     star_threshold = 0;
@@ -1898,6 +1902,7 @@ SWGCameraSettings::fromJsonObject(QJsonObject &pJson) {
     ::SWGSDRangel::setValue(&cloud_filter_stars, pJson["cloudFilterStars"], "qint32", "");
     ::SWGSDRangel::setValue(&cloud_filter_motion, pJson["cloudFilterMotion"], "qint32", "");
     ::SWGSDRangel::setValue(&cloud_motion_overlap_threshold, pJson["cloudMotionOverlapThreshold"], "double", "");
+    ::SWGSDRangel::setValue(&cloud_event_threshold, pJson["cloudEventThreshold"], "double", "");
     ::SWGSDRangel::setValue(&star_detect, pJson["starDetect"], "qint32", "");
     
     ::SWGSDRangel::setValue(&star_threshold, pJson["starThreshold"], "qint32", "");
@@ -2673,6 +2678,9 @@ SWGCameraSettings::asJsonObject() {
     }
     if(m_cloud_motion_overlap_threshold_isSet){
         obj->insert("cloudMotionOverlapThreshold", QJsonValue(cloud_motion_overlap_threshold));
+    }
+    if(m_cloud_event_threshold_isSet){
+        obj->insert("cloudEventThreshold", QJsonValue(cloud_event_threshold));
     }
     if(m_star_detect_isSet){
         obj->insert("starDetect", QJsonValue(star_detect));
@@ -5017,6 +5025,16 @@ SWGCameraSettings::setCloudMotionOverlapThreshold(double cloud_motion_overlap_th
     this->m_cloud_motion_overlap_threshold_isSet = true;
 }
 
+double
+SWGCameraSettings::getCloudEventThreshold() {
+    return cloud_event_threshold;
+}
+void
+SWGCameraSettings::setCloudEventThreshold(double cloud_event_threshold) {
+    this->cloud_event_threshold = cloud_event_threshold;
+    this->m_cloud_event_threshold_isSet = true;
+}
+
 qint32
 SWGCameraSettings::getStarDetect() {
     return star_detect;
@@ -6207,6 +6225,9 @@ SWGCameraSettings::isSet(){
             isObjectUpdated = true; break;
         }
         if(m_cloud_motion_overlap_threshold_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_cloud_event_threshold_isSet){
             isObjectUpdated = true; break;
         }
         if(m_star_detect_isSet){

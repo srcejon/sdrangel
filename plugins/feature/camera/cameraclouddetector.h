@@ -26,6 +26,53 @@
 #include "cameradetector.h"
 
 /**
+ * \brief Tracks cloud coverage against the event threshold and decides when to emit
+ * Scheduler coverage-high/low events.
+ *
+ * The state starts unknown at capture start, so the first coverage report emits an event
+ * describing the initial sky state (an already-overcast sky fires High immediately).
+ * Thereafter events fire only on transitions, with a fixed hysteresis band below the
+ * threshold so coverage hovering around it does not chatter.
+ */
+struct CameraCloudEventTracker
+{
+    enum Event { None, High, Low };
+
+    static constexpr double m_hysteresisPercent = 10.0;
+
+    void reset() { m_state = StateUnknown; }
+
+    Event update(double coveragePercent, double thresholdPercent)
+    {
+        switch (m_state)
+        {
+        case StateUnknown:
+            m_state = (coveragePercent >= thresholdPercent) ? StateHigh : StateLow;
+            return (m_state == StateHigh) ? High : Low;
+        case StateLow:
+            if (coveragePercent >= thresholdPercent)
+            {
+                m_state = StateHigh;
+                return High;
+            }
+            return None;
+        case StateHigh:
+        default:
+            if (coveragePercent <= thresholdPercent - m_hysteresisPercent)
+            {
+                m_state = StateLow;
+                return Low;
+            }
+            return None;
+        }
+    }
+
+private:
+    enum State { StateUnknown, StateLow, StateHigh };
+    State m_state = StateUnknown;
+};
+
+/**
  * \brief Detection stage that segments clouds into a per-pixel mask and coverage percentage.
  *
  * Classifies the detection ROI of each frame as cloud/clear using one of two classical paths:
@@ -64,20 +111,23 @@ public:
     public:
         float getCoveragePercent() const { return m_coveragePercent; }
         bool isNight() const { return m_night; }
+        const QDateTime& getCaptureDateTime() const { return m_captureDateTime; }
 
-        static MsgReportCloudCoverage* create(float coveragePercent, bool night)
+        static MsgReportCloudCoverage* create(float coveragePercent, bool night, const QDateTime& captureDateTime)
         {
-            return new MsgReportCloudCoverage(coveragePercent, night);
+            return new MsgReportCloudCoverage(coveragePercent, night, captureDateTime);
         }
 
     private:
         float m_coveragePercent;
         bool m_night;
+        QDateTime m_captureDateTime;
 
-        MsgReportCloudCoverage(float coveragePercent, bool night) :
+        MsgReportCloudCoverage(float coveragePercent, bool night, const QDateTime& captureDateTime) :
             Message(),
             m_coveragePercent(coveragePercent),
-            m_night(night)
+            m_night(night),
+            m_captureDateTime(captureDateTime)
         { }
     };
 

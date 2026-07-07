@@ -842,6 +842,10 @@ CameraSettings:
       description: "Cloud overlap fraction at which a motion box is suppressed: 0.0 to 1.0"
       type: number
       format: double
+    cloudEventThreshold:
+      description: "Coverage percentage at which a Scheduler coverage-high event is emitted (low again 10 points below): 0 to 100"
+      type: number
+      format: double
     starDetect:
       description: "Enable star detection (1 for yes, 0 for no)"
       type: integer

@@ -508,6 +508,8 @@ QStringList Scheduler::eventTypeNames()
         QStringLiteral("Squelch Closed"),
         QStringLiteral("CTCSS Frequency"),
         QStringLiteral("DCS Code"),
+        QStringLiteral("Camera Cloud Coverage High"),
+        QStringLiteral("Camera Cloud Coverage Low"),
         });
 }
 

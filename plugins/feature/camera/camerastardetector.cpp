@@ -571,6 +571,7 @@ void CameraStarDetector::processNewFrame(const CameraPipelineFramePtr& frame)
             frame->m_starDetections);
         reportPlateSolveStatus(false);
         frame->m_plateSolve.m_solved = plateSolveResult.m_solved;
+        frame->m_plateSolve.m_mirrored = plateSolveResult.m_mirrored;
         frame->m_plateSolve.m_matchedStars = plateSolveResult.m_matchedStars;
         frame->m_plateSolve.m_detectedStarsConsidered = plateSolveResult.m_detectedStarsConsidered;
         frame->m_plateSolve.m_catalogStarsLoaded = plateSolveResult.m_catalogStarsLoaded;

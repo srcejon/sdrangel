@@ -328,6 +328,13 @@ struct SkyProjector
     double distortionK1 = 0.0;
     int width = 0;
     int height = 0;
+    // Handedness. When true the projector maps to/from a horizontally-MIRRORED image: an
+    // up-looking all-sky camera images the sky reflected, so a pose recovered on the mirrored
+    // detection set (CameraPlateSolveResult::m_mirrored) must reflect pixel x about the image
+    // centre to overlay onto the ORIGINAL image. Default false keeps the projector orientation-
+    // preserving and every existing solve/overlay path byte-identical; only projectors built for
+    // OUTPUT/overlay of a mirrored solve set it. See projectVector/unprojectPixelToVector.
+    bool mirrorX = false;
 };
 
 static constexpr double kPi = 3.14159265358979323846;

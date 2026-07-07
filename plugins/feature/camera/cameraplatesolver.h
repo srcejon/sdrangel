@@ -47,6 +47,14 @@
 struct CameraPlateSolveResult
 {
     bool m_solved = false;
+    // True when this solve was obtained on the horizontally-mirrored (handedness-flipped)
+    // detection set — i.e. the image is a mirror of the modelled sky (up-looking all-sky
+    // fisheye cameras image the sky reflected, which the orientation-preserving projector
+    // cannot otherwise fit). The recovered az/el/roll pose is expressed in the mirrored
+    // frame; any projector built to overlay this pose back onto the ORIGINAL image must
+    // reflect pixel x about the image centre (SkyProjector::mirrorX). Detection positions
+    // returned to the caller are already restored to original-image coordinates.
+    bool m_mirrored = false;
     int m_matchedStars = 0;
     int m_detectedStarsConsidered = 0;
     int m_catalogStarsLoaded = 0;

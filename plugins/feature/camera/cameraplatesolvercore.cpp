@@ -1490,7 +1490,14 @@ bool CameraPlateSolver::SolverContext::projectVector(const SkyProjector& project
         return false;
     }
 
-    point.setX(projector.principalPointX + normalizedX * 0.5 * static_cast<double>(projector.width));
+    double imageX = projector.principalPointX + normalizedX * 0.5 * static_cast<double>(projector.width);
+    // Mirrored (up-looking all-sky) image: reflect pixel x about the image centre so the pose,
+    // recovered on the mirrored detection set, projects onto the ORIGINAL image. Inert (default
+    // false) for every solve-time projector, so those paths stay byte-identical.
+    if (projector.mirrorX) {
+        imageX = static_cast<double>(projector.width - 1) - imageX;
+    }
+    point.setX(imageX);
     point.setY(projector.principalPointY - normalizedY * 0.5 * static_cast<double>(projector.height));
     return true;
 }
@@ -1506,7 +1513,12 @@ bool CameraPlateSolver::SolverContext::unprojectPixelToVector(const SkyProjector
         return false;
     }
 
-    double projectedX = ((point.x() - projector.principalPointX) / (0.5 * static_cast<double>(projector.width)))
+    // Mirrored image: reflect the incoming pixel x about the image centre before unprojecting,
+    // the exact inverse of the reflection projectVector applies. Inert when mirrorX is false.
+    const double sourceX = projector.mirrorX
+        ? (static_cast<double>(projector.width - 1) - point.x())
+        : point.x();
+    double projectedX = ((sourceX - projector.principalPointX) / (0.5 * static_cast<double>(projector.width)))
         * projector.horizontalScale;
     double projectedY = (-(point.y() - projector.principalPointY) / (0.5 * static_cast<double>(projector.height)))
         * projector.verticalScale;

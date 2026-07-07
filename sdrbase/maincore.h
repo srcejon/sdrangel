@@ -914,6 +914,8 @@ public:
              CameraMotionStoppedEvent,
              CameraObjectInViewEvent,    // Data: name="Map name",label="Same as map label",x=120,y=23,azimuth=23.1,elevation=34.5 For map items from other features / channels
              CameraObjectOutOfViewEvent,
+             CameraCloudCoverageHighEvent, // Data: coverage=80.0,threshold=75.0,night=1
+             CameraCloudCoverageLowEvent,
              PacketReceivedEvent,        // Data: data=deadbeef
              SquelchOpenEvent,           // AM/NFM/WFM - No Data
              SquelchClosedEvent,

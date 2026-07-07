@@ -445,6 +445,11 @@ void SatelliteTrackerWorker::update()
 
     bool timeReversed = m_lastUpdateDateTime > qdt;
 
+    // Determine if we need to draw on the map, and thus need to calculate ground tracks
+    QList<ObjectPipe*> initialMapMessagePipes;
+    MainCore::instance()->getMessagePipes().getMessagePipes(m_satelliteTracker, "mapitems", initialMapMessagePipes);
+    bool mapEnabled = m_settings.m_drawOnMap && (initialMapMessagePipes.size() > 0);
+
     QHashIterator<QString, SatWorkerState *> itr(m_workerState);
     while (itr.hasNext())
     {
@@ -468,7 +473,7 @@ void SatelliteTrackerWorker::update()
                                     m_settings.m_predictionPeriod, m_settings.m_minAOSElevation, m_settings.m_minPassElevation,
                                     m_settings.m_passStartTime, m_settings.m_passFinishTime, m_settings.m_utc,
                                     noOfPasses,
-                                    m_settings.m_drawOnMap, m_settings.m_groundTrackPoints, &satWorkerState->m_satState);
+                                    mapEnabled, m_settings.m_groundTrackPoints, &satWorkerState->m_satState);
 
                 // Update AOS/LOS
                 if (satWorkerState->m_satState.m_passes.size() > 0)
@@ -580,7 +585,7 @@ void SatelliteTrackerWorker::update()
                 }
 
                 // Send to Map
-                if (m_settings.m_drawOnMap)
+                if (mapEnabled)
                 {
                     QList<ObjectPipe*> mapMessagePipes;
                     MainCore::instance()->getMessagePipes().getMessagePipes(m_satelliteTracker, "mapitems", mapMessagePipes);

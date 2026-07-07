@@ -309,6 +309,31 @@ the solver honor the existing `m_flipX`/`m_flipY` display flags the same way (ti
 overlays align); (c) AUTO-handedness — solve both ways, keep the tighter — for users who don't know
 their camera is mirrored. Recommended: (a)+(c). Then layer the fixed-intrinsics finishing step.
 
+**AUTO-DETECT IMPLEMENTATION ATTEMPT (2026-07-07) — reverted; two decisive design lessons.** Wired a
+failure-gated retry into runSolve: `m_mirrored` on the result + on a FAILED fisheye solve, flip
+detection x (x'=width-1-x), re-solve on a fresh context, flip back; adopt if solved (the harness
+validates via restored detection POSITIONS, so no projector/harness change was needed). Result: REAL
+47/48 and WIDE 27/36 byte-IDENTICAL (rectilinear → never retried), but **TREx only 4→5** and FISHEYE
+synthetic **+3 (026/043/039) — false positives.** Why:
+1. **Failure-gating on `!m_solved` is WRONG for this class.** TREx's wrong-roll failures return
+   `m_solved=TRUE` with a wrong pose (the harness marks them FAIL on anchors; the solver thinks it
+   succeeded). So a retry that only fires on `!m_solved` misses exactly the cases that need it — hence
+   4→5 instead of 4→10. **The retry must run for fisheye REGARDLESS of m_solved (always-both).**
+2. **Naive adopt-if-mirror-solved creates weak-oracle FPs.** The 44 passing synthetic-fisheye cases
+   solve with the NORMAL projector, so synthetic fisheye is NON-mirrored → a mirror "solve" there is
+   wrong; 026/043/039 passed only because those are the corpus's known weak-anchor-oracle cases.
+   **Adoption must require the mirror solve to BEAT the normal one by a robust fit margin** (from the
+   image-flip data the true mirror has MORE matches AND LOWER rms than the wrong-roll normal solve, so
+   an `(matches↑, rms↓)`-with-margin test favours the true mirror while rejecting a correct normal
+   solve's always-worse mirror and a weak-oracle spurious mirror).
+**Correct spec for the real implementation:** for fisheye context, ALWAYS solve both handedness
+(mirror = flip detection x, solve, flip back); keep whichever has stronger support via the existing
+result comparator with a margin; set `m_mirrored` when the mirror wins. Cost = 2× fisheye solve
+(acceptable; gate to fisheye only, never narrow/rectilinear so REAL stays identical). Validate: REAL/
+WIDE byte-identical, FISHEYE synthetic NO new passes (or verify any are genuine, since that corpus's
+oracle is weak — strengthen it first), TREx → ~10/20. This is a proper feature (its own task), not a
+session-tail change; reverted to keep the tree clean. The image-flip proof (4→10) remains the target.
+
 **CORRECTION to the earlier "every lever measured, investigation closed at evidence floor" line: that
 stands for the NARROW dense-field cases (pollux/RAND2) and for COLOR, but is WRONG for the all-sky
 TREx class — those failures were a handedness bug with a concrete fix, not a fundamental limit.**

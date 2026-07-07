@@ -135,7 +135,7 @@ void CameraCloudDetector::applySettings(const CameraSettings& settings, const QL
         invalidateCache();
 
         // Re-run on the last frame so tuning is live on a paused/static image
-        if (!force && m_settings.m_cloudDetect && m_lastInputFrame)
+        if (!force && m_lastInputFrame)
         {
             CameraPipelineFramePtr frame(new CameraPipelineFrame(*m_lastInputFrame));
             frame->m_manualPreviewFrame = true;
@@ -160,14 +160,13 @@ void CameraCloudDetector::processNewFrame(const CameraPipelineFramePtr& frame)
     }
 
     frame->m_cloud = CameraPipelineCloud();
+    m_lastInputFrame.reset(new CameraPipelineFrame(*frame));
 
     if (!m_settings.m_cloudDetect)
     {
         forwardFrame(frame);
         return;
     }
-
-    m_lastInputFrame.reset(new CameraPipelineFrame(*frame));
 
     const QSize frameSize = frame->imageSize();
     if (frameSize.isEmpty()) {

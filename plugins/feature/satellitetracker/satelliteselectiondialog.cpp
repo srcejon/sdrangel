@@ -20,6 +20,9 @@
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QDesktopServices>
+#include <QSignalBlocker>
+
+#include <algorithm>
 
 #include <OrbitalElements.h>
 #include <Tle.h>
@@ -28,6 +31,57 @@
 #include "satelliteselectiondialog.h"
 
 using namespace libsgp4;
+
+namespace
+{
+    QStringList moveSelectedItems(QListWidget *source, QListWidget *destination)
+    {
+        QList<QPair<int, QString>> selected;
+        const QList<QListWidgetItem *> items = source->selectedItems();
+        selected.reserve(items.size());
+
+        for (QListWidgetItem *item : items) {
+            selected.append(qMakePair(source->row(item), item->text()));
+        }
+
+        std::sort(
+            selected.begin(),
+            selected.end(),
+            [](const QPair<int, QString>& a, const QPair<int, QString>& b) {
+                return a.first < b.first;
+            }
+        );
+
+        QStringList names;
+        names.reserve(selected.size());
+
+        for (const QPair<int, QString>& item : selected) {
+            names.append(item.second);
+        }
+
+        if (names.isEmpty()) {
+            return names;
+        }
+
+        QSignalBlocker sourceBlocker(source);
+        QSignalBlocker destinationBlocker(destination);
+        source->setUpdatesEnabled(false);
+        destination->setUpdatesEnabled(false);
+
+        for (int i = selected.size() - 1; i >= 0; i--) {
+            delete source->takeItem(selected[i].first);
+        }
+
+        destination->clearSelection();
+        destination->addItems(names);
+        destination->setCurrentRow(destination->count() - names.size());
+
+        source->setUpdatesEnabled(true);
+        destination->setUpdatesEnabled(true);
+
+        return names;
+    }
+}
 
 SatelliteSelectionDialog::SatelliteSelectionDialog(SatelliteTrackerSettings *settings,
         const QHash<QString, SatNogsSatellite *>& satellites,
@@ -113,21 +167,19 @@ void SatelliteSelectionDialog::on_find_textChanged(const QString &text)
 
 void SatelliteSelectionDialog::on_addSat_clicked()
 {
-    QList<QListWidgetItem *> items = ui->availableSats->selectedItems();
-    for (int i = 0; i < items.size(); i++)
-    {
-        ui->selectedSats->addItem(items[i]->text());
-        delete items[i];
+    QStringList names = moveSelectedItems(ui->availableSats, ui->selectedSats);
+
+    if (!names.isEmpty()) {
+        displaySatInfo(names[0]);
     }
 }
 
 void SatelliteSelectionDialog::on_removeSat_clicked()
 {
-    QList<QListWidgetItem *> items = ui->selectedSats->selectedItems();
-    for (int i = 0; i < items.size(); i++)
-    {
-        ui->availableSats->addItem(items[i]->text());
-        delete items[i];
+    QStringList names = moveSelectedItems(ui->selectedSats, ui->availableSats);
+
+    if (!names.isEmpty()) {
+        displaySatInfo(names[0]);
     }
 }
 

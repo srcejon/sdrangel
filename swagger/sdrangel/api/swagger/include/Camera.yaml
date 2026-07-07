@@ -780,6 +780,68 @@ CameraSettings:
       type: array
       items:
         $ref: "http://swgserver:8081/api/swagger/include/Camera.yaml#/CameraRect"
+    cloudDetect:
+      description: "Enable cloud detection (1 for yes, 0 for no)"
+      type: integer
+    cloudMode:
+      description: >
+        Cloud classification path
+          * 0 - Auto (day or night from overall frame brightness)
+          * 1 - Day (red/blue ratio)
+          * 2 - Night (sky-background deviation)
+      type: integer
+    cloudDebugView:
+      description: >
+        Cloud detector debug view
+          * 0 - Off
+          * 1 - Background
+          * 2 - Signal
+          * 3 - Thresholded
+          * 4 - Final
+          * 5 - Texture
+      type: integer
+    cloudColor:
+      description: "Cloud mask overlay tint colour as 0xAARRGGBB integer"
+      type: integer
+    cloudShowOverlay:
+      description: "Tint cloud-classified regions on the preview image (1 for yes, 0 for no)"
+      type: integer
+    cloudDayThreshold:
+      description: "Day path: minimum red/blue ratio classified as cloud: 0.0 to 2.0"
+      type: number
+      format: double
+    cloudTextureThreshold:
+      description: "Day path: fine-scale texture level above which a region cannot be cloud (rejects roofs/trees); 0 disables: 0 to 255"
+      type: integer
+    cloudNightThreshold:
+      description: "Night path: threshold on sky-background deviation from the median sky level: 0 to 255"
+      type: integer
+    cloudBackgroundBlur:
+      description: "Night path: radius used to estimate the sky background, in downscaled pixels: 1 to 128"
+      type: integer
+    cloudOpenSize:
+      description: "Kernel radius for cloud-mask morphological open: 0 to 20"
+      type: integer
+    cloudCloseSize:
+      description: "Kernel radius for cloud-mask morphological close: 0 to 20"
+      type: integer
+    cloudDownscale:
+      description: "Downscale factor for the cloud detection path: 1.0, 0.5, 0.25 or 0.125"
+      type: number
+      format: double
+    cloudUpdateIntervalFrames:
+      description: "Recompute the cloud mask every this many frames: 1 to 600"
+      type: integer
+    cloudFilterStars:
+      description: "Drop star detections whose centroid falls inside the cloud mask (1 for yes, 0 for no)"
+      type: integer
+    cloudFilterMotion:
+      description: "Suppress motion boxes that substantially overlap the cloud mask (1 for yes, 0 for no)"
+      type: integer
+    cloudMotionOverlapThreshold:
+      description: "Cloud overlap fraction at which a motion box is suppressed: 0.0 to 1.0"
+      type: number
+      format: double
     starDetect:
       description: "Enable star detection (1 for yes, 0 for no)"
       type: integer
@@ -997,6 +1059,13 @@ CameraReport:
           * 1 - idle
           * 2 - running
           * 3 - error
+    cloudCoveragePercent:
+      description: "Percentage of the evaluated sky classified as cloud in the latest analysed frame"
+      type: number
+      format: float
+    cloudCoverageValid:
+      description: "Whether cloudCoveragePercent is valid (1 for yes, 0 for no)"
+      type: integer
 
 CameraActions:
   description: "Camera feature actions"

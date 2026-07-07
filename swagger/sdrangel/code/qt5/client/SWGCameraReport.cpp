@@ -30,6 +30,10 @@ SWGCameraReport::SWGCameraReport(QString* json) {
 SWGCameraReport::SWGCameraReport() {
     running_state = 0;
     m_running_state_isSet = false;
+    cloud_coverage_percent = 0.0f;
+    m_cloud_coverage_percent_isSet = false;
+    cloud_coverage_valid = 0;
+    m_cloud_coverage_valid_isSet = false;
 }
 
 SWGCameraReport::~SWGCameraReport() {
@@ -40,6 +44,10 @@ void
 SWGCameraReport::init() {
     running_state = 0;
     m_running_state_isSet = false;
+    cloud_coverage_percent = 0.0f;
+    m_cloud_coverage_percent_isSet = false;
+    cloud_coverage_valid = 0;
+    m_cloud_coverage_valid_isSet = false;
 }
 
 void
@@ -59,7 +67,11 @@ SWGCameraReport::fromJson(QString &json) {
 void
 SWGCameraReport::fromJsonObject(QJsonObject &pJson) {
     ::SWGSDRangel::setValue(&running_state, pJson["runningState"], "qint32", "");
-    
+
+    ::SWGSDRangel::setValue(&cloud_coverage_percent, pJson["cloudCoveragePercent"], "float", "");
+
+    ::SWGSDRangel::setValue(&cloud_coverage_valid, pJson["cloudCoverageValid"], "qint32", "");
+
 }
 
 QString
@@ -79,6 +91,12 @@ SWGCameraReport::asJsonObject() {
     if(m_running_state_isSet){
         obj->insert("runningState", QJsonValue(running_state));
     }
+    if(m_cloud_coverage_percent_isSet){
+        obj->insert("cloudCoveragePercent", QJsonValue(cloud_coverage_percent));
+    }
+    if(m_cloud_coverage_valid_isSet){
+        obj->insert("cloudCoverageValid", QJsonValue(cloud_coverage_valid));
+    }
 
     return obj;
 }
@@ -93,12 +111,38 @@ SWGCameraReport::setRunningState(qint32 running_state) {
     this->m_running_state_isSet = true;
 }
 
+float
+SWGCameraReport::getCloudCoveragePercent() {
+    return cloud_coverage_percent;
+}
+void
+SWGCameraReport::setCloudCoveragePercent(float cloud_coverage_percent) {
+    this->cloud_coverage_percent = cloud_coverage_percent;
+    this->m_cloud_coverage_percent_isSet = true;
+}
+
+qint32
+SWGCameraReport::getCloudCoverageValid() {
+    return cloud_coverage_valid;
+}
+void
+SWGCameraReport::setCloudCoverageValid(qint32 cloud_coverage_valid) {
+    this->cloud_coverage_valid = cloud_coverage_valid;
+    this->m_cloud_coverage_valid_isSet = true;
+}
+
 
 bool
 SWGCameraReport::isSet(){
     bool isObjectUpdated = false;
     do{
         if(m_running_state_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_cloud_coverage_percent_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_cloud_coverage_valid_isSet){
             isObjectUpdated = true; break;
         }
     }while(false);

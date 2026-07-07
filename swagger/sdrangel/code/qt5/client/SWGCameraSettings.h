@@ -651,6 +651,54 @@ public:
     QList<SWGCameraRect*>* getMotionExclusionRects();
     void setMotionExclusionRects(QList<SWGCameraRect*>* motion_exclusion_rects);
 
+    qint32 getCloudDetect();
+    void setCloudDetect(qint32 cloud_detect);
+
+    qint32 getCloudMode();
+    void setCloudMode(qint32 cloud_mode);
+
+    qint32 getCloudDebugView();
+    void setCloudDebugView(qint32 cloud_debug_view);
+
+    qint32 getCloudColor();
+    void setCloudColor(qint32 cloud_color);
+
+    qint32 getCloudShowOverlay();
+    void setCloudShowOverlay(qint32 cloud_show_overlay);
+
+    double getCloudDayThreshold();
+    void setCloudDayThreshold(double cloud_day_threshold);
+
+    qint32 getCloudTextureThreshold();
+    void setCloudTextureThreshold(qint32 cloud_texture_threshold);
+
+    qint32 getCloudNightThreshold();
+    void setCloudNightThreshold(qint32 cloud_night_threshold);
+
+    qint32 getCloudBackgroundBlur();
+    void setCloudBackgroundBlur(qint32 cloud_background_blur);
+
+    qint32 getCloudOpenSize();
+    void setCloudOpenSize(qint32 cloud_open_size);
+
+    qint32 getCloudCloseSize();
+    void setCloudCloseSize(qint32 cloud_close_size);
+
+    double getCloudDownscale();
+    void setCloudDownscale(double cloud_downscale);
+
+    qint32 getCloudUpdateIntervalFrames();
+    void setCloudUpdateIntervalFrames(qint32 cloud_update_interval_frames);
+
+    qint32 getCloudFilterStars();
+    void setCloudFilterStars(qint32 cloud_filter_stars);
+
+    qint32 getCloudFilterMotion();
+    void setCloudFilterMotion(qint32 cloud_filter_motion);
+
+    double getCloudMotionOverlapThreshold();
+    void setCloudMotionOverlapThreshold(double cloud_motion_overlap_threshold);
+
     qint32 getStarDetect();
     void setStarDetect(qint32 star_detect);
 
@@ -1419,6 +1467,54 @@ private:
 
     QList<SWGCameraRect*>* motion_exclusion_rects;
     bool m_motion_exclusion_rects_isSet;
+
+    qint32 cloud_detect;
+    bool m_cloud_detect_isSet;
+
+    qint32 cloud_mode;
+    bool m_cloud_mode_isSet;
+
+    qint32 cloud_debug_view;
+    bool m_cloud_debug_view_isSet;
+
+    qint32 cloud_color;
+    bool m_cloud_color_isSet;
+
+    qint32 cloud_show_overlay;
+    bool m_cloud_show_overlay_isSet;
+
+    double cloud_day_threshold;
+    bool m_cloud_day_threshold_isSet;
+
+    qint32 cloud_texture_threshold;
+    bool m_cloud_texture_threshold_isSet;
+
+    qint32 cloud_night_threshold;
+    bool m_cloud_night_threshold_isSet;
+
+    qint32 cloud_background_blur;
+    bool m_cloud_background_blur_isSet;
+
+    qint32 cloud_open_size;
+    bool m_cloud_open_size_isSet;
+
+    qint32 cloud_close_size;
+    bool m_cloud_close_size_isSet;
+
+    double cloud_downscale;
+    bool m_cloud_downscale_isSet;
+
+    qint32 cloud_update_interval_frames;
+    bool m_cloud_update_interval_frames_isSet;
+
+    qint32 cloud_filter_stars;
+    bool m_cloud_filter_stars_isSet;
+
+    qint32 cloud_filter_motion;
+    bool m_cloud_filter_motion_isSet;
+
+    double cloud_motion_overlap_threshold;
+    bool m_cloud_motion_overlap_threshold_isSet;
 
     qint32 star_detect;
     bool m_star_detect_isSet;

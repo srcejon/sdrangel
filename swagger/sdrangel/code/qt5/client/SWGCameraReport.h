@@ -44,12 +44,24 @@ public:
     qint32 getRunningState();
     void setRunningState(qint32 running_state);
 
+    float getCloudCoveragePercent();
+    void setCloudCoveragePercent(float cloud_coverage_percent);
+
+    qint32 getCloudCoverageValid();
+    void setCloudCoverageValid(qint32 cloud_coverage_valid);
+
 
     virtual bool isSet() override;
 
 private:
     qint32 running_state;
     bool m_running_state_isSet;
+
+    float cloud_coverage_percent;
+    bool m_cloud_coverage_percent_isSet;
+
+    qint32 cloud_coverage_valid;
+    bool m_cloud_coverage_valid_isSet;
 
 };
 

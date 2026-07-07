@@ -432,6 +432,38 @@ SWGCameraSettings::SWGCameraSettings() {
     m_show_motion_exclusion_rects_isSet = false;
     motion_exclusion_rects = nullptr;
     m_motion_exclusion_rects_isSet = false;
+    cloud_detect = 0;
+    m_cloud_detect_isSet = false;
+    cloud_mode = 0;
+    m_cloud_mode_isSet = false;
+    cloud_debug_view = 0;
+    m_cloud_debug_view_isSet = false;
+    cloud_color = 0;
+    m_cloud_color_isSet = false;
+    cloud_show_overlay = 0;
+    m_cloud_show_overlay_isSet = false;
+    cloud_day_threshold = 0.0;
+    m_cloud_day_threshold_isSet = false;
+    cloud_texture_threshold = 0;
+    m_cloud_texture_threshold_isSet = false;
+    cloud_night_threshold = 0;
+    m_cloud_night_threshold_isSet = false;
+    cloud_background_blur = 0;
+    m_cloud_background_blur_isSet = false;
+    cloud_open_size = 0;
+    m_cloud_open_size_isSet = false;
+    cloud_close_size = 0;
+    m_cloud_close_size_isSet = false;
+    cloud_downscale = 0.0;
+    m_cloud_downscale_isSet = false;
+    cloud_update_interval_frames = 0;
+    m_cloud_update_interval_frames_isSet = false;
+    cloud_filter_stars = 0;
+    m_cloud_filter_stars_isSet = false;
+    cloud_filter_motion = 0;
+    m_cloud_filter_motion_isSet = false;
+    cloud_motion_overlap_threshold = 0.0;
+    m_cloud_motion_overlap_threshold_isSet = false;
     star_detect = 0;
     m_star_detect_isSet = false;
     star_threshold = 0;
@@ -950,6 +982,38 @@ SWGCameraSettings::init() {
     m_show_motion_exclusion_rects_isSet = false;
     motion_exclusion_rects = new QList<SWGCameraRect*>();
     m_motion_exclusion_rects_isSet = false;
+    cloud_detect = 0;
+    m_cloud_detect_isSet = false;
+    cloud_mode = 0;
+    m_cloud_mode_isSet = false;
+    cloud_debug_view = 0;
+    m_cloud_debug_view_isSet = false;
+    cloud_color = 0;
+    m_cloud_color_isSet = false;
+    cloud_show_overlay = 0;
+    m_cloud_show_overlay_isSet = false;
+    cloud_day_threshold = 0.0;
+    m_cloud_day_threshold_isSet = false;
+    cloud_texture_threshold = 0;
+    m_cloud_texture_threshold_isSet = false;
+    cloud_night_threshold = 0;
+    m_cloud_night_threshold_isSet = false;
+    cloud_background_blur = 0;
+    m_cloud_background_blur_isSet = false;
+    cloud_open_size = 0;
+    m_cloud_open_size_isSet = false;
+    cloud_close_size = 0;
+    m_cloud_close_size_isSet = false;
+    cloud_downscale = 0.0;
+    m_cloud_downscale_isSet = false;
+    cloud_update_interval_frames = 0;
+    m_cloud_update_interval_frames_isSet = false;
+    cloud_filter_stars = 0;
+    m_cloud_filter_stars_isSet = false;
+    cloud_filter_motion = 0;
+    m_cloud_filter_motion_isSet = false;
+    cloud_motion_overlap_threshold = 0.0;
+    m_cloud_motion_overlap_threshold_isSet = false;
     star_detect = 0;
     m_star_detect_isSet = false;
     star_threshold = 0;
@@ -1818,6 +1882,22 @@ SWGCameraSettings::fromJsonObject(QJsonObject &pJson) {
     
     
     ::SWGSDRangel::setValue(&motion_exclusion_rects, pJson["motionExclusionRects"], "QList", "SWGCameraRect");
+    ::SWGSDRangel::setValue(&cloud_detect, pJson["cloudDetect"], "qint32", "");
+    ::SWGSDRangel::setValue(&cloud_mode, pJson["cloudMode"], "qint32", "");
+    ::SWGSDRangel::setValue(&cloud_debug_view, pJson["cloudDebugView"], "qint32", "");
+    ::SWGSDRangel::setValue(&cloud_color, pJson["cloudColor"], "qint32", "");
+    ::SWGSDRangel::setValue(&cloud_show_overlay, pJson["cloudShowOverlay"], "qint32", "");
+    ::SWGSDRangel::setValue(&cloud_day_threshold, pJson["cloudDayThreshold"], "double", "");
+    ::SWGSDRangel::setValue(&cloud_texture_threshold, pJson["cloudTextureThreshold"], "qint32", "");
+    ::SWGSDRangel::setValue(&cloud_night_threshold, pJson["cloudNightThreshold"], "qint32", "");
+    ::SWGSDRangel::setValue(&cloud_background_blur, pJson["cloudBackgroundBlur"], "qint32", "");
+    ::SWGSDRangel::setValue(&cloud_open_size, pJson["cloudOpenSize"], "qint32", "");
+    ::SWGSDRangel::setValue(&cloud_close_size, pJson["cloudCloseSize"], "qint32", "");
+    ::SWGSDRangel::setValue(&cloud_downscale, pJson["cloudDownscale"], "double", "");
+    ::SWGSDRangel::setValue(&cloud_update_interval_frames, pJson["cloudUpdateIntervalFrames"], "qint32", "");
+    ::SWGSDRangel::setValue(&cloud_filter_stars, pJson["cloudFilterStars"], "qint32", "");
+    ::SWGSDRangel::setValue(&cloud_filter_motion, pJson["cloudFilterMotion"], "qint32", "");
+    ::SWGSDRangel::setValue(&cloud_motion_overlap_threshold, pJson["cloudMotionOverlapThreshold"], "double", "");
     ::SWGSDRangel::setValue(&star_detect, pJson["starDetect"], "qint32", "");
     
     ::SWGSDRangel::setValue(&star_threshold, pJson["starThreshold"], "qint32", "");
@@ -2545,6 +2625,54 @@ SWGCameraSettings::asJsonObject() {
     }
     if(motion_exclusion_rects && motion_exclusion_rects->size() > 0){
         toJsonArray((QList<void*>*)motion_exclusion_rects, obj, "motionExclusionRects", "SWGCameraRect");
+    }
+    if(m_cloud_detect_isSet){
+        obj->insert("cloudDetect", QJsonValue(cloud_detect));
+    }
+    if(m_cloud_mode_isSet){
+        obj->insert("cloudMode", QJsonValue(cloud_mode));
+    }
+    if(m_cloud_debug_view_isSet){
+        obj->insert("cloudDebugView", QJsonValue(cloud_debug_view));
+    }
+    if(m_cloud_color_isSet){
+        obj->insert("cloudColor", QJsonValue(cloud_color));
+    }
+    if(m_cloud_show_overlay_isSet){
+        obj->insert("cloudShowOverlay", QJsonValue(cloud_show_overlay));
+    }
+    if(m_cloud_day_threshold_isSet){
+        obj->insert("cloudDayThreshold", QJsonValue(cloud_day_threshold));
+    }
+    if(m_cloud_texture_threshold_isSet){
+        obj->insert("cloudTextureThreshold", QJsonValue(cloud_texture_threshold));
+    }
+    if(m_cloud_night_threshold_isSet){
+        obj->insert("cloudNightThreshold", QJsonValue(cloud_night_threshold));
+    }
+    if(m_cloud_background_blur_isSet){
+        obj->insert("cloudBackgroundBlur", QJsonValue(cloud_background_blur));
+    }
+    if(m_cloud_open_size_isSet){
+        obj->insert("cloudOpenSize", QJsonValue(cloud_open_size));
+    }
+    if(m_cloud_close_size_isSet){
+        obj->insert("cloudCloseSize", QJsonValue(cloud_close_size));
+    }
+    if(m_cloud_downscale_isSet){
+        obj->insert("cloudDownscale", QJsonValue(cloud_downscale));
+    }
+    if(m_cloud_update_interval_frames_isSet){
+        obj->insert("cloudUpdateIntervalFrames", QJsonValue(cloud_update_interval_frames));
+    }
+    if(m_cloud_filter_stars_isSet){
+        obj->insert("cloudFilterStars", QJsonValue(cloud_filter_stars));
+    }
+    if(m_cloud_filter_motion_isSet){
+        obj->insert("cloudFilterMotion", QJsonValue(cloud_filter_motion));
+    }
+    if(m_cloud_motion_overlap_threshold_isSet){
+        obj->insert("cloudMotionOverlapThreshold", QJsonValue(cloud_motion_overlap_threshold));
     }
     if(m_star_detect_isSet){
         obj->insert("starDetect", QJsonValue(star_detect));
@@ -4730,6 +4858,166 @@ SWGCameraSettings::setMotionExclusionRects(QList<SWGCameraRect*>* motion_exclusi
 }
 
 qint32
+SWGCameraSettings::getCloudDetect() {
+    return cloud_detect;
+}
+void
+SWGCameraSettings::setCloudDetect(qint32 cloud_detect) {
+    this->cloud_detect = cloud_detect;
+    this->m_cloud_detect_isSet = true;
+}
+
+qint32
+SWGCameraSettings::getCloudMode() {
+    return cloud_mode;
+}
+void
+SWGCameraSettings::setCloudMode(qint32 cloud_mode) {
+    this->cloud_mode = cloud_mode;
+    this->m_cloud_mode_isSet = true;
+}
+
+qint32
+SWGCameraSettings::getCloudDebugView() {
+    return cloud_debug_view;
+}
+void
+SWGCameraSettings::setCloudDebugView(qint32 cloud_debug_view) {
+    this->cloud_debug_view = cloud_debug_view;
+    this->m_cloud_debug_view_isSet = true;
+}
+
+qint32
+SWGCameraSettings::getCloudColor() {
+    return cloud_color;
+}
+void
+SWGCameraSettings::setCloudColor(qint32 cloud_color) {
+    this->cloud_color = cloud_color;
+    this->m_cloud_color_isSet = true;
+}
+
+qint32
+SWGCameraSettings::getCloudShowOverlay() {
+    return cloud_show_overlay;
+}
+void
+SWGCameraSettings::setCloudShowOverlay(qint32 cloud_show_overlay) {
+    this->cloud_show_overlay = cloud_show_overlay;
+    this->m_cloud_show_overlay_isSet = true;
+}
+
+double
+SWGCameraSettings::getCloudDayThreshold() {
+    return cloud_day_threshold;
+}
+void
+SWGCameraSettings::setCloudDayThreshold(double cloud_day_threshold) {
+    this->cloud_day_threshold = cloud_day_threshold;
+    this->m_cloud_day_threshold_isSet = true;
+}
+
+qint32
+SWGCameraSettings::getCloudTextureThreshold() {
+    return cloud_texture_threshold;
+}
+void
+SWGCameraSettings::setCloudTextureThreshold(qint32 cloud_texture_threshold) {
+    this->cloud_texture_threshold = cloud_texture_threshold;
+    this->m_cloud_texture_threshold_isSet = true;
+}
+
+qint32
+SWGCameraSettings::getCloudNightThreshold() {
+    return cloud_night_threshold;
+}
+void
+SWGCameraSettings::setCloudNightThreshold(qint32 cloud_night_threshold) {
+    this->cloud_night_threshold = cloud_night_threshold;
+    this->m_cloud_night_threshold_isSet = true;
+}
+
+qint32
+SWGCameraSettings::getCloudBackgroundBlur() {
+    return cloud_background_blur;
+}
+void
+SWGCameraSettings::setCloudBackgroundBlur(qint32 cloud_background_blur) {
+    this->cloud_background_blur = cloud_background_blur;
+    this->m_cloud_background_blur_isSet = true;
+}
+
+qint32
+SWGCameraSettings::getCloudOpenSize() {
+    return cloud_open_size;
+}
+void
+SWGCameraSettings::setCloudOpenSize(qint32 cloud_open_size) {
+    this->cloud_open_size = cloud_open_size;
+    this->m_cloud_open_size_isSet = true;
+}
+
+qint32
+SWGCameraSettings::getCloudCloseSize() {
+    return cloud_close_size;
+}
+void
+SWGCameraSettings::setCloudCloseSize(qint32 cloud_close_size) {
+    this->cloud_close_size = cloud_close_size;
+    this->m_cloud_close_size_isSet = true;
+}
+
+double
+SWGCameraSettings::getCloudDownscale() {
+    return cloud_downscale;
+}
+void
+SWGCameraSettings::setCloudDownscale(double cloud_downscale) {
+    this->cloud_downscale = cloud_downscale;
+    this->m_cloud_downscale_isSet = true;
+}
+
+qint32
+SWGCameraSettings::getCloudUpdateIntervalFrames() {
+    return cloud_update_interval_frames;
+}
+void
+SWGCameraSettings::setCloudUpdateIntervalFrames(qint32 cloud_update_interval_frames) {
+    this->cloud_update_interval_frames = cloud_update_interval_frames;
+    this->m_cloud_update_interval_frames_isSet = true;
+}
+
+qint32
+SWGCameraSettings::getCloudFilterStars() {
+    return cloud_filter_stars;
+}
+void
+SWGCameraSettings::setCloudFilterStars(qint32 cloud_filter_stars) {
+    this->cloud_filter_stars = cloud_filter_stars;
+    this->m_cloud_filter_stars_isSet = true;
+}
+
+qint32
+SWGCameraSettings::getCloudFilterMotion() {
+    return cloud_filter_motion;
+}
+void
+SWGCameraSettings::setCloudFilterMotion(qint32 cloud_filter_motion) {
+    this->cloud_filter_motion = cloud_filter_motion;
+    this->m_cloud_filter_motion_isSet = true;
+}
+
+double
+SWGCameraSettings::getCloudMotionOverlapThreshold() {
+    return cloud_motion_overlap_threshold;
+}
+void
+SWGCameraSettings::setCloudMotionOverlapThreshold(double cloud_motion_overlap_threshold) {
+    this->cloud_motion_overlap_threshold = cloud_motion_overlap_threshold;
+    this->m_cloud_motion_overlap_threshold_isSet = true;
+}
+
+qint32
 SWGCameraSettings::getStarDetect() {
     return star_detect;
 }
@@ -5871,6 +6159,54 @@ SWGCameraSettings::isSet(){
             isObjectUpdated = true; break;
         }
         if(motion_exclusion_rects && (motion_exclusion_rects->size() > 0)){
+            isObjectUpdated = true; break;
+        }
+        if(m_cloud_detect_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_cloud_mode_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_cloud_debug_view_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_cloud_color_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_cloud_show_overlay_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_cloud_day_threshold_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_cloud_texture_threshold_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_cloud_night_threshold_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_cloud_background_blur_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_cloud_open_size_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_cloud_close_size_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_cloud_downscale_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_cloud_update_interval_frames_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_cloud_filter_stars_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_cloud_filter_motion_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_cloud_motion_overlap_threshold_isSet){
             isObjectUpdated = true; break;
         }
         if(m_star_detect_isSet){

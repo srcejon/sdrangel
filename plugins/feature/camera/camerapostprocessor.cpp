@@ -20,6 +20,7 @@
 #include <array>
 #include <cmath>
 #include <limits>
+#include <utility>
 
 #include <QDebug>
 #include <QFont>
@@ -918,7 +919,7 @@ QDateTime plateSolveOverlayDateTime(const CameraSettings& settings, const QDateT
 CameraPostProcessor::CameraPostProcessor() :
     m_msgQueueToGUI(nullptr),
     m_nextStageQueue(nullptr),
-    m_availableChannelOrFeatureHandler(kTrackedObjectPipeURIs, QStringList{QStringLiteral("mapitems")}),
+    m_availableChannelOrFeatureHandler(kTrackedObjectPipeURIs),
     m_processingFrame(false)
 {}
 
@@ -932,14 +933,17 @@ void CameraPostProcessor::startWork()
 {
     QObject::connect(&m_inputMessageQueue, &MessageQueue::messageEnqueued, this, &CameraPostProcessor::handleInputMessages);
     QObject::connect(&m_availableChannelOrFeatureHandler, &AvailableChannelOrFeatureHandler::messageEnqueued, this, &CameraPostProcessor::handlePipeMessageQueue);
+    QObject::connect(&m_availableChannelOrFeatureHandler, &AvailableChannelOrFeatureHandler::channelsOrFeaturesChanged, this, &CameraPostProcessor::handleTrackedObjectSourcesChanged);
     m_availableChannelOrFeatureHandler.scanAvailableChannelsAndFeatures();
     handleInputMessages();
 }
 
 void CameraPostProcessor::stopWork()
 {
+    unregisterTrackedObjectPipes();
     QObject::disconnect(&m_inputMessageQueue, &MessageQueue::messageEnqueued, this, &CameraPostProcessor::handleInputMessages);
     QObject::disconnect(&m_availableChannelOrFeatureHandler, &AvailableChannelOrFeatureHandler::messageEnqueued, this, &CameraPostProcessor::handlePipeMessageQueue);
+    QObject::disconnect(&m_availableChannelOrFeatureHandler, &AvailableChannelOrFeatureHandler::channelsOrFeaturesChanged, this, &CameraPostProcessor::handleTrackedObjectSourcesChanged);
 
     if (m_weather)
     {
@@ -977,6 +981,11 @@ void CameraPostProcessor::handlePipeMessageQueue(MessageQueue* messageQueue)
             delete message;
         }
     }
+}
+
+void CameraPostProcessor::handleTrackedObjectSourcesChanged()
+{
+    updateTrackedObjectPipeRegistration();
 }
 
 bool CameraPostProcessor::handleMessage(const Message& cmd)
@@ -1061,6 +1070,10 @@ bool CameraPostProcessor::handleMessage(const Message& cmd)
     }
     else if (MainCore::MsgMapItem::match(cmd))
     {
+        if (!m_captureActive) {
+            return true;
+        }
+
         const MainCore::MsgMapItem& msgMapItem = (const MainCore::MsgMapItem&) cmd;
         updateTrackedMapObject(msgMapItem.getPipeSource(), msgMapItem.getSWGMapItem());
         return true;
@@ -1075,6 +1088,12 @@ bool CameraPostProcessor::handleMessage(const Message& cmd)
         if (activeMsg.isActive())
         {
             m_lastFrame = CameraPipelineFrame();
+            updateTrackedObjectPipeRegistration();
+        }
+        else
+        {
+            unregisterTrackedObjectPipes();
+            m_trackedMapObjects.clear();
         }
         QMutexLocker locker(&m_frameMutex);
         m_pendingFrames.clear();
@@ -1195,6 +1214,10 @@ void CameraPostProcessor::applySettings(const CameraSettings& settings, const QL
         m_windowOverlayFrames.clear();
     }
 
+    if (force || settingsKeys.contains("trackObjects")) {
+        updateTrackedObjectPipeRegistration();
+    }
+
     if (force || settingsKeys.contains("owmAPIKey") || settingsKeys.contains("latitude") || settingsKeys.contains("longitude"))
     {
         restartWeatherUpdates();
@@ -1208,6 +1231,65 @@ void CameraPostProcessor::applySettings(const CameraSettings& settings, const QL
         const QImage preview = applyPostProcessing(m_lastFrame, false, &previewTextLabels, &previewRectItems, &trackedObjects, false);
         reportFrameToGUI(preview, m_lastFrame, previewTextLabels, previewRectItems, trackedObjects);
     }
+}
+
+void CameraPostProcessor::updateTrackedObjectPipeRegistration()
+{
+    if (m_captureActive && m_settings.m_trackObjects) {
+        registerTrackedObjectPipes();
+    } else {
+        unregisterTrackedObjectPipes();
+    }
+}
+
+void CameraPostProcessor::registerTrackedObjectPipes()
+{
+    m_availableChannelOrFeatureHandler.scanAvailableChannelsAndFeatures();
+
+    QSet<QObject*> availableSources;
+    QSet<QObject*> registeredSources;
+    const QStringList pipeNames{QStringLiteral("mapitems")};
+
+    for (const AvailableChannelOrFeature& source : m_availableChannelOrFeatureHandler.getAvailableChannelOrFeatureList())
+    {
+        if (!source.m_object) {
+            continue;
+        }
+
+        availableSources.insert(source.m_object);
+
+        if (m_trackedObjectPipeSources.contains(source.m_object))
+        {
+            registeredSources.insert(source.m_object);
+        }
+        else
+        {
+            QObject *registeredSource = m_availableChannelOrFeatureHandler.registerPipes(source.getLongId(), pipeNames);
+            if (registeredSource) {
+                registeredSources.insert(registeredSource);
+            }
+        }
+    }
+
+    for (QObject *source : std::as_const(m_trackedObjectPipeSources))
+    {
+        if (!availableSources.contains(source) || !registeredSources.contains(source)) {
+            m_availableChannelOrFeatureHandler.deregisterPipes(source, pipeNames);
+        }
+    }
+
+    m_trackedObjectPipeSources = registeredSources;
+}
+
+void CameraPostProcessor::unregisterTrackedObjectPipes()
+{
+    const QStringList pipeNames{QStringLiteral("mapitems")};
+
+    for (QObject *source : std::as_const(m_trackedObjectPipeSources)) {
+        m_availableChannelOrFeatureHandler.deregisterPipes(source, pipeNames);
+    }
+
+    m_trackedObjectPipeSources.clear();
 }
 
 void CameraPostProcessor::restartWeatherUpdates()

@@ -28,6 +28,7 @@
 #include <QColor>
 #include <QDateTime>
 #include <QPointF>
+#include <QSet>
 #include <QTextDocument>
 
 #include <opencv2/core/core.hpp>
@@ -389,6 +390,7 @@ private:
     MessageQueue *m_nextStageQueue;
     MessageQueue *m_workerInputMessageQueue = nullptr;
     AvailableChannelOrFeatureHandler m_availableChannelOrFeatureHandler;
+    QSet<QObject*> m_trackedObjectPipeSources;
     CameraSettings m_settings;
     CameraPipelineFrame m_lastFrame;
     // Recycles the full-frame overlay-composite buffers produced every frame in
@@ -458,11 +460,15 @@ private:
     void applyTextOverlay(QImage& image, QTextDocument& overlayTextDocument) const;
     [[nodiscard]] QString expandOverlayTextTemplate() const;
     void updateTrackedMapObject(const QObject* pipeSource, SWGSDRangel::SWGMapItem* swgMapItem);
+    void updateTrackedObjectPipeRegistration();
+    void registerTrackedObjectPipes();
+    void unregisterTrackedObjectPipes();
     void restartWeatherUpdates();
     void reportFrameToGUI(const QImage& image, const CameraPipelineFrame& frame, const QVector<PreviewTextLabel>& previewTextLabels = {}, const QVector<PreviewRectItem>& previewRectItems = {}, const QVector<CameraPipelineTrackedObject>& trackedObjects = {});
 private slots:
     void handleInputMessages();
     void handlePipeMessageQueue(MessageQueue* messageQueue);
+    void handleTrackedObjectSourcesChanged();
     void processNextFrame();
     void weatherUpdated(float temperature, float pressure, float humidity, float cloudiness, float windSpeed, float windDirection);
 

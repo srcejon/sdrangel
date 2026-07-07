@@ -992,6 +992,7 @@ void Camera::webapiFormatFeatureSettings(
         streamUrlHistory->append(new QString(url));
     }
     swg->setStreamUrlHistory(streamUrlHistory);
+    swg->setStreamBufferingSeconds(settings.m_streamBufferingSeconds);
     auto *imageFileCameraPaths = new QList<QString*>();
     for (const QString& path : settings.m_imageFileCameraPaths) {
         imageFileCameraPaths->append(new QString(path));
@@ -1041,6 +1042,11 @@ void Camera::webapiFormatFeatureSettings(
     swg->setStackDisplayMode((int) settings.m_stackDisplayMode);
     swg->setStackDisplayFrameIndex(settings.m_stackDisplayFrameIndex);
     swg->setStackRejectBadFrames(settings.m_stackRejectBadFrames ? 1 : 0);
+    swg->setScaleEnabled(settings.m_scaleEnabled ? 1 : 0);
+    swg->setScaleWidth(settings.m_scaleWidth);
+    swg->setScaleHeight(settings.m_scaleHeight);
+    swg->setScaleKeepAspectRatio(settings.m_scaleKeepAspectRatio ? 1 : 0);
+    swg->setScaleJustification((int) settings.m_scaleJustification);
     swg->setStackDarkFileName(new QString(settings.m_stackDarkFileName));
     swg->setStackFlatFileName(new QString(settings.m_stackFlatFileName));
     swg->setStackBiasFileName(new QString(settings.m_stackBiasFileName));
@@ -1064,6 +1070,7 @@ void Camera::webapiFormatFeatureSettings(
     swg->setLensCenterOffsetX(settings.m_lensCenterOffsetX);
     swg->setLensCenterOffsetY(settings.m_lensCenterOffsetY);
     swg->setLensDistortionK1(settings.m_lensDistortionK1);
+    swg->setLensMirror(settings.m_lensMirror ? 1 : 0);
 
     // Post-processing – tone / colour
     swg->setPostProcessWhiteBalanceMode(settings.m_postProcessWhiteBalanceMode);
@@ -1099,6 +1106,7 @@ void Camera::webapiFormatFeatureSettings(
     swg->setOverlayDateTime(settings.m_overlayDateTime ? 1 : 0);
     swg->setDateTimeColor((qint32) settings.m_dateTimeColor.rgb());
     swg->setDateTimeFormat(new QString(settings.m_dateTimeFormat));
+    swg->setDateTimeUtc(settings.m_dateTimeUtc ? 1 : 0);
     swg->setDateTimePosX(settings.m_dateTimePosX);
     swg->setDateTimePosY(settings.m_dateTimePosY);
 
@@ -1113,10 +1121,14 @@ void Camera::webapiFormatFeatureSettings(
     swg->setConstellationOverlay((int) settings.m_constellationOverlay);
     swg->setTrackObjects(settings.m_trackObjects ? 1 : 0);
     swg->setTrackObjectMinElevation(settings.m_trackObjectMinElevation);
+    swg->setTrackObjectMaxRangeKm(settings.m_trackObjectMaxRangeKm);
+    swg->setTrackObjectLabelDisplay((int) settings.m_trackObjectLabelDisplay);
+    swg->setTrackObjectLabelDetectionRadius(settings.m_trackObjectLabelDetectionRadius);
     swg->setTrackObjectColor((qint32) settings.m_trackObjectColor.rgb());
     swg->setTrackObjectFontScale(settings.m_trackObjectFontScale);
     swg->setTrackObjectTrails(settings.m_trackObjectTrails ? 1 : 0);
     swg->setTrackObjectHeatMap(settings.m_trackObjectHeatMap ? 1 : 0);
+    swg->setTrackObjectRange(settings.m_trackObjectRange ? 1 : 0);
     swg->setGridLabelFontFamily(new QString(settings.m_gridLabelFontFamily));
     swg->setGridLabelFontScale(settings.m_gridLabelFontScale);
     swg->setOverlayTextString(new QString(settings.m_overlayTextString));
@@ -1158,6 +1170,7 @@ void Camera::webapiFormatFeatureSettings(
     swg->setMotionPersistenceFrames(settings.m_motionPersistenceFrames);
     swg->setMotionBoxColor((qint32) settings.m_motionBoxColor.rgb());
     swg->setMinContourArea(settings.m_minContourArea);
+    swg->setShowMotionExclusionRects(settings.m_showMotionExclusionRects ? 1 : 0);
     auto *swgMotionExclusionRects = new QList<SWGSDRangel::SWGCameraRect*>();
     for (const QRect& rect : settings.m_motionExclusionRects)
     {
@@ -1237,6 +1250,7 @@ void Camera::webapiFormatFeatureSettings(
 
     // Audio (Qt camera)
     swg->setAudioMute(settings.m_audioMute ? 1 : 0);
+    swg->setAudioPreviewVolume(settings.m_audioPreviewVolume);
     swg->setAudioDeviceName(new QString(settings.m_audioDeviceName));
 
     // Qt camera controls
@@ -1457,6 +1471,9 @@ void Camera::webapiUpdateFeatureSettings(
     if (featureSettingsKeys.contains("streamUrl")) {
         settings.m_streamUrl = *swg->getStreamUrl();
     }
+    if (featureSettingsKeys.contains("streamBufferingSeconds")) {
+        settings.m_streamBufferingSeconds = swg->getStreamBufferingSeconds();
+    }
     if (featureSettingsKeys.contains("streamUrlHistory"))
     {
         settings.m_streamUrlHistory.clear();
@@ -1597,6 +1614,21 @@ void Camera::webapiUpdateFeatureSettings(
     if (featureSettingsKeys.contains("stackRejectBadFrames")) {
         settings.m_stackRejectBadFrames = swg->getStackRejectBadFrames() != 0;
     }
+    if (featureSettingsKeys.contains("scaleEnabled")) {
+        settings.m_scaleEnabled = swg->getScaleEnabled() != 0;
+    }
+    if (featureSettingsKeys.contains("scaleWidth")) {
+        settings.m_scaleWidth = swg->getScaleWidth();
+    }
+    if (featureSettingsKeys.contains("scaleHeight")) {
+        settings.m_scaleHeight = swg->getScaleHeight();
+    }
+    if (featureSettingsKeys.contains("scaleKeepAspectRatio")) {
+        settings.m_scaleKeepAspectRatio = swg->getScaleKeepAspectRatio() != 0;
+    }
+    if (featureSettingsKeys.contains("scaleJustification")) {
+        settings.m_scaleJustification = (CameraSettings::ScaleJustification) swg->getScaleJustification();
+    }
     if (featureSettingsKeys.contains("stackDarkFileName")) {
         settings.m_stackDarkFileName = *swg->getStackDarkFileName();
     }
@@ -1659,6 +1691,9 @@ void Camera::webapiUpdateFeatureSettings(
     }
     if (featureSettingsKeys.contains("lensDistortionK1")) {
         settings.m_lensDistortionK1 = swg->getLensDistortionK1();
+    }
+    if (featureSettingsKeys.contains("lensMirror")) {
+        settings.m_lensMirror = swg->getLensMirror() != 0;
     }
 
     // Post-processing – tone / colour
@@ -1757,6 +1792,9 @@ void Camera::webapiUpdateFeatureSettings(
     if (featureSettingsKeys.contains("dateTimeFormat")) {
         settings.m_dateTimeFormat = *swg->getDateTimeFormat();
     }
+    if (featureSettingsKeys.contains("dateTimeUtc")) {
+        settings.m_dateTimeUtc = swg->getDateTimeUtc() != 0;
+    }
     if (featureSettingsKeys.contains("dateTimePosX")) {
         settings.m_dateTimePosX = swg->getDateTimePosX();
     }
@@ -1795,6 +1833,15 @@ void Camera::webapiUpdateFeatureSettings(
     if (featureSettingsKeys.contains("trackObjectMinElevation")) {
         settings.m_trackObjectMinElevation = swg->getTrackObjectMinElevation();
     }
+    if (featureSettingsKeys.contains("trackObjectMaxRangeKm")) {
+        settings.m_trackObjectMaxRangeKm = swg->getTrackObjectMaxRangeKm();
+    }
+    if (featureSettingsKeys.contains("trackObjectLabelDisplay")) {
+        settings.m_trackObjectLabelDisplay = (CameraSettings::TrackObjectLabelDisplay) swg->getTrackObjectLabelDisplay();
+    }
+    if (featureSettingsKeys.contains("trackObjectLabelDetectionRadius")) {
+        settings.m_trackObjectLabelDetectionRadius = swg->getTrackObjectLabelDetectionRadius();
+    }
     if (featureSettingsKeys.contains("trackObjectColor")) {
         settings.m_trackObjectColor = QColor(swg->getTrackObjectColor());
     }
@@ -1806,6 +1853,9 @@ void Camera::webapiUpdateFeatureSettings(
     }
     if (featureSettingsKeys.contains("trackObjectHeatMap")) {
         settings.m_trackObjectHeatMap = swg->getTrackObjectHeatMap() != 0;
+    }
+    if (featureSettingsKeys.contains("trackObjectRange")) {
+        settings.m_trackObjectRange = swg->getTrackObjectRange() != 0;
     }
     if (featureSettingsKeys.contains("gridLabelFontFamily")) {
         settings.m_gridLabelFontFamily = *swg->getGridLabelFontFamily();
@@ -1917,6 +1967,9 @@ void Camera::webapiUpdateFeatureSettings(
     }
     if (featureSettingsKeys.contains("minContourArea")) {
         settings.m_minContourArea = swg->getMinContourArea();
+    }
+    if (featureSettingsKeys.contains("showMotionExclusionRects")) {
+        settings.m_showMotionExclusionRects = swg->getShowMotionExclusionRects() != 0;
     }
     if (featureSettingsKeys.contains("motionExclusionRects"))
     {
@@ -2126,6 +2179,9 @@ void Camera::webapiUpdateFeatureSettings(
     // Audio (Qt camera)
     if (featureSettingsKeys.contains("audioMute")) {
         settings.m_audioMute = swg->getAudioMute() != 0;
+    }
+    if (featureSettingsKeys.contains("audioPreviewVolume")) {
+        settings.m_audioPreviewVolume = swg->getAudioPreviewVolume();
     }
     if (featureSettingsKeys.contains("audioDeviceName")) {
         settings.m_audioDeviceName = *swg->getAudioDeviceName();

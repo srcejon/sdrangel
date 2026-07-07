@@ -234,7 +234,7 @@ Check to enable cloud detection, which classifies each part of the sky as cloud 
 * The star detector can drop detections that fall inside the cloud mask, so cloud structure breaking up into star-like blobs does not produce false stars or mislead the plate solver.
 * The motion detector can suppress bounding boxes that substantially overlap the cloud mask, so drifting clouds do not register as motion while aircraft, meteors or satellites in clear sky are still caught.
 
-Two classification paths are used, selected manually or automatically from overall frame brightness:
+Two classification paths are used, selected manually or automatically. Automatic selection uses the sun elevation computed from the camera position and the frame's observation time - the wall clock for live cameras, or the capture time derived from the file name for video and image playback (with the plate-solve date/time settings as a manual override for recorded media without one). In twilight, or when no observation time is available, overall frame brightness decides instead.
 
 * At night, a clear sky is smooth apart from point sources, so clouds show up as low-frequency brightness structure - brighter under moonlight or light pollution, or darker where they block airglow. A heavily blurred background estimate is compared against the median sky level and the deviation is thresholded.
 * By day, cloud is white or grey against blue sky, so a per-pixel red/blue ratio is thresholded. Grey or white but finely textured regions - roofs, trees, buildings - would pass the ratio test, so they are rejected by an additional texture veto: cloud is smooth at the detection resolution, while man-made surfaces and foliage retain dense fine detail. Dark neutral regions - lens vignette, shadowed structures - are rejected by a brightness floor anchored to the evaluated sky's median brightness, since daytime cloud is at least comparably bright to the sky.
@@ -901,7 +901,7 @@ On the Cloud Detection sub-tab:
 
 <h4>1. Mode</h4>
 
-Selects the classification path: Auto, Day or Night. Auto picks day or night from the overall frame brightness, with hysteresis so twilight does not flap between the two.
+Selects the classification path: Auto, Day or Night. Auto picks day or night from the sun elevation at the camera position and the frame's observation time (capture time for played-back media). In twilight, or when no observation time is available, the overall frame brightness decides, with hysteresis so the decision does not flap.
 
 <h4>2. Day threshold</h4>
 
@@ -954,6 +954,8 @@ Selects an intermediate cloud detection stage (Background, Signal, Thresholded, 
 <h4>14. Coverage</h4>
 
 Shows the percentage of the evaluated sky classified as cloud in the latest analysed frame, and whether the day or night path classified it. Regions inside motion exclusion rectangles and borders added by output scaling are not evaluated.
+
+A chart below the settings plots the coverage percentage over time, sampled every few seconds against the frame's capture time (so it also works for video and image playback). Up to 24 hours of history is kept; the bin button clears the chart.
 
 On the Star Detection sub-tab:
 

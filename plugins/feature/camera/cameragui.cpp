@@ -749,6 +749,9 @@ bool CameraGUI::handleMessage(const Message& message)
         settingsUI()->cloudCoverageLabel->setText(report.isCloudValid()
             ? tr("%1 % (%2)").arg(report.getCloudCoveragePercent(), 0, 'f', 1).arg(report.isCloudNight() ? tr("night") : tr("day"))
             : "-");
+        if (report.isCloudValid() && m_settingsDialog) {
+            m_settingsDialog->appendCloudCoverageSample(report.getCaptureDateTime(), report.getCloudCoveragePercent());
+        }
         m_pipelineFrameTimes.append(nowMs);
         while ((m_pipelineFrameTimes.size() > 1) && (m_pipelineFrameTimes.first() < nowMs - 5000)) {
             m_pipelineFrameTimes.removeFirst();

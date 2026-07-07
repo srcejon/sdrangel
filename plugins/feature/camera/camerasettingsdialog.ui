@@ -6126,7 +6126,7 @@ car</string>
               </size>
              </property>
              <property name="toolTip">
-              <string>Cloud classification path. Auto picks day or night from overall frame brightness; day thresholds the red/blue ratio; night thresholds sky-background deviation</string>
+              <string>Cloud classification path. Auto picks day or night from the sun elevation at the camera position and frame time (falling back to frame brightness in twilight or without a time); day thresholds the red/blue ratio; night thresholds sky-background deviation</string>
              </property>
              <item>
               <property name="text">
@@ -6501,18 +6501,32 @@ car</string>
              </property>
             </widget>
            </item>
-           <item row="9" column="0">
-            <spacer name="cloudVerticalSpacer">
-             <property name="orientation">
-              <enum>Qt::Orientation::Vertical</enum>
+           <item row="8" column="3" alignment="Qt::AlignmentFlag::AlignRight">
+            <widget class="QToolButton" name="clearCloudChart">
+             <property name="toolTip">
+              <string>Clear cloud coverage history chart</string>
              </property>
-             <property name="sizeHint" stdset="0">
+             <property name="text">
+              <string/>
+             </property>
+             <property name="icon">
+              <iconset resource="../../../sdrgui/resources/res.qrc">
+               <normaloff>:/bin.png</normaloff>:/bin.png</iconset>
+             </property>
+            </widget>
+           </item>
+           <item row="9" column="0" colspan="4">
+            <widget class="QWidget" name="cloudChartContainer" native="true">
+             <property name="toolTip">
+              <string>Displays the cloud coverage history chart.</string>
+             </property>
+             <property name="minimumSize">
               <size>
-               <width>20</width>
-               <height>40</height>
+               <width>0</width>
+               <height>200</height>
               </size>
              </property>
-            </spacer>
+            </widget>
            </item>
           </layout>
          </widget>

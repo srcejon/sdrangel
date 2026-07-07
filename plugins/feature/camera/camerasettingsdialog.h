@@ -47,15 +47,16 @@ using CameraSettingsValueAxis = QValueAxis;
 #endif
 
 /**
- * \brief Dialog hosting the camera's detailed settings UI and a live CCD-temperature chart.
+ * \brief Dialog hosting the camera's detailed settings UI and live history charts.
  *
- * Wraps the generated Ui::CameraSettingsDialog (the large multi-page settings form) and adds a
- * QtCharts line chart that plots CCD temperature over time. appendTemperatureSample() feeds new
- * samples into the chart, clearCameraStatus() resets the status display, and
- * shrinkToVisibleContent() compacts the dialog to its currently visible controls.
+ * Wraps the generated Ui::CameraSettingsDialog (the large multi-page settings form) and adds
+ * QtCharts line charts that plot CCD temperature and cloud coverage over time.
+ * appendTemperatureSample() and appendCloudCoverageSample() feed new samples into the charts,
+ * clearCameraStatus() resets the status display, and shrinkToVisibleContent() compacts the
+ * dialog to its currently visible controls.
  *
  * \note The owning CameraGUI accesses the underlying UI directly via getUI(); this dialog is a thin
- *       container around that form plus the temperature chart.
+ *       container around that form plus the charts.
  */
 class CameraSettingsDialog : public QDialog
 {
@@ -67,6 +68,7 @@ public:
 
     Ui::CameraSettingsDialog *getUI() const { return ui; }
     void appendTemperatureSample(const QDateTime& timestamp, double temperatureC);
+    void appendCloudCoverageSample(const QDateTime& timestamp, double coveragePercent);
     void clearCameraStatus();
     void shrinkToVisibleContent();
 
@@ -76,9 +78,17 @@ private:
     CameraSettingsLineSeries *m_tempSeries;
     CameraSettingsDateTimeAxis *m_tempAxisX;
     CameraSettingsValueAxis *m_tempAxisY;
+    CameraSettingsChart *m_cloudChart;
+    CameraSettingsLineSeries *m_cloudSeries;
+    CameraSettingsDateTimeAxis *m_cloudAxisX;
+    CameraSettingsValueAxis *m_cloudAxisY;
+    qint64 m_lastCloudSampleMs;
+
+    void updateCloudAxes();
 
 private slots:
     void on_clearChart_clicked();
+    void on_clearCloudChart_clicked();
 };
 
 #endif // INCLUDE_FEATURE_CAMERASETTINGSDIALOG_H_

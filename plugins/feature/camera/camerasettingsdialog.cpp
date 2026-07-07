@@ -87,7 +87,12 @@ CameraSettingsDialog::CameraSettingsDialog(QWidget *parent) :
     m_tempChart(nullptr),
     m_tempSeries(nullptr),
     m_tempAxisX(nullptr),
-    m_tempAxisY(nullptr)
+    m_tempAxisY(nullptr),
+    m_cloudChart(nullptr),
+    m_cloudSeries(nullptr),
+    m_cloudAxisX(nullptr),
+    m_cloudAxisY(nullptr),
+    m_lastCloudSampleMs(0)
 {
     ui->setupUi(this);
 
@@ -118,6 +123,37 @@ CameraSettingsDialog::CameraSettingsDialog(QWidget *parent) :
     auto* layout = new QVBoxLayout(ui->cameraTempChartContainer);
     layout->setContentsMargins(0, 0, 0, 0);
     layout->addWidget(chartView);
+
+    m_cloudChart = new QChart();
+    m_cloudChart->setTheme(QChart::ChartThemeDark);
+    m_cloudChart->setTitle(tr("Cloud coverage vs time"));
+    m_cloudChart->legend()->hide();
+    m_cloudChart->layout()->setContentsMargins(0, 0, 0, 0);
+
+    m_cloudSeries = new QLineSeries(m_cloudChart);
+    m_cloudChart->addSeries(m_cloudSeries);
+
+    m_cloudAxisX = new QDateTimeAxis(m_cloudChart);
+    m_cloudAxisX->setFormat("HH:mm:ss");
+
+    m_cloudAxisY = new QValueAxis(m_cloudChart);
+    m_cloudAxisY->setTitleText(tr("Coverage (%)"));
+    m_cloudAxisY->setLabelFormat("%.0f");
+    m_cloudAxisY->setRange(0.0, 100.0);
+
+    m_cloudChart->addAxis(m_cloudAxisX, Qt::AlignBottom);
+    m_cloudChart->addAxis(m_cloudAxisY, Qt::AlignLeft);
+    m_cloudSeries->attachAxis(m_cloudAxisX);
+    m_cloudSeries->attachAxis(m_cloudAxisY);
+
+    auto* cloudChartView = new QChartView(m_cloudChart, ui->cloudChartContainer);
+    cloudChartView->setRenderHint(QPainter::Antialiasing);
+
+    auto* cloudLayout = new QVBoxLayout(ui->cloudChartContainer);
+    cloudLayout->setContentsMargins(0, 0, 0, 0);
+    cloudLayout->addWidget(cloudChartView);
+
+    updateCloudAxes();
 
     clearCameraStatus();
 }
@@ -191,4 +227,71 @@ void CameraSettingsDialog::on_clearChart_clicked()
     }
 
     updateTemperatureAxes(m_tempSeries, m_tempAxisX, m_tempAxisY);
+}
+
+void CameraSettingsDialog::appendCloudCoverageSample(const QDateTime& timestamp, double coveragePercent)
+{
+    if (!m_cloudSeries || !timestamp.isValid()) {
+        return;
+    }
+
+    // Coverage arrives per displayed frame; sample the chart every few seconds so a long
+    // session stays readable and cheap to append to
+    constexpr qint64 sampleIntervalMs = 5000;
+    // A day of samples at the sample interval
+    constexpr int maxSamples = 17280;
+
+    const qint64 sampleMs = timestamp.toMSecsSinceEpoch();
+    if (m_cloudSeries->count() > 0)
+    {
+        // Playback was restarted or seeked backwards: restart the history rather than
+        // drawing a line that doubles back on itself
+        if (sampleMs + sampleIntervalMs < m_lastCloudSampleMs) {
+            m_cloudSeries->clear();
+        } else if (sampleMs - m_lastCloudSampleMs < sampleIntervalMs) {
+            return;
+        }
+    }
+
+    m_cloudSeries->append(sampleMs, coveragePercent);
+    m_lastCloudSampleMs = sampleMs;
+    if (m_cloudSeries->count() > maxSamples) {
+        m_cloudSeries->removePoints(0, m_cloudSeries->count() - maxSamples);
+    }
+
+    updateCloudAxes();
+}
+
+void CameraSettingsDialog::updateCloudAxes()
+{
+    if (!m_cloudSeries || !m_cloudAxisX || !m_cloudAxisY) {
+        return;
+    }
+
+    // Coverage is a percentage, so the Y axis stays fixed at 0-100; only time auto-ranges
+    if (m_cloudSeries->count() == 0)
+    {
+        const QDateTime now = QDateTime::currentDateTime();
+        m_cloudAxisX->setRange(now.addSecs(-60), now);
+        return;
+    }
+
+    qreal minX = m_cloudSeries->at(0).x();
+    qreal maxX = m_cloudSeries->at(m_cloudSeries->count() - 1).x();
+    if (maxX <= minX) {
+        maxX = minX + 1000.0;
+    }
+
+    m_cloudAxisX->setRange(QDateTime::fromMSecsSinceEpoch(static_cast<qint64>(minX)),
+                           QDateTime::fromMSecsSinceEpoch(static_cast<qint64>(maxX)));
+}
+
+void CameraSettingsDialog::on_clearCloudChart_clicked()
+{
+    if (m_cloudSeries) {
+        m_cloudSeries->clear();
+    }
+    m_lastCloudSampleMs = 0;
+
+    updateCloudAxes();
 }

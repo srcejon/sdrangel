@@ -25,6 +25,7 @@
 #include <opencv2/cudawarping.hpp>
 #endif
 
+#include "util/astronomy.h"
 #include "util/profiler.h"
 #include "cameraclouddetector.h"
 
@@ -38,6 +39,11 @@ constexpr int dayMinBrightness = 30;
 // Auto-mode hysteresis band: day at or above the upper bound, night at or below the lower
 constexpr double autoDayBrightness = 60.0;
 constexpr double autoNightBrightness = 45.0;
+// Auto-mode sun-elevation bounds in degrees: the day-path colour cues need a bright sky and
+// the night-path background deviation needs real darkness; in the twilight band between them
+// (and when no observation time is available) the brightness heuristic decides
+constexpr double sunDayElevation = -4.0;
+constexpr double sunNightElevation = -10.0;
 
 // Median of the 8-bit values where mask is non-zero, as a robust sky-level estimate that
 // ignores excluded regions and is insensitive to cloud outliers
@@ -100,7 +106,13 @@ bool CameraCloudDetector::cloudSettingsChanged(const QList<QString>& settingsKey
         || settingsKeys.contains("detectionRoiY")
         || settingsKeys.contains("detectionRoiWidth")
         || settingsKeys.contains("detectionRoiHeight")
-        || settingsKeys.contains("motionExclusionRects");
+        || settingsKeys.contains("motionExclusionRects")
+        // Auto mode derives day/night from the sun elevation at the camera position
+        || settingsKeys.contains("latitude")
+        || settingsKeys.contains("longitude")
+        || settingsKeys.contains("plateSolveUseCaptureDateTime")
+        || settingsKeys.contains("plateSolveDateTime")
+        || settingsKeys.contains("plateSolveDateTimeUtc");
 }
 
 void CameraCloudDetector::invalidateCache()
@@ -230,7 +242,7 @@ void CameraCloudDetector::processNewFrame(const CameraPipelineFramePtr& frame)
     }
 
     cv::Mat cloudDebugMask;
-    applyCloudDetection(workBgr, rawGray, gray, detectionRoi, contentRect, frame->m_cloud, debugViewActive ? &cloudDebugMask : nullptr);
+    applyCloudDetection(workBgr, rawGray, gray, detectionRoi, contentRect, frame->m_captureDateTime, frame->m_cloud, debugViewActive ? &cloudDebugMask : nullptr);
 
     m_lastCloud = frame->m_cloud;
     m_lastFrameSize = frameSize;
@@ -258,7 +270,7 @@ void CameraCloudDetector::processNewFrame(const CameraPipelineFramePtr& frame)
     forwardFrame(frame);
 }
 
-bool CameraCloudDetector::resolveNightMode(const cv::Mat& medianGray, const cv::Mat& evaluationMask)
+bool CameraCloudDetector::resolveNightMode(const cv::Mat& medianGray, const cv::Mat& evaluationMask, const QDateTime& captureDateTime)
 {
     switch (m_settings.m_cloudMode)
     {
@@ -269,6 +281,34 @@ bool CameraCloudDetector::resolveNightMode(const cv::Mat& medianGray, const cv::
     case CameraSettings::CloudModeAuto:
     default:
         break;
+    }
+
+    // Prefer the sun elevation at the camera position and the frame's observation time over
+    // frame brightness, which auto-exposure cameras distort. Live frames carry the wall
+    // clock, video/image playback carries the capture time derived from the file name, and
+    // the plate-solve date/time settings supply a manual override for recorded media without
+    // one (the same policy the plate solver uses).
+    const QDateTime observationTime = m_settings.m_plateSolveUseCaptureDateTime
+        ? captureDateTime
+        : m_settings.m_plateSolveDateTime;
+    if (observationTime.isValid())
+    {
+        AzAlt sunAzAlt;
+        RADec sunRaDec;
+        Astronomy::sunPosition(sunAzAlt, sunRaDec, m_settings.m_latitude, m_settings.m_longitude, observationTime);
+        if (sunAzAlt.alt >= sunDayElevation)
+        {
+            m_autoNight = false;
+            m_haveAutoModeState = true;
+            return false;
+        }
+        if (sunAzAlt.alt <= sunNightElevation)
+        {
+            m_autoNight = true;
+            m_haveAutoModeState = true;
+            return true;
+        }
+        // Twilight: neither path is clearly right, so let the brightness heuristic decide
     }
 
     const double meanBrightness = cv::mean(medianGray, evaluationMask)[0];
@@ -384,7 +424,7 @@ bool CameraCloudDetector::prepareWorkImagesCuda(const cv::cuda::GpuMat& bgrGpu, 
 }
 #endif
 
-void CameraCloudDetector::applyCloudDetection(const cv::Mat& workBgr, const cv::Mat& rawGray, const cv::Mat& gray, const cv::Rect& roi, const cv::Rect& contentRect, CameraPipelineCloud& cloud, cv::Mat* debugMask)
+void CameraCloudDetector::applyCloudDetection(const cv::Mat& workBgr, const cv::Mat& rawGray, const cv::Mat& gray, const cv::Rect& roi, const cv::Rect& contentRect, const QDateTime& captureDateTime, CameraPipelineCloud& cloud, cv::Mat* debugMask)
 {
     PROFILER_START();
 
@@ -427,7 +467,7 @@ void CameraCloudDetector::applyCloudDetection(const cv::Mat& workBgr, const cv::
         evaluationMask = combinedMask;
     }
 
-    const bool night = resolveNightMode(gray, evaluationMask);
+    const bool night = resolveNightMode(gray, evaluationMask, captureDateTime);
 
     cv::Mat mask;
     if (night)

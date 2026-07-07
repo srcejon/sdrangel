@@ -33,9 +33,11 @@ add_library(modemmeshcore
 
 # Vendored Monocypher (BSD-2-Clause OR CC0-1.0) is intentionally untouched;
 # silence sdrangel's strict-warning policy for the two .c files.
-set_source_files_properties(monocypher.c monocypher-ed25519.c
-    PROPERTIES COMPILE_FLAGS "-Wno-unused-function -Wno-unused-parameter"
-)
+if (NOT MSVC)
+    set_source_files_properties(monocypher.c monocypher-ed25519.c
+        PROPERTIES COMPILE_FLAGS "-Wno-unused-function -Wno-unused-parameter"
+    )
+endif()
 
 target_link_libraries(modemmeshcore
     Qt::Core

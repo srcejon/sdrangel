@@ -422,8 +422,8 @@ int MeshcoreMod::webapiSettingsGet(
     QString& errorMessage)
 {
     (void) errorMessage;
-    response.setMeshtasticModSettings(new SWGSDRangel::SWGMeshtasticModSettings());
-    response.getMeshtasticModSettings()->init();
+    response.setMeshcoreModSettings(new SWGSDRangel::SWGMeshcoreModSettings());
+    response.getMeshcoreModSettings()->init();
     webapiFormatChannelSettings(response, m_settings);
 
     return 200;
@@ -468,82 +468,82 @@ void MeshcoreMod::webapiUpdateChannelSettings(
         SWGSDRangel::SWGChannelSettings& response)
 {
     if (channelSettingsKeys.contains("inputFrequencyOffset")) {
-        settings.m_inputFrequencyOffset = response.getMeshtasticModSettings()->getInputFrequencyOffset();
+        settings.m_inputFrequencyOffset = response.getMeshcoreModSettings()->getInputFrequencyOffset();
     }
     if (channelSettingsKeys.contains("bandwidthIndex")) {
-        settings.m_bandwidthIndex = response.getMeshtasticModSettings()->getBandwidthIndex();
+        settings.m_bandwidthIndex = response.getMeshcoreModSettings()->getBandwidthIndex();
     }
     if (channelSettingsKeys.contains("spreadFactor")) {
-        settings.m_spreadFactor = response.getMeshtasticModSettings()->getSpreadFactor();
+        settings.m_spreadFactor = response.getMeshcoreModSettings()->getSpreadFactor();
     }
     if (channelSettingsKeys.contains("deBits")) {
-        settings.m_deBits = response.getMeshtasticModSettings()->getDeBits();
+        settings.m_deBits = response.getMeshcoreModSettings()->getDeBits();
     }
     if (channelSettingsKeys.contains("preambleChirps")) {
-        settings.m_preambleChirps = response.getMeshtasticModSettings()->getPreambleChirps();
+        settings.m_preambleChirps = response.getMeshcoreModSettings()->getPreambleChirps();
     }
     if (channelSettingsKeys.contains("quietMillis")) {
-        settings.m_quietMillis = response.getMeshtasticModSettings()->getQuietMillis();
+        settings.m_quietMillis = response.getMeshcoreModSettings()->getQuietMillis();
     }
     if (channelSettingsKeys.contains("syncWord")) {
-        settings.m_syncWord = response.getMeshtasticModSettings()->getSyncWord();
+        settings.m_syncWord = response.getMeshcoreModSettings()->getSyncWord();
     }
     if (channelSettingsKeys.contains("syncWord")) {
-        settings.m_syncWord = response.getMeshtasticModSettings()->getSyncWord();
+        settings.m_syncWord = response.getMeshcoreModSettings()->getSyncWord();
     }
     if (channelSettingsKeys.contains("channelMute")) {
-        settings.m_channelMute = response.getMeshtasticModSettings()->getChannelMute() != 0;
+        settings.m_channelMute = response.getMeshcoreModSettings()->getChannelMute() != 0;
     }
     if (channelSettingsKeys.contains("nbParityBits")) {
-        settings.m_nbParityBits = response.getMeshtasticModSettings()->getNbParityBits();
+        settings.m_nbParityBits = response.getMeshcoreModSettings()->getNbParityBits();
     }
     if (channelSettingsKeys.contains("textMessage")) {
-        settings.m_textMessage = *response.getMeshtasticModSettings()->getTextMessage();
+        settings.m_textMessage = *response.getMeshcoreModSettings()->getTextMessage();
     }
     if (channelSettingsKeys.contains("messageRepeat")) {
-        settings.m_messageRepeat = response.getMeshtasticModSettings()->getMessageRepeat();
+        settings.m_messageRepeat = response.getMeshcoreModSettings()->getMessageRepeat();
     }
     if (channelSettingsKeys.contains("udpEnabled")) {
-        settings.m_udpEnabled = response.getMeshtasticModSettings()->getUdpEnabled();
+        settings.m_udpEnabled = response.getMeshcoreModSettings()->getUdpEnabled();
     }
     if (channelSettingsKeys.contains("udpAddress")) {
-        settings.m_udpAddress = *response.getMeshtasticModSettings()->getUdpAddress();
+        settings.m_udpAddress = *response.getMeshcoreModSettings()->getUdpAddress();
     }
     if (channelSettingsKeys.contains("udpPort")) {
-        settings.m_udpPort = response.getMeshtasticModSettings()->getUdpPort();
+        settings.m_udpPort = response.getMeshcoreModSettings()->getUdpPort();
     }
     if (channelSettingsKeys.contains("invertRamps")) {
-        settings.m_invertRamps = response.getMeshtasticModSettings()->getInvertRamps();
+        settings.m_invertRamps = response.getMeshcoreModSettings()->getInvertRamps();
     }
     if (channelSettingsKeys.contains("rgbColor")) {
-        settings.m_rgbColor = response.getMeshtasticModSettings()->getRgbColor();
+        settings.m_rgbColor = response.getMeshcoreModSettings()->getRgbColor();
     }
     if (channelSettingsKeys.contains("title")) {
-        settings.m_title = *response.getMeshtasticModSettings()->getTitle();
+        settings.m_title = *response.getMeshcoreModSettings()->getTitle();
     }
     if (channelSettingsKeys.contains("streamIndex")) {
-        settings.m_streamIndex = response.getMeshtasticModSettings()->getStreamIndex();
+        settings.m_streamIndex = response.getMeshcoreModSettings()->getStreamIndex();
     }
     if (channelSettingsKeys.contains("useReverseAPI")) {
-        settings.m_useReverseAPI = response.getMeshtasticModSettings()->getUseReverseApi() != 0;
+        settings.m_useReverseAPI = response.getMeshcoreModSettings()->getUseReverseApi() != 0;
     }
     if (channelSettingsKeys.contains("reverseAPIAddress")) {
-        settings.m_reverseAPIAddress = *response.getMeshtasticModSettings()->getReverseApiAddress();
+        settings.m_reverseAPIAddress = *response.getMeshcoreModSettings()->getReverseApiAddress();
     }
     if (channelSettingsKeys.contains("reverseAPIPort")) {
-        settings.m_reverseAPIPort = response.getMeshtasticModSettings()->getReverseApiPort();
+        settings.m_reverseAPIPort = response.getMeshcoreModSettings()->getReverseApiPort();
     }
     if (channelSettingsKeys.contains("reverseAPIDeviceIndex")) {
-        settings.m_reverseAPIDeviceIndex = response.getMeshtasticModSettings()->getReverseApiDeviceIndex();
+        settings.m_reverseAPIDeviceIndex = response.getMeshcoreModSettings()->getReverseApiDeviceIndex();
     }
     if (channelSettingsKeys.contains("reverseAPIChannelIndex")) {
-        settings.m_reverseAPIChannelIndex = response.getMeshtasticModSettings()->getReverseApiChannelIndex();
+        settings.m_reverseAPIChannelIndex = response.getMeshcoreModSettings()->getReverseApiChannelIndex();
     }
     if (settings.m_channelMarker && channelSettingsKeys.contains("channelMarker")) {
-        settings.m_channelMarker->updateFrom(channelSettingsKeys, response.getMeshtasticModSettings()->getChannelMarker());
+        settings.m_channelMarker->updateFrom(channelSettingsKeys, response.getMeshcoreModSettings()->getChannelMarker());
     }
     if (settings.m_rollupState && channelSettingsKeys.contains("rollupState")) {
-        settings.m_rollupState->updateFrom(channelSettingsKeys, response.getMeshtasticModSettings()->getRollupState());
+        settings.m_rollupState->updateFrom(channelSettingsKeys, response.getMeshcoreModSettings()->getRollupState());
     }
 }
 
@@ -552,8 +552,8 @@ int MeshcoreMod::webapiReportGet(
     QString& errorMessage)
 {
     (void) errorMessage;
-    response.setMeshtasticModReport(new SWGSDRangel::SWGMeshtasticModReport());
-    response.getMeshtasticModReport()->init();
+    response.setMeshcoreModReport(new SWGSDRangel::SWGMeshcoreModReport());
+    response.getMeshcoreModReport()->init();
     webapiFormatChannelReport(response);
     return 200;
 }
@@ -582,87 +582,87 @@ int MeshcoreMod::webapiActionsPost(
 
 void MeshcoreMod::webapiFormatChannelSettings(SWGSDRangel::SWGChannelSettings& response, const MeshcoreModSettings& settings)
 {
-    response.getMeshtasticModSettings()->setInputFrequencyOffset(settings.m_inputFrequencyOffset);
-    response.getMeshtasticModSettings()->setBandwidthIndex(settings.m_bandwidthIndex);
-    response.getMeshtasticModSettings()->setSpreadFactor(settings.m_spreadFactor);
-    response.getMeshtasticModSettings()->setDeBits(settings.m_deBits);
-    response.getMeshtasticModSettings()->setPreambleChirps(settings.m_preambleChirps);
-    response.getMeshtasticModSettings()->setQuietMillis(settings.m_quietMillis);
-    response.getMeshtasticModSettings()->setSyncWord(settings.m_syncWord);
-    response.getMeshtasticModSettings()->setChannelMute(settings.m_channelMute ? 1 : 0);
-    response.getMeshtasticModSettings()->setNbParityBits(settings.m_nbParityBits);
+    response.getMeshcoreModSettings()->setInputFrequencyOffset(settings.m_inputFrequencyOffset);
+    response.getMeshcoreModSettings()->setBandwidthIndex(settings.m_bandwidthIndex);
+    response.getMeshcoreModSettings()->setSpreadFactor(settings.m_spreadFactor);
+    response.getMeshcoreModSettings()->setDeBits(settings.m_deBits);
+    response.getMeshcoreModSettings()->setPreambleChirps(settings.m_preambleChirps);
+    response.getMeshcoreModSettings()->setQuietMillis(settings.m_quietMillis);
+    response.getMeshcoreModSettings()->setSyncWord(settings.m_syncWord);
+    response.getMeshcoreModSettings()->setChannelMute(settings.m_channelMute ? 1 : 0);
+    response.getMeshcoreModSettings()->setNbParityBits(settings.m_nbParityBits);
 
-    if (response.getMeshtasticModSettings()->getTextMessage()) {
-        *response.getMeshtasticModSettings()->getTextMessage() = settings.m_textMessage;
+    if (response.getMeshcoreModSettings()->getTextMessage()) {
+        *response.getMeshcoreModSettings()->getTextMessage() = settings.m_textMessage;
     } else {
-        response.getMeshtasticModSettings()->setTextMessage(new QString(settings.m_textMessage));
+        response.getMeshcoreModSettings()->setTextMessage(new QString(settings.m_textMessage));
     }
 
-    response.getMeshtasticModSettings()->setMessageRepeat(settings.m_messageRepeat);
-    response.getMeshtasticModSettings()->setUdpEnabled(settings.m_udpEnabled);
-    response.getMeshtasticModSettings()->setUdpAddress(new QString(settings.m_udpAddress));
-    response.getMeshtasticModSettings()->setUdpPort(settings.m_udpPort);
-    response.getMeshtasticModSettings()->setInvertRamps(settings.m_invertRamps ? 1 : 0);
+    response.getMeshcoreModSettings()->setMessageRepeat(settings.m_messageRepeat);
+    response.getMeshcoreModSettings()->setUdpEnabled(settings.m_udpEnabled);
+    response.getMeshcoreModSettings()->setUdpAddress(new QString(settings.m_udpAddress));
+    response.getMeshcoreModSettings()->setUdpPort(settings.m_udpPort);
+    response.getMeshcoreModSettings()->setInvertRamps(settings.m_invertRamps ? 1 : 0);
 
-    response.getMeshtasticModSettings()->setRgbColor(settings.m_rgbColor);
+    response.getMeshcoreModSettings()->setRgbColor(settings.m_rgbColor);
 
-    if (response.getMeshtasticModSettings()->getTitle()) {
-        *response.getMeshtasticModSettings()->getTitle() = settings.m_title;
+    if (response.getMeshcoreModSettings()->getTitle()) {
+        *response.getMeshcoreModSettings()->getTitle() = settings.m_title;
     } else {
-        response.getMeshtasticModSettings()->setTitle(new QString(settings.m_title));
+        response.getMeshcoreModSettings()->setTitle(new QString(settings.m_title));
     }
 
-    response.getMeshtasticModSettings()->setUseReverseApi(settings.m_useReverseAPI ? 1 : 0);
+    response.getMeshcoreModSettings()->setUseReverseApi(settings.m_useReverseAPI ? 1 : 0);
 
-    if (response.getMeshtasticModSettings()->getReverseApiAddress()) {
-        *response.getMeshtasticModSettings()->getReverseApiAddress() = settings.m_reverseAPIAddress;
+    if (response.getMeshcoreModSettings()->getReverseApiAddress()) {
+        *response.getMeshcoreModSettings()->getReverseApiAddress() = settings.m_reverseAPIAddress;
     } else {
-        response.getMeshtasticModSettings()->setReverseApiAddress(new QString(settings.m_reverseAPIAddress));
+        response.getMeshcoreModSettings()->setReverseApiAddress(new QString(settings.m_reverseAPIAddress));
     }
 
-    response.getMeshtasticModSettings()->setReverseApiPort(settings.m_reverseAPIPort);
-    response.getMeshtasticModSettings()->setReverseApiDeviceIndex(settings.m_reverseAPIDeviceIndex);
-    response.getMeshtasticModSettings()->setReverseApiChannelIndex(settings.m_reverseAPIChannelIndex);
+    response.getMeshcoreModSettings()->setReverseApiPort(settings.m_reverseAPIPort);
+    response.getMeshcoreModSettings()->setReverseApiDeviceIndex(settings.m_reverseAPIDeviceIndex);
+    response.getMeshcoreModSettings()->setReverseApiChannelIndex(settings.m_reverseAPIChannelIndex);
 
     if (settings.m_channelMarker)
     {
-        if (response.getMeshtasticModSettings()->getChannelMarker())
+        if (response.getMeshcoreModSettings()->getChannelMarker())
         {
-            settings.m_channelMarker->formatTo(response.getMeshtasticModSettings()->getChannelMarker());
+            settings.m_channelMarker->formatTo(response.getMeshcoreModSettings()->getChannelMarker());
         }
         else
         {
             SWGSDRangel::SWGChannelMarker *swgChannelMarker = new SWGSDRangel::SWGChannelMarker();
             settings.m_channelMarker->formatTo(swgChannelMarker);
-            response.getMeshtasticModSettings()->setChannelMarker(swgChannelMarker);
+            response.getMeshcoreModSettings()->setChannelMarker(swgChannelMarker);
         }
     }
 
     if (settings.m_rollupState)
     {
-        if (response.getMeshtasticModSettings()->getRollupState())
+        if (response.getMeshcoreModSettings()->getRollupState())
         {
-            settings.m_rollupState->formatTo(response.getMeshtasticModSettings()->getRollupState());
+            settings.m_rollupState->formatTo(response.getMeshcoreModSettings()->getRollupState());
         }
         else
         {
             SWGSDRangel::SWGRollupState *swgRollupState = new SWGSDRangel::SWGRollupState();
             settings.m_rollupState->formatTo(swgRollupState);
-            response.getMeshtasticModSettings()->setRollupState(swgRollupState);
+            response.getMeshcoreModSettings()->setRollupState(swgRollupState);
         }
     }
 }
 
 void MeshcoreMod::webapiFormatChannelReport(SWGSDRangel::SWGChannelReport& response)
 {
-    response.getMeshtasticModReport()->setChannelPowerDb(CalcDb::dbPower(getMagSq()));
-    response.getMeshtasticModReport()->setChannelSampleRate(m_basebandSource->getChannelSampleRate());
+    response.getMeshcoreModReport()->setChannelPowerDb(CalcDb::dbPower(getMagSq()));
+    response.getMeshcoreModReport()->setChannelSampleRate(m_basebandSource->getChannelSampleRate());
     float fourthsMs = ((1<<m_settings.m_spreadFactor) * 250.0) / MeshcoreModSettings::bandwidths[m_settings.m_bandwidthIndex];
     float controlMs = (4*m_settings.m_preambleChirps + 8 + 9) * fourthsMs; // preamble + sync word + SFD
-    response.getMeshtasticModReport()->setPayloadTimeMs(m_currentPayloadTime);
-    response.getMeshtasticModReport()->setTotalTimeMs(m_currentPayloadTime + controlMs);
-    response.getMeshtasticModReport()->setSymbolTimeMs(4.0 * fourthsMs);
-    response.getMeshtasticModReport()->setPlaying(getModulatorActive() ? 1 : 0);
+    response.getMeshcoreModReport()->setPayloadTimeMs(m_currentPayloadTime);
+    response.getMeshcoreModReport()->setTotalTimeMs(m_currentPayloadTime + controlMs);
+    response.getMeshcoreModReport()->setSymbolTimeMs(4.0 * fourthsMs);
+    response.getMeshcoreModReport()->setPlaying(getModulatorActive() ? 1 : 0);
 }
 
 void MeshcoreMod::webapiReverseSendSettings(QList<QString>& channelSettingsKeys, const MeshcoreModSettings& settings, bool force)
@@ -726,8 +726,8 @@ void MeshcoreMod::webapiFormatChannelSettings(
     swgChannelSettings->setOriginatorChannelIndex(getIndexInDeviceSet());
     swgChannelSettings->setOriginatorDeviceSetIndex(getDeviceSetIndex());
     swgChannelSettings->setChannelType(new QString(m_channelId));
-    swgChannelSettings->setMeshtasticModSettings(new SWGSDRangel::SWGMeshtasticModSettings());
-    SWGSDRangel::SWGMeshtasticModSettings *swgMeshcoreModSettings = swgChannelSettings->getMeshtasticModSettings();
+    swgChannelSettings->setMeshcoreModSettings(new SWGSDRangel::SWGMeshcoreModSettings());
+    SWGSDRangel::SWGMeshcoreModSettings *swgMeshcoreModSettings = swgChannelSettings->getMeshcoreModSettings();
 
     // transfer data that has been modified. When force is on transfer all data except reverse API data
 

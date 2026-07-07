@@ -42,10 +42,8 @@ Functional surfaces:
   keys dialog rather than a numbered Channel selector.
 
 Outstanding:
-- WebAPI schema reuses `SWGMeshtasticDemodSettings` /
-  `SWGMeshtasticDemodReport` as a placeholder; a dedicated
-  `SWGMeshcoreDemod*` schema would require regenerating the SWG
-  bindings.
+- WebAPI schema now uses dedicated `SWGMeshcoreDemodSettings` /
+  `SWGMeshcoreDemodReport` schemas (no longer a placeholder).
 
 <h2>References</h2>
 

@@ -24,6 +24,10 @@ if (ENABLE_CHANNELTX_MODMESHTASTIC)
     add_subdirectory(modmeshtastic)
 endif()
 
+if (ENABLE_CHANNELTX_MODMESHCORE)
+    add_subdirectory(modmeshcore)
+endif()
+
 if (ENABLE_CHANNELTX_MODNFM)
     add_subdirectory(modnfm)
 endif()

@@ -61,6 +61,8 @@
 #include "SWGM17ModSettings.h"
 #include "SWGMeshtasticDemodSettings.h"
 #include "SWGMeshtasticModSettings.h"
+#include "SWGMeshcoreDemodSettings.h"
+#include "SWGMeshcoreModSettings.h"
 #include "SWGMeteorSettings.h"
 #include "SWGNFMDemodSettings.h"
 #include "SWGNFMModSettings.h"
@@ -229,6 +231,12 @@ public:
 
     SWGMeshtasticModSettings* getMeshtasticModSettings();
     void setMeshtasticModSettings(SWGMeshtasticModSettings* meshtastic_mod_settings);
+
+    SWGMeshcoreDemodSettings* getMeshcoreDemodSettings();
+    void setMeshcoreDemodSettings(SWGMeshcoreDemodSettings* meshcore_demod_settings);
+
+    SWGMeshcoreModSettings* getMeshcoreModSettings();
+    void setMeshcoreModSettings(SWGMeshcoreModSettings* meshcore_mod_settings);
 
     SWGMeteorSettings* getMeteorSettings();
     void setMeteorSettings(SWGMeteorSettings* meteor_settings);
@@ -440,6 +448,12 @@ private:
 
     SWGMeshtasticModSettings* meshtastic_mod_settings;
     bool m_meshtastic_mod_settings_isSet;
+
+    SWGMeshcoreDemodSettings* meshcore_demod_settings;
+    bool m_meshcore_demod_settings_isSet;
+
+    SWGMeshcoreModSettings* meshcore_mod_settings;
+    bool m_meshcore_mod_settings_isSet;
 
     SWGMeteorSettings* meteor_settings;
     bool m_meteor_settings_isSet;

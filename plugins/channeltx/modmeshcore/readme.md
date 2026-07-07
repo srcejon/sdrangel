@@ -49,9 +49,9 @@ Functional surfaces:
   concept.
 
 Outstanding:
-- WebAPI schema reuses `SWGMeshtasticModSettings` as a placeholder; a
-  dedicated `SWGMeshcoreMod*` schema would require regenerating the
-  SWG bindings.
+- WebAPI schema now uses dedicated `SWGMeshcoreModSettings` /
+  `SWGMeshcoreModReport` / `SWGMeshcoreModActions` schemas (no longer
+  a placeholder).
 
 <h2>MESHCORE: command syntax</h2>
 

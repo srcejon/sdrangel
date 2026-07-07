@@ -29,7 +29,7 @@
 const PluginDescriptor MeshcorePlugin::m_pluginDescriptor = {
     MeshcoreDemod::m_channelId,
 	QStringLiteral("MeshCore Demodulator"),
-    QStringLiteral("7.24.0"),
+    QStringLiteral("7.27.1"),
 	QStringLiteral("(c) Edouard Griffiths, F4EXB"),
 	QStringLiteral("https://github.com/f4exb/sdrangel"),
 	true,

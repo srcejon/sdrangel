@@ -30,6 +30,29 @@
 
 using namespace libsgp4;
 
+bool GroundTrackDetails::match(const QDateTime& quantizedDateTime, const QString& tle0, const QString& tle1, const QString& tle2, int groundTrackSteps) const
+{
+    return (m_quantizedDateTime == quantizedDateTime) && (m_tle0 == tle0) && (m_tle1 == tle1) && (m_tle2 == tle2) && (m_groundTrackSteps == groundTrackSteps);
+}
+
+void GroundTrackDetails::update(const QDateTime& quantizedDateTime, const QString& tle0, const QString& tle1, const QString& tle2, int groundTrackSteps)
+{
+    m_quantizedDateTime = quantizedDateTime;
+    m_tle0 = tle0;
+    m_tle1 = tle1;
+    m_tle2 = tle2;
+    m_groundTrackSteps = groundTrackSteps;
+}
+
+void GroundTrackDetails::invalidate()
+{
+    m_quantizedDateTime = QDateTime();
+    m_tle0.clear();
+    m_tle1.clear();
+    m_tle2.clear();
+    m_groundTrackSteps = 0;
+}
+
 // Convert QGP4 DateTime to Qt QDataTime
 static QDateTime dateTimeToQDateTime(DateTime dt)
 {
@@ -48,28 +71,28 @@ static DateTime qDateTimeToDateTime(QDateTime qdt)
     return dt;
 }
 
+// For 3D map, we want to quantize to minutes, so we replace previous
+// position data, rather than insert additional positions alongside the old
+// which can result is the camera view jumping around
+static QDateTime quantizeDateTime(const QDateTime& dateTime)
+{
+#if QT_CONFIG(timezone)
+    return QDateTime(dateTime.date(), QTime(dateTime.time().hour(), dateTime.time().minute()), dateTime.timeZone());
+#else
+    return QDateTime(dateTime.date(), QTime(dateTime.time().hour(), dateTime.time().minute()));
+#endif
+}
+
 // Get ground track
 // Throws SatelliteException, DecayedException and TleException
-void getGroundTrack(QDateTime dateTime,
-                        const QString& tle0, const QString& tle1, const QString& tle2,
+static void getGroundTrack(QDateTime dateTime,
+                        const SGP4& sgp4, const OrbitalElements& ele,
                         int steps, bool forward,
                         QList<QGeoCoordinate>& coordinates,
                         QList<QDateTime>& coordinateDateTimes)
 {
-    Tle tle = Tle(tle0.toStdString(), tle1.toStdString(), tle2.toStdString());
-    SGP4 sgp4(tle);
-    OrbitalElements ele(tle);
     double periodMins;
     double timeStep;
-
-    // For 3D map, we want to quantize to minutes, so we replace previous
-    // position data, rather than insert additional positions alongside the old
-    // which can result is the camera view jumping around
-#if QT_CONFIG(timezone)
-    dateTime = QDateTime(dateTime.date(), QTime(dateTime.time().hour(), dateTime.time().minute()), dateTime.timeZone());
-#else
-    dateTime = QDateTime(dateTime.date(), QTime(dateTime.time().hour(), dateTime.time().minute()));
-#endif
 
     // Note 2D map doesn't support paths wrapping around Earth several times
     // So we just have a slight overlap here, with the future track being longer
@@ -512,14 +535,33 @@ void getSatelliteState(QDateTime dateTime,
                                                 noOfPasses);
         }
 
-        satState->m_groundTrack.clear();
-        satState->m_groundTrackDateTime.clear();
-        satState->m_predictedGroundTrack.clear();
-        satState->m_predictedGroundTrackDateTime.clear();
         if (calcGroundTrack)
         {
-            getGroundTrack(dateTime, tle0, tle1, tle2, groundTrackSteps, false, satState->m_groundTrack, satState->m_groundTrackDateTime);
-            getGroundTrack(dateTime, tle0, tle1, tle2, groundTrackSteps, true, satState->m_predictedGroundTrack, satState->m_predictedGroundTrackDateTime);
+            QDateTime quantizedDateTime = quantizeDateTime(dateTime);
+
+            if (!satState->m_groundTrackDetails.match(quantizedDateTime, tle0, tle1, tle2, groundTrackSteps))
+            {
+                QList<QGeoCoordinate> groudTrack, predictedGroundTrack;
+                QList<QDateTime> groudTrackDateTimes, predictedGroudTrackDateTimes;
+
+                getGroundTrack(quantizedDateTime, sgp4, ele, groundTrackSteps, false, groudTrack, groudTrackDateTimes);
+                getGroundTrack(quantizedDateTime, sgp4, ele, groundTrackSteps, true, predictedGroundTrack, predictedGroudTrackDateTimes);
+
+                satState->m_groundTrack = groudTrack;
+                satState->m_groundTrackDateTime = groudTrackDateTimes;
+                satState->m_predictedGroundTrack = predictedGroundTrack;
+                satState->m_predictedGroundTrackDateTime = predictedGroudTrackDateTimes;
+
+                satState->m_groundTrackDetails.update(quantizedDateTime, tle0, tle1, tle2, groundTrackSteps);
+            }
+        }
+        else
+        {
+            satState->m_groundTrack.clear();
+            satState->m_groundTrackDateTime.clear();
+            satState->m_predictedGroundTrack.clear();
+            satState->m_predictedGroundTrackDateTime.clear();
+            satState->m_groundTrackDetails.invalidate();
         }
     }
     catch (SatelliteException& se)

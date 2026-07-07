@@ -587,7 +587,7 @@ void SatelliteTrackerWorker::update()
 
                     if (mapMessagePipes.size() > 0)
                     {
-                        const QStringList cubeSats({"AISAT-1", "FOX-1B", "FOX-1C", "FOX-1D", "FOX-1E", "FUNCUBE-1", "NO-84"});
+                        static const QStringList cubeSats({"AISAT-1", "FOX-1B", "FOX-1C", "FOX-1D", "FOX-1E", "FUNCUBE-1", "NO-84"});
                         QString image;
                         QString model;
                         float labelOffset;

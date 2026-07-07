@@ -27,6 +27,18 @@
 using namespace QtCharts;
 #endif
 
+class GroundTrackDetails {
+    QDateTime m_quantizedDateTime;
+    QString m_tle0;
+    QString m_tle1;
+    QString m_tle2;
+    int m_groundTrackSteps = 0;
+public:
+    bool match(const QDateTime& quantizedDateTime, const QString& tle0, const QString& tle1, const QString& tle2, int groundTrackSteps) const;
+    void update(const QDateTime& quantizedDateTime, const QString& tle0, const QString& tle1, const QString& tle2, int groundTrackSteps);
+    void invalidate();
+};
+
 struct SatellitePass {
     QDateTime m_aos;
     QDateTime m_los;
@@ -53,11 +65,8 @@ struct SatelliteState {
     QList<QDateTime> m_groundTrackDateTime;
     QList<QGeoCoordinate> m_predictedGroundTrack;
     QList<QDateTime> m_predictedGroundTrackDateTime;
+    GroundTrackDetails m_groundTrackDetails;
 };
-
-void getGroundTrack(QDateTime dateTime,
-                        const QString& tle0, const QString& tle1, const QString& tle2,
-                        int steps, QList<QGeoCoordinate>& coordinates);
 
 void getSatelliteState(QDateTime dateTime,
                         const QString& tle0, const QString& tle1, const QString& tle2,

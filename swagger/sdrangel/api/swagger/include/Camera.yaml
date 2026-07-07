@@ -817,7 +817,7 @@ CameraSettings:
       description: "Day path: fine-scale texture level above which a region cannot be cloud (rejects roofs/trees); 0 disables: 0 to 255"
       type: integer
     cloudNightThreshold:
-      description: "Night path: threshold on sky-background deviation from the median sky level: 0 to 255"
+      description: "Dark night path: how much brighter than the surrounding sky a region must be to classify as cloud: 0 to 255"
       type: integer
     cloudBackgroundBlur:
       description: "Night path: radius used to estimate the sky background, in downscaled pixels: 1 to 128"

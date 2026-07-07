@@ -873,6 +873,9 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
                     static const double kCenterGrid[] = { -60.0, -30.0, 0.0, 30.0, 60.0 };
                     static const double kK1Grid[] = { -0.15, -0.10, -0.05, 0.0, 0.05 };
                     for (const double cx : kCenterGrid) {
+                        // 125 full-catalog evaluations; check for cancellation each cx row so a
+                        // cancel request during a slow wide-fisheye solve is honoured promptly.
+                        if (isCancellationRequested()) { return finishCancelled(); }
                         for (const double cy : kCenterGrid) {
                             for (const double k1 : kK1Grid) {
                                 const Evaluation swept = evalLens(seedAnchored, cx, cy, k1);
@@ -891,6 +894,7 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
                 // polishes the principal point to its precise value.
                 for (int pass = 0; pass < 5; ++pass)
                 {
+                    if (isCancellationRequested()) { return finishCancelled(); }
                     const int prevMatches = seedAnchored.matchCount;
                     const Evaluation refined = refinePoseStep(seedAnchored);
                     if (!isBetterSeedAnchored(refined, seedAnchored)) {
@@ -925,6 +929,7 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
                     }};
                     for (int pass = 0; pass < 5; ++pass)
                     {
+                        if (isCancellationRequested()) { return finishCancelled(); }
                         const int prevMatches = seedAnchored.matchCount;
                         const QVector<Match> fixedMatches = uniqueValidMatchesForRefinement(
                             catalogContext, starDetections, seedAnchored.matches, nullptr);
@@ -1858,6 +1863,15 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
             poseFalseAlarmLogOdds(catalogContext, selectedFinalPass, imageSize, finalMatchRadius,
                 static_cast<int>(starDetections.size()))
             * 1000.0)));
+    // SHADOW MODE (Track 1a): the astrometry.net per-detection mixture verifier, recorded alongside
+    // faLogOdds so the two can be compared against the heuristic accept/reject bands across the
+    // corpus. Also not gating -- the success criterion is cleaner accept/reject separation than the
+    // per-match sum before it is wired into any decision.
+    recordProfileMetric(QStringLiteral("verify.mixtureLogOddsMilli"),
+        static_cast<qint64>(std::llround(
+            poseVerificationLogOdds(catalogContext, selectedFinalPass, imageSize, finalMatchRadius,
+                static_cast<int>(starDetections.size()))
+            * 1000.0)));
 
     const bool selectedWideBrightAnchorAccepted =
         hasAcceptableWideBrightAnchorSupport(settings, starDetections, selectedFinalPass);
@@ -2425,9 +2439,36 @@ void CameraPlateSolver::requestCancellation()
     }
 }
 
+// R1: default hard wall-clock budget for one top-level solve() (ms). The slowest legitimate
+// solve in the corpus is the dense narrow-7 field at ~30s; this 120s ceiling is >4x that, so
+// it never trips a real solve but caps a pathological or gate-ablated runaway (WS3 pass-2 found
+// the rollAlias reject is one ablation away from a multi-minute solve). 0 disables the bound.
+static constexpr qint64 kDefaultSolveBudgetMs = 120000;
+
+static qint64 resolveSolveBudgetMs()
+{
+    const QByteArray budgetOverride = qgetenv("SDRANGEL_CAMERA_PLATE_SOLVER_BUDGET_MS");
+    if (!budgetOverride.isEmpty()) {
+        bool ok = false;
+        const qint64 value = budgetOverride.toLongLong(&ok);
+        if (ok && (value >= 0)) {
+            return value;
+        }
+    }
+    return kDefaultSolveBudgetMs;
+}
+
 bool CameraPlateSolver::isCancellationRequested() const
 {
-    return m_cancelRequested.load();
+    if (m_cancelRequested.load()) {
+        return true;
+    }
+    // R1: a top-level solve that blows its wall-clock budget is treated as cancelled, so every
+    // existing checkpoint (inner solve, worker contexts, outer retry ladders) unwinds and the
+    // solve returns best-so-far instead of running for minutes. The budget is far above the
+    // slowest legitimate solve, so this never affects a real result.
+    const qint64 budgetMs = m_solveBudgetMs.load();
+    return (budgetMs > 0) && m_solveWallClock.isValid() && (m_solveWallClock.elapsed() > budgetMs);
 }
 
 // The configured Az/El search radius is an upper bound on how far the true pointing might
@@ -2454,6 +2495,11 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
     // from a previous solve doesn't block subsequent ones.
     m_cancelRequested.store(false);
     m_cancelNetworkRequests.store(false);
+    // R1: arm the per-solve wall-clock deadline. Started here on the solver thread before any
+    // worker threads spawn; isCancellationRequested() reports true once it is exceeded so the
+    // solve is provably time-bounded regardless of input or acceptance-gate configuration.
+    m_solveBudgetMs.store(resolveSolveBudgetMs());
+    m_solveWallClock.start();
 
     // Dump every setting that drives the solve so a GUI run and a test-harness run
     // can be diffed line-for-line when they disagree on the same image. Split across
@@ -2540,19 +2586,192 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
     QElapsedTimer totalSolveTimer;
     totalSolveTimer.start();
 
+    // Handedness (mirror) adoption test for all-sky fisheye. An up-looking all-sky camera
+    // images the sky REFLECTED, so the orientation-preserving projector cannot fit any pose and
+    // the solver stalls on the least-bad wrong-roll pose. Solving the horizontally-mirrored
+    // detection set can recover the true pose. This comparator decides when to keep the mirror.
+    //
+    // The available signal is match count + global rms (the named bright-anchor field is 0 on
+    // real all-sky corpora, whose catalogue stars are not HIP/HR/HD-named). That signal does NOT
+    // reliably separate a true mirror from a coincidental wrong-roll pose: on a dense all-sky
+    // field a wrong pose can match as many faint stars at a similar (or lower) rms than the
+    // correct pose. So this test is deliberately conservative and the whole retry is opt-in
+    // (mirrorHandednessEnabled, default OFF) — see the block below. Thresholds are env-overridable
+    // (SDRANGEL_CAMERA_PLATE_SOLVER_MIRROR_*) for calibration; the baked defaults are conservative.
+    struct MirrorAdoptThresholds {
+        int minMatches;         // sanity floor on the mirror's matched stars
+        double maxRmsPixels;    // sanity cap on the mirror's global rms
+        double rmsAbsMargin;    // mirror rms must be <= normal rms - this (vs a solved normal)
+        double rmsRatio;        // and <= normal rms * this
+        double minMatchRatio;   // and mirror matches >= normal matches * this (not a much sparser fit)
+        double soloMaxRmsPixels;// when normal did NOT solve, adopt if mirror rms <= this
+    };
+    const auto readMirrorThreshold = [](const char* name, double fallback) -> double {
+        const QByteArray value = qgetenv(name);
+        if (!value.isEmpty()) {
+            bool ok = false;
+            const double parsed = value.toDouble(&ok);
+            if (ok) { return parsed; }
+        }
+        return fallback;
+    };
+    // All-sky handedness (mirror) auto-detect. DEFAULT OFF: measurement showed that adopting a
+    // mirror on match-statistics alone regresses correct NON-mirrored solves (synthetic fisheye
+    // mode1 -2, mode4 -1) because a wrong mirror pose on a dense field can score a lower rms than
+    // the correct normal pose — the same all-sky "verifier wall" that blocks wrong-pose rejection
+    // elsewhere in this solver. There is no match-statistics signal that separates a true mirror
+    // from a coincidental one, so enabling adoption by default would change synthetic verdicts
+    // unexplained. The mechanism is kept behind an opt-in for a KNOWN-mirrored all-sky camera
+    // (where every frame benefits and the false-adopt risk is absent). See the plan doc's
+    // "AUTO-DETECT" section for the full evidence and the image-level-flip follow-on.
+    const bool mirrorHandednessEnabled =
+        qEnvironmentVariableIsSet("SDRANGEL_CAMERA_PLATE_SOLVER_MIRROR");
+    const MirrorAdoptThresholds mirrorThresholds {
+        static_cast<int>(readMirrorThreshold("SDRANGEL_CAMERA_PLATE_SOLVER_MIRROR_MIN_MATCHES", 12)),
+        readMirrorThreshold("SDRANGEL_CAMERA_PLATE_SOLVER_MIRROR_MAX_RMS", 12.0),
+        readMirrorThreshold("SDRANGEL_CAMERA_PLATE_SOLVER_MIRROR_RMS_ABS_MARGIN", 2.5),
+        readMirrorThreshold("SDRANGEL_CAMERA_PLATE_SOLVER_MIRROR_RMS_RATIO", 0.80),
+        readMirrorThreshold("SDRANGEL_CAMERA_PLATE_SOLVER_MIRROR_MIN_MATCH_RATIO", 0.80),
+        readMirrorThreshold("SDRANGEL_CAMERA_PLATE_SOLVER_MIRROR_SOLO_MAX_RMS", 9.0)
+    };
+    const auto mirrorResultClearlyBetter = [&mirrorThresholds](const CameraPlateSolveResult& mirror,
+                                              const CameraPlateSolveResult& normal) -> bool {
+        // The named bright-anchor discriminator is unavailable on real all-sky corpora (their
+        // catalogue stars are not HIP/HR/HD-named, so namedBrightAnchorMatches is 0), so this
+        // works from total matched count and global rms. That signal CANNOT reliably tell a true
+        // mirror from a coincidental one (the documented all-sky verifier wall): a wrong pose can
+        // match many faint stars at a low rms. Consequently adoption is NOT always safe — a wrong
+        // mirror with a low rms can even displace a CORRECT normal solve whose rms is higher
+        // (measured on a near-zenith truth-seeded TREx frame). That is why the whole retry is
+        // opt-in (default OFF): with it off, every corpus is byte-identical. When on, the rule is
+        // kept deliberately conservative so it fires only on a solid, clearly-better mirror.
+        if (!mirror.m_solved
+            || (mirror.m_matchedStars < mirrorThresholds.minMatches)
+            || !(mirror.m_rmsErrorPixels > 0.0)
+            || (mirror.m_rmsErrorPixels > mirrorThresholds.maxRmsPixels))
+        {
+            return false;
+        }
+        if (normal.m_solved)
+        {
+            const bool lowerRms =
+                (mirror.m_rmsErrorPixels <= (normal.m_rmsErrorPixels - mirrorThresholds.rmsAbsMargin))
+                && (mirror.m_rmsErrorPixels <= (mirrorThresholds.rmsRatio * normal.m_rmsErrorPixels));
+            const bool notMuchSparser =
+                mirror.m_matchedStars
+                    >= static_cast<int>(std::floor(mirrorThresholds.minMatchRatio * normal.m_matchedStars));
+            return lowerRms && notMuchSparser;
+        }
+        // Normal did not solve: adopt a solid, tight mirror lock.
+        return mirror.m_rmsErrorPixels <= mirrorThresholds.soloMaxRmsPixels;
+    };
+    // Clear a detection's per-solve match annotations (keeping its intrinsic geometry/quality)
+    // so a re-solve on the same vector starts from a clean slate. Used before the mirror solve
+    // so the adopted-mirror output carries only the mirror pose's matches.
+    const auto clearDetectionSolveState = [](CameraPipelineStarDetection& detection) {
+        detection.m_projectedCenter = QPointF();
+        detection.m_label.clear();
+        detection.m_matchDistancePixels = 0.0f;
+        detection.m_catalogMagnitude = 0.0f;
+        detection.m_catalogRightAscensionDegrees = std::numeric_limits<double>::quiet_NaN();
+        detection.m_catalogDeclinationDegrees = std::numeric_limits<double>::quiet_NaN();
+        detection.m_catalogSpectralType.clear();
+        detection.m_solved = false;
+    };
+
     auto runSolve = [&](const CameraSettings& runSettings, const QString& reason, bool disableRollRecovery = false) {
         QElapsedTimer runTimer;
         runTimer.start();
-        SolverContext context(this);
-        context.m_disableRollRecovery = disableRollRecovery;
 
-        // Swap the persistent caches into the SolverContext so that Siril SPCC data
-        // fetched in this solve is reused in future solves rather than discarded.
-        std::swap(context.m_sirilRangeCache, m_sirilRangeCache);
-        std::swap(context.m_sirilIndexCache, m_sirilIndexCache);
+        // One solve on the current detection vector, swapping the persistent Siril caches in
+        // and out so SPCC data fetched here is reused by later solves rather than discarded.
+        const auto solveOnce = [&](QVector<CameraPipelineStarDetection>& detections) {
+            SolverContext context(this);
+            context.m_disableRollRecovery = disableRollRecovery;
+            std::swap(context.m_sirilRangeCache, m_sirilRangeCache);
+            std::swap(context.m_sirilIndexCache, m_sirilIndexCache);
+            CameraPlateSolveResult once = context.solve(runSettings, imageSize, captureDateTime, detections);
+            once.m_profileSummary = context.profileSummary();
+            std::swap(context.m_sirilRangeCache, m_sirilRangeCache);
+            std::swap(context.m_sirilIndexCache, m_sirilIndexCache);
+            evictSirilRangeCacheIfNeeded();
+            return once;
+        };
 
-        CameraPlateSolveResult runResult = context.solve(runSettings, imageSize, captureDateTime, starDetections);
-        runResult.m_profileSummary = context.profileSummary();
+        CameraPlateSolveResult runResult = solveOnce(starDetections);
+
+        // All-sky handedness: for a fisheye/wide (non-rectilinear) context, ALWAYS also solve
+        // the mirrored detection set and adopt it when decisively better (see
+        // mirrorResultClearlyBetter). Gated to non-rectilinear so REAL/narrow stays byte-
+        // identical and pays no 2x cost. The retry must run regardless of runResult.m_solved:
+        // the all-sky failures return m_solved=true on a wrong-roll pose, so a failure-gated
+        // retry would miss exactly the cases that need it.
+        const bool fisheyeContext =
+            (runSettings.m_lensProjection != CameraSettings::LensProjectionRectilinear);
+        if (fisheyeContext && mirrorHandednessEnabled && !isCancellationRequested())
+        {
+            const double maxX = static_cast<double>(imageSize.width() - 1);
+            // Solve the horizontally-mirrored detection set on a COPY, so the original
+            // detections' centroids are never disturbed. Each mirrored detection keeps the same
+            // index as its original, so an adopted mirror's match annotations can be transferred
+            // back by index while the original centroid (which the caller/harness reads for
+            // validation) stays put. This ties label -> original-position by index, so an
+            // adopted mirror shows its matches at the true image positions with no coordinate
+            // round-trip on the shared vector.
+            QVector<CameraPipelineStarDetection> mirroredDetections = starDetections;
+            for (CameraPipelineStarDetection& detection : mirroredDetections)
+            {
+                detection.m_center.setX(maxX - detection.m_center.x());
+                clearDetectionSolveState(detection);
+            }
+            const CameraPlateSolveResult mirrorResult = solveOnce(mirroredDetections);
+            const bool adoptMirror = mirrorResultClearlyBetter(mirrorResult, runResult);
+            // Split across statements: MSVC/Qt qCInfo silently truncates a single line past
+            // ~10 streamed fields, so keep each short.
+            qCInfo(cameraPlateSolverLog).nospace()
+                << "CameraPlateSolver: handedness " << reason << " adopt=" << adoptMirror
+                << " normal solved=" << runResult.m_solved
+                << " m=" << runResult.m_matchedStars
+                << " rms=" << runResult.m_rmsErrorPixels
+                << " az=" << runResult.m_azimuthDegrees
+                << " roll=" << runResult.m_rollDegrees;
+            qCInfo(cameraPlateSolverLog).nospace()
+                << "CameraPlateSolver: handedness " << reason << " adopt=" << adoptMirror
+                << " mirror solved=" << mirrorResult.m_solved
+                << " m=" << mirrorResult.m_matchedStars
+                << " rms=" << mirrorResult.m_rmsErrorPixels
+                << " az=" << mirrorResult.m_azimuthDegrees
+                << " roll=" << mirrorResult.m_rollDegrees;
+            if (adoptMirror)
+            {
+                runResult = mirrorResult;
+                runResult.m_mirrored = true;
+                // Transfer the mirror pose's match annotations onto the original detections,
+                // keeping each detection's ORIGINAL centroid; reflect the projected-centre x
+                // back into the original image frame. The solve does not resize/reorder the
+                // detection vector (the normal path relies on the same in-place annotation), so
+                // index i is the same physical detection in both.
+                const int transferCount = std::min(starDetections.size(), mirroredDetections.size());
+                for (int i = 0; i < transferCount; ++i)
+                {
+                    CameraPipelineStarDetection& dst = starDetections[i];
+                    const CameraPipelineStarDetection& src = mirroredDetections.at(i);
+                    dst.m_solved = src.m_solved;
+                    dst.m_label = src.m_label;
+                    dst.m_matchDistancePixels = src.m_matchDistancePixels;
+                    dst.m_catalogMagnitude = src.m_catalogMagnitude;
+                    dst.m_catalogRightAscensionDegrees = src.m_catalogRightAscensionDegrees;
+                    dst.m_catalogDeclinationDegrees = src.m_catalogDeclinationDegrees;
+                    dst.m_catalogSpectralType = src.m_catalogSpectralType;
+                    dst.m_projectedCenter = src.m_solved
+                        ? QPointF(maxX - src.m_projectedCenter.x(), src.m_projectedCenter.y())
+                        : QPointF();
+                    // dst.m_center intentionally left at the original detection centroid.
+                }
+            }
+            // If not adopted, starDetections keeps the normal solve's annotations (untouched).
+        }
+
         solveRunProfiles.append({
             disableRollRecovery ? QStringLiteral("%1-no-roll-recovery").arg(reason) : reason,
             runTimer.elapsed(),
@@ -2568,10 +2787,6 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
             runResult.m_distortionK1,
             runResult.m_profileSummary
         });
-
-        std::swap(context.m_sirilRangeCache, m_sirilRangeCache);
-        std::swap(context.m_sirilIndexCache, m_sirilIndexCache);
-        evictSirilRangeCacheIfNeeded();
 
         return runResult;
     };

@@ -67,7 +67,17 @@ bool CameraPlateSolver::SolverContext::rotVecLmEnabled()
 
 bool CameraPlateSolver::SolverContext::rotVecLmActive(const CameraSettings& settings)
 {
-    return rotVecLmEnabled() && plateSolveStartUsesDirection(settings);
+    // Rot-vec applies to DIRECTION-seeded solves and, additionally, to elevation-seeded WIDE fisheye
+    // (mode 2). A global rot-vec default regressed the BLIND fisheye corpus (mode 0/1), which is why
+    // it is not universal -- but blind is not elevation-seeded, so that risk does not apply here. The
+    // mode-2 wide near-zenith case needs it: with the legacy pinned-Az/El LM the seed-anchored
+    // candidate is stuck at the entered azimuth (e.g. wide-9: pinned Az=50.94 vs true 52.3 -> RMS
+    // 11.6, 96 matches) and loses selection to a higher-match wrong-azimuth near-zenith alias. Rot-vec
+    // retires the Az/El pin (lockSeedDirection) and refines Az/El in the well-conditioned camera frame
+    // at zenith, letting the true-azimuth candidate converge and win.
+    return rotVecLmEnabled()
+        && (plateSolveStartUsesDirection(settings)
+            || (plateSolveStartUsesElevation(settings) && isWidePlateSolveContext(settings)));
 }
 
 void CameraPlateSolver::SolverContext::lmBasisFromAzElRoll(double azimuthDegrees, double elevationDegrees, double rollDegrees, SkyVector& center, SkyVector& right, SkyVector& up)

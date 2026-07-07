@@ -20,6 +20,18 @@
 
 // Solve pipeline: catalog fetch/build, seed generation, pose evaluation + matching (non-static SolverContext members, WS5).
 
+// Track 0a: hermetic-catalog offline mode. When SDRANGEL_CAMERA_PLATE_SOLVER_OFFLINE is set the
+// solver must NOT reach the network -- every Siril SPCC byte-range request that misses the
+// on-disk/in-memory cache fails loudly instead of silently fetching. This turns the test corpus
+// into a reproducible gate: given a warmed cache, a solve is a pure function of the frozen bytes,
+// so the pollux-class nondeterminism (a silent re-fetch returning subtly different catalog data)
+// can no longer perturb results. Read once per process (the harness sets the env before launch).
+static bool sirilOfflineModeEnabled()
+{
+    static const bool offline = qEnvironmentVariableIntValue("SDRANGEL_CAMERA_PLATE_SOLVER_OFFLINE") != 0;
+    return offline;
+}
+
 void CameraPlateSolver::SolverContext::clearProfileTimings()
 {
     m_profileTimingOrder.clear();
@@ -123,6 +135,15 @@ QVector<CameraPlateSolver::SolverContext::CatalogStar> CameraPlateSolver::Solver
 
 QByteArray CameraPlateSolver::SolverContext::fetchSirilRangeFromSource(int chunkIndex, qint64 firstByte, qint64 lastByte, int sourceIndex)
 {
+    // Track 0a: in offline mode a cache miss is a hard, visible failure -- never a silent fetch.
+    if (sirilOfflineModeEnabled())
+    {
+        qWarning().nospace() << "CameraPlateSolver: OFFLINE -- refusing Siril SPCC network fetch (cache miss)"
+                   << " source=" << sirilSpccSourceName(sourceIndex)
+                   << " chunk=" << chunkIndex << " bytes=" << firstByte << "-" << lastByte;
+        return {};
+    }
+
     if (!m_networkManager)
     {
         qWarning() << "CameraPlateSolver: Siril SPCC range request has no active network manager"
@@ -160,6 +181,10 @@ QByteArray CameraPlateSolver::SolverContext::fetchSirilRangeFromSource(int chunk
     QObject::connect(&timeoutTimer, &QTimer::timeout, &loop, &QEventLoop::quit);
     timeoutTimer.start(30000);
     loop.exec();
+    // A single-shot timer auto-deactivates when it fires, so capture whether it fired BEFORE we
+    // stop it -- otherwise the stop() makes isActive() always false and the timedOut test below
+    // degenerates to !reply->isFinished().
+    const bool timerFired = !timeoutTimer.isActive();
     timeoutTimer.stop();  // stop the timer if the reply finished before it fired
 
     if (m_owner) {
@@ -168,7 +193,7 @@ QByteArray CameraPlateSolver::SolverContext::fetchSirilRangeFromSource(int chunk
     }
 
     QByteArray data;
-    const bool timedOut = !timeoutTimer.isActive() && !reply->isFinished();
+    const bool timedOut = timerFired && !reply->isFinished();
     if (timedOut)
     {
         reply->abort();
@@ -324,7 +349,10 @@ QByteArray CameraPlateSolver::SolverContext::fetchSirilChunkIndex(int chunkIndex
                    << "chunk" << chunkIndex
                    << "expected" << kSirilIndexSize
                    << "got" << indexBytes.size();
-        m_sirilIndexCache.insert(chunkIndex, QByteArray());
+        // Do NOT negative-cache the failure: m_sirilIndexCache is never evicted and is persisted
+        // across solves, so caching an empty result here would permanently blind this sky chunk
+        // after a single transient network error. The chunk set is small/fixed, so re-requesting a
+        // genuinely-missing chunk on the next solve is cheap.
         return {};
     }
 
@@ -369,6 +397,18 @@ void CameraPlateSolver::SolverContext::prefetchSirilMergedRanges(const QVector<S
     }
 
     if (missingRanges.isEmpty()) {
+        return;
+    }
+
+    // Track 0a: in offline mode do not open any network requests for the missing ranges. Each is
+    // reported so an incomplete snapshot is obvious; the downstream per-range fetch refuses too
+    // (fetchSirilRangeFromSource) and the catalog load fails loudly rather than silently fetching.
+    if (sirilOfflineModeEnabled())
+    {
+        const SirilMergedRange& first = missingRanges.first();
+        qWarning().nospace() << "CameraPlateSolver: OFFLINE -- " << missingRanges.size()
+                   << " Siril SPCC range(s) missing from cache; not fetching. First: chunk="
+                   << first.chunkIndex << " bytes=" << first.firstByte << "-" << first.lastByte;
         return;
     }
 
@@ -467,6 +507,10 @@ void CameraPlateSolver::SolverContext::prefetchSirilMergedRanges(const QVector<S
     {
         if (item && item->reply)
         {
+            // Disconnect from the loop first: abort() can emit finished() synchronously, which would
+            // run finishPending() and set item->reply = nullptr, turning the deleteLater() below into
+            // a null-pointer dereference.
+            QObject::disconnect(item->reply, nullptr, &loop, nullptr);
             item->reply->abort();
             item->reply->deleteLater();
         }
@@ -993,6 +1037,15 @@ QVector<CameraPlateSolver::SolverContext::CatalogStar> CameraPlateSolver::Solver
         *catalogSource = QStringLiteral("Siril SPCC Gaia DR3");
     }
     writeSirilRegionDiskCacheFile(regionCachePath, stars, settings.m_starCatalogDiskCacheSizeGb);
+    // Bound the raw SPCC byte-range disk cache (siril-spcc-cache/v1/ranges/*.bin) with the same
+    // limit as the region cache. This cache is written per byte-range fetch and had no eviction,
+    // so it grew unbounded (observed at 148 GB, filling the disk). Enforced once here at the end of
+    // a network catalog build (all of this solve's ranges are already fetched, so eviction only
+    // drops older regions' files, never this solve's). The index sub-dir is naturally bounded
+    // (<= 48 chunks) and holds .idx files the *.bin evictor ignores, so it is left alone.
+    enforceSirilRegionDiskCacheLimit(
+        QDir(sirilCacheRootDir()).filePath(QStringLiteral("ranges")),
+        settings.m_starCatalogDiskCacheSizeGb);
     qDebug() << "CameraPlateSolver: loaded Siril SPCC Gaia stars"
              << stars.size()
              << "pixels" << pixels.size()
@@ -8182,7 +8235,30 @@ bool CameraPlateSolver::SolverContext::hasAcceptableWideBrightAnchorSupport(cons
             || (brightDetectionsAgree && brightProjectedStarsAgree);
     }
 
-    return brightDetectionsAgree
+    // Wide direction-less (FoV / FoV+elevation start, no azimuth prior) brightness-consistency
+    // floor. The bright-detection / bright-projected agreement above is evadable by structured-blob
+    // garbage: a wrong wide pose over neg-blobs (uniform detection flux) can land 5 of its 8 bright
+    // blobs on bright catalog stars and even match 2 bright projected stars, satisfying the tests
+    // below, while its detection<->catalog brightness ordering stays scrambled (brightnessRankError
+    // ~0.29-0.32). Genuine wide-fisheye solves separate cleanly: every one that carries a high rank
+    // error matches >= 7 bright detections (dense all-sky fisheye, e.g. stars-wide-3 at rankError
+    // 0.30 / 8 bright matched), and the only genuine direction-less solves that lean on <= 5 bright
+    // matches keep a consistent ordering (<= 0.21). So require either >= 6 matched bright detections
+    // or a consistent brightness ordering; neg-blobs has neither.
+    //
+    // The floor is scoped to the direction-less start modes. When the user supplies an azimuth/
+    // elevation prior (FovAzEl and up) the pose is already pinned, so the search cannot wander onto
+    // a brightness-scrambled garbage basin; there the floor only risks vetoing a genuinely faint
+    // guided field whose correct pose legitimately matches few bright stars with a high rank error
+    // (e.g. synth-fisheye-044 in mode 4: 4 bright matched, rankError 0.35).
+    const bool brightnessOrderingSupported =
+        plateSolveStartUsesDirection(settings)
+        || (evaluation.matchedBrightDetections >= 6)
+        || !std::isfinite(evaluation.brightnessRankError)
+        || (evaluation.brightnessRankError <= 0.25);
+
+    return brightnessOrderingSupported
+        && brightDetectionsAgree
         && (brightProjectedStarsAgree || (evaluation.matchedBrightDetections >= 4));
 }
 
@@ -8435,10 +8511,114 @@ bool CameraPlateSolver::SolverContext::isBetterWeakModeRefinedEvaluation(const E
     return isBetterWeakModeEvaluation(candidate, best);
 }
 
+const CameraPlateSolver::SolverContext::FinalPassSeedCache&
+CameraPlateSolver::SolverContext::finalPassSeedCache(const CameraSettings& settings, const PlateSolveCatalogContext& catalogContext, const QSize& imageSize, const QVector<CameraPipelineStarDetection>& starDetections)
+{
+    FinalPassSeedCache& cache = m_finalPassSeedCache;
+    const bool useNarrowGuidedBrightPrior = m_useDirectionSeedPreference && isNarrowField(settings);
+    const bool useSeedRadialPrior = useNarrowGuidedBrightPrior && !m_directionSeedHasRollPreference;
+    const int detectionCount = static_cast<int>(starDetections.size());
+
+    // Reuse the cache only when every dependency of the stored quantities is unchanged. The guard
+    // errs toward rebuilding: any mismatch recomputes. Catalog content is tracked by the generation
+    // stamp (bumped on every visibleStars (re)populate); the seed reference and lens are exact.
+    if (cache.valid
+        && (cache.catalogGeneration == catalogContext.visibleStarsGeneration)
+        && (cache.detectionCount == detectionCount)
+        && (cache.useNarrowGuidedBrightPrior == useNarrowGuidedBrightPrior)
+        && (cache.useSeedRadialPrior == useSeedRadialPrior)
+        && (cache.refAz == m_directionSeedReferenceAzimuthDegrees)
+        && (cache.refEl == m_directionSeedReferenceElevationDegrees)
+        && (cache.refRoll == m_directionSeedReferenceRollDegrees)
+        && (cache.refFov == m_directionSeedReferenceFovDegrees)
+        && (cache.lensCx == settings.m_lensCenterOffsetX)
+        && (cache.lensCy == settings.m_lensCenterOffsetY)
+        && (cache.lensK1 == settings.m_lensDistortionK1))
+    {
+        return cache;
+    }
+
+    cache = FinalPassSeedCache{};
+    cache.catalogGeneration = catalogContext.visibleStarsGeneration;
+    cache.detectionCount = detectionCount;
+    cache.useNarrowGuidedBrightPrior = useNarrowGuidedBrightPrior;
+    cache.useSeedRadialPrior = useSeedRadialPrior;
+    cache.refAz = m_directionSeedReferenceAzimuthDegrees;
+    cache.refEl = m_directionSeedReferenceElevationDegrees;
+    cache.refRoll = m_directionSeedReferenceRollDegrees;
+    cache.refFov = m_directionSeedReferenceFovDegrees;
+    cache.lensCx = settings.m_lensCenterOffsetX;
+    cache.lensCy = settings.m_lensCenterOffsetY;
+    cache.lensK1 = settings.m_lensDistortionK1;
+
+    // Mirrors the former inline construction in evaluateFinalMatchPass exactly.
+    cache.seedRadialProjector = useSeedRadialPrior
+        ? createProjector(
+            settings, imageSize,
+            m_directionSeedReferenceAzimuthDegrees, m_directionSeedReferenceElevationDegrees,
+            m_directionSeedReferenceRollDegrees, m_directionSeedReferenceFovDegrees,
+            settings.m_lensCenterOffsetX, settings.m_lensCenterOffsetY, settings.m_lensDistortionK1)
+        : SkyProjector();
+    cache.seedRadialCenter = projectorPrincipalPoint(cache.seedRadialProjector);
+
+    if (cache.seedRadialProjector.valid)
+    {
+        const int visibleCount = static_cast<int>(catalogContext.visibleStars.size());
+        cache.seedPoints.resize(visibleCount);
+        cache.seedPointValid.resize(visibleCount);
+        for (int i = 0; i < visibleCount; ++i)
+        {
+            QPointF seedPoint;
+            const bool ok = projectVector(cache.seedRadialProjector, catalogContext.visibleStars[i].vector, seedPoint);
+            cache.seedPoints[i] = seedPoint;
+            cache.seedPointValid[i] = ok ? quint8(1) : quint8(0);
+        }
+        cache.sortedDetectionRadii.reserve(detectionCount);
+        for (const CameraPipelineStarDetection& detection : starDetections) {
+            cache.sortedDetectionRadii.append(pointDistancePixels(detection.m_center, cache.seedRadialCenter));
+        }
+        std::sort(cache.sortedDetectionRadii.begin(), cache.sortedDetectionRadii.end());
+    }
+
+    if (useNarrowGuidedBrightPrior)
+    {
+        cache.brightDetectionIndices.reserve(detectionCount);
+        for (int detectionIndex = 0; detectionIndex < detectionCount; ++detectionIndex) {
+            cache.brightDetectionIndices.append(detectionIndex);
+        }
+        cache.brightDetectionIndices.erase(
+            std::remove_if(
+                cache.brightDetectionIndices.begin(),
+                cache.brightDetectionIndices.end(),
+                [&starDetections](int detectionIndex) {
+                    return (detectionIndex < 0)
+                        || (detectionIndex >= starDetections.size())
+                        || !isDetectionUsableForBrightPrior(starDetections[detectionIndex]);
+                }),
+            cache.brightDetectionIndices.end());
+        std::sort(cache.brightDetectionIndices.begin(), cache.brightDetectionIndices.end(), [this, &starDetections](int lhs, int rhs) {
+            const double lhsBrightness = cachedDetectionBrightnessMetric(starDetections, lhs);
+            const double rhsBrightness = cachedDetectionBrightnessMetric(starDetections, rhs);
+            const double lhsReliability = cachedDetectionReliabilityMetric(starDetections, lhs);
+            const double rhsReliability = cachedDetectionReliabilityMetric(starDetections, rhs);
+            const double lhsImportance = lhsBrightness * std::sqrt(std::max(0.0, lhsReliability));
+            const double rhsImportance = rhsBrightness * std::sqrt(std::max(0.0, rhsReliability));
+            if (!qFuzzyCompare(lhsImportance + 1.0, rhsImportance + 1.0)) {
+                return lhsImportance > rhsImportance;
+            }
+            return lhsBrightness > rhsBrightness;
+        });
+    }
+
+    cache.valid = true;
+    return cache;
+}
+
 CameraPlateSolver::SolverContext::FinalMatchPassEvaluation CameraPlateSolver::SolverContext::evaluateFinalMatchPass(const CameraSettings& settings, const PlateSolveCatalogContext& catalogContext, const QSize& imageSize, const QVector<CameraPipelineStarDetection>& starDetections, const QVector<int>& detectionIndices, const Evaluation& candidate, double finalMatchRadius, bool restrictSupplementalMatchesToDetectionIndices)
 {
     FinalMatchPassEvaluation finalPass;
     finalPass.pose = candidate;
+    const FinalPassSeedCache& seedCache = finalPassSeedCache(settings, catalogContext, imageSize, starDetections);
 
     const SkyProjector projector = createProjector(
         settings,
@@ -8716,19 +8896,9 @@ CameraPlateSolver::SolverContext::FinalMatchPassEvaluation CameraPlateSolver::So
             ? settings.m_plateSolveMaxMagnitude
             : 5.0;
         const bool useSeedRadialPrior = useNarrowGuidedBrightPrior && !m_directionSeedHasRollPreference;
-        const SkyProjector seedRadialProjector = useSeedRadialPrior
-            ? createProjector(
-                settings,
-                imageSize,
-                m_directionSeedReferenceAzimuthDegrees,
-                m_directionSeedReferenceElevationDegrees,
-                m_directionSeedReferenceRollDegrees,
-                m_directionSeedReferenceFovDegrees,
-                settings.m_lensCenterOffsetX,
-                settings.m_lensCenterOffsetY,
-                settings.m_lensDistortionK1)
-            : SkyProjector();
-        const QPointF seedRadialCenter = projectorPrincipalPoint(seedRadialProjector);
+        // P-A: candidate-independent -- served from the per-solve seed cache instead of rebuilt here.
+        const SkyProjector& seedRadialProjector = seedCache.seedRadialProjector;
+        const QPointF& seedRadialCenter = seedCache.seedRadialCenter;
         double prioritySeedRadialWeightedError = 0.0;
         double prioritySeedRadialWeight = 0.0;
         for (const Match& match : finalPass.finalMatches)
@@ -8766,9 +8936,10 @@ CameraPlateSolver::SolverContext::FinalMatchPassEvaluation CameraPlateSolver::So
                         const int visibleIndex = visibleIt.value();
                         if ((visibleIndex >= 0) && (visibleIndex < catalogContext.visibleStars.size()))
                         {
-                            QPointF seedPoint;
-                            if (projectVector(seedRadialProjector, catalogContext.visibleStars[visibleIndex].vector, seedPoint))
+                            // P-A: seed projection served from the cache (bit-identical value).
+                            if (seedCache.seedPointValid.value(visibleIndex, 0))
                             {
+                                const QPointF seedPoint = seedCache.seedPoints[visibleIndex];
                                 const double seedRadius = pointDistancePixels(seedPoint, seedRadialCenter);
                                 const double detectionRadius = pointDistancePixels(detection.m_center, seedRadialCenter);
                                 const double radialError = std::fabs(detectionRadius - seedRadius);
@@ -8803,12 +8974,8 @@ CameraPlateSolver::SolverContext::FinalMatchPassEvaluation CameraPlateSolver::So
                 std::max(seedRadialCenter.x(), static_cast<double>(imageSize.width()) - seedRadialCenter.x()),
                 std::max(seedRadialCenter.y(), static_cast<double>(imageSize.height()) - seedRadialCenter.y()))
                 + seedMatchRadius;
-            QVector<double> detectionRadii;
-            detectionRadii.reserve(starDetections.size());
-            for (const CameraPipelineStarDetection& detection : starDetections) {
-                detectionRadii.append(pointDistancePixels(detection.m_center, seedRadialCenter));
-            }
-            std::sort(detectionRadii.begin(), detectionRadii.end());
+            // P-A: sorted detection radii served from the per-solve cache (bit-identical).
+            const QVector<double>& detectionRadii = seedCache.sortedDetectionRadii;
             const auto hasDetectionAtSeedRadius = [&detectionRadii, seedMatchRadius](double seedRadius) {
                 const auto lower = std::lower_bound(
                     detectionRadii.cbegin(),
@@ -8817,8 +8984,9 @@ CameraPlateSolver::SolverContext::FinalMatchPassEvaluation CameraPlateSolver::So
                 return (lower != detectionRadii.cend()) && (*lower <= (seedRadius + seedMatchRadius));
             };
 
-            for (const VisibleCatalogStar& visibleStar : catalogContext.visibleStars)
+            for (int visibleStarIndex = 0; visibleStarIndex < catalogContext.visibleStars.size(); ++visibleStarIndex)
             {
+                const VisibleCatalogStar& visibleStar = catalogContext.visibleStars[visibleStarIndex];
                 if ((visibleStar.catalogIndex < 0)
                     || (visibleStar.catalogIndex >= catalogContext.catalogStars.size()))
                 {
@@ -8830,10 +8998,11 @@ CameraPlateSolver::SolverContext::FinalMatchPassEvaluation CameraPlateSolver::So
                     continue;
                 }
 
-                QPointF seedPoint;
-                if (!projectVector(seedRadialProjector, visibleStar.vector, seedPoint)) {
+                // P-A: seed projection served from the cache (bit-identical value).
+                if (!seedCache.seedPointValid.value(visibleStarIndex, 0)) {
                     continue;
                 }
+                const QPointF seedPoint = seedCache.seedPoints[visibleStarIndex];
 
                 const double seedRadius = pointDistancePixels(seedPoint, seedRadialCenter);
                 if ((seedRadius > maxImageRadius) || !hasDetectionAtSeedRadius(seedRadius)) {
@@ -8873,40 +9042,39 @@ CameraPlateSolver::SolverContext::FinalMatchPassEvaluation CameraPlateSolver::So
                 ? finalPass.matchedSeedRadialMagnitudeSupport / finalPass.seedRadialMagnitudeSupport
                 : 1.0;
         }
-        QVector<int> brightDetectionIndices;
-        if (useNarrowGuidedBrightPrior)
+        // P-A: for the narrow-guided prior this list is all-detections (caller-independent) and is
+        // served from the per-solve cache; otherwise it derives from the caller's detectionIndices
+        // and is built inline (bit-identical to before). const& so any later mutation fails to build.
+        QVector<int> brightDetectionIndicesLocal;
+        if (!useNarrowGuidedBrightPrior)
         {
-            brightDetectionIndices.reserve(starDetections.size());
-            for (int detectionIndex = 0; detectionIndex < starDetections.size(); ++detectionIndex) {
-                brightDetectionIndices.append(detectionIndex);
-            }
+            brightDetectionIndicesLocal = detectionIndices;
+            brightDetectionIndicesLocal.erase(
+                std::remove_if(
+                    brightDetectionIndicesLocal.begin(),
+                    brightDetectionIndicesLocal.end(),
+                    [&starDetections](int detectionIndex) {
+                        return (detectionIndex < 0)
+                            || (detectionIndex >= starDetections.size())
+                            || !isDetectionUsableForBrightPrior(starDetections[detectionIndex]);
+                    }),
+                brightDetectionIndicesLocal.end());
+            std::sort(brightDetectionIndicesLocal.begin(), brightDetectionIndicesLocal.end(), [this, &starDetections](int lhs, int rhs) {
+                const double lhsBrightness = cachedDetectionBrightnessMetric(starDetections, lhs);
+                const double rhsBrightness = cachedDetectionBrightnessMetric(starDetections, rhs);
+                const double lhsReliability = cachedDetectionReliabilityMetric(starDetections, lhs);
+                const double rhsReliability = cachedDetectionReliabilityMetric(starDetections, rhs);
+                const double lhsImportance = lhsBrightness * std::sqrt(std::max(0.0, lhsReliability));
+                const double rhsImportance = rhsBrightness * std::sqrt(std::max(0.0, rhsReliability));
+                if (!qFuzzyCompare(lhsImportance + 1.0, rhsImportance + 1.0)) {
+                    return lhsImportance > rhsImportance;
+                }
+                return lhsBrightness > rhsBrightness;
+            });
         }
-        else
-        {
-            brightDetectionIndices = detectionIndices;
-        }
-        brightDetectionIndices.erase(
-            std::remove_if(
-                brightDetectionIndices.begin(),
-                brightDetectionIndices.end(),
-                [&starDetections](int detectionIndex) {
-                    return (detectionIndex < 0)
-                        || (detectionIndex >= starDetections.size())
-                        || !isDetectionUsableForBrightPrior(starDetections[detectionIndex]);
-                }),
-            brightDetectionIndices.end());
-        std::sort(brightDetectionIndices.begin(), brightDetectionIndices.end(), [this, &starDetections](int lhs, int rhs) {
-            const double lhsBrightness = cachedDetectionBrightnessMetric(starDetections, lhs);
-            const double rhsBrightness = cachedDetectionBrightnessMetric(starDetections, rhs);
-            const double lhsReliability = cachedDetectionReliabilityMetric(starDetections, lhs);
-            const double rhsReliability = cachedDetectionReliabilityMetric(starDetections, rhs);
-            const double lhsImportance = lhsBrightness * std::sqrt(std::max(0.0, lhsReliability));
-            const double rhsImportance = rhsBrightness * std::sqrt(std::max(0.0, rhsReliability));
-            if (!qFuzzyCompare(lhsImportance + 1.0, rhsImportance + 1.0)) {
-                return lhsImportance > rhsImportance;
-            }
-            return lhsBrightness > rhsBrightness;
-        });
+        const QVector<int>& brightDetectionIndices = useNarrowGuidedBrightPrior
+            ? seedCache.brightDetectionIndices
+            : brightDetectionIndicesLocal;
         const int brightDetectionLimit = std::min(
             useNarrowGuidedBrightPrior ? 24 : 8,
             static_cast<int>(brightDetectionIndices.size()));
@@ -9161,6 +9329,101 @@ CameraPlateSolver::SolverContext::FinalMatchPassEvaluation CameraPlateSolver::So
         finalPass.medianErrorPixels = medianDistancePixels(finalPass.finalMatches);
         finalPass.maxErrorPixels = maxError;
         finalPass.pose.meanCatalogMagnitude = finalPass.meanCatalogMagnitude;
+    }
+
+    // P-C: memoize the derived gate/score values that the ranking comparator would otherwise
+    // recompute for both sides on every pairwise comparison. Pure functions of (settings, this
+    // pass); computed once here now that finalPass is fully populated.
+    finalPass.cachedStrongDenseNarrowGuided = hasStrongDenseNarrowGuidedFinalPass(settings, finalPass);
+    finalPass.cachedFinalMatchPassScore = finalMatchPassScore(settings, finalPass);
+    finalPass.cachedNarrowGuidedBrightConsistencyScore = narrowGuidedBrightConsistencyScore(settings, finalPass);
+    finalPass.cachedNarrowGuidedSeedConsistencyScore = narrowGuidedSeedConsistencyScore(settings, finalPass);
+    finalPass.cachedGatesValid = true;
+
+    // Verifier-study instrumentation (Tier 1): dump one machine-readable line per final-pass
+    // candidate so an OFFLINE study can label each pose right/wrong against the corpus truth and
+    // evaluate discriminator features (excess-over-chance at a radius ladder, brightness agreement,
+    // residual structure) across every failure class at once. Raw quantities only — features are
+    // engineered offline. Off by default; enabling changes logging only, never behaviour.
+    static const bool candidateDumpEnabled =
+        qEnvironmentVariableIsSet("SDRANGEL_CAMERA_PLATE_SOLVER_CANDIDATE_DUMP");
+    if (candidateDumpEnabled && finalPass.projectorValid)
+    {
+        // Match-tightness ladder: counts within fixed absolute radii. Chance matches distribute
+        // with density ~r (CDF ~r^2), correct matches concentrate at small r, so the ladder is
+        // what lets the offline study compute excess-over-chance at the informative radius
+        // (a single-radius count saturates in dense fields for right AND wrong poses alike).
+        int within2 = 0, within4 = 0, within8 = 0, within16 = 0;
+        for (const Match& match : finalPass.finalMatches)
+        {
+            if (match.distancePixels <= 2.0) ++within2;
+            if (match.distancePixels <= 4.0) ++within4;
+            if (match.distancePixels <= 8.0) ++within8;
+            if (match.distancePixels <= 16.0) ++within16;
+        }
+        qDebug().noquote().nospace()
+            << "CandidateDump,az=" << QString::number(finalPass.pose.azimuthDegrees, 'f', 3)
+            << ",el=" << QString::number(finalPass.pose.elevationDegrees, 'f', 3)
+            << ",roll=" << QString::number(finalPass.pose.rollDegrees, 'f', 3)
+            << ",fov=" << QString::number(finalPass.pose.fovDegrees, 'f', 4)
+            << ",cx=" << QString::number(finalPass.pose.centerOffsetXPixels, 'f', 1)
+            << ",cy=" << QString::number(finalPass.pose.centerOffsetYPixels, 'f', 1)
+            << ",k1=" << QString::number(finalPass.pose.distortionK1, 'f', 4)
+            << ",D=" << detectionIndices.size()
+            << ",C=" << finalPass.projectedStars.size()
+            << ",M=" << finalPass.finalMatches.size()
+            << ",m2=" << within2 << ",m4=" << within4 << ",m8=" << within8 << ",m16=" << within16
+            << ",rms=" << QString::number(finalPass.rmsErrorPixels, 'f', 2)
+            << ",med=" << QString::number(finalPass.medianErrorPixels, 'f', 2)
+            << ",max=" << QString::number(finalPass.maxErrorPixels, 'f', 2)
+            << ",r=" << QString::number(finalMatchRadius, 'f', 1)
+            << ",W=" << imageSize.width() << ",H=" << imageSize.height()
+            << ",bD=" << finalPass.brightDetections << ",mBD=" << finalPass.matchedBrightDetections
+            << ",bP=" << finalPass.brightProjectedStars << ",mBP=" << finalPass.matchedBrightProjectedStars
+            << ",magErr=" << QString::number(finalPass.brightDetectionMagnitudeError, 'f', 3)
+            << ",rank=" << (std::isfinite(finalPass.brightnessRankError)
+                ? QString::number(finalPass.brightnessRankError, 'f', 3) : QStringLiteral("inf"))
+            << [&]() -> QString {
+                // v2: per-match residual VECTORS for finalist-grade candidates, so the offline
+                // study can compute residual-FIELD coherence — the one feature with a physical
+                // reason to separate all-sky rotations (true-pose residuals are a smooth function
+                // of image position: lens-model error + slight rotation; coincidence residuals are
+                // not). Subsampled to <=48 matches; x:y = detection position, dx:dy = detection
+                // minus projected catalogue position.
+                if (finalPass.finalMatches.size() < 6) {
+                    return QString();
+                }
+                QHash<int, QPointF> projectedByCatalog;
+                projectedByCatalog.reserve(finalPass.projectedStars.size());
+                for (const ProjectedCatalogStar& star : finalPass.projectedStars) {
+                    projectedByCatalog.insert(star.catalogIndex, star.point);
+                }
+                QString residuals = QStringLiteral(",res=");
+                const int matchCount = static_cast<int>(finalPass.finalMatches.size());
+                const int stride = std::max(1, matchCount / 48);
+                bool first = true;
+                for (int i = 0; i < matchCount; i += stride)
+                {
+                    const Match& match = finalPass.finalMatches[i];
+                    if ((match.detectionIndex < 0) || (match.detectionIndex >= starDetections.size())
+                        || !projectedByCatalog.contains(match.catalogIndex))
+                    {
+                        continue;
+                    }
+                    const QPointF detection = starDetections[match.detectionIndex].m_center;
+                    const QPointF projected = projectedByCatalog.value(match.catalogIndex);
+                    if (!first) {
+                        residuals += QLatin1Char(';');
+                    }
+                    first = false;
+                    residuals += QStringLiteral("%1:%2:%3:%4")
+                        .arg(detection.x(), 0, 'f', 0)
+                        .arg(detection.y(), 0, 'f', 0)
+                        .arg(detection.x() - projected.x(), 0, 'f', 2)
+                        .arg(detection.y() - projected.y(), 0, 'f', 2);
+                }
+                return residuals;
+            }();
     }
 
     return finalPass;
@@ -9957,18 +10220,18 @@ bool CameraPlateSolver::SolverContext::isBetterWeakModeFinalMatchPass(const Came
             && (bestMatches >= std::max(settings.m_plateSolveMinMatches + 6, 10));
         if (candidateHasStrongNamedAnchorSet != bestHasStrongNamedAnchorSet) {
             const bool candidateHasStrongDenseGuidedSupport =
-                hasStrongDenseNarrowGuidedFinalPass(settings, candidate);
+                cachedHasStrongDenseNarrowGuidedFinalPass(settings, candidate);
             const bool bestHasStrongDenseGuidedSupport =
-                hasStrongDenseNarrowGuidedFinalPass(settings, best);
+                cachedHasStrongDenseNarrowGuidedFinalPass(settings, best);
             if (candidateHasStrongDenseGuidedSupport != bestHasStrongDenseGuidedSupport) {
                 return candidateHasStrongDenseGuidedSupport;
             }
             return candidateHasStrongNamedAnchorSet;
         }
         const bool candidateHasStrongDenseGuidedSupport =
-            hasStrongDenseNarrowGuidedFinalPass(settings, candidate);
+            cachedHasStrongDenseNarrowGuidedFinalPass(settings, candidate);
         const bool bestHasStrongDenseGuidedSupport =
-            hasStrongDenseNarrowGuidedFinalPass(settings, best);
+            cachedHasStrongDenseNarrowGuidedFinalPass(settings, best);
         if (candidateHasStrongDenseGuidedSupport != bestHasStrongDenseGuidedSupport) {
             return candidateHasStrongDenseGuidedSupport;
         }
@@ -10007,8 +10270,8 @@ bool CameraPlateSolver::SolverContext::isBetterWeakModeFinalMatchPass(const Came
             && seedConsistencyComparableSupport
             && seedConsistencyComparableRms)
         {
-            const double candidateSeedConsistency = narrowGuidedSeedConsistencyScore(settings, candidate);
-            const double bestSeedConsistency = narrowGuidedSeedConsistencyScore(settings, best);
+            const double candidateSeedConsistency = cachedNarrowGuidedSeedConsistencyScore(settings, candidate);
+            const double bestSeedConsistency = cachedNarrowGuidedSeedConsistencyScore(settings, best);
             const double seedConsistencyDelta = candidateSeedConsistency - bestSeedConsistency;
             if (std::fabs(seedConsistencyDelta) >= 1.5) {
                 return seedConsistencyDelta > 0.0;
@@ -10206,8 +10469,8 @@ bool CameraPlateSolver::SolverContext::isBetterWeakModeFinalMatchPass(const Came
                 && (candidate.rmsErrorPixels <= (best.rmsErrorPixels + rmsTolerance))
                 && (best.rmsErrorPixels <= (candidate.rmsErrorPixels + rmsTolerance)))
             {
-                const double candidateBrightScore = narrowGuidedBrightConsistencyScore(settings, candidate);
-                const double bestBrightScore = narrowGuidedBrightConsistencyScore(settings, best);
+                const double candidateBrightScore = cachedNarrowGuidedBrightConsistencyScore(settings, candidate);
+                const double bestBrightScore = cachedNarrowGuidedBrightConsistencyScore(settings, best);
                 if (std::fabs(candidateBrightScore - bestBrightScore) <= 1.0) {
                     return actualMatchDelta > 0;
                 }
@@ -10380,8 +10643,8 @@ bool CameraPlateSolver::SolverContext::isBetterWeakModeFinalMatchPass(const Came
 
     if (m_useWideCatalogMagnitudePreference || m_useDirectionSeedPreference)
     {
-        const double candidateScore = finalMatchPassScore(settings, candidate);
-        const double bestScore = finalMatchPassScore(settings, best);
+        const double candidateScore = cachedFinalMatchPassScore(settings, candidate);
+        const double bestScore = cachedFinalMatchPassScore(settings, best);
         const double scoreScale = std::max({
             1e-9,
             std::fabs(candidateScore),
@@ -10394,8 +10657,8 @@ bool CameraPlateSolver::SolverContext::isBetterWeakModeFinalMatchPass(const Came
 
     if (isLowMagnitudeNarrowGuidedSolve(settings) && narrowGuidedActualMatchCountsAreClose)
     {
-        const double candidateBrightScore = narrowGuidedBrightConsistencyScore(settings, candidate);
-        const double bestBrightScore = narrowGuidedBrightConsistencyScore(settings, best);
+        const double candidateBrightScore = cachedNarrowGuidedBrightConsistencyScore(settings, candidate);
+        const double bestBrightScore = cachedNarrowGuidedBrightConsistencyScore(settings, best);
         if (std::fabs(candidateBrightScore - bestBrightScore) > 0.35) {
             return candidateBrightScore > bestBrightScore;
         }
@@ -11662,10 +11925,16 @@ CameraPlateSolver::SolverContext::Evaluation CameraPlateSolver::SolverContext::r
     const double baseDistortionK1 = calibrate ? candidate.distortionK1 : settings.m_lensDistortionK1;
 
     Evaluation best = candidate;
-    const std::array<double, 4> distortionSweep = {{-0.05, -0.025, 0.0, 0.025}};
+    // Sweep the distortion RELATIVE to the candidate's own K1 (baseDistortionK1), symmetrically.
+    // The previous sweep used fixed ABSOLUTE values {-0.05,-0.025,0,0.025}: a candidate already
+    // refined to e.g. K1=-0.09 was only re-evaluated far from its value and never above it, so the
+    // rescore could not refine a strong barrel candidate around its own K1 (and baseDistortionK1
+    // was unused on the calibrate path). The 0.0 delta re-evaluates at the candidate's exact K1;
+    // best starts as the candidate, so the sweep can only improve on it, never regress.
+    const std::array<double, 5> distortionSweep = {{-0.05, -0.025, 0.0, 0.025, 0.05}};
     for (double distortionDelta : distortionSweep)
     {
-        const double distortionK1 = calibrate ? distortionDelta : baseDistortionK1;
+        const double distortionK1 = calibrate ? (baseDistortionK1 + distortionDelta) : baseDistortionK1;
         Evaluation rescored = evaluatePose(
             settings,
             catalogContext,
@@ -12165,6 +12434,150 @@ CameraPlateSolver::SolverContext::Evaluation CameraPlateSolver::SolverContext::s
             && useStartRoll;
         const QVector<double> directionOffsets = buildGuidedDirectionOffsets(coarseSearchRadius);
         const QVector<double> rollOffsets = buildGuidedRollOffsets();
+
+        // T2 (P4): the no-early-stop guided grid (mode-3 narrow etc., the dominant searchBestPose
+        // cost) is a FIXED set of evaluations — guidedSatisfied can never fire when
+        // !allowGuidedEarlyStop, so the loop has no data-dependent exits. That makes it safe to
+        // split into (a) a parallel, per-worker-context evaluation of every (fov,el,az,roll) grid
+        // point (each worker owns its blind-grid cache/scratch; evaluatePoseFromPrecomputedCatalog
+        // reads only that and the shared read-only inputs), then (b) a SERIAL replay of the
+        // reduction — logging, sparse-pair promotion, candidate-pool insertion, best-tracking — in
+        // the exact canonical fov→el→az→roll order of the serial loop, on this context. The replay
+        // is the same code path evaluateSeedFromCache runs serially, so the result is
+        // byte-identical by construction (only under mid-run cancellation can the set of completed
+        // evaluations differ, and a cancelled solve's result is discarded anyway). The early-stop
+        // mode keeps the original serial loop: its exits are data-dependent and it is cheap.
+        struct GuidedGridPoint
+        {
+            double azimuthDegrees = 0.0;
+            double elevationDegrees = 0.0;
+            double rollDegrees = 0.0;
+            double fovDegrees = 0.0;
+            int cellIndex = -1;
+        };
+        QVector<GuidedGridPoint> gridPoints;
+        if (!allowGuidedEarlyStop)
+        {
+            gridPoints.reserve(static_cast<qsizetype>(coarseFovOffsetsOrdered.size())
+                * directionOffsets.size() * directionOffsets.size() * rollOffsets.size());
+            int cellIndex = 0;
+            for (double fovFactor : coarseFovOffsetsOrdered)
+            {
+                for (double elOffset : directionOffsets)
+                {
+                    for (double azOffset : directionOffsets)
+                    {
+                        const double fovDegrees = std::max(
+                            static_cast<double>(CameraSettings::m_minFov),
+                            static_cast<double>(settings.m_fov) + fovFactor * coarseFovRadius);
+                        for (double rollOffset : rollOffsets)
+                        {
+                            GuidedGridPoint point;
+                            point.azimuthDegrees = settings.m_azimuth + azOffset;
+                            point.elevationDegrees = settings.m_elevation + elOffset;
+                            point.rollDegrees = settings.m_roll + rollOffset;
+                            point.fovDegrees = fovDegrees;
+                            point.cellIndex = cellIndex;
+                            gridPoints.append(point);
+                        }
+                        ++cellIndex;
+                    }
+                }
+            }
+        }
+        const int guidedGridThreads = gridPoints.isEmpty() ? 1
+            : refinementWorkerThreadCount(
+                static_cast<int>(gridPoints.size()),
+                estimateRefinementWorkUnits(
+                    static_cast<int>(gridPoints.size()),
+                    catalogContext.visibleStars.size(),
+                    detectionIndices.size()));
+
+        if (!allowGuidedEarlyStop && (guidedGridThreads > 1))
+        {
+            const int pointCount = static_cast<int>(gridPoints.size());
+            const int rollCount = std::max(1, static_cast<int>(rollOffsets.size()));
+            QVector<Evaluation> gridResults(pointCount);
+            QThreadPool guidedGridPool;
+            guidedGridPool.setMaxThreadCount(guidedGridThreads);
+            for (int workerIndex = 0; workerIndex < guidedGridThreads; ++workerIndex)
+            {
+                guidedGridPool.start(QRunnable::create([&, workerIndex]() {
+                    SolverContext workerContext(m_owner);
+                    workerContext.copySearchStateFrom(*this);
+                    int cachedCellIndex = -1;
+                    // Stride by CELL so each worker builds a cell's blind-grid cache once and
+                    // reuses it across that cell's rolls, mirroring the serial loop's cost shape.
+                    const int cellCount = (pointCount + rollCount - 1) / rollCount;
+                    for (int cell = workerIndex; cell < cellCount; cell += guidedGridThreads)
+                    {
+                        if (workerContext.isCancellationRequested()) {
+                            break;
+                        }
+                        const int firstPoint = cell * rollCount;
+                        const int lastPoint = std::min(pointCount, firstPoint + rollCount);
+                        const GuidedGridPoint& cellPoint = gridPoints[firstPoint];
+                        const SkyProjector refProjector = createProjector(
+                            settings,
+                            imageSize,
+                            cellPoint.azimuthDegrees,
+                            cellPoint.elevationDegrees,
+                            0.0,
+                            cellPoint.fovDegrees,
+                            fixedCenterOffsetX,
+                            fixedCenterOffsetY,
+                            fixedDistortionK1);
+                        if (cachedCellIndex != cellPoint.cellIndex)
+                        {
+                            workerContext.buildBlindGridCache(
+                                catalogContext,
+                                refProjector,
+                                guidedFirstPassCatalogIndices);
+                            cachedCellIndex = cellPoint.cellIndex;
+                        }
+                        for (int pointIndex = firstPoint; pointIndex < lastPoint; ++pointIndex)
+                        {
+                            if (workerContext.isCancellationRequested()) {
+                                break;
+                            }
+                            const GuidedGridPoint& point = gridPoints[pointIndex];
+                            workerContext.populateBlindGridProjectedCatalog(
+                                point.rollDegrees, guidedSeedMatchRadius, refProjector);
+                            gridResults[pointIndex] = workerContext.evaluatePoseFromPrecomputedCatalog(
+                                settings, catalogContext, starDetections, detectionIndices,
+                                point.azimuthDegrees, point.elevationDegrees, point.rollDegrees,
+                                point.fovDegrees,
+                                fixedCenterOffsetX, fixedCenterOffsetY, fixedDistortionK1,
+                                guidedSeedMatchRadius);
+                        }
+                    }
+                }));
+            }
+            guidedGridPool.waitForDone();
+
+            // Serial replay of the reduction in canonical order — identical code path to the
+            // serial evaluateSeedFromCache (promoteSparseGuidedPair disabled there too).
+            for (int pointIndex = 0; pointIndex < pointCount; ++pointIndex)
+            {
+                if (isCancellationRequested()) {
+                    break;
+                }
+                const Evaluation& candidate = gridResults[pointIndex];
+                logPlateSolveEvaluation("guided-direction", candidate);
+                if (keepMultipleCandidates) {
+                    insertDistinctEvaluationCandidate(
+                        *candidatePool, candidate, maxMultiHypothesisCandidates,
+                        useWeakModeScoring, "guided-direction", interestingWeakModeMatchCount,
+                        weakModeCandidatePoolMinMatches, useGuidedDirectionScoring);
+                }
+                if (isBetterEvaluationForMode(candidate, best, useWeakModeScoring, useGuidedDirectionScoring)) {
+                    best = candidate;
+                    logPlateSolveEvaluation("guided-direction", best, true);
+                }
+            }
+        }
+        else
+        {
         for (double fovFactor : coarseFovOffsetsOrdered)
         {
             if (isCancellationRequested()) break;
@@ -12216,6 +12629,7 @@ CameraPlateSolver::SolverContext::Evaluation CameraPlateSolver::SolverContext::s
                     }
                 }
             }
+        }
         }
         logSearchProfile("guided-direction", stageStartMs);
     }
@@ -12323,7 +12737,13 @@ CameraPlateSolver::SolverContext::Evaluation CameraPlateSolver::SolverContext::s
                                 catalogContext,
                                 refProjector,
                                 wideFirstPassCatalogIndices.isEmpty() ? nullptr : &wideFirstPassCatalogIndices);
-                            for (double rollDegrees : wideRollOffsetsOrdered)
+                            // Use fovSearchRollOffsets, which in this branch (wideWeakMode &&
+                            // useStartFov && !useStartElevation && !useStartDirection) is the fine
+                            // 15-deg roll set. It was built for exactly this mode-1 path but was
+                            // previously only referenced from the useStartElevation branch (where it
+                            // resolves to the coarse set), so the fine sweep was never actually used.
+                            // The finer roll granularity closes a mode-1 wide/fisheye coverage gap.
+                            for (double rollDegrees : fovSearchRollOffsets)
                             {
                                 if (isCancellationRequested()) break;
                                 populateBlindGridProjectedCatalog(rollDegrees, guidedFovMatchRadius, refProjector);

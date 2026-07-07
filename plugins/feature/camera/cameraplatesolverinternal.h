@@ -131,6 +131,10 @@ struct PlateSolveCatalogContext
     QString catalogSource;
     QVector<VisibleCatalogStar> visibleStars;
     QHash<int, int> visibleStarIndexByCatalogIndex;
+    // Monotonic id stamped whenever visibleStars is (re)populated (populateVisibleCatalogContext).
+    // Used by the evaluateFinalMatchPass seed-prior cache (P-A) to detect a catalog rebuild: two
+    // distinct-content contexts never share a generation because that is the single assignment site.
+    quint64 visibleStarsGeneration = 0;
 };
 
 struct CandidatePair
@@ -242,6 +246,18 @@ struct FinalMatchPassEvaluation
     double sparseGuidedAnchorRmsErrorPixels = std::numeric_limits<double>::infinity();
     double sparseGuidedAnchorBrightnessRankError = std::numeric_limits<double>::infinity();
     double sparseGuidedAnchorMeanMagnitude = std::numeric_limits<double>::infinity();
+
+    // P-C: derived gate/score values the ranking comparator would otherwise recompute for both
+    // sides on every pairwise comparison (the incumbent's are re-derived once per candidate). These
+    // are pure functions of (settings, [starDetections,] this evaluation), so evaluateFinalMatchPass
+    // computes them once when the pass is fully populated and sets cachedGatesValid; the cached*
+    // accessors read them, falling back to direct computation when the flag is unset (e.g. an
+    // early-return pass). Bit-identical to recomputing.
+    bool cachedGatesValid = false;
+    bool cachedStrongDenseNarrowGuided = false;
+    double cachedFinalMatchPassScore = 0.0;
+    double cachedNarrowGuidedBrightConsistencyScore = 0.0;
+    double cachedNarrowGuidedSeedConsistencyScore = 0.0;
 };
 
 struct CandidateRefinementResult
@@ -312,6 +328,13 @@ struct SkyProjector
     double distortionK1 = 0.0;
     int width = 0;
     int height = 0;
+    // Handedness. When true the projector maps to/from a horizontally-MIRRORED image: an
+    // up-looking all-sky camera images the sky reflected, so a pose recovered on the mirrored
+    // detection set (CameraPlateSolveResult::m_mirrored) must reflect pixel x about the image
+    // centre to overlay onto the ORIGINAL image. Default false keeps the projector orientation-
+    // preserving and every existing solve/overlay path byte-identical; only projectors built for
+    // OUTPUT/overlay of a mirrored solve set it. See projectVector/unprojectPixelToVector.
+    bool mirrorX = false;
 };
 
 static constexpr double kPi = 3.14159265358979323846;
@@ -381,6 +404,35 @@ int m_brightnessRankGeneration = 0;
 QVector<int> m_detectionMatchGeneration;
 QVector<int> m_catalogMatchGeneration;
 int m_matchGeneration = 0;
+
+// P-A: per-(catalog,seed,detections) cache of the candidate-INDEPENDENT seed-prior work that
+// evaluateFinalMatchPass would otherwise recompute on every call (it runs hundreds of times per
+// solve). Covers the seed-radial projector + the O(V) seed projection of every visible star, the
+// sorted detection radii, and the sorted bright-detection list -- all functions of settings, the
+// direction-seed reference, the detections and the visible catalog only. Rebuilt only when the
+// guard changes; the stored values are bit-identical to the former inline computation.
+struct FinalPassSeedCache
+{
+    bool valid = false;
+    quint64 catalogGeneration = 0;
+    int detectionCount = -1;
+    bool useNarrowGuidedBrightPrior = false;
+    bool useSeedRadialPrior = false;
+    double refAz = 0.0, refEl = 0.0, refRoll = 0.0, refFov = 0.0;
+    double lensCx = 0.0, lensCy = 0.0, lensK1 = 0.0;
+    SkyProjector seedRadialProjector;
+    QPointF seedRadialCenter;
+    QVector<QPointF> seedPoints;      // parallel to catalogContext.visibleStars (only when useSeedRadialPrior)
+    QVector<quint8> seedPointValid;   // parallel to catalogContext.visibleStars
+    QVector<double> sortedDetectionRadii;
+    QVector<int> brightDetectionIndices;  // all-detections filtered+sorted (only when useNarrowGuidedBrightPrior)
+};
+FinalPassSeedCache m_finalPassSeedCache;
+
+// Build-or-reuse m_finalPassSeedCache for the given inputs and return it. Bit-identical to the
+// former inline computation in evaluateFinalMatchPass.
+const FinalPassSeedCache& finalPassSeedCache(const CameraSettings& settings, const PlateSolveCatalogContext& catalogContext, const QSize& imageSize, const QVector<CameraPipelineStarDetection>& starDetections);
+
 struct ProfileTiming
 {
     qint64 totalMs = 0;
@@ -1548,6 +1600,15 @@ static bool gateAblationDisabled(const char* token);
 
 static double poseFalseAlarmLogOdds(const PlateSolveCatalogContext& catalogContext, const FinalMatchPassEvaluation& finalPass, const QSize& imageSize, double matchRadiusPixels, int detectionCount);
 
+// Track 1a (SHADOW, not yet gating): astrometry.net-style verification log-odds. Unlike
+// poseFalseAlarmLogOdds (a per-match SUM that grows with match count, so dense and sparse solves
+// aren't comparable) this is a per-DETECTION foreground/background mixture with a distractor
+// fraction (Sutherland-Saunders): every matched detection contributes a bounded +ve foreground vs
+// background log-ratio, and every UNMATCHED detection contributes log(distractorFraction) < 0, so a
+// dense wrong solve that leaves most detections unmatched is penalised. Recorded to the profile
+// (verify.mixtureLogOddsMilli) for corpus comparison against the heuristic accept/reject bands.
+static double poseVerificationLogOdds(const PlateSolveCatalogContext& catalogContext, const FinalMatchPassEvaluation& finalPass, const QSize& imageSize, double matchRadiusPixels, int detectionCount);
+
 // (WS3 2026-06-19) hasOverwhelmingFaintGuidedSupport was removed: it bypassed the brightness
 // acceptance gates for faint anchor-less fields, but ablation showed it casts no deciding vote on
 // REAL + RAND2 (the faint synthetic regime) + FISHEYE + negatives, even jointly with the other two
@@ -1751,6 +1812,25 @@ double sparseGuidedAnchorRankingScore(const FinalMatchPassEvaluation& evaluation
 double namedBrightAnchorEvidenceScore(const FinalMatchPassEvaluation& evaluation);
 
 double finalMatchPassScore(const CameraSettings& settings, const FinalMatchPassEvaluation& evaluation);
+
+// P-C accessors: return the cached derived value when evaluateFinalMatchPass populated it,
+// otherwise compute it directly. Bit-identical; only avoids the per-comparison recomputation.
+bool cachedHasStrongDenseNarrowGuidedFinalPass(const CameraSettings& settings, const FinalMatchPassEvaluation& e)
+{
+    return e.cachedGatesValid ? e.cachedStrongDenseNarrowGuided : hasStrongDenseNarrowGuidedFinalPass(settings, e);
+}
+double cachedFinalMatchPassScore(const CameraSettings& settings, const FinalMatchPassEvaluation& e)
+{
+    return e.cachedGatesValid ? e.cachedFinalMatchPassScore : finalMatchPassScore(settings, e);
+}
+double cachedNarrowGuidedBrightConsistencyScore(const CameraSettings& settings, const FinalMatchPassEvaluation& e)
+{
+    return e.cachedGatesValid ? e.cachedNarrowGuidedBrightConsistencyScore : narrowGuidedBrightConsistencyScore(settings, e);
+}
+double cachedNarrowGuidedSeedConsistencyScore(const CameraSettings& settings, const FinalMatchPassEvaluation& e)
+{
+    return e.cachedGatesValid ? e.cachedNarrowGuidedSeedConsistencyScore : narrowGuidedSeedConsistencyScore(settings, e);
+}
 
 double narrowGuidedEvidenceScore(const CameraSettings& settings, const FinalMatchPassEvaluation& evaluation);
 

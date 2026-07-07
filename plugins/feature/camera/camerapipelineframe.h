@@ -167,6 +167,12 @@ struct CameraPipelineStarDetection
 struct CameraPipelinePlateSolve
 {
     bool m_solved = false;
+    // True when the pose was recovered on the horizontally-mirrored (handedness-flipped)
+    // detection set — an up-looking all-sky fisheye images the sky reflected. The az/el/roll
+    // pose is expressed in the mirrored frame, so any projector built to overlay this pose onto
+    // the ORIGINAL image must set SkyProjector::mirrorX. Detection positions on the frame are
+    // already in original-image coordinates.
+    bool m_mirrored = false;
     int m_matchedStars = 0;
     int m_detectedStarsConsidered = 0;
     int m_catalogStarsLoaded = 0;

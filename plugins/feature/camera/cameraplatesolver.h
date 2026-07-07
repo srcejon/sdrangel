@@ -21,6 +21,7 @@
 
 #include <QByteArray>
 #include <QDateTime>
+#include <QElapsedTimer>
 #include <QHash>
 #include <QMutex>
 #include <QObject>
@@ -46,6 +47,14 @@
 struct CameraPlateSolveResult
 {
     bool m_solved = false;
+    // True when this solve was obtained on the horizontally-mirrored (handedness-flipped)
+    // detection set — i.e. the image is a mirror of the modelled sky (up-looking all-sky
+    // fisheye cameras image the sky reflected, which the orientation-preserving projector
+    // cannot otherwise fit). The recovered az/el/roll pose is expressed in the mirrored
+    // frame; any projector built to overlay this pose back onto the ORIGINAL image must
+    // reflect pixel x about the image centre (SkyProjector::mirrorX). Detection positions
+    // returned to the caller are already restored to original-image coordinates.
+    bool m_mirrored = false;
     int m_matchedStars = 0;
     int m_detectedStarsConsidered = 0;
     int m_catalogStarsLoaded = 0;
@@ -128,6 +137,19 @@ private:
     // also checked by the nested Siril request event loops.
     std::atomic_bool m_cancelRequested {false};
     std::atomic_bool m_cancelNetworkRequests {false};
+    // R1 defensive bound: a hard wall-clock budget for one top-level solve(). The retry
+    // ladders and the inner solve are individually bounded, but each spawns a full inner
+    // solve, so a pathological input (or a disabled acceptance gate — WS3 pass-2 found the
+    // rollAlias reject is one ablation away from a multi-minute solve) can chain enough of
+    // them to run for minutes. isCancellationRequested() also reports true once this budget
+    // is exceeded, so every existing cancellation checkpoint (inner solve, worker contexts,
+    // outer ladders) doubles as a deadline check and the solve returns best-so-far. The
+    // clock is started once per solve() on the solver thread before any workers spawn;
+    // QElapsedTimer::elapsed() is a mutation-free monotonic read so concurrent worker reads
+    // are safe. Budget 0 disables the bound. Overridable via
+    // SDRANGEL_CAMERA_PLATE_SOLVER_BUDGET_MS (0 = off); default kDefaultSolveBudgetMs.
+    QElapsedTimer m_solveWallClock;
+    std::atomic<qint64> m_solveBudgetMs {0};
     // The active Siril network reply, set/cleared on the star-detector thread (where the solver
     // runs) but read by requestCancellation() which can be invoked synchronously from the feature
     // thread (Camera::applySettings -> CameraStarDetector::requestPlateSolveCancellation). Guard

@@ -1,0 +1,11 @@
+image,site,latitude,longitude,utc_time,exposure,source,source_url_base,starlike_peaks
+trex_luck_20251223_060030utc.png,luck,51.15399,-107.26474,2025-12-23 06:00:30.049594 UTC,3.0s,TREx RGB stream0,https://data.phys.ucalgary.ca/sort_by_project/TREx/RGB/stream0/2025/12/23/,991
+trex_luck_20251223_090030utc.png,luck,51.15399,-107.26474,2025-12-23 09:00:30.055393 UTC,3.0s,TREx RGB stream0,https://data.phys.ucalgary.ca/sort_by_project/TREx/RGB/stream0/2025/12/23/,1537
+trex_luck_20260210_060030utc.png,luck,51.15399,-107.26474,2026-02-10 06:00:30.222039 UTC,3.0s,TREx RGB stream0,https://data.phys.ucalgary.ca/sort_by_project/TREx/RGB/stream0/2026/02/10/,551
+trex_luck_20260219_060030utc.png,luck,51.15399,-107.26474,2026-02-19 06:00:30.064534 UTC,3.0s,TREx RGB stream0,https://data.phys.ucalgary.ca/sort_by_project/TREx/RGB/stream0/2026/02/19/,919
+trex_luck_20260219_090030utc.png,luck,51.15399,-107.26474,2026-02-19 09:00:30.092387 UTC,3.0s,TREx RGB stream0,https://data.phys.ucalgary.ca/sort_by_project/TREx/RGB/stream0/2026/02/19/,1206
+trex_rabb_20251218_060030utc.png,rabb,58.22781,-103.68063,2025-12-18 06:00:30.195517 UTC,3.0s,TREx RGB stream0,https://data.phys.ucalgary.ca/sort_by_project/TREx/RGB/stream0/2025/12/18/,2135
+trex_rabb_20251224_060030utc.png,rabb,58.22781,-103.68063,2025-12-24 06:00:30.038688 UTC,3.0s,TREx RGB stream0,https://data.phys.ucalgary.ca/sort_by_project/TREx/RGB/stream0/2025/12/24/,3638
+trex_rabb_20260124_060030utc.png,rabb,58.22781,-103.68063,2026-01-24 06:00:30.285204 UTC,3.0s,TREx RGB stream0,https://data.phys.ucalgary.ca/sort_by_project/TREx/RGB/stream0/2026/01/24/,1997
+trex_pina_20260112_060030utc.png,pina,50.25881,-95.86517,2026-01-12 06:00:30.197048 UTC,3.0s,TREx RGB stream0,https://data.phys.ucalgary.ca/sort_by_project/TREx/RGB/stream0/2026/01/12/,3241
+trex_yknf_20251216_080030utc.png,yknf,62.51985,-114.31303,2025-12-16 08:00:30.061339 UTC,3.0s,TREx RGB stream0,https://data.phys.ucalgary.ca/sort_by_project/TREx/RGB/stream0/2025/12/16/,4793

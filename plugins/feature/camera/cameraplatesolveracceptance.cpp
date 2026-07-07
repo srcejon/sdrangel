@@ -168,6 +168,55 @@ double CameraPlateSolver::SolverContext::poseFalseAlarmLogOdds(const PlateSolveC
     return logOdds;
 }
 
+double CameraPlateSolver::SolverContext::poseVerificationLogOdds(const PlateSolveCatalogContext& catalogContext, const FinalMatchPassEvaluation& finalPass, const QSize& imageSize, double matchRadiusPixels, int detectionCount)
+{
+    Q_UNUSED(catalogContext);
+    if (!finalPass.projectorValid
+        || finalPass.finalMatches.isEmpty()
+        || (imageSize.width() <= 0)
+        || (imageSize.height() <= 0)
+        || (matchRadiusPixels <= 0.0)
+        || (detectionCount <= 0))
+    {
+        return 0.0;
+    }
+
+    // Astrometry.net-style Bayesian verification (Lang et al. 2010, after Sutherland & Saunders
+    // 1992). Per FIELD detection, compare:
+    //   H1 (this WCS is correct): background density rho_bg + a foreground Gaussian bump wherever a
+    //       reference star projects;
+    //   H0 (random WCS): background density rho_bg everywhere.
+    // The per-detection likelihood ratio is 1 + foreground/rho_bg for a matched detection and
+    //   exactly 1 (log 0) for an unmatched one -- an unmatched detection is background under BOTH
+    // hypotheses, so it carries no evidence. (An earlier revision wrongly charged log(f) per
+    // unmatched detection; the shadow log showed that over-penalised correct deep/nebular fields
+    // whose detector returns hundreds of sub-catalogue-depth detections -- e.g. stars-narrow-3,
+    // ngc-2403 scored below the pollux false solve. Dropping that term is the correct model.)
+    // rho_bg is the empirical detection density, so a dense field automatically discounts each
+    // match: a chance coincidence sits near background (ratio ~1, log ~0) while a genuine tight
+    // match rises far above it, which is what separates a correct solve from a dense wrong one.
+    constexpr double kForegroundDetectability = 0.75; // (1-f): prob. a projected star is a real, detectable source
+    const double area = static_cast<double>(imageSize.width()) * static_cast<double>(imageSize.height());
+    // Positional-uncertainty scale: real matches sit inside the radius but carry pose-model error,
+    // so r/2 (as in poseFalseAlarmLogOdds) is the effective 1-sigma.
+    const double sigma = std::max(1.0, matchRadiusPixels * 0.5);
+    const double twoSigmaSquared = 2.0 * sigma * sigma;
+    const double backgroundDensity = std::max(1.0, static_cast<double>(detectionCount)) / area;
+
+    double logOdds = 0.0;
+    for (const Match& match : finalPass.finalMatches)
+    {
+        const double d = match.distancePixels;
+        if (d > matchRadiusPixels) {
+            continue; // shouldn't happen for an accepted match; skip defensively
+        }
+        // Foreground positional density of one reference star: (1/(2*pi*sigma^2)) exp(-d^2/2sigma^2).
+        const double foregroundDensity = std::exp(-(d * d) / twoSigmaSquared) / (kPi * twoSigmaSquared);
+        logOdds += std::log(1.0 + kForegroundDetectability * foregroundDensity / backgroundDensity);
+    }
+    return logOdds;
+}
+
 double CameraPlateSolver::SolverContext::detectionMatchWeight(const CameraPipelineStarDetection& detection)
 {
     const double centroidUncertainty = std::isfinite(static_cast<double>(detection.m_centroidUncertainty))

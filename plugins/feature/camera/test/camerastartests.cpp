@@ -115,6 +115,11 @@ struct StarTestCase
     double maxMagnitude = std::numeric_limits<double>::quiet_NaN();
     double expectedRoll = std::numeric_limits<double>::quiet_NaN();
     double expectedRollTolerance = std::numeric_limits<double>::quiet_NaN();
+    // Negative-test support (Track 0e): a row may declare it EXPECTS to be rejected (garbage,
+    // wrong-FoV, near-boundary wrong time/place). When false the case PASSES iff the solver returns
+    // solved=false, so negatives are proper standing gates instead of being read inverted. Optional
+    // column "expectSolved" (1/true default, 0/false for a negative).
+    bool expectSolved = true;
     CameraSettings::PlateSolveStartMode plateSolveStartMode = CameraSettings::PlateSolveStartFovAzElRollLens;
     int roiX = 0;
     int roiY = 0;
@@ -921,6 +926,16 @@ bool readTestCases(const QString& csvPath, QVector<StarTestCase>& testCases)
         }
         test.expectedRoll = parseOptionalDouble(header, fields, QStringLiteral("expectedRoll"), lineNumber, &ok);
         test.expectedRollTolerance = parseOptionalDouble(header, fields, QStringLiteral("expectedRollTolerance"), lineNumber, &ok);
+        const int expectSolvedIndex = header.indexOf(QStringLiteral("expectSolved"));
+        if (expectSolvedIndex >= 0)
+        {
+            const QString expectSolvedValue = fields.value(expectSolvedIndex).trimmed().toLower();
+            if (!expectSolvedValue.isEmpty()) {
+                test.expectSolved = !((expectSolvedValue == QStringLiteral("0"))
+                    || (expectSolvedValue == QStringLiteral("false"))
+                    || (expectSolvedValue == QStringLiteral("no")));
+            }
+        }
         if (std::isfinite(test.expectedRollTolerance) && (test.expectedRollTolerance < 0.0))
         {
             std::cerr << "Line " << lineNumber << ": expectedRollTolerance cannot be negative\n";
@@ -1807,6 +1822,58 @@ int runTests(const QString& csvPath, const QString& outputDirectory)
     int failures = 0;
     QElapsedTimer suiteTimer;
     suiteTimer.start();
+
+    // Track 0c: optional machine-readable per-case metrics. Opt-in via
+    // SDRANGEL_CAMERA_STAR_TEST_METRICS_CSV=<path>; when unset, stdout is byte-identical to before.
+    // One row per case with the verdict, solve diagnostics, recovered pose + lens, and the pose
+    // deltas vs the CSV truth (seed az/el and expectedRoll) so accuracy drift is visible without
+    // re-grepping the verbose log. timeMs is the only per-case timing robust to this machine's
+    // mid-run sleeps (wall-clock suite totals are not).
+    QFile metricsFile;
+    QTextStream metricsOut;
+    const QString metricsPath = qEnvironmentVariable("SDRANGEL_CAMERA_STAR_TEST_METRICS_CSV");
+    if (!metricsPath.isEmpty())
+    {
+        metricsFile.setFileName(metricsPath);
+        if (metricsFile.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text)) {
+            metricsOut.setDevice(&metricsFile);
+            metricsOut << "name,verdict,solved,detections,matched,catalog,catalogStars,candidates,"
+                          "outliers,required,rms,maxErr,timeMs,poseAz,poseEl,poseRoll,poseFov,cx,cy,k1,"
+                          "seedAz,seedEl,truthRoll,azDeltaDeg,elDeltaDeg,rollDeltaDeg,failReason\n";
+        } else {
+            std::cerr << "Warning: could not open metrics CSV " << metricsPath.toStdString() << '\n';
+        }
+    }
+    const bool emitMetrics = metricsFile.isOpen();
+    const auto writeMetricsRow = [&](const StarTestCase& t, const CameraPipelinePlateSolve* ps,
+                                     int detections, bool pass, qint64 timeMs, const QString& failReason) {
+        if (!emitMetrics) {
+            return;
+        }
+        const double nan = std::numeric_limits<double>::quiet_NaN();
+        const bool solved = ps && ps->m_solved;
+        // For a direction-seeded solve the CSV az/el is the trusted pointing (≈ truth); roll truth
+        // is expectedRoll when the row provides it, else the seed roll.
+        const double truthRoll = std::isfinite(t.expectedRoll) ? t.expectedRoll : t.roll;
+        const double azDelta = solved ? wrappedAngleDistanceDegrees(ps->m_azimuth, t.azimuth) : nan;
+        const double elDelta = solved ? (static_cast<double>(ps->m_elevation) - t.elevation) : nan;
+        const double rollDelta = (solved && std::isfinite(truthRoll))
+            ? wrappedAngleDistanceDegrees(ps->m_roll, truthRoll) : nan;
+        const auto q = [](const QString& s) { QString e = s; e.replace(QLatin1Char('"'), QLatin1Char('\'')); return QLatin1Char('"') + e + QLatin1Char('"'); };
+        metricsOut << q(t.name) << ',' << (pass ? "PASS" : "FAIL") << ',' << (solved ? 1 : 0) << ','
+                   << detections << ',' << (ps ? ps->m_matchedStars : 0) << ','
+                   << (ps ? q(ps->m_catalogSource) : QStringLiteral("\"\"")) << ','
+                   << (ps ? ps->m_catalogStarsLoaded : 0) << ',' << (ps ? ps->m_catalogCandidateStars : 0) << ','
+                   << (ps ? ps->m_outlierStars : 0) << ',' << (ps ? ps->m_requiredMatches : 0) << ','
+                   << (ps ? ps->m_rmsError : 0.0f) << ',' << (ps ? ps->m_maxError : 0.0f) << ',' << timeMs << ','
+                   << (ps ? ps->m_azimuth : 0.0f) << ',' << (ps ? ps->m_elevation : 0.0f) << ','
+                   << (ps ? ps->m_roll : 0.0f) << ',' << (ps ? ps->m_fov : 0.0f) << ','
+                   << (ps ? ps->m_centerOffsetX : 0.0f) << ',' << (ps ? ps->m_centerOffsetY : 0.0f) << ','
+                   << (ps ? ps->m_distortionK1 : 0.0f) << ','
+                   << t.azimuth << ',' << t.elevation << ',' << truthRoll << ','
+                   << azDelta << ',' << elDelta << ',' << rollDelta << ',' << failReason << '\n';
+    };
+
     for (const StarTestCase& test : tests)
     {
         QElapsedTimer testTimer;
@@ -1818,6 +1885,7 @@ int runTests(const QString& csvPath, const QString& outputDirectory)
             ++failures;
             std::cerr << "FAIL " << test.name.toStdString() << ": " << result.error.toStdString()
                       << " timeMs=" << elapsedMs << '\n';
+            writeMetricsRow(test, nullptr, 0, false, elapsedMs, QStringLiteral("not-completed"));
             continue;
         }
 
@@ -1858,10 +1926,23 @@ int runTests(const QString& csvPath, const QString& outputDirectory)
             diagnosticCatalog);
         const QStringList poseMismatches = expectedPoseMismatches(test, result.frame);
         const bool solved = result.frame->m_plateSolve.m_solved;
-        const bool pass = solved && missing.isEmpty() && positionMismatches.isEmpty() && poseMismatches.isEmpty();
+        // A negative row (expectSolved=false) passes iff the solver correctly REJECTS it. A positive
+        // row passes on a correct, well-anchored solve as before.
+        const bool pass = test.expectSolved
+            ? (solved && missing.isEmpty() && positionMismatches.isEmpty() && poseMismatches.isEmpty())
+            : (!solved);
         if (!pass) {
             ++failures;
         }
+
+        const QString metricsFailReason = pass ? QString()
+            : (!solved ? QStringLiteral("not-solved")
+               : !missing.isEmpty() ? QStringLiteral("missing-stars")
+               : !positionMismatches.isEmpty() ? QStringLiteral("position-mismatch")
+               : !poseMismatches.isEmpty() ? QStringLiteral("pose-mismatch")
+               : QStringLiteral("fail"));
+        writeMetricsRow(test, &result.frame->m_plateSolve, result.frame->m_starDetections.size(),
+                        pass, elapsedMs, metricsFailReason);
 
         std::cout << (pass ? "PASS " : "FAIL ") << test.name.toStdString()
                   << ": detections=" << result.frame->m_starDetections.size()

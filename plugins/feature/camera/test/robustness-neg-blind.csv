@@ -1,0 +1,5 @@
+image,time,latitude,longitude,altitude,azimuth,elevation,roll,fov,projection,cx,cy,k1,stars,plateSolveMaxMagnitude,plateSolveStartMode,roiX,roiY,roiW,roiH,expectedRoll,expectedRollTolerance,starPositions,expectSolved
+images-robustness/neg-noise.jpg,2026-05-27 02:05:00,51.013713,-1.852005,0.0,50.9429,88.8147,93.14,159.87,equidistant fisheye,0.0,0.0,0.0,"Arcturus,Dubhe,Merak,Phecda,Megrez,Alioth,Mizar,Alkaid,Vega",7.0,1,0,0,0,0,,,Vega:1603:1480,0
+images-robustness/neg-noise.jpg,2026-05-27 02:05:00,51.013713,-1.852005,0.0,50.9429,88.8147,93.14,159.87,equidistant fisheye,0.0,0.0,0.0,"Arcturus,Dubhe,Merak,Phecda,Megrez,Alioth,Mizar,Alkaid,Vega",7.0,0,0,0,0,0,,,Vega:1603:1480,0
+images-robustness/neg-blobs.jpg,2026-05-27 02:05:00,51.013713,-1.852005,0.0,50.9429,88.8147,93.14,159.87,equidistant fisheye,0.0,0.0,0.0,"Arcturus,Dubhe,Merak,Phecda,Megrez,Alioth,Mizar,Alkaid,Vega",7.0,1,0,0,0,0,,,Vega:1603:1480,0
+images-robustness/neg-blobs.jpg,2026-05-27 02:05:00,51.013713,-1.852005,0.0,50.9429,88.8147,93.14,159.87,equidistant fisheye,0.0,0.0,0.0,"Arcturus,Dubhe,Merak,Phecda,Megrez,Alioth,Mizar,Alkaid,Vega",7.0,0,0,0,0,0,,,Vega:1603:1480,0

@@ -5,3 +5,19 @@ vs-profile/
 star-tests-synthetic*.csv
 images-synthetic*/
 synth-*.log
+
+# Track 0a — portable hermetic Siril-catalog snapshot (regenerable Gaia SPCC data,
+# built on demand by refresh-catalog-snapshot.ps1, not committed)
+catalog-snapshot/
+
+# Track 0b real fisheye/wide corpus — the large source frames + raw data are external
+# (TREx .h5, GMN .png, FITS, station archive, anchor caches); they are gitignored. The
+# committed record is the CSV rows (star-tests-real-*.csv), the calibration ground truth
+# (*.cal / CALSTARS), metadata.csv, and the READMEs under images-real-fisheye-staging/.
+images-real-fisheye-staging/**/*.png
+images-real-fisheye-staging/**/*.h5
+images-real-fisheye-staging/**/*.fits
+images-real-fisheye-staging/**/*.tar.bz2
+images-real-fisheye-staging/**/*.pkl
+images-real-fisheye-staging/**/*.sav
+images-real-fisheye-staging/**/*.bmp

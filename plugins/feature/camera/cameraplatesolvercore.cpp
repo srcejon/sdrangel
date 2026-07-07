@@ -224,6 +224,15 @@ QString CameraPlateSolver::SolverContext::stripQuotedField(const QString& value)
 
 QString CameraPlateSolver::SolverContext::downloadedCatalogDir()
 {
+    // Track 0a: point every catalog + Siril cache path at a versioned snapshot dir instead of the
+    // per-user AppData location. Combined with SDRANGEL_CAMERA_PLATE_SOLVER_OFFLINE this makes a
+    // solve fully reproducible from a frozen cache, so the harness is a hermetic gate. The override
+    // is the equivalent of the AppData ".../camera" dir (it holds siril-spcc-cache/, the base
+    // catalog files, etc.).
+    const QByteArray overrideDir = qgetenv("SDRANGEL_CAMERA_PLATE_SOLVER_CACHE_DIR");
+    if (!overrideDir.isEmpty()) {
+        return QString::fromLocal8Bit(overrideDir);
+    }
     const QString baseDir = QStandardPaths::standardLocations(QStandardPaths::AppDataLocation).value(0);
     return QDir(baseDir).filePath(QString::fromUtf8(kDownloadedCatalogDir));
 }
@@ -1231,13 +1240,21 @@ void CameraPlateSolver::SolverContext::repairFinalMatchCollisions(const QVector<
               });
 
     QSet<int> usedDetections;
+    QSet<int> usedCatalogs;
     for (const SwapCandidate& cand : candidates) {
         if (usedDetections.contains(cand.detectionIndex)) continue;
+        // Guard the catalog star too: without this, two candidates targeting the same catalog
+        // star both apply, and the second overwrites the first's match -- unseating the first's
+        // detection, which stays flagged used but ends up matched to nothing. Candidates are
+        // sorted best-first (strict before relaxed, then ascending distance ratio), so the first
+        // claim on a catalog star is the one to keep.
+        if (usedCatalogs.contains(cand.catalogIndex)) continue;
         const int matchIdx = catalogToMatchIdx.value(cand.catalogIndex, -1);
         if (matchIdx < 0) continue;
         matches[matchIdx].detectionIndex = cand.detectionIndex;
         matches[matchIdx].distancePixels = cand.newDistance;
         usedDetections.insert(cand.detectionIndex);
+        usedCatalogs.insert(cand.catalogIndex);
     }
 }
 
@@ -1473,7 +1490,14 @@ bool CameraPlateSolver::SolverContext::projectVector(const SkyProjector& project
         return false;
     }
 
-    point.setX(projector.principalPointX + normalizedX * 0.5 * static_cast<double>(projector.width));
+    double imageX = projector.principalPointX + normalizedX * 0.5 * static_cast<double>(projector.width);
+    // Mirrored (up-looking all-sky) image: reflect pixel x about the image centre so the pose,
+    // recovered on the mirrored detection set, projects onto the ORIGINAL image. Inert (default
+    // false) for every solve-time projector, so those paths stay byte-identical.
+    if (projector.mirrorX) {
+        imageX = static_cast<double>(projector.width - 1) - imageX;
+    }
+    point.setX(imageX);
     point.setY(projector.principalPointY - normalizedY * 0.5 * static_cast<double>(projector.height));
     return true;
 }
@@ -1489,7 +1513,12 @@ bool CameraPlateSolver::SolverContext::unprojectPixelToVector(const SkyProjector
         return false;
     }
 
-    double projectedX = ((point.x() - projector.principalPointX) / (0.5 * static_cast<double>(projector.width)))
+    // Mirrored image: reflect the incoming pixel x about the image centre before unprojecting,
+    // the exact inverse of the reflection projectVector applies. Inert when mirrorX is false.
+    const double sourceX = projector.mirrorX
+        ? (static_cast<double>(projector.width - 1) - point.x())
+        : point.x();
+    double projectedX = ((sourceX - projector.principalPointX) / (0.5 * static_cast<double>(projector.width)))
         * projector.horizontalScale;
     double projectedY = (-(point.y() - projector.principalPointY) / (0.5 * static_cast<double>(projector.height)))
         * projector.verticalScale;
@@ -1499,23 +1528,40 @@ bool CameraPlateSolver::SolverContext::unprojectPixelToVector(const SkyProjector
 
     if (std::fabs(projector.distortionK1) > 1e-9)
     {
-        double undistortedX = projectedX;
-        double undistortedY = projectedY;
-        bool undistortOk = true;
-        for (int iteration = 0; iteration < 8; ++iteration)
+        // Invert the radial model R_d = R_u * (1 + k1 * R_u^2) for the undistorted radius R_u on the
+        // physically valid, MONOTONIC branch R_u^2 < -1/(3 k1). (A1) Newton on the scalar radius:
+        // f(R) = R + k1 R^3 - R_d, f'(R) = 1 + 3 k1 R^2. It converges quadratically and exits as
+        // soon as the step falls below tolerance, versus the previous flat 8-pass fixed-point
+        // R_u <- R_d/(1 + k1 R_u^2), which only converges linearly and, for strong barrel distortion
+        // near the fold, can under-converge in 8 passes or drift onto the wrong (large-R) branch.
+        // For the corpus's distortion (rectilinear skips this branch; wide fisheye k1 ~ -0.10 is well
+        // inside the convergent regime) both reach the same root, so this is byte-identical there and
+        // only better-conditioned for extreme lenses.
+        const double k1 = projector.distortionK1;
+        const double distortedRadius = std::hypot(projectedX, projectedY);
+        if (distortedRadius > 1e-12)
         {
-            const double radiusSquared = undistortedX * undistortedX + undistortedY * undistortedY;
-            const double distortionScale = 1.0
-                + projector.distortionK1 * radiusSquared;
-            // Non-positive scale means the pixel lies in the folded region of the
-            // distortion model — it cannot be mapped back to a sky direction.
-            if (distortionScale <= 0.0) { undistortOk = false; break; }
-            undistortedX = projectedX / distortionScale;
-            undistortedY = projectedY / distortionScale;
+            double undistortedRadius = distortedRadius;
+            bool undistortOk = false;
+            for (int iteration = 0; iteration < 12; ++iteration)
+            {
+                const double radiusSquared = undistortedRadius * undistortedRadius;
+                const double derivative = 1.0 + 3.0 * k1 * radiusSquared;
+                // derivative <= 0 is the non-monotonic fold: the model is not invertible there, so
+                // reject rather than step onto the wrong branch (tighter than the old scale<=0 test).
+                if (derivative <= 0.0) { undistortOk = false; break; }
+                const double residual = undistortedRadius * (1.0 + k1 * radiusSquared) - distortedRadius;
+                const double step = residual / derivative;
+                undistortedRadius -= step;
+                if (undistortedRadius < 0.0) { undistortOk = false; break; }
+                undistortOk = true; // last iterate is a usable estimate even if tolerance not hit
+                if (std::fabs(step) <= 1e-10 * (1.0 + distortedRadius)) { break; }
+            }
+            if (!undistortOk) { return false; }
+            const double scale = undistortedRadius / distortedRadius;
+            projectedX *= scale;
+            projectedY *= scale;
         }
-        if (!undistortOk) return false;
-        projectedX = undistortedX;
-        projectedY = undistortedY;
     }
 
     const double projectionRadius = std::hypot(projectedX, projectedY);
@@ -3298,8 +3344,19 @@ void CameraPlateSolver::SolverContext::storeVisibleCatalogCache(const CameraSett
     cache.insert(key, {visibleStars, visibleStarIndexByCatalogIndex});
 }
 
+// File-local: the P-A seed cache's catalog-generation stamp. Monotonic within a process, not
+// Date/Random-based (deterministic/resume-safe). Only populateVisibleCatalogContext bumps it.
+static quint64 nextVisibleStarsGeneration()
+{
+    static std::atomic<quint64> counter{0};
+    return counter.fetch_add(1, std::memory_order_relaxed) + 1;
+}
+
 void CameraPlateSolver::SolverContext::populateVisibleCatalogContext(PlateSolveCatalogContext& context, const CameraSettings& settings, const QDateTime& captureDateTimeUtc, double maxMagnitude, bool allowCache)
 {
+    // Every assignment to context.visibleStars happens in this function, so stamping a fresh
+    // generation on each populate is a sound cache-invalidation signal for the P-A seed-prior cache.
+    context.visibleStarsGeneration = nextVisibleStarsGeneration();
     if (allowCache
         && loadVisibleCatalogCache(
             settings,

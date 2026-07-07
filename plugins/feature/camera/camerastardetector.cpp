@@ -632,6 +632,7 @@ void CameraStarDetector::processNewFrame(const CameraPipelineFramePtr& frame)
         }
 
         frame->m_plateSolve.m_solved = plateSolveResult.m_solved;
+        frame->m_plateSolve.m_mirrored = plateSolveResult.m_mirrored;
         frame->m_plateSolve.m_matchedStars = plateSolveResult.m_matchedStars;
         frame->m_plateSolve.m_detectedStarsConsidered = plateSolveResult.m_detectedStarsConsidered;
         frame->m_plateSolve.m_catalogStarsLoaded = plateSolveResult.m_catalogStarsLoaded;
@@ -865,14 +866,53 @@ bool CameraStarDetector::applyStarDetection(
     const bool is16Bit = (residual.depth() == CV_16U);
     const double saturationThreshold = is16Bit ? 64000.0 : (hasGray ? 250.0 : 200.0);
 
+    // Phase 3 (star-detector v2): DEFAULT ON. Applies the true pixel-count blob area in wide/fisheye
+    // contexts (see v2Active below) so ~1px stars are recovered. Validated to keep REAL at 47 (after
+    // the wide-9 mode-2 rot-vec fix) while improving synthetic fisheye (mode1 +3, mode4 +5) and
+    // getting the real all-sky fisheye corpus solving. Kill-switch SDRANGEL_CAMERA_STAR_DETECTOR_DISABLE_V2
+    // reverts to the legacy detector (byte-identical) for A/B. Read once.
+    static const bool detectorV2 = !qEnvironmentVariableIsSet("SDRANGEL_CAMERA_STAR_DETECTOR_DISABLE_V2");
+    // V2 quality gate (A2): the minimum SNR a star recovered ONLY by the true pixel-count area
+    // (one the legacy polygon-area would have rejected at the minArea gate) must have to be admitted.
+    // This keeps confident faint point sources -- which help wide/fisheye recall -- while blocking
+    // the low-SNR noise / faint galaxy-structure blobs that regressed dense narrow REAL fields when
+    // small-star recovery was unconditional. Env-tunable so the bar can be swept without rebuilding.
+    static const double v2RecoveredMinSnr = []() {
+        bool ok = false;
+        const double v = qEnvironmentVariable("SDRANGEL_CAMERA_STAR_DETECTOR_V2_MINSNR").toDouble(&ok);
+        return ok ? v : 0.0;   // 0 = off; context-gating (v2Active) protects narrow REAL now
+    }();
+
     for (const std::vector<cv::Point>& contour : contours)
     {
-        const double area = cv::contourArea(contour);
+        const cv::Rect box = cv::boundingRect(contour);
+        const double polygonArea = cv::contourArea(contour);
+
+        // V2 uses the true filled-pixel count as the blob area (cv::contourArea gives the
+        // pixel-CENTRE polygon area -- ~1 for a 2x2 star, 0 for a 1-px-wide blob -- which rejects
+        // real ~1px stars at the minArea gate and biases their fillRatio/SNR/hot-pixel). This is the
+        // "more correct" area and it delivers the real wide/fisheye recall gain (validated on the
+        // GMN/TREx real corpus), but the pixel count and the polygon count differ ~20% for EVERY
+        // blob, and the dense narrow-field solver heuristics are co-tuned around the legacy polygon
+        // area -- feeding them the corrected area regressed real narrow/galaxy fields. Since the
+        // small-star problem is specifically a wide/fisheye phenomenon (tiny PSFs), apply V2 ONLY in
+        // wide or fisheye contexts and leave narrow rectilinear fields on the legacy area untouched.
+        const bool v2Active = detectorV2
+            && ((m_settings.m_lensProjection != CameraSettings::LensProjectionRectilinear)
+                || (m_settings.m_fov >= 30.0f));
+        double area = polygonArea;
+        cv::Mat contourMask;
+        if (v2Active)
+        {
+            contourMask = cv::Mat::zeros(box.height, box.width, CV_8UC1);
+            std::vector<std::vector<cv::Point>> pixelAreaContour{contour};
+            cv::drawContours(contourMask, pixelAreaContour, 0, cv::Scalar(255), cv::FILLED, cv::LINE_8, cv::noArray(), INT_MAX, -box.tl());
+            area = static_cast<double>(cv::countNonZero(contourMask));
+        }
         if ((area < m_settings.m_starMinArea) || (area > m_settings.m_starMaxArea)) {
             continue;
         }
 
-        const cv::Rect box = cv::boundingRect(contour);
         const double width = std::max(1, box.width);
         const double height = std::max(1, box.height);
         const double aspectRatio = std::max(width / height, height / width);
@@ -887,7 +927,7 @@ bool CameraStarDetector::applyStarDetection(
         }
 
         const double perimeter = std::max(1.0, cv::arcLength(contour, true));
-        const double roundness = std::clamp((4.0 * CV_PI * area) / (perimeter * perimeter), 0.0, 1.0);
+        const double roundness = std::clamp((4.0 * CV_PI * polygonArea) / (perimeter * perimeter), 0.0, 1.0);
         bool saturatedContourCandidate = false;
         if ((roundness < 0.2) && hasGray && (area >= 6.0))
         {
@@ -901,9 +941,12 @@ bool CameraStarDetector::applyStarDetection(
             continue;
         }
 
-        cv::Mat contourMask = cv::Mat::zeros(box.height, box.width, CV_8UC1);
-        std::vector<std::vector<cv::Point>> singleContour{contour};
-        cv::drawContours(contourMask, singleContour, 0, cv::Scalar(255), cv::FILLED, cv::LINE_8, cv::noArray(), INT_MAX, -box.tl());
+        if (contourMask.empty())  // already built above under detectorV2
+        {
+            contourMask = cv::Mat::zeros(box.height, box.width, CV_8UC1);
+            std::vector<std::vector<cv::Point>> singleContour{contour};
+            cv::drawContours(contourMask, singleContour, 0, cv::Scalar(255), cv::FILLED, cv::LINE_8, cv::noArray(), INT_MAX, -box.tl());
+        }
 
         const cv::Mat residualRoi = residual(box);
         // gray is empty when the CUDA preprocessing path skipped the download to save a
@@ -1022,6 +1065,20 @@ bool CameraStarDetector::applyStarDetection(
         detection.m_aspectRatio = static_cast<float>(aspectRatio);
         detection.m_saturated = saturated;
         detection.m_hotPixelSuspect = hotPixelSuspect;
+
+        // Optional V2 quality gate (A2, off by default): in a V2 (wide/fisheye) context, reject a
+        // star recovered only by the pixel-count area (legacy polygon-area would have rejected it at
+        // minArea) unless it clears an SNR bar. Off by default because context-gating already
+        // protects narrow REAL; retained env-tunable in case wide/fisheye REAL needs noise filtering.
+        // Saturated cores are exempt (unreliable SNR but real bright stars).
+        if (v2Active
+            && (v2RecoveredMinSnr > 0.0)
+            && !saturated
+            && (polygonArea < static_cast<double>(m_settings.m_starMinArea))
+            && (snr < v2RecoveredMinSnr))
+        {
+            continue;
+        }
         starDetections.append(detection);
 
         if (!finalMask.empty()) {

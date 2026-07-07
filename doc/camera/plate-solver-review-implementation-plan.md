@@ -55,6 +55,18 @@ Rules, unchanged from prior workstreams:
 
 Fix first; each is small and independently committable.
 
+**Status (2026-07-02): D1, D2, D3, D5, D6, D7, D8 landed and validated (REAL 47/48 + FISHEYE
+mode1 35/50 + mode4 40/50 + WIDE 27/36, all verdict sets identical to baseline). D4 ATTEMPTED
+AND REVERTED** — quantizing the three banded sort keys (1e-6 / 0.05 / 0.20) is a valid strict-weak
+ordering but reshuffles near-tie rankings enough to move the corpus: FISHEYE-mode4 40→44 (+4), but
+**WIDE 27→21 (−6)** and FISHEYE-mode1 churned 16 cases at net zero; REAL stayed 47. Some WIDE cases
+were implicitly relying on the (UB) band ordering. The UB is latent (no observed crash on the small
+candidate-pool arrays in MSVC release), so D4 is deferred to a dedicated effort: it needs (a) quantum
+calibration per comparator against the FULL corpus, (b) RAND2 (dense-narrow near-tie regime) in the
+gate — establish a same-branch RAND2 baseline first, and (c) likely splitting the sort-key comparator
+from the pairwise incumbent check (the plan's original intent) rather than quantizing the shared
+function. Fold into WS1b (decision-boundary margins) work.
+
 | # | Item | Where | Class | Validation |
 |---|---|---|---|---|
 | D1 | Fine roll sweep unreachable: built under `!useStartElevation && !useStartDirection`, consumed only in the `useStartElevation` branch. Decide intent: wire `fovSearchRollOffsets` into the guided-fov grid (mode-1) or delete the fine path. | `cameraplatesolverpipeline.cpp:11956`, `:12235` | **Behaviour-affecting** | A/B on FISHEYE mode-1 + WIDE; full suite. This is also the first Phase-5 coverage probe. |
@@ -70,6 +82,19 @@ Fix first; each is small and independently committable.
 
 Do these **before** the accuracy phases: they cut suite wall-clock, which multiplies through every
 later validation run. Split into two sub-tiers.
+
+**Status (2026-07-04): P-A and P-C landed bit-identical; P-B already present; P-E/P-F/P-G deferred.**
+- **P-A DONE (621ec44b9):** per-solve `FinalPassSeedCache` (guarded by a catalog `visibleStarsGeneration`
+  stamp + seed-ref params + detection count). Measured −15..−25% per-case solve time on dense
+  narrow-guided cases (cluster-m7 7027→5279ms, galaxy-m31 5606→4236ms); verdict sets identical.
+- **P-C DONE (35168e347):** memoized the four pure per-eval gate/score values the pairwise ranking
+  comparator recomputed for the incumbent every comparison (`hasStrongDenseNarrowGuidedFinalPass`,
+  `finalMatchPassScore`, `narrowGuidedBrightConsistencyScore`, `narrowGuidedSeedConsistencyScore`),
+  cached at the end of `evaluateFinalMatchPass` with a `cachedGatesValid` flag + fallback accessors;
+  verdict sets identical.
+- **P-B:** already implemented in current code (the seed-radial loop uses `matchedDetectionByCatalog`).
+- **P-E/P-F/P-G:** deferred — recon showed non-bit-identical wrinkles (P-F normalize is ULP-affecting;
+  P-E changes the failure result's catalog fields; P-G's deferred metrics need an equality check).
 
 **2a — bit-identical (caching / lookup replacement); verdict sets must not change:**
 
@@ -127,6 +152,29 @@ Highest expected value for the fisheye gap, and the riskiest for the tuned stack
 distribution of **every** case). Flag-gate the package behind one env var
 (`SDRANGEL_CAMERA_STAR_DETECTOR_V2=1`) during development; land items individually once green.
 Full five-corpus run after **each** item; FISHEYE mode-1/mode-4 are the success metrics, REAL the gate.
+
+**Status (2026-07-03): S1 landed flag-gated (default OFF, byte-identical); S3 tried + reverted; V2
+NOT default-eligible — no REAL-safe win found.** Measured under the flag:
+- **S1 (true pixel-count area)** alone: FISHEYE mode1 35→38 (+3), mode4 40→45 (+5), WIDE 27 (net 0),
+  but **REAL 47→43 (−4)** — recovering small blobs adds noise/galaxy-structure false positives that
+  confuse dense/real fields (narrow-3, wide-9, m101, m51-2). Committed flag-gated (103f19600).
+- **S1+S3 (correct half-normal σ from the positive residual)**: REAL recovered only to 45 (−2), and
+  the higher σ → higher 4σ threshold **killed the fisheye gain** (mode1 back to 35, mode4 41) and
+  **regressed WIDE 27→21 (−6)**. Root cause: the 4σ multiplier was calibrated against the
+  *underestimated* legacy σ, so correcting σ over-thresholds — the two are coupled and must be
+  re-tuned together. S3 reverted (net-negative even flag-gated).
+- **Conclusion:** every V2 variant regresses REAL, the trustworthy gate. The synthetic-fisheye
+  movement is largely oracle churn (consistent with `plate-solver-notes.md`: "remaining synthetic
+  mode-1 failures are dominated by test-corpus quality issues… REAL is the trustworthy gate"). So
+  the fisheye gap is NOT closeable via these detector changes without a real regression. S1 stays a
+  documented opt-in experiment; do not flip the V2 default. A genuine attempt would need to (a) fix σ
+  AND re-calibrate the threshold multiplier jointly, (b) add quality-gated small-star recovery so
+  only high-confidence faint stars are admitted, and (c) validate on a *trustworthy* fisheye corpus
+  (real fisheye frames, not the weak-oracle synthetic set) — a research loop, not a quick fix.
+
+Remaining unattempted items (S2/S4/S5/S6/S8/S9/S10) are held behind the same conclusion: without a
+trustworthy fisheye gate and a σ+threshold co-calibration, they risk the same REAL-for-synthetic
+trade. Revisit only with a real-fisheye validation corpus.
 
 1. S1 Pixel-count areas: replace `findContours`+`contourArea`+per-contour `drawContours` with one
    `connectedComponentsWithStats` pass (fixes area-0 rejection of 1-px-wide blobs, fixes `fillRatio`

@@ -35,7 +35,7 @@
 
 #include <opencv2/imgproc.hpp>
 
-#if defined(CAMERA_OPENCV_CUDA_IMAGE_PROCESSING) || defined(CAMERA_OPENCV_CUDA_DETECTION) || defined(CAMERA_OPENCV_CUDA_MOTION_DETECTION)
+#if defined(CAMERA_OPENCV_CUDA_IMAGE_PROCESSING) || defined(CAMERA_OPENCV_CUDA_DETECTION) || defined(CAMERA_OPENCV_CUDA_MOTION_DETECTION) || defined(CAMERA_OPENCV_CUDA_CLOUD_DETECTION)
 #include <opencv2/core/cuda.hpp>
 #endif
 
@@ -434,7 +434,7 @@ struct CameraPipelineFrame
     BayerPattern m_bayerPattern = BayerNone;
     BayerPattern m_rawInputBayerPattern = BayerNone;
 
-#if defined(CAMERA_OPENCV_CUDA_IMAGE_PROCESSING) || defined(CAMERA_OPENCV_CUDA_DETECTION) || defined(CAMERA_OPENCV_CUDA_MOTION_DETECTION)
+#if defined(CAMERA_OPENCV_CUDA_IMAGE_PROCESSING) || defined(CAMERA_OPENCV_CUDA_DETECTION) || defined(CAMERA_OPENCV_CUDA_MOTION_DETECTION) || defined(CAMERA_OPENCV_CUDA_CLOUD_DETECTION)
     cv::cuda::GpuMat m_cudaBgrImage;
     cv::cuda::GpuMat m_cudaGrayImage;
 
@@ -496,7 +496,7 @@ struct CameraPipelineFrame
     bool hasImageData() const
     {
         return !m_image.isNull()
-#if defined(CAMERA_OPENCV_CUDA_IMAGE_PROCESSING) || defined(CAMERA_OPENCV_CUDA_DETECTION) || defined(CAMERA_OPENCV_CUDA_MOTION_DETECTION)
+#if defined(CAMERA_OPENCV_CUDA_IMAGE_PROCESSING) || defined(CAMERA_OPENCV_CUDA_DETECTION) || defined(CAMERA_OPENCV_CUDA_MOTION_DETECTION) || defined(CAMERA_OPENCV_CUDA_CLOUD_DETECTION)
             || hasCudaBgrImage()
             || hasCudaGrayImage()
 #endif
@@ -508,7 +508,7 @@ struct CameraPipelineFrame
         if (!m_image.isNull()) {
             return m_image.size();
         }
-#if defined(CAMERA_OPENCV_CUDA_IMAGE_PROCESSING) || defined(CAMERA_OPENCV_CUDA_DETECTION) || defined(CAMERA_OPENCV_CUDA_MOTION_DETECTION)
+#if defined(CAMERA_OPENCV_CUDA_IMAGE_PROCESSING) || defined(CAMERA_OPENCV_CUDA_DETECTION) || defined(CAMERA_OPENCV_CUDA_MOTION_DETECTION) || defined(CAMERA_OPENCV_CUDA_CLOUD_DETECTION)
         if (hasCudaBgrImage()) {
             return QSize(m_cudaBgrImage.cols, m_cudaBgrImage.rows);
         }

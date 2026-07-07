@@ -19,6 +19,10 @@
 #ifndef INCLUDE_FEATURE_CAMERACLOUDDETECTOR_H_
 #define INCLUDE_FEATURE_CAMERACLOUDDETECTOR_H_
 
+#ifdef CAMERA_OPENCV_CUDA_CLOUD_DETECTION
+#include <opencv2/cudafilters.hpp>
+#endif
+
 #include "cameradetector.h"
 
 /**
@@ -43,8 +47,12 @@
  * \note Derives from CameraDetectionStage and runs on its own QThread; see that base class for
  *       threading, frame-backlog and ROI/exclusion-mask behaviour. Whenever a fresh mask is
  *       computed a MsgReportCloudCoverage is pushed to the feature for GUI/WebAPI reporting.
- *       CPU-only for now; a CUDA path (boxFilter/threshold via cv::cuda, as in the star
- *       detector's preprocessing) is a possible follow-up.
+ * \note The only full-resolution work is the prepare step (ROI crop, downscale, luminance,
+ *       median blur); classification then runs on the small downscaled images. When
+ *       CAMERA_OPENCV_CUDA_CLOUD_DETECTION is defined and the frame carries a GPU-resident BGR
+ *       image, the prepare step runs on the GPU so the full-resolution frame never has to be
+ *       downloaded to the CPU; only the downscaled work images are. Classification is shared
+ *       between the two paths, so CPU and CUDA results differ only by resize/filter rounding.
  */
 class CameraCloudDetector : public CameraDetectionStage
 {
@@ -92,9 +100,17 @@ private:
     bool m_autoNight;          // Auto-mode day/night decision, kept between frames for hysteresis
     bool m_haveAutoModeState;
 
+#ifdef CAMERA_OPENCV_CUDA_CLOUD_DETECTION
+    cv::cuda::Stream m_cudaCloudStream;
+    cv::Ptr<cv::cuda::Filter> m_cudaCloudMedianFilter;
+
+    [[nodiscard]] bool canUseCudaCloudDetection() const;
+    bool prepareWorkImagesCuda(const cv::cuda::GpuMat& bgrGpu, const cv::Rect& roi, cv::Mat& workBgr, cv::Mat& rawGray, cv::Mat& gray);
+#endif
     [[nodiscard]] static bool cloudSettingsChanged(const QList<QString>& settingsKeys);
     [[nodiscard]] bool resolveNightMode(const cv::Mat& medianGray, const cv::Mat& evaluationMask);
-    void applyCloudDetection(const cv::Mat& bgrMat, const cv::Rect& roi, const cv::Rect& contentRect, CameraPipelineCloud& cloud, cv::Mat* debugMask);
+    void prepareWorkImages(const cv::Mat& bgrMat, const cv::Rect& roi, cv::Mat& workBgr, cv::Mat& rawGray, cv::Mat& gray) const;
+    void applyCloudDetection(const cv::Mat& workBgr, const cv::Mat& rawGray, const cv::Mat& gray, const cv::Rect& roi, const cv::Rect& contentRect, CameraPipelineCloud& cloud, cv::Mat* debugMask);
     void invalidateCache();
 };
 

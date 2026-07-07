@@ -243,6 +243,8 @@ Clouds evolve slowly, so the mask is only recomputed every few frames (configura
 
 When output scaling places the image inside a larger canvas, the padded borders are excluded automatically: they are never classified as cloud, do not count towards the coverage percentage, and do not influence the automatic day/night decision.
 
+When OpenCV CUDA support is available and enabled, the full-resolution part of cloud detection (crop, downscale, luminance extraction and median filtering) runs on the GPU, so GPU-resident frames from earlier pipeline stages do not need to be downloaded at full resolution.
+
 Cloud-classified regions can be tinted on the image with a configurable colour, and the coverage percentage is shown on the Cloud Detection sub-tab in the Camera Settings dialog and reported via the API.
 
 <h3>31: Item overlay</h3>

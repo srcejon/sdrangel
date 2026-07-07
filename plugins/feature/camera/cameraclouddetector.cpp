@@ -20,6 +20,10 @@
 #include <cmath>
 
 #include <QDebug>
+#ifdef CAMERA_OPENCV_CUDA_CLOUD_DETECTION
+#include <opencv2/cudaimgproc.hpp>
+#include <opencv2/cudawarping.hpp>
+#endif
 
 #include "util/profiler.h"
 #include "cameraclouddetector.h"
@@ -195,18 +199,38 @@ void CameraCloudDetector::processNewFrame(const CameraPipelineFramePtr& frame)
         return;
     }
 
-    if (!frame->ensureCpuImageFromCuda()) {
-        return;
+    cv::Mat workBgr;
+    cv::Mat rawGray;
+    cv::Mat gray;
+    bool prepared = false;
+
+#ifdef CAMERA_OPENCV_CUDA_CLOUD_DETECTION
+    // When the frame already carries a GPU-resident BGR image, run the only full-resolution
+    // work (crop/downscale/luminance/median) on the GPU and download just the small
+    // downscaled work images, instead of downloading the whole frame
+    if (frame->hasCudaBgrImage()
+        && (frame->m_cudaBgrImage.depth() == CV_8U)
+        && canUseCudaCloudDetection())
+    {
+        prepared = prepareWorkImagesCuda(frame->m_cudaBgrImage, detectionRoi, workBgr, rawGray, gray);
+    }
+#endif
+    if (!prepared)
+    {
+        if (!frame->ensureCpuImageFromCuda()) {
+            return;
+        }
+
+        QImage convertedRgb;
+        const QImage& rgb = ensureRgb888(frame->m_image, convertedRgb);
+        cv::Mat mat = wrapRgb888Image(rgb);
+        cv::Mat bgrMat;
+        cv::cvtColor(mat, bgrMat, cv::COLOR_RGB2BGR);
+        prepareWorkImages(bgrMat, detectionRoi, workBgr, rawGray, gray);
     }
 
-    QImage convertedRgb;
-    const QImage& rgb = ensureRgb888(frame->m_image, convertedRgb);
-    cv::Mat mat = wrapRgb888Image(rgb);
-    cv::Mat bgrMat;
-    cv::cvtColor(mat, bgrMat, cv::COLOR_RGB2BGR);
-
     cv::Mat cloudDebugMask;
-    applyCloudDetection(bgrMat, detectionRoi, contentRect, frame->m_cloud, debugViewActive ? &cloudDebugMask : nullptr);
+    applyCloudDetection(workBgr, rawGray, gray, detectionRoi, contentRect, frame->m_cloud, debugViewActive ? &cloudDebugMask : nullptr);
 
     m_lastCloud = frame->m_cloud;
     m_lastFrameSize = frameSize;
@@ -225,8 +249,9 @@ void CameraCloudDetector::processNewFrame(const CameraPipelineFramePtr& frame)
             cv::resize(cloudDebugMask, roiMask, detectionRoi.size(), 0.0, 0.0, cv::INTER_NEAREST);
         }
         roiMask.copyTo(maskCanvas(detectionRoi));
-        cv::cvtColor(maskCanvas, bgrMat, cv::COLOR_GRAY2BGR);
-        frame->m_image = convertBgrToRgbImage(bgrMat);
+        cv::Mat debugBgr;
+        cv::cvtColor(maskCanvas, debugBgr, cv::COLOR_GRAY2BGR);
+        frame->m_image = convertBgrToRgbImage(debugBgr);
         frame->clearCudaCache();
     }
 
@@ -265,11 +290,14 @@ bool CameraCloudDetector::resolveNightMode(const cv::Mat& medianGray, const cv::
     return m_autoNight;
 }
 
-void CameraCloudDetector::applyCloudDetection(const cv::Mat& bgrMat, const cv::Rect& roi, const cv::Rect& contentRect, CameraPipelineCloud& cloud, cv::Mat* debugMask)
+// Produces the downscaled work images the classification runs on: BGR (for the day-path
+// colour ratio), raw luminance and median-blurred luminance. The median blur erases stars,
+// hot pixels and other point sources so they never register as cloud texture.
+void CameraCloudDetector::prepareWorkImages(const cv::Mat& bgrMat, const cv::Rect& roi, cv::Mat& workBgr, cv::Mat& rawGray, cv::Mat& gray) const
 {
     PROFILER_START();
 
-    cv::Mat input = bgrMat(roi);
+    workBgr = bgrMat(roi);
     const double downscale = m_settings.m_cloudDownscale;
     if (downscale < 0.999)
     {
@@ -277,15 +305,88 @@ void CameraCloudDetector::applyCloudDetection(const cv::Mat& bgrMat, const cv::R
             std::max(1, static_cast<int>(std::lround(roi.width * downscale))),
             std::max(1, static_cast<int>(std::lround(roi.height * downscale))));
         cv::Mat downscaledInput;
-        cv::resize(input, downscaledInput, downscaledSize, 0.0, 0.0, cv::INTER_AREA);
-        input = downscaledInput;
+        cv::resize(workBgr, downscaledInput, downscaledSize, 0.0, 0.0, cv::INTER_AREA);
+        workBgr = downscaledInput;
     }
 
-    cv::Mat rawGray;
-    cv::cvtColor(input, rawGray, cv::COLOR_BGR2GRAY);
-    // Erase stars, hot pixels and other point sources so they never register as cloud texture
-    cv::Mat gray;
+    cv::cvtColor(workBgr, rawGray, cv::COLOR_BGR2GRAY);
     cv::medianBlur(rawGray, gray, 5);
+
+    PROFILER_STOP(__FUNCTION__);
+}
+
+#ifdef CAMERA_OPENCV_CUDA_CLOUD_DETECTION
+bool CameraCloudDetector::canUseCudaCloudDetection() const
+{
+    static bool warnedNoDevice = false;
+
+    if (!m_settings.m_postProcessUseCuda) {
+        return false;
+    }
+
+    if (cv::cuda::getCudaEnabledDeviceCount() <= 0)
+    {
+        if (!warnedNoDevice)
+        {
+            qWarning() << "CameraCloudDetector: CUDA cloud detection requested, but no CUDA-enabled OpenCV device is available";
+            warnedNoDevice = true;
+        }
+        return false;
+    }
+
+    return true;
+}
+
+// GPU variant of prepareWorkImages(): the full-resolution BGR image stays on the GPU and
+// only the downscaled work images are downloaded
+bool CameraCloudDetector::prepareWorkImagesCuda(const cv::cuda::GpuMat& bgrGpu, const cv::Rect& roi, cv::Mat& workBgr, cv::Mat& rawGray, cv::Mat& gray)
+{
+    PROFILER_START();
+
+    try
+    {
+        cv::cuda::GpuMat inputGpu = bgrGpu(roi);
+        const double downscale = m_settings.m_cloudDownscale;
+        if (downscale < 0.999)
+        {
+            const cv::Size downscaledSize(
+                std::max(1, static_cast<int>(std::lround(roi.width * downscale))),
+                std::max(1, static_cast<int>(std::lround(roi.height * downscale))));
+            cv::cuda::GpuMat downscaledGpu;
+            cv::cuda::resize(inputGpu, downscaledGpu, downscaledSize, 0.0, 0.0, cv::INTER_AREA, m_cudaCloudStream);
+            inputGpu = downscaledGpu;
+        }
+
+        cv::cuda::GpuMat rawGrayGpu;
+        cv::cuda::cvtColor(inputGpu, rawGrayGpu, cv::COLOR_BGR2GRAY, 0, m_cudaCloudStream);
+
+        if (!m_cudaCloudMedianFilter) {
+            m_cudaCloudMedianFilter = cv::cuda::createMedianFilter(CV_8UC1, 5);
+        }
+        cv::cuda::GpuMat grayGpu;
+        m_cudaCloudMedianFilter->apply(rawGrayGpu, grayGpu, m_cudaCloudStream);
+
+        inputGpu.download(workBgr, m_cudaCloudStream);
+        rawGrayGpu.download(rawGray, m_cudaCloudStream);
+        grayGpu.download(gray, m_cudaCloudStream);
+        m_cudaCloudStream.waitForCompletion();
+
+        PROFILER_STOP(__FUNCTION__);
+        return true;
+    }
+    catch (const cv::Exception& error)
+    {
+        qWarning() << "CameraCloudDetector: CUDA cloud preprocessing failed; falling back to CPU:" << error.what();
+    }
+
+    PROFILER_STOP(__FUNCTION__);
+    return false;
+}
+#endif
+
+void CameraCloudDetector::applyCloudDetection(const cv::Mat& workBgr, const cv::Mat& rawGray, const cv::Mat& gray, const cv::Rect& roi, const cv::Rect& contentRect, CameraPipelineCloud& cloud, cv::Mat* debugMask)
+{
+    PROFILER_START();
 
     // Local fine-scale texture energy: what the median blur removed, averaged over a
     // neighbourhood. Cloud is smooth at the working resolution, while roofs, trees and
@@ -356,7 +457,7 @@ void CameraCloudDetector::applyCloudDetection(const cv::Mat& bgrMat, const cv::R
         // Clear blue sky has a red/blue ratio well below 1; white/grey cloud approaches or
         // exceeds it
         std::vector<cv::Mat> channels;
-        cv::split(input, channels);
+        cv::split(workBgr, channels);
         cv::Mat blue, red;
         channels[0].convertTo(blue, CV_32F);
         channels[2].convertTo(red, CV_32F);

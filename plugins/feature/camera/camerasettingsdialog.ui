@@ -6228,7 +6228,7 @@ car</string>
            <item row="1" column="3">
             <widget class="QSpinBox" name="cloudNightThresholdSpin">
              <property name="toolTip">
-              <string>Night path: threshold on sky-background deviation from the median sky level (0-255)</string>
+              <string>Dark night path: how much brighter than the surrounding sky a region must be to classify as cloud (0-255)</string>
              </property>
              <property name="maximum">
               <number>255</number>

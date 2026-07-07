@@ -36,18 +36,44 @@ namespace {
 // Absolute lower bound on the day-path brightness floor; the effective floor also scales
 // with the evaluated sky's median brightness so dark vignette/borders never classify
 constexpr int dayMinBrightness = 30;
+// Night path: the sky is treated as moonlit when its bright quartile reaches this level -
+// i.e. at least a quarter of the evaluated sky is bright, so the colour cues have something
+// to work with. Judging by the bright quartile rather than the median keeps half-overcast
+// moonlit skies (bright cloud over a dark clear half) on the colour path.
+constexpr int moonlitBrightness = 60;
+constexpr double moonlitSkyFraction = 0.75;
+// Moonlit night: cloud is where the red/blue ratio exceeds the clear-sky ratio by this
+// margin. Relative rather than absolute, because high gain and night white balance shift
+// the whole ratio scale. The clear-sky ratio is anchored at a low percentile of the bright
+// sky, so it still finds the clear gaps when cloud covers most of the frame. On a fully
+// overcast sky the anchor inevitably lands inside cloud, so the resulting threshold is
+// capped at the day threshold: anything at least as white as daytime cloud is cloud at
+// night too, whatever the anchor says
+constexpr double moonlitClearSkyFraction = 0.05;
+constexpr float moonlitRatioMargin = 0.10f;
+// Moonlit night: cloud lit by the moon or ground light is also much brighter than the
+// median night sky; this catches grey/white cloud when cloud dominates the frame and the
+// colour anchor has little clear sky to calibrate against
+constexpr double moonlitCloudBrightness = 1.3;
+// Dark night: pixels below this brightness are border or foreground, not sky, and are kept
+// out of the local background averages so the dark fisheye surround cannot bleed into them
+constexpr int darkSkyFloor = 12;
+// Dark night: the wide neighbourhood the local background is compared against, as a
+// multiple of the background blur radius. Wide enough that a large dim cloud veil still
+// contrasts against the sky beyond it, instead of being averaged into its own surround
+constexpr int darkSurroundScale = 4;
 // Auto-mode hysteresis band: day at or above the upper bound, night at or below the lower
 constexpr double autoDayBrightness = 60.0;
 constexpr double autoNightBrightness = 45.0;
-// Auto-mode sun-elevation bounds in degrees: the day-path colour cues need a bright sky and
-// the night-path background deviation needs real darkness; in the twilight band between them
-// (and when no observation time is available) the brightness heuristic decides
+// Auto-mode day/night sun-elevation boundary in degrees: at or above this the sky is bright
+// enough for the day-path colour cues; below it (twilight and full night) the night path
+// runs, since a high-gain camera makes twilight brightness an unreliable day/night signal.
+// When no observation time is available the brightness heuristic decides instead.
 constexpr double sunDayElevation = -4.0;
-constexpr double sunNightElevation = -10.0;
 
-// Median of the 8-bit values where mask is non-zero, as a robust sky-level estimate that
-// ignores excluded regions and is insensitive to cloud outliers
-int maskedMedian(const cv::Mat& values, const cv::Mat& mask)
+// Percentile of the 8-bit values where mask is non-zero (0.5 = median), as a robust
+// sky-level estimate that ignores excluded regions and is insensitive to outliers
+int maskedPercentile(const cv::Mat& values, const cv::Mat& mask, double fraction)
 {
     int histogram[256] = {0};
     int total = 0;
@@ -65,7 +91,7 @@ int maskedMedian(const cv::Mat& values, const cv::Mat& mask)
         }
     }
 
-    int remaining = (total + 1) / 2;
+    int remaining = std::max(1, static_cast<int>(std::ceil(std::clamp(fraction, 0.0, 1.0) * total)));
     for (int bin = 0; bin < 256; ++bin)
     {
         remaining -= histogram[bin];
@@ -75,6 +101,34 @@ int maskedMedian(const cv::Mat& values, const cv::Mat& mask)
     }
 
     return 0;
+}
+
+// Percentile of the red/blue ratio over the masked pixels; a low percentile estimates the
+// clear-sky colour, self-calibrating to the camera's white balance and gain
+float maskedRatioPercentile(const cv::Mat& red, const cv::Mat& blue, const cv::Mat& mask, double fraction)
+{
+    std::vector<float> samples;
+    samples.reserve(static_cast<size_t>(red.total()));
+    for (int row = 0; row < red.rows; ++row)
+    {
+        const float *redLine = red.ptr<float>(row);
+        const float *blueLine = blue.ptr<float>(row);
+        const uchar *maskLine = mask.ptr<uchar>(row);
+        for (int col = 0; col < red.cols; ++col)
+        {
+            if (maskLine[col]) {
+                samples.push_back(redLine[col] / (blueLine[col] + 1.0f));
+            }
+        }
+    }
+
+    if (samples.empty()) {
+        return 0.0f;
+    }
+
+    const size_t index = static_cast<size_t>(std::clamp(fraction, 0.0, 1.0) * (samples.size() - 1));
+    std::nth_element(samples.begin(), samples.begin() + index, samples.end());
+    return samples[index];
 }
 
 } // namespace
@@ -295,19 +349,15 @@ bool CameraCloudDetector::resolveNightMode(const cv::Mat& medianGray, const cv::
         AzAlt sunAzAlt;
         RADec sunRaDec;
         Astronomy::sunPosition(sunAzAlt, sunRaDec, m_settings.m_latitude, m_settings.m_longitude, observationTime);
-        if (sunAzAlt.alt >= sunDayElevation)
-        {
-            m_autoNight = false;
-            m_haveAutoModeState = true;
-            return false;
-        }
-        if (sunAzAlt.alt <= sunNightElevation)
-        {
-            m_autoNight = true;
-            m_haveAutoModeState = true;
-            return true;
-        }
-        // Twilight: neither path is clearly right, so let the brightness heuristic decide
+        // Day only when the sun is up or in early twilight; the whole rest of the
+        // sub-horizon range routes to night. Through twilight a high-gain camera makes a
+        // dark sky read bright, so frame brightness cannot be trusted to pick day/night;
+        // and the night path's moonlit branch already handles bright twilight cloud (and
+        // does so better than the day path, whose fixed daylight threshold under-detects
+        // pastel pre-dawn cloud), so there is nothing to gain by second-guessing here.
+        m_autoNight = sunAzAlt.alt < sunDayElevation;
+        m_haveAutoModeState = true;
+        return m_autoNight;
     }
 
     const double meanBrightness = cv::mean(medianGray, evaluationMask)[0];
@@ -469,27 +519,96 @@ void CameraCloudDetector::applyCloudDetection(const cv::Mat& workBgr, const cv::
     const bool night = resolveNightMode(gray, evaluationMask, captureDateTime);
 
     cv::Mat mask;
-    if (night)
+    const int nightSkyMedian = night ? maskedPercentile(gray, evaluationMask, 0.5) : 0;
+    const int nightSkyBrightQuartile = night ? maskedPercentile(gray, evaluationMask, moonlitSkyFraction) : 0;
+    if (night && (nightSkyBrightQuartile >= moonlitBrightness))
     {
-        // A clear night sky is smooth apart from point sources, so clouds show up as
-        // low-frequency structure: brighter under moonlight/light pollution, darker where
-        // airglow is blocked. Compare a heavily blurred background against a robust global
-        // sky level and threshold the absolute deviation.
-        const int ksize = 2 * m_settings.m_cloudBackgroundBlur + 1;
-        cv::Mat background;
-        cv::boxFilter(gray, background, -1, cv::Size(ksize, ksize));
+        // A bright night sky (moonlit, or high gain and long exposure) is Rayleigh-scattered
+        // light and behaves like dim daylight: clear sky is blue, cloud is white/pink. The
+        // luminance-deviation approach fails here because moonlight and vignette span a wide
+        // brightness range. Classify by red/blue ratio instead, but with the threshold
+        // anchored to the bluest quartile of the bright sky, since gain and night white
+        // balance shift the whole ratio scale.
+        std::vector<cv::Mat> channels;
+        cv::split(workBgr, channels);
+        cv::Mat blue, red;
+        channels[0].convertTo(blue, CV_32F);
+        channels[2].convertTo(red, CV_32F);
+
+        const int brightnessFloor = std::max(dayMinBrightness, nightSkyMedian / 2);
+        const cv::Mat brightMask = gray >= brightnessFloor;
+        cv::Mat skyMask;
+        cv::bitwise_and(brightMask, evaluationMask, skyMask);
+        const float clearSkyRatio = maskedRatioPercentile(red, blue, skyMask, moonlitClearSkyFraction);
+        const float cloudRatio = std::min(clearSkyRatio + moonlitRatioMargin, static_cast<float>(m_settings.m_cloudDayThreshold));
+
         if (debugMask && (m_settings.m_cloudDebugView == CameraSettings::CloudDebugViewBackground)) {
-            *debugMask = background.clone();
+            *debugMask = gray.clone();
+        }
+        if (debugMask && (m_settings.m_cloudDebugView == CameraSettings::CloudDebugViewSignal))
+        {
+            // Ratio image scaled so a ratio of 1.0 maps to mid-grey
+            cv::Mat ratio = red / (blue + 1.0f);
+            ratio.convertTo(*debugMask, CV_8U, 128.0);
         }
 
-        const int skyLevel = maskedMedian(background, evaluationMask);
-        cv::Mat deviation;
-        cv::absdiff(background, cv::Scalar(skyLevel), deviation);
-        if (debugMask && (m_settings.m_cloudDebugView == CameraSettings::CloudDebugViewSignal)) {
-            *debugMask = deviation.clone();
+        cv::Mat ratioMask;
+        cv::compare(red, (blue + 1.0f) * cloudRatio, ratioMask, cv::CMP_GE);
+
+        const int cloudBrightness = std::min(255, static_cast<int>(std::lround(moonlitCloudBrightness * nightSkyMedian)));
+        const cv::Mat brightCloudMask = gray >= cloudBrightness;
+        cv::bitwise_or(ratioMask, brightCloudMask, ratioMask);
+        cv::bitwise_and(ratioMask, brightMask, mask);
+    }
+    else if (night)
+    {
+        // A dark night sky varies smoothly across the frame (moon glow, light pollution,
+        // vignetting), so no global sky level can separate cloud from gradient. Cloud lit
+        // by ground light or the moon is locally brighter than the sky around it, so
+        // compare the local background against a much wider neighbourhood instead. Both
+        // averages are normalized over sky pixels only, so the dark fisheye border and
+        // foreground cannot bleed into them and fake a bright rim.
+        cv::Mat skyMask8;
+        cv::bitwise_and(gray >= darkSkyFloor, evaluationMask, skyMask8);
+        cv::Mat sky;
+        skyMask8.convertTo(sky, CV_32F, 1.0 / 255.0);
+        cv::Mat grayWeighted;
+        gray.convertTo(grayWeighted, CV_32F);
+        grayWeighted = grayWeighted.mul(sky);
+
+        auto maskedBackground = [&](int radius, cv::Mat& background, cv::Mat& density)
+        {
+            const cv::Size kernel(2 * radius + 1, 2 * radius + 1);
+            cv::Mat sum;
+            cv::boxFilter(grayWeighted, sum, -1, kernel);
+            cv::boxFilter(sky, density, -1, kernel);
+            cv::Mat safeDensity;
+            cv::max(density, 1e-3, safeDensity);
+            cv::divide(sum, safeDensity, background);
+        };
+
+        cv::Mat backgroundLocal, densityLocal, backgroundWide, densityWide;
+        maskedBackground(m_settings.m_cloudBackgroundBlur, backgroundLocal, densityLocal);
+        maskedBackground(darkSurroundScale * m_settings.m_cloudBackgroundBlur, backgroundWide, densityWide);
+        if (debugMask && (m_settings.m_cloudDebugView == CameraSettings::CloudDebugViewBackground)) {
+            backgroundLocal.convertTo(*debugMask, CV_8U);
         }
 
-        cv::threshold(deviation, mask, m_settings.m_cloudNightThreshold, 255, cv::THRESH_BINARY);
+        const cv::Mat contrast = backgroundLocal - backgroundWide;
+        if (debugMask && (m_settings.m_cloudDebugView == CameraSettings::CloudDebugViewSignal))
+        {
+            cv::Mat positiveContrast;
+            cv::max(contrast, 0.0, positiveContrast);
+            positiveContrast.convertTo(*debugMask, CV_8U);
+        }
+
+        // Only positive contrast is cloud: the clear gaps between clouds are darker than
+        // their surroundings and must not classify
+        mask = contrast > static_cast<float>(m_settings.m_cloudNightThreshold);
+        cv::bitwise_and(mask, skyMask8, mask);
+        // Ignore regions where the wide window saw too little sky to give a stable average
+        const cv::Mat stableMask = densityWide > 0.2f;
+        cv::bitwise_and(mask, stableMask, mask);
     }
     else
     {
@@ -518,7 +637,7 @@ void CameraCloudDetector::applyCloudDetection(const cv::Mat& workBgr, const cv::
         // vignette, borders and shadowed structures are neutral and smooth, so they pass
         // the ratio and texture tests. By day cloud is at least comparably bright to the
         // sky, so anchor the floor to the evaluated sky's median brightness.
-        const int daySkyLevel = maskedMedian(gray, evaluationMask);
+        const int daySkyLevel = maskedPercentile(gray, evaluationMask, 0.5);
         const int brightnessFloor = std::max(dayMinBrightness, daySkyLevel / 2);
         const cv::Mat brightMask = gray >= brightnessFloor;
         cv::bitwise_and(ratioMask, brightMask, mask);

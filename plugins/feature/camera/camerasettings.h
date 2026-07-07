@@ -642,7 +642,7 @@ struct CameraSettings
     bool   m_cloudShowOverlay;  ///< Draw the cloud mask tint on the preview image
     double m_cloudDayThreshold; ///< Day path: minimum red/blue ratio classified as cloud: 0.0..2.0
     int    m_cloudTextureThreshold; ///< Day path: fine-scale texture level above which a region cannot be cloud (rejects roofs/trees); 0 disables: 0..255
-    int    m_cloudNightThreshold; ///< Night path: threshold on background deviation from the sky level: 0..255
+    int    m_cloudNightThreshold; ///< Dark night path: how much brighter than the surrounding sky a region must be to classify as cloud: 0..255
     int    m_cloudBackgroundBlur; ///< Night path: radius used to estimate the sky background, in downscaled pixels: 1..128
     int    m_cloudOpenSize;     ///< Kernel radius for cloud-mask morphological open: 0..20
     int    m_cloudCloseSize;    ///< Kernel radius for cloud-mask morphological close: 0..20

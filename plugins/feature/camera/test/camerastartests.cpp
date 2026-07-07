@@ -112,6 +112,7 @@ struct StarTestCase
     double centerOffsetX = 0.0;
     double centerOffsetY = 0.0;
     double distortionK1 = 0.0;
+    bool lensMirror = false;   ///< optional "mirror" column: image is horizontally mirrored vs the sky
     double maxMagnitude = std::numeric_limits<double>::quiet_NaN();
     double expectedRoll = std::numeric_limits<double>::quiet_NaN();
     double expectedRollTolerance = std::numeric_limits<double>::quiet_NaN();
@@ -166,6 +167,10 @@ struct TestProjector
     double distortionK1 = 0.0;
     int width = 0;
     int height = 0;
+    // Mirrored test (mirror=1 column): the solved pose lives in the horizontally-flipped
+    // detection frame, so diagnostic projections onto the ORIGINAL image reflect pixel x
+    // (same semantics as the solver/postprocessor SkyProjector::mirrorX).
+    bool mirrorX = false;
 };
 
 constexpr double kPi = 3.14159265358979323846;
@@ -730,6 +735,7 @@ TestProjector createDiagnosticProjector(const StarTestCase& test,
     projector.width = frame->m_image.width();
     projector.height = frame->m_image.height();
     projector.lensProjection = test.projection;
+    projector.mirrorX = test.lensMirror;
     if ((projector.width <= 0) || (projector.height <= 0) || (fov <= 0.0)) {
         return projector;
     }
@@ -804,7 +810,11 @@ bool projectDiagnosticVector(const TestProjector& projector, const SkyVector& ve
         projectedY *= distortionScale;
     }
 
-    point.setX(projector.principalPointX + (projectedX / projector.horizontalScale) * 0.5 * static_cast<double>(projector.width));
+    double pixelX = projector.principalPointX + (projectedX / projector.horizontalScale) * 0.5 * static_cast<double>(projector.width);
+    if (projector.mirrorX) {
+        pixelX = static_cast<double>(projector.width - 1) - pixelX;
+    }
+    point.setX(pixelX);
     point.setY(projector.principalPointY - (projectedY / projector.verticalScale) * 0.5 * static_cast<double>(projector.height));
     return std::isfinite(point.x()) && std::isfinite(point.y());
 }
@@ -936,6 +946,15 @@ bool readTestCases(const QString& csvPath, QVector<StarTestCase>& testCases)
                     || (expectSolvedValue == QStringLiteral("no")));
             }
         }
+        const int mirrorIndex = header.indexOf(QStringLiteral("mirror"));
+        if (mirrorIndex >= 0)
+        {
+            const QString mirrorValue = fields.value(mirrorIndex).trimmed().toLower();
+            test.lensMirror = !mirrorValue.isEmpty()
+                && (mirrorValue != QStringLiteral("0"))
+                && (mirrorValue != QStringLiteral("false"))
+                && (mirrorValue != QStringLiteral("no"));
+        }
         if (std::isfinite(test.expectedRollTolerance) && (test.expectedRollTolerance < 0.0))
         {
             std::cerr << "Line " << lineNumber << ": expectedRollTolerance cannot be negative\n";
@@ -967,6 +986,7 @@ CameraSettings makeSettings(const StarTestCase& test)
     settings.m_lensCenterOffsetX = test.centerOffsetX;
     settings.m_lensCenterOffsetY = test.centerOffsetY;
     settings.m_lensDistortionK1 = test.distortionK1;
+    settings.m_lensMirror = test.lensMirror;
     settings.m_plateSolveUseCaptureDateTime = false;
     settings.m_plateSolveDateTime = test.dateTime;
     // CSV timestamps are UTC, so tell the solver to interpret m_plateSolveDateTime as

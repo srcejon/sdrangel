@@ -8068,6 +8068,16 @@ Right-click: toggle continual synchronization from My Position.</string>
             </property>
            </widget>
           </item>
+          <item row="9" column="0" colspan="2">
+           <widget class="QCheckBox" name="lensMirrorCheck">
+            <property name="toolTip">
+             <string>Image is horizontally mirrored relative to the sky (up-looking all-sky camera or telescope star diagonal). Plate solving and sky overlays account for the reflection.</string>
+            </property>
+            <property name="text">
+             <string>Mirrored</string>
+            </property>
+           </widget>
+          </item>
          </layout>
         </widget>
        </item>

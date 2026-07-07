@@ -329,7 +329,8 @@ bool CameraStarDetector::plateSolveInputSettingsChanged(const QList<QString>& se
         || settingsKeys.contains("lensProjection")
         || settingsKeys.contains("lensCenterOffsetX")
         || settingsKeys.contains("lensCenterOffsetY")
-        || settingsKeys.contains("lensDistortionK1");
+        || settingsKeys.contains("lensDistortionK1")
+        || settingsKeys.contains("lensMirror");
 }
 
 bool CameraStarDetector::starDisplaySettingsChanged(const QList<QString>& settingsKeys)
@@ -477,6 +478,17 @@ void CameraStarDetector::processNewFrame(const CameraPipelineFramePtr& frame)
     const cv::cuda::GpuMat* cachedBgrGpu = nullptr;
 #endif
 
+    // Declared mirrored camera (m_lensMirror): the image is horizontally mirrored relative to
+    // the sky (up-looking all-sky camera, or a telescope star diagonal), which the plate
+    // solver's orientation-preserving projector cannot fit. Fix: flip the DETECTION INPUT
+    // IMAGE here so star detection and the solve both run on a sky-true view, then reflect
+    // the detection coordinates back to the displayed (original) image at the end. Flipping
+    // the image (rather than coordinate-flipping the original image's detections) is the
+    // measured-correct form: the marginal all-sky solves are sensitive to the sub-pixel/order
+    // differences of re-detected centroids (TREx recovered 10/20 with the image flip vs 4/20
+    // with a coordinate flip of the same frames).
+    const bool lensMirror = m_settings.m_lensMirror;
+
     auto materializeStarCpuInput = [&]() -> bool
     {
         if (!bgrMat.empty()) {
@@ -496,9 +508,22 @@ void CameraStarDetector::processNewFrame(const CameraPipelineFramePtr& frame)
         const QImage& rgb = ensureRgb888(frame->m_image, convertedRgb);
         cv::Mat mat = wrapRgb888Image(rgb);
         cv::cvtColor(mat, bgrMat, cv::COLOR_RGB2BGR);
+        if (lensMirror)
+        {
+            cv::flip(bgrMat, bgrMat, 1);
+            if (!highBitDepthGray.empty()) {
+                cv::flip(highBitDepthGray, highBitDepthGray, 1);
+            }
+        }
         detectionRoi = resolveDetectionRoi(bgrMat.size());
+        if (lensMirror) {
+            // The user's ROI is specified on the displayed image; mirror it into the flipped frame.
+            detectionRoi.x = bgrMat.cols - detectionRoi.x - detectionRoi.width;
+        }
 #ifdef CAMERA_OPENCV_CUDA_DETECTION
-        cachedBgrGpu = frame->hasCudaBgrImage() ? &frame->m_cudaBgrImage : nullptr;
+        // The cached GPU image is the UNFLIPPED frame, so it must not feed detection when the
+        // mirror flip is active — force the (flipped) CPU input instead.
+        cachedBgrGpu = (frame->hasCudaBgrImage() && !lensMirror) ? &frame->m_cudaBgrImage : nullptr;
 #endif
         return true;
     };
@@ -515,6 +540,7 @@ void CameraStarDetector::processNewFrame(const CameraPipelineFramePtr& frame)
         const bool canUseGpuOnlyStarPreprocessing = frame->hasCudaBgrImage()
             && (frame->m_cudaBgrImage.depth() == CV_8U)
             && (m_settings.m_starDebugView == CameraSettings::StarDebugViewOff)
+            && !lensMirror // GPU image is unflipped; the mirror flip needs the CPU input path
             && canUseCudaDetection();
         if (canUseGpuOnlyStarPreprocessing) {
             cachedBgrGpu = &frame->m_cudaBgrImage;
@@ -573,6 +599,11 @@ void CameraStarDetector::processNewFrame(const CameraPipelineFramePtr& frame)
             } else {
                 bgrMat = maskCanvas;
             }
+            if (lensMirror) {
+                // The debug mask was built in the flipped detection frame; flip it back so the
+                // debug view displays in the original image orientation.
+                cv::flip(bgrMat, bgrMat, 1);
+            }
             frame->m_image = convertBgrToRgbImage(bgrMat);
             frame->clearCudaCache();
         }
@@ -583,12 +614,19 @@ void CameraStarDetector::processNewFrame(const CameraPipelineFramePtr& frame)
     if (m_settings.m_cloudFilterStars && frame->m_cloud.m_valid && !frame->m_starDetections.isEmpty())
     {
         const CameraPipelineCloud& cloud = frame->m_cloud;
+        // With the mirror flip active, detections are (still) in the flipped detection frame,
+        // but the cloud mask was computed on the original image — reflect the test point.
+        const double cloudMirrorMaxX = static_cast<double>(frame->imageSize().width() - 1);
         frame->m_starDetections.erase(
             std::remove_if(
                 frame->m_starDetections.begin(),
                 frame->m_starDetections.end(),
-                [&cloud](const CameraPipelineStarDetection& detection) {
-                    return cloud.isCloudAtImagePoint(detection.m_center);
+                [&cloud, lensMirror, cloudMirrorMaxX](const CameraPipelineStarDetection& detection) {
+                    QPointF point = detection.m_center;
+                    if (lensMirror) {
+                        point.setX(cloudMirrorMaxX - point.x());
+                    }
+                    return cloud.isCloudAtImagePoint(point);
                 }),
             frame->m_starDetections.end());
     }
@@ -596,18 +634,38 @@ void CameraStarDetector::processNewFrame(const CameraPipelineFramePtr& frame)
     if (m_settings.m_plateSolve && !frame->m_starDetections.isEmpty())
     {
         reportPlateSolveStatus(true);
+        // With the mirror flip active the detections are (still) in the flipped detection
+        // frame — exactly what the solve should see. The solver receives a settings copy with
+        // m_lensMirror cleared: the flip has already been applied to its input here, and the
+        // solver itself intentionally has no mirror branch (see the note in
+        // CameraPlateSolver::solve).
         QVector<CameraPipelineStarDetection> solveDetections = frame->m_starDetections;
         const bool solveInOpticalCoordinates = frame->m_imageTransform.isValid();
+        const double mirrorImageMaxX = static_cast<double>(frame->imageSize().width() - 1);
+        const double mirrorOpticalMaxX = static_cast<double>(frame->opticalImageSize().width() - 1);
         if (solveInOpticalCoordinates)
         {
-            for (CameraPipelineStarDetection& detection : solveDetections) {
-                detection.m_center = frame->mapImageToOptical(detection.m_center);
+            for (CameraPipelineStarDetection& detection : solveDetections)
+            {
+                QPointF point = detection.m_center;
+                if (lensMirror) {
+                    // mapImageToOptical expects original-image coordinates: unflip, map, then
+                    // re-apply the mirror in optical space so the solve stays sky-true.
+                    point.setX(mirrorImageMaxX - point.x());
+                }
+                point = frame->mapImageToOptical(point);
+                if (lensMirror) {
+                    point.setX(mirrorOpticalMaxX - point.x());
+                }
+                detection.m_center = point;
             }
         }
 
+        CameraSettings solveSettings = m_settings;
+        solveSettings.m_lensMirror = false; // input already flipped above
         const QSize solveImageSize = frame->opticalImageSize();
         const CameraPlateSolveResult plateSolveResult = m_plateSolver.solve(
-            m_settings,
+            solveSettings,
             solveImageSize,
             frame->m_captureDateTime,
             solveDetections);
@@ -621,8 +679,16 @@ void CameraStarDetector::processNewFrame(const CameraPipelineFramePtr& frame)
                 const QPointF imageCenter = frame->m_starDetections[i].m_center;
                 frame->m_starDetections[i] = solveDetections[i];
                 frame->m_starDetections[i].m_center = imageCenter;
-                if (frame->m_starDetections[i].m_solved && !solveDetections[i].m_projectedCenter.isNull()) {
-                    frame->m_starDetections[i].m_projectedCenter = frame->mapOpticalToImage(solveDetections[i].m_projectedCenter);
+                if (frame->m_starDetections[i].m_solved && !solveDetections[i].m_projectedCenter.isNull())
+                {
+                    QPointF projected = solveDetections[i].m_projectedCenter;
+                    if (lensMirror) {
+                        // Projected centres come back in the mirrored optical frame; unflip in
+                        // optical space BEFORE the optical->image mapping (the mapping does not
+                        // commute with the mirror), yielding original-image coordinates.
+                        projected.setX(mirrorOpticalMaxX - projected.x());
+                    }
+                    frame->m_starDetections[i].m_projectedCenter = frame->mapOpticalToImage(projected);
                 }
             }
         }
@@ -632,7 +698,10 @@ void CameraStarDetector::processNewFrame(const CameraPipelineFramePtr& frame)
         }
 
         frame->m_plateSolve.m_solved = plateSolveResult.m_solved;
-        frame->m_plateSolve.m_mirrored = plateSolveResult.m_mirrored;
+        // The pose of a mirrored camera's solve is expressed in the mirrored frame; overlay
+        // projection onto the displayed image reflects pixel x (see CameraPostProcessor's
+        // SkyProjector::mirrorX, driven by the same m_lensMirror setting).
+        frame->m_plateSolve.m_mirrored = lensMirror || plateSolveResult.m_mirrored;
         frame->m_plateSolve.m_matchedStars = plateSolveResult.m_matchedStars;
         frame->m_plateSolve.m_detectedStarsConsidered = plateSolveResult.m_detectedStarsConsidered;
         frame->m_plateSolve.m_catalogStarsLoaded = plateSolveResult.m_catalogStarsLoaded;
@@ -652,6 +721,24 @@ void CameraStarDetector::processNewFrame(const CameraPipelineFramePtr& frame)
         frame->m_plateSolve.m_matchSummary = plateSolveResult.m_matchSummary;
         frame->m_plateSolve.m_profileSummary = plateSolveResult.m_profileSummary;
         frame->m_plateSolve.m_requiredMatches = plateSolveResult.m_requiredMatches;
+    }
+
+    if (lensMirror && !frame->m_starDetections.isEmpty())
+    {
+        // Detection centroids were produced in the flipped detection frame; reflect them back
+        // so every downstream consumer (display, harness validation, cloud overlays) sees
+        // original-image coordinates. Projected centres are likewise reflected, EXCEPT when an
+        // image transform is active — the optical merge above already restored those to
+        // original-image coordinates via the unflip-then-map path.
+        const double mirrorMaxX = static_cast<double>(frame->imageSize().width() - 1);
+        const bool projectedAlreadyOriginal = frame->m_imageTransform.isValid();
+        for (CameraPipelineStarDetection& detection : frame->m_starDetections)
+        {
+            detection.m_center.setX(mirrorMaxX - detection.m_center.x());
+            if (!projectedAlreadyOriginal && !detection.m_projectedCenter.isNull()) {
+                detection.m_projectedCenter.setX(mirrorMaxX - detection.m_projectedCenter.x());
+            }
+        }
     }
 
     forwardFrame(frame);

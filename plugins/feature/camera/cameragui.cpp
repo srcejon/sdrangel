@@ -1836,6 +1836,7 @@ void CameraGUI::displaySettings()
     settingsUI()->lensCenterOffsetXSpin->setValue(m_settings.m_lensCenterOffsetX);
     settingsUI()->lensCenterOffsetYSpin->setValue(m_settings.m_lensCenterOffsetY);
     settingsUI()->lensDistortionK1Spin->setValue(m_settings.m_lensDistortionK1);
+    settingsUI()->lensMirrorCheck->setChecked(m_settings.m_lensMirror);
     populateDirectionSourceCombo();
     applyPositionSync();
     updatePositionControls();
@@ -2847,6 +2848,7 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->lensCenterOffsetXSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_lensCenterOffsetXSpin_valueChanged);
     QObject::connect(settingsUI()->lensCenterOffsetYSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_lensCenterOffsetYSpin_valueChanged);
     QObject::connect(settingsUI()->lensDistortionK1Spin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_lensDistortionK1Spin_valueChanged);
+    QObject::connect(settingsUI()->lensMirrorCheck, &QCheckBox::toggled, this, &CameraGUI::on_lensMirrorCheck_toggled);
     QObject::connect(settingsUI()->postProcessWhiteBalanceModeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_postProcessWhiteBalanceModeCombo_currentIndexChanged);
     QObject::connect(settingsUI()->postProcessWhiteBalanceRedGainSlider, &QSlider::valueChanged, this, &CameraGUI::on_postProcessWhiteBalanceRedGainSlider_valueChanged);
     QObject::connect(settingsUI()->postProcessWhiteBalanceRedGainSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_postProcessWhiteBalanceRedGainSpin_valueChanged);
@@ -8103,6 +8105,12 @@ void CameraGUI::on_lensDistortionK1Spin_valueChanged(double value)
 {
     m_settings.m_lensDistortionK1 = value;
     applySetting("lensDistortionK1");
+}
+
+void CameraGUI::on_lensMirrorCheck_toggled(bool checked)
+{
+    m_settings.m_lensMirror = checked;
+    applySetting("lensMirror");
 }
 
 void CameraGUI::updatePostProcessWhiteBalanceControls()

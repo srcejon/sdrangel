@@ -449,6 +449,9 @@ CameraSettings:
       description: "Radial distortion coefficient"
       type: number
       format: double
+    lensMirror:
+      description: "Image is horizontally mirrored relative to the sky (1 for up-looking all-sky camera or telescope star diagonal). Plate solving and sky overlays account for the reflection."
+      type: integer
     postProcessWhiteBalanceMode:
       description: >
         Post-processing white balance mode

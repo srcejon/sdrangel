@@ -2516,7 +2516,8 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
     qCInfo(cameraPlateSolverLog).nospace() << "CameraPlateSolver: solve lens projection=" << static_cast<int>(settings.m_lensProjection)
                       << " Cx=" << settings.m_lensCenterOffsetX
                       << " Cy=" << settings.m_lensCenterOffsetY
-                      << " K1=" << settings.m_lensDistortionK1;
+                      << " K1=" << settings.m_lensDistortionK1
+                      << " mirror=" << settings.m_lensMirror;
     qCInfo(cameraPlateSolverLog).nospace() << "CameraPlateSolver: solve detect=" << settings.m_starDetect
                       << " threshold=" << settings.m_starThreshold
                       << " backgroundBlur=" << settings.m_starBackgroundBlur
@@ -2678,6 +2679,32 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
         detection.m_catalogSpectralType.clear();
         detection.m_solved = false;
     };
+    // Transfer a mirror solve's match annotations onto the original detections by index, keeping
+    // each detection's ORIGINAL centroid and reflecting the projected centre back into the
+    // original image frame. The solve does not resize/reorder the detection vector (the normal
+    // path relies on the same in-place annotation), so index i is the same physical detection in
+    // both. Used by the declared-mirror path and by the opt-in auto-detect adopt path.
+    const auto transferMirrorAnnotations = [](QVector<CameraPipelineStarDetection>& originals,
+                                              const QVector<CameraPipelineStarDetection>& mirrored,
+                                              double maxX) {
+        const int transferCount = std::min(originals.size(), mirrored.size());
+        for (int i = 0; i < transferCount; ++i)
+        {
+            CameraPipelineStarDetection& dst = originals[i];
+            const CameraPipelineStarDetection& src = mirrored.at(i);
+            dst.m_solved = src.m_solved;
+            dst.m_label = src.m_label;
+            dst.m_matchDistancePixels = src.m_matchDistancePixels;
+            dst.m_catalogMagnitude = src.m_catalogMagnitude;
+            dst.m_catalogRightAscensionDegrees = src.m_catalogRightAscensionDegrees;
+            dst.m_catalogDeclinationDegrees = src.m_catalogDeclinationDegrees;
+            dst.m_catalogSpectralType = src.m_catalogSpectralType;
+            dst.m_projectedCenter = src.m_solved
+                ? QPointF(maxX - src.m_projectedCenter.x(), src.m_projectedCenter.y())
+                : QPointF();
+            // dst.m_center intentionally left at the original detection centroid.
+        }
+    };
 
     auto runSolve = [&](const CameraSettings& runSettings, const QString& reason, bool disableRollRecovery = false) {
         QElapsedTimer runTimer;
@@ -2698,17 +2725,26 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
             return once;
         };
 
+        // NOTE on the declared mirrored-camera setting (m_lensMirror): it is handled UPSTREAM in
+        // CameraStarDetector, which horizontally flips the detection INPUT IMAGE before star
+        // detection and passes this solver a settings copy with m_lensMirror cleared. Detecting
+        // on the flipped image is the measured-correct form of the handedness fix: coordinate-
+        // flipping the original image's detections here was tried and recovers materially fewer
+        // frames (TREx 4/20 vs the image-flip's 10/20 — these marginal all-sky solves are
+        // sensitive to the sub-pixel/order differences of re-detected centroids). So this
+        // function intentionally has NO m_lensMirror branch.
         CameraPlateSolveResult runResult = solveOnce(starDetections);
 
-        // All-sky handedness: for a fisheye/wide (non-rectilinear) context, ALWAYS also solve
-        // the mirrored detection set and adopt it when decisively better (see
+        // All-sky handedness AUTO-DETECT: for a fisheye/wide (non-rectilinear) context, ALSO
+        // solve the mirrored detection set and adopt it when decisively better (see
         // mirrorResultClearlyBetter). Gated to non-rectilinear so REAL/narrow stays byte-
         // identical and pays no 2x cost. The retry must run regardless of runResult.m_solved:
         // the all-sky failures return m_solved=true on a wrong-roll pose, so a failure-gated
-        // retry would miss exactly the cases that need it.
+        // retry would miss exactly the cases that need it. Skipped when the camera's
+        // handedness is DECLARED (m_lensMirror) — the input was already flipped upstream.
         const bool fisheyeContext =
             (runSettings.m_lensProjection != CameraSettings::LensProjectionRectilinear);
-        if (fisheyeContext && mirrorHandednessEnabled && !isCancellationRequested())
+        if (fisheyeContext && mirrorHandednessEnabled && !runSettings.m_lensMirror && !isCancellationRequested())
         {
             const double maxX = static_cast<double>(imageSize.width() - 1);
             // Solve the horizontally-mirrored detection set on a COPY, so the original
@@ -2746,28 +2782,7 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
             {
                 runResult = mirrorResult;
                 runResult.m_mirrored = true;
-                // Transfer the mirror pose's match annotations onto the original detections,
-                // keeping each detection's ORIGINAL centroid; reflect the projected-centre x
-                // back into the original image frame. The solve does not resize/reorder the
-                // detection vector (the normal path relies on the same in-place annotation), so
-                // index i is the same physical detection in both.
-                const int transferCount = std::min(starDetections.size(), mirroredDetections.size());
-                for (int i = 0; i < transferCount; ++i)
-                {
-                    CameraPipelineStarDetection& dst = starDetections[i];
-                    const CameraPipelineStarDetection& src = mirroredDetections.at(i);
-                    dst.m_solved = src.m_solved;
-                    dst.m_label = src.m_label;
-                    dst.m_matchDistancePixels = src.m_matchDistancePixels;
-                    dst.m_catalogMagnitude = src.m_catalogMagnitude;
-                    dst.m_catalogRightAscensionDegrees = src.m_catalogRightAscensionDegrees;
-                    dst.m_catalogDeclinationDegrees = src.m_catalogDeclinationDegrees;
-                    dst.m_catalogSpectralType = src.m_catalogSpectralType;
-                    dst.m_projectedCenter = src.m_solved
-                        ? QPointF(maxX - src.m_projectedCenter.x(), src.m_projectedCenter.y())
-                        : QPointF();
-                    // dst.m_center intentionally left at the original detection centroid.
-                }
+                transferMirrorAnnotations(starDetections, mirroredDetections, maxX);
             }
             // If not adopted, starDetections keeps the normal solve's annotations (untouched).
         }

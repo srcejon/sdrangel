@@ -371,6 +371,7 @@ void CameraSettings::resetToDefaults()
     m_lensCenterOffsetX = 0.0;
     m_lensCenterOffsetY = 0.0;
     m_lensDistortionK1 = 0.0;
+    m_lensMirror = false;
     m_workspaceIndex = 0;
     m_geometryBytes.clear();
     m_postProcessWhiteBalanceMode = 0;
@@ -857,6 +858,7 @@ QByteArray CameraSettings::serialize() const
     s.writeDouble(296, m_cloudMotionOverlapThreshold);
     s.writeS32(297, m_cloudTextureThreshold);
     s.writeDouble(298, m_cloudEventThreshold);
+    s.writeBool(299, m_lensMirror);
 
     return s.final();
 }
@@ -1210,6 +1212,7 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readDouble(296, &m_cloudMotionOverlapThreshold, 0.6);
         d.readS32(297, &m_cloudTextureThreshold, 3);
         d.readDouble(298, &m_cloudEventThreshold, 80.0);
+        d.readBool(299, &m_lensMirror, false);
         m_cloudEventThreshold = qBound(m_minCoveragePercent, m_cloudEventThreshold, m_maxCoveragePercent);
         m_cloudDayThreshold = qBound(m_minCloudRatioThreshold, m_cloudDayThreshold, m_maxCloudRatioThreshold);
         m_cloudTextureThreshold = qBound(m_minThreshold8Bit, m_cloudTextureThreshold, m_maxThreshold8Bit);
@@ -1924,6 +1927,9 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     }
     if (settingsKeys.contains("lensDistortionK1")) {
         m_lensDistortionK1 = qBound(m_minLensDistortionK1, settings.m_lensDistortionK1, m_maxLensDistortionK1);
+    }
+    if (settingsKeys.contains("lensMirror")) {
+        m_lensMirror = settings.m_lensMirror;
     }
     if (settingsKeys.contains("workspaceIndex")) {
         m_workspaceIndex = settings.m_workspaceIndex;
@@ -2858,6 +2864,9 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("lensDistortionK1") || force) {
         ostr << " m_lensDistortionK1: " << m_lensDistortionK1;
+    }
+    if (settingsKeys.contains("lensMirror") || force) {
+        ostr << " m_lensMirror: " << m_lensMirror;
     }
     if (settingsKeys.contains("brightness") || force) {
         ostr << " m_brightness: " << m_brightness;

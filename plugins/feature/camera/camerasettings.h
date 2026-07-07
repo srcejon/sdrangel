@@ -538,6 +538,7 @@ struct CameraSettings
     double m_lensCenterOffsetX;    ///< Principal point X offset in pixels from image center
     double m_lensCenterOffsetY;    ///< Principal point Y offset in pixels from image center
     double m_lensDistortionK1;     ///< Radial distortion coefficient for plate solving / overlays
+    bool m_lensMirror;             ///< Image is horizontally mirrored relative to the sky (up-looking all-sky camera, star diagonal). Plate solve flips detections; overlays reflect x.
     Serializable *m_rollupState;
     int m_workspaceIndex;
     QByteArray m_geometryBytes;

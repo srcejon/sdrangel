@@ -752,6 +752,11 @@ struct SkyProjector
     double distortionK1 = 0.0;
     int width = 0;
     int height = 0;
+    // Handedness: the image is horizontally mirrored relative to the sky (m_lensMirror — up-looking
+    // all-sky camera or star diagonal). The solved pose lives in the mirrored frame, so overlay
+    // projection onto the displayed (original) image must reflect pixel x about the image centre.
+    // Mirrors the solver's SkyProjector::mirrorX semantics exactly.
+    bool mirrorX = false;
     CameraPipelineImageTransform imageTransform;
 
     static SkyProjector create(const CameraSettings& settings, const QSize& imageSize, const CameraPipelineImageTransform& transform = CameraPipelineImageTransform())
@@ -795,6 +800,7 @@ struct SkyProjector
         projector.principalPointX = static_cast<double>(projector.width) * 0.5 + settings.m_lensCenterOffsetX;
         projector.principalPointY = static_cast<double>(projector.height) * 0.5 + settings.m_lensCenterOffsetY;
         projector.distortionK1 = settings.m_lensDistortionK1;
+        projector.mirrorX = settings.m_lensMirror;
         projector.valid = projector.verticalScale > 0.0;
         return projector;
     }
@@ -849,9 +855,12 @@ struct SkyProjector
             return false;
         }
 
-        const QPointF opticalPoint(
+        QPointF opticalPoint(
             principalPointX + normalizedX * 0.5 * static_cast<double>(width),
             principalPointY - normalizedY * 0.5 * static_cast<double>(height));
+        if (mirrorX) {
+            opticalPoint.setX(static_cast<double>(width - 1) - opticalPoint.x());
+        }
         point = imageTransform.mapOpticalToImage(opticalPoint);
         return true;
     }

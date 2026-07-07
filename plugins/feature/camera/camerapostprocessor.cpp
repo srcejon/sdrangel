@@ -1461,6 +1461,7 @@ void CameraPostProcessor::reportFrameToGUI(const QImage& image, const CameraPipe
             frame.m_starDetections,
             frame.m_plateSolve,
             frame.m_motionBoxes,
+            frame.m_cloud,
             frame.m_detections,
             frame.m_meteorPhotometry,
             trackedObjects,
@@ -1471,6 +1472,40 @@ void CameraPostProcessor::reportFrameToGUI(const QImage& image, const CameraPipe
             previewRectItems,
             currentImageOverlays()));
     }
+}
+
+void CameraPostProcessor::applyCloudOverlay(QImage& image, const CameraPipelineCloud& cloud) const
+{
+    PROFILER_START();
+
+    if (!cloud.m_valid || cloud.m_mask.empty() || (cloud.m_roi.width <= 0) || (cloud.m_roi.height <= 0)) {
+        return;
+    }
+
+    // Build an ARGB tint image from the (possibly downscaled) mask and composite it over
+    // the cloud-classified regions
+    QImage tint(cloud.m_mask.cols, cloud.m_mask.rows, QImage::Format_ARGB32_Premultiplied);
+    tint.fill(Qt::transparent);
+    const QRgb tintColor = qPremultiply(m_settings.m_cloudColor.rgba());
+    for (int row = 0; row < cloud.m_mask.rows; ++row)
+    {
+        const uchar *maskLine = cloud.m_mask.ptr<uchar>(row);
+        QRgb *tintLine = reinterpret_cast<QRgb*>(tint.scanLine(row));
+        for (int col = 0; col < cloud.m_mask.cols; ++col)
+        {
+            if (maskLine[col]) {
+                tintLine[col] = tintColor;
+            }
+        }
+    }
+
+    QPainter painter(&image);
+    painter.setRenderHint(QPainter::SmoothPixmapTransform, false);
+    painter.drawImage(
+        QRect(cloud.m_roi.x, cloud.m_roi.y, cloud.m_roi.width, cloud.m_roi.height),
+        tint);
+
+    PROFILER_STOP(__FUNCTION__);
 }
 
 void CameraPostProcessor::applyMotionOverlay(QImage& image, const QVector<QRect>& motionBoxes, bool drawBoxes, QVector<PreviewRectItem> *previewRectItems) const
@@ -2616,6 +2651,7 @@ QImage CameraPostProcessor::applyPostProcessing(
         || (m_settings.m_trackObjects && !m_trackedMapObjects.isEmpty())
         || needsTextOverlay
         || !frame.m_motionBoxes.isEmpty()
+        || (m_settings.m_cloudDetect && m_settings.m_cloudShowOverlay && frame.m_cloud.m_valid)
         || (m_settings.m_yoloEnabled && !frame.m_detections.isEmpty())
         || !frame.m_starDetections.isEmpty()
         || (drawImageOverlays && needsSpectrumOverlay)
@@ -2642,8 +2678,11 @@ QImage CameraPostProcessor::applyPostProcessing(
     {
         result = input.convertToFormat(QImage::Format_RGB32);
     }
-    if (!frame.m_motionBoxes.isEmpty()) { 
-        applyMotionOverlay(result, frame.m_motionBoxes, drawPreviewText, previewRectItems); 
+    if (m_settings.m_cloudDetect && m_settings.m_cloudShowOverlay && frame.m_cloud.m_valid) {
+        applyCloudOverlay(result, frame.m_cloud);
+    }
+    if (!frame.m_motionBoxes.isEmpty()) {
+        applyMotionOverlay(result, frame.m_motionBoxes, drawPreviewText, previewRectItems);
     }
     if (m_settings.m_yoloEnabled && !frame.m_detections.isEmpty()) { 
         applyDetectionOverlay(result, frame.m_detections, frame.m_meteorPhotometry, drawPreviewText, previewTextLabels, previewRectItems);

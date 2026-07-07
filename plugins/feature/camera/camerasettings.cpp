@@ -464,6 +464,22 @@ void CameraSettings::resetToDefaults()
     m_minContourArea = 100;
     m_showMotionExclusionRects = true;
     m_motionExclusionRects.clear();
+    m_cloudDetect = false;
+    m_cloudMode = CloudModeAuto;
+    m_cloudDebugView = CloudDebugViewOff;
+    m_cloudColor = QColor(255, 140, 0, 96);
+    m_cloudShowOverlay = true;
+    m_cloudDayThreshold = 0.85;
+    m_cloudTextureThreshold = 3;
+    m_cloudNightThreshold = 8;
+    m_cloudBackgroundBlur = 24;
+    m_cloudOpenSize = 1;
+    m_cloudCloseSize = 3;
+    m_cloudDownscale = 0.25;
+    m_cloudUpdateIntervalFrames = 10;
+    m_cloudFilterStars = true;
+    m_cloudFilterMotion = true;
+    m_cloudMotionOverlapThreshold = 0.6;
     m_starDetect = false;
     m_starThreshold = 24;
     m_starBackgroundBlur = 12;
@@ -823,6 +839,22 @@ QByteArray CameraSettings::serialize() const
     s.writeDouble(279, m_trackObjectMaxRangeKm);
     s.writeS32(280, static_cast<qint32>(m_trackObjectLabelDisplay));
     s.writeDouble(281, m_trackObjectLabelDetectionRadius);
+    s.writeBool(282, m_cloudDetect);
+    s.writeS32(283, static_cast<qint32>(m_cloudMode));
+    s.writeS32(284, static_cast<qint32>(m_cloudDebugView));
+    s.writeU32(285, m_cloudColor.rgba());
+    s.writeBool(286, m_cloudShowOverlay);
+    s.writeDouble(287, m_cloudDayThreshold);
+    s.writeS32(288, m_cloudNightThreshold);
+    s.writeS32(289, m_cloudBackgroundBlur);
+    s.writeS32(290, m_cloudOpenSize);
+    s.writeS32(291, m_cloudCloseSize);
+    s.writeDouble(292, m_cloudDownscale);
+    s.writeS32(293, m_cloudUpdateIntervalFrames);
+    s.writeBool(294, m_cloudFilterStars);
+    s.writeBool(295, m_cloudFilterMotion);
+    s.writeDouble(296, m_cloudMotionOverlapThreshold);
+    s.writeS32(297, m_cloudTextureThreshold);
 
     return s.final();
 }
@@ -1147,6 +1179,46 @@ bool CameraSettings::deserialize(const QByteArray& data)
         m_motionCloseSize = qBound(m_minMorphologyKernel, m_motionCloseSize, m_maxMorphologyKernel);
         m_motionPersistenceFrames = qBound(m_minNonNegative, m_motionPersistenceFrames, m_maxShortHistoryFrames);
         m_minContourArea = qBound(m_minContourAreaBound, m_minContourArea, m_maxContourAreaBound);
+        d.readBool(282, &m_cloudDetect, false);
+        qint32 cloudMode = static_cast<qint32>(CloudModeAuto);
+        d.readS32(283, &cloudMode, static_cast<qint32>(CloudModeAuto));
+        m_cloudMode = static_cast<CloudDetectionMode>(qBound(
+            static_cast<qint32>(CloudModeAuto),
+            cloudMode,
+            static_cast<qint32>(CloudModeNight)));
+        qint32 cloudDebugView = static_cast<qint32>(CloudDebugViewOff);
+        d.readS32(284, &cloudDebugView, static_cast<qint32>(CloudDebugViewOff));
+        m_cloudDebugView = static_cast<CloudDebugView>(qBound(
+            static_cast<qint32>(CloudDebugViewOff),
+            cloudDebugView,
+            static_cast<qint32>(CloudDebugViewTexture)));
+        uint32_t cloudColorRgba = QColor(255, 140, 0, 96).rgba();
+        d.readU32(285, &cloudColorRgba, QColor(255, 140, 0, 96).rgba());
+        m_cloudColor = QColor::fromRgba(cloudColorRgba);
+        d.readBool(286, &m_cloudShowOverlay, true);
+        d.readDouble(287, &m_cloudDayThreshold, 0.85);
+        d.readS32(288, &m_cloudNightThreshold, 8);
+        d.readS32(289, &m_cloudBackgroundBlur, 24);
+        d.readS32(290, &m_cloudOpenSize, 1);
+        d.readS32(291, &m_cloudCloseSize, 3);
+        d.readDouble(292, &m_cloudDownscale, 0.25);
+        d.readS32(293, &m_cloudUpdateIntervalFrames, 10);
+        d.readBool(294, &m_cloudFilterStars, true);
+        d.readBool(295, &m_cloudFilterMotion, true);
+        d.readDouble(296, &m_cloudMotionOverlapThreshold, 0.6);
+        d.readS32(297, &m_cloudTextureThreshold, 3);
+        m_cloudDayThreshold = qBound(m_minCloudRatioThreshold, m_cloudDayThreshold, m_maxCloudRatioThreshold);
+        m_cloudTextureThreshold = qBound(m_minThreshold8Bit, m_cloudTextureThreshold, m_maxThreshold8Bit);
+        m_cloudNightThreshold = qBound(m_minThreshold8Bit, m_cloudNightThreshold, m_maxThreshold8Bit);
+        m_cloudBackgroundBlur = qBound(m_minCloudBackgroundBlur, m_cloudBackgroundBlur, m_maxCloudBackgroundBlur);
+        m_cloudOpenSize = qBound(m_minMorphologyKernel, m_cloudOpenSize, m_maxMorphologyKernel);
+        m_cloudCloseSize = qBound(m_minMorphologyKernel, m_cloudCloseSize, m_maxMorphologyKernel);
+        const QList<double> validCloudDownscales{1.0, 0.5, 0.25, 0.125};
+        if (!validCloudDownscales.contains(m_cloudDownscale)) {
+            m_cloudDownscale = 0.25;
+        }
+        m_cloudUpdateIntervalFrames = qBound(m_minCloudUpdateInterval, m_cloudUpdateIntervalFrames, m_maxCloudUpdateInterval);
+        m_cloudMotionOverlapThreshold = qBound(m_minNormalized, m_cloudMotionOverlapThreshold, m_maxNormalized);
         d.readBool(234, &m_recordRawFits, false);
         d.readBool(235, &m_recordCalibratedMedia, true);
         d.readBool(236, &m_recordPostProcessedMedia, false);
@@ -2042,6 +2114,61 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     if (settingsKeys.contains("motionExclusionRects")) {
         m_motionExclusionRects = settings.m_motionExclusionRects;
     }
+    if (settingsKeys.contains("cloudDetect")) {
+        m_cloudDetect = settings.m_cloudDetect;
+    }
+    if (settingsKeys.contains("cloudMode")) {
+        m_cloudMode = static_cast<CloudDetectionMode>(qBound(
+            static_cast<qint32>(CloudModeAuto),
+            static_cast<qint32>(settings.m_cloudMode),
+            static_cast<qint32>(CloudModeNight)));
+    }
+    if (settingsKeys.contains("cloudDebugView")) {
+        m_cloudDebugView = static_cast<CloudDebugView>(qBound(
+            static_cast<qint32>(CloudDebugViewOff),
+            static_cast<qint32>(settings.m_cloudDebugView),
+            static_cast<qint32>(CloudDebugViewTexture)));
+    }
+    if (settingsKeys.contains("cloudColor")) {
+        m_cloudColor = settings.m_cloudColor;
+    }
+    if (settingsKeys.contains("cloudShowOverlay")) {
+        m_cloudShowOverlay = settings.m_cloudShowOverlay;
+    }
+    if (settingsKeys.contains("cloudDayThreshold")) {
+        m_cloudDayThreshold = qBound(m_minCloudRatioThreshold, settings.m_cloudDayThreshold, m_maxCloudRatioThreshold);
+    }
+    if (settingsKeys.contains("cloudTextureThreshold")) {
+        m_cloudTextureThreshold = qBound(m_minThreshold8Bit, settings.m_cloudTextureThreshold, m_maxThreshold8Bit);
+    }
+    if (settingsKeys.contains("cloudNightThreshold")) {
+        m_cloudNightThreshold = qBound(m_minThreshold8Bit, settings.m_cloudNightThreshold, m_maxThreshold8Bit);
+    }
+    if (settingsKeys.contains("cloudBackgroundBlur")) {
+        m_cloudBackgroundBlur = qBound(m_minCloudBackgroundBlur, settings.m_cloudBackgroundBlur, m_maxCloudBackgroundBlur);
+    }
+    if (settingsKeys.contains("cloudOpenSize")) {
+        m_cloudOpenSize = qBound(m_minMorphologyKernel, settings.m_cloudOpenSize, m_maxMorphologyKernel);
+    }
+    if (settingsKeys.contains("cloudCloseSize")) {
+        m_cloudCloseSize = qBound(m_minMorphologyKernel, settings.m_cloudCloseSize, m_maxMorphologyKernel);
+    }
+    if (settingsKeys.contains("cloudDownscale")) {
+        const QList<double> validCloudDownscales{1.0, 0.5, 0.25, 0.125};
+        m_cloudDownscale = validCloudDownscales.contains(settings.m_cloudDownscale) ? settings.m_cloudDownscale : 0.25;
+    }
+    if (settingsKeys.contains("cloudUpdateIntervalFrames")) {
+        m_cloudUpdateIntervalFrames = qBound(m_minCloudUpdateInterval, settings.m_cloudUpdateIntervalFrames, m_maxCloudUpdateInterval);
+    }
+    if (settingsKeys.contains("cloudFilterStars")) {
+        m_cloudFilterStars = settings.m_cloudFilterStars;
+    }
+    if (settingsKeys.contains("cloudFilterMotion")) {
+        m_cloudFilterMotion = settings.m_cloudFilterMotion;
+    }
+    if (settingsKeys.contains("cloudMotionOverlapThreshold")) {
+        m_cloudMotionOverlapThreshold = qBound(m_minNormalized, settings.m_cloudMotionOverlapThreshold, m_maxNormalized);
+    }
     if (settingsKeys.contains("starDetect")) {
         m_starDetect = settings.m_starDetect;
     }
@@ -2901,6 +3028,54 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("motionExclusionRects") || force) {
         ostr << " m_motionExclusionRects: " << m_motionExclusionRects.size();
+    }
+    if (settingsKeys.contains("cloudDetect") || force) {
+        ostr << " m_cloudDetect: " << m_cloudDetect;
+    }
+    if (settingsKeys.contains("cloudMode") || force) {
+        ostr << " m_cloudMode: " << m_cloudMode;
+    }
+    if (settingsKeys.contains("cloudDebugView") || force) {
+        ostr << " m_cloudDebugView: " << m_cloudDebugView;
+    }
+    if (settingsKeys.contains("cloudColor") || force) {
+        ostr << " m_cloudColor: " << m_cloudColor.name().toStdString();
+    }
+    if (settingsKeys.contains("cloudShowOverlay") || force) {
+        ostr << " m_cloudShowOverlay: " << m_cloudShowOverlay;
+    }
+    if (settingsKeys.contains("cloudDayThreshold") || force) {
+        ostr << " m_cloudDayThreshold: " << m_cloudDayThreshold;
+    }
+    if (settingsKeys.contains("cloudTextureThreshold") || force) {
+        ostr << " m_cloudTextureThreshold: " << m_cloudTextureThreshold;
+    }
+    if (settingsKeys.contains("cloudNightThreshold") || force) {
+        ostr << " m_cloudNightThreshold: " << m_cloudNightThreshold;
+    }
+    if (settingsKeys.contains("cloudBackgroundBlur") || force) {
+        ostr << " m_cloudBackgroundBlur: " << m_cloudBackgroundBlur;
+    }
+    if (settingsKeys.contains("cloudOpenSize") || force) {
+        ostr << " m_cloudOpenSize: " << m_cloudOpenSize;
+    }
+    if (settingsKeys.contains("cloudCloseSize") || force) {
+        ostr << " m_cloudCloseSize: " << m_cloudCloseSize;
+    }
+    if (settingsKeys.contains("cloudDownscale") || force) {
+        ostr << " m_cloudDownscale: " << m_cloudDownscale;
+    }
+    if (settingsKeys.contains("cloudUpdateIntervalFrames") || force) {
+        ostr << " m_cloudUpdateIntervalFrames: " << m_cloudUpdateIntervalFrames;
+    }
+    if (settingsKeys.contains("cloudFilterStars") || force) {
+        ostr << " m_cloudFilterStars: " << m_cloudFilterStars;
+    }
+    if (settingsKeys.contains("cloudFilterMotion") || force) {
+        ostr << " m_cloudFilterMotion: " << m_cloudFilterMotion;
+    }
+    if (settingsKeys.contains("cloudMotionOverlapThreshold") || force) {
+        ostr << " m_cloudMotionOverlapThreshold: " << m_cloudMotionOverlapThreshold;
     }
     if (settingsKeys.contains("starDetect") || force) {
         ostr << " m_starDetect: " << m_starDetect;

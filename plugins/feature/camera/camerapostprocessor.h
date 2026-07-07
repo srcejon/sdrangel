@@ -151,6 +151,9 @@ public:
         const QVector<PreviewRectItem>& getPreviewRectItems() const { return m_previewRectItems; }
         const QVector<WindowOverlayFrame>& getPreviewImageOverlays() const { return m_previewImageOverlays; }
         const QVector<QRect>& getMotionBoxes() const { return m_motionBoxes; }
+        bool isCloudValid() const { return m_cloud.m_valid; }
+        float getCloudCoveragePercent() const { return m_cloud.m_coveragePercent; }
+        bool isCloudNight() const { return m_cloud.m_night; }
         const QVector<CameraPipelineDetection>& getDetections() const { return m_detections; }
         const QVector<CameraPipelineMeteorPhotometry>& getMeteorPhotometry() const { return m_meteorPhotometry; }
         const QVector<CameraPipelineTrackedObject>& getTrackedObjects() const { return m_trackedObjects; }
@@ -164,6 +167,7 @@ public:
                                       const QVector<CameraPipelineStarDetection>& starDetections,
                                       const CameraPipelinePlateSolve& plateSolve,
                                       const QVector<QRect>& motionBoxes,
+                                      const CameraPipelineCloud& cloud,
                                       const QVector<CameraPipelineDetection>& detections,
                                       const QVector<CameraPipelineMeteorPhotometry>& meteorPhotometry,
                                       const QVector<CameraPipelineTrackedObject>& trackedObjects,
@@ -181,6 +185,7 @@ public:
                 starDetections,
                 plateSolve,
                 motionBoxes,
+                cloud,
                 detections,
                 meteorPhotometry,
                 trackedObjects,
@@ -199,6 +204,7 @@ public:
         QVector<CameraPipelineStarDetection> m_starDetections;
         CameraPipelinePlateSolve m_plateSolve;
         QVector<QRect> m_motionBoxes;
+        CameraPipelineCloud m_cloud;
         QVector<CameraPipelineDetection> m_detections;
         QVector<CameraPipelineMeteorPhotometry> m_meteorPhotometry;
         QVector<CameraPipelineTrackedObject> m_trackedObjects;
@@ -215,6 +221,7 @@ public:
                        const QVector<CameraPipelineStarDetection>& starDetections,
                        const CameraPipelinePlateSolve& plateSolve,
                        const QVector<QRect>& motionBoxes,
+                       const CameraPipelineCloud& cloud,
                        const QVector<CameraPipelineDetection>& detections,
                        const QVector<CameraPipelineMeteorPhotometry>& meteorPhotometry,
                        const QVector<CameraPipelineTrackedObject>& trackedObjects,
@@ -231,6 +238,7 @@ public:
             m_starDetections(starDetections),
             m_plateSolve(plateSolve),
             m_motionBoxes(motionBoxes),
+            m_cloud(cloud),
             m_detections(detections),
             m_meteorPhotometry(meteorPhotometry),
             m_trackedObjects(trackedObjects),
@@ -431,6 +439,7 @@ private:
         QVector<CameraPipelineTrackedObject> *trackedObjects = nullptr,
         bool drawImageOverlays = true);
     void applyMotionOverlay(QImage& image, const QVector<QRect>& motionBoxes, bool drawBoxes, QVector<PreviewRectItem> *previewRectItems) const;
+    void applyCloudOverlay(QImage& image, const CameraPipelineCloud& cloud) const;
     void applyDetectionOverlay(QImage& image, const QVector<CameraPipelineDetection>& detections, const QVector<CameraPipelineMeteorPhotometry>& meteorPhotometry, bool drawLabels, QVector<PreviewTextLabel> *previewTextLabels, QVector<PreviewRectItem> *previewRectItems) const;
     void applyStarOverlay(QImage& image, const QVector<CameraPipelineStarDetection>& starDetections, bool drawLabels, QVector<PreviewTextLabel> *previewTextLabels) const;
     void applyPreviewRectItems(QImage& image, const QVector<PreviewRectItem>& items) const;

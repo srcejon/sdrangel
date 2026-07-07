@@ -24,6 +24,7 @@ The Camera plugin also supports a variety of post-processing, detection and over
 * YOLO AI object detection (CPU, OpenCV CUDA or TensorRT acceleration)
 * Motion detection
 * Star detection and plate solving
+* Cloud detection
 * Meteor apparent magnitude calculation, based on measaured flux relative to reference stars
 * Difference detection between images
 * ADS-B, AIS, satellite and star tracker item overlay
@@ -225,6 +226,24 @@ and wide-angle all-sky cameras:
 The solution gives the direction the camera is pointing, field-of-view and lens distortion parameters:
 
 ![Plate solving result](../../../doc/img/Camera_plugin_plate_solve_result.png)
+
+<h3>30a: Cloud detection</h3>
+
+Check to enable cloud detection, which classifies each part of the sky as cloud or clear and reports the overall cloud coverage percentage. The resulting cloud mask can optionally be used by the other detectors:
+
+* The star detector can drop detections that fall inside the cloud mask, so cloud structure breaking up into star-like blobs does not produce false stars or mislead the plate solver.
+* The motion detector can suppress bounding boxes that substantially overlap the cloud mask, so drifting clouds do not register as motion while aircraft, meteors or satellites in clear sky are still caught.
+
+Two classification paths are used, selected manually or automatically from overall frame brightness:
+
+* At night, a clear sky is smooth apart from point sources, so clouds show up as low-frequency brightness structure - brighter under moonlight or light pollution, or darker where they block airglow. A heavily blurred background estimate is compared against the median sky level and the deviation is thresholded.
+* By day, cloud is white or grey against blue sky, so a per-pixel red/blue ratio is thresholded. Grey or white but finely textured regions - roofs, trees, buildings - would pass the ratio test, so they are rejected by an additional texture veto: cloud is smooth at the detection resolution, while man-made surfaces and foliage retain dense fine detail. Dark neutral regions - lens vignette, shadowed structures - are rejected by a brightness floor anchored to the evaluated sky's median brightness, since daytime cloud is at least comparably bright to the sky.
+
+Clouds evolve slowly, so the mask is only recomputed every few frames (configurable) and intermediate frames reuse the previous mask.
+
+When output scaling places the image inside a larger canvas, the padded borders are excluded automatically: they are never classified as cloud, do not count towards the coverage percentage, and do not influence the automatic day/night decision.
+
+Cloud-classified regions can be tinted on the image with a configurable colour, and the coverage percentage is shown on the Cloud Detection sub-tab in the Camera Settings dialog and reported via the API.
 
 <h3>31: Item overlay</h3>
 
@@ -758,7 +777,7 @@ Set the YouTube stream video bitrate (preset or custom value), the stream frame 
 
 <h3>Detection tab</h3>
 
-The Detection tab contains a common ROI sub-tab and sub-tabs for object, motion, star and difference detection. The Reset Defaults button at the bottom of the tab restores all detection settings to their defaults.
+The Detection tab contains a common ROI sub-tab and sub-tabs for object, motion, cloud, star and difference detection. The Reset Defaults button at the bottom of the tab restores all detection settings to their defaults.
 
 On the ROI sub-tab:
 
@@ -875,6 +894,64 @@ Selects the motion bounding box colour.
 <h4>12. Debug view</h4>
 
 Selects an intermediate motion mask stage (Raw, Thresholded, Opened, Closed or Final) to display instead of the normal image.
+
+On the Cloud Detection sub-tab:
+
+<h4>1. Mode</h4>
+
+Selects the classification path: Auto, Day or Night. Auto picks day or night from the overall frame brightness, with hysteresis so twilight does not flap between the two.
+
+<h4>2. Day threshold</h4>
+
+Sets the minimum red/blue ratio classified as cloud on the day path. Clear blue sky is typically 0.55 to 0.8, cloud 0.9 and above.
+
+<h4>3. Texture threshold</h4>
+
+Day path: sets the fine-scale texture level above which a region cannot be cloud. This rejects grey or white but textured surfaces such as roofs, trees and buildings, which would otherwise pass the red/blue ratio test. The Texture debug view shows the measured texture level. 0 disables the veto. The measured texture depends on the Downscale setting, so retune this if the downscale is changed.
+
+<h4>4. Night threshold</h4>
+
+Sets the threshold on sky-background deviation from the median sky level on the night path.
+
+<h4>5. Background blur</h4>
+
+Sets the blur radius used to estimate the sky background on the night path, in downscaled pixels.
+
+<h4>6. Downscale</h4>
+
+Selects the reduced-resolution detection path (100%, 50%, 25% or 12.5%). Clouds are low-frequency structure, so heavy downscaling is cheap and safe.
+
+<h4>7. Open size / Close size</h4>
+
+Set the morphological clean-up kernel radii applied to the cloud mask. 0 disables.
+
+<h4>8. Update interval</h4>
+
+Sets how many frames pass between cloud mask recomputations. Intermediate frames reuse the previous mask.
+
+<h4>9. Filter stars</h4>
+
+Drops star detections whose centroid falls inside the cloud mask, before plate solving.
+
+<h4>10. Filter motion</h4>
+
+Suppresses motion boxes that substantially overlap the cloud mask.
+
+<h4>11. Motion overlap</h4>
+
+Sets the fraction of a motion box that must be cloud before it is suppressed.
+
+<h4>12. Show overlay / Mask colour</h4>
+
+Tints cloud-classified regions on the image with the selected colour.
+
+<h4>13. Debug view</h4>
+
+Selects an intermediate cloud detection stage (Background, Signal, Thresholded, Final or Texture) to display instead of the normal image.
+
+<h4>14. Coverage</h4>
+
+Shows the percentage of the evaluated sky classified as cloud in the latest analysed frame, and whether the day or night path classified it. Regions inside motion exclusion rectangles and borders added by output scaling are not evaluated.
 
 On the Star Detection sub-tab:
 

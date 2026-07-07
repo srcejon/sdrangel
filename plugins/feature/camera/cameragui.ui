@@ -582,6 +582,20 @@
        </widget>
       </item>
       <item>
+       <widget class="ButtonSwitch" name="cloudDetectButton">
+        <property name="toolTip">
+         <string>Cloud detection</string>
+        </property>
+        <property name="text">
+         <string/>
+        </property>
+        <property name="icon">
+         <iconset resource="cameraicons.qrc">
+          <normaloff>:/camera/icons/cloud.png</normaloff>:/camera/icons/cloud.png</iconset>
+        </property>
+       </widget>
+      </item>
+      <item>
        <widget class="ButtonSwitch" name="trackObjectsButton">
         <property name="toolTip">
          <string>Overlay ADS-B / satellite / star tracker objects</string>

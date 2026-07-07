@@ -4,6 +4,7 @@ option(ENABLE_CAMERA_TENSORRT "Enable optional TensorRT YOLO inference in the ca
 set(camera_SOURCES
     camera.cpp
     cameradetector.cpp
+    cameraclouddetector.cpp
     cameramotiondetector.cpp
     camerastardetector.cpp
     cameraobjectdetector.cpp
@@ -37,6 +38,7 @@ set(camera_SOURCES
 set(camera_HEADERS
     camera.h
     cameradetector.h
+    cameraclouddetector.h
     cameramotiondetector.h
     camerastardetector.h
     cameraobjectdetector.h

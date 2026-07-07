@@ -746,6 +746,9 @@ bool CameraGUI::handleMessage(const Message& message)
         settingsUI()->stackCurrentCountValue->setToolTip(stackStatusToolTip);
         settingsUI()->stackDisplayFrameSpin->setMaximum(std::max(1, m_lastStackCount));
         settingsUI()->stackDeleteFrameButton->setEnabled(m_lastStackCount > 0);
+        settingsUI()->cloudCoverageLabel->setText(report.isCloudValid()
+            ? tr("%1 % (%2)").arg(report.getCloudCoveragePercent(), 0, 'f', 1).arg(report.isCloudNight() ? tr("night") : tr("day"))
+            : "-");
         m_pipelineFrameTimes.append(nowMs);
         while ((m_pipelineFrameTimes.size() > 1) && (m_pipelineFrameTimes.first() < nowMs - 5000)) {
             m_pipelineFrameTimes.removeFirst();
@@ -1956,6 +1959,24 @@ void CameraGUI::displaySettings()
     settingsUI()->motionCloseSizeSpin->setValue(m_settings.m_motionCloseSize);
     settingsUI()->motionPersistenceFramesSpin->setValue(m_settings.m_motionPersistenceFrames);
     settingsUI()->minContourAreaSpin->setValue(m_settings.m_minContourArea);
+    ui->cloudDetectButton->setChecked(m_settings.m_cloudDetect);
+    settingsUI()->cloudModeCombo->setCurrentIndex(static_cast<int>(m_settings.m_cloudMode));
+    settingsUI()->cloudDebugViewCombo->setCurrentIndex(static_cast<int>(m_settings.m_cloudDebugView));
+    settingsUI()->cloudDayThresholdSpin->setValue(m_settings.m_cloudDayThreshold);
+    settingsUI()->cloudTextureThresholdSpin->setValue(m_settings.m_cloudTextureThreshold);
+    settingsUI()->cloudNightThresholdSpin->setValue(m_settings.m_cloudNightThreshold);
+    settingsUI()->cloudBackgroundBlurSpin->setValue(m_settings.m_cloudBackgroundBlur);
+    settingsUI()->cloudDownscaleCombo->setCurrentIndex(
+        qFuzzyCompare(m_settings.m_cloudDownscale, 0.5) ? 1 :
+        qFuzzyCompare(m_settings.m_cloudDownscale, 0.25) ? 2 :
+        qFuzzyCompare(m_settings.m_cloudDownscale, 0.125) ? 3 : 0);
+    settingsUI()->cloudOpenSizeSpin->setValue(m_settings.m_cloudOpenSize);
+    settingsUI()->cloudCloseSizeSpin->setValue(m_settings.m_cloudCloseSize);
+    settingsUI()->cloudUpdateIntervalSpin->setValue(m_settings.m_cloudUpdateIntervalFrames);
+    settingsUI()->cloudShowOverlayCheck->setChecked(m_settings.m_cloudShowOverlay);
+    settingsUI()->cloudFilterStarsCheck->setChecked(m_settings.m_cloudFilterStars);
+    settingsUI()->cloudFilterMotionCheck->setChecked(m_settings.m_cloudFilterMotion);
+    settingsUI()->cloudMotionOverlapSpin->setValue(m_settings.m_cloudMotionOverlapThreshold);
     ui->starDetectButton->setChecked(m_settings.m_starDetect);
     settingsUI()->starThresholdSpin->setValue(m_settings.m_starThreshold);
     settingsUI()->starBackgroundBlurSpin->setValue(m_settings.m_starBackgroundBlur);
@@ -1993,6 +2014,7 @@ void CameraGUI::displaySettings()
     settingsUI()->hideSyntheticNamesCheck->setChecked(m_settings.m_plateSolveLabelHideSyntheticNames);
     updateColorButton(settingsUI()->overlayTextColorButton, m_settings.m_overlayTextColor);
     updateColorButton(settingsUI()->motionBoxColorButton, m_settings.m_motionBoxColor);
+    updateColorButton(settingsUI()->cloudColorButton, m_settings.m_cloudColor);
     ui->spectrumOverlayButton->setChecked(std::any_of(m_settings.m_spectrumOverlays.cbegin(), m_settings.m_spectrumOverlays.cend(), [](const CameraSettings::SpectrumOverlay& overlay) {
         return overlay.m_enabled && !overlay.m_device.isEmpty();
     }));
@@ -2921,6 +2943,7 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->detectionRoiDeleteButton, &QToolButton::clicked, this, &CameraGUI::on_detectionRoiDeleteButton_clicked);
     QObject::connect(settingsUI()->detectionResetDefaultsButton, &QToolButton::clicked, this, &CameraGUI::on_detectionResetDefaultsButton_clicked);
     QObject::connect(ui->motionDetectButton, &QToolButton::toggled, this, &CameraGUI::on_motionDetectButton_toggled);
+    QObject::connect(ui->cloudDetectButton, &QToolButton::toggled, this, &CameraGUI::on_cloudDetectButton_toggled);
     QObject::connect(ui->starDetectButton, &QToolButton::toggled, this, &CameraGUI::on_starDetectButton_toggled);
     QObject::connect(settingsUI()->motionBackgroundSubtractorCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_motionBackgroundSubtractorCombo_currentIndexChanged);
     QObject::connect(settingsUI()->motionMaskViewCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_motionMaskViewCombo_currentIndexChanged);
@@ -2935,6 +2958,21 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->motionPersistenceFramesSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_motionPersistenceFramesSpin_valueChanged);
     QObject::connect(settingsUI()->minContourAreaSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_minContourAreaSpin_valueChanged);
     QObject::connect(settingsUI()->motionBoxColorButton, &QToolButton::clicked, this, &CameraGUI::on_motionBoxColorButton_clicked);
+    QObject::connect(settingsUI()->cloudModeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_cloudModeCombo_currentIndexChanged);
+    QObject::connect(settingsUI()->cloudDebugViewCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_cloudDebugViewCombo_currentIndexChanged);
+    QObject::connect(settingsUI()->cloudDayThresholdSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_cloudDayThresholdSpin_valueChanged);
+    QObject::connect(settingsUI()->cloudTextureThresholdSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_cloudTextureThresholdSpin_valueChanged);
+    QObject::connect(settingsUI()->cloudNightThresholdSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_cloudNightThresholdSpin_valueChanged);
+    QObject::connect(settingsUI()->cloudBackgroundBlurSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_cloudBackgroundBlurSpin_valueChanged);
+    QObject::connect(settingsUI()->cloudDownscaleCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_cloudDownscaleCombo_currentIndexChanged);
+    QObject::connect(settingsUI()->cloudOpenSizeSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_cloudOpenSizeSpin_valueChanged);
+    QObject::connect(settingsUI()->cloudCloseSizeSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_cloudCloseSizeSpin_valueChanged);
+    QObject::connect(settingsUI()->cloudUpdateIntervalSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_cloudUpdateIntervalSpin_valueChanged);
+    QObject::connect(settingsUI()->cloudShowOverlayCheck, &QCheckBox::toggled, this, &CameraGUI::on_cloudShowOverlayCheck_toggled);
+    QObject::connect(settingsUI()->cloudFilterStarsCheck, &QCheckBox::toggled, this, &CameraGUI::on_cloudFilterStarsCheck_toggled);
+    QObject::connect(settingsUI()->cloudFilterMotionCheck, &QCheckBox::toggled, this, &CameraGUI::on_cloudFilterMotionCheck_toggled);
+    QObject::connect(settingsUI()->cloudMotionOverlapSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_cloudMotionOverlapSpin_valueChanged);
+    QObject::connect(settingsUI()->cloudColorButton, &QToolButton::clicked, this, &CameraGUI::on_cloudColorButton_clicked);
     QObject::connect(settingsUI()->starThresholdSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_starThresholdSpin_valueChanged);
     QObject::connect(settingsUI()->starBackgroundBlurSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_starBackgroundBlurSpin_valueChanged);
     QObject::connect(settingsUI()->starMinAreaSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_starMinAreaSpin_valueChanged);
@@ -9563,6 +9601,108 @@ void CameraGUI::on_motionBoxColorButton_clicked()
         m_settings.m_motionBoxColor = color;
         updateColorButton(settingsUI()->motionBoxColorButton, color);
         applySetting("motionBoxColor");
+    }
+}
+
+void CameraGUI::on_cloudDetectButton_toggled(bool checked)
+{
+    m_settings.m_cloudDetect = checked;
+    applySetting("cloudDetect");
+}
+
+void CameraGUI::on_cloudModeCombo_currentIndexChanged(int index)
+{
+    m_settings.m_cloudMode = static_cast<CameraSettings::CloudDetectionMode>(index);
+    applySetting("cloudMode");
+}
+
+void CameraGUI::on_cloudDebugViewCombo_currentIndexChanged(int index)
+{
+    m_settings.m_cloudDebugView = static_cast<CameraSettings::CloudDebugView>(index);
+    applySetting("cloudDebugView");
+}
+
+void CameraGUI::on_cloudDayThresholdSpin_valueChanged(double value)
+{
+    m_settings.m_cloudDayThreshold = value;
+    applySetting("cloudDayThreshold");
+}
+
+void CameraGUI::on_cloudTextureThresholdSpin_valueChanged(int value)
+{
+    m_settings.m_cloudTextureThreshold = value;
+    applySetting("cloudTextureThreshold");
+}
+
+void CameraGUI::on_cloudNightThresholdSpin_valueChanged(int value)
+{
+    m_settings.m_cloudNightThreshold = value;
+    applySetting("cloudNightThreshold");
+}
+
+void CameraGUI::on_cloudBackgroundBlurSpin_valueChanged(int value)
+{
+    m_settings.m_cloudBackgroundBlur = value;
+    applySetting("cloudBackgroundBlur");
+}
+
+void CameraGUI::on_cloudDownscaleCombo_currentIndexChanged(int index)
+{
+    m_settings.m_cloudDownscale = index == 1 ? 0.5 : index == 2 ? 0.25 : index == 3 ? 0.125 : 1.0;
+    applySetting("cloudDownscale");
+}
+
+void CameraGUI::on_cloudOpenSizeSpin_valueChanged(int value)
+{
+    m_settings.m_cloudOpenSize = value;
+    applySetting("cloudOpenSize");
+}
+
+void CameraGUI::on_cloudCloseSizeSpin_valueChanged(int value)
+{
+    m_settings.m_cloudCloseSize = value;
+    applySetting("cloudCloseSize");
+}
+
+void CameraGUI::on_cloudUpdateIntervalSpin_valueChanged(int value)
+{
+    m_settings.m_cloudUpdateIntervalFrames = value;
+    applySetting("cloudUpdateIntervalFrames");
+}
+
+void CameraGUI::on_cloudShowOverlayCheck_toggled(bool checked)
+{
+    m_settings.m_cloudShowOverlay = checked;
+    applySetting("cloudShowOverlay");
+}
+
+void CameraGUI::on_cloudFilterStarsCheck_toggled(bool checked)
+{
+    m_settings.m_cloudFilterStars = checked;
+    applySetting("cloudFilterStars");
+}
+
+void CameraGUI::on_cloudFilterMotionCheck_toggled(bool checked)
+{
+    m_settings.m_cloudFilterMotion = checked;
+    applySetting("cloudFilterMotion");
+}
+
+void CameraGUI::on_cloudMotionOverlapSpin_valueChanged(double value)
+{
+    m_settings.m_cloudMotionOverlapThreshold = value;
+    applySetting("cloudMotionOverlapThreshold");
+}
+
+void CameraGUI::on_cloudColorButton_clicked()
+{
+    const QColor color = QColorDialog::getColor(m_settings.m_cloudColor, this, tr("Select cloud mask colour"), QColorDialog::ShowAlphaChannel);
+
+    if (color.isValid())
+    {
+        m_settings.m_cloudColor = color;
+        updateColorButton(settingsUI()->cloudColorButton, color);
+        applySetting("cloudColor");
     }
 }
 

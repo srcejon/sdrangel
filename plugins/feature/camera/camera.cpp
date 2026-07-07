@@ -109,6 +109,8 @@ Camera::Camera(WebAPIAdapterInterface *webAPIAdapterInterface) :
     m_frameStacker(new CameraFrameStacker()),
     m_imageProcessorThread(new QThread()),
     m_imageProcessor(new CameraImageProcessor()),
+    m_cloudDetectorThread(new QThread()),
+    m_cloudDetector(new CameraCloudDetector()),
     m_motionDetectorThread(new QThread()),
     m_motionDetector(new CameraMotionDetector(this)),
     m_starDetectorThread(new QThread()),
@@ -168,9 +170,18 @@ Camera::Camera(WebAPIAdapterInterface *webAPIAdapterInterface) :
     QObject::connect(m_imageProcessorThread, &QThread::started, m_imageProcessor, &CameraImageProcessor::startWork);
     QObject::connect(m_imageProcessorThread, &QThread::finished, m_imageProcessor, &QObject::deleteLater);
     QObject::connect(m_imageProcessorThread, &QThread::finished, m_imageProcessorThread, &QThread::deleteLater);
-    m_imageProcessor->setNextStage(m_motionDetector);
+    m_imageProcessor->setNextStage(m_cloudDetector);
     m_imageProcessorThread->start();
     m_imageProcessor->getInputMessageQueue()->push(Camera::MsgConfigureCamera::create(m_settings, QList<QString>(), true));
+
+    m_cloudDetector->moveToThread(m_cloudDetectorThread);
+    QObject::connect(m_cloudDetectorThread, &QThread::started, m_cloudDetector, &CameraCloudDetector::startWork);
+    QObject::connect(m_cloudDetectorThread, &QThread::finished, m_cloudDetector, &QObject::deleteLater);
+    QObject::connect(m_cloudDetectorThread, &QThread::finished, m_cloudDetectorThread, &QThread::deleteLater);
+    m_cloudDetector->setNextStage(m_motionDetector);
+    m_cloudDetector->setMessageQueueToFeature(getInputMessageQueue());
+    m_cloudDetectorThread->start();
+    m_cloudDetector->getInputMessageQueue()->push(Camera::MsgConfigureCamera::create(m_settings, QList<QString>(), true));
 
     m_motionDetector->moveToThread(m_motionDetectorThread);
     QObject::connect(m_motionDetectorThread, &QThread::started, m_motionDetector, &CameraMotionDetector::startWork);
@@ -273,6 +284,14 @@ Camera::~Camera()
         m_imageProcessor = nullptr;
     }
 
+    if (m_cloudDetectorThread)
+    {
+        m_cloudDetectorThread->quit();
+        m_cloudDetectorThread->wait();
+        m_cloudDetectorThread = nullptr;
+        m_cloudDetector = nullptr;
+    }
+
     if (m_motionDetectorThread)
     {
         m_motionDetectorThread->quit();
@@ -352,6 +371,9 @@ void Camera::start()
     if (m_imageProcessor) {
         m_imageProcessor->getInputMessageQueue()->push(Camera::MsgCaptureActive::create(true, captureEpoch));
     }
+    if (m_cloudDetector) {
+        m_cloudDetector->getInputMessageQueue()->push(Camera::MsgCaptureActive::create(true, captureEpoch));
+    }
     if (m_motionDetector) {
         m_motionDetector->getInputMessageQueue()->push(Camera::MsgCaptureActive::create(true, captureEpoch));
     }
@@ -405,6 +427,9 @@ void Camera::stop()
     }
     if (m_motionDetector) {
         m_motionDetector->getInputMessageQueue()->push(Camera::MsgCaptureActive::create(false, captureEpoch));
+    }
+    if (m_cloudDetector) {
+        m_cloudDetector->getInputMessageQueue()->push(Camera::MsgCaptureActive::create(false, captureEpoch));
     }
     if (m_imageProcessor) {
         m_imageProcessor->getInputMessageQueue()->push(Camera::MsgCaptureActive::create(false, captureEpoch));
@@ -535,6 +560,13 @@ bool Camera::handleMessage(const Message& cmd)
         }
         return true;
     }
+    else if (CameraCloudDetector::MsgReportCloudCoverage::match(cmd))
+    {
+        const CameraCloudDetector::MsgReportCloudCoverage& report = (const CameraCloudDetector::MsgReportCloudCoverage&) cmd;
+        m_lastCloudCoveragePercent = report.getCoveragePercent();
+        m_lastCloudCoverageValid = true;
+        return true;
+    }
 
     return false;
 }
@@ -588,6 +620,9 @@ void Camera::applySettings(const CameraSettings& settings, const QList<QString>&
     }
     if (m_imageProcessor) {
         m_imageProcessor->getInputMessageQueue()->push(Camera::MsgConfigureCamera::create(settings, settingsKeys, force));
+    }
+    if (m_cloudDetector) {
+        m_cloudDetector->getInputMessageQueue()->push(Camera::MsgConfigureCamera::create(settings, settingsKeys, force));
     }
     if (m_motionDetector) {
         m_motionDetector->getInputMessageQueue()->push(Camera::MsgConfigureCamera::create(settings, settingsKeys, force));
@@ -668,6 +703,8 @@ int Camera::webapiReportGet(SWGSDRangel::SWGFeatureReport& response, QString& er
 void Camera::webapiFormatFeatureReport(SWGSDRangel::SWGFeatureReport& response)
 {
     response.getCameraReport()->setRunningState(getState());
+    response.getCameraReport()->setCloudCoveragePercent(m_lastCloudCoveragePercent.load());
+    response.getCameraReport()->setCloudCoverageValid(m_lastCloudCoverageValid.load() ? 1 : 0);
 }
 
 int Camera::webapiActionsPost(
@@ -1098,6 +1135,22 @@ void Camera::webapiFormatFeatureSettings(
         swgMotionExclusionRects->append(swgRect);
     }
     swg->setMotionExclusionRects(swgMotionExclusionRects);
+    swg->setCloudDetect(settings.m_cloudDetect ? 1 : 0);
+    swg->setCloudMode((int) settings.m_cloudMode);
+    swg->setCloudDebugView((int) settings.m_cloudDebugView);
+    swg->setCloudColor((qint32) settings.m_cloudColor.rgba());
+    swg->setCloudShowOverlay(settings.m_cloudShowOverlay ? 1 : 0);
+    swg->setCloudDayThreshold(settings.m_cloudDayThreshold);
+    swg->setCloudTextureThreshold(settings.m_cloudTextureThreshold);
+    swg->setCloudNightThreshold(settings.m_cloudNightThreshold);
+    swg->setCloudBackgroundBlur(settings.m_cloudBackgroundBlur);
+    swg->setCloudOpenSize(settings.m_cloudOpenSize);
+    swg->setCloudCloseSize(settings.m_cloudCloseSize);
+    swg->setCloudDownscale(settings.m_cloudDownscale);
+    swg->setCloudUpdateIntervalFrames(settings.m_cloudUpdateIntervalFrames);
+    swg->setCloudFilterStars(settings.m_cloudFilterStars ? 1 : 0);
+    swg->setCloudFilterMotion(settings.m_cloudFilterMotion ? 1 : 0);
+    swg->setCloudMotionOverlapThreshold(settings.m_cloudMotionOverlapThreshold);
     swg->setStarDetect(settings.m_starDetect ? 1 : 0);
     swg->setStarThreshold(settings.m_starThreshold);
     swg->setStarBackgroundBlur(settings.m_starBackgroundBlur);
@@ -1846,6 +1899,54 @@ void Camera::webapiUpdateFeatureSettings(
                 }
             }
         }
+    }
+    if (featureSettingsKeys.contains("cloudDetect")) {
+        settings.m_cloudDetect = swg->getCloudDetect() != 0;
+    }
+    if (featureSettingsKeys.contains("cloudMode")) {
+        settings.m_cloudMode = (CameraSettings::CloudDetectionMode) swg->getCloudMode();
+    }
+    if (featureSettingsKeys.contains("cloudDebugView")) {
+        settings.m_cloudDebugView = (CameraSettings::CloudDebugView) swg->getCloudDebugView();
+    }
+    if (featureSettingsKeys.contains("cloudColor")) {
+        settings.m_cloudColor = QColor::fromRgba((QRgb) swg->getCloudColor());
+    }
+    if (featureSettingsKeys.contains("cloudShowOverlay")) {
+        settings.m_cloudShowOverlay = swg->getCloudShowOverlay() != 0;
+    }
+    if (featureSettingsKeys.contains("cloudDayThreshold")) {
+        settings.m_cloudDayThreshold = swg->getCloudDayThreshold();
+    }
+    if (featureSettingsKeys.contains("cloudTextureThreshold")) {
+        settings.m_cloudTextureThreshold = swg->getCloudTextureThreshold();
+    }
+    if (featureSettingsKeys.contains("cloudNightThreshold")) {
+        settings.m_cloudNightThreshold = swg->getCloudNightThreshold();
+    }
+    if (featureSettingsKeys.contains("cloudBackgroundBlur")) {
+        settings.m_cloudBackgroundBlur = swg->getCloudBackgroundBlur();
+    }
+    if (featureSettingsKeys.contains("cloudOpenSize")) {
+        settings.m_cloudOpenSize = swg->getCloudOpenSize();
+    }
+    if (featureSettingsKeys.contains("cloudCloseSize")) {
+        settings.m_cloudCloseSize = swg->getCloudCloseSize();
+    }
+    if (featureSettingsKeys.contains("cloudDownscale")) {
+        settings.m_cloudDownscale = swg->getCloudDownscale();
+    }
+    if (featureSettingsKeys.contains("cloudUpdateIntervalFrames")) {
+        settings.m_cloudUpdateIntervalFrames = swg->getCloudUpdateIntervalFrames();
+    }
+    if (featureSettingsKeys.contains("cloudFilterStars")) {
+        settings.m_cloudFilterStars = swg->getCloudFilterStars() != 0;
+    }
+    if (featureSettingsKeys.contains("cloudFilterMotion")) {
+        settings.m_cloudFilterMotion = swg->getCloudFilterMotion() != 0;
+    }
+    if (featureSettingsKeys.contains("cloudMotionOverlapThreshold")) {
+        settings.m_cloudMotionOverlapThreshold = swg->getCloudMotionOverlapThreshold();
     }
     if (featureSettingsKeys.contains("starDetect")) {
         settings.m_starDetect = swg->getStarDetect() != 0;

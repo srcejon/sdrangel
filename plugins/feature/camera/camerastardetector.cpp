@@ -578,6 +578,21 @@ void CameraStarDetector::processNewFrame(const CameraPipelineFramePtr& frame)
         }
     }
 
+    // Cloud structure can break up into star-like blobs; drop detections inside the cloud
+    // mask before they reach the plate solver
+    if (m_settings.m_cloudFilterStars && frame->m_cloud.m_valid && !frame->m_starDetections.isEmpty())
+    {
+        const CameraPipelineCloud& cloud = frame->m_cloud;
+        frame->m_starDetections.erase(
+            std::remove_if(
+                frame->m_starDetections.begin(),
+                frame->m_starDetections.end(),
+                [&cloud](const CameraPipelineStarDetection& detection) {
+                    return cloud.isCloudAtImagePoint(detection.m_center);
+                }),
+            frame->m_starDetections.end());
+    }
+
     if (m_settings.m_plateSolve && !frame->m_starDetections.isEmpty())
     {
         reportPlateSolveStatus(true);

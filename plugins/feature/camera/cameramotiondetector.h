@@ -35,7 +35,9 @@ class Camera;
  * Runs an OpenCV background subtractor (MOG2/KNN, optionally CUDA-accelerated) over the
  * detection ROI of each frame, applies morphological open/close to clean the foreground mask,
  * and emits the resulting motion bounding boxes into CameraPipelineFrame::m_motionBoxes before
- * forwarding the frame. Boxes that fall in exclusion rectangles are suppressed, and persistence
+ * forwarding the frame. Boxes that fall in exclusion rectangles are suppressed, boxes that
+ * substantially overlap the frame's cloud mask are optionally dropped (so drifting clouds do not
+ * register as motion while the background model keeps learning the whole ROI), and persistence
  * /confirmation counters debounce transient detections so noise does not produce spurious motion.
  *
  * \note Derives from CameraDetectionStage and runs on its own QThread; see that base class for
@@ -83,9 +85,9 @@ private:
     [[nodiscard]] bool canUseCudaMotionDetection() const;
     void invalidateCudaMotionCaches();
     [[nodiscard]] const cv::cuda::GpuMat& cudaMotionExclusionMask(const cv::Rect& roi, const cv::Size& workSize);
-    bool applyMotionDetectionCuda(const cv::Mat& bgrMat, const cv::cuda::GpuMat* bgrGpu, const cv::Rect& roi, QVector<QRect>& motionBoxes, cv::Mat* debugMask = nullptr);
+    bool applyMotionDetectionCuda(const cv::Mat& bgrMat, const cv::cuda::GpuMat* bgrGpu, const cv::Rect& roi, const CameraPipelineCloud* cloud, QVector<QRect>& motionBoxes, cv::Mat* debugMask = nullptr);
 #endif
-    void applyMotionDetection(const cv::Mat& bgrMat, const cv::Rect& roi, QVector<QRect>& motionBoxes, cv::Mat* debugMask = nullptr);
+    void applyMotionDetection(const cv::Mat& bgrMat, const cv::Rect& roi, const CameraPipelineCloud* cloud, QVector<QRect>& motionBoxes, cv::Mat* debugMask = nullptr);
 };
 
 #endif // INCLUDE_FEATURE_CAMERAMOTIONDETECTOR_H_

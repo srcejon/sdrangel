@@ -189,6 +189,46 @@ struct CameraPipelinePlateSolve
 };
 
 /**
+ * \brief Cloud segmentation result for a frame: per-pixel mask and coverage statistics.
+ *
+ * Produced by CameraCloudDetector and attached to CameraPipelineFrame::m_cloud. The mask is a
+ * CV_8UC1 image in the (possibly downscaled) detection-ROI working space where 255 = cloud and
+ * 0 = clear sky or excluded region; m_roi gives the full-image rectangle the mask covers.
+ * Downstream consumers (star/motion detectors, post-processor) use isCloudAtImagePoint() or map
+ * their own rectangles into mask space; m_coveragePercent is the percentage of evaluated
+ * (non-excluded) sky classified as cloud.
+ *
+ * \note The mask may be shared between frames via cv::Mat refcounting when the detector reuses
+ *       a cached result on intermediate frames, so consumers must treat it as read-only.
+ * \note Check m_valid before using any field; frames that bypass the cloud detector stage (or
+ *       frames processed while cloud detection is disabled) carry an invalid result.
+ */
+struct CameraPipelineCloud
+{
+    cv::Mat m_mask;                  ///< CV_8UC1, 255 = cloud, 0 = clear/excluded; detection-ROI working space
+    cv::Rect m_roi;                  ///< Full-image detection ROI the mask covers
+    float m_coveragePercent = 0.0f;  ///< Percent of evaluated (non-excluded) sky classified as cloud
+    bool m_night = false;            ///< True when the night-sky path classified this frame
+    bool m_valid = false;
+
+    /// Returns true when the full-image point falls inside a cloud-classified mask cell.
+    bool isCloudAtImagePoint(const QPointF& point) const
+    {
+        if (!m_valid || m_mask.empty() || (m_roi.width <= 0) || (m_roi.height <= 0)) {
+            return false;
+        }
+
+        const int col = static_cast<int>((point.x() - m_roi.x) * m_mask.cols / m_roi.width);
+        const int row = static_cast<int>((point.y() - m_roi.y) * m_mask.rows / m_roi.height);
+        if ((col < 0) || (col >= m_mask.cols) || (row < 0) || (row >= m_mask.rows)) {
+            return false;
+        }
+
+        return m_mask.at<uchar>(row, col) != 0;
+    }
+};
+
+/**
  * \brief Bookkeeping for the frame-stacking stage: counts and alignment outcome.
  *
  * Attached to CameraPipelineFrame::m_stack to describe how the (possibly stacked) frame was
@@ -377,6 +417,7 @@ struct CameraPipelineFrame
     int m_hdrExposureIndex = -1;
     int m_hdrExposureCount = 0;
     QVector<QRect> m_motionBoxes;
+    CameraPipelineCloud m_cloud;
     QVector<CameraPipelineDetection> m_detections;
     QVector<CameraPipelineMeteorPhotometry> m_meteorPhotometry;
     QVector<CameraPipelineStarDetection> m_starDetections;

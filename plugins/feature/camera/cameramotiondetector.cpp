@@ -30,6 +30,31 @@
 #include "camera.h"
 #include "cameramotiondetector.h"
 
+namespace {
+
+// Fraction of the full-image box covered by cloud in the (possibly downscaled) cloud mask
+double cloudOverlapFraction(const CameraPipelineCloud& cloud, const cv::Rect& box)
+{
+    if (!cloud.m_valid || cloud.m_mask.empty() || (cloud.m_roi.width <= 0) || (cloud.m_roi.height <= 0)) {
+        return 0.0;
+    }
+
+    const double scaleX = static_cast<double>(cloud.m_mask.cols) / cloud.m_roi.width;
+    const double scaleY = static_cast<double>(cloud.m_mask.rows) / cloud.m_roi.height;
+    const int x0 = std::max(0, static_cast<int>(std::floor((box.x - cloud.m_roi.x) * scaleX)));
+    const int y0 = std::max(0, static_cast<int>(std::floor((box.y - cloud.m_roi.y) * scaleY)));
+    const int x1 = std::min(cloud.m_mask.cols, static_cast<int>(std::ceil((box.x + box.width - cloud.m_roi.x) * scaleX)));
+    const int y1 = std::min(cloud.m_mask.rows, static_cast<int>(std::ceil((box.y + box.height - cloud.m_roi.y) * scaleY)));
+    if ((x1 <= x0) || (y1 <= y0)) {
+        return 0.0;
+    }
+
+    const cv::Rect maskRect(x0, y0, x1 - x0, y1 - y0);
+    return static_cast<double>(cv::countNonZero(cloud.m_mask(maskRect))) / maskRect.area();
+}
+
+} // namespace
+
 CameraMotionDetector::CameraMotionDetector(Camera *camera) :
     m_camera(camera),
 #ifdef CAMERA_OPENCV_CUDA_MOTION_DETECTION
@@ -142,6 +167,8 @@ void CameraMotionDetector::processNewFrame(const CameraPipelineFramePtr& frame)
     cv::Mat bgrMat;
     cv::Mat motionDebugMask;
     bool useCPUMotionDetection = true;
+    const CameraPipelineCloud* cloud =
+        (m_settings.m_cloudFilterMotion && frame->m_cloud.m_valid) ? &frame->m_cloud : nullptr;
 
 #ifdef CAMERA_OPENCV_CUDA_MOTION_DETECTION
     if (cachedBgrGpu
@@ -150,6 +177,7 @@ void CameraMotionDetector::processNewFrame(const CameraPipelineFramePtr& frame)
             bgrMat,
             cachedBgrGpu,
             detectionRoi,
+            cloud,
             frame->m_motionBoxes,
             (m_settings.m_motionMaskView != CameraSettings::MotionMaskViewOff) ? &motionDebugMask : nullptr))
     {
@@ -169,6 +197,7 @@ void CameraMotionDetector::processNewFrame(const CameraPipelineFramePtr& frame)
         applyMotionDetection(
             bgrMat,
             detectionRoi,
+            cloud,
             frame->m_motionBoxes,
             (m_settings.m_motionMaskView != CameraSettings::MotionMaskViewOff) ? &motionDebugMask : nullptr);
     }
@@ -277,7 +306,7 @@ const cv::cuda::GpuMat& CameraMotionDetector::cudaMotionExclusionMask(const cv::
     return m_cudaMotionExclusionMask;
 }
 
-bool CameraMotionDetector::applyMotionDetectionCuda(const cv::Mat& bgrMat, const cv::cuda::GpuMat* sourceBgrGpu, const cv::Rect& roi, QVector<QRect>& motionBoxes, cv::Mat* debugMask)
+bool CameraMotionDetector::applyMotionDetectionCuda(const cv::Mat& bgrMat, const cv::cuda::GpuMat* sourceBgrGpu, const cv::Rect& roi, const CameraPipelineCloud* cloud, QVector<QRect>& motionBoxes, cv::Mat* debugMask)
 {
     PROFILER_START();
 
@@ -400,6 +429,11 @@ bool CameraMotionDetector::applyMotionDetectionCuda(const cv::Mat& bgrMat, const
                 }
                 box.x += roi.x;
                 box.y += roi.y;
+                // Drop boxes that are mostly drifting cloud before they can seed the
+                // confirmation/persistence counters
+                if (cloud && (cloudOverlapFraction(*cloud, box) >= m_settings.m_cloudMotionOverlapThreshold)) {
+                    continue;
+                }
                 boxes.append(QRect(box.x, box.y, box.width, box.height));
             }
         }
@@ -446,7 +480,7 @@ bool CameraMotionDetector::applyMotionDetectionCuda(const cv::Mat& bgrMat, const
 }
 #endif
 
-void CameraMotionDetector::applyMotionDetection(const cv::Mat& bgrMat, const cv::Rect& roi, QVector<QRect>& motionBoxes, cv::Mat* debugMask)
+void CameraMotionDetector::applyMotionDetection(const cv::Mat& bgrMat, const cv::Rect& roi, const CameraPipelineCloud* cloud, QVector<QRect>& motionBoxes, cv::Mat* debugMask)
 {
     PROFILER_START();
 
@@ -523,6 +557,11 @@ void CameraMotionDetector::applyMotionDetection(const cv::Mat& bgrMat, const cv:
             }
             box.x += roi.x;
             box.y += roi.y;
+            // Drop boxes that are mostly drifting cloud before they can seed the
+            // confirmation/persistence counters
+            if (cloud && (cloudOverlapFraction(*cloud, box) >= m_settings.m_cloudMotionOverlapThreshold)) {
+                continue;
+            }
             boxes.append(QRect(box.x, box.y, box.width, box.height));
         }
     }

@@ -19,6 +19,8 @@
 #ifndef INCLUDE_FEATURE_CAMERA_H_
 #define INCLUDE_FEATURE_CAMERA_H_
 
+#include <atomic>
+
 #include <QByteArray>
 #include <QThread>
 
@@ -26,6 +28,7 @@
 #include "util/message.h"
 #include "camerasettings.h"
 #include "cameradetector.h"
+#include "cameraclouddetector.h"
 #include "cameramotiondetector.h"
 #include "camerastardetector.h"
 #include "cameraobjectdetector.h"
@@ -54,7 +57,7 @@ namespace SWGSDRangel {
  * Camera is the top-level Feature object for the camera plugin. It owns the whole
  * processing chain and the capture orchestrator: a CameraWorker plus a sequence of
  * QObject stages (frame preprocessor -> frame aligner -> frame stacker -> image
- * processor -> motion/star/object/diff detectors -> recorder, with a continuously
+ * processor -> cloud/motion/star/object/diff detectors -> recorder, with a continuously
  * running post-processor). Each stage lives on its own dedicated QThread and frames
  * flow down the chain as CameraPipelineFramePtr passed via per-stage message queues.
  * The class handles configuration (CameraSettings), start/stop, serialization, and the
@@ -329,6 +332,8 @@ private:
     CameraFrameStacker *m_frameStacker;
     QThread *m_imageProcessorThread;
     CameraImageProcessor *m_imageProcessor;
+    QThread *m_cloudDetectorThread;
+    CameraCloudDetector *m_cloudDetector;
     QThread *m_motionDetectorThread;
     CameraMotionDetector *m_motionDetector;
     QThread *m_starDetectorThread;
@@ -343,6 +348,10 @@ private:
     CameraPostProcessor *m_postProcessor;
     CameraSettings m_settings;
     quint64 m_captureEpoch;
+    // Latest cloud coverage from MsgReportCloudCoverage; atomics because webapiReportGet
+    // may read them from a different thread than handleMessage
+    std::atomic<float> m_lastCloudCoveragePercent{0.0f};
+    std::atomic<bool> m_lastCloudCoverageValid{false};
 
     void start();
     void stop();

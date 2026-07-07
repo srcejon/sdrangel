@@ -195,6 +195,23 @@ struct CameraSettings
         StarDebugViewFinal
     };
 
+    enum CloudDetectionMode
+    {
+        CloudModeAuto = 0,
+        CloudModeDay,
+        CloudModeNight
+    };
+
+    enum CloudDebugView
+    {
+        CloudDebugViewOff = 0,
+        CloudDebugViewBackground,
+        CloudDebugViewSignal,
+        CloudDebugViewThresholded,
+        CloudDebugViewFinal,
+        CloudDebugViewTexture
+    };
+
     enum ConstellationOverlay
     {
         ConstellationOverlayUrsaMajor = 0,
@@ -350,6 +367,12 @@ struct CameraSettings
     static constexpr int m_maxContourAreaBound = 10000;
     static constexpr int m_minStarBackgroundBlur = 1;
     static constexpr int m_maxStarBackgroundBlur = 50;
+    static constexpr double m_minCloudRatioThreshold = 0.0;
+    static constexpr double m_maxCloudRatioThreshold = 2.0;
+    static constexpr int m_minCloudBackgroundBlur = 1;
+    static constexpr int m_maxCloudBackgroundBlur = 128;
+    static constexpr int m_minCloudUpdateInterval = 1;
+    static constexpr int m_maxCloudUpdateInterval = 600;
     static constexpr double m_minStarAspectRatio = 1.0;
     static constexpr double m_maxStarAspectRatio = 10.0;
     static constexpr double m_minPlateSolveMagnitude = -2.0;
@@ -609,6 +632,22 @@ struct CameraSettings
     int    m_minContourArea;    ///< Minimum contour area (px²) to draw: 0..10000
     bool   m_showMotionExclusionRects; ///< Show motion exclusion rectangles on the preview image
     QList<QRect> m_motionExclusionRects; ///< Full-resolution exclusion rectangles for diff/motion detection
+    bool   m_cloudDetect;       ///< Enable cloud detection
+    CloudDetectionMode m_cloudMode; ///< Cloud classification path: auto, day (R/B ratio) or night (background deviation)
+    CloudDebugView m_cloudDebugView; ///< Optional debug view of cloud detection stages
+    QColor m_cloudColor;        ///< Overlay tint colour for cloud-classified regions
+    bool   m_cloudShowOverlay;  ///< Draw the cloud mask tint on the preview image
+    double m_cloudDayThreshold; ///< Day path: minimum red/blue ratio classified as cloud: 0.0..2.0
+    int    m_cloudTextureThreshold; ///< Day path: fine-scale texture level above which a region cannot be cloud (rejects roofs/trees); 0 disables: 0..255
+    int    m_cloudNightThreshold; ///< Night path: threshold on background deviation from the sky level: 0..255
+    int    m_cloudBackgroundBlur; ///< Night path: radius used to estimate the sky background, in downscaled pixels: 1..128
+    int    m_cloudOpenSize;     ///< Kernel radius for cloud-mask morphological open: 0..20
+    int    m_cloudCloseSize;    ///< Kernel radius for cloud-mask morphological close: 0..20
+    double m_cloudDownscale;    ///< Downscale factor for the cloud detection path: 1.0, 0.5, 0.25, 0.125
+    int    m_cloudUpdateIntervalFrames; ///< Recompute the cloud mask every this many frames: 1..600
+    bool   m_cloudFilterStars;  ///< Drop star detections whose centroid falls inside the cloud mask
+    bool   m_cloudFilterMotion; ///< Suppress motion boxes that substantially overlap the cloud mask
+    double m_cloudMotionOverlapThreshold; ///< Cloud overlap fraction at which a motion box is suppressed: 0.0..1.0
     bool   m_starDetect;        ///< Enable star detection
     int    m_starThreshold;     ///< Threshold on the star residual image
     int    m_starBackgroundBlur; ///< Radius used to estimate the smooth sky background

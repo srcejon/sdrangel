@@ -6096,6 +6096,426 @@ car</string>
            </item>
           </layout>
          </widget>
+         <widget class="QWidget" name="tabCloud">
+          <property name="toolTip">
+           <string>Cloud detection settings.</string>
+          </property>
+          <attribute name="title">
+           <string>Cloud Detection</string>
+          </attribute>
+          <layout class="QGridLayout" name="gridLayoutCloud">
+           <item row="0" column="0">
+            <widget class="QLabel" name="cloudModeLabel">
+             <property name="minimumSize">
+              <size>
+               <width>130</width>
+               <height>0</height>
+              </size>
+             </property>
+             <property name="text">
+              <string>Mode</string>
+             </property>
+            </widget>
+           </item>
+           <item row="0" column="1">
+            <widget class="QComboBox" name="cloudModeCombo">
+             <property name="minimumSize">
+              <size>
+               <width>180</width>
+               <height>0</height>
+              </size>
+             </property>
+             <property name="toolTip">
+              <string>Cloud classification path. Auto picks day or night from overall frame brightness; day thresholds the red/blue ratio; night thresholds sky-background deviation</string>
+             </property>
+             <item>
+              <property name="text">
+               <string>Auto</string>
+              </property>
+             </item>
+             <item>
+              <property name="text">
+               <string>Day</string>
+              </property>
+             </item>
+             <item>
+              <property name="text">
+               <string>Night</string>
+              </property>
+             </item>
+            </widget>
+           </item>
+           <item row="0" column="2">
+            <widget class="QLabel" name="cloudDebugViewLabel">
+             <property name="minimumSize">
+              <size>
+               <width>130</width>
+               <height>0</height>
+              </size>
+             </property>
+             <property name="text">
+              <string>Debug view</string>
+             </property>
+            </widget>
+           </item>
+           <item row="0" column="3">
+            <widget class="QComboBox" name="cloudDebugViewCombo">
+             <property name="toolTip">
+              <string>Replace the preview image with an intermediate cloud detection stage</string>
+             </property>
+             <item>
+              <property name="text">
+               <string>Off</string>
+              </property>
+             </item>
+             <item>
+              <property name="text">
+               <string>Background</string>
+              </property>
+             </item>
+             <item>
+              <property name="text">
+               <string>Signal</string>
+              </property>
+             </item>
+             <item>
+              <property name="text">
+               <string>Thresholded</string>
+              </property>
+             </item>
+             <item>
+              <property name="text">
+               <string>Final</string>
+              </property>
+             </item>
+             <item>
+              <property name="text">
+               <string>Texture</string>
+              </property>
+             </item>
+            </widget>
+           </item>
+           <item row="1" column="0">
+            <widget class="QLabel" name="cloudDayThresholdLabel">
+             <property name="text">
+              <string>Day threshold</string>
+             </property>
+            </widget>
+           </item>
+           <item row="1" column="1">
+            <widget class="QDoubleSpinBox" name="cloudDayThresholdSpin">
+             <property name="toolTip">
+              <string>Day path: minimum red/blue ratio classified as cloud. Clear blue sky is typically 0.55-0.8, cloud 0.9 and above</string>
+             </property>
+             <property name="maximum">
+              <double>2.000000000000000</double>
+             </property>
+             <property name="singleStep">
+              <double>0.010000000000000</double>
+             </property>
+             <property name="value">
+              <double>0.850000000000000</double>
+             </property>
+            </widget>
+           </item>
+           <item row="1" column="2">
+            <widget class="QLabel" name="cloudNightThresholdLabel">
+             <property name="text">
+              <string>Night threshold</string>
+             </property>
+            </widget>
+           </item>
+           <item row="1" column="3">
+            <widget class="QSpinBox" name="cloudNightThresholdSpin">
+             <property name="toolTip">
+              <string>Night path: threshold on sky-background deviation from the median sky level (0-255)</string>
+             </property>
+             <property name="maximum">
+              <number>255</number>
+             </property>
+             <property name="value">
+              <number>8</number>
+             </property>
+            </widget>
+           </item>
+           <item row="2" column="0">
+            <widget class="QLabel" name="cloudBackgroundBlurLabel">
+             <property name="text">
+              <string>Background blur</string>
+             </property>
+            </widget>
+           </item>
+           <item row="2" column="1">
+            <widget class="QSpinBox" name="cloudBackgroundBlurSpin">
+             <property name="toolTip">
+              <string>Night path: blur radius used to estimate the sky background, in downscaled pixels</string>
+             </property>
+             <property name="minimum">
+              <number>1</number>
+             </property>
+             <property name="maximum">
+              <number>128</number>
+             </property>
+             <property name="value">
+              <number>24</number>
+             </property>
+            </widget>
+           </item>
+           <item row="2" column="2">
+            <widget class="QLabel" name="cloudDownscaleLabel">
+             <property name="text">
+              <string>Downscale</string>
+             </property>
+            </widget>
+           </item>
+           <item row="2" column="3">
+            <widget class="QComboBox" name="cloudDownscaleCombo">
+             <property name="toolTip">
+              <string>Downscale factor applied before cloud detection. Clouds are low-frequency structure, so heavy downscaling is cheap and safe</string>
+             </property>
+             <property name="currentIndex">
+              <number>2</number>
+             </property>
+             <item>
+              <property name="text">
+               <string>1</string>
+              </property>
+             </item>
+             <item>
+              <property name="text">
+               <string>1/2</string>
+              </property>
+             </item>
+             <item>
+              <property name="text">
+               <string>1/4</string>
+              </property>
+             </item>
+             <item>
+              <property name="text">
+               <string>1/8</string>
+              </property>
+             </item>
+            </widget>
+           </item>
+           <item row="3" column="0">
+            <widget class="QLabel" name="cloudOpenSizeLabel">
+             <property name="text">
+              <string>Open size</string>
+             </property>
+            </widget>
+           </item>
+           <item row="3" column="1">
+            <widget class="QSpinBox" name="cloudOpenSizeSpin">
+             <property name="toolTip">
+              <string>Kernel radius for cloud-mask morphological open (0 disables)</string>
+             </property>
+             <property name="maximum">
+              <number>20</number>
+             </property>
+             <property name="value">
+              <number>1</number>
+             </property>
+            </widget>
+           </item>
+           <item row="3" column="2">
+            <widget class="QLabel" name="cloudCloseSizeLabel">
+             <property name="text">
+              <string>Close size</string>
+             </property>
+            </widget>
+           </item>
+           <item row="3" column="3">
+            <widget class="QSpinBox" name="cloudCloseSizeSpin">
+             <property name="toolTip">
+              <string>Kernel radius for cloud-mask morphological close (0 disables)</string>
+             </property>
+             <property name="maximum">
+              <number>20</number>
+             </property>
+             <property name="value">
+              <number>3</number>
+             </property>
+            </widget>
+           </item>
+           <item row="4" column="0">
+            <widget class="QLabel" name="cloudUpdateIntervalLabel">
+             <property name="text">
+              <string>Update interval</string>
+             </property>
+            </widget>
+           </item>
+           <item row="4" column="1">
+            <widget class="QSpinBox" name="cloudUpdateIntervalSpin">
+             <property name="toolTip">
+              <string>Recompute the cloud mask every this many frames. Clouds evolve slowly, so intermediate frames reuse the last mask</string>
+             </property>
+             <property name="suffix">
+              <string> frames</string>
+             </property>
+             <property name="minimum">
+              <number>1</number>
+             </property>
+             <property name="maximum">
+              <number>600</number>
+             </property>
+             <property name="value">
+              <number>10</number>
+             </property>
+            </widget>
+           </item>
+           <item row="4" column="2">
+            <widget class="QLabel" name="cloudShowOverlayLabel">
+             <property name="text">
+              <string>Show overlay</string>
+             </property>
+            </widget>
+           </item>
+           <item row="4" column="3">
+            <widget class="QCheckBox" name="cloudShowOverlayCheck">
+             <property name="toolTip">
+              <string>Tint cloud-classified regions on the preview image</string>
+             </property>
+             <property name="text">
+              <string/>
+             </property>
+             <property name="checked">
+              <bool>true</bool>
+             </property>
+            </widget>
+           </item>
+           <item row="5" column="0">
+            <widget class="QLabel" name="cloudFilterStarsLabel">
+             <property name="text">
+              <string>Filter stars</string>
+             </property>
+            </widget>
+           </item>
+           <item row="5" column="1">
+            <widget class="QCheckBox" name="cloudFilterStarsCheck">
+             <property name="toolTip">
+              <string>Drop star detections whose centroid falls inside the cloud mask, so cloud structure cannot produce false stars</string>
+             </property>
+             <property name="text">
+              <string/>
+             </property>
+             <property name="checked">
+              <bool>true</bool>
+             </property>
+            </widget>
+           </item>
+           <item row="5" column="2">
+            <widget class="QLabel" name="cloudFilterMotionLabel">
+             <property name="text">
+              <string>Filter motion</string>
+             </property>
+            </widget>
+           </item>
+           <item row="5" column="3">
+            <widget class="QCheckBox" name="cloudFilterMotionCheck">
+             <property name="toolTip">
+              <string>Suppress motion boxes that substantially overlap the cloud mask, so drifting clouds do not register as motion</string>
+             </property>
+             <property name="text">
+              <string/>
+             </property>
+             <property name="checked">
+              <bool>true</bool>
+             </property>
+            </widget>
+           </item>
+           <item row="6" column="0">
+            <widget class="QLabel" name="cloudMotionOverlapLabel">
+             <property name="text">
+              <string>Motion overlap</string>
+             </property>
+            </widget>
+           </item>
+           <item row="6" column="1">
+            <widget class="QDoubleSpinBox" name="cloudMotionOverlapSpin">
+             <property name="toolTip">
+              <string>Fraction of a motion box that must be cloud before it is suppressed</string>
+             </property>
+             <property name="maximum">
+              <double>1.000000000000000</double>
+             </property>
+             <property name="singleStep">
+              <double>0.050000000000000</double>
+             </property>
+             <property name="value">
+              <double>0.600000000000000</double>
+             </property>
+            </widget>
+           </item>
+           <item row="6" column="2">
+            <widget class="QLabel" name="cloudColorLabel">
+             <property name="text">
+              <string>Mask colour</string>
+             </property>
+            </widget>
+           </item>
+           <item row="6" column="3">
+            <widget class="QToolButton" name="cloudColorButton">
+             <property name="toolTip">
+              <string>Overlay tint colour for cloud-classified regions</string>
+             </property>
+             <property name="text">
+              <string/>
+             </property>
+            </widget>
+           </item>
+           <item row="7" column="0">
+            <widget class="QLabel" name="cloudTextureThresholdLabel">
+             <property name="text">
+              <string>Texture threshold</string>
+             </property>
+            </widget>
+           </item>
+           <item row="7" column="1">
+            <widget class="QSpinBox" name="cloudTextureThresholdSpin">
+             <property name="toolTip">
+              <string>Day path: fine-scale texture level above which a region cannot be cloud. Rejects grey/white but textured surfaces such as roofs, trees and buildings. 0 disables</string>
+             </property>
+             <property name="maximum">
+              <number>255</number>
+             </property>
+             <property name="value">
+              <number>3</number>
+             </property>
+            </widget>
+           </item>
+           <item row="8" column="0">
+            <widget class="QLabel" name="cloudCoverageTitleLabel">
+             <property name="text">
+              <string>Coverage</string>
+             </property>
+            </widget>
+           </item>
+           <item row="8" column="1">
+            <widget class="QLabel" name="cloudCoverageLabel">
+             <property name="toolTip">
+              <string>Percentage of the evaluated sky classified as cloud in the latest frame</string>
+             </property>
+             <property name="text">
+              <string>-</string>
+             </property>
+            </widget>
+           </item>
+           <item row="9" column="0">
+            <spacer name="cloudVerticalSpacer">
+             <property name="orientation">
+              <enum>Qt::Orientation::Vertical</enum>
+             </property>
+             <property name="sizeHint" stdset="0">
+              <size>
+               <width>20</width>
+               <height>40</height>
+              </size>
+             </property>
+            </spacer>
+           </item>
+          </layout>
+         </widget>
          <widget class="QWidget" name="tab_3">
           <property name="toolTip">
            <string>Star detection and plate-solving settings.</string>

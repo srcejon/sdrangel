@@ -219,6 +219,9 @@ public:
     QList<QString*>* getStreamUrlHistory();
     void setStreamUrlHistory(QList<QString*>* stream_url_history);
 
+    double getStreamBufferingSeconds();
+    void setStreamBufferingSeconds(double stream_buffering_seconds);
+
     QList<QString*>* getImageFileCameraPaths();
     void setImageFileCameraPaths(QList<QString*>* image_file_camera_paths);
 
@@ -336,6 +339,21 @@ public:
     qint32 getStackRejectBadFrames();
     void setStackRejectBadFrames(qint32 stack_reject_bad_frames);
 
+    qint32 getScaleEnabled();
+    void setScaleEnabled(qint32 scale_enabled);
+
+    qint32 getScaleWidth();
+    void setScaleWidth(qint32 scale_width);
+
+    qint32 getScaleHeight();
+    void setScaleHeight(qint32 scale_height);
+
+    qint32 getScaleKeepAspectRatio();
+    void setScaleKeepAspectRatio(qint32 scale_keep_aspect_ratio);
+
+    qint32 getScaleJustification();
+    void setScaleJustification(qint32 scale_justification);
+
     QString* getStackDarkFileName();
     void setStackDarkFileName(QString* stack_dark_file_name);
 
@@ -398,6 +416,9 @@ public:
 
     double getLensDistortionK1();
     void setLensDistortionK1(double lens_distortion_k1);
+
+    qint32 getLensMirror();
+    void setLensMirror(qint32 lens_mirror);
 
     qint32 getPostProcessWhiteBalanceMode();
     void setPostProcessWhiteBalanceMode(qint32 post_process_white_balance_mode);
@@ -492,6 +513,9 @@ public:
     QString* getDateTimeFormat();
     void setDateTimeFormat(QString* date_time_format);
 
+    qint32 getDateTimeUtc();
+    void setDateTimeUtc(qint32 date_time_utc);
+
     qint32 getDateTimePosX();
     void setDateTimePosX(qint32 date_time_pos_x);
 
@@ -528,6 +552,15 @@ public:
     double getTrackObjectMinElevation();
     void setTrackObjectMinElevation(double track_object_min_elevation);
 
+    double getTrackObjectMaxRangeKm();
+    void setTrackObjectMaxRangeKm(double track_object_max_range_km);
+
+    qint32 getTrackObjectLabelDisplay();
+    void setTrackObjectLabelDisplay(qint32 track_object_label_display);
+
+    double getTrackObjectLabelDetectionRadius();
+    void setTrackObjectLabelDetectionRadius(double track_object_label_detection_radius);
+
     qint32 getTrackObjectColor();
     void setTrackObjectColor(qint32 track_object_color);
 
@@ -539,6 +572,9 @@ public:
 
     qint32 getTrackObjectHeatMap();
     void setTrackObjectHeatMap(qint32 track_object_heat_map);
+
+    qint32 getTrackObjectRange();
+    void setTrackObjectRange(qint32 track_object_range);
 
     QString* getGridLabelFontFamily();
     void setGridLabelFontFamily(QString* grid_label_font_family);
@@ -822,6 +858,9 @@ public:
     qint32 getAudioMute();
     void setAudioMute(qint32 audio_mute);
 
+    qint32 getAudioPreviewVolume();
+    void setAudioPreviewVolume(qint32 audio_preview_volume);
+
     QString* getAudioDeviceName();
     void setAudioDeviceName(QString* audio_device_name);
 
@@ -1039,6 +1078,9 @@ private:
     QList<QString*>* stream_url_history;
     bool m_stream_url_history_isSet;
 
+    double stream_buffering_seconds;
+    bool m_stream_buffering_seconds_isSet;
+
     QList<QString*>* image_file_camera_paths;
     bool m_image_file_camera_paths_isSet;
 
@@ -1156,6 +1198,21 @@ private:
     qint32 stack_reject_bad_frames;
     bool m_stack_reject_bad_frames_isSet;
 
+    qint32 scale_enabled;
+    bool m_scale_enabled_isSet;
+
+    qint32 scale_width;
+    bool m_scale_width_isSet;
+
+    qint32 scale_height;
+    bool m_scale_height_isSet;
+
+    qint32 scale_keep_aspect_ratio;
+    bool m_scale_keep_aspect_ratio_isSet;
+
+    qint32 scale_justification;
+    bool m_scale_justification_isSet;
+
     QString* stack_dark_file_name;
     bool m_stack_dark_file_name_isSet;
 
@@ -1218,6 +1275,9 @@ private:
 
     double lens_distortion_k1;
     bool m_lens_distortion_k1_isSet;
+
+    qint32 lens_mirror;
+    bool m_lens_mirror_isSet;
 
     qint32 post_process_white_balance_mode;
     bool m_post_process_white_balance_mode_isSet;
@@ -1312,6 +1372,9 @@ private:
     QString* date_time_format;
     bool m_date_time_format_isSet;
 
+    qint32 date_time_utc;
+    bool m_date_time_utc_isSet;
+
     qint32 date_time_pos_x;
     bool m_date_time_pos_x_isSet;
 
@@ -1348,6 +1411,15 @@ private:
     double track_object_min_elevation;
     bool m_track_object_min_elevation_isSet;
 
+    double track_object_max_range_km;
+    bool m_track_object_max_range_km_isSet;
+
+    qint32 track_object_label_display;
+    bool m_track_object_label_display_isSet;
+
+    double track_object_label_detection_radius;
+    bool m_track_object_label_detection_radius_isSet;
+
     qint32 track_object_color;
     bool m_track_object_color_isSet;
 
@@ -1359,6 +1431,9 @@ private:
 
     qint32 track_object_heat_map;
     bool m_track_object_heat_map_isSet;
+
+    qint32 track_object_range;
+    bool m_track_object_range_isSet;
 
     QString* grid_label_font_family;
     bool m_grid_label_font_family_isSet;
@@ -1641,6 +1716,9 @@ private:
 
     qint32 audio_mute;
     bool m_audio_mute_isSet;
+
+    qint32 audio_preview_volume;
+    bool m_audio_preview_volume_isSet;
 
     QString* audio_device_name;
     bool m_audio_device_name_isSet;

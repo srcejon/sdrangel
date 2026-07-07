@@ -144,6 +144,8 @@ SWGCameraSettings::SWGCameraSettings() {
     m_stream_url_isSet = false;
     stream_url_history = nullptr;
     m_stream_url_history_isSet = false;
+    stream_buffering_seconds = 0.0;
+    m_stream_buffering_seconds_isSet = false;
     image_file_camera_paths = nullptr;
     m_image_file_camera_paths_isSet = false;
     video_file_name = nullptr;
@@ -222,6 +224,16 @@ SWGCameraSettings::SWGCameraSettings() {
     m_stack_display_frame_index_isSet = false;
     stack_reject_bad_frames = 0;
     m_stack_reject_bad_frames_isSet = false;
+    scale_enabled = 0;
+    m_scale_enabled_isSet = false;
+    scale_width = 0;
+    m_scale_width_isSet = false;
+    scale_height = 0;
+    m_scale_height_isSet = false;
+    scale_keep_aspect_ratio = 0;
+    m_scale_keep_aspect_ratio_isSet = false;
+    scale_justification = 0;
+    m_scale_justification_isSet = false;
     stack_dark_file_name = nullptr;
     m_stack_dark_file_name_isSet = false;
     stack_flat_file_name = nullptr;
@@ -264,6 +276,8 @@ SWGCameraSettings::SWGCameraSettings() {
     m_lens_center_offset_y_isSet = false;
     lens_distortion_k1 = 0.0;
     m_lens_distortion_k1_isSet = false;
+    lens_mirror = 0;
+    m_lens_mirror_isSet = false;
     post_process_white_balance_mode = 0;
     m_post_process_white_balance_mode_isSet = false;
     post_process_white_balance_red_gain = 0.0;
@@ -326,6 +340,8 @@ SWGCameraSettings::SWGCameraSettings() {
     m_date_time_color_isSet = false;
     date_time_format = nullptr;
     m_date_time_format_isSet = false;
+    date_time_utc = 0;
+    m_date_time_utc_isSet = false;
     date_time_pos_x = 0;
     m_date_time_pos_x_isSet = false;
     date_time_pos_y = 0;
@@ -350,6 +366,12 @@ SWGCameraSettings::SWGCameraSettings() {
     m_track_objects_isSet = false;
     track_object_min_elevation = 0.0;
     m_track_object_min_elevation_isSet = false;
+    track_object_max_range_km = 0.0;
+    m_track_object_max_range_km_isSet = false;
+    track_object_label_display = 0;
+    m_track_object_label_display_isSet = false;
+    track_object_label_detection_radius = 0.0;
+    m_track_object_label_detection_radius_isSet = false;
     track_object_color = 0;
     m_track_object_color_isSet = false;
     track_object_font_scale = 0.0;
@@ -358,6 +380,8 @@ SWGCameraSettings::SWGCameraSettings() {
     m_track_object_trails_isSet = false;
     track_object_heat_map = 0;
     m_track_object_heat_map_isSet = false;
+    track_object_range = 0;
+    m_track_object_range_isSet = false;
     grid_label_font_family = nullptr;
     m_grid_label_font_family_isSet = false;
     grid_label_font_scale = 0.0;
@@ -546,6 +570,8 @@ SWGCameraSettings::SWGCameraSettings() {
     m_yolo_dnn_target_isSet = false;
     audio_mute = 0;
     m_audio_mute_isSet = false;
+    audio_preview_volume = 0;
+    m_audio_preview_volume_isSet = false;
     audio_device_name = nullptr;
     m_audio_device_name_isSet = false;
     white_balance_mode = 0;
@@ -696,6 +722,8 @@ SWGCameraSettings::init() {
     m_stream_url_isSet = false;
     stream_url_history = new QList<QString*>();
     m_stream_url_history_isSet = false;
+    stream_buffering_seconds = 0.0;
+    m_stream_buffering_seconds_isSet = false;
     image_file_camera_paths = new QList<QString*>();
     m_image_file_camera_paths_isSet = false;
     video_file_name = new QString("");
@@ -774,6 +802,16 @@ SWGCameraSettings::init() {
     m_stack_display_frame_index_isSet = false;
     stack_reject_bad_frames = 0;
     m_stack_reject_bad_frames_isSet = false;
+    scale_enabled = 0;
+    m_scale_enabled_isSet = false;
+    scale_width = 0;
+    m_scale_width_isSet = false;
+    scale_height = 0;
+    m_scale_height_isSet = false;
+    scale_keep_aspect_ratio = 0;
+    m_scale_keep_aspect_ratio_isSet = false;
+    scale_justification = 0;
+    m_scale_justification_isSet = false;
     stack_dark_file_name = new QString("");
     m_stack_dark_file_name_isSet = false;
     stack_flat_file_name = new QString("");
@@ -816,6 +854,8 @@ SWGCameraSettings::init() {
     m_lens_center_offset_y_isSet = false;
     lens_distortion_k1 = 0.0;
     m_lens_distortion_k1_isSet = false;
+    lens_mirror = 0;
+    m_lens_mirror_isSet = false;
     post_process_white_balance_mode = 0;
     m_post_process_white_balance_mode_isSet = false;
     post_process_white_balance_red_gain = 0.0;
@@ -878,6 +918,8 @@ SWGCameraSettings::init() {
     m_date_time_color_isSet = false;
     date_time_format = new QString("");
     m_date_time_format_isSet = false;
+    date_time_utc = 0;
+    m_date_time_utc_isSet = false;
     date_time_pos_x = 0;
     m_date_time_pos_x_isSet = false;
     date_time_pos_y = 0;
@@ -902,6 +944,12 @@ SWGCameraSettings::init() {
     m_track_objects_isSet = false;
     track_object_min_elevation = 0.0;
     m_track_object_min_elevation_isSet = false;
+    track_object_max_range_km = 0.0;
+    m_track_object_max_range_km_isSet = false;
+    track_object_label_display = 0;
+    m_track_object_label_display_isSet = false;
+    track_object_label_detection_radius = 0.0;
+    m_track_object_label_detection_radius_isSet = false;
     track_object_color = 0;
     m_track_object_color_isSet = false;
     track_object_font_scale = 0.0;
@@ -910,6 +958,8 @@ SWGCameraSettings::init() {
     m_track_object_trails_isSet = false;
     track_object_heat_map = 0;
     m_track_object_heat_map_isSet = false;
+    track_object_range = 0;
+    m_track_object_range_isSet = false;
     grid_label_font_family = new QString("");
     m_grid_label_font_family_isSet = false;
     grid_label_font_scale = 0.0;
@@ -1098,6 +1148,8 @@ SWGCameraSettings::init() {
     m_yolo_dnn_target_isSet = false;
     audio_mute = 0;
     m_audio_mute_isSet = false;
+    audio_preview_volume = 0;
+    m_audio_preview_volume_isSet = false;
     audio_device_name = new QString("");
     m_audio_device_name_isSet = false;
     white_balance_mode = 0;
@@ -1212,6 +1264,7 @@ SWGCameraSettings::cleanup() {
         }
         delete stream_url_history;
     }
+
     if(image_file_camera_paths != nullptr) { 
         auto arr = image_file_camera_paths;
         for(auto o: *arr) { 
@@ -1243,6 +1296,11 @@ SWGCameraSettings::cleanup() {
     if(youtube_stream_key != nullptr) { 
         delete youtube_stream_key;
     }
+
+
+
+
+
 
 
 
@@ -1326,9 +1384,15 @@ SWGCameraSettings::cleanup() {
 
 
 
+
     if(date_time_format != nullptr) { 
         delete date_time_format;
     }
+
+
+
+
+
 
 
 
@@ -1414,6 +1478,23 @@ SWGCameraSettings::cleanup() {
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     if(plate_solve_date_time != nullptr) { 
         delete plate_solve_date_time;
     }
@@ -1448,6 +1529,7 @@ SWGCameraSettings::cleanup() {
         }
         delete yolo_ignored_class_names;
     }
+
 
 
     if(audio_device_name != nullptr) { 
@@ -1598,6 +1680,8 @@ SWGCameraSettings::fromJsonObject(QJsonObject &pJson) {
     
     
     ::SWGSDRangel::setValue(&stream_url_history, pJson["streamUrlHistory"], "QList", "QString");
+    ::SWGSDRangel::setValue(&stream_buffering_seconds, pJson["streamBufferingSeconds"], "double", "");
+    
     
     ::SWGSDRangel::setValue(&image_file_camera_paths, pJson["imageFileCameraPaths"], "QList", "QString");
     ::SWGSDRangel::setValue(&video_file_name, pJson["videoFileName"], "QString", "QString");
@@ -1676,6 +1760,16 @@ SWGCameraSettings::fromJsonObject(QJsonObject &pJson) {
     
     ::SWGSDRangel::setValue(&stack_reject_bad_frames, pJson["stackRejectBadFrames"], "qint32", "");
     
+    ::SWGSDRangel::setValue(&scale_enabled, pJson["scaleEnabled"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&scale_width, pJson["scaleWidth"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&scale_height, pJson["scaleHeight"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&scale_keep_aspect_ratio, pJson["scaleKeepAspectRatio"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&scale_justification, pJson["scaleJustification"], "qint32", "");
+    
     ::SWGSDRangel::setValue(&stack_dark_file_name, pJson["stackDarkFileName"], "QString", "QString");
     
     ::SWGSDRangel::setValue(&stack_flat_file_name, pJson["stackFlatFileName"], "QString", "QString");
@@ -1717,6 +1811,8 @@ SWGCameraSettings::fromJsonObject(QJsonObject &pJson) {
     ::SWGSDRangel::setValue(&lens_center_offset_y, pJson["lensCenterOffsetY"], "double", "");
     
     ::SWGSDRangel::setValue(&lens_distortion_k1, pJson["lensDistortionK1"], "double", "");
+    
+    ::SWGSDRangel::setValue(&lens_mirror, pJson["lensMirror"], "qint32", "");
     
     ::SWGSDRangel::setValue(&post_process_white_balance_mode, pJson["postProcessWhiteBalanceMode"], "qint32", "");
     
@@ -1780,6 +1876,8 @@ SWGCameraSettings::fromJsonObject(QJsonObject &pJson) {
     
     ::SWGSDRangel::setValue(&date_time_format, pJson["dateTimeFormat"], "QString", "QString");
     
+    ::SWGSDRangel::setValue(&date_time_utc, pJson["dateTimeUtc"], "qint32", "");
+    
     ::SWGSDRangel::setValue(&date_time_pos_x, pJson["dateTimePosX"], "qint32", "");
     
     ::SWGSDRangel::setValue(&date_time_pos_y, pJson["dateTimePosY"], "qint32", "");
@@ -1804,6 +1902,12 @@ SWGCameraSettings::fromJsonObject(QJsonObject &pJson) {
     
     ::SWGSDRangel::setValue(&track_object_min_elevation, pJson["trackObjectMinElevation"], "double", "");
     
+    ::SWGSDRangel::setValue(&track_object_max_range_km, pJson["trackObjectMaxRangeKm"], "double", "");
+    
+    ::SWGSDRangel::setValue(&track_object_label_display, pJson["trackObjectLabelDisplay"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&track_object_label_detection_radius, pJson["trackObjectLabelDetectionRadius"], "double", "");
+    
     ::SWGSDRangel::setValue(&track_object_color, pJson["trackObjectColor"], "qint32", "");
     
     ::SWGSDRangel::setValue(&track_object_font_scale, pJson["trackObjectFontScale"], "double", "");
@@ -1811,6 +1915,8 @@ SWGCameraSettings::fromJsonObject(QJsonObject &pJson) {
     ::SWGSDRangel::setValue(&track_object_trails, pJson["trackObjectTrails"], "qint32", "");
     
     ::SWGSDRangel::setValue(&track_object_heat_map, pJson["trackObjectHeatMap"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&track_object_range, pJson["trackObjectRange"], "qint32", "");
     
     ::SWGSDRangel::setValue(&grid_label_font_family, pJson["gridLabelFontFamily"], "QString", "QString");
     
@@ -1887,22 +1993,39 @@ SWGCameraSettings::fromJsonObject(QJsonObject &pJson) {
     
     ::SWGSDRangel::setValue(&motion_exclusion_rects, pJson["motionExclusionRects"], "QList", "SWGCameraRect");
     ::SWGSDRangel::setValue(&cloud_detect, pJson["cloudDetect"], "qint32", "");
+    
     ::SWGSDRangel::setValue(&cloud_mode, pJson["cloudMode"], "qint32", "");
+    
     ::SWGSDRangel::setValue(&cloud_debug_view, pJson["cloudDebugView"], "qint32", "");
+    
     ::SWGSDRangel::setValue(&cloud_color, pJson["cloudColor"], "qint32", "");
+    
     ::SWGSDRangel::setValue(&cloud_show_overlay, pJson["cloudShowOverlay"], "qint32", "");
+    
     ::SWGSDRangel::setValue(&cloud_day_threshold, pJson["cloudDayThreshold"], "double", "");
+    
     ::SWGSDRangel::setValue(&cloud_texture_threshold, pJson["cloudTextureThreshold"], "qint32", "");
+    
     ::SWGSDRangel::setValue(&cloud_night_threshold, pJson["cloudNightThreshold"], "qint32", "");
+    
     ::SWGSDRangel::setValue(&cloud_background_blur, pJson["cloudBackgroundBlur"], "qint32", "");
+    
     ::SWGSDRangel::setValue(&cloud_open_size, pJson["cloudOpenSize"], "qint32", "");
+    
     ::SWGSDRangel::setValue(&cloud_close_size, pJson["cloudCloseSize"], "qint32", "");
+    
     ::SWGSDRangel::setValue(&cloud_downscale, pJson["cloudDownscale"], "double", "");
+    
     ::SWGSDRangel::setValue(&cloud_update_interval_frames, pJson["cloudUpdateIntervalFrames"], "qint32", "");
+    
     ::SWGSDRangel::setValue(&cloud_filter_stars, pJson["cloudFilterStars"], "qint32", "");
+    
     ::SWGSDRangel::setValue(&cloud_filter_motion, pJson["cloudFilterMotion"], "qint32", "");
+    
     ::SWGSDRangel::setValue(&cloud_motion_overlap_threshold, pJson["cloudMotionOverlapThreshold"], "double", "");
+    
     ::SWGSDRangel::setValue(&cloud_event_threshold, pJson["cloudEventThreshold"], "double", "");
+    
     ::SWGSDRangel::setValue(&star_detect, pJson["starDetect"], "qint32", "");
     
     ::SWGSDRangel::setValue(&star_threshold, pJson["starThreshold"], "qint32", "");
@@ -1982,6 +2105,8 @@ SWGCameraSettings::fromJsonObject(QJsonObject &pJson) {
     ::SWGSDRangel::setValue(&yolo_dnn_target, pJson["yoloDnnTarget"], "qint32", "");
     
     ::SWGSDRangel::setValue(&audio_mute, pJson["audioMute"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&audio_preview_volume, pJson["audioPreviewVolume"], "qint32", "");
     
     ::SWGSDRangel::setValue(&audio_device_name, pJson["audioDeviceName"], "QString", "QString");
     
@@ -2199,6 +2324,9 @@ SWGCameraSettings::asJsonObject() {
     if(stream_url_history && stream_url_history->size() > 0){
         toJsonArray((QList<void*>*)stream_url_history, obj, "streamUrlHistory", "QString");
     }
+    if(m_stream_buffering_seconds_isSet){
+        obj->insert("streamBufferingSeconds", QJsonValue(stream_buffering_seconds));
+    }
     if(image_file_camera_paths && image_file_camera_paths->size() > 0){
         toJsonArray((QList<void*>*)image_file_camera_paths, obj, "imageFileCameraPaths", "QString");
     }
@@ -2316,6 +2444,21 @@ SWGCameraSettings::asJsonObject() {
     if(m_stack_reject_bad_frames_isSet){
         obj->insert("stackRejectBadFrames", QJsonValue(stack_reject_bad_frames));
     }
+    if(m_scale_enabled_isSet){
+        obj->insert("scaleEnabled", QJsonValue(scale_enabled));
+    }
+    if(m_scale_width_isSet){
+        obj->insert("scaleWidth", QJsonValue(scale_width));
+    }
+    if(m_scale_height_isSet){
+        obj->insert("scaleHeight", QJsonValue(scale_height));
+    }
+    if(m_scale_keep_aspect_ratio_isSet){
+        obj->insert("scaleKeepAspectRatio", QJsonValue(scale_keep_aspect_ratio));
+    }
+    if(m_scale_justification_isSet){
+        obj->insert("scaleJustification", QJsonValue(scale_justification));
+    }
     if(stack_dark_file_name != nullptr && *stack_dark_file_name != QString("")){
         toJsonValue(QString("stackDarkFileName"), stack_dark_file_name, obj, QString("QString"));
     }
@@ -2378,6 +2521,9 @@ SWGCameraSettings::asJsonObject() {
     }
     if(m_lens_distortion_k1_isSet){
         obj->insert("lensDistortionK1", QJsonValue(lens_distortion_k1));
+    }
+    if(m_lens_mirror_isSet){
+        obj->insert("lensMirror", QJsonValue(lens_mirror));
     }
     if(m_post_process_white_balance_mode_isSet){
         obj->insert("postProcessWhiteBalanceMode", QJsonValue(post_process_white_balance_mode));
@@ -2472,6 +2618,9 @@ SWGCameraSettings::asJsonObject() {
     if(date_time_format != nullptr && *date_time_format != QString("")){
         toJsonValue(QString("dateTimeFormat"), date_time_format, obj, QString("QString"));
     }
+    if(m_date_time_utc_isSet){
+        obj->insert("dateTimeUtc", QJsonValue(date_time_utc));
+    }
     if(m_date_time_pos_x_isSet){
         obj->insert("dateTimePosX", QJsonValue(date_time_pos_x));
     }
@@ -2508,6 +2657,15 @@ SWGCameraSettings::asJsonObject() {
     if(m_track_object_min_elevation_isSet){
         obj->insert("trackObjectMinElevation", QJsonValue(track_object_min_elevation));
     }
+    if(m_track_object_max_range_km_isSet){
+        obj->insert("trackObjectMaxRangeKm", QJsonValue(track_object_max_range_km));
+    }
+    if(m_track_object_label_display_isSet){
+        obj->insert("trackObjectLabelDisplay", QJsonValue(track_object_label_display));
+    }
+    if(m_track_object_label_detection_radius_isSet){
+        obj->insert("trackObjectLabelDetectionRadius", QJsonValue(track_object_label_detection_radius));
+    }
     if(m_track_object_color_isSet){
         obj->insert("trackObjectColor", QJsonValue(track_object_color));
     }
@@ -2519,6 +2677,9 @@ SWGCameraSettings::asJsonObject() {
     }
     if(m_track_object_heat_map_isSet){
         obj->insert("trackObjectHeatMap", QJsonValue(track_object_heat_map));
+    }
+    if(m_track_object_range_isSet){
+        obj->insert("trackObjectRange", QJsonValue(track_object_range));
     }
     if(grid_label_font_family != nullptr && *grid_label_font_family != QString("")){
         toJsonValue(QString("gridLabelFontFamily"), grid_label_font_family, obj, QString("QString"));
@@ -2801,6 +2962,9 @@ SWGCameraSettings::asJsonObject() {
     }
     if(m_audio_mute_isSet){
         obj->insert("audioMute", QJsonValue(audio_mute));
+    }
+    if(m_audio_preview_volume_isSet){
+        obj->insert("audioPreviewVolume", QJsonValue(audio_preview_volume));
     }
     if(audio_device_name != nullptr && *audio_device_name != QString("")){
         toJsonValue(QString("audioDeviceName"), audio_device_name, obj, QString("QString"));
@@ -3425,6 +3589,16 @@ SWGCameraSettings::setStreamUrlHistory(QList<QString*>* stream_url_history) {
     this->m_stream_url_history_isSet = true;
 }
 
+double
+SWGCameraSettings::getStreamBufferingSeconds() {
+    return stream_buffering_seconds;
+}
+void
+SWGCameraSettings::setStreamBufferingSeconds(double stream_buffering_seconds) {
+    this->stream_buffering_seconds = stream_buffering_seconds;
+    this->m_stream_buffering_seconds_isSet = true;
+}
+
 QList<QString*>*
 SWGCameraSettings::getImageFileCameraPaths() {
     return image_file_camera_paths;
@@ -3815,6 +3989,56 @@ SWGCameraSettings::setStackRejectBadFrames(qint32 stack_reject_bad_frames) {
     this->m_stack_reject_bad_frames_isSet = true;
 }
 
+qint32
+SWGCameraSettings::getScaleEnabled() {
+    return scale_enabled;
+}
+void
+SWGCameraSettings::setScaleEnabled(qint32 scale_enabled) {
+    this->scale_enabled = scale_enabled;
+    this->m_scale_enabled_isSet = true;
+}
+
+qint32
+SWGCameraSettings::getScaleWidth() {
+    return scale_width;
+}
+void
+SWGCameraSettings::setScaleWidth(qint32 scale_width) {
+    this->scale_width = scale_width;
+    this->m_scale_width_isSet = true;
+}
+
+qint32
+SWGCameraSettings::getScaleHeight() {
+    return scale_height;
+}
+void
+SWGCameraSettings::setScaleHeight(qint32 scale_height) {
+    this->scale_height = scale_height;
+    this->m_scale_height_isSet = true;
+}
+
+qint32
+SWGCameraSettings::getScaleKeepAspectRatio() {
+    return scale_keep_aspect_ratio;
+}
+void
+SWGCameraSettings::setScaleKeepAspectRatio(qint32 scale_keep_aspect_ratio) {
+    this->scale_keep_aspect_ratio = scale_keep_aspect_ratio;
+    this->m_scale_keep_aspect_ratio_isSet = true;
+}
+
+qint32
+SWGCameraSettings::getScaleJustification() {
+    return scale_justification;
+}
+void
+SWGCameraSettings::setScaleJustification(qint32 scale_justification) {
+    this->scale_justification = scale_justification;
+    this->m_scale_justification_isSet = true;
+}
+
 QString*
 SWGCameraSettings::getStackDarkFileName() {
     return stack_dark_file_name;
@@ -4023,6 +4247,16 @@ void
 SWGCameraSettings::setLensDistortionK1(double lens_distortion_k1) {
     this->lens_distortion_k1 = lens_distortion_k1;
     this->m_lens_distortion_k1_isSet = true;
+}
+
+qint32
+SWGCameraSettings::getLensMirror() {
+    return lens_mirror;
+}
+void
+SWGCameraSettings::setLensMirror(qint32 lens_mirror) {
+    this->lens_mirror = lens_mirror;
+    this->m_lens_mirror_isSet = true;
 }
 
 qint32
@@ -4336,6 +4570,16 @@ SWGCameraSettings::setDateTimeFormat(QString* date_time_format) {
 }
 
 qint32
+SWGCameraSettings::getDateTimeUtc() {
+    return date_time_utc;
+}
+void
+SWGCameraSettings::setDateTimeUtc(qint32 date_time_utc) {
+    this->date_time_utc = date_time_utc;
+    this->m_date_time_utc_isSet = true;
+}
+
+qint32
 SWGCameraSettings::getDateTimePosX() {
     return date_time_pos_x;
 }
@@ -4455,6 +4699,36 @@ SWGCameraSettings::setTrackObjectMinElevation(double track_object_min_elevation)
     this->m_track_object_min_elevation_isSet = true;
 }
 
+double
+SWGCameraSettings::getTrackObjectMaxRangeKm() {
+    return track_object_max_range_km;
+}
+void
+SWGCameraSettings::setTrackObjectMaxRangeKm(double track_object_max_range_km) {
+    this->track_object_max_range_km = track_object_max_range_km;
+    this->m_track_object_max_range_km_isSet = true;
+}
+
+qint32
+SWGCameraSettings::getTrackObjectLabelDisplay() {
+    return track_object_label_display;
+}
+void
+SWGCameraSettings::setTrackObjectLabelDisplay(qint32 track_object_label_display) {
+    this->track_object_label_display = track_object_label_display;
+    this->m_track_object_label_display_isSet = true;
+}
+
+double
+SWGCameraSettings::getTrackObjectLabelDetectionRadius() {
+    return track_object_label_detection_radius;
+}
+void
+SWGCameraSettings::setTrackObjectLabelDetectionRadius(double track_object_label_detection_radius) {
+    this->track_object_label_detection_radius = track_object_label_detection_radius;
+    this->m_track_object_label_detection_radius_isSet = true;
+}
+
 qint32
 SWGCameraSettings::getTrackObjectColor() {
     return track_object_color;
@@ -4493,6 +4767,16 @@ void
 SWGCameraSettings::setTrackObjectHeatMap(qint32 track_object_heat_map) {
     this->track_object_heat_map = track_object_heat_map;
     this->m_track_object_heat_map_isSet = true;
+}
+
+qint32
+SWGCameraSettings::getTrackObjectRange() {
+    return track_object_range;
+}
+void
+SWGCameraSettings::setTrackObjectRange(qint32 track_object_range) {
+    this->track_object_range = track_object_range;
+    this->m_track_object_range_isSet = true;
 }
 
 QString*
@@ -5435,6 +5719,16 @@ SWGCameraSettings::setAudioMute(qint32 audio_mute) {
     this->m_audio_mute_isSet = true;
 }
 
+qint32
+SWGCameraSettings::getAudioPreviewVolume() {
+    return audio_preview_volume;
+}
+void
+SWGCameraSettings::setAudioPreviewVolume(qint32 audio_preview_volume) {
+    this->audio_preview_volume = audio_preview_volume;
+    this->m_audio_preview_volume_isSet = true;
+}
+
 QString*
 SWGCameraSettings::getAudioDeviceName() {
     return audio_device_name;
@@ -5744,6 +6038,9 @@ SWGCameraSettings::isSet(){
         if(stream_url_history && (stream_url_history->size() > 0)){
             isObjectUpdated = true; break;
         }
+        if(m_stream_buffering_seconds_isSet){
+            isObjectUpdated = true; break;
+        }
         if(image_file_camera_paths && (image_file_camera_paths->size() > 0)){
             isObjectUpdated = true; break;
         }
@@ -5864,6 +6161,21 @@ SWGCameraSettings::isSet(){
         if(m_stack_reject_bad_frames_isSet){
             isObjectUpdated = true; break;
         }
+        if(m_scale_enabled_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_scale_width_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_scale_height_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_scale_keep_aspect_ratio_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_scale_justification_isSet){
+            isObjectUpdated = true; break;
+        }
         if(stack_dark_file_name && *stack_dark_file_name != QString("")){
             isObjectUpdated = true; break;
         }
@@ -5925,6 +6237,9 @@ SWGCameraSettings::isSet(){
             isObjectUpdated = true; break;
         }
         if(m_lens_distortion_k1_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_lens_mirror_isSet){
             isObjectUpdated = true; break;
         }
         if(m_post_process_white_balance_mode_isSet){
@@ -6020,6 +6335,9 @@ SWGCameraSettings::isSet(){
         if(date_time_format && *date_time_format != QString("")){
             isObjectUpdated = true; break;
         }
+        if(m_date_time_utc_isSet){
+            isObjectUpdated = true; break;
+        }
         if(m_date_time_pos_x_isSet){
             isObjectUpdated = true; break;
         }
@@ -6056,6 +6374,15 @@ SWGCameraSettings::isSet(){
         if(m_track_object_min_elevation_isSet){
             isObjectUpdated = true; break;
         }
+        if(m_track_object_max_range_km_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_track_object_label_display_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_track_object_label_detection_radius_isSet){
+            isObjectUpdated = true; break;
+        }
         if(m_track_object_color_isSet){
             isObjectUpdated = true; break;
         }
@@ -6066,6 +6393,9 @@ SWGCameraSettings::isSet(){
             isObjectUpdated = true; break;
         }
         if(m_track_object_heat_map_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_track_object_range_isSet){
             isObjectUpdated = true; break;
         }
         if(grid_label_font_family && *grid_label_font_family != QString("")){
@@ -6348,6 +6678,9 @@ SWGCameraSettings::isSet(){
             isObjectUpdated = true; break;
         }
         if(m_audio_mute_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_audio_preview_volume_isSet){
             isObjectUpdated = true; break;
         }
         if(audio_device_name && *audio_device_name != QString("")){

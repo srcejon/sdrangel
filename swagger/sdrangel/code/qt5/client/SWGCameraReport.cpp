@@ -53,6 +53,8 @@ SWGCameraReport::init() {
 void
 SWGCameraReport::cleanup() {
 
+
+
 }
 
 SWGCameraReport*
@@ -67,11 +69,11 @@ SWGCameraReport::fromJson(QString &json) {
 void
 SWGCameraReport::fromJsonObject(QJsonObject &pJson) {
     ::SWGSDRangel::setValue(&running_state, pJson["runningState"], "qint32", "");
-
+    
     ::SWGSDRangel::setValue(&cloud_coverage_percent, pJson["cloudCoveragePercent"], "float", "");
-
+    
     ::SWGSDRangel::setValue(&cloud_coverage_valid, pJson["cloudCoverageValid"], "qint32", "");
-
+    
 }
 
 QString

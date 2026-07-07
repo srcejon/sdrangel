@@ -91,6 +91,10 @@ ChannelSettings:
       $ref: "/doc/swagger/include/MeshtasticDemod.yaml#/MeshtasticDemodSettings"
     MeshtasticModSettings:
       $ref: "/doc/swagger/include/MeshtasticMod.yaml#/MeshtasticModSettings"
+    MeshcoreDemodSettings:
+      $ref: "/doc/swagger/include/MeshcoreDemod.yaml#/MeshcoreDemodSettings"
+    MeshcoreModSettings:
+      $ref: "/doc/swagger/include/MeshcoreMod.yaml#/MeshcoreModSettings"
     MeteorSettings:
       $ref: "/doc/swagger/include/Meteor.yaml#/MeteorSettings"
     NavtexDemodSettings:

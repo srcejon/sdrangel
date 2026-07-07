@@ -234,14 +234,14 @@
 #include "SWGMapItem_2.h"
 #include "SWGMapReport.h"
 #include "SWGMapSettings.h"
-#include "SWGMeshtasticDemodReport.h"
-#include "SWGMeshtasticDemodSettings.h"
-#include "SWGMeshtasticModReport.h"
-#include "SWGMeshtasticModSettings.h"
 #include "SWGMeshcoreDemodReport.h"
 #include "SWGMeshcoreDemodSettings.h"
 #include "SWGMeshcoreModReport.h"
 #include "SWGMeshcoreModSettings.h"
+#include "SWGMeshtasticDemodReport.h"
+#include "SWGMeshtasticDemodSettings.h"
+#include "SWGMeshtasticModReport.h"
+#include "SWGMeshtasticModSettings.h"
 #include "SWGMeteorSettings.h"
 #include "SWGMetisMISOSettings.h"
 #include "SWGMorseDecoderActions.h"
@@ -1519,26 +1519,6 @@ namespace SWGSDRangel {
       obj->init();
       return obj;
     }
-    if(QString("SWGMeshtasticDemodReport").compare(type) == 0) {
-      SWGMeshtasticDemodReport *obj = new SWGMeshtasticDemodReport();
-      obj->init();
-      return obj;
-    }
-    if(QString("SWGMeshtasticDemodSettings").compare(type) == 0) {
-      SWGMeshtasticDemodSettings *obj = new SWGMeshtasticDemodSettings();
-      obj->init();
-      return obj;
-    }
-    if(QString("SWGMeshtasticModReport").compare(type) == 0) {
-      SWGMeshtasticModReport *obj = new SWGMeshtasticModReport();
-      obj->init();
-      return obj;
-    }
-    if(QString("SWGMeshtasticModSettings").compare(type) == 0) {
-      SWGMeshtasticModSettings *obj = new SWGMeshtasticModSettings();
-      obj->init();
-      return obj;
-    }
     if(QString("SWGMeshcoreDemodReport").compare(type) == 0) {
       SWGMeshcoreDemodReport *obj = new SWGMeshcoreDemodReport();
       obj->init();
@@ -1556,6 +1536,26 @@ namespace SWGSDRangel {
     }
     if(QString("SWGMeshcoreModSettings").compare(type) == 0) {
       SWGMeshcoreModSettings *obj = new SWGMeshcoreModSettings();
+      obj->init();
+      return obj;
+    }
+    if(QString("SWGMeshtasticDemodReport").compare(type) == 0) {
+      SWGMeshtasticDemodReport *obj = new SWGMeshtasticDemodReport();
+      obj->init();
+      return obj;
+    }
+    if(QString("SWGMeshtasticDemodSettings").compare(type) == 0) {
+      SWGMeshtasticDemodSettings *obj = new SWGMeshtasticDemodSettings();
+      obj->init();
+      return obj;
+    }
+    if(QString("SWGMeshtasticModReport").compare(type) == 0) {
+      SWGMeshtasticModReport *obj = new SWGMeshtasticModReport();
+      obj->init();
+      return obj;
+    }
+    if(QString("SWGMeshtasticModSettings").compare(type) == 0) {
+      SWGMeshtasticModSettings *obj = new SWGMeshtasticModSettings();
       obj->init();
       return obj;
     }

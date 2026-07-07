@@ -3644,6 +3644,15 @@ margin-bottom: 20px;
     "runningState" : {
       "type" : "integer",
       "description" : "Running state\n  * 0 - not started\n  * 1 - idle\n  * 2 - running\n  * 3 - error\n"
+    },
+    "cloudCoveragePercent" : {
+      "type" : "number",
+      "format" : "float",
+      "description" : "Percentage of the evaluated sky classified as cloud in the latest analysed frame"
+    },
+    "cloudCoverageValid" : {
+      "type" : "integer",
+      "description" : "Whether cloudCoveragePercent is valid (1 for yes, 0 for no)"
     }
   },
   "description" : "Camera feature report"
@@ -3890,6 +3899,11 @@ margin-bottom: 20px;
         "type" : "string"
       }
     },
+    "streamBufferingSeconds" : {
+      "type" : "number",
+      "format" : "double",
+      "description" : "Decoded media buffering in seconds for stream: camera sources before playback starts or resumes after a stall"
+    },
     "imageFileCameraPaths" : {
       "type" : "array",
       "description" : "Ordered image file list for images: image sequence camera source",
@@ -4054,6 +4068,26 @@ margin-bottom: 20px;
       "type" : "integer",
       "description" : "Reject frames that are poor candidates for stacking (1 for yes, 0 for no)"
     },
+    "scaleEnabled" : {
+      "type" : "integer",
+      "description" : "Scale calibrated/stacked frames after stacking (1 for yes, 0 for no)"
+    },
+    "scaleWidth" : {
+      "type" : "integer",
+      "description" : "Scaled output width in pixels; 0 keeps the source width"
+    },
+    "scaleHeight" : {
+      "type" : "integer",
+      "description" : "Scaled output height in pixels; 0 keeps the source height"
+    },
+    "scaleKeepAspectRatio" : {
+      "type" : "integer",
+      "description" : "Fit the scaled output inside the requested size without stretching (1 for yes, 0 for no)"
+    },
+    "scaleJustification" : {
+      "type" : "integer",
+      "description" : "Placement of the fitted image when keep-aspect scaling leaves padding: 0 center, 1 left, 2 right, 3 top, 4 bottom"
+    },
     "stackDarkFileName" : {
       "type" : "string",
       "description" : "Dark calibration frame file path"
@@ -4150,6 +4184,10 @@ margin-bottom: 20px;
       "type" : "number",
       "format" : "double",
       "description" : "Radial distortion coefficient"
+    },
+    "lensMirror" : {
+      "type" : "integer",
+      "description" : "Image is horizontally mirrored relative to the sky (1 for up-looking all-sky camera or telescope star diagonal). Plate solving and sky overlays account for the reflection."
     },
     "postProcessWhiteBalanceMode" : {
       "type" : "integer",
@@ -4291,6 +4329,10 @@ margin-bottom: 20px;
       "type" : "string",
       "description" : "QDateTime::toString format string for the date/time overlay (e.g. 'yyyy-MM-dd hh:mm:ss')"
     },
+    "dateTimeUtc" : {
+      "type" : "integer",
+      "description" : "Display the date/time overlay in UTC rather than local time (1 for yes, 0 for no)"
+    },
     "dateTimePosX" : {
       "type" : "integer",
       "description" : "X pixel offset from the left edge for the date/time overlay: 0 to 4096"
@@ -4340,6 +4382,20 @@ margin-bottom: 20px;
       "format" : "double",
       "description" : "Minimum elevation in degrees for tracked objects"
     },
+    "trackObjectMaxRangeKm" : {
+      "type" : "number",
+      "format" : "double",
+      "description" : "Maximum line-of-sight range in km for tracked objects; 0 disables range filtering"
+    },
+    "trackObjectLabelDisplay" : {
+      "type" : "integer",
+      "description" : "Tracked object label display mode\n  * 0 - Always\n  * 1 - Only when the projected item is close to a detected object\n"
+    },
+    "trackObjectLabelDetectionRadius" : {
+      "type" : "number",
+      "format" : "double",
+      "description" : "Maximum pixel distance from a detected object center for showing tracked object labels"
+    },
     "trackObjectColor" : {
       "type" : "integer",
       "description" : "Tracked object label colour as 0xRRGGBB integer"
@@ -4356,6 +4412,10 @@ margin-bottom: 20px;
     "trackObjectHeatMap" : {
       "type" : "integer",
       "description" : "Draw a persistent heat map from tracked overlay object positions (1 for yes, 0 for no)"
+    },
+    "trackObjectRange" : {
+      "type" : "integer",
+      "description" : "Append tracked object line-of-sight range in km to labels (1 for yes, 0 for no)"
     },
     "gridLabelFontFamily" : {
       "type" : "string",
@@ -4514,6 +4574,78 @@ margin-bottom: 20px;
         "$ref" : "#/definitions/CameraRect"
       }
     },
+    "cloudDetect" : {
+      "type" : "integer",
+      "description" : "Enable cloud detection (1 for yes, 0 for no)"
+    },
+    "cloudMode" : {
+      "type" : "integer",
+      "description" : "Cloud classification path\n  * 0 - Auto (day or night from overall frame brightness)\n  * 1 - Day (red/blue ratio)\n  * 2 - Night (sky-background deviation)\n"
+    },
+    "cloudDebugView" : {
+      "type" : "integer",
+      "description" : "Cloud detector debug view\n  * 0 - Off\n  * 1 - Background\n  * 2 - Signal\n  * 3 - Thresholded\n  * 4 - Final\n  * 5 - Texture\n"
+    },
+    "cloudColor" : {
+      "type" : "integer",
+      "description" : "Cloud mask overlay tint colour as 0xAARRGGBB integer"
+    },
+    "cloudShowOverlay" : {
+      "type" : "integer",
+      "description" : "Tint cloud-classified regions on the preview image (1 for yes, 0 for no)"
+    },
+    "cloudDayThreshold" : {
+      "type" : "number",
+      "format" : "double",
+      "description" : "Day path: minimum red/blue ratio classified as cloud: 0.0 to 2.0"
+    },
+    "cloudTextureThreshold" : {
+      "type" : "integer",
+      "description" : "Day path: fine-scale texture level above which a region cannot be cloud (rejects roofs/trees); 0 disables: 0 to 255"
+    },
+    "cloudNightThreshold" : {
+      "type" : "integer",
+      "description" : "Night path: threshold on sky-background deviation from the median sky level: 0 to 255"
+    },
+    "cloudBackgroundBlur" : {
+      "type" : "integer",
+      "description" : "Night path: radius used to estimate the sky background, in downscaled pixels: 1 to 128"
+    },
+    "cloudOpenSize" : {
+      "type" : "integer",
+      "description" : "Kernel radius for cloud-mask morphological open: 0 to 20"
+    },
+    "cloudCloseSize" : {
+      "type" : "integer",
+      "description" : "Kernel radius for cloud-mask morphological close: 0 to 20"
+    },
+    "cloudDownscale" : {
+      "type" : "number",
+      "format" : "double",
+      "description" : "Downscale factor for the cloud detection path: 1.0, 0.5, 0.25 or 0.125"
+    },
+    "cloudUpdateIntervalFrames" : {
+      "type" : "integer",
+      "description" : "Recompute the cloud mask every this many frames: 1 to 600"
+    },
+    "cloudFilterStars" : {
+      "type" : "integer",
+      "description" : "Drop star detections whose centroid falls inside the cloud mask (1 for yes, 0 for no)"
+    },
+    "cloudFilterMotion" : {
+      "type" : "integer",
+      "description" : "Suppress motion boxes that substantially overlap the cloud mask (1 for yes, 0 for no)"
+    },
+    "cloudMotionOverlapThreshold" : {
+      "type" : "number",
+      "format" : "double",
+      "description" : "Cloud overlap fraction at which a motion box is suppressed: 0.0 to 1.0"
+    },
+    "cloudEventThreshold" : {
+      "type" : "number",
+      "format" : "double",
+      "description" : "Coverage percentage at which a Scheduler coverage-high event is emitted (low again 10 points below): 0 to 100"
+    },
     "starDetect" : {
       "type" : "integer",
       "description" : "Enable star detection (1 for yes, 0 for no)"
@@ -4586,7 +4718,7 @@ margin-bottom: 20px;
     },
     "plateSolveLabelMode" : {
       "type" : "integer",
-      "description" : "Plate solve label mode\n  * 0 - Name\n  * 1 - Name/magnitude\n  * 2 - Name/magnitude/spectral type\n"
+      "description" : "Plate solve label mode\n  * 0 - None\n  * 1 - Name\n  * 2 - Name/magnitude\n  * 3 - Name/magnitude/spectral type\n"
     },
     "plateSolveUseCaptureDateTime" : {
       "type" : "integer",
@@ -4685,6 +4817,10 @@ margin-bottom: 20px;
     "audioMute" : {
       "type" : "integer",
       "description" : "Silence captured camera audio (1 for yes, 0 for no)"
+    },
+    "audioPreviewVolume" : {
+      "type" : "integer",
+      "description" : "Audio preview volume in percent (0 to 100)"
     },
     "audioDeviceName" : {
       "type" : "string",
@@ -5224,6 +5360,12 @@ margin-bottom: 20px;
     "MeshtasticModReport" : {
       "$ref" : "#/definitions/MeshtasticModReport"
     },
+    "MeshcoreDemodReport" : {
+      "$ref" : "#/definitions/MeshcoreDemodReport"
+    },
+    "MeshcoreModReport" : {
+      "$ref" : "#/definitions/MeshcoreModReport"
+    },
     "NavtexDemodReport" : {
       "$ref" : "#/definitions/NavtexDemodReport"
     },
@@ -5426,6 +5568,12 @@ margin-bottom: 20px;
     },
     "MeshtasticModSettings" : {
       "$ref" : "#/definitions/MeshtasticModSettings"
+    },
+    "MeshcoreDemodSettings" : {
+      "$ref" : "#/definitions/MeshcoreDemodSettings"
+    },
+    "MeshcoreModSettings" : {
+      "$ref" : "#/definitions/MeshcoreModSettings"
     },
     "MeteorSettings" : {
       "$ref" : "#/definitions/MeteorSettings"
@@ -12151,6 +12299,328 @@ margin-bottom: 20px;
     }
   },
   "description" : "Map"
+};
+            defs.MeshcoreDemodReport = {
+  "properties" : {
+    "channelPowerDB" : {
+      "type" : "number",
+      "format" : "float",
+      "description" : "current de-chirped total channel power (dB)"
+    },
+    "noisePowerDB" : {
+      "type" : "number",
+      "format" : "float",
+      "description" : "current de-chirped noise argmax power (dB)"
+    },
+    "signalPowerDB" : {
+      "type" : "number",
+      "format" : "float",
+      "description" : "last message de-chirped signal argmax power (dB)"
+    },
+    "snrPowerDB" : {
+      "type" : "number",
+      "format" : "float",
+      "description" : "last message de-chirped signal to noise ratio power (dB)"
+    },
+    "channelSampleRate" : {
+      "type" : "integer"
+    },
+    "syncWord" : {
+      "type" : "integer",
+      "description" : "2 bytes sync word (0..65535)"
+    },
+    "nbParityBits" : {
+      "type" : "integer",
+      "description" : "Hamming FEC parity bits (LoRa)"
+    },
+    "packetLength" : {
+      "type" : "integer",
+      "description" : "Packet length in number of bytes (LoRa)"
+    },
+    "nbSymbols" : {
+      "type" : "integer",
+      "description" : "Number of symbols in the payload with header and CRC (LoRa)"
+    },
+    "nbCodewords" : {
+      "type" : "integer",
+      "description" : "Number of codewords in the payload with header and CRC (LoRa)"
+    },
+    "headerParityStatus" : {
+      "type" : "integer",
+      "description" : "Header FEC parity status:\n  * 0 - Undefined\n  * 1 - Uncorrectable error\n  * 2 - Corrected error\n  * 3 - OK\n"
+    },
+    "headerCRCStatus" : {
+      "type" : "integer",
+      "description" : "header CRC check status. Boolean 1 if OK else 0"
+    },
+    "payloadParityStatus" : {
+      "type" : "integer",
+      "description" : "Payload FEC parity status:\n  * 0 - Undefined\n  * 1 - Uncorrectable error\n  * 2 - Corrected error\n  * 3 - OK\n"
+    },
+    "payloadCRCStatus" : {
+      "type" : "integer",
+      "description" : "payload CRC check status. Boolean 1 if OK else 0"
+    },
+    "messageTimestamp" : {
+      "type" : "string",
+      "description" : "timestamp of the last decoded message"
+    },
+    "messageString" : {
+      "type" : "string",
+      "description" : "string representation of the last decoded message"
+    },
+    "frameType" : {
+      "type" : "string",
+      "description" : "frame type shown in the GUI tree view (for example LORA_FRAME or POSITION_APP)"
+    },
+    "channelType" : {
+      "type" : "string",
+      "description" : "Channel type code e.g. LONG_FAST"
+    },
+    "messageBytes" : {
+      "type" : "array",
+      "description" : "bytes of the last decoded message as an array of hex string represented bytes (00..FF)",
+      "items" : {
+        "type" : "string"
+      }
+    },
+    "decoding" : {
+      "type" : "integer",
+      "description" : "Boolean - decoding status\n  * 0 - no decoding\n  * 1 - decoding\n"
+    }
+  },
+  "description" : "MeshcoreDemod"
+};
+            defs.MeshcoreDemodSettings = {
+  "properties" : {
+    "inputFrequencyOffset" : {
+      "type" : "integer",
+      "format" : "int64"
+    },
+    "bandwidthIndex" : {
+      "type" : "integer",
+      "description" : "standard bandwidths index:\n  *  0 -    375 Hz (384000 / 1024)\n  *  1 -    750 Hz (384000 / 512)\n  *  2 -   1500 Hz (384000 / 256)\n  *  3 -   2604 Hz (333333 / 128)\n  *  4 -   3125 Hz (400000 / 128)\n  *  5 -   3906 Hz (500000 / 128)\n  *  6 -   5208 Hz (333333 / 64)\n  *  7 -   6250 Hz (400000 / 64)\n  *  8 -   7813 Hz (500000 / 64)\n  *  9 -  10417 Hz (333333 / 32)\n  * 10 -  12500 Hz (400000 / 32)\n  * 11 -  15625 Hz (500000 / 32)\n  * 12 -  20833 Hz (333333 / 16)\n  * 13 -  25000 Hz (400000 / 16)\n  * 14 -  31250 Hz (500000 / 16)\n  * 15 -  41667 Hz (333333 / 8)\n  * 16 -  50000 Hz (400000 / 8)\n  * 17 -  62500 Hz (500000 / 8)\n  * 18 -  83333 Hz (333333 / 4)\n  * 19 - 100000 Hz (400000 / 4)\n  * 20 - 125000 Hz (500000 / 4)\n  * 21 - 166667 Hz (333333 / 2)\n  * 22 - 200000 Hz (400000 / 2)\n  * 23 - 250000 Hz (500000 / 2)\n  * 24 - 333333 Hz (333333 / 1)\n  * 25 - 400000 Hz (400000 / 1)\n  * 26 - 500000 Hz (500000 / 1)\n"
+    },
+    "spreadFactor" : {
+      "type" : "integer"
+    },
+    "deBits" : {
+      "type" : "integer",
+      "description" : "Low data rate optimize (DE) bits i.e. nb of FFT bins per effective symbol"
+    },
+    "decodeActive" : {
+      "type" : "integer",
+      "description" : "boolean 1 to activate 0 to de-activate decoder"
+    },
+    "eomSquelchTenths" : {
+      "type" : "integer",
+      "description" : "argmax squared magnitude is compared between current multiplied by this factor and maximum during decoding. This value is divided by 10"
+    },
+    "nbSymbolsMax" : {
+      "type" : "integer",
+      "description" : "expected maximum number of symbols in a payload"
+    },
+    "preambleChirps" : {
+      "type" : "integer",
+      "description" : "Number of expected preamble chirps"
+    },
+    "nbParityBits" : {
+      "type" : "integer",
+      "description" : "Hamming FEC parity bits (LoRa)"
+    },
+    "packetLength" : {
+      "type" : "integer",
+      "description" : "expected packet length in number of bytes (LoRa)"
+    },
+    "sendViaUDP" : {
+      "type" : "integer",
+      "description" : "boolean 1 to send decoded message via UDP else 0"
+    },
+    "sendJsonViaUDP" : {
+      "type" : "integer",
+      "description" : "boolean 1 to send decoded message as JSON via UDP else 0"
+    },
+    "udpEnabled" : {
+      "type" : "integer",
+      "description" : "Boolean - Send via UDP\n  * 0 - Do not send decoded messages via UDP\n  * 1 - Send decoded messages via UDP\n"
+    },
+    "udpAddress" : {
+      "type" : "string",
+      "description" : "UDP destination udpAddress"
+    },
+    "udpPort" : {
+      "type" : "integer",
+      "description" : "UDP destination port"
+    },
+    "invertRamps" : {
+      "type" : "integer",
+      "description" : "Invert chirp ramps\n  * 0 - Normal chirp ramps (upchirps for preamble and payload)\n  * 1 - Inverted chirp ramps (downchirps for preamble and payload)\n"
+    },
+    "rgbColor" : {
+      "type" : "integer"
+    },
+    "title" : {
+      "type" : "string"
+    },
+    "streamIndex" : {
+      "type" : "integer",
+      "description" : "MIMO channel. Not relevant when connected to SI (single Rx)."
+    },
+    "useReverseAPI" : {
+      "type" : "integer",
+      "description" : "Synchronize with reverse API (1 for yes, 0 for no)"
+    },
+    "reverseAPIAddress" : {
+      "type" : "string"
+    },
+    "reverseAPIPort" : {
+      "type" : "integer"
+    },
+    "reverseAPIDeviceIndex" : {
+      "type" : "integer"
+    },
+    "reverseAPIChannelIndex" : {
+      "type" : "integer"
+    },
+    "spectrumConfig" : {
+      "$ref" : "#/definitions/GLSpectrum"
+    },
+    "channelMarker" : {
+      "$ref" : "#/definitions/ChannelMarker"
+    },
+    "rollupState" : {
+      "$ref" : "#/definitions/RollupState"
+    }
+  },
+  "description" : "MeshcoreDemod"
+};
+            defs.MeshcoreModReport = {
+  "properties" : {
+    "channelPowerDB" : {
+      "type" : "number",
+      "format" : "float",
+      "description" : "power transmitted in channel (dB)"
+    },
+    "channelSampleRate" : {
+      "type" : "integer"
+    },
+    "symbolTimeMs" : {
+      "type" : "number",
+      "format" : "float",
+      "description" : "symbol duration (ms)"
+    },
+    "payloadTimeMs" : {
+      "type" : "number",
+      "format" : "float",
+      "description" : "payload duration (ms)"
+    },
+    "totalTimeMs" : {
+      "type" : "number",
+      "format" : "float",
+      "description" : "total message duration inc. preamble and SFD (ms)"
+    },
+    "playing" : {
+      "type" : "integer",
+      "description" : "Boolean - modulator is active (playing) including idle time\n  * 0 - Modulator not active\n  * 1 - Modulator active\n"
+    }
+  },
+  "description" : "MeshcoreMod"
+};
+            defs.MeshcoreModSettings = {
+  "properties" : {
+    "inputFrequencyOffset" : {
+      "type" : "integer",
+      "format" : "int64"
+    },
+    "bandwidthIndex" : {
+      "type" : "integer",
+      "description" : "standard bandwidths index:\n  *  0 -    375 Hz (384000 / 1024)\n  *  1 -    750 Hz (384000 / 512)\n  *  2 -   1500 Hz (384000 / 256)\n  *  3 -   2604 Hz (333333 / 128)\n  *  4 -   3125 Hz (400000 / 128)\n  *  5 -   3906 Hz (500000 / 128)\n  *  6 -   5208 Hz (333333 / 64)\n  *  7 -   6250 Hz (400000 / 64)\n  *  8 -   7813 Hz (500000 / 64)\n  *  9 -  10417 Hz (333333 / 32)\n  * 10 -  12500 Hz (400000 / 32)\n  * 11 -  15625 Hz (500000 / 32)\n  * 12 -  20833 Hz (333333 / 16)\n  * 13 -  25000 Hz (400000 / 16)\n  * 14 -  31250 Hz (500000 / 16)\n  * 15 -  41667 Hz (333333 / 8)\n  * 16 -  50000 Hz (400000 / 8)\n  * 17 -  62500 Hz (500000 / 8)\n  * 18 -  83333 Hz (333333 / 4)\n  * 19 - 100000 Hz (400000 / 4)\n  * 20 - 125000 Hz (500000 / 4)\n  * 21 - 166667 Hz (333333 / 2)\n  * 22 - 200000 Hz (400000 / 2)\n  * 23 - 250000 Hz (500000 / 2)\n  * 24 - 333333 Hz (333333 / 1)\n  * 25 - 400000 Hz (400000 / 1)\n  * 26 - 500000 Hz (500000 / 1)\n"
+    },
+    "spreadFactor" : {
+      "type" : "integer"
+    },
+    "deBits" : {
+      "type" : "integer",
+      "description" : "Low data rate optimize (DE) bits i.e. nb of FFT bins per effective symbol"
+    },
+    "preambleChirps" : {
+      "type" : "integer",
+      "description" : "Number of preamble chirps"
+    },
+    "quietMillis" : {
+      "type" : "integer",
+      "description" : "Number of milliseconds to pause between transmissions"
+    },
+    "syncWord" : {
+      "type" : "integer",
+      "description" : "2 byte (0..65535) synchronization syncWord"
+    },
+    "channelMute" : {
+      "type" : "integer",
+      "description" : "boolean"
+    },
+    "nbParityBits" : {
+      "type" : "integer",
+      "description" : "Hamming FEC parity bits (LoRa)"
+    },
+    "textMessage" : {
+      "type" : "string",
+      "description" : "freeform text message"
+    },
+    "messageRepeat" : {
+      "type" : "integer",
+      "description" : "number of repetitions of the same message (0 for infinite)"
+    },
+    "udpEnabled" : {
+      "type" : "integer",
+      "description" : "boolean 1 to enable forwarding messages via UDP else 0"
+    },
+    "udpAddress" : {
+      "type" : "string",
+      "description" : "UDP address to listen for messages to transmit on"
+    },
+    "udpPort" : {
+      "type" : "integer",
+      "description" : "UDP port to listen for messages to transmit on"
+    },
+    "invertRamps" : {
+      "type" : "integer",
+      "description" : "Invert chirp ramps\n  * 0 - Normal chirp ramps (upchirps for preamble and payload)\n  * 1 - Inverted chirp ramps (downchirps for preamble and payload)\n"
+    },
+    "rgbColor" : {
+      "type" : "integer"
+    },
+    "title" : {
+      "type" : "string"
+    },
+    "streamIndex" : {
+      "type" : "integer",
+      "description" : "MIMO channel. Not relevant when connected to SI (single Rx)."
+    },
+    "useReverseAPI" : {
+      "type" : "integer",
+      "description" : "Synchronize with reverse API (1 for yes, 0 for no)"
+    },
+    "reverseAPIAddress" : {
+      "type" : "string"
+    },
+    "reverseAPIPort" : {
+      "type" : "integer"
+    },
+    "reverseAPIDeviceIndex" : {
+      "type" : "integer"
+    },
+    "reverseAPIChannelIndex" : {
+      "type" : "integer"
+    },
+    "channelMarker" : {
+      "$ref" : "#/definitions/ChannelMarker"
+    },
+    "rollupState" : {
+      "$ref" : "#/definitions/RollupState"
+    }
+  },
+  "description" : "MeshcoreMod"
 };
             defs.MeshtasticDemodReport = {
   "properties" : {
@@ -61981,7 +62451,7 @@ except ApiException as e:
           </div>
           <div id="generator">
             <div class="content">
-              Generated 2026-06-17T15:43:36.900+02:00
+              Generated 2026-07-07T16:58:38.194+02:00
             </div>
           </div>
       </div>

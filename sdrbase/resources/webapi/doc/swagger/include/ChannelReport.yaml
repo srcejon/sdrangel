@@ -73,6 +73,10 @@ ChannelReport:
       $ref: "/doc/swagger/include/MeshtasticDemod.yaml#/MeshtasticDemodReport"
     MeshtasticModReport:
       $ref: "/doc/swagger/include/MeshtasticMod.yaml#/MeshtasticModReport"
+    MeshcoreDemodReport:
+      $ref: "/doc/swagger/include/MeshcoreDemod.yaml#/MeshcoreDemodReport"
+    MeshcoreModReport:
+      $ref: "/doc/swagger/include/MeshcoreMod.yaml#/MeshcoreModReport"
     NavtexDemodReport:
       $ref: "/doc/swagger/include/NavtexDemod.yaml#/NavtexDemodReport"
     NFMDemodReport:

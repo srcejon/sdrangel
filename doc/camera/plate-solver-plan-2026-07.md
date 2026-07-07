@@ -334,6 +334,50 @@ WIDE byte-identical, FISHEYE synthetic NO new passes (or verify any are genuine,
 oracle is weak — strengthen it first), TREx → ~10/20. This is a proper feature (its own task), not a
 session-tail change; reverted to keep the tree clean. The image-flip proof (4→10) remains the target.
 
+**★ FEATURE IMPLEMENTED (2026-07-07, branch `plate-solver-handedness` off `plate-solver-review`) — the
+in-solver DETECTION-flip auto-detect does NOT reproduce the image-flip 4→10, and match-stats adoption
+is not safe, so it ships as clean infrastructure + an OPT-IN retry (default OFF), all gates
+byte-identical. What was built and measured:**
+- **Infrastructure (byte-identical when off, shipped ON the code path):** `CameraPlateSolveResult::
+  m_mirrored` + `CameraPipelinePlateSolve::m_mirrored` (propagated in CameraStarDetector);
+  `SkyProjector::mirrorX` (cameraplatesolverinternal.h) honored in `projectVector` (final `X=(W-1)-X`)
+  and `unprojectPixelToVector` (pre-image `x=(W-1)-x`), default false so every solve/overlay projector
+  is unchanged. The GUI-overlay `SkyProjector` in camerapostprocessor.cpp is a SEPARATE struct built
+  from `m_settings` (not the frame's solve), so threading handedness to the overlay needs a persisted
+  `CameraSettings` mirror flag — left as a documented FOLLOW-ON (the feature is off by default, so no
+  overlay currently renders a mirrored pose).
+- **Mechanism:** in `runSolve`, for a fisheye (non-rectilinear) context, ALSO solve the horizontally-
+  mirrored detection set on a COPY, then adopt it when clearly better, transferring the mirror pose's
+  match annotations onto the original detections BY INDEX (original centroids preserved, so the
+  harness/caller sees original-image positions with no coordinate round-trip). The copy+index-transfer
+  is correct by construction; an earlier in-place flip/flip-back mislocated labels and was replaced.
+- **Why it is OPT-IN (`SDRANGEL_CAMERA_PLATE_SOLVER_MIRROR`, default OFF), not always-on auto:**
+  1. **Detection-flip ≠ image-flip.** Force-adopting EVERY mirror gives TREx **4/20**, nowhere near the
+     offline image-flip prototype's 10/20 — despite identical recovered poses on the rows that overlap
+     (e.g. row-7 az/el/roll byte-identical to the flip proof). The offline proof flipped the IMAGE and
+     RE-DETECTED (+ used flipped anchors); the in-solver centroid-flip lands the correct mirror pose on
+     only ~1–2 rows. The complete fix is an IMAGE-level flip before detection (doc's option (a)) — a
+     larger CameraStarDetector change and a real FOLLOW-ON.
+  2. **Match-stats cannot arbitrate handedness (the verifier wall, now proven both ways).** The named
+     bright-anchor field is 0 on real all-sky corpora (catalogue stars are not HIP/HR/HD-named), leaving
+     only match-count + global rms. On dense all-sky fields a WRONG pose matches as many faint stars at
+     an equal-or-lower rms than the correct pose, so no margin separates them. Measured under always-on
+     adoption: TREx is a net-0 SHUFFLE (a near-zenith truth-seeded frame's CORRECT normal solve, rms
+     13.5, is displaced by a wrong low-rms mirror, rms 6.6 → PASS→FAIL) offsetting a knife-edge gain.
+     Enabling by default would change verdicts unexplained.
+- **Validation (baseline = `test/baseline-2026-07/*.verdicts.txt`):** with the feature OFF (default),
+  REAL **47/48**, WIDE **27/36**, FISHEYE-mode1 **44/50**, FISHEYE-mode4 **45/50** are ALL byte-IDENTICAL
+  to baseline; TREx **4/20**, trex2 **3/10** (= the no-feature reference). With the feature ON, synthetic
+  mode1/mode4 and WIDE stay byte-identical (the conservative comparator never fires harmfully there) and
+  TREx/trex2 are a net-0 shuffle. (Note: a stale prebuilt test exe reported mode1/mode4 46/46 and TREx
+  5 — that was an anomalous build; the committed baseline verdict FILES are 44/45 and TREx 4, which a
+  clean build reproduces. Any single change to cameraplatesolver.cpp also ULP-shifts one knife-edge TREx
+  frame, harmless on the REAL/WIDE gates.)
+- **Net:** the root-cause finding stands and the plumbing is landed, but a *robust automatic* TREx gain
+  is NOT achievable from match statistics. The two remaining paths are both FOLLOW-ONs: (a) image-level
+  flip before detection for a KNOWN-mirrored camera (reproduces 4→10 without needing to arbitrate
+  handedness), and (b) external bright-star identification to give auto-detect a real discriminator.
+
 **CORRECTION to the earlier "every lever measured, investigation closed at evidence floor" line: that
 stands for the NARROW dense-field cases (pollux/RAND2) and for COLOR, but is WRONG for the all-sky
 TREx class — those failures were a handedness bug with a concrete fix, not a fundamental limit.**

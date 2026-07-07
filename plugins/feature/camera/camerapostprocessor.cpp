@@ -1244,8 +1244,6 @@ void CameraPostProcessor::updateTrackedObjectPipeRegistration()
 
 void CameraPostProcessor::registerTrackedObjectPipes()
 {
-    m_availableChannelOrFeatureHandler.scanAvailableChannelsAndFeatures();
-
     QSet<QObject*> availableSources;
     QSet<QObject*> registeredSources;
     const QStringList pipeNames{QStringLiteral("mapitems")};

@@ -79,8 +79,32 @@ public:
     QList<SWGMapCoordinate*>* getTrack();
     void setTrack(QList<SWGMapCoordinate*>* track);
 
+    QList<double>* getTrackLatitudes();
+    void setTrackLatitudes(QList<double>* track_latitudes);
+
+    QList<double>* getTrackLongitudes();
+    void setTrackLongitudes(QList<double>* track_longitudes);
+
+    QList<double>* getTrackAltitudes();
+    void setTrackAltitudes(QList<double>* track_altitudes);
+
+    QList<qint64>* getTrackDateTimeMsecs();
+    void setTrackDateTimeMsecs(QList<qint64>* track_date_time_msecs);
+
     QList<SWGMapCoordinate*>* getPredictedTrack();
     void setPredictedTrack(QList<SWGMapCoordinate*>* predicted_track);
+
+    QList<double>* getPredictedTrackLatitudes();
+    void setPredictedTrackLatitudes(QList<double>* predicted_track_latitudes);
+
+    QList<double>* getPredictedTrackLongitudes();
+    void setPredictedTrackLongitudes(QList<double>* predicted_track_longitudes);
+
+    QList<double>* getPredictedTrackAltitudes();
+    void setPredictedTrackAltitudes(QList<double>* predicted_track_altitudes);
+
+    QList<qint64>* getPredictedTrackDateTimeMsecs();
+    void setPredictedTrackDateTimeMsecs(QList<qint64>* predicted_track_date_time_msecs);
 
     QString* getModel();
     void setModel(QString* model);
@@ -194,8 +218,32 @@ private:
     QList<SWGMapCoordinate*>* track;
     bool m_track_isSet;
 
+    QList<double>* track_latitudes;
+    bool m_track_latitudes_isSet;
+
+    QList<double>* track_longitudes;
+    bool m_track_longitudes_isSet;
+
+    QList<double>* track_altitudes;
+    bool m_track_altitudes_isSet;
+
+    QList<qint64>* track_date_time_msecs;
+    bool m_track_date_time_msecs_isSet;
+
     QList<SWGMapCoordinate*>* predicted_track;
     bool m_predicted_track_isSet;
+
+    QList<double>* predicted_track_latitudes;
+    bool m_predicted_track_latitudes_isSet;
+
+    QList<double>* predicted_track_longitudes;
+    bool m_predicted_track_longitudes_isSet;
+
+    QList<double>* predicted_track_altitudes;
+    bool m_predicted_track_altitudes_isSet;
+
+    QList<qint64>* predicted_track_date_time_msecs;
+    bool m_predicted_track_date_time_msecs_isSet;
 
     QString* model;
     bool m_model_isSet;

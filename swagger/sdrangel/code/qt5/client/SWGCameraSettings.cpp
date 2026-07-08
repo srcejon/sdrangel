@@ -1507,6 +1507,9 @@ SWGCameraSettings::cleanup() {
 
 
 
+
+
+
     if(plate_solve_date_time != nullptr) { 
         delete plate_solve_date_time;
     }
@@ -2037,10 +2040,13 @@ SWGCameraSettings::fromJsonObject(QJsonObject &pJson) {
     ::SWGSDRangel::setValue(&cloud_motion_overlap_threshold, pJson["cloudMotionOverlapThreshold"], "double", "");
     
     ::SWGSDRangel::setValue(&cloud_event_threshold, pJson["cloudEventThreshold"], "double", "");
+    
     ::SWGSDRangel::setValue(&cloud_edge_margin_percent, pJson["cloudEdgeMarginPercent"], "double", "");
+    
     ::SWGSDRangel::setValue(&cloud_mask_sun_moon, pJson["cloudMaskSunMoon"], "qint32", "");
+    
     ::SWGSDRangel::setValue(&cloud_sun_moon_radius_deg, pJson["cloudSunMoonRadiusDeg"], "double", "");
-
+    
     ::SWGSDRangel::setValue(&star_detect, pJson["starDetect"], "qint32", "");
     
     ::SWGSDRangel::setValue(&star_threshold, pJson["starThreshold"], "qint32", "");

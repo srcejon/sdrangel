@@ -4605,7 +4605,7 @@ margin-bottom: 20px;
     },
     "cloudNightThreshold" : {
       "type" : "integer",
-      "description" : "Night path: threshold on sky-background deviation from the median sky level: 0 to 255"
+      "description" : "Dark night path: how much brighter than the surrounding sky a region must be to classify as cloud: 0 to 255"
     },
     "cloudBackgroundBlur" : {
       "type" : "integer",
@@ -4645,6 +4645,20 @@ margin-bottom: 20px;
       "type" : "number",
       "format" : "double",
       "description" : "Coverage percentage at which a Scheduler coverage-high event is emitted (low again 10 points below): 0 to 100"
+    },
+    "cloudEdgeMarginPercent" : {
+      "type" : "number",
+      "format" : "double",
+      "description" : "Exclude a margin this percentage of the frame in from the sky-region edge (fisheye rim / vignette / foreground); 0 disables: 0 to 25"
+    },
+    "cloudMaskSunMoon" : {
+      "type" : "integer",
+      "description" : "Exclude a disc around the projected sun (day) / moon (night) so they are not classified as cloud (1 for yes, 0 for no)"
+    },
+    "cloudSunMoonRadiusDeg" : {
+      "type" : "number",
+      "format" : "double",
+      "description" : "Angular radius in degrees of the sun/moon exclusion disc: 0 to 45"
     },
     "starDetect" : {
       "type" : "integer",
@@ -11956,11 +11970,75 @@ margin-bottom: 20px;
         "$ref" : "#/definitions/MapCoordinate"
       }
     },
+    "trackLatitudes" : {
+      "type" : "array",
+      "description" : "Track/path latitudes in decimal degrees",
+      "items" : {
+        "type" : "number",
+        "format" : "double"
+      }
+    },
+    "trackLongitudes" : {
+      "type" : "array",
+      "description" : "Track/path longitudes in decimal degrees",
+      "items" : {
+        "type" : "number",
+        "format" : "double"
+      }
+    },
+    "trackAltitudes" : {
+      "type" : "array",
+      "description" : "Track/path altitudes in metres",
+      "items" : {
+        "type" : "number",
+        "format" : "double"
+      }
+    },
+    "trackDateTimeMsecs" : {
+      "type" : "array",
+      "description" : "Track/path date and times as milliseconds since the Unix epoch",
+      "items" : {
+        "type" : "integer",
+        "format" : "int64"
+      }
+    },
     "predictedTrack" : {
       "type" : "array",
       "description" : "Track/path the item is predicted to take",
       "items" : {
         "$ref" : "#/definitions/MapCoordinate"
+      }
+    },
+    "predictedTrackLatitudes" : {
+      "type" : "array",
+      "description" : "Predicted track/path latitudes in decimal degrees",
+      "items" : {
+        "type" : "number",
+        "format" : "double"
+      }
+    },
+    "predictedTrackLongitudes" : {
+      "type" : "array",
+      "description" : "Predicted track/path longitudes in decimal degrees",
+      "items" : {
+        "type" : "number",
+        "format" : "double"
+      }
+    },
+    "predictedTrackAltitudes" : {
+      "type" : "array",
+      "description" : "Predicted track/path altitudes in metres",
+      "items" : {
+        "type" : "number",
+        "format" : "double"
+      }
+    },
+    "predictedTrackDateTimeMsecs" : {
+      "type" : "array",
+      "description" : "Predicted track/path date and times as milliseconds since the Unix epoch",
+      "items" : {
+        "type" : "integer",
+        "format" : "int64"
       }
     },
     "model" : {
@@ -12131,11 +12209,75 @@ margin-bottom: 20px;
         "$ref" : "#/definitions/MapCoordinate"
       }
     },
+    "trackLatitudes" : {
+      "type" : "array",
+      "description" : "Track/path latitudes in decimal degrees",
+      "items" : {
+        "type" : "number",
+        "format" : "double"
+      }
+    },
+    "trackLongitudes" : {
+      "type" : "array",
+      "description" : "Track/path longitudes in decimal degrees",
+      "items" : {
+        "type" : "number",
+        "format" : "double"
+      }
+    },
+    "trackAltitudes" : {
+      "type" : "array",
+      "description" : "Track/path altitudes in metres",
+      "items" : {
+        "type" : "number",
+        "format" : "double"
+      }
+    },
+    "trackDateTimeMsecs" : {
+      "type" : "array",
+      "description" : "Track/path date and times as milliseconds since the Unix epoch",
+      "items" : {
+        "type" : "integer",
+        "format" : "int64"
+      }
+    },
     "predictedTrack" : {
       "type" : "array",
       "description" : "Track/path the item is predicted to take",
       "items" : {
         "$ref" : "#/definitions/MapCoordinate"
+      }
+    },
+    "predictedTrackLatitudes" : {
+      "type" : "array",
+      "description" : "Predicted track/path latitudes in decimal degrees",
+      "items" : {
+        "type" : "number",
+        "format" : "double"
+      }
+    },
+    "predictedTrackLongitudes" : {
+      "type" : "array",
+      "description" : "Predicted track/path longitudes in decimal degrees",
+      "items" : {
+        "type" : "number",
+        "format" : "double"
+      }
+    },
+    "predictedTrackAltitudes" : {
+      "type" : "array",
+      "description" : "Predicted track/path altitudes in metres",
+      "items" : {
+        "type" : "number",
+        "format" : "double"
+      }
+    },
+    "predictedTrackDateTimeMsecs" : {
+      "type" : "array",
+      "description" : "Predicted track/path date and times as milliseconds since the Unix epoch",
+      "items" : {
+        "type" : "integer",
+        "format" : "int64"
       }
     },
     "model" : {
@@ -62451,7 +62593,7 @@ except ApiException as e:
           </div>
           <div id="generator">
             <div class="content">
-              Generated 2026-07-07T16:58:38.194+02:00
+              Generated 2026-07-08T15:42:48.748+02:00
             </div>
           </div>
       </div>

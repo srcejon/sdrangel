@@ -50,8 +50,24 @@ SWGMapItem::SWGMapItem() {
     m_altitude_date_time_isSet = false;
     track = nullptr;
     m_track_isSet = false;
+    track_latitudes = new QList<double>();
+    m_track_latitudes_isSet = false;
+    track_longitudes = new QList<double>();
+    m_track_longitudes_isSet = false;
+    track_altitudes = new QList<double>();
+    m_track_altitudes_isSet = false;
+    track_date_time_msecs = new QList<qint64>();
+    m_track_date_time_msecs_isSet = false;
     predicted_track = nullptr;
     m_predicted_track_isSet = false;
+    predicted_track_latitudes = new QList<double>();
+    m_predicted_track_latitudes_isSet = false;
+    predicted_track_longitudes = new QList<double>();
+    m_predicted_track_longitudes_isSet = false;
+    predicted_track_altitudes = new QList<double>();
+    m_predicted_track_altitudes_isSet = false;
+    predicted_track_date_time_msecs = new QList<qint64>();
+    m_predicted_track_date_time_msecs_isSet = false;
     model = nullptr;
     m_model_isSet = false;
     orientation = 0;
@@ -132,8 +148,24 @@ SWGMapItem::init() {
     m_altitude_date_time_isSet = false;
     track = new QList<SWGMapCoordinate*>();
     m_track_isSet = false;
+    track_latitudes = new QList<double>();
+    m_track_latitudes_isSet = false;
+    track_longitudes = new QList<double>();
+    m_track_longitudes_isSet = false;
+    track_altitudes = new QList<double>();
+    m_track_altitudes_isSet = false;
+    track_date_time_msecs = new QList<qint64>();
+    m_track_date_time_msecs_isSet = false;
     predicted_track = new QList<SWGMapCoordinate*>();
     m_predicted_track_isSet = false;
+    predicted_track_latitudes = new QList<double>();
+    m_predicted_track_latitudes_isSet = false;
+    predicted_track_longitudes = new QList<double>();
+    m_predicted_track_longitudes_isSet = false;
+    predicted_track_altitudes = new QList<double>();
+    m_predicted_track_altitudes_isSet = false;
+    predicted_track_date_time_msecs = new QList<qint64>();
+    m_predicted_track_date_time_msecs_isSet = false;
     model = new QString("");
     m_model_isSet = false;
     orientation = 0;
@@ -215,6 +247,10 @@ SWGMapItem::cleanup() {
         }
         delete track;
     }
+
+
+
+
     if(predicted_track != nullptr) { 
         auto arr = predicted_track;
         for(auto o: *arr) { 
@@ -222,6 +258,10 @@ SWGMapItem::cleanup() {
         }
         delete predicted_track;
     }
+
+
+
+
     if(model != nullptr) { 
         delete model;
     }
@@ -309,7 +349,23 @@ SWGMapItem::fromJsonObject(QJsonObject &pJson) {
     
     ::SWGSDRangel::setValue(&track, pJson["track"], "QList", "SWGMapCoordinate");
     
+    ::SWGSDRangel::setValue(&track_latitudes, pJson["trackLatitudes"], "QList", "double");
+    
+    ::SWGSDRangel::setValue(&track_longitudes, pJson["trackLongitudes"], "QList", "double");
+    
+    ::SWGSDRangel::setValue(&track_altitudes, pJson["trackAltitudes"], "QList", "double");
+    
+    ::SWGSDRangel::setValue(&track_date_time_msecs, pJson["trackDateTimeMsecs"], "QList", "qint64");
+    
     ::SWGSDRangel::setValue(&predicted_track, pJson["predictedTrack"], "QList", "SWGMapCoordinate");
+    
+    ::SWGSDRangel::setValue(&predicted_track_latitudes, pJson["predictedTrackLatitudes"], "QList", "double");
+    
+    ::SWGSDRangel::setValue(&predicted_track_longitudes, pJson["predictedTrackLongitudes"], "QList", "double");
+    
+    ::SWGSDRangel::setValue(&predicted_track_altitudes, pJson["predictedTrackAltitudes"], "QList", "double");
+    
+    ::SWGSDRangel::setValue(&predicted_track_date_time_msecs, pJson["predictedTrackDateTimeMsecs"], "QList", "qint64");
     ::SWGSDRangel::setValue(&model, pJson["model"], "QString", "QString");
     
     ::SWGSDRangel::setValue(&orientation, pJson["orientation"], "qint32", "");
@@ -409,8 +465,32 @@ SWGMapItem::asJsonObject() {
     if(track && track->size() > 0){
         toJsonArray((QList<void*>*)track, obj, "track", "SWGMapCoordinate");
     }
+    if(track_latitudes && track_latitudes->size() > 0){
+        toJsonArray((QList<void*>*)track_latitudes, obj, "trackLatitudes", "");
+    }
+    if(track_longitudes && track_longitudes->size() > 0){
+        toJsonArray((QList<void*>*)track_longitudes, obj, "trackLongitudes", "");
+    }
+    if(track_altitudes && track_altitudes->size() > 0){
+        toJsonArray((QList<void*>*)track_altitudes, obj, "trackAltitudes", "");
+    }
+    if(track_date_time_msecs && track_date_time_msecs->size() > 0){
+        toJsonArray((QList<void*>*)track_date_time_msecs, obj, "trackDateTimeMsecs", "");
+    }
     if(predicted_track && predicted_track->size() > 0){
         toJsonArray((QList<void*>*)predicted_track, obj, "predictedTrack", "SWGMapCoordinate");
+    }
+    if(predicted_track_latitudes && predicted_track_latitudes->size() > 0){
+        toJsonArray((QList<void*>*)predicted_track_latitudes, obj, "predictedTrackLatitudes", "");
+    }
+    if(predicted_track_longitudes && predicted_track_longitudes->size() > 0){
+        toJsonArray((QList<void*>*)predicted_track_longitudes, obj, "predictedTrackLongitudes", "");
+    }
+    if(predicted_track_altitudes && predicted_track_altitudes->size() > 0){
+        toJsonArray((QList<void*>*)predicted_track_altitudes, obj, "predictedTrackAltitudes", "");
+    }
+    if(predicted_track_date_time_msecs && predicted_track_date_time_msecs->size() > 0){
+        toJsonArray((QList<void*>*)predicted_track_date_time_msecs, obj, "predictedTrackDateTimeMsecs", "");
     }
     if(model != nullptr && *model != QString("")){
         toJsonValue(QString("model"), model, obj, QString("QString"));
@@ -601,6 +681,46 @@ SWGMapItem::setTrack(QList<SWGMapCoordinate*>* track) {
     this->m_track_isSet = true;
 }
 
+QList<double>*
+SWGMapItem::getTrackLatitudes() {
+    return track_latitudes;
+}
+void
+SWGMapItem::setTrackLatitudes(QList<double>* track_latitudes) {
+    this->track_latitudes = track_latitudes;
+    this->m_track_latitudes_isSet = true;
+}
+
+QList<double>*
+SWGMapItem::getTrackLongitudes() {
+    return track_longitudes;
+}
+void
+SWGMapItem::setTrackLongitudes(QList<double>* track_longitudes) {
+    this->track_longitudes = track_longitudes;
+    this->m_track_longitudes_isSet = true;
+}
+
+QList<double>*
+SWGMapItem::getTrackAltitudes() {
+    return track_altitudes;
+}
+void
+SWGMapItem::setTrackAltitudes(QList<double>* track_altitudes) {
+    this->track_altitudes = track_altitudes;
+    this->m_track_altitudes_isSet = true;
+}
+
+QList<qint64>*
+SWGMapItem::getTrackDateTimeMsecs() {
+    return track_date_time_msecs;
+}
+void
+SWGMapItem::setTrackDateTimeMsecs(QList<qint64>* track_date_time_msecs) {
+    this->track_date_time_msecs = track_date_time_msecs;
+    this->m_track_date_time_msecs_isSet = true;
+}
+
 QList<SWGMapCoordinate*>*
 SWGMapItem::getPredictedTrack() {
     return predicted_track;
@@ -609,6 +729,46 @@ void
 SWGMapItem::setPredictedTrack(QList<SWGMapCoordinate*>* predicted_track) {
     this->predicted_track = predicted_track;
     this->m_predicted_track_isSet = true;
+}
+
+QList<double>*
+SWGMapItem::getPredictedTrackLatitudes() {
+    return predicted_track_latitudes;
+}
+void
+SWGMapItem::setPredictedTrackLatitudes(QList<double>* predicted_track_latitudes) {
+    this->predicted_track_latitudes = predicted_track_latitudes;
+    this->m_predicted_track_latitudes_isSet = true;
+}
+
+QList<double>*
+SWGMapItem::getPredictedTrackLongitudes() {
+    return predicted_track_longitudes;
+}
+void
+SWGMapItem::setPredictedTrackLongitudes(QList<double>* predicted_track_longitudes) {
+    this->predicted_track_longitudes = predicted_track_longitudes;
+    this->m_predicted_track_longitudes_isSet = true;
+}
+
+QList<double>*
+SWGMapItem::getPredictedTrackAltitudes() {
+    return predicted_track_altitudes;
+}
+void
+SWGMapItem::setPredictedTrackAltitudes(QList<double>* predicted_track_altitudes) {
+    this->predicted_track_altitudes = predicted_track_altitudes;
+    this->m_predicted_track_altitudes_isSet = true;
+}
+
+QList<qint64>*
+SWGMapItem::getPredictedTrackDateTimeMsecs() {
+    return predicted_track_date_time_msecs;
+}
+void
+SWGMapItem::setPredictedTrackDateTimeMsecs(QList<qint64>* predicted_track_date_time_msecs) {
+    this->predicted_track_date_time_msecs = predicted_track_date_time_msecs;
+    this->m_predicted_track_date_time_msecs_isSet = true;
 }
 
 QString*
@@ -899,7 +1059,55 @@ SWGMapItem::isSet(){
         if(track && (track->size() > 0)){
             isObjectUpdated = true; break;
         }
+        if(m_track_latitudes_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(track_latitudes && (track_latitudes->size() > 0)){
+            isObjectUpdated = true; break;
+        }
+        if(m_track_longitudes_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(track_longitudes && (track_longitudes->size() > 0)){
+            isObjectUpdated = true; break;
+        }
+        if(m_track_altitudes_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(track_altitudes && (track_altitudes->size() > 0)){
+            isObjectUpdated = true; break;
+        }
+        if(m_track_date_time_msecs_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(track_date_time_msecs && (track_date_time_msecs->size() > 0)){
+            isObjectUpdated = true; break;
+        }
         if(predicted_track && (predicted_track->size() > 0)){
+            isObjectUpdated = true; break;
+        }
+        if(m_predicted_track_latitudes_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(predicted_track_latitudes && (predicted_track_latitudes->size() > 0)){
+            isObjectUpdated = true; break;
+        }
+        if(m_predicted_track_longitudes_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(predicted_track_longitudes && (predicted_track_longitudes->size() > 0)){
+            isObjectUpdated = true; break;
+        }
+        if(m_predicted_track_altitudes_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(predicted_track_altitudes && (predicted_track_altitudes->size() > 0)){
+            isObjectUpdated = true; break;
+        }
+        if(m_predicted_track_date_time_msecs_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(predicted_track_date_time_msecs && (predicted_track_date_time_msecs->size() > 0)){
             isObjectUpdated = true; break;
         }
         if(model && *model != QString("")){

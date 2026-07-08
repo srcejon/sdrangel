@@ -86,11 +86,59 @@ MapItem:
       type: array
       items:
         $ref: "/doc/swagger/include/Map.yaml#/MapCoordinate"
+    trackLatitudes:
+      description: "Track/path latitudes in decimal degrees"
+      type: array
+      items:
+        type: number
+        format: double
+    trackLongitudes:
+      description: "Track/path longitudes in decimal degrees"
+      type: array
+      items:
+        type: number
+        format: double
+    trackAltitudes:
+      description: "Track/path altitudes in metres"
+      type: array
+      items:
+        type: number
+        format: double
+    trackDateTimeMsecs:
+      description: "Track/path date and times as milliseconds since the Unix epoch"
+      type: array
+      items:
+        type: integer
+        format: int64
     predictedTrack:
       description: "Track/path the item is predicted to take"
       type: array
       items:
         $ref: "/doc/swagger/include/Map.yaml#/MapCoordinate"
+    predictedTrackLatitudes:
+      description: "Predicted track/path latitudes in decimal degrees"
+      type: array
+      items:
+        type: number
+        format: double
+    predictedTrackLongitudes:
+      description: "Predicted track/path longitudes in decimal degrees"
+      type: array
+      items:
+        type: number
+        format: double
+    predictedTrackAltitudes:
+      description: "Predicted track/path altitudes in metres"
+      type: array
+      items:
+        type: number
+        format: double
+    predictedTrackDateTimeMsecs:
+      description: "Predicted track/path date and times as milliseconds since the Unix epoch"
+      type: array
+      items:
+        type: integer
+        format: int64
     model:
       description: "3D .glb/*.gltf model for displaying on 3D map"
       type: string

@@ -738,6 +738,15 @@ public:
     double getCloudEventThreshold();
     void setCloudEventThreshold(double cloud_event_threshold);
 
+    double getCloudEdgeMarginPercent();
+    void setCloudEdgeMarginPercent(double cloud_edge_margin_percent);
+
+    qint32 getCloudMaskSunMoon();
+    void setCloudMaskSunMoon(qint32 cloud_mask_sun_moon);
+
+    double getCloudSunMoonRadiusDeg();
+    void setCloudSunMoonRadiusDeg(double cloud_sun_moon_radius_deg);
+
     qint32 getStarDetect();
     void setStarDetect(qint32 star_detect);
 
@@ -1596,6 +1605,15 @@ private:
 
     double cloud_event_threshold;
     bool m_cloud_event_threshold_isSet;
+
+    double cloud_edge_margin_percent;
+    bool m_cloud_edge_margin_percent_isSet;
+
+    qint32 cloud_mask_sun_moon;
+    bool m_cloud_mask_sun_moon_isSet;
+
+    double cloud_sun_moon_radius_deg;
+    bool m_cloud_sun_moon_radius_deg_isSet;
 
     qint32 star_detect;
     bool m_star_detect_isSet;

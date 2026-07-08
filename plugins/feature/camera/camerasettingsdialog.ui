@@ -6514,13 +6514,88 @@ car</string>
             </widget>
            </item>
            <item row="8" column="0">
+            <widget class="QLabel" name="cloudEdgeMarginLabel">
+             <property name="text">
+              <string>Edge margin</string>
+             </property>
+            </widget>
+           </item>
+           <item row="8" column="1">
+            <widget class="QDoubleSpinBox" name="cloudEdgeMarginSpin">
+             <property name="toolTip">
+              <string>Exclude a margin this percentage of the frame in from the sky-region edge, removing the fisheye rim, vignette and foreground edges from classification. 0 disables</string>
+             </property>
+             <property name="suffix">
+              <string> %</string>
+             </property>
+             <property name="decimals">
+              <number>1</number>
+             </property>
+             <property name="maximum">
+              <double>25.000000000000000</double>
+             </property>
+             <property name="singleStep">
+              <double>1.000000000000000</double>
+             </property>
+             <property name="value">
+              <double>0.000000000000000</double>
+             </property>
+            </widget>
+           </item>
+           <item row="8" column="2">
+            <widget class="QLabel" name="cloudMaskSunMoonLabel">
+             <property name="text">
+              <string>Mask sun/moon</string>
+             </property>
+            </widget>
+           </item>
+           <item row="8" column="3">
+            <widget class="QCheckBox" name="cloudMaskSunMoonCheck">
+             <property name="toolTip">
+              <string>Exclude a disc around the projected sun (day) and moon (night) so they are not classified as cloud. Requires the camera position, capture time and lens model to be set</string>
+             </property>
+             <property name="text">
+              <string/>
+             </property>
+            </widget>
+           </item>
+           <item row="9" column="0">
+            <widget class="QLabel" name="cloudSunMoonRadiusLabel">
+             <property name="text">
+              <string>Sun/moon radius</string>
+             </property>
+            </widget>
+           </item>
+           <item row="9" column="1">
+            <widget class="QDoubleSpinBox" name="cloudSunMoonRadiusSpin">
+             <property name="toolTip">
+              <string>Angular radius of the sun/moon exclusion disc, in degrees</string>
+             </property>
+             <property name="suffix">
+              <string> °</string>
+             </property>
+             <property name="decimals">
+              <number>1</number>
+             </property>
+             <property name="maximum">
+              <double>45.000000000000000</double>
+             </property>
+             <property name="singleStep">
+              <double>1.000000000000000</double>
+             </property>
+             <property name="value">
+              <double>8.000000000000000</double>
+             </property>
+            </widget>
+           </item>
+           <item row="10" column="0">
             <widget class="QLabel" name="cloudCoverageTitleLabel">
              <property name="text">
               <string>Coverage</string>
              </property>
             </widget>
            </item>
-           <item row="8" column="1">
+           <item row="10" column="1">
             <widget class="QLabel" name="cloudCoverageLabel">
              <property name="toolTip">
               <string>Percentage of the evaluated sky classified as cloud in the latest frame</string>
@@ -6530,7 +6605,7 @@ car</string>
              </property>
             </widget>
            </item>
-           <item row="8" column="3" alignment="Qt::AlignmentFlag::AlignRight">
+           <item row="10" column="3" alignment="Qt::AlignmentFlag::AlignRight">
             <widget class="QToolButton" name="clearCloudChart">
              <property name="toolTip">
               <string>Clear cloud coverage history chart</string>
@@ -6544,7 +6619,7 @@ car</string>
              </property>
             </widget>
            </item>
-           <item row="9" column="0" colspan="4">
+           <item row="11" column="0" colspan="4">
             <widget class="QWidget" name="cloudChartContainer" native="true">
              <property name="toolTip">
               <string>Displays the cloud coverage history chart.</string>

@@ -1200,6 +1200,9 @@ void Camera::webapiFormatFeatureSettings(
     swg->setCloudFilterMotion(settings.m_cloudFilterMotion ? 1 : 0);
     swg->setCloudMotionOverlapThreshold(settings.m_cloudMotionOverlapThreshold);
     swg->setCloudEventThreshold(settings.m_cloudEventThreshold);
+    swg->setCloudEdgeMarginPercent(settings.m_cloudEdgeMarginPercent);
+    swg->setCloudMaskSunMoon(settings.m_cloudMaskSunMoon ? 1 : 0);
+    swg->setCloudSunMoonRadiusDeg(settings.m_cloudSunMoonRadiusDeg);
     swg->setStarDetect(settings.m_starDetect ? 1 : 0);
     swg->setStarThreshold(settings.m_starThreshold);
     swg->setStarBackgroundBlur(settings.m_starBackgroundBlur);
@@ -2039,6 +2042,15 @@ void Camera::webapiUpdateFeatureSettings(
     }
     if (featureSettingsKeys.contains("cloudEventThreshold")) {
         settings.m_cloudEventThreshold = swg->getCloudEventThreshold();
+    }
+    if (featureSettingsKeys.contains("cloudEdgeMarginPercent")) {
+        settings.m_cloudEdgeMarginPercent = swg->getCloudEdgeMarginPercent();
+    }
+    if (featureSettingsKeys.contains("cloudMaskSunMoon")) {
+        settings.m_cloudMaskSunMoon = swg->getCloudMaskSunMoon() != 0;
+    }
+    if (featureSettingsKeys.contains("cloudSunMoonRadiusDeg")) {
+        settings.m_cloudSunMoonRadiusDeg = swg->getCloudSunMoonRadiusDeg();
     }
     if (featureSettingsKeys.contains("starDetect")) {
         settings.m_starDetect = swg->getStarDetect() != 0;

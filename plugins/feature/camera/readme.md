@@ -236,7 +236,7 @@ Check to enable cloud detection, which classifies each part of the sky as cloud 
 
 Two classification paths are used, selected manually or automatically. Automatic selection uses the sun elevation computed from the camera position and the frame's observation time - the wall clock for live cameras, or the capture time derived from the file name for video and image playback (with the plate-solve date/time settings as a manual override for recorded media without one). The day path is used only when the sun is up or in early twilight; the rest of the twilight range and full night use the night path, because a high-gain camera makes twilight brightness an unreliable day/night cue and the night path's moonlit branch already handles bright twilight cloud. When no observation time is available, overall frame brightness decides instead.
 
-* At night, two regimes are handled. On dark nights, cloud lit by ground light or the moon is locally brighter than the sky around it, while the sky itself only varies smoothly (moon glow, light pollution, vignetting): a local background estimate is compared against a much wider neighbourhood and the positive difference is thresholded, so smooth gradients never classify as cloud. On bright nights (moonlit, or shot with high gain and long exposure - chosen when at least a quarter of the evaluated sky is bright, so a half-overcast moonlit sky counts) the sky behaves like dim daylight - clear sky is blue, cloud is white or pink - so cloud is classified by the red/blue ratio, with the threshold anchored to the bluest part of the bright sky since gain and night white balance shift the whole colour scale (but never above the day threshold, so a fully overcast sky - where there is no clear sky to anchor to - is still detected). Regions much brighter than the median night sky are also classified as cloud, which catches moonlit cloud sheets when cloud covers most of the frame and there is little clear sky to calibrate the colour threshold against.
+* At night, two regimes are handled. On dark nights, cloud lit by ground light or the moon is locally brighter than the sky around it, while the sky itself only varies smoothly (horizon glow, light pollution, vignetting): a smooth surface is fitted to the sky and the local sky level is compared against it, so the smooth gradient is absorbed by the fit and only localized cloud (which stands out above the surface) is classified. On bright nights (moonlit, or shot with high gain and long exposure - chosen when at least a quarter of the evaluated sky is bright, so a half-overcast moonlit sky counts) the sky behaves like dim daylight - clear sky is blue, cloud is white or pink - so cloud is classified by the red/blue ratio, with the threshold anchored to the bluest part of the bright sky since gain and night white balance shift the whole colour scale (but never above the day threshold, so a fully overcast sky - where there is no clear sky to anchor to - is still detected). Regions much brighter than the median night sky are also classified as cloud, which catches moonlit cloud sheets when cloud covers most of the frame and there is little clear sky to calibrate the colour threshold against.
 * By day, cloud is white or grey against blue sky, so a per-pixel red/blue ratio is thresholded. Grey or white but finely textured regions - roofs, trees, buildings - would pass the ratio test, so they are rejected by an additional texture veto: cloud is smooth at the detection resolution, while man-made surfaces and foliage retain dense fine detail. Dark neutral regions - lens vignette, shadowed structures - are rejected by a brightness floor anchored to the evaluated sky's median brightness, since daytime cloud is at least comparably bright to the sky.
 
 Clouds evolve slowly, so the mask is only recomputed every few frames (configurable) and intermediate frames reuse the previous mask.
@@ -962,6 +962,18 @@ A chart below the settings plots the coverage percentage over time, sampled ever
 <h4>15. Event threshold</h4>
 
 Sets the coverage percentage at which a Camera Cloud Coverage High event is emitted to the Scheduler. The matching Low event is emitted when coverage falls 10 points below this. An event describing the initial sky state is emitted when capture starts.
+
+<h4>16. Edge margin</h4>
+
+Excludes a margin, given as a percentage of the frame, inward from the edge of the illuminated sky region. On fisheye all-sky lenses the image circle is ringed by a vignetted rim, lens flare and foreground obstructions that are neither clear sky nor cloud; this removes that band from both classification and the coverage percentage. 0 disables it.
+
+<h4>17. Mask sun/moon</h4>
+
+Excludes a disc around the projected position of the sun (by day) and moon (by night), so their bright disc and surrounding glare are not classified as cloud. The position is computed from the camera latitude/longitude, the frame's capture time (live wall clock, the time parsed from a video/image file name, or the plate-solver date/time override) and the lens model, so those must be set correctly for the mask to line up. The disc size is set by Sun/moon radius.
+
+<h4>18. Sun/moon radius</h4>
+
+Sets the angular radius, in degrees, of the sun/moon exclusion disc.
 
 On the Star Detection sub-tab:
 

@@ -160,7 +160,8 @@ private:
     [[nodiscard]] static bool cloudSettingsChanged(const QList<QString>& settingsKeys);
     [[nodiscard]] bool resolveNightMode(const cv::Mat& medianGray, const cv::Mat& evaluationMask, const QDateTime& captureDateTime);
     void prepareWorkImages(const cv::Mat& bgrMat, const cv::Rect& roi, cv::Mat& workBgr, cv::Mat& rawGray, cv::Mat& gray) const;
-    void applyCloudDetection(const cv::Mat& workBgr, const cv::Mat& rawGray, const cv::Mat& gray, const cv::Rect& roi, const cv::Rect& contentRect, const QDateTime& captureDateTime, CameraPipelineCloud& cloud, cv::Mat* debugMask);
+    void applyCloudDetection(const cv::Mat& workBgr, const cv::Mat& rawGray, const cv::Mat& gray, const cv::Rect& roi, const cv::Rect& contentRect, const QSize& imageSize, const CameraPipelineImageTransform& imageTransform, const QDateTime& captureDateTime, CameraPipelineCloud& cloud, cv::Mat* debugMask);
+    void applySunMoonMask(cv::Mat& evaluationMask, const cv::Rect& roi, const QSize& imageSize, const CameraPipelineImageTransform& imageTransform, const QDateTime& captureDateTime) const;
     void invalidateCache();
 };
 

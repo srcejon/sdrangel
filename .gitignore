@@ -53,3 +53,4 @@ wdsp/*.o
 wdsp/*.h
 wdsp/*.c
 wdsp/Makefile
+/plugins/feature/camera/test/cloud-mask-output

@@ -1982,6 +1982,9 @@ void CameraGUI::displaySettings()
     settingsUI()->cloudFilterMotionCheck->setChecked(m_settings.m_cloudFilterMotion);
     settingsUI()->cloudMotionOverlapSpin->setValue(m_settings.m_cloudMotionOverlapThreshold);
     settingsUI()->cloudEventThresholdSpin->setValue(m_settings.m_cloudEventThreshold);
+    settingsUI()->cloudEdgeMarginSpin->setValue(m_settings.m_cloudEdgeMarginPercent);
+    settingsUI()->cloudMaskSunMoonCheck->setChecked(m_settings.m_cloudMaskSunMoon);
+    settingsUI()->cloudSunMoonRadiusSpin->setValue(m_settings.m_cloudSunMoonRadiusDeg);
     ui->starDetectButton->setChecked(m_settings.m_starDetect);
     settingsUI()->starThresholdSpin->setValue(m_settings.m_starThreshold);
     settingsUI()->starBackgroundBlurSpin->setValue(m_settings.m_starBackgroundBlur);
@@ -2982,6 +2985,9 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->cloudFilterMotionCheck, &QCheckBox::toggled, this, &CameraGUI::on_cloudFilterMotionCheck_toggled);
     QObject::connect(settingsUI()->cloudMotionOverlapSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_cloudMotionOverlapSpin_valueChanged);
     QObject::connect(settingsUI()->cloudEventThresholdSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_cloudEventThresholdSpin_valueChanged);
+    QObject::connect(settingsUI()->cloudEdgeMarginSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_cloudEdgeMarginSpin_valueChanged);
+    QObject::connect(settingsUI()->cloudMaskSunMoonCheck, &QCheckBox::toggled, this, &CameraGUI::on_cloudMaskSunMoonCheck_toggled);
+    QObject::connect(settingsUI()->cloudSunMoonRadiusSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_cloudSunMoonRadiusSpin_valueChanged);
     QObject::connect(settingsUI()->cloudColorButton, &QToolButton::clicked, this, &CameraGUI::on_cloudColorButton_clicked);
     QObject::connect(settingsUI()->starThresholdSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_starThresholdSpin_valueChanged);
     QObject::connect(settingsUI()->starBackgroundBlurSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_starBackgroundBlurSpin_valueChanged);
@@ -9714,6 +9720,24 @@ void CameraGUI::on_cloudEventThresholdSpin_valueChanged(double value)
 {
     m_settings.m_cloudEventThreshold = value;
     applySetting("cloudEventThreshold");
+}
+
+void CameraGUI::on_cloudEdgeMarginSpin_valueChanged(double value)
+{
+    m_settings.m_cloudEdgeMarginPercent = value;
+    applySetting("cloudEdgeMarginPercent");
+}
+
+void CameraGUI::on_cloudMaskSunMoonCheck_toggled(bool checked)
+{
+    m_settings.m_cloudMaskSunMoon = checked;
+    applySetting("cloudMaskSunMoon");
+}
+
+void CameraGUI::on_cloudSunMoonRadiusSpin_valueChanged(double value)
+{
+    m_settings.m_cloudSunMoonRadiusDeg = value;
+    applySetting("cloudSunMoonRadiusDeg");
 }
 
 void CameraGUI::on_cloudColorButton_clicked()

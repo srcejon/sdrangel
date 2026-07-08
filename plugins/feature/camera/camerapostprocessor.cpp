@@ -40,6 +40,7 @@
 #include "cameraworker.h"
 #include "camerapostprocessor.h"
 #include "camerarecorder.h"
+#include "cameraskyprojector.h"
 
 namespace {
 // Dev toggle for the once-per-second submit->display pipeline-latency log. Off by default to keep the
@@ -339,19 +340,6 @@ const std::array<EquatorialStar, 4> kCruxStars = {{
     {187.791667, -57.113333}  // Delta Crucis
 }};
 
-struct SkyVector
-{
-    double x;
-    double y;
-    double z;
-};
-
-static double degToRad(double value)
-{
-    static constexpr double kPi = 3.14159265358979323846;
-    return value * kPi / 180.0;
-}
-
 static double normalizeDegrees(double value)
 {
     value = std::fmod(value, 360.0);
@@ -645,66 +633,6 @@ static void appendTopLeftPreviewTextLabel(QVector<CameraPostProcessor::PreviewTe
     labels->append(label);
 }
 
-static SkyVector vectorFromAltAz(double azimuthDegrees, double elevationDegrees)
-{
-    const double azimuth = degToRad(azimuthDegrees);
-    const double elevation = degToRad(elevationDegrees);
-    const double cosElevation = std::cos(elevation);
-
-    return {
-        cosElevation * std::sin(azimuth),
-        cosElevation * std::cos(azimuth),
-        std::sin(elevation)
-    };
-}
-
-static double dot(const SkyVector& lhs, const SkyVector& rhs)
-{
-    return lhs.x * rhs.x + lhs.y * rhs.y + lhs.z * rhs.z;
-}
-
-static SkyVector cross(const SkyVector& lhs, const SkyVector& rhs)
-{
-    return {
-        lhs.y * rhs.z - lhs.z * rhs.y,
-        lhs.z * rhs.x - lhs.x * rhs.z,
-        lhs.x * rhs.y - lhs.y * rhs.x
-    };
-}
-
-static double length(const SkyVector& vector)
-{
-    return std::sqrt(dot(vector, vector));
-}
-
-static SkyVector normalize(const SkyVector& vector)
-{
-    const double vectorLength = length(vector);
-    if (vectorLength <= 0.0) {
-        return {0.0, 0.0, 0.0};
-    }
-
-    return {
-        vector.x / vectorLength,
-        vector.y / vectorLength,
-        vector.z / vectorLength
-    };
-}
-
-static SkyVector rotateAroundAxis(const SkyVector& vector, const SkyVector& axis, double angleRadians)
-{
-    const double cosAngle = std::cos(angleRadians);
-    const double sinAngle = std::sin(angleRadians);
-    const SkyVector axisCrossVector = cross(axis, vector);
-    const double axisDotVector = dot(axis, vector);
-
-    return {
-        vector.x * cosAngle + axisCrossVector.x * sinAngle + axis.x * axisDotVector * (1.0 - cosAngle),
-        vector.y * cosAngle + axisCrossVector.y * sinAngle + axis.y * axisDotVector * (1.0 - cosAngle),
-        vector.z * cosAngle + axisCrossVector.z * sinAngle + axis.z * axisDotVector * (1.0 - cosAngle)
-    };
-}
-
 static bool equatorialToAltAz(double rightAscensionDegrees,
                               double declinationDegrees,
                               double latitudeDegrees,
@@ -719,9 +647,9 @@ static bool equatorialToAltAz(double rightAscensionDegrees,
         hourAngleDegrees -= 360.0;
     }
 
-    const double hourAngle = degToRad(hourAngleDegrees);
-    const double declination = degToRad(declinationDegrees);
-    const double latitude = degToRad(latitudeDegrees);
+    const double hourAngle = skyDegToRad(hourAngleDegrees);
+    const double declination = skyDegToRad(declinationDegrees);
+    const double latitude = skyDegToRad(latitudeDegrees);
 
     const double sinAltitude = std::sin(declination) * std::sin(latitude)
         + std::cos(declination) * std::cos(latitude) * std::cos(hourAngle);
@@ -736,135 +664,6 @@ static bool equatorialToAltAz(double rightAscensionDegrees,
     elevationDegrees = altitude * 180.0 / M_PI;
     return std::isfinite(azimuthDegrees) && std::isfinite(elevationDegrees);
 }
-
-struct SkyProjector
-{
-    bool valid = false;
-    CameraSettings::LensProjection lensProjection = CameraSettings::LensProjectionRectilinear;
-    SkyVector center;
-    SkyVector right;
-    SkyVector up;
-    double halfHorizontalFov = 0.0;
-    double horizontalScale = 1.0;
-    double verticalScale = 1.0;
-    double principalPointX = 0.0;
-    double principalPointY = 0.0;
-    double distortionK1 = 0.0;
-    int width = 0;
-    int height = 0;
-    // Handedness: the image is horizontally mirrored relative to the sky (m_lensMirror — up-looking
-    // all-sky camera or star diagonal). The solved pose lives in the mirrored frame, so overlay
-    // projection onto the displayed (original) image must reflect pixel x about the image centre.
-    // Mirrors the solver's SkyProjector::mirrorX semantics exactly.
-    bool mirrorX = false;
-    CameraPipelineImageTransform imageTransform;
-
-    static SkyProjector create(const CameraSettings& settings, const QSize& imageSize, const CameraPipelineImageTransform& transform = CameraPipelineImageTransform())
-    {
-        SkyProjector projector;
-        projector.imageTransform = transform;
-        const QSize projectionSize = transform.opticalSize(imageSize);
-        projector.width = projectionSize.width();
-        projector.height = projectionSize.height();
-        projector.lensProjection = settings.m_lensProjection;
-
-        if (projector.width <= 0 || projector.height <= 0 || settings.m_fov <= 0.0f) {
-            return projector;
-        }
-
-        const double azimuth = degToRad(settings.m_azimuth);
-        projector.center = normalize(vectorFromAltAz(settings.m_azimuth, settings.m_elevation));
-        projector.right = normalize({std::cos(azimuth), -std::sin(azimuth), 0.0});
-        projector.up = normalize(cross(projector.right, projector.center));
-        if (length(projector.right) <= 0.0 || length(projector.up) <= 0.0) {
-            return projector;
-        }
-
-        const double rollRadians = degToRad(settings.m_roll);
-        if (std::fabs(rollRadians) > 1e-9)
-        {
-            projector.right = normalize(rotateAroundAxis(projector.right, projector.center, rollRadians));
-            projector.up = normalize(rotateAroundAxis(projector.up, projector.center, rollRadians));
-        }
-
-        const double halfHorizontalFov = degToRad(settings.m_fov) * 0.5;
-        static constexpr double kPi = 3.14159265358979323846;
-        if (halfHorizontalFov <= 0.0 || halfHorizontalFov >= (kPi * 0.5)) {
-            return projector;
-        }
-
-        projector.halfHorizontalFov = halfHorizontalFov;
-        const double aspect = static_cast<double>(projector.height) / static_cast<double>(projector.width);
-        projector.horizontalScale = 1.0;
-        projector.verticalScale = aspect;
-        projector.principalPointX = static_cast<double>(projector.width) * 0.5 + settings.m_lensCenterOffsetX;
-        projector.principalPointY = static_cast<double>(projector.height) * 0.5 + settings.m_lensCenterOffsetY;
-        projector.distortionK1 = settings.m_lensDistortionK1;
-        projector.mirrorX = settings.m_lensMirror;
-        projector.valid = projector.verticalScale > 0.0;
-        return projector;
-    }
-
-    bool projectAltAz(double azimuthDegrees, double elevationDegrees, QPointF& point) const
-    {
-        if (!valid) {
-            return false;
-        }
-
-        const SkyVector vector = vectorFromAltAz(azimuthDegrees, elevationDegrees);
-        const double depth = dot(vector, center);
-        if (depth <= 0.0) {
-            return false;
-        }
-
-        const double planeX = dot(vector, right);
-        const double planeY = dot(vector, up);
-        if (!std::isfinite(planeX) || !std::isfinite(planeY)) {
-            return false;
-        }
-
-        const double theta = std::acos(std::clamp(depth, -1.0, 1.0));
-        const double phi = std::atan2(planeY, planeX);
-        const double projectionRadius = [&]() -> double
-        {
-            switch (lensProjection)
-            {
-            case CameraSettings::LensProjectionEquidistant:
-                return theta / halfHorizontalFov;
-            case CameraSettings::LensProjectionEquisolid:
-                return std::sin(theta * 0.5) / std::sin(halfHorizontalFov * 0.5);
-            case CameraSettings::LensProjectionRectilinear:
-            default:
-                return std::tan(theta) / std::tan(halfHorizontalFov);
-            }
-        }();
-
-        double projectedX = std::cos(phi) * projectionRadius;
-        double projectedY = std::sin(phi) * projectionRadius;
-        if (std::fabs(distortionK1) > 1e-9)
-        {
-            const double radiusSquared = projectedX * projectedX + projectedY * projectedY;
-            const double distortionScale = std::max(0.1, 1.0 + distortionK1 * radiusSquared);
-            projectedX *= distortionScale;
-            projectedY *= distortionScale;
-        }
-
-        const double normalizedX = projectedX / horizontalScale;
-        const double normalizedY = projectedY / verticalScale;
-        if (!std::isfinite(normalizedX) || !std::isfinite(normalizedY)) {
-            return false;
-        }
-
-        QPointF opticalPoint(
-            principalPointX + normalizedX * 0.5 * static_cast<double>(width),
-            principalPointY - normalizedY * 0.5 * static_cast<double>(height));
-        if (mirrorX) {
-            opticalPoint.setX(static_cast<double>(width - 1) - opticalPoint.x());
-        }
-        point = imageTransform.mapOpticalToImage(opticalPoint);
-        return true;
-    }
-};
 
 template<typename StarArray>
 void drawConstellationStars(QPainter& painter,

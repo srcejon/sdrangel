@@ -83,7 +83,18 @@ public:
 protected:
     void findFrequencies();
     void updateTrack(QList<SWGSDRangel::SWGMapCoordinate *> *track, MapSettings::MapItemSettings *itemSettings);
+    void updateTrack(
+        QList<double> *latitudes,
+        QList<double> *longitudes,
+        QList<double> *altitudes,
+        QList<qint64> *dateTimeMsecs,
+        MapSettings::MapItemSettings *itemSettings);
     void updatePredictedTrack(QList<SWGSDRangel::SWGMapCoordinate *> *track);
+    void updatePredictedTrack(
+        QList<double> *latitudes,
+        QList<double> *longitudes,
+        QList<double> *altitudes,
+        QList<qint64> *dateTimeMsecs);
     void extrapolatePosition(QGeoCoordinate *c, const QDateTime& dateTime);
     void extrapolateAltitude(QGeoCoordinate *c, const QDateTime& dateTime);
     void interpolatePosition(int i, const float latitude, const float longitude, const QDateTime &dateTime);
@@ -206,4 +217,3 @@ protected:
 };
 
 #endif // INCLUDE_FEATURE_MAPITEM_H_
-

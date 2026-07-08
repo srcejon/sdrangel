@@ -17,6 +17,22 @@
 
 #include "mapitem.h"
 
+static bool hasCompactTrack(
+    const QList<double> *latitudes,
+    const QList<double> *longitudes,
+    const QList<double> *altitudes,
+    const QList<qint64> *dateTimeMsecs
+)
+{
+    return (latitudes != nullptr)
+        && (longitudes != nullptr)
+        && (altitudes != nullptr)
+        && (dateTimeMsecs != nullptr)
+        && (latitudes->size() == longitudes->size())
+        && (latitudes->size() == altitudes->size())
+        && (latitudes->size() == dateTimeMsecs->size());
+}
+
 MapItem::MapItem(const QObject *sourcePipe, const QString &group, MapSettings::MapItemSettings *itemSettings, SWGSDRangel::SWGMapItem *mapItem) :
     m_altitude(0.0)
 {
@@ -111,8 +127,17 @@ void ObjectMapItem::update(SWGSDRangel::SWGMapItem *mapItem)
     findFrequencies();
     if (!m_fixedPosition)
     {
-        updateTrack(mapItem->getTrack(), m_itemSettings);
-        updatePredictedTrack(mapItem->getPredictedTrack());
+        if (hasCompactTrack(mapItem->getTrackLatitudes(), mapItem->getTrackLongitudes(), mapItem->getTrackAltitudes(), mapItem->getTrackDateTimeMsecs())) {
+            updateTrack(mapItem->getTrackLatitudes(), mapItem->getTrackLongitudes(), mapItem->getTrackAltitudes(), mapItem->getTrackDateTimeMsecs(), m_itemSettings);
+        } else {
+            updateTrack(mapItem->getTrack(), m_itemSettings);
+        }
+
+        if (hasCompactTrack(mapItem->getPredictedTrackLatitudes(), mapItem->getPredictedTrackLongitudes(), mapItem->getPredictedTrackAltitudes(), mapItem->getPredictedTrackDateTimeMsecs())) {
+            updatePredictedTrack(mapItem->getPredictedTrackLatitudes(), mapItem->getPredictedTrackLongitudes(), mapItem->getPredictedTrackAltitudes(), mapItem->getPredictedTrackDateTimeMsecs());
+        } else {
+            updatePredictedTrack(mapItem->getPredictedTrack());
+        }
     }
     if (mapItem->getAvailableFrom()) {
         m_availableFrom = QDateTime::fromString(*mapItem->getAvailableFrom(), Qt::ISODateWithMs);
@@ -424,6 +449,40 @@ void ObjectMapItem::interpolateAltitude(int p2, const float p3Altitude, const QD
     m_interpolatedDateTimes.append(m_takenTrackDateTimes[p2]);
 }
 
+void ObjectMapItem::updateTrack(
+    QList<double> *latitudes,
+    QList<double> *longitudes,
+    QList<double> *altitudes,
+    QList<qint64> *dateTimeMsecs,
+    MapSettings::MapItemSettings *itemSettings)
+{
+    Q_UNUSED(itemSettings);
+
+    if (latitudes != nullptr)
+    {
+        qDeleteAll(m_takenTrackCoords);
+        m_takenTrackCoords.clear();
+        qDeleteAll(m_takenTrackDateTimes);
+        m_takenTrackDateTimes.clear();
+        m_takenTrackPositionExtrapolated.clear();
+        m_takenTrackAltitudeExtrapolated.clear();
+        m_takenTrack.clear();
+        m_takenTrack1.clear();
+        m_takenTrack2.clear();
+
+        for (int i = 0; i < latitudes->size(); i++)
+        {
+            QGeoCoordinate *c = new QGeoCoordinate(latitudes->at(i), longitudes->at(i), altitudes->at(i));
+            QDateTime *d = new QDateTime(QDateTime::fromMSecsSinceEpoch(dateTimeMsecs->at(i), Qt::UTC));
+            m_takenTrackCoords.push_back(c);
+            m_takenTrackDateTimes.push_back(d);
+            m_takenTrackPositionExtrapolated.push_back(false);
+            m_takenTrackAltitudeExtrapolated.push_back(false);
+            m_takenTrack.push_back(QVariant::fromValue(*c));
+        }
+    }
+}
+
 void ObjectMapItem::updateTrack(QList<SWGSDRangel::SWGMapCoordinate *> *track, MapSettings::MapItemSettings *itemSettings)
 {
     if (track != nullptr)
@@ -676,3 +735,29 @@ void ObjectMapItem::updatePredictedTrack(QList<SWGSDRangel::SWGMapCoordinate *> 
     }
 }
 
+void ObjectMapItem::updatePredictedTrack(
+    QList<double> *latitudes,
+    QList<double> *longitudes,
+    QList<double> *altitudes,
+    QList<qint64> *dateTimeMsecs)
+{
+    if (latitudes != nullptr)
+    {
+        qDeleteAll(m_predictedTrackCoords);
+        m_predictedTrackCoords.clear();
+        qDeleteAll(m_predictedTrackDateTimes);
+        m_predictedTrackDateTimes.clear();
+        m_predictedTrack.clear();
+        m_predictedTrack1.clear();
+        m_predictedTrack2.clear();
+
+        for (int i = 0; i < latitudes->size(); i++)
+        {
+            QGeoCoordinate *c = new QGeoCoordinate(latitudes->at(i), longitudes->at(i), altitudes->at(i));
+            QDateTime *d = new QDateTime(QDateTime::fromMSecsSinceEpoch(dateTimeMsecs->at(i), Qt::UTC));
+            m_predictedTrackCoords.push_back(c);
+            m_predictedTrackDateTimes.push_back(d);
+            m_predictedTrack.push_back(QVariant::fromValue(*c));
+        }
+    }
+}

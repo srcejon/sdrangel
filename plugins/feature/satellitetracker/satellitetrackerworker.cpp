@@ -73,6 +73,41 @@ static SatelliteState createSatelliteReportState(const SatelliteState& source)
     return report;
 }
 
+struct MapTrackArrays
+{
+    QList<double> m_latitudes;
+    QList<double> m_longitudes;
+    QList<double> m_altitudes;
+    QList<qint64> m_dateTimeMsecs;
+    bool m_valid = false;
+};
+
+static MapTrackArrays makeMapTrackArrays(const QList<QGeoCoordinate> *track, const QList<QDateTime> *trackDateTime)
+{
+    MapTrackArrays arrays;
+
+    if ((track == nullptr) || (trackDateTime == nullptr) || (track->size() != trackDateTime->size())) {
+        return arrays;
+    }
+
+    arrays.m_valid = true;
+    arrays.m_latitudes.reserve(track->size());
+    arrays.m_longitudes.reserve(track->size());
+    arrays.m_altitudes.reserve(track->size());
+    arrays.m_dateTimeMsecs.reserve(track->size());
+
+    for (int i = 0; i < track->size(); i++)
+    {
+        const QGeoCoordinate& c = track->at(i);
+        arrays.m_latitudes.append(c.latitude());
+        arrays.m_longitudes.append(c.longitude());
+        arrays.m_altitudes.append(c.altitude());
+        arrays.m_dateTimeMsecs.append(trackDateTime->at(i).toMSecsSinceEpoch());
+    }
+
+    return arrays;
+}
+
 SatelliteTrackerWorker::SatelliteTrackerWorker(SatelliteTracker* satelliteTracker, WebAPIAdapterInterface *webAPIAdapterInterface) :
     m_satelliteTracker(satelliteTracker),
     m_webAPIAdapterInterface(webAPIAdapterInterface),
@@ -284,6 +319,9 @@ void SatelliteTrackerWorker::sendToMap(
     QList<QDateTime> *predictedTrackDateTime
 )
 {
+    const MapTrackArrays trackArrays = makeMapTrackArrays(track, trackDateTime);
+    const MapTrackArrays predictedTrackArrays = makeMapTrackArrays(predictedTrack, predictedTrackDateTime);
+
     for (const auto& pipe : mapMessagePipes)
     {
         MessageQueue *messageQueue = qobject_cast<MessageQueue*>(pipe->m_element);
@@ -300,35 +338,19 @@ void SatelliteTrackerWorker::sendToMap(
         swgMapItem->setOrientation(0);
         swgMapItem->setLabel(new QString(name));
         swgMapItem->setLabelAltitudeOffset(labelOffset);
-        if (track != nullptr)
+        if (trackArrays.m_valid)
         {
-            QList<SWGSDRangel::SWGMapCoordinate *> *mapTrack = new QList<SWGSDRangel::SWGMapCoordinate *>();
-            for (int i = 0; i < track->size(); i++)
-            {
-                SWGSDRangel::SWGMapCoordinate* p = new SWGSDRangel::SWGMapCoordinate();
-                const QGeoCoordinate& c = track->at(i);
-                p->setLatitude(c.latitude());
-                p->setLongitude(c.longitude());
-                p->setAltitude(c.altitude());
-                p->setDateTime(new QString(trackDateTime->at(i).toString(Qt::ISODate)));
-                mapTrack->append(p);
-            }
-            swgMapItem->setTrack(mapTrack);
+            swgMapItem->setTrackLatitudes(new QList<double>(trackArrays.m_latitudes));
+            swgMapItem->setTrackLongitudes(new QList<double>(trackArrays.m_longitudes));
+            swgMapItem->setTrackAltitudes(new QList<double>(trackArrays.m_altitudes));
+            swgMapItem->setTrackDateTimeMsecs(new QList<qint64>(trackArrays.m_dateTimeMsecs));
         }
-        if (predictedTrack != nullptr)
+        if (predictedTrackArrays.m_valid)
         {
-            QList<SWGSDRangel::SWGMapCoordinate *> *mapTrack = new QList<SWGSDRangel::SWGMapCoordinate *>();
-            for (int i = 0; i < predictedTrack->size(); i++)
-            {
-                SWGSDRangel::SWGMapCoordinate* p = new SWGSDRangel::SWGMapCoordinate();
-                const QGeoCoordinate& c = predictedTrack->at(i);
-                p->setLatitude(c.latitude());
-                p->setLongitude(c.longitude());
-                p->setAltitude(c.altitude());
-                p->setDateTime(new QString(predictedTrackDateTime->at(i).toString(Qt::ISODate)));
-                mapTrack->append(p);
-            }
-            swgMapItem->setPredictedTrack(mapTrack);
+            swgMapItem->setPredictedTrackLatitudes(new QList<double>(predictedTrackArrays.m_latitudes));
+            swgMapItem->setPredictedTrackLongitudes(new QList<double>(predictedTrackArrays.m_longitudes));
+            swgMapItem->setPredictedTrackAltitudes(new QList<double>(predictedTrackArrays.m_altitudes));
+            swgMapItem->setPredictedTrackDateTimeMsecs(new QList<qint64>(predictedTrackArrays.m_dateTimeMsecs));
         }
 
         MainCore::MsgMapItem *msg = MainCore::MsgMapItem::create(m_satelliteTracker, swgMapItem);

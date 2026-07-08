@@ -18,14 +18,17 @@
 #ifndef INCLUDE_FEATURE_SATELLITETRACKERSGP4_H_
 #define INCLUDE_FEATURE_SATELLITETRACKERSGP4_H_
 
+#include <memory>
+
 #include <QList>
 #include <QDateTime>
-#include <QGeoCoordinate>
 #include <QtCharts/QLineSeries>
 
 #if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
 using namespace QtCharts;
 #endif
+
+struct SatelliteState;
 
 class GroundTrackDetails {
     QDateTime m_quantizedDateTime;
@@ -39,6 +42,27 @@ public:
     void invalidate();
 };
 
+class SatelliteStateContext {
+public:
+    SatelliteStateContext();
+    ~SatelliteStateContext();
+    SatelliteStateContext(const SatelliteStateContext&) = delete;
+    SatelliteStateContext& operator=(const SatelliteStateContext&) = delete;
+
+private:
+    class Impl;
+    std::unique_ptr<Impl> m_impl;
+
+    friend void getSatelliteState(QDateTime dateTime,
+                            const QString& tle0, const QString& tle1, const QString& tle2,
+                            double latitude, double longitude, double altitude,
+                            int predictionPeriod, int minAOSElevationDeg, int minPassElevationDeg,
+                            QTime passStartTime, QTime passFinishTime, bool utc,
+                            int noOfPasses,
+                            bool calcGroundTrack, int groundTrackSteps, SatelliteState *satState,
+                            SatelliteStateContext *context);
+};
+
 struct SatellitePass {
     QDateTime m_aos;
     QDateTime m_los;
@@ -46,6 +70,37 @@ struct SatellitePass {
     double m_aosAzimuth;                // Degrees
     double m_losAzimuth;                // Degrees
     bool m_northToSouth;
+};
+
+struct SatelliteTrack {
+    QList<double> m_latitudes;
+    QList<double> m_longitudes;
+    QList<double> m_altitudes;
+    QList<qint64> m_dateTimeMsecs;
+    quint64 m_revision = 0;
+
+    void clear()
+    {
+        m_latitudes.clear();
+        m_longitudes.clear();
+        m_altitudes.clear();
+        m_dateTimeMsecs.clear();
+    }
+
+    void reserve(int size)
+    {
+        m_latitudes.reserve(size);
+        m_longitudes.reserve(size);
+        m_altitudes.reserve(size);
+        m_dateTimeMsecs.reserve(size);
+    }
+
+    bool isValid() const
+    {
+        return (m_latitudes.size() == m_longitudes.size())
+            && (m_latitudes.size() == m_altitudes.size())
+            && (m_latitudes.size() == m_dateTimeMsecs.size());
+    }
 };
 
 struct SatelliteState {
@@ -61,10 +116,8 @@ struct SatelliteState {
     double m_period = 0.0;
     QString m_error;
     QList<SatellitePass> m_passes;              // Used in worker and GUI threads
-    QList<QGeoCoordinate> m_groundTrack;        // These used only in worker thread, to send to Map
-    QList<QDateTime> m_groundTrackDateTime;
-    QList<QGeoCoordinate> m_predictedGroundTrack;
-    QList<QDateTime> m_predictedGroundTrackDateTime;
+    SatelliteTrack m_groundTrack;               // Used only in worker thread, to send to Map
+    SatelliteTrack m_predictedGroundTrack;
     GroundTrackDetails m_groundTrackDetails;
 };
 
@@ -74,7 +127,8 @@ void getSatelliteState(QDateTime dateTime,
                         int predictionPeriod, int minAOSElevationDeg, int minPassElevationDeg,
                         QTime passStartTime, QTime passFinishTime, bool utc,
                         int noOfPasses, 
-                        bool calcGroundTrack, int groundTrackSteps, SatelliteState *satState);
+                        bool calcGroundTrack, int groundTrackSteps, SatelliteState *satState,
+                        SatelliteStateContext *context = nullptr);
 
 void getPassAzEl(QLineSeries *azimuth, QLineSeries *elevation, QLineSeries *polar,
                         const QString& tle0, const QString& tle1, const QString& tle2,

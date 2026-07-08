@@ -73,41 +73,6 @@ static SatelliteState createSatelliteReportState(const SatelliteState& source)
     return report;
 }
 
-struct MapTrackArrays
-{
-    QList<double> m_latitudes;
-    QList<double> m_longitudes;
-    QList<double> m_altitudes;
-    QList<qint64> m_dateTimeMsecs;
-    bool m_valid = false;
-};
-
-static MapTrackArrays makeMapTrackArrays(const QList<QGeoCoordinate> *track, const QList<QDateTime> *trackDateTime)
-{
-    MapTrackArrays arrays;
-
-    if ((track == nullptr) || (trackDateTime == nullptr) || (track->size() != trackDateTime->size())) {
-        return arrays;
-    }
-
-    arrays.m_valid = true;
-    arrays.m_latitudes.reserve(track->size());
-    arrays.m_longitudes.reserve(track->size());
-    arrays.m_altitudes.reserve(track->size());
-    arrays.m_dateTimeMsecs.reserve(track->size());
-
-    for (int i = 0; i < track->size(); i++)
-    {
-        const QGeoCoordinate& c = track->at(i);
-        arrays.m_latitudes.append(c.latitude());
-        arrays.m_longitudes.append(c.longitude());
-        arrays.m_altitudes.append(c.altitude());
-        arrays.m_dateTimeMsecs.append(trackDateTime->at(i).toMSecsSinceEpoch());
-    }
-
-    return arrays;
-}
-
 SatelliteTrackerWorker::SatelliteTrackerWorker(SatelliteTracker* satelliteTracker, WebAPIAdapterInterface *webAPIAdapterInterface) :
     m_satelliteTracker(satelliteTracker),
     m_webAPIAdapterInterface(webAPIAdapterInterface),
@@ -237,7 +202,10 @@ void SatelliteTrackerWorker::applySettings(const SatelliteTrackerSettings& setti
         while (itr.hasNext())
         {
             itr.next();
+            SatWorkerState *satWorkerState = itr.value();
             removeFromMap(itr.key());
+            satWorkerState->m_lastSentGroundTrackRevision = 0;
+            satWorkerState->m_lastSentPredictedGroundTrackRevision = 0;
         }
     }
 
@@ -298,11 +266,11 @@ void SatelliteTrackerWorker::removeFromMap(QString id)
     MainCore::instance()->getMessagePipes().getMessagePipes(m_satelliteTracker, "mapitems", mapMessagePipes);
 
     if (mapMessagePipes.size() > 0) {
-        sendToMap(mapMessagePipes, id, "", "", "", 0.0f, 0.0, 0.0, 0.0, 0.0, nullptr, nullptr, nullptr, nullptr);
+        sendToMap(mapMessagePipes, id, "", "", "", 0.0f, 0.0, 0.0, 0.0, 0.0);
     }
 }
 
-void SatelliteTrackerWorker::sendToMap(
+bool SatelliteTrackerWorker::sendToMap(
     const QList<ObjectPipe*>& mapMessagePipes,
     QString name,
     QString image,
@@ -313,18 +281,19 @@ void SatelliteTrackerWorker::sendToMap(
     double lon,
     double altitude,
     double rotation,
-    QList<QGeoCoordinate> *track,
-    QList<QDateTime> *trackDateTime,
-    QList<QGeoCoordinate> *predictedTrack,
-    QList<QDateTime> *predictedTrackDateTime
+    const SatelliteTrack *track,
+    const SatelliteTrack *predictedTrack
 )
 {
-    const MapTrackArrays trackArrays = makeMapTrackArrays(track, trackDateTime);
-    const MapTrackArrays predictedTrackArrays = makeMapTrackArrays(predictedTrack, predictedTrackDateTime);
+    bool sent = false;
 
     for (const auto& pipe : mapMessagePipes)
     {
         MessageQueue *messageQueue = qobject_cast<MessageQueue*>(pipe->m_element);
+        if (messageQueue == nullptr) {
+            continue;
+        }
+
         SWGSDRangel::SWGMapItem *swgMapItem = new SWGSDRangel::SWGMapItem();
         swgMapItem->setName(new QString(name));
         swgMapItem->setLatitude(lat);
@@ -338,24 +307,27 @@ void SatelliteTrackerWorker::sendToMap(
         swgMapItem->setOrientation(0);
         swgMapItem->setLabel(new QString(name));
         swgMapItem->setLabelAltitudeOffset(labelOffset);
-        if (trackArrays.m_valid)
+        if ((track != nullptr) && track->isValid())
         {
-            swgMapItem->setTrackLatitudes(new QList<double>(trackArrays.m_latitudes));
-            swgMapItem->setTrackLongitudes(new QList<double>(trackArrays.m_longitudes));
-            swgMapItem->setTrackAltitudes(new QList<double>(trackArrays.m_altitudes));
-            swgMapItem->setTrackDateTimeMsecs(new QList<qint64>(trackArrays.m_dateTimeMsecs));
+            swgMapItem->setTrackLatitudes(new QList<double>(track->m_latitudes));
+            swgMapItem->setTrackLongitudes(new QList<double>(track->m_longitudes));
+            swgMapItem->setTrackAltitudes(new QList<double>(track->m_altitudes));
+            swgMapItem->setTrackDateTimeMsecs(new QList<qint64>(track->m_dateTimeMsecs));
         }
-        if (predictedTrackArrays.m_valid)
+        if ((predictedTrack != nullptr) && predictedTrack->isValid())
         {
-            swgMapItem->setPredictedTrackLatitudes(new QList<double>(predictedTrackArrays.m_latitudes));
-            swgMapItem->setPredictedTrackLongitudes(new QList<double>(predictedTrackArrays.m_longitudes));
-            swgMapItem->setPredictedTrackAltitudes(new QList<double>(predictedTrackArrays.m_altitudes));
-            swgMapItem->setPredictedTrackDateTimeMsecs(new QList<qint64>(predictedTrackArrays.m_dateTimeMsecs));
+            swgMapItem->setPredictedTrackLatitudes(new QList<double>(predictedTrack->m_latitudes));
+            swgMapItem->setPredictedTrackLongitudes(new QList<double>(predictedTrack->m_longitudes));
+            swgMapItem->setPredictedTrackAltitudes(new QList<double>(predictedTrack->m_altitudes));
+            swgMapItem->setPredictedTrackDateTimeMsecs(new QList<qint64>(predictedTrack->m_dateTimeMsecs));
         }
 
         MainCore::MsgMapItem *msg = MainCore::MsgMapItem::create(m_satelliteTracker, swgMapItem);
         messageQueue->push(msg);
+        sent = true;
     }
+
+    return sent;
 }
 
 void SatelliteTrackerWorker::rescheduleTimer()
@@ -455,6 +427,21 @@ void SatelliteTrackerWorker::update()
     const int maxQueueSize = 10;
     QList<SatelliteState> reportSatStates;
     reportSatStates.reserve(m_workerState.size());
+    struct MapUpdate
+    {
+        SatWorkerState *m_satWorkerState;
+        QString m_name;
+        QString m_image;
+        QString m_model;
+        QString m_text;
+        float m_labelOffset;
+        double m_latitude;
+        double m_longitude;
+        double m_altitude;
+        double m_rotation;
+    };
+    QList<MapUpdate> mapUpdates;
+    mapUpdates.reserve(m_workerState.size());
 
     // Get date and time to calculate position at
     QDateTime qdt;
@@ -470,6 +457,26 @@ void SatelliteTrackerWorker::update()
     // Determine if we need to draw on the map, and thus need to calculate ground tracks
     QList<ObjectPipe*> initialMapMessagePipes;
     MainCore::instance()->getMessagePipes().getMessagePipes(m_satelliteTracker, "mapitems", initialMapMessagePipes);
+    auto updateMapPipeCache = [this](const QList<ObjectPipe*>& mapMessagePipes)
+    {
+        QSet<ObjectPipe *> currentMapMessagePipes;
+        for (ObjectPipe *pipe : mapMessagePipes) {
+            currentMapMessagePipes.insert(pipe);
+        }
+        if (currentMapMessagePipes != m_lastMapMessagePipes)
+        {
+            QHashIterator<QString, SatWorkerState *> stateItr(m_workerState);
+            while (stateItr.hasNext())
+            {
+                stateItr.next();
+                SatWorkerState *satWorkerState = stateItr.value();
+                satWorkerState->m_lastSentGroundTrackRevision = 0;
+                satWorkerState->m_lastSentPredictedGroundTrackRevision = 0;
+            }
+            m_lastMapMessagePipes = currentMapMessagePipes;
+        }
+    };
+    updateMapPipeCache(initialMapMessagePipes);
     bool mapEnabled = m_settings.m_drawOnMap && (initialMapMessagePipes.size() > 0);
 
     QHashIterator<QString, SatWorkerState *> itr(m_workerState);
@@ -495,7 +502,8 @@ void SatelliteTrackerWorker::update()
                                     m_settings.m_predictionPeriod, m_settings.m_minAOSElevation, m_settings.m_minPassElevation,
                                     m_settings.m_passStartTime, m_settings.m_passFinishTime, m_settings.m_utc,
                                     noOfPasses,
-                                    mapEnabled, m_settings.m_groundTrackPoints, &satWorkerState->m_satState);
+                                    mapEnabled, m_settings.m_groundTrackPoints, &satWorkerState->m_satState,
+                                    &satWorkerState->m_satStateContext);
 
                 // Update AOS/LOS
                 if (satWorkerState->m_satState.m_passes.size() > 0)
@@ -606,90 +614,138 @@ void SatelliteTrackerWorker::update()
                     }
                 }
 
-                // Send to Map
+                // Prepare Map update. We re-fetch map pipes once after this compute loop
+                // so pipe deregistration is handled close to send time without doing a
+                // locked pipe-registry lookup for every satellite.
                 if (mapEnabled)
                 {
-                    QList<ObjectPipe*> mapMessagePipes;
-                    MainCore::instance()->getMessagePipes().getMessagePipes(m_satelliteTracker, "mapitems", mapMessagePipes);
+                    static const QStringList cubeSats({"AISAT-1", "FOX-1B", "FOX-1C", "FOX-1D", "FOX-1E", "FUNCUBE-1", "NO-84"});
+                    QString image;
+                    QString model;
+                    float labelOffset;
 
-                    if (mapMessagePipes.size() > 0)
+                    if (sat->m_name == "ISS")
                     {
-                        static const QStringList cubeSats({"AISAT-1", "FOX-1B", "FOX-1C", "FOX-1D", "FOX-1E", "FUNCUBE-1", "NO-84"});
-                        QString image;
-                        QString model;
-                        float labelOffset;
+                        image = "qrc:///satellitetracker/satellitetracker/iss-32.png";
+                        model = "iss.glb";
+                        labelOffset = 15.0f;
+                    }
+                    else if (cubeSats.contains(sat->m_name))
+                    {
+                        image = "qrc:///satellitetracker/satellitetracker/cubesat-32.png";
+                        model = "cubesat.glb";
+                        labelOffset = 0.7f;
+                    }
+                    else
+                    {
+                        image = "qrc:///satellitetracker/satellitetracker/satellite-32.png";
+                        model = "satellite.glb";
+                        labelOffset = 2.5f;
+                    }
 
-                        if (sat->m_name == "ISS")
+                    QString text = QString("Name: %1\nAltitude: %2 km\nRange: %3 km\nRange rate: %4 km/s\nSpeed: %5 km/h\nPeriod: %6 mins")
+                                           .arg(sat->m_name)
+                                           .arg((int)round(satWorkerState->m_satState.m_altitude))
+                                           .arg((int)round(satWorkerState->m_satState.m_range))
+                                           .arg(satWorkerState->m_satState.m_rangeRate, 0, 'f', 1)
+                                           .arg(Units::kmpsToIntegerKPH(satWorkerState->m_satState.m_speed))
+                                           .arg((int)round(satWorkerState->m_satState.m_period));
+                    if (satWorkerState->m_satState.m_passes.size() > 0)
+                    {
+                        if ((qdt >= satWorkerState->m_satState.m_passes[0].m_aos) && (qdt <= satWorkerState->m_satState.m_passes[0].m_los))
+                            text = text.append("\nSatellite is visible");
+                        else
+                            text = text.append("\nAOS in: %1 mins").arg((int)round((satWorkerState->m_satState.m_passes[0].m_aos.toSecsSinceEpoch() - qdt.toSecsSinceEpoch())/60.0));
+                        QString aosDateTime;
+                        QString losDateTime;
+                        if (m_settings.m_utc)
                         {
-                            image = "qrc:///satellitetracker/satellitetracker/iss-32.png";
-                            model = "iss.glb";
-                            labelOffset = 15.0f;
-                        }
-                        else if (cubeSats.contains(sat->m_name))
-                        {
-                            image = "qrc:///satellitetracker/satellitetracker/cubesat-32.png";
-                            model = "cubesat.glb";
-                            labelOffset = 0.7f;
+                            aosDateTime = satWorkerState->m_satState.m_passes[0].m_aos.toString(m_settings.m_dateFormat + " hh:mm");
+                            losDateTime = satWorkerState->m_satState.m_passes[0].m_los.toString(m_settings.m_dateFormat + " hh:mm");
                         }
                         else
                         {
-                            image = "qrc:///satellitetracker/satellitetracker/satellite-32.png";
-                            model = "satellite.glb";
-                            labelOffset = 2.5f;
+                            aosDateTime = satWorkerState->m_satState.m_passes[0].m_aos.toLocalTime().toString(m_settings.m_dateFormat + " hh:mm");
+                            losDateTime = satWorkerState->m_satState.m_passes[0].m_los.toLocalTime().toString(m_settings.m_dateFormat + " hh:mm");
                         }
-
-                        QString text = QString("Name: %1\nAltitude: %2 km\nRange: %3 km\nRange rate: %4 km/s\nSpeed: %5 km/h\nPeriod: %6 mins")
-                                               .arg(sat->m_name)
-                                               .arg((int)round(satWorkerState->m_satState.m_altitude))
-                                               .arg((int)round(satWorkerState->m_satState.m_range))
-                                               .arg(satWorkerState->m_satState.m_rangeRate, 0, 'f', 1)
-                                               .arg(Units::kmpsToIntegerKPH(satWorkerState->m_satState.m_speed))
-                                               .arg((int)round(satWorkerState->m_satState.m_period));
-                        if (satWorkerState->m_satState.m_passes.size() > 0)
-                        {
-                            if ((qdt >= satWorkerState->m_satState.m_passes[0].m_aos) && (qdt <= satWorkerState->m_satState.m_passes[0].m_los))
-                                text = text.append("\nSatellite is visible");
-                            else
-                                text = text.append("\nAOS in: %1 mins").arg((int)round((satWorkerState->m_satState.m_passes[0].m_aos.toSecsSinceEpoch() - qdt.toSecsSinceEpoch())/60.0));
-                            QString aosDateTime;
-                            QString losDateTime;
-                            if (m_settings.m_utc)
-                            {
-                                aosDateTime = satWorkerState->m_satState.m_passes[0].m_aos.toString(m_settings.m_dateFormat + " hh:mm");
-                                losDateTime = satWorkerState->m_satState.m_passes[0].m_los.toString(m_settings.m_dateFormat + " hh:mm");
-                            }
-                            else
-                            {
-                                aosDateTime = satWorkerState->m_satState.m_passes[0].m_aos.toLocalTime().toString(m_settings.m_dateFormat + " hh:mm");
-                                losDateTime = satWorkerState->m_satState.m_passes[0].m_los.toLocalTime().toString(m_settings.m_dateFormat + " hh:mm");
-                            }
-                            text = QString("%1\nAOS: %2\nLOS: %3\nMax El: %4%5")
-                                            .arg(text)
-                                            .arg(aosDateTime)
-                                            .arg(losDateTime)
-                                            .arg((int)round(satWorkerState->m_satState.m_passes[0].m_maxElevation))
-                                            .arg(QChar(0xb0));
-                        }
-
-                        sendToMap(
-                            mapMessagePipes,
-                            sat->m_name,
-                            image,
-                            model,
-                            text,
-                            labelOffset,
-                            satWorkerState->m_satState.m_latitude, satWorkerState->m_satState.m_longitude,
-                            satWorkerState->m_satState.m_altitude * 1000.0, 0,
-                            &satWorkerState->m_satState.m_groundTrack, &satWorkerState->m_satState.m_groundTrackDateTime,
-                            &satWorkerState->m_satState.m_predictedGroundTrack, &satWorkerState->m_satState.m_predictedGroundTrackDateTime
-                        );
+                        text = QString("%1\nAOS: %2\nLOS: %3\nMax El: %4%5")
+                                        .arg(text)
+                                        .arg(aosDateTime)
+                                        .arg(losDateTime)
+                                        .arg((int)round(satWorkerState->m_satState.m_passes[0].m_maxElevation))
+                                        .arg(QChar(0xb0));
                     }
+
+                    mapUpdates.append(MapUpdate{
+                        satWorkerState,
+                        sat->m_name,
+                        image,
+                        model,
+                        text,
+                        labelOffset,
+                        satWorkerState->m_satState.m_latitude,
+                        satWorkerState->m_satState.m_longitude,
+                        satWorkerState->m_satState.m_altitude * 1000.0,
+                        0.0
+                    });
                 }
 
                 reportSatStates.append(createSatelliteReportState(satWorkerState->m_satState));
             }
             else
                 qDebug() << "SatelliteTrackerWorker::update: No TLE for " << sat->m_name << ". Can't compute position.";
+        }
+    }
+
+    if (!mapUpdates.isEmpty())
+    {
+        QList<ObjectPipe*> mapMessagePipes;
+        MainCore::instance()->getMessagePipes().getMessagePipes(m_satelliteTracker, "mapitems", mapMessagePipes);
+        updateMapPipeCache(mapMessagePipes);
+
+        if (mapMessagePipes.size() > 0)
+        {
+            for (const MapUpdate& mapUpdate : mapUpdates)
+            {
+                SatWorkerState *satWorkerState = mapUpdate.m_satWorkerState;
+
+                const SatelliteTrack *groundTrack = nullptr;
+                if (satWorkerState->m_satState.m_groundTrack.isValid()
+                    && (satWorkerState->m_satState.m_groundTrack.m_revision != satWorkerState->m_lastSentGroundTrackRevision))
+                {
+                    groundTrack = &satWorkerState->m_satState.m_groundTrack;
+                }
+
+                const SatelliteTrack *predictedGroundTrack = nullptr;
+                if (satWorkerState->m_satState.m_predictedGroundTrack.isValid()
+                    && (satWorkerState->m_satState.m_predictedGroundTrack.m_revision != satWorkerState->m_lastSentPredictedGroundTrackRevision))
+                {
+                    predictedGroundTrack = &satWorkerState->m_satState.m_predictedGroundTrack;
+                }
+
+                if (sendToMap(
+                    mapMessagePipes,
+                    mapUpdate.m_name,
+                    mapUpdate.m_image,
+                    mapUpdate.m_model,
+                    mapUpdate.m_text,
+                    mapUpdate.m_labelOffset,
+                    mapUpdate.m_latitude,
+                    mapUpdate.m_longitude,
+                    mapUpdate.m_altitude,
+                    mapUpdate.m_rotation,
+                    groundTrack,
+                    predictedGroundTrack
+                ))
+                {
+                    if (groundTrack != nullptr) {
+                        satWorkerState->m_lastSentGroundTrackRevision = groundTrack->m_revision;
+                    }
+                    if (predictedGroundTrack != nullptr) {
+                        satWorkerState->m_lastSentPredictedGroundTrackRevision = predictedGroundTrack->m_revision;
+                    }
+                }
+            }
         }
     }
 

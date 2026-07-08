@@ -24,6 +24,7 @@
 #include <QObject>
 #include <QTimer>
 #include <QAbstractSocket>
+#include <QSet>
 
 #include "util/message.h"
 #include "util/messagequeue.h"
@@ -39,7 +40,6 @@ class QTcpSocket;
 class SatelliteTracker;
 class SatelliteTrackerWorker;
 class QDateTime;
-class QGeoCoordinate;
 class ObjectPipe;
 
 class SatWorkerState
@@ -62,10 +62,13 @@ protected:
     QList<int> m_initFrequencyOffset;
     QList<int> m_doppler;       // How much doppler we've applied to a channel
     SatelliteState m_satState;
+    SatelliteStateContext m_satStateContext;
     bool m_hasSignalledAOS;     // For pass specified by m_aos and m_los
     bool m_aosScheduled = false;
     bool m_losScheduled = false;
     bool m_dopplerScheduled = false;
+    quint64 m_lastSentGroundTrackRevision = 0;
+    quint64 m_lastSentPredictedGroundTrackRevision = 0;
 
     friend SatelliteTrackerWorker;
 };
@@ -125,12 +128,13 @@ private:
     bool m_extendedAzRotation;          //!< Use 450+ degree azimuth to avoid 360/0 degree discontinuity
     bool m_running;
     QDateTime m_lastUpdateDateTime;
+    QSet<ObjectPipe *> m_lastMapMessagePipes;
 
     bool handleMessage(const Message& cmd);
     void applySettings(const SatelliteTrackerSettings& settings, const QList<QString>& settingsKeys, bool force = false);
     MessageQueue *getMessageQueueToGUI() { return m_msgQueueToGUI; }
     void removeFromMap(QString id);
-    void sendToMap(
+    bool sendToMap(
         const QList<ObjectPipe*>& mapMessagePipes,
         QString id,
         QString image,
@@ -141,10 +145,8 @@ private:
         double lon,
         double altitude,
         double rotation,
-        QList<QGeoCoordinate> *track = nullptr,
-        QList<QDateTime> *trackDateTime = nullptr,
-        QList<QGeoCoordinate> *predictedTrack = nullptr,
-        QList<QDateTime> *predictedTrackDateTime = nullptr
+        const SatelliteTrack *track = nullptr,
+        const SatelliteTrack *predictedTrack = nullptr
     );
     void applyDeviceAOSSettings(const QString& name);
     void startStopSinks(bool start);

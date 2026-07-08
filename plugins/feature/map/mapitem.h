@@ -74,6 +74,8 @@ class ObjectMapItem : public MapItem {
 public:
     ObjectMapItem(const QObject *sourcePipe, const QString &group, MapSettings::MapItemSettings *itemSettings, SWGSDRangel::SWGMapItem *mapItem) :
         MapItem(sourcePipe, group, itemSettings, mapItem),
+        m_hasExplicitTrack(false),
+        m_hasExplicitPredictedTrack(false),
         m_aircraftState(nullptr)
     {
         update(mapItem);
@@ -115,6 +117,8 @@ protected:
     QList<qint64> m_frequencies;        // Frequencies that can be tuned (currently only extracted from text)
     QStringList m_frequencyStrings;
     bool m_fixedPosition;               // Don't record/display track
+    bool m_hasExplicitTrack;            // A producer supplies the full taken track; missing track data means unchanged
+    bool m_hasExplicitPredictedTrack;   // A producer supplies the full predicted track; missing track data means unchanged
     QList<QGeoCoordinate *> m_predictedTrackCoords;
     QList<QDateTime *> m_predictedTrackDateTimes;
     QVariantList m_predictedTrack;      // Line showing where the object is going

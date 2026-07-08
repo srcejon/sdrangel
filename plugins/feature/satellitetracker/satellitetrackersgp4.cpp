@@ -16,6 +16,7 @@
 ///////////////////////////////////////////////////////////////////////////////////
 
 #include <cmath>
+#include <utility>
 
 #include <CoordTopocentric.h>
 #include <CoordGeodetic.h>
@@ -29,6 +30,66 @@
 #include "satellitetrackersgp4.h"
 
 using namespace libsgp4;
+
+class SatelliteStateContext::Impl
+{
+public:
+    bool match(const QString& tle0, const QString& tle1, const QString& tle2,
+               double latitude, double longitude, double altitude) const
+    {
+        return m_valid
+            && (m_tle0 == tle0)
+            && (m_tle1 == tle1)
+            && (m_tle2 == tle2)
+            && (m_latitude == latitude)
+            && (m_longitude == longitude)
+            && (m_altitude == altitude);
+    }
+
+    void update(const QString& tle0, const QString& tle1, const QString& tle2,
+                double latitude, double longitude, double altitude)
+    {
+        if (match(tle0, tle1, tle2, latitude, longitude, altitude)) {
+            return;
+        }
+
+        std::unique_ptr<Tle> tle(new Tle(tle0.toStdString(), tle1.toStdString(), tle2.toStdString()));
+        std::unique_ptr<SGP4> sgp4(new SGP4(*tle));
+        std::unique_ptr<Observer> observer(new Observer(latitude, longitude, altitude));
+        std::unique_ptr<OrbitalElements> orbitalElements(new OrbitalElements(*tle));
+
+        m_tle = std::move(tle);
+        m_sgp4 = std::move(sgp4);
+        m_observer = std::move(observer);
+        m_orbitalElements = std::move(orbitalElements);
+        m_tle0 = tle0;
+        m_tle1 = tle1;
+        m_tle2 = tle2;
+        m_latitude = latitude;
+        m_longitude = longitude;
+        m_altitude = altitude;
+        m_valid = true;
+    }
+
+    bool m_valid = false;
+    QString m_tle0;
+    QString m_tle1;
+    QString m_tle2;
+    double m_latitude = 0.0;
+    double m_longitude = 0.0;
+    double m_altitude = 0.0;
+    std::unique_ptr<Tle> m_tle;
+    std::unique_ptr<SGP4> m_sgp4;
+    std::unique_ptr<Observer> m_observer;
+    std::unique_ptr<OrbitalElements> m_orbitalElements;
+};
+
+SatelliteStateContext::SatelliteStateContext() :
+    m_impl(new Impl)
+{
+}
+
+SatelliteStateContext::~SatelliteStateContext() = default;
 
 bool GroundTrackDetails::match(const QDateTime& quantizedDateTime, const QString& tle0, const QString& tle1, const QString& tle2, int groundTrackSteps) const
 {
@@ -88,8 +149,7 @@ static QDateTime quantizeDateTime(const QDateTime& dateTime)
 static void getGroundTrack(QDateTime dateTime,
                         const SGP4& sgp4, const OrbitalElements& ele,
                         int steps, bool forward,
-                        QList<QGeoCoordinate>& coordinates,
-                        QList<QDateTime>& coordinateDateTimes)
+                        SatelliteTrack& track)
 {
     double periodMins;
     double timeStep;
@@ -121,6 +181,8 @@ static void getGroundTrack(QDateTime dateTime,
     timeStep = round(timeStep);
     timeStep /= 2.0;
 
+    track.reserve(steps);
+
     while ((forward && (currentTime < endTime)) || (!forward && (currentTime > endTime)))
     {
         // Calculate satellite position
@@ -129,10 +191,10 @@ static void getGroundTrack(QDateTime dateTime,
         // Convert satellite position to geodetic coordinates (lat and long)
         CoordGeodetic geo = eci.ToGeodetic();
 
-        coordinates.append(QGeoCoordinate(Units::radiansToDegrees(geo.latitude),
-                                          Units::radiansToDegrees(geo.longitude),
-                                          geo.altitude * 1000.0));
-        coordinateDateTimes.append(dateTimeToQDateTime(currentTime));
+        track.m_latitudes.append(Units::radiansToDegrees(geo.latitude));
+        track.m_longitudes.append(Units::radiansToDegrees(geo.longitude));
+        track.m_altitudes.append(geo.altitude * 1000.0);
+        track.m_dateTimeMsecs.append(dateTimeToQDateTime(currentTime).toMSecsSinceEpoch());
 
         // 2D map is stretched at poles, so use finer steps
         if (std::abs(Units::radiansToDegrees(geo.latitude)) >= 70)
@@ -495,13 +557,18 @@ void getSatelliteState(QDateTime dateTime,
                         int predictionPeriod, int minAOSElevationDeg, int minPassElevationDeg,
                         QTime passStartTime, QTime passFinishTime, bool utc,
                         int noOfPasses, 
-                        bool calcGroundTrack, int groundTrackSteps, SatelliteState *satState)
+                        bool calcGroundTrack, int groundTrackSteps, SatelliteState *satState,
+                        SatelliteStateContext *context)
 {
     try
     {
-        Tle tle = Tle(tle0.toStdString(), tle1.toStdString(), tle2.toStdString());
-        SGP4 sgp4(tle);
-        Observer obs(latitude, longitude, altitude);
+        SatelliteStateContext localContext;
+        SatelliteStateContext *stateContext = context == nullptr ? &localContext : context;
+        stateContext->m_impl->update(tle0, tle1, tle2, latitude, longitude, altitude);
+
+        SGP4& sgp4 = *stateContext->m_impl->m_sgp4;
+        Observer& obs = *stateContext->m_impl->m_observer;
+        OrbitalElements& ele = *stateContext->m_impl->m_orbitalElements;
 
         DateTime dt = qDateTimeToDateTime(dateTime);
 
@@ -521,7 +588,6 @@ void getSatelliteState(QDateTime dateTime,
         satState->m_elevation = Units::radiansToDegrees(topo.elevation);
         satState->m_range = topo.range;
         satState->m_rangeRate = topo.range_rate;
-        OrbitalElements ele(tle);
         satState->m_speed = eci.Velocity().Magnitude();
         satState->m_period = ele.Period();
         satState->m_error = "";
@@ -541,16 +607,15 @@ void getSatelliteState(QDateTime dateTime,
 
             if (!satState->m_groundTrackDetails.match(quantizedDateTime, tle0, tle1, tle2, groundTrackSteps))
             {
-                QList<QGeoCoordinate> groudTrack, predictedGroundTrack;
-                QList<QDateTime> groudTrackDateTimes, predictedGroudTrackDateTimes;
+                SatelliteTrack groundTrack, predictedGroundTrack;
 
-                getGroundTrack(quantizedDateTime, sgp4, ele, groundTrackSteps, false, groudTrack, groudTrackDateTimes);
-                getGroundTrack(quantizedDateTime, sgp4, ele, groundTrackSteps, true, predictedGroundTrack, predictedGroudTrackDateTimes);
+                getGroundTrack(quantizedDateTime, sgp4, ele, groundTrackSteps, false, groundTrack);
+                getGroundTrack(quantizedDateTime, sgp4, ele, groundTrackSteps, true, predictedGroundTrack);
 
-                satState->m_groundTrack = groudTrack;
-                satState->m_groundTrackDateTime = groudTrackDateTimes;
-                satState->m_predictedGroundTrack = predictedGroundTrack;
-                satState->m_predictedGroundTrackDateTime = predictedGroudTrackDateTimes;
+                groundTrack.m_revision = satState->m_groundTrack.m_revision + 1;
+                predictedGroundTrack.m_revision = satState->m_predictedGroundTrack.m_revision + 1;
+                satState->m_groundTrack = std::move(groundTrack);
+                satState->m_predictedGroundTrack = std::move(predictedGroundTrack);
 
                 satState->m_groundTrackDetails.update(quantizedDateTime, tle0, tle1, tle2, groundTrackSteps);
             }
@@ -558,9 +623,7 @@ void getSatelliteState(QDateTime dateTime,
         else
         {
             satState->m_groundTrack.clear();
-            satState->m_groundTrackDateTime.clear();
             satState->m_predictedGroundTrack.clear();
-            satState->m_predictedGroundTrackDateTime.clear();
             satState->m_groundTrackDetails.invalidate();
         }
     }

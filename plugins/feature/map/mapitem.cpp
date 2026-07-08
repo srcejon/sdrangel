@@ -24,10 +24,13 @@ static bool hasCompactTrack(
     const QList<qint64> *dateTimeMsecs
 )
 {
+    // Generated SWGMapItem instances own empty QList objects even when compact
+    // track fields were omitted, so require at least one point to mean "present".
     return (latitudes != nullptr)
         && (longitudes != nullptr)
         && (altitudes != nullptr)
         && (dateTimeMsecs != nullptr)
+        && !latitudes->isEmpty()
         && (latitudes->size() == longitudes->size())
         && (latitudes->size() == altitudes->size())
         && (latitudes->size() == dateTimeMsecs->size());
@@ -127,16 +130,42 @@ void ObjectMapItem::update(SWGSDRangel::SWGMapItem *mapItem)
     findFrequencies();
     if (!m_fixedPosition)
     {
-        if (hasCompactTrack(mapItem->getTrackLatitudes(), mapItem->getTrackLongitudes(), mapItem->getTrackAltitudes(), mapItem->getTrackDateTimeMsecs())) {
+        const bool hasCompactTakenTrack = hasCompactTrack(mapItem->getTrackLatitudes(), mapItem->getTrackLongitudes(), mapItem->getTrackAltitudes(), mapItem->getTrackDateTimeMsecs());
+        const bool hasLegacyTakenTrack = mapItem->getTrack() != nullptr;
+
+        // Producers such as Satellite Tracker may send a full explicit track once, then omit
+        // track fields on later position-only updates. For explicit-track items, omitted track
+        // data means "keep the previous track". For producers that have never sent a track,
+        // retain the original Map behavior and auto-build a taken track from positions.
+        if (hasCompactTakenTrack)
+        {
             updateTrack(mapItem->getTrackLatitudes(), mapItem->getTrackLongitudes(), mapItem->getTrackAltitudes(), mapItem->getTrackDateTimeMsecs(), m_itemSettings);
-        } else {
+            m_hasExplicitTrack = true;
+        }
+        else if (hasLegacyTakenTrack)
+        {
             updateTrack(mapItem->getTrack(), m_itemSettings);
+            m_hasExplicitTrack = true;
+        }
+        else if (!m_hasExplicitTrack)
+        {
+            updateTrack(nullptr, m_itemSettings);
         }
 
-        if (hasCompactTrack(mapItem->getPredictedTrackLatitudes(), mapItem->getPredictedTrackLongitudes(), mapItem->getPredictedTrackAltitudes(), mapItem->getPredictedTrackDateTimeMsecs())) {
+        const bool hasCompactPredictedTrack = hasCompactTrack(mapItem->getPredictedTrackLatitudes(), mapItem->getPredictedTrackLongitudes(), mapItem->getPredictedTrackAltitudes(), mapItem->getPredictedTrackDateTimeMsecs());
+        const bool hasLegacyPredictedTrack = mapItem->getPredictedTrack() != nullptr;
+
+        // Predicted tracks are producer-managed. As above, absence of predicted-track fields
+        // after one has been supplied means unchanged, not cleared.
+        if (hasCompactPredictedTrack)
+        {
             updatePredictedTrack(mapItem->getPredictedTrackLatitudes(), mapItem->getPredictedTrackLongitudes(), mapItem->getPredictedTrackAltitudes(), mapItem->getPredictedTrackDateTimeMsecs());
-        } else {
+            m_hasExplicitPredictedTrack = true;
+        }
+        else if (hasLegacyPredictedTrack)
+        {
             updatePredictedTrack(mapItem->getPredictedTrack());
+            m_hasExplicitPredictedTrack = true;
         }
     }
     if (mapItem->getAvailableFrom()) {

@@ -849,6 +849,17 @@ CameraSettings:
       description: "Coverage percentage at which a Scheduler coverage-high event is emitted (low again 10 points below): 0 to 100"
       type: number
       format: double
+    cloudEdgeMarginPercent:
+      description: "Exclude a margin this percentage of the frame in from the sky-region edge (fisheye rim / vignette / foreground); 0 disables: 0 to 25"
+      type: number
+      format: double
+    cloudMaskSunMoon:
+      description: "Exclude a disc around the projected sun (day) / moon (night) so they are not classified as cloud (1 for yes, 0 for no)"
+      type: integer
+    cloudSunMoonRadiusDeg:
+      description: "Angular radius in degrees of the sun/moon exclusion disc: 0 to 45"
+      type: number
+      format: double
     starDetect:
       description: "Enable star detection (1 for yes, 0 for no)"
       type: integer

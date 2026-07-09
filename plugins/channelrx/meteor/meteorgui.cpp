@@ -259,11 +259,12 @@ void MeteorGUI::setupUi(RollupContents *rollupContents)
     m_clearDetections->setToolTip("Clear detections");
     m_clearDetections->setMaximumWidth(28);
 
-    m_detectionsTable->setColumnCount(11);
+    m_detectionsTable->setColumnCount(12);
     const QStringList detectionHeaders = {
         "Time (local)",
         "Peak (dB)",
         "BG (dB)",
+        "Total (dB)",
         "Amp",
         "Duration (ms)",
         "Center (Hz)",
@@ -277,6 +278,7 @@ void MeteorGUI::setupUi(RollupContents *rollupContents)
         "Local date and time when the meteor pulse started",
         "Peak signal power during the detection in dB",
         "Estimated background power level at detection time in dB",
+        "Integrated meteor signal power across the detection in dB",
         "Peak linear signal amplitude during the detection",
         "Detected pulse duration in milliseconds",
         "Estimated center frequency of the pulse relative to channel center in hertz",
@@ -1167,14 +1169,15 @@ void MeteorGUI::addDetection(const MeteorDemodSink::MsgMeteorDetected& detection
     m_detectionsTable->setItem(row, 0, timeItem);
     m_detectionsTable->setItem(row, 1, makeTableItem(QString::number(detection.getPeakPowerDB(), 'f', 1), detection.getPeakPowerDB()));
     m_detectionsTable->setItem(row, 2, makeTableItem(QString::number(detection.getBackgroundPowerDB(), 'f', 1), detection.getBackgroundPowerDB()));
-    m_detectionsTable->setItem(row, 3, makeTableItem(QString::number(detection.getPeakAmplitude(), 'f', 4), detection.getPeakAmplitude()));
-    m_detectionsTable->setItem(row, 4, makeTableItem(QString::number(detection.getDurationS() * 1000.0, 'f', 1), detection.getDurationS()));
-    m_detectionsTable->setItem(row, 5, makeTableItem(QString::number(detection.getCenterFrequency(), 'f', 1), detection.getCenterFrequency()));
-    m_detectionsTable->setItem(row, 6, makeTableItem(QString::number(detection.getFrequencySpan(), 'f', 1), detection.getFrequencySpan()));
-    m_detectionsTable->setItem(row, 7, makeTableItem(QString::number(detection.getFrequencyDrift(), 'f', 1), detection.getFrequencyDrift()));
-    m_detectionsTable->setItem(row, 8, makeTableItem(QString::number(detection.getSampleRate()), detection.getSampleRate()));
-    m_detectionsTable->setItem(row, 9, makeTableItem(QString()));
+    m_detectionsTable->setItem(row, 3, makeTableItem(QString::number(detection.getTotalPowerDB(), 'f', 1), detection.getTotalPowerDB()));
+    m_detectionsTable->setItem(row, 4, makeTableItem(QString::number(detection.getPeakAmplitude(), 'f', 4), detection.getPeakAmplitude()));
+    m_detectionsTable->setItem(row, 5, makeTableItem(QString::number(detection.getDurationS() * 1000.0, 'f', 1), detection.getDurationS()));
+    m_detectionsTable->setItem(row, 6, makeTableItem(QString::number(detection.getCenterFrequency(), 'f', 1), detection.getCenterFrequency()));
+    m_detectionsTable->setItem(row, 7, makeTableItem(QString::number(detection.getFrequencySpan(), 'f', 1), detection.getFrequencySpan()));
+    m_detectionsTable->setItem(row, 8, makeTableItem(QString::number(detection.getFrequencyDrift(), 'f', 1), detection.getFrequencyDrift()));
+    m_detectionsTable->setItem(row, 9, makeTableItem(QString::number(detection.getSampleRate()), detection.getSampleRate()));
     m_detectionsTable->setItem(row, 10, makeTableItem(QString()));
+    m_detectionsTable->setItem(row, 11, makeTableItem(QString()));
     m_detectionsTable->setSortingEnabled(sortingEnabled);
 
     updateCounters();
@@ -1210,15 +1213,16 @@ void MeteorGUI::addCameraDetection(const Meteor::MsgCameraMeteorDetected& detect
     m_detectionsTable->setItem(row, 1, makeTableItem(QString()));
     m_detectionsTable->setItem(row, 2, makeTableItem(QString()));
     m_detectionsTable->setItem(row, 3, makeTableItem(QString()));
-    m_detectionsTable->setItem(row, 4, makeTableItem(QString::number(detection.getDurationS() * 1000.0, 'f', 1), detection.getDurationS()));
-    m_detectionsTable->setItem(row, 5, makeTableItem(QString()));
+    m_detectionsTable->setItem(row, 4, makeTableItem(QString()));
+    m_detectionsTable->setItem(row, 5, makeTableItem(QString::number(detection.getDurationS() * 1000.0, 'f', 1), detection.getDurationS()));
     m_detectionsTable->setItem(row, 6, makeTableItem(QString()));
     m_detectionsTable->setItem(row, 7, makeTableItem(QString()));
     m_detectionsTable->setItem(row, 8, makeTableItem(QString()));
-    m_detectionsTable->setItem(row, 9, detection.hasMagnitude()
+    m_detectionsTable->setItem(row, 9, makeTableItem(QString()));
+    m_detectionsTable->setItem(row, 10, detection.hasMagnitude()
         ? makeTableItem(QString::number(detection.getMagnitude(), 'f', 2), detection.getMagnitude())
         : makeTableItem(QString()));
-    m_detectionsTable->setItem(row, 10, detection.hasFlux()
+    m_detectionsTable->setItem(row, 11, detection.hasFlux()
         ? makeTableItem(QString::number(detection.getFlux(), 'g', 6), detection.getFlux())
         : makeTableItem(QString()));
     m_detectionsTable->setSortingEnabled(sortingEnabled);

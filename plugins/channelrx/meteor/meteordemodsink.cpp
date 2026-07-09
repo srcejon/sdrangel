@@ -595,6 +595,7 @@ void MeteorDemodSink::updateSpectralEvent(SpectralEvent& event, const SpectralBa
     event.m_lastCenterSample = frameCenterSample;
     event.m_missingFrames = 0;
     event.m_peakPower = std::max(event.m_peakPower, band.m_framePeakPower);
+    event.m_totalPower += std::max(band.m_totalExcessPower, 0.0);
     event.m_maxBandwidth = std::max(event.m_maxBandwidth, band.m_bandwidth);
     event.m_weightedFrequencySum += band.m_centerFrequency * std::max(band.m_totalExcessPower, 1e-30);
     event.m_weightSum += std::max(band.m_totalExcessPower, 1e-30);
@@ -685,6 +686,7 @@ void MeteorDemodSink::finishSpectralEvent(const SpectralEvent& event)
     report.m_displayEndSample = candidate.m_displayEndSample;
     report.m_peakPower = event.m_peakPower;
     report.m_backgroundPower = event.m_backgroundPower;
+    report.m_totalPower = event.m_totalPower;
     report.m_durationS = candidate.m_durationS;
     report.m_centerFrequency = candidate.m_centerFrequency;
     report.m_frequencySpan = candidate.m_frequencySpan;
@@ -1613,6 +1615,7 @@ void MeteorDemodSink::finishPulse(bool forceRejected)
         report.m_dateTimeUtc = sampleCounterToDateTimeUtc(report.m_startSample);
         report.m_peakPower = m_pulsePeakPower;
         report.m_backgroundPower = m_noiseFloor;
+        report.m_totalPower = estimatePulseTotalPower(report.m_startSample, report.m_endSample, report.m_backgroundPower);
         report.m_durationS = 1.0 / (double) std::max(1, m_settings.m_channelSampleRate);
         report.m_centerFrequency = centerFrequency;
         report.m_frequencySpan = reportedFrequencySpan;
@@ -1664,6 +1667,7 @@ void MeteorDemodSink::finishPulse(bool forceRejected)
             report.m_endSample = endSample;
             report.m_peakPower = m_pulsePeakPower;
             report.m_backgroundPower = m_noiseFloor;
+            report.m_totalPower = estimatePulseTotalPower(report.m_startSample, report.m_endSample, report.m_backgroundPower);
             report.m_durationS = durationS;
             report.m_centerFrequency = centerFrequency;
             report.m_frequencySpan = reportedFrequencySpan;
@@ -1686,6 +1690,7 @@ void MeteorDemodSink::finishPulse(bool forceRejected)
         m_pendingBroadPulse.m_endSample = endSample;
         m_pendingBroadPulse.m_peakPower = m_pulsePeakPower;
         m_pendingBroadPulse.m_backgroundPower = m_noiseFloor;
+        m_pendingBroadPulse.m_totalPower = estimatePulseTotalPower(m_pendingBroadPulse.m_startSample, m_pendingBroadPulse.m_endSample, m_pendingBroadPulse.m_backgroundPower);
         m_pendingBroadPulse.m_durationS = durationS;
         m_pendingBroadPulse.m_centerFrequency = centerFrequency;
         m_pendingBroadPulse.m_frequencySpan = reportedFrequencySpan;
@@ -1979,6 +1984,7 @@ void MeteorDemodSink::finishPendingSpectralReportsForPulse(
 
             mergedReport.m_peakPower = std::max(mergedReport.m_peakPower, report.m_peakPower);
             mergedReport.m_backgroundPower = std::max(mergedReport.m_backgroundPower, report.m_backgroundPower);
+            mergedReport.m_totalPower = std::max(mergedReport.m_totalPower, report.m_totalPower);
             merged = true;
             break;
         }
@@ -2204,8 +2210,34 @@ bool MeteorDemodSink::estimatePulseBandEnvelope(PulseReport& report) const
     }
     report.m_peakPower = std::max(report.m_peakPower, m_pulsePeakPower);
     report.m_backgroundPower = m_noiseFloor;
+    report.m_totalPower = estimatePulseTotalPower(report.m_startSample, report.m_endSample, report.m_backgroundPower);
     report.m_durationS = durationS;
     return true;
+}
+
+double MeteorDemodSink::estimatePulseTotalPower(quint64 startSample, quint64 endSample, double backgroundPower) const
+{
+    if ((endSample < startSample) || m_pulseSamples.empty()) {
+        return 0.0;
+    }
+
+    const quint64 pulseEndSample = m_pulseStartSample + (quint64) m_pulseSamples.size() - 1;
+    const quint64 clippedStartSample = std::max(startSample, m_pulseStartSample);
+    const quint64 clippedEndSample = std::min(endSample, pulseEndSample);
+
+    if (clippedEndSample < clippedStartSample) {
+        return 0.0;
+    }
+
+    const int firstIndex = (int) (clippedStartSample - m_pulseStartSample);
+    const int lastIndex = (int) (clippedEndSample - m_pulseStartSample);
+    double totalPower = 0.0;
+
+    for (int i = firstIndex; i <= lastIndex; i++) {
+        totalPower += std::max(0.0, (double) std::norm(m_pulseSamples[i]) - backgroundPower);
+    }
+
+    return totalPower;
 }
 
 bool MeteorDemodSink::reportsOverlap(
@@ -2226,6 +2258,20 @@ void MeteorDemodSink::emitDetectionReport(const PulseReport& report, const char 
     const double peakAmplitude = std::sqrt(std::max(report.m_peakPower, 0.0));
     const double peakPowerDB = 10.0 * std::log10(std::max(report.m_peakPower, 1e-20));
     const double backgroundPowerDB = 10.0 * std::log10(std::max(report.m_backgroundPower, 1e-20));
+    double totalPower = report.m_totalPower;
+    const quint64 sampleDuration = report.m_endSample >= report.m_startSample
+        ? report.m_endSample - report.m_startSample + 1
+        : 1;
+
+    if (totalPower <= 0.0) {
+        totalPower = estimatePulseTotalPower(report.m_startSample, report.m_endSample, report.m_backgroundPower);
+    }
+
+    if (totalPower <= 0.0) {
+        totalPower = std::max(report.m_peakPower - report.m_backgroundPower, report.m_peakPower) * (double) std::max<quint64>(1, sampleDuration);
+    }
+
+    const double totalPowerDB = 10.0 * std::log10(std::max(totalPower, 1e-20));
     const quint64 displayStartSample = report.m_hasDisplaySamples ? report.m_displayStartSample : report.m_startSample;
     const quint64 displayEndSample = report.m_hasDisplaySamples ? report.m_displayEndSample : report.m_endSample;
     const QDateTime displayDateTimeUtc = sampleCounterToDisplayDateTimeUtc(displayStartSample);
@@ -2249,6 +2295,7 @@ void MeteorDemodSink::emitDetectionReport(const PulseReport& report, const char 
              << " displayDurationS:" << displayDurationS
              << " peakPowerDB:" << peakPowerDB
              << " backgroundPowerDB:" << backgroundPowerDB
+             << " totalPowerDB:" << totalPowerDB
              << " centerFrequency:" << report.m_centerFrequency
              << " frequencySpan:" << report.m_frequencySpan
              << " frequencyDrift:" << report.m_frequencyDrift
@@ -2265,6 +2312,7 @@ void MeteorDemodSink::emitDetectionReport(const PulseReport& report, const char 
             peakAmplitude,
             peakPowerDB,
             backgroundPowerDB,
+            totalPowerDB,
             report.m_durationS,
             displayDurationS,
             report.m_centerFrequency,
@@ -2288,7 +2336,7 @@ void MeteorDemodSink::emitDetectionReport(const PulseReport& report, const char 
     QList<ObjectPipe*> eventPipes;
     MainCore::instance()->getMessagePipes().getMessagePipes(m_channel, "event", eventPipes);
 
-    QString eventData = QString("peakPowerDB=%1,duration=%2").arg(peakPowerDB).arg(displayDurationS);
+    QString eventData = QString("peakPowerDB=%1,totalPowerDB=%2,duration=%3").arg(peakPowerDB).arg(totalPowerDB).arg(displayDurationS);
 
     for (const auto& pipe : eventPipes)
     {

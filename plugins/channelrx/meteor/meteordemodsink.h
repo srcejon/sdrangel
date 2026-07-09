@@ -52,6 +52,7 @@ public:
         double getPeakAmplitude() const { return m_peakAmplitude; }
         double getPeakPowerDB() const { return m_peakPowerDB; }
         double getBackgroundPowerDB() const { return m_backgroundPowerDB; }
+        double getTotalPowerDB() const { return m_totalPowerDB; }
         double getDurationS() const { return m_durationS; }
         double getDisplayDurationS() const { return m_displayDurationS; }
         double getCenterFrequency() const { return m_centerFrequency; }
@@ -65,6 +66,7 @@ public:
             double peakAmplitude,
             double peakPowerDB,
             double backgroundPowerDB,
+            double totalPowerDB,
             double durationS,
             double displayDurationS,
             double centerFrequency,
@@ -78,6 +80,7 @@ public:
                 peakAmplitude,
                 peakPowerDB,
                 backgroundPowerDB,
+                totalPowerDB,
                 durationS,
                 displayDurationS,
                 centerFrequency,
@@ -93,6 +96,7 @@ public:
         double m_peakAmplitude;
         double m_peakPowerDB;
         double m_backgroundPowerDB;
+        double m_totalPowerDB;
         double m_durationS;
         double m_displayDurationS;
         double m_centerFrequency;
@@ -106,6 +110,7 @@ public:
             double peakAmplitude,
             double peakPowerDB,
             double backgroundPowerDB,
+            double totalPowerDB,
             double durationS,
             double displayDurationS,
             double centerFrequency,
@@ -119,6 +124,7 @@ public:
             m_peakAmplitude(peakAmplitude),
             m_peakPowerDB(peakPowerDB),
             m_backgroundPowerDB(backgroundPowerDB),
+            m_totalPowerDB(totalPowerDB),
             m_durationS(durationS),
             m_displayDurationS(displayDurationS),
             m_centerFrequency(centerFrequency),
@@ -173,6 +179,7 @@ private:
         quint64 m_displayEndSample;
         double m_peakPower;
         double m_backgroundPower;
+        double m_totalPower;
         double m_durationS;
         double m_centerFrequency;
         double m_frequencySpan;
@@ -193,6 +200,7 @@ private:
             m_displayEndSample(0),
             m_peakPower(0.0),
             m_backgroundPower(1e-20),
+            m_totalPower(0.0),
             m_durationS(0.0),
             m_centerFrequency(0.0),
             m_frequencySpan(0.0),
@@ -245,6 +253,7 @@ private:
         int m_missingFrames;
         double m_peakPower;
         double m_backgroundPower;
+        double m_totalPower;
         double m_minFrequency;
         double m_maxFrequency;
         double m_maxBandwidth;
@@ -267,6 +276,7 @@ private:
             m_missingFrames(0),
             m_peakPower(0.0),
             m_backgroundPower(1e-20),
+            m_totalPower(0.0),
             m_minFrequency(0.0),
             m_maxFrequency(0.0),
             m_maxBandwidth(0.0),
@@ -471,6 +481,7 @@ private:
         double pulseFrequencySpan,
         double pulseFrequencyDrift);
     bool estimatePulseBandEnvelope(PulseReport& report) const;
+    double estimatePulseTotalPower(quint64 startSample, quint64 endSample, double backgroundPower) const;
     bool reportsOverlap(quint64 firstStartSample, quint64 firstEndSample, quint64 secondStartSample, quint64 secondEndSample) const;
     void emitDetectionReport(const PulseReport& report, const char *source);
     QDateTime sampleCounterToDateTimeUtc(quint64 sampleCounter) const;

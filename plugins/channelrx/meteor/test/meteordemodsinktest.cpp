@@ -54,6 +54,7 @@ namespace {
         double peakAmplitude;
         double peakPowerDB;
         double backgroundPowerDB;
+        double totalPowerDB;
         double durationS;
         double centerFrequency;
         double frequencySpan;
@@ -377,6 +378,7 @@ namespace {
                     detection.getPeakAmplitude(),
                     detection.getPeakPowerDB(),
                     detection.getBackgroundPowerDB(),
+                    detection.getTotalPowerDB(),
                     detection.getDurationS(),
                     detection.getCenterFrequency(),
                     detection.getFrequencySpan(),
@@ -452,13 +454,14 @@ namespace {
         for (int i = 0; i < detections.size(); i++)
         {
             const Detection& detection = detections[i];
-            out << QString("Detection %1: timeUtc=%2 displayTimeUtc=%3 peakAmplitude=%4 peakPowerDB=%5 backgroundPowerDB=%6 durationS=%7 centerFrequencyHz=%8 frequencySpanHz=%9 frequencyDriftHz=%10 sampleRate=%11\n")
+            out << QString("Detection %1: timeUtc=%2 displayTimeUtc=%3 peakAmplitude=%4 peakPowerDB=%5 backgroundPowerDB=%6 totalPowerDB=%7 durationS=%8 centerFrequencyHz=%9 frequencySpanHz=%10 frequencyDriftHz=%11 sampleRate=%12\n")
                 .arg(i + 1)
                 .arg(detection.dateTimeUtc.toString(Qt::ISODateWithMs))
                 .arg(detection.displayDateTimeUtc.toString(Qt::ISODateWithMs))
                 .arg(detection.peakAmplitude, 0, 'f', 6)
                 .arg(detection.peakPowerDB, 0, 'f', 2)
                 .arg(detection.backgroundPowerDB, 0, 'f', 2)
+                .arg(detection.totalPowerDB, 0, 'f', 2)
                 .arg(detection.durationS, 0, 'f', 6)
                 .arg(detection.centerFrequency, 0, 'f', 2)
                 .arg(detection.frequencySpan, 0, 'f', 2)

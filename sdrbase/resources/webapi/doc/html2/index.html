@@ -3645,6 +3645,21 @@ margin-bottom: 20px;
       "type" : "integer",
       "description" : "Running state\n  * 0 - not started\n  * 1 - idle\n  * 2 - running\n  * 3 - error\n"
     },
+    "captureDateTime" : {
+      "type" : "string",
+      "description" : "ISO-8601 capture date/time for the current frame, or an empty string if unavailable"
+    },
+    "detectedObjectClasses" : {
+      "type" : "array",
+      "description" : "Distinct object detector class names detected in the current frame",
+      "items" : {
+        "type" : "string"
+      }
+    },
+    "motionDetected" : {
+      "type" : "integer",
+      "description" : "Whether motion is currently detected (1 for yes, 0 for no)"
+    },
     "cloudCoveragePercent" : {
       "type" : "number",
       "format" : "float",
@@ -4653,12 +4668,21 @@ margin-bottom: 20px;
     },
     "cloudMaskSunMoon" : {
       "type" : "integer",
-      "description" : "Exclude a disc around the projected sun (day) / moon (night) so they are not classified as cloud (1 for yes, 0 for no)"
+      "description" : "Exclude the projected sun (day) / moon (night) so their bright bloom is not classified as cloud (1 for yes, 0 for no)"
+    },
+    "cloudStarSense" : {
+      "type" : "integer",
+      "description" : "At night, unmark detected cloud that predicted catalog stars are visible through; requires camera position, capture time and a calibrated lens model (1 for yes, 0 for no)"
+    },
+    "cloudStarSenseMagnitude" : {
+      "type" : "number",
+      "format" : "double",
+      "description" : "Faintest catalog star magnitude checked by star-visibility sensing: 0 to 6"
     },
     "cloudSunMoonRadiusDeg" : {
       "type" : "number",
       "format" : "double",
-      "description" : "Angular radius in degrees of the sun/moon exclusion disc: 0 to 45"
+      "description" : "Maximum angular radius in degrees the sun/moon exclusion grows to; the mask sizes itself to the actual glare bloom up to this cap: 0 to 45"
     },
     "starDetect" : {
       "type" : "integer",
@@ -62593,7 +62617,7 @@ except ApiException as e:
           </div>
           <div id="generator">
             <div class="content">
-              Generated 2026-07-08T15:42:48.748+02:00
+              Generated 2026-07-09T10:50:17.044+02:00
             </div>
           </div>
       </div>

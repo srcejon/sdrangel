@@ -494,12 +494,12 @@ SWGCameraSettings::SWGCameraSettings() {
     m_cloud_edge_margin_percent_isSet = false;
     cloud_mask_sun_moon = 0;
     m_cloud_mask_sun_moon_isSet = false;
-    cloud_sun_moon_radius_deg = 0.0;
-    m_cloud_sun_moon_radius_deg_isSet = false;
     cloud_star_sense = 0;
     m_cloud_star_sense_isSet = false;
     cloud_star_sense_magnitude = 0.0;
     m_cloud_star_sense_magnitude_isSet = false;
+    cloud_sun_moon_radius_deg = 0.0;
+    m_cloud_sun_moon_radius_deg_isSet = false;
     star_detect = 0;
     m_star_detect_isSet = false;
     star_threshold = 0;
@@ -1082,12 +1082,12 @@ SWGCameraSettings::init() {
     m_cloud_edge_margin_percent_isSet = false;
     cloud_mask_sun_moon = 0;
     m_cloud_mask_sun_moon_isSet = false;
-    cloud_sun_moon_radius_deg = 0.0;
-    m_cloud_sun_moon_radius_deg_isSet = false;
     cloud_star_sense = 0;
     m_cloud_star_sense_isSet = false;
     cloud_star_sense_magnitude = 0.0;
     m_cloud_star_sense_magnitude_isSet = false;
+    cloud_sun_moon_radius_deg = 0.0;
+    m_cloud_sun_moon_radius_deg_isSet = false;
     star_detect = 0;
     m_star_detect_isSet = false;
     star_threshold = 0;
@@ -1480,6 +1480,8 @@ SWGCameraSettings::cleanup() {
         }
         delete motion_exclusion_rects;
     }
+
+
 
 
 
@@ -2053,9 +2055,11 @@ SWGCameraSettings::fromJsonObject(QJsonObject &pJson) {
     
     ::SWGSDRangel::setValue(&cloud_mask_sun_moon, pJson["cloudMaskSunMoon"], "qint32", "");
     
-    ::SWGSDRangel::setValue(&cloud_sun_moon_radius_deg, pJson["cloudSunMoonRadiusDeg"], "double", "");
     ::SWGSDRangel::setValue(&cloud_star_sense, pJson["cloudStarSense"], "qint32", "");
+    
     ::SWGSDRangel::setValue(&cloud_star_sense_magnitude, pJson["cloudStarSenseMagnitude"], "double", "");
+    
+    ::SWGSDRangel::setValue(&cloud_sun_moon_radius_deg, pJson["cloudSunMoonRadiusDeg"], "double", "");
     
     ::SWGSDRangel::setValue(&star_detect, pJson["starDetect"], "qint32", "");
     
@@ -2880,14 +2884,14 @@ SWGCameraSettings::asJsonObject() {
     if(m_cloud_mask_sun_moon_isSet){
         obj->insert("cloudMaskSunMoon", QJsonValue(cloud_mask_sun_moon));
     }
-    if(m_cloud_sun_moon_radius_deg_isSet){
-        obj->insert("cloudSunMoonRadiusDeg", QJsonValue(cloud_sun_moon_radius_deg));
-    }
     if(m_cloud_star_sense_isSet){
         obj->insert("cloudStarSense", QJsonValue(cloud_star_sense));
     }
     if(m_cloud_star_sense_magnitude_isSet){
         obj->insert("cloudStarSenseMagnitude", QJsonValue(cloud_star_sense_magnitude));
+    }
+    if(m_cloud_sun_moon_radius_deg_isSet){
+        obj->insert("cloudSunMoonRadiusDeg", QJsonValue(cloud_sun_moon_radius_deg));
     }
     if(m_star_detect_isSet){
         obj->insert("starDetect", QJsonValue(star_detect));
@@ -5385,16 +5389,6 @@ SWGCameraSettings::setCloudMaskSunMoon(qint32 cloud_mask_sun_moon) {
     this->m_cloud_mask_sun_moon_isSet = true;
 }
 
-double
-SWGCameraSettings::getCloudSunMoonRadiusDeg() {
-    return cloud_sun_moon_radius_deg;
-}
-void
-SWGCameraSettings::setCloudSunMoonRadiusDeg(double cloud_sun_moon_radius_deg) {
-    this->cloud_sun_moon_radius_deg = cloud_sun_moon_radius_deg;
-    this->m_cloud_sun_moon_radius_deg_isSet = true;
-}
-
 qint32
 SWGCameraSettings::getCloudStarSense() {
     return cloud_star_sense;
@@ -5413,6 +5407,16 @@ void
 SWGCameraSettings::setCloudStarSenseMagnitude(double cloud_star_sense_magnitude) {
     this->cloud_star_sense_magnitude = cloud_star_sense_magnitude;
     this->m_cloud_star_sense_magnitude_isSet = true;
+}
+
+double
+SWGCameraSettings::getCloudSunMoonRadiusDeg() {
+    return cloud_sun_moon_radius_deg;
+}
+void
+SWGCameraSettings::setCloudSunMoonRadiusDeg(double cloud_sun_moon_radius_deg) {
+    this->cloud_sun_moon_radius_deg = cloud_sun_moon_radius_deg;
+    this->m_cloud_sun_moon_radius_deg_isSet = true;
 }
 
 qint32
@@ -6662,13 +6666,13 @@ SWGCameraSettings::isSet(){
         if(m_cloud_mask_sun_moon_isSet){
             isObjectUpdated = true; break;
         }
-        if(m_cloud_sun_moon_radius_deg_isSet){
-            isObjectUpdated = true; break;
-        }
         if(m_cloud_star_sense_isSet){
             isObjectUpdated = true; break;
         }
         if(m_cloud_star_sense_magnitude_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_cloud_sun_moon_radius_deg_isSet){
             isObjectUpdated = true; break;
         }
         if(m_star_detect_isSet){

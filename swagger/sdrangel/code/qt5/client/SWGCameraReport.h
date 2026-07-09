@@ -22,6 +22,8 @@
 #include <QJsonObject>
 
 
+#include <QList>
+#include <QString>
 
 #include "SWGObject.h"
 #include "export.h"
@@ -44,6 +46,15 @@ public:
     qint32 getRunningState();
     void setRunningState(qint32 running_state);
 
+    QString* getCaptureDateTime();
+    void setCaptureDateTime(QString* capture_date_time);
+
+    QList<QString*>* getDetectedObjectClasses();
+    void setDetectedObjectClasses(QList<QString*>* detected_object_classes);
+
+    qint32 getMotionDetected();
+    void setMotionDetected(qint32 motion_detected);
+
     float getCloudCoveragePercent();
     void setCloudCoveragePercent(float cloud_coverage_percent);
 
@@ -56,6 +67,15 @@ public:
 private:
     qint32 running_state;
     bool m_running_state_isSet;
+
+    QString* capture_date_time;
+    bool m_capture_date_time_isSet;
+
+    QList<QString*>* detected_object_classes;
+    bool m_detected_object_classes_isSet;
+
+    qint32 motion_detected;
+    bool m_motion_detected_isSet;
 
     float cloud_coverage_percent;
     bool m_cloud_coverage_percent_isSet;

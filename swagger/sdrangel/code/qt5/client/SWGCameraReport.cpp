@@ -30,6 +30,12 @@ SWGCameraReport::SWGCameraReport(QString* json) {
 SWGCameraReport::SWGCameraReport() {
     running_state = 0;
     m_running_state_isSet = false;
+    capture_date_time = nullptr;
+    m_capture_date_time_isSet = false;
+    detected_object_classes = nullptr;
+    m_detected_object_classes_isSet = false;
+    motion_detected = 0;
+    m_motion_detected_isSet = false;
     cloud_coverage_percent = 0.0f;
     m_cloud_coverage_percent_isSet = false;
     cloud_coverage_valid = 0;
@@ -44,6 +50,12 @@ void
 SWGCameraReport::init() {
     running_state = 0;
     m_running_state_isSet = false;
+    capture_date_time = new QString("");
+    m_capture_date_time_isSet = false;
+    detected_object_classes = new QList<QString*>();
+    m_detected_object_classes_isSet = false;
+    motion_detected = 0;
+    m_motion_detected_isSet = false;
     cloud_coverage_percent = 0.0f;
     m_cloud_coverage_percent_isSet = false;
     cloud_coverage_valid = 0;
@@ -52,6 +64,17 @@ SWGCameraReport::init() {
 
 void
 SWGCameraReport::cleanup() {
+
+    if(capture_date_time != nullptr) { 
+        delete capture_date_time;
+    }
+    if(detected_object_classes != nullptr) { 
+        auto arr = detected_object_classes;
+        for(auto o: *arr) { 
+            delete o;
+        }
+        delete detected_object_classes;
+    }
 
 
 
@@ -69,6 +92,12 @@ SWGCameraReport::fromJson(QString &json) {
 void
 SWGCameraReport::fromJsonObject(QJsonObject &pJson) {
     ::SWGSDRangel::setValue(&running_state, pJson["runningState"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&capture_date_time, pJson["captureDateTime"], "QString", "QString");
+    
+    
+    ::SWGSDRangel::setValue(&detected_object_classes, pJson["detectedObjectClasses"], "QList", "QString");
+    ::SWGSDRangel::setValue(&motion_detected, pJson["motionDetected"], "qint32", "");
     
     ::SWGSDRangel::setValue(&cloud_coverage_percent, pJson["cloudCoveragePercent"], "float", "");
     
@@ -93,6 +122,15 @@ SWGCameraReport::asJsonObject() {
     if(m_running_state_isSet){
         obj->insert("runningState", QJsonValue(running_state));
     }
+    if(capture_date_time != nullptr && *capture_date_time != QString("")){
+        toJsonValue(QString("captureDateTime"), capture_date_time, obj, QString("QString"));
+    }
+    if(detected_object_classes && detected_object_classes->size() > 0){
+        toJsonArray((QList<void*>*)detected_object_classes, obj, "detectedObjectClasses", "QString");
+    }
+    if(m_motion_detected_isSet){
+        obj->insert("motionDetected", QJsonValue(motion_detected));
+    }
     if(m_cloud_coverage_percent_isSet){
         obj->insert("cloudCoveragePercent", QJsonValue(cloud_coverage_percent));
     }
@@ -111,6 +149,36 @@ void
 SWGCameraReport::setRunningState(qint32 running_state) {
     this->running_state = running_state;
     this->m_running_state_isSet = true;
+}
+
+QString*
+SWGCameraReport::getCaptureDateTime() {
+    return capture_date_time;
+}
+void
+SWGCameraReport::setCaptureDateTime(QString* capture_date_time) {
+    this->capture_date_time = capture_date_time;
+    this->m_capture_date_time_isSet = true;
+}
+
+QList<QString*>*
+SWGCameraReport::getDetectedObjectClasses() {
+    return detected_object_classes;
+}
+void
+SWGCameraReport::setDetectedObjectClasses(QList<QString*>* detected_object_classes) {
+    this->detected_object_classes = detected_object_classes;
+    this->m_detected_object_classes_isSet = true;
+}
+
+qint32
+SWGCameraReport::getMotionDetected() {
+    return motion_detected;
+}
+void
+SWGCameraReport::setMotionDetected(qint32 motion_detected) {
+    this->motion_detected = motion_detected;
+    this->m_motion_detected_isSet = true;
 }
 
 float
@@ -139,6 +207,15 @@ SWGCameraReport::isSet(){
     bool isObjectUpdated = false;
     do{
         if(m_running_state_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(capture_date_time && *capture_date_time != QString("")){
+            isObjectUpdated = true; break;
+        }
+        if(detected_object_classes && (detected_object_classes->size() > 0)){
+            isObjectUpdated = true; break;
+        }
+        if(m_motion_detected_isSet){
             isObjectUpdated = true; break;
         }
         if(m_cloud_coverage_percent_isSet){

@@ -854,10 +854,17 @@ CameraSettings:
       type: number
       format: double
     cloudMaskSunMoon:
-      description: "Exclude a disc around the projected sun (day) / moon (night) so they are not classified as cloud (1 for yes, 0 for no)"
+      description: "Exclude the projected sun (day) / moon (night) so their bright bloom is not classified as cloud (1 for yes, 0 for no)"
       type: integer
+    cloudStarSense:
+      description: "At night, unmark detected cloud that predicted catalog stars are visible through; requires camera position, capture time and a calibrated lens model (1 for yes, 0 for no)"
+      type: integer
+    cloudStarSenseMagnitude:
+      description: "Faintest catalog star magnitude checked by star-visibility sensing: 0 to 6"
+      type: number
+      format: double
     cloudSunMoonRadiusDeg:
-      description: "Angular radius in degrees of the sun/moon exclusion disc: 0 to 45"
+      description: "Maximum angular radius in degrees the sun/moon exclusion grows to; the mask sizes itself to the actual glare bloom up to this cap: 0 to 45"
       type: number
       format: double
     starDetect:
@@ -1077,6 +1084,17 @@ CameraReport:
           * 1 - idle
           * 2 - running
           * 3 - error
+    captureDateTime:
+      description: "ISO-8601 capture date/time for the current frame, or an empty string if unavailable"
+      type: string
+    detectedObjectClasses:
+      description: "Distinct object detector class names detected in the current frame"
+      type: array
+      items:
+        type: string
+    motionDetected:
+      description: "Whether motion is currently detected (1 for yes, 0 for no)"
+      type: integer
     cloudCoveragePercent:
       description: "Percentage of the evaluated sky classified as cloud in the latest analysed frame"
       type: number

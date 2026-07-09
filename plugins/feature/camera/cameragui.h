@@ -812,6 +812,7 @@ private slots:
     void on_cloudAutoReferenceCheck_toggled(bool checked);
     void on_cloudSaveReferenceButton_clicked();
     void on_cloudViewReferenceButton_clicked();
+    void on_cloudSaveTestCaseButton_clicked();
     void on_cloudColorButton_clicked();
     void on_starDetectButton_toggled(bool checked);
     void on_starThresholdSpin_valueChanged(int value);

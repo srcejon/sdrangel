@@ -6696,6 +6696,16 @@ car</string>
                </property>
               </widget>
              </item>
+             <item>
+              <widget class="QPushButton" name="cloudSaveTestCaseButton">
+               <property name="toolTip">
+                <string>Save the current image together with all settings, the capture time and the clear-sky reference as a standalone test-case bundle, runnable offline with the cloud test harness (--run-case)</string>
+               </property>
+               <property name="text">
+                <string>Save test case</string>
+               </property>
+              </widget>
+             </item>
             </layout>
            </item>
            <item row="11" column="3">

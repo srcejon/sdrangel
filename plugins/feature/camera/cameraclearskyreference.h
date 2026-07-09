@@ -42,9 +42,12 @@
  *  - Cue: pixels standing above the reference in brightness or shifted toward white in
  *    colour are cloud, catching deviations the in-frame heuristics cannot anchor.
  *
- * Because the comparison is anchored to per-frame statistics it is deliberately blind to
- * perfectly uniform whole-sky changes (that would need absolute exposure metadata); its
- * value is spatial: quirks, patchy cloud, and haze structure.
+ * The comparison judges the residual after removing a fitted low-order surface from the
+ * deviation: twilight and moon glow evolve within minutes as smooth gradients, and without
+ * this a reference only held for the minutes around its capture. The consequence, shared
+ * with the per-frame anchoring, is deliberate blindness to smooth whole-sky changes
+ * (uniform or gradient haze would need absolute exposure metadata); the model's value is
+ * spatial: quirks, patchy cloud, and localised structure.
  *
  * The model also derives a static foreground mask (trees, roofs, window frames) from the
  * captured data: foreground silhouettes are darker than the night sky's airglow in the
@@ -59,12 +62,22 @@
 class CameraClearSkyReference
 {
 public:
-    static constexpr int kSlotCount = 7; // Day, Twilight(+moon), DeepTwilight(+moon), Dark(+moon)
+    // Day plus nine 2-degree sun-elevation bins from -4 down to below -20, each split by
+    // moon above/below 5 degrees. The bins are deliberately fine: at solstice latitudes one
+    // broad twilight band spans a 4x sky-brightness range, so a reference saved late in the
+    // band would overwrite one still needed for the earlier conditions.
+    static constexpr int kNightBins = 9;
+    static constexpr int kSlotCount = 1 + 2 * kNightBins;
 
-    // Slot for a sky state: sun-elevation bands day (>= -4 deg), twilight (-4..-12),
-    // deep twilight (-12..-18), dark (< -18); night bands split by moon above 5 deg
     [[nodiscard]] static int slotFor(double sunElevationDeg, double moonElevationDeg);
     [[nodiscard]] static QString slotName(int slot);
+
+    // The slot encoding, defined once: slot 0 is Day; night slots are 1 + 2*bin + moon.
+    // All bin/moon arithmetic must go through these so the encoding has a single source.
+    [[nodiscard]] static constexpr bool slotIsNight(int slot) { return (slot >= 1) && (slot < kSlotCount); }
+    [[nodiscard]] static constexpr int slotFromBin(int bin, bool moonUp) { return 1 + 2 * bin + (moonUp ? 1 : 0); }
+    [[nodiscard]] static constexpr int slotBin(int slot) { return (slot - 1) / 2; }
+    [[nodiscard]] static constexpr bool slotMoonUp(int slot) { return ((slot - 1) % 2) != 0; }
 
     // Points the store at the camera identified by the settings' camera id, loading its
     // saved references when the camera changes. Call before any other member.
@@ -74,7 +87,8 @@ public:
     // median-blurred work luminance, workBgr the work-resolution BGR image, texture the
     // fine-texture energy, evaluationMask the evaluated-sky mask; roiNorm is the detection
     // ROI normalised to the frame so a later ROI change invalidates the slot.
-    void capture(int slot, const cv::Mat& gray, const cv::Mat& workBgr, const cv::Mat& texture, const cv::Mat& evaluationMask, const QRectF& roiNorm, const QDateTime& when);
+    void capture(int slot, const cv::Mat& gray, const cv::Mat& workBgr, const cv::Mat& texture, const cv::Mat& evaluationMask, const QRectF& roiNorm, const QDateTime& when,
+                 double sunElevationDeg = 0.0, double moonElevationDeg = 0.0);
 
     // Applies the reference comparison to the thresholded cloud mask (cue OR, veto AND).
     // Returns false when it abstained: empty/mismatched slot, or the frame globally
@@ -83,9 +97,12 @@ public:
 
     // Auto-learning: blends a verified-clear frame into its slot (first fill copies).
     // Gated on measured coverage, star-sensing confirmation at night (when star sensing
-    // is enabled), and a per-slot time throttle. Returns true when the slot was updated.
+    // is enabled), and a per-slot time throttle. When star sensing strongly confirms a
+    // clear sky (most predicted stars visible everywhere), learning is allowed even at
+    // high measured coverage - measured coverage may be exactly the false positives an
+    // empty slot cannot yet veto. Returns true when the slot was updated.
     bool autoLearn(int slot, const cv::Mat& gray, const cv::Mat& workBgr, const cv::Mat& texture, const cv::Mat& evaluationMask, const QRectF& roiNorm, const QDateTime& when,
-                   float coveragePercent, bool night, bool starSenseEnabled, bool starConfirmed);
+                   float coveragePercent, bool night, bool starSenseEnabled, int starsExpected, int starsVisible);
 
     // Static foreground mask (255 = foreground) derived from the darkest filled night
     // slot's silhouettes and the day slot's fine texture, resized to workSize. Empty when
@@ -108,6 +125,10 @@ public:
     [[nodiscard]] SlotPreview slotPreview(int slot) const;
     [[nodiscard]] QImage foregroundPreview() const; // derived foreground mask; null when none
 
+    // Copies the reference into a test-case bundle directory (canonical file name), so the
+    // bundle is a standalone clear-sky store; false when nothing is saved yet
+    bool exportTo(const QString& directory) const;
+
 private:
     struct Slot
     {
@@ -117,6 +138,8 @@ private:
         cv::Mat sky;          // CV_8U refSize: evaluated-sky mask at capture
         double brightnessAnchor = 0.0; // robust sky median luminance at capture
         double ratioAnchor = 0.0;      // clear-sky (low percentile) ratio at capture
+        double sunElevation = 0.0;     // sky state at capture, for diagnostics
+        double moonElevation = 0.0;
         QRectF roiNorm;
         QDateTime updated;
         int updateCount = 0;
@@ -124,10 +147,14 @@ private:
         [[nodiscard]] bool valid() const { return !brightness.empty(); }
     };
 
+    [[nodiscard]] const Slot* usableSlot(int slot, const QRectF& roiNorm, double frameAnchor) const;
     [[nodiscard]] static QString storageDir();
+    [[nodiscard]] QString storageFileName() const;
     [[nodiscard]] QString storagePath() const;
     void load();
     void save() const;
+    bool saveToPath(const QString& path) const;
+    [[nodiscard]] static bool roiNormsMatch(const QRectF& a, const QRectF& b);
     [[nodiscard]] static bool roiMatches(const Slot& slot, const QRectF& roiNorm);
     static void buildMaps(const cv::Mat& gray, const cv::Mat& workBgr, const cv::Mat& texture, const cv::Mat& evaluationMask,
                           cv::Mat& brightnessOut, cv::Mat& ratioOut, cv::Mat& textureOut, cv::Mat& skyOut,
@@ -137,6 +164,7 @@ private:
     bool m_loaded = false;
     Slot m_slots[kSlotCount];
     mutable cv::Mat m_foregroundCache; // at reference resolution; invalidated on slot updates
+    mutable QRectF m_foregroundRoiNorm; // ROI of the slot the cache was derived from, for the geometry gate
     mutable bool m_foregroundDirty = true;
 };
 

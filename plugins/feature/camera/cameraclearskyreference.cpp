@@ -48,6 +48,12 @@ constexpr int kSmoothRadius = 2;
 constexpr double kVetoBrightness = 0.08;    // relative to the sky anchor
 constexpr double kVetoAbsBrightness = 6.0;  // 8-bit units; rescues dark skies where the relative tolerance is tighter than noise
 constexpr double kVetoRatio = 0.06;
+// The veto judges the residual after smooth-surface removal so it survives twilight/moon
+// drift, but that must not let it erase a genuinely smooth overcast the in-frame paths
+// detected: where the RAW deviation from the clear reference is itself large, the pixel is
+// not "matching the reference" however smooth the change, and the veto may not fire.
+constexpr double kVetoRawBrightnessCap = 0.30; // raw |brightness deviation| above this blocks the veto
+constexpr double kVetoRawRatioCap = 0.12;      // raw |anchored ratio deviation| above this blocks the veto
 
 // Cue: deviation from the reference strong enough to flag as cloud on its own
 constexpr double kCueBrightness = 0.18;     // relative to the sky anchor
@@ -71,7 +77,18 @@ constexpr double kForegroundDarkLevel = 24.0;  // absolute 8-bit level below whi
 constexpr double kForegroundTexture = 8.0;     // day-slot fine-texture level above which a pixel is foliage/structure
 constexpr double kForegroundMaxFraction = 0.45; // a derivation covering most of the frame is wrong; ignore it
 
-constexpr quint32 kFileMagic = 0x43535231; // "CSR1"
+constexpr quint32 kFileMagic = 0x43535232;   // "CSR2": fine sun-elevation bins + per-slot sky state
+constexpr quint32 kFileMagicV1 = 0x43535231; // "CSR1": three broad night bands
+// A reference is only comparable when frame and reference were exposed similarly; beyond
+// this anchor ratio the normalised shapes no longer correspond and the comparison abstains
+constexpr double kAnchorRatioLimit = 2.5;
+// Strong star confirmation: most predicted stars visible everywhere proves the sky clear
+// even when the measured coverage is inflated by the very false positives an empty
+// reference slot cannot yet veto
+constexpr int kStarConfirmMinExpected = 20;
+constexpr double kStarConfirmStrongFraction = 0.7;
+constexpr int kStarConfirmMinVisible = 5; // weak confirmation: some stars visible somewhere
+constexpr float kAutoLearnStarMaxCoverage = 35.0f;
 
 int maskedPercentile8U(const cv::Mat& values, const cv::Mat& mask, double fraction)
 {
@@ -128,6 +145,81 @@ float maskedPercentile32F(const cv::Mat& values, const cv::Mat& mask, double fra
     return samples[index];
 }
 
+// Fits an order-2 polynomial surface to the masked values (least squares over normalised
+// coordinates) and returns it evaluated over the whole map. Used to remove the smooth
+// component of a frame-vs-reference deviation: twilight and moon glow evolve within
+// minutes as smooth low-order gradients, while camera quirks and genuine cloud are
+// localised, so comparing the residual keeps a reference valid across a whole sky-state
+// band instead of only for the minutes around its capture.
+cv::Mat fitSmoothSurface(const cv::Mat& values, const cv::Mat& mask)
+{
+    constexpr int kTerms = 6; // 1, x, y, x^2, xy, y^2
+    double ata[kTerms][kTerms] = {{0.0}};
+    double atb[kTerms] = {0.0};
+    int samples = 0;
+
+    const double scaleX = 2.0 / std::max(1, values.cols - 1);
+    const double scaleY = 2.0 / std::max(1, values.rows - 1);
+    for (int row = 0; row < values.rows; row += 2)
+    {
+        const float *valueLine = values.ptr<float>(row);
+        const uchar *maskLine = mask.ptr<uchar>(row);
+        const double y = row * scaleY - 1.0;
+        for (int col = 0; col < values.cols; col += 2)
+        {
+            if (!maskLine[col]) {
+                continue;
+            }
+            const double x = col * scaleX - 1.0;
+            const double basis[kTerms] = {1.0, x, y, x * x, x * y, y * y};
+            for (int i = 0; i < kTerms; ++i)
+            {
+                for (int j = i; j < kTerms; ++j) {
+                    ata[i][j] += basis[i] * basis[j];
+                }
+                atb[i] += basis[i] * valueLine[col];
+            }
+            ++samples;
+        }
+    }
+
+    cv::Mat surface = cv::Mat::zeros(values.size(), CV_32F);
+    if (samples < 4 * kTerms) {
+        return surface;
+    }
+
+    cv::Mat lhs(kTerms, kTerms, CV_64F);
+    cv::Mat rhs(kTerms, 1, CV_64F);
+    for (int i = 0; i < kTerms; ++i)
+    {
+        for (int j = 0; j < kTerms; ++j) {
+            lhs.at<double>(i, j) = ata[std::min(i, j)][std::max(i, j)];
+        }
+        rhs.at<double>(i) = atb[i];
+    }
+    cv::Mat coefficients;
+    if (!cv::solve(lhs, rhs, coefficients, cv::DECOMP_SVD)) {
+        return surface;
+    }
+
+    for (int row = 0; row < surface.rows; ++row)
+    {
+        float *line = surface.ptr<float>(row);
+        const double y = row * scaleY - 1.0;
+        for (int col = 0; col < surface.cols; ++col)
+        {
+            const double x = col * scaleX - 1.0;
+            const double basis[kTerms] = {1.0, x, y, x * x, x * y, y * y};
+            double value = 0.0;
+            for (int i = 0; i < kTerms; ++i) {
+                value += coefficients.at<double>(i) * basis[i];
+            }
+            line[col] = static_cast<float>(value);
+        }
+    }
+    return surface;
+}
+
 void writeMat(QDataStream& stream, const cv::Mat& mat)
 {
     stream << static_cast<qint32>(mat.rows) << static_cast<qint32>(mat.cols) << static_cast<qint32>(mat.type());
@@ -163,31 +255,29 @@ int CameraClearSkyReference::slotFor(double sunElevationDeg, double moonElevatio
     if (sunElevationDeg >= -4.0) {
         return 0; // Day (matches the detector's day/night boundary)
     }
-    int band;
-    if (sunElevationDeg >= -12.0) {
-        band = 0; // Twilight (civil + early nautical)
-    } else if (sunElevationDeg >= -18.0) {
-        band = 1; // Deep twilight
-    } else {
-        band = 2; // Dark
-    }
+    const int bin = std::clamp(static_cast<int>((-4.0 - sunElevationDeg) / 2.0), 0, kNightBins - 1);
     const bool moonUp = moonElevationDeg > 5.0;
-    return 1 + 2 * band + (moonUp ? 1 : 0);
+    return slotFromBin(bin, moonUp);
 }
 
 QString CameraClearSkyReference::slotName(int slot)
 {
-    switch (slot)
-    {
-    case 0: return QStringLiteral("Day");
-    case 1: return QStringLiteral("Twilight");
-    case 2: return QStringLiteral("Twilight+moon");
-    case 3: return QStringLiteral("Deep twilight");
-    case 4: return QStringLiteral("Deep twilight+moon");
-    case 5: return QStringLiteral("Dark");
-    case 6: return QStringLiteral("Dark+moon");
-    default: return QStringLiteral("?");
+    if (slot == 0) {
+        return QStringLiteral("Day");
     }
+    if ((slot < 0) || (slot >= kSlotCount)) {
+        return QStringLiteral("?");
+    }
+    const int bin = slotBin(slot);
+    const bool moonUp = slotMoonUp(slot);
+    const int upper = -4 - 2 * bin;
+    QString name = (bin == kNightBins - 1)
+        ? QStringLiteral("Sun < %1\u00b0").arg(upper)
+        : QStringLiteral("Sun %1..%2\u00b0").arg(upper).arg(upper - 2);
+    if (moonUp) {
+        name += QStringLiteral(" +moon");
+    }
+    return name;
 }
 
 QString CameraClearSkyReference::storageDir()
@@ -200,10 +290,15 @@ QString CameraClearSkyReference::storageDir()
     return QDir(baseDir).filePath(QStringLiteral("camera/clearsky"));
 }
 
-QString CameraClearSkyReference::storagePath() const
+QString CameraClearSkyReference::storageFileName() const
 {
     const QByteArray hash = QCryptographicHash::hash(m_cameraId.toUtf8(), QCryptographicHash::Sha1).toHex().left(16);
-    return QDir(storageDir()).filePath(QString::fromLatin1(hash) + QStringLiteral(".csr"));
+    return QString::fromLatin1(hash) + QStringLiteral(".csr");
+}
+
+QString CameraClearSkyReference::storagePath() const
+{
+    return QDir(storageDir()).filePath(storageFileName());
 }
 
 void CameraClearSkyReference::ensureLoaded(const QString& cameraId)
@@ -232,22 +327,36 @@ void CameraClearSkyReference::load()
     stream.setVersion(QDataStream::Qt_5_15);
     quint32 magic = 0;
     stream >> magic;
-    if (magic != kFileMagic)
+    if ((magic != kFileMagic) && (magic != kFileMagicV1))
     {
         qWarning() << "CameraClearSkyReference: unrecognised reference file" << file.fileName();
         return;
     }
 
-    for (Slot& slot : m_slots)
+    const bool v1 = (magic == kFileMagicV1);
+    // v1 files held Day plus three broad night bands (x moon). Each band is replicated
+    // into every fine bin it covered (cv::Mat copies share pixel data, so this is cheap),
+    // preserving the coverage the old single band provided; the anchor guard rejects any
+    // bin where the approximation no longer corresponds to the frame's exposure.
+    static constexpr int kV1FirstBin[] = {0, 0, 0, 4, 4, 7, 7}; // Twilight -4..-12, Deep -12..-18, Dark < -18
+    static constexpr int kV1LastBin[] = {0, 3, 3, 6, 6, 8, 8};
+    const int slotCount = v1 ? 7 : kSlotCount;
+
+    for (int index = 0; index < slotCount; ++index)
     {
         bool valid = false;
         stream >> valid;
         if (!valid) {
             continue;
         }
-        stream >> slot.brightnessAnchor >> slot.ratioAnchor >> slot.roiNorm >> slot.updated >> slot.updateCount;
-        if (!readMat(stream, slot.brightness) || !readMat(stream, slot.ratio)
-            || !readMat(stream, slot.texture) || !readMat(stream, slot.sky)
+        Slot loaded;
+        stream >> loaded.brightnessAnchor >> loaded.ratioAnchor;
+        if (!v1) {
+            stream >> loaded.sunElevation >> loaded.moonElevation;
+        }
+        stream >> loaded.roiNorm >> loaded.updated >> loaded.updateCount;
+        if (!readMat(stream, loaded.brightness) || !readMat(stream, loaded.ratio)
+            || !readMat(stream, loaded.texture) || !readMat(stream, loaded.sky)
             || (stream.status() != QDataStream::Ok))
         {
             qWarning() << "CameraClearSkyReference: failed to read reference file" << file.fileName();
@@ -256,19 +365,61 @@ void CameraClearSkyReference::load()
             }
             return;
         }
+        if (!v1)
+        {
+            if ((index >= 0) && (index < kSlotCount)) {
+                m_slots[index] = loaded;
+            }
+            continue;
+        }
+        if (index == 0)
+        {
+            loaded.sunElevation = 10.0;
+            loaded.moonElevation = -20.0;
+            m_slots[0] = loaded;
+            continue;
+        }
+        const bool moonUp = slotMoonUp(index); // v1 night slots share the same parity encoding
+        loaded.moonElevation = moonUp ? 20.0 : -20.0;
+        for (int bin = kV1FirstBin[index]; bin <= kV1LastBin[index]; ++bin)
+        {
+            Slot replica = loaded;
+            replica.sunElevation = -4.0 - 2.0 * bin - 1.0; // bin centre
+            m_slots[slotFromBin(bin, moonUp)] = replica;
+        }
     }
 }
 
 void CameraClearSkyReference::save() const
 {
     QDir().mkpath(storageDir());
+    saveToPath(storagePath());
+}
+
+// Exports the in-memory reference into another directory under its canonical file name, so
+// a saved test-case bundle can serve as a clear-sky store by pointing
+// SDRANGEL_CAMERA_CLEARSKY_DIR at the bundle
+bool CameraClearSkyReference::exportTo(const QString& directory) const
+{
+    bool any = false;
+    for (const Slot& slot : m_slots) {
+        any = any || slot.valid();
+    }
+    if (!any) {
+        return false;
+    }
+    return saveToPath(QDir(directory).filePath(storageFileName()));
+}
+
+bool CameraClearSkyReference::saveToPath(const QString& path) const
+{
     // QSaveFile commits atomically via rename, so a crash mid-write (or a concurrent
     // reader in another feature instance) never sees a truncated reference file
-    QSaveFile file(storagePath());
+    QSaveFile file(path);
     if (!file.open(QIODevice::WriteOnly))
     {
         qWarning() << "CameraClearSkyReference: cannot write reference file" << file.fileName();
-        return;
+        return false;
     }
 
     QDataStream stream(&file);
@@ -280,23 +431,50 @@ void CameraClearSkyReference::save() const
         if (!slot.valid()) {
             continue;
         }
-        stream << slot.brightnessAnchor << slot.ratioAnchor << slot.roiNorm << slot.updated << slot.updateCount;
+        stream << slot.brightnessAnchor << slot.ratioAnchor << slot.sunElevation << slot.moonElevation << slot.roiNorm << slot.updated << slot.updateCount;
         writeMat(stream, slot.brightness);
         writeMat(stream, slot.ratio);
         writeMat(stream, slot.texture);
         writeMat(stream, slot.sky);
     }
-    if (!file.commit()) {
+    if (!file.commit())
+    {
         qWarning() << "CameraClearSkyReference: failed to commit reference file" << file.fileName();
+        return false;
     }
+    return true;
+}
+
+// A slot usable for comparison against a frame: filled, same ROI, and exposed similarly
+// enough that normalised shapes correspond
+const CameraClearSkyReference::Slot* CameraClearSkyReference::usableSlot(int slot, const QRectF& roiNorm, double frameAnchor) const
+{
+    if ((slot < 0) || (slot >= kSlotCount)) {
+        return nullptr;
+    }
+    const Slot& candidate = m_slots[slot];
+    if (!candidate.valid() || !roiMatches(candidate, roiNorm)) {
+        return nullptr;
+    }
+    const double high = std::max(frameAnchor, candidate.brightnessAnchor);
+    const double low = std::max(1.0, std::min(frameAnchor, candidate.brightnessAnchor));
+    if (high / low > kAnchorRatioLimit) {
+        return nullptr;
+    }
+    return &candidate;
+}
+
+bool CameraClearSkyReference::roiNormsMatch(const QRectF& a, const QRectF& b)
+{
+    return (std::fabs(a.x() - b.x()) < 0.02)
+        && (std::fabs(a.y() - b.y()) < 0.02)
+        && (std::fabs(a.width() - b.width()) < 0.02)
+        && (std::fabs(a.height() - b.height()) < 0.02);
 }
 
 bool CameraClearSkyReference::roiMatches(const Slot& slot, const QRectF& roiNorm)
 {
-    return (std::fabs(slot.roiNorm.x() - roiNorm.x()) < 0.02)
-        && (std::fabs(slot.roiNorm.y() - roiNorm.y()) < 0.02)
-        && (std::fabs(slot.roiNorm.width() - roiNorm.width()) < 0.02)
-        && (std::fabs(slot.roiNorm.height() - roiNorm.height()) < 0.02);
+    return roiNormsMatch(slot.roiNorm, roiNorm);
 }
 
 // Builds the reference-resolution maps from the detector's work images: box-smoothed
@@ -307,11 +485,15 @@ void CameraClearSkyReference::buildMaps(const cv::Mat& gray, const cv::Mat& work
                                         double& brightnessAnchorOut, double& ratioAnchorOut)
 {
     const cv::Size refSize(kRefSize, kRefSize);
-    cv::Mat grayRef, bgrRef, textureRef;
+    cv::Mat grayRef, bgrRef;
     cv::resize(gray, grayRef, refSize, 0.0, 0.0, cv::INTER_AREA);
     cv::resize(workBgr, bgrRef, refSize, 0.0, 0.0, cv::INTER_AREA);
-    cv::resize(texture, textureRef, refSize, 0.0, 0.0, cv::INTER_AREA);
     cv::resize(evaluationMask, skyOut, refSize, 0.0, 0.0, cv::INTER_NEAREST);
+    // The texture map is only stored at capture; comparisons pass an empty Mat
+    cv::Mat textureRef = cv::Mat::zeros(refSize, CV_8UC1);
+    if (!texture.empty()) {
+        cv::resize(texture, textureRef, refSize, 0.0, 0.0, cv::INTER_AREA);
+    }
 
     brightnessAnchorOut = std::max(1, maskedPercentile8U(grayRef, skyOut, 0.5));
 
@@ -336,7 +518,8 @@ void CameraClearSkyReference::buildMaps(const cv::Mat& gray, const cv::Mat& work
     textureRef.convertTo(textureOut, CV_32F);
 }
 
-void CameraClearSkyReference::capture(int slot, const cv::Mat& gray, const cv::Mat& workBgr, const cv::Mat& texture, const cv::Mat& evaluationMask, const QRectF& roiNorm, const QDateTime& when)
+void CameraClearSkyReference::capture(int slot, const cv::Mat& gray, const cv::Mat& workBgr, const cv::Mat& texture, const cv::Mat& evaluationMask, const QRectF& roiNorm, const QDateTime& when,
+                                       double sunElevationDeg, double moonElevationDeg)
 {
     if ((slot < 0) || (slot >= kSlotCount)) {
         return;
@@ -346,6 +529,8 @@ void CameraClearSkyReference::capture(int slot, const cv::Mat& gray, const cv::M
     buildMaps(gray, workBgr, texture, evaluationMask,
               target.brightness, target.ratio, target.texture, target.sky,
               target.brightnessAnchor, target.ratioAnchor);
+    target.sunElevation = sunElevationDeg;
+    target.moonElevation = moonElevationDeg;
     target.roiNorm = roiNorm;
     target.updated = when;
     target.updateCount = 1;
@@ -358,8 +543,22 @@ bool CameraClearSkyReference::applyCueAndVeto(int slot, cv::Mat& mask, const cv:
     if ((slot < 0) || (slot >= kSlotCount)) {
         return false;
     }
-    const Slot& reference = m_slots[slot];
-    if (!reference.valid() || !roiMatches(reference, roiNorm)) {
+    // Cheap pre-check before building the frame's maps: with an empty or ROI-mismatched
+    // store (every fresh install) nothing below could succeed, and the map build is the
+    // expensive part of the comparison
+    const auto slotCandidate = [&](int candidate) {
+        return (candidate >= 0) && (candidate < kSlotCount)
+            && m_slots[candidate].valid() && roiMatches(m_slots[candidate], roiNorm);
+    };
+    bool anyCandidate = slotCandidate(slot);
+    if (!anyCandidate && slotIsNight(slot))
+    {
+        const int bin = slotBin(slot);
+        const bool moonUp = slotMoonUp(slot);
+        anyCandidate = ((bin > 0) && slotCandidate(slotFromBin(bin - 1, moonUp)))
+            || ((bin < kNightBins - 1) && slotCandidate(slotFromBin(bin + 1, moonUp)));
+    }
+    if (!anyCandidate) {
         return false;
     }
 
@@ -367,10 +566,30 @@ bool CameraClearSkyReference::applyCueAndVeto(int slot, cv::Mat& mask, const cv:
     // reference resolution
     cv::Mat frameBrightness, frameRatio, frameTexture, frameSky;
     double frameBrightnessAnchor = 0.0, frameRatioAnchor = 0.0;
-    cv::Mat dummyTexture = cv::Mat::zeros(gray.size(), CV_8UC1);
-    buildMaps(gray, workBgr, dummyTexture, evaluationMask,
+    buildMaps(gray, workBgr, cv::Mat(), evaluationMask,
               frameBrightness, frameRatio, frameTexture, frameSky,
               frameBrightnessAnchor, frameRatioAnchor);
+
+    // Exact bin first, then the neighbouring sun-elevation bins with the same moon state.
+    // Day (slot 0) never participates in night fallback and has no fallback of its own: a
+    // night frame compared against a daylight map produces nonsense either way. The anchor
+    // guard rejects any candidate whose exposure no longer corresponds to the frame's.
+    const Slot *chosen = usableSlot(slot, roiNorm, frameBrightnessAnchor);
+    if (!chosen && slotIsNight(slot))
+    {
+        const int bin = slotBin(slot);
+        const bool moonUp = slotMoonUp(slot);
+        if (bin > 0) {
+            chosen = usableSlot(slotFromBin(bin - 1, moonUp), roiNorm, frameBrightnessAnchor);
+        }
+        if (!chosen && (bin < kNightBins - 1)) {
+            chosen = usableSlot(slotFromBin(bin + 1, moonUp), roiNorm, frameBrightnessAnchor);
+        }
+    }
+    if (!chosen) {
+        return false;
+    }
+    const Slot& reference = *chosen;
 
     cv::Mat valid;
     cv::bitwise_and(reference.sky, frameSky, valid);
@@ -378,21 +597,34 @@ bool CameraClearSkyReference::applyCueAndVeto(int slot, cv::Mat& mask, const cv:
         return false;
     }
 
-    // Normalised brightness deviation, and the same in absolute 8-bit units
-    const cv::Mat brightnessDev = frameBrightness - reference.brightness;
-    cv::Mat absDev = brightnessDev * frameBrightnessAnchor;
+    // Normalised brightness deviation
+    cv::Mat brightnessDev = frameBrightness - reference.brightness;
 
     // Colour deviation with both sides anchored to their own clear-sky ratio, absorbing
     // white-balance and gain shifts (and, unavoidably, perfectly uniform colour changes)
-    const cv::Mat ratioDev = (frameRatio - static_cast<float>(frameRatioAnchor))
+    cv::Mat ratioDev = (frameRatio - static_cast<float>(frameRatioAnchor))
         - (reference.ratio - static_cast<float>(reference.ratioAnchor));
 
     // Frame-level sanity: if the sky no longer resembles the reference at the median, the
     // exposure regime changed and per-pixel judgements would be nonsense
-    cv::Mat absBrightnessDev = cv::abs(brightnessDev);
-    if (maskedPercentile32F(absBrightnessDev, valid, 0.5) > kAbstainMedianDev) {
-        return false;
+    {
+        const cv::Mat rawAbsDev = cv::abs(brightnessDev);
+        if (maskedPercentile32F(rawAbsDev, valid, 0.5) > kAbstainMedianDev) {
+            return false;
+        }
     }
+
+    // Twilight and moon glow evolve within minutes as smooth low-order gradients; without
+    // this the veto only holds for the minutes around a save and the cue then misreads the
+    // drifted glow as cloud. Judge only the residual, localised deviation - but keep the
+    // raw deviations: the veto must not fire where the sky differs strongly from the
+    // reference even if the difference is smooth (a gradient overcast is not drift).
+    const cv::Mat rawAbsBrightnessDev = cv::abs(brightnessDev);
+    const cv::Mat rawAbsRatioDev = cv::abs(ratioDev);
+    brightnessDev -= fitSmoothSurface(brightnessDev, valid);
+    ratioDev -= fitSmoothSurface(ratioDev, valid);
+    cv::Mat absDev = brightnessDev * frameBrightnessAnchor;
+    cv::Mat absBrightnessDev = cv::abs(brightnessDev);
 
     cv::Mat grayRef;
     cv::resize(gray, grayRef, cv::Size(kRefSize, kRefSize), 0.0, 0.0, cv::INTER_AREA);
@@ -417,10 +649,14 @@ bool CameraClearSkyReference::applyCueAndVeto(int slot, cv::Mat& mask, const cv:
     const cv::Mat vetoBrightnessRel = absBrightnessDev < kVetoBrightness;
     const cv::Mat vetoBrightnessAbs = absAbsDev < kVetoAbsBrightness;
     const cv::Mat vetoRatioRel = absRatioDev < kVetoRatio;
+    const cv::Mat rawBrightnessOk = rawAbsBrightnessDev < kVetoRawBrightnessCap;
+    const cv::Mat rawRatioOk = rawAbsRatioDev < kVetoRawRatioCap;
     cv::Mat vetoBrightness, vetoRatio, veto;
     cv::bitwise_or(vetoBrightnessRel, vetoBrightnessAbs, vetoBrightness);
     cv::bitwise_or(vetoRatioRel, darkPixels, vetoRatio);
     cv::bitwise_and(vetoBrightness, vetoRatio, veto);
+    cv::bitwise_and(veto, rawBrightnessOk, veto);
+    cv::bitwise_and(veto, rawRatioOk, veto);
     cv::bitwise_and(veto, valid, veto);
 
     // Back to work resolution and into the thresholded mask
@@ -436,22 +672,35 @@ bool CameraClearSkyReference::applyCueAndVeto(int slot, cv::Mat& mask, const cv:
 }
 
 bool CameraClearSkyReference::autoLearn(int slot, const cv::Mat& gray, const cv::Mat& workBgr, const cv::Mat& texture, const cv::Mat& evaluationMask, const QRectF& roiNorm, const QDateTime& when,
-                                        float coveragePercent, bool night, bool starSenseEnabled, bool starConfirmed)
+                                        float coveragePercent, bool night, bool starSenseEnabled, int starsExpected, int starsVisible)
 {
     if ((slot < 0) || (slot >= kSlotCount)) {
         return false;
     }
-    if (coveragePercent > (night ? kAutoLearnMaxCoverageNight : kAutoLearnMaxCoverageDay)) {
+    Slot& target = m_slots[slot];
+    const bool replace = !target.valid() || !roiMatches(target, roiNorm);
+
+    // Strong star confirmation (most predicted stars visible across the sky) overrides the
+    // coverage gate ONLY when bootstrapping an empty slot: there, high measured coverage is
+    // usually the false positives the missing reference cannot yet veto. A filled slot is a
+    // working reference; it only ever blends genuinely low-coverage frames, so one partly
+    // cloudy frame with clear zenith stars cannot progressively poison it. (The bootstrap
+    // itself accepts a bounded risk: star sensing samples nothing below the minimum
+    // elevation, so low horizon cloud can be baked into a first fill - a later Save ref or
+    // low-coverage blends correct it.)
+    const bool starStrong = night && starSenseEnabled && (starsExpected >= kStarConfirmMinExpected)
+        && (static_cast<double>(starsVisible) >= kStarConfirmStrongFraction * starsExpected);
+    const float maxCoverage = (starStrong && replace)
+        ? kAutoLearnStarMaxCoverage
+        : (night ? kAutoLearnMaxCoverageNight : kAutoLearnMaxCoverageDay);
+    if (coveragePercent > maxCoverage) {
         return false;
     }
     // At night, when star sensing runs it must confirm the sky is genuinely clear; low
     // measured coverage alone could be a dark overcast the detector under-reads
-    if (night && starSenseEnabled && !starConfirmed) {
+    if (night && starSenseEnabled && !starStrong && (starsVisible < kStarConfirmMinVisible)) {
         return false;
     }
-
-    Slot& target = m_slots[slot];
-    const bool replace = !target.valid() || !roiMatches(target, roiNorm);
     if (!replace && target.updated.isValid() && when.isValid()
         && (target.updated.secsTo(when) < kAutoLearnThrottleSecs)) {
         return false;
@@ -496,16 +745,18 @@ cv::Mat CameraClearSkyReference::foregroundMask(const cv::Size& workSize, const 
     {
         m_foregroundCache = cv::Mat();
 
-        // Silhouettes: in the darkest filled night slot, foreground (trees, roofs, frames)
-        // is darker than the airglow-lit sky
-        static constexpr int darkPreference[] = {5, 6, 3, 4};
+        // Silhouettes: in the darkest filled night slot (deepest sun-elevation bin,
+        // moonless preferred), foreground (trees, roofs, frames) is darker than the
+        // airglow-lit sky
         const Slot *darkSlot = nullptr;
-        for (int slot : darkPreference)
+        for (int bin = kNightBins - 1; (bin >= 0) && !darkSlot; --bin)
         {
-            if (m_slots[slot].valid())
+            for (int moon = 0; (moon <= 1) && !darkSlot; ++moon)
             {
-                darkSlot = &m_slots[slot];
-                break;
+                const int slot = slotFromBin(bin, moon != 0);
+                if (m_slots[slot].valid()) {
+                    darkSlot = &m_slots[slot];
+                }
             }
         }
 
@@ -535,8 +786,13 @@ cv::Mat CameraClearSkyReference::foregroundMask(const cv::Size& workSize, const 
             const cv::Mat kernel = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(3, 3));
             cv::morphologyEx(foreground, foreground, cv::MORPH_OPEN, kernel);
             const double fraction = static_cast<double>(cv::countNonZero(foreground)) / (kRefSize * kRefSize);
-            if ((fraction > 0.0) && (fraction <= kForegroundMaxFraction)) {
+            if ((fraction > 0.0) && (fraction <= kForegroundMaxFraction))
+            {
                 m_foregroundCache = foreground;
+                // Remember the ROI of the slot the mask was derived from: the geometry
+                // gate below must test the SOURCE slot, not whichever slot a scan order
+                // happens to find first
+                m_foregroundRoiNorm = darkSlot ? darkSlot->roiNorm : m_slots[0].roiNorm;
             }
         }
         m_foregroundDirty = false;
@@ -546,16 +802,8 @@ cv::Mat CameraClearSkyReference::foregroundMask(const cv::Size& workSize, const 
         return cv::Mat();
     }
     // The mask geometry only holds for the ROI it was learned from
-    static constexpr int darkPreference[] = {5, 6, 3, 4, 0};
-    for (int slot : darkPreference)
-    {
-        if (m_slots[slot].valid())
-        {
-            if (!roiMatches(m_slots[slot], roiNorm)) {
-                return cv::Mat();
-            }
-            break;
-        }
+    if (!roiNormsMatch(m_foregroundRoiNorm, roiNorm)) {
+        return cv::Mat();
     }
 
     cv::Mat work;
@@ -615,13 +863,14 @@ CameraClearSkyReference::SlotPreview CameraClearSkyReference::slotPreview(int sl
 
 QImage CameraClearSkyReference::foregroundPreview() const
 {
-    // Use the source slot's own ROI so the geometry check always passes for the preview
-    static constexpr int preference[] = {5, 6, 3, 4, 0};
-    for (int slot : preference)
+    // Derive (or reuse) the cache, then render it with its own source ROI so the
+    // geometry gate always passes for the preview
+    for (int slot = 0; slot < kSlotCount; ++slot)
     {
         if (m_slots[slot].valid())
         {
-            const cv::Mat foreground = foregroundMask(cv::Size(kRefSize, kRefSize), m_slots[slot].roiNorm);
+            foregroundMask(cv::Size(kRefSize, kRefSize), m_slots[slot].roiNorm); // ensure derived
+            const cv::Mat foreground = foregroundMask(cv::Size(kRefSize, kRefSize), m_foregroundRoiNorm);
             return foreground.empty() ? QImage() : grayMatToImage(foreground);
         }
     }

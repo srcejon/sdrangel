@@ -21,6 +21,10 @@
 #include <cstring>
 
 #include <QDebug>
+#include <QDir>
+#include <QFile>
+#include <QJsonDocument>
+#include <QJsonObject>
 #ifdef CAMERA_OPENCV_CUDA_CLOUD_DETECTION
 #include <opencv2/cudaimgproc.hpp>
 #include <opencv2/cudawarping.hpp>
@@ -35,6 +39,7 @@
 #include "cameraskyprojector.h"
 
 MESSAGE_CLASS_DEFINITION(CameraCloudDetector::MsgReportCloudCoverage, Message)
+MESSAGE_CLASS_DEFINITION(CameraCloudDetector::MsgSaveCloudTestCase, Message)
 MESSAGE_CLASS_DEFINITION(CameraCloudDetector::MsgSaveClearSkyReference, Message)
 MESSAGE_CLASS_DEFINITION(CameraCloudDetector::MsgReportClearSkyReference, Message)
 
@@ -284,8 +289,47 @@ QString CameraCloudDetector::referenceStorageKey(const CameraSettings& settings)
 
 bool CameraCloudDetector::handleStageMessage(const Message& cmd)
 {
+    if (MsgSaveCloudTestCase::match(cmd))
+    {
+        const MsgSaveCloudTestCase& saveMsg = (const MsgSaveCloudTestCase&) cmd;
+        // The request is only honoured on a detection recompute; refuse immediately when
+        // that cannot happen rather than latching it to fire on some unrelated future frame
+        if (!m_settings.m_cloudDetect)
+        {
+            if (m_msgQueueToFeature) {
+                m_msgQueueToFeature->push(MsgReportClearSkyReference::create(
+                    QStringLiteral("Cannot save test case: cloud detection is disabled")));
+            }
+            return true;
+        }
+        if (!m_lastInputFrame && !m_captureActive)
+        {
+            if (m_msgQueueToFeature) {
+                m_msgQueueToFeature->push(MsgReportClearSkyReference::create(
+                    QStringLiteral("Cannot save test case: no frame available")));
+            }
+            return true;
+        }
+        m_saveTestCaseDir = saveMsg.getDirectory();
+        invalidateCache();
+        if (m_lastInputFrame)
+        {
+            CameraPipelineFramePtr frame(new CameraPipelineFrame(*m_lastInputFrame));
+            frame->m_manualPreviewFrame = true;
+            submitFrame(frame);
+        }
+        return true;
+    }
     if (MsgSaveClearSkyReference::match(cmd))
     {
+        if (!m_settings.m_cloudDetect)
+        {
+            if (m_msgQueueToFeature) {
+                m_msgQueueToFeature->push(MsgReportClearSkyReference::create(
+                    QStringLiteral("Cannot save reference: cloud detection is disabled")));
+            }
+            return true;
+        }
         // Captured on the next recompute; re-run on the last frame so a paused image or an
         // idle interval-capture camera saves immediately rather than at the next frame
         m_saveReferencePending = true;
@@ -388,8 +432,11 @@ void CameraCloudDetector::captureActiveChanged(bool active)
     if (!active)
     {
         // Release the retained tuning frame so its image buffers (CPU and GPU) are not
-        // pinned while capture is stopped
+        // pinned while capture is stopped, and drop pending save requests: firing them on
+        // whatever scene the next capture shows would save the wrong thing
         m_lastInputFrame.reset();
+        m_saveTestCaseDir.clear();
+        m_saveReferencePending = false;
         return;
     }
 
@@ -495,6 +542,10 @@ void CameraCloudDetector::processNewFrame(const CameraPipelineFramePtr& frame)
     m_lastContentRect = contentRect;
     m_framesSinceUpdate = 0;
 
+    if (!m_saveTestCaseDir.isEmpty()) {
+        saveTestCaseBundle(frame);
+    }
+
     if (m_msgQueueToFeature && frame->m_cloud.m_valid) {
         m_msgQueueToFeature->push(MsgReportCloudCoverage::create(frame->m_cloud.m_coveragePercent, frame->m_cloud.m_night, frame->m_captureDateTime));
     }
@@ -505,6 +556,87 @@ void CameraCloudDetector::processNewFrame(const CameraPipelineFramePtr& frame)
     }
 
     forwardFrame(frame);
+}
+
+// Writes a standalone test-case bundle: the exact input image the detection ran on, the
+// complete serialized settings (lens pose, position, thresholds - everything), the capture
+// time and the measured result, plus the clear-sky reference store when one is in use. The
+// bundle reproduces this detection offline via the test harness --run-case mode.
+void CameraCloudDetector::saveTestCaseBundle(const CameraPipelineFramePtr& frame)
+{
+    const QString directory = m_saveTestCaseDir;
+    m_saveTestCaseDir.clear();
+
+    QString status;
+    if (!QDir().mkpath(directory))
+    {
+        status = QStringLiteral("Cannot create test case directory %1").arg(directory);
+    }
+    else if (!frame->ensureCpuImageFromCuda() || frame->m_image.isNull())
+    {
+        status = QStringLiteral("Cannot save test case: no frame image");
+    }
+    else if (!frame->m_image.save(QDir(directory).filePath(QStringLiteral("image.png"))))
+    {
+        status = QStringLiteral("Cannot save test case image in %1").arg(directory);
+    }
+    else
+    {
+        bool filesOk = true;
+        QFile settingsFile(QDir(directory).filePath(QStringLiteral("settings.dat")));
+        if (settingsFile.open(QIODevice::WriteOnly))
+        {
+            filesOk = settingsFile.write(m_settings.serialize()) >= 0;
+            settingsFile.close();
+        }
+        else
+        {
+            filesOk = false;
+        }
+
+        QJsonObject meta;
+        meta.insert(QStringLiteral("formatVersion"), 1);
+        meta.insert(QStringLiteral("captureDateTime"),
+            frame->m_captureDateTime.isValid() ? frame->m_captureDateTime.toUTC().toString(Qt::ISODateWithMs) : QString());
+        meta.insert(QStringLiteral("cameraProtocol"), m_settings.m_cameraProtocol);
+        meta.insert(QStringLiteral("cameraId"), m_settings.m_cameraId);
+        meta.insert(QStringLiteral("coveragePercent"), frame->m_cloud.m_valid ? frame->m_cloud.m_coveragePercent : -1.0);
+        meta.insert(QStringLiteral("night"), frame->m_cloud.m_valid && frame->m_cloud.m_night);
+        // Remove any reference file left by an earlier save into this directory, so the
+        // bundle never carries a stale store the current run did not use
+        const QStringList staleReferences = QDir(directory).entryList(QStringList{QStringLiteral("*.csr")}, QDir::Files);
+        for (const QString& stale : staleReferences) {
+            QFile::remove(QDir(directory).filePath(stale));
+        }
+        bool referenceIncluded = false;
+        if (m_settings.m_cloudUseReference)
+        {
+            m_clearSkyReference.ensureLoaded(referenceStorageKey(m_settings));
+            referenceIncluded = m_clearSkyReference.exportTo(directory);
+        }
+        meta.insert(QStringLiteral("referenceIncluded"), referenceIncluded);
+
+        QFile metaFile(QDir(directory).filePath(QStringLiteral("testcase.json")));
+        if (metaFile.open(QIODevice::WriteOnly))
+        {
+            filesOk = (metaFile.write(QJsonDocument(meta).toJson(QJsonDocument::Indented)) >= 0) && filesOk;
+        }
+        else
+        {
+            filesOk = false;
+        }
+
+        status = filesOk
+            ? QStringLiteral("Saved test case to %1 (coverage %2 %)")
+                .arg(directory)
+                .arg(frame->m_cloud.m_valid ? frame->m_cloud.m_coveragePercent : -1.0f, 0, 'f', 1)
+            : QStringLiteral("Test case in %1 is incomplete: file writes failed").arg(directory);
+    }
+
+    qInfo() << "CameraCloudDetector:" << status;
+    if (m_msgQueueToFeature) {
+        m_msgQueueToFeature->push(MsgReportClearSkyReference::create(status));
+    }
 }
 
 // Paints the cached debug-view mask onto the frame in place of the camera image. Called on
@@ -1269,12 +1401,16 @@ void CameraCloudDetector::applyCloudDetection(const cv::Mat& workBgr, const cv::
         ? captureDateTime
         : m_settings.m_plateSolveDateTime;
     int referenceSlot = -1;
+    double referenceSunElevation = 0.0;
+    double referenceMoonElevation = 0.0;
     if ((m_settings.m_cloudUseReference || m_saveReferencePending) && observationTime.isValid())
     {
         AzAlt sunAzAlt, moonAzAlt;
         RADec bodyRaDec;
         Astronomy::sunPosition(sunAzAlt, bodyRaDec, m_settings.m_latitude, m_settings.m_longitude, observationTime);
         Astronomy::moonPosition(moonAzAlt, bodyRaDec, m_settings.m_latitude, m_settings.m_longitude, observationTime);
+        referenceSunElevation = sunAzAlt.alt;
+        referenceMoonElevation = moonAzAlt.alt;
         referenceSlot = CameraClearSkyReference::slotFor(sunAzAlt.alt, moonAzAlt.alt);
         m_clearSkyReference.ensureLoaded(referenceStorageKey(m_settings));
     }
@@ -1341,7 +1477,8 @@ void CameraCloudDetector::applyCloudDetection(const cv::Mat& workBgr, const cv::
         if (referenceSlot >= 0)
         {
             m_clearSkyReference.ensureLoaded(referenceStorageKey(m_settings));
-            m_clearSkyReference.capture(referenceSlot, gray, workBgr, textureEnergy, evaluationMask, roiNorm, observationTime);
+            m_clearSkyReference.capture(referenceSlot, gray, workBgr, textureEnergy, evaluationMask, roiNorm, observationTime,
+                                        referenceSunElevation, referenceMoonElevation);
             if (m_msgQueueToFeature) {
                 m_msgQueueToFeature->push(MsgReportClearSkyReference::create(
                     QStringLiteral("Saved %1 - %2").arg(CameraClearSkyReference::slotName(referenceSlot),
@@ -1623,9 +1760,9 @@ void CameraCloudDetector::applyCloudDetection(const cv::Mat& workBgr, const cv::
         for (const CloudStarSense::Star& star : starSense.stars) {
             visibleStars += star.visible ? 1 : 0;
         }
-        const bool starConfirmed = starSense.valid && (visibleStars >= 5);
         if (m_clearSkyReference.autoLearn(referenceSlot, gray, workBgr, textureEnergy, evaluationMask, roiNorm, observationTime,
-                                          cloud.m_coveragePercent, night, m_settings.m_cloudStarSense, starConfirmed)
+                                          cloud.m_coveragePercent, night, m_settings.m_cloudStarSense,
+                                          starSense.valid ? starSense.stars.size() : 0, visibleStars)
             && m_msgQueueToFeature)
         {
             m_msgQueueToFeature->push(MsgReportClearSkyReference::create(

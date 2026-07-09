@@ -132,6 +132,29 @@ public:
         { }
     };
 
+    // GUI/API request: save the current frame plus everything needed to reproduce this
+    // detection offline (full settings, capture time, clear-sky reference) as a standalone
+    // test-case bundle in the given directory (runnable via the test harness --run-case)
+    class MsgSaveCloudTestCase : public Message {
+        MESSAGE_CLASS_DECLARATION
+
+    public:
+        const QString& getDirectory() const { return m_directory; }
+
+        static MsgSaveCloudTestCase* create(const QString& directory)
+        {
+            return new MsgSaveCloudTestCase(directory);
+        }
+
+    private:
+        QString m_directory;
+
+        explicit MsgSaveCloudTestCase(const QString& directory) :
+            Message(),
+            m_directory(directory)
+        { }
+    };
+
     // GUI/API request: capture the current frame as the clear-sky reference for the
     // current sky state (sun/moon elevation at the frame's observation time)
     class MsgSaveClearSkyReference : public Message {
@@ -192,6 +215,7 @@ private:
     bool m_haveAutoModeState;
     CameraClearSkyReference m_clearSkyReference;
     bool m_saveReferencePending;
+    QString m_saveTestCaseDir; // Non-empty: write a test-case bundle here on the next recompute
 
 #ifdef CAMERA_OPENCV_CUDA_CLOUD_DETECTION
     cv::cuda::Stream m_cudaCloudStream;
@@ -223,6 +247,7 @@ private:
     static bool samplePatchGray(const CameraPipelineFramePtr& frame, const QPoint& centre, int half, cv::Mat& patch);
     void applyStarVisibilityVeto(cv::Mat& mask, const CloudStarSense& starSense, const cv::Rect& roi) const;
     void renderDebugView(const CameraPipelineFramePtr& frame, const cv::Size& frameCvSize, const cv::Rect& roi) const;
+    void saveTestCaseBundle(const CameraPipelineFramePtr& frame);
     void invalidateCache();
 };
 

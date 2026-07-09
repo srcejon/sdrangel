@@ -3024,6 +3024,7 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->cloudAutoReferenceCheck, &QCheckBox::toggled, this, &CameraGUI::on_cloudAutoReferenceCheck_toggled);
     QObject::connect(settingsUI()->cloudSaveReferenceButton, &QPushButton::clicked, this, &CameraGUI::on_cloudSaveReferenceButton_clicked);
     QObject::connect(settingsUI()->cloudViewReferenceButton, &QPushButton::clicked, this, &CameraGUI::on_cloudViewReferenceButton_clicked);
+    QObject::connect(settingsUI()->cloudSaveTestCaseButton, &QPushButton::clicked, this, &CameraGUI::on_cloudSaveTestCaseButton_clicked);
     QObject::connect(settingsUI()->cloudColorButton, &QToolButton::clicked, this, &CameraGUI::on_cloudColorButton_clicked);
     QObject::connect(settingsUI()->starThresholdSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_starThresholdSpin_valueChanged);
     QObject::connect(settingsUI()->starBackgroundBlurSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_starBackgroundBlurSpin_valueChanged);
@@ -9849,6 +9850,14 @@ void CameraGUI::on_cloudViewReferenceButton_clicked()
     CameraClearSkyReferenceDialog *dialog = new CameraClearSkyReferenceDialog(
         CameraCloudDetector::referenceStorageKey(m_settings), this);
     dialog->show();
+}
+
+void CameraGUI::on_cloudSaveTestCaseButton_clicked()
+{
+    const QString directory = QFileDialog::getExistingDirectory(this, tr("Save cloud test case to directory"));
+    if (!directory.isEmpty()) {
+        m_camera->getInputMessageQueue()->push(Camera::MsgSaveCloudTestCase::create(directory));
+    }
 }
 
 void CameraGUI::on_cloudColorButton_clicked()

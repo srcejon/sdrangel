@@ -22,6 +22,8 @@
 #include <QGuiApplication>
 #include <QImage>
 #include <QStringList>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QTemporaryDir>
 #include <QTimeZone>
 #include <QTimer>
@@ -30,6 +32,7 @@
 #include <opencv2/imgproc.hpp>
 
 #include "camera.h"
+#include "cameraclearskyreference.h"
 #include "cameraclouddetector.h"
 #include "cameramotiondetector.h"
 #include "cameraplatesolver.h"
@@ -291,7 +294,7 @@ CloudRunResult runChain(
 
 // Frames carry an invalid capture time by default so auto-mode tests exercise the
 // deterministic brightness fallback rather than the sun elevation at the real wall clock
-CloudRunResult runCloudDetector(const CameraSettings& settings, const QVector<QImage>& images, const CameraPipelineImageTransform* imageTransform = nullptr, bool uploadToGpu = false, const QDateTime& captureDateTime = QDateTime(), bool saveReferenceFirst = false)
+CloudRunResult runCloudDetector(const CameraSettings& settings, const QVector<QImage>& images, const CameraPipelineImageTransform* imageTransform = nullptr, bool uploadToGpu = false, const QDateTime& captureDateTime = QDateTime(), bool saveReferenceFirst = false, const QString& saveTestCaseDir = QString())
 {
     CameraCloudDetector detector;
     MessageQueue outputQueue;
@@ -365,6 +368,9 @@ CloudRunResult runCloudDetector(const CameraSettings& settings, const QVector<QI
     detector.getInputMessageQueue()->push(Camera::MsgCaptureActive::create(true, 0));
     if (saveReferenceFirst) {
         detector.getInputMessageQueue()->push(CameraCloudDetector::MsgSaveClearSkyReference::create());
+    }
+    if (!saveTestCaseDir.isEmpty()) {
+        detector.getInputMessageQueue()->push(CameraCloudDetector::MsgSaveCloudTestCase::create(saveTestCaseDir));
     }
 
     submitNext();
@@ -925,6 +931,41 @@ void testClearSkyReference(TestContext& context)
         context.check(false, "clear-sky-ref", control.error);
     }
 
+    // Twilight drift: the sky evolves as a smooth gradient within minutes of a save. The
+    // deviation surface removal must keep the quirk vetoed on the drifted frame instead of
+    // the veto going stale (and the cue misreading the drift as cloud).
+    {
+        cv::Mat driftedBgr(imageHeight, imageWidth, CV_8UC3);
+        const QImage& base = clearImage;
+        for (int row = 0; row < imageHeight; ++row)
+        {
+            cv::Vec3b *line = driftedBgr.ptr<cv::Vec3b>(row);
+            const uchar *scan = base.constScanLine(row);
+            for (int col = 0; col < imageWidth; ++col)
+            {
+                const int drift = (25 * col) / imageWidth; // smooth horizontal brightening
+                line[col] = cv::Vec3b(
+                    static_cast<uchar>(std::min(255, scan[3 * col + 2] + drift)),
+                    static_cast<uchar>(std::min(255, scan[3 * col + 1] + drift)),
+                    static_cast<uchar>(std::min(255, scan[3 * col] + drift)));
+            }
+        }
+        const QImage driftedImage = bgrToImage(driftedBgr);
+        const CloudRunResult drifted = runCloudDetector(settings, {driftedImage}, nullptr, false, captureTime);
+        if (drifted.completed(1) && drifted.frames.first()->m_cloud.m_valid)
+        {
+            context.check(!drifted.frames.first()->m_cloud.isCloudAtImagePoint(QPointF(quirkCentre.x, quirkCentre.y)),
+                "clear-sky-ref", "quirk stays vetoed after smooth twilight-style drift");
+            context.check(drifted.frames.first()->m_cloud.m_coveragePercent < 2.0f,
+                "clear-sky-ref", QStringLiteral("drifted clear frame reads %1 % with the reference")
+                    .arg(drifted.frames.first()->m_cloud.m_coveragePercent, 0, 'f', 1));
+        }
+        else
+        {
+            context.check(false, "clear-sky-ref", drifted.error);
+        }
+    }
+
     // v2 auto-learning: with a fresh camera id and no button press, a verified-clear frame
     // fills the slot on its own; a later run vetoes the quirk
     CameraSettings autoSettings = settings;
@@ -942,6 +983,213 @@ void testClearSkyReference(TestContext& context)
     {
         context.check(false, "clear-sky-ref", afterLearn.error);
     }
+}
+
+void writeMaskOverlay(const QString& imagePath, const CameraPipelineCloud& cloud, const QString& outPath); // defined with the dump harness below
+
+// Loads a test-case bundle saved by the GUI's "Save test case" button (or by the
+// round-trip test below) and reruns the detection it captured
+struct TestCaseBundle
+{
+    CameraSettings settings;
+    QImage image;
+    QDateTime captureTime;
+    double savedCoverage = -1.0;
+    QString error;
+
+    [[nodiscard]] bool valid() const { return error.isEmpty(); }
+};
+
+TestCaseBundle loadTestCaseBundle(const QString& directory)
+{
+    TestCaseBundle bundle;
+    QFile settingsFile(QDir(directory).filePath(QStringLiteral("settings.dat")));
+    if (!settingsFile.open(QIODevice::ReadOnly))
+    {
+        bundle.error = QStringLiteral("cannot read settings.dat in %1").arg(directory);
+        return bundle;
+    }
+    const QByteArray blob = settingsFile.readAll();
+    bundle.settings.resetToDefaults();
+    if (!bundle.settings.deserialize(blob))
+    {
+        bundle.error = QStringLiteral("cannot deserialize settings.dat in %1").arg(directory);
+        return bundle;
+    }
+
+    bundle.image = QImage(QDir(directory).filePath(QStringLiteral("image.png")));
+    if (bundle.image.isNull())
+    {
+        bundle.error = QStringLiteral("cannot read image.png in %1").arg(directory);
+        return bundle;
+    }
+
+    QFile metaFile(QDir(directory).filePath(QStringLiteral("testcase.json")));
+    if (metaFile.open(QIODevice::ReadOnly))
+    {
+        const QJsonObject meta = QJsonDocument::fromJson(metaFile.readAll()).object();
+        const QString when = meta.value(QStringLiteral("captureDateTime")).toString();
+        if (!when.isEmpty())
+        {
+            bundle.captureTime = QDateTime::fromString(when, Qt::ISODateWithMs);
+            bundle.captureTime.setTimeZone(QTimeZone::utc());
+        }
+        bundle.savedCoverage = meta.value(QStringLiteral("coveragePercent")).toDouble(-1.0);
+    }
+    return bundle;
+}
+
+int runTestCaseBundle(const QString& directory)
+{
+    // The bundle doubles as the clear-sky reference store for this run
+    qputenv("SDRANGEL_CAMERA_CLEARSKY_DIR", QDir(directory).absolutePath().toLocal8Bit());
+
+    TestCaseBundle bundle = loadTestCaseBundle(directory);
+    if (!bundle.valid())
+    {
+        std::cout << "FAIL: " << bundle.error.toStdString() << "\n";
+        return 1;
+    }
+    // Reruns must be idempotent: auto-learning would write into the bundle's own
+    // reference store (the env dir above) and change subsequent reruns
+    bundle.settings.m_cloudAutoReference = false;
+
+    const CloudRunResult result = runCloudDetector(bundle.settings, {bundle.image}, nullptr, false, bundle.captureTime);
+    if (!result.completed(1) || !result.frames.first()->m_cloud.m_valid)
+    {
+        std::cout << "FAIL: " << result.error.toStdString() << "\n";
+        return 1;
+    }
+
+    const CameraPipelineFramePtr& frame = result.frames.first();
+    std::cout << "coverage " << QString::number(frame->m_cloud.m_coveragePercent, 'f', 1).toStdString()
+              << " % (" << (frame->m_cloud.m_night ? "night" : "day") << " path)";
+    if (bundle.savedCoverage >= 0.0) {
+        std::cout << " - saved run measured " << QString::number(bundle.savedCoverage, 'f', 1).toStdString() << " %";
+    }
+    std::cout << "\n";
+
+    const QString maskPath = QDir(directory).filePath(QStringLiteral("mask.png"));
+    writeMaskOverlay(QDir(directory).filePath(QStringLiteral("image.png")), frame->m_cloud, maskPath);
+    std::cout << "mask overlay written to " << maskPath.toStdString() << "\n";
+    return 0;
+}
+
+// Round trip of the GUI's "Save test case" bundle: saving a case and rerunning it from the
+// bundle alone must reproduce the same coverage
+void testTestCaseBundle(TestContext& context)
+{
+    static QTemporaryDir caseDir;
+    if (!caseDir.isValid())
+    {
+        context.check(false, "test-case-bundle", "cannot create temporary directory");
+        return;
+    }
+
+    CameraSettings settings = makeCloudSettings();
+    settings.m_cloudMode = CameraSettings::CloudModeNight;
+    const QDateTime captureTime(QDate(2024, 3, 1), QTime(1, 30, 0), QTimeZone::utc());
+    const QImage image = makeNightImage(true, false);
+
+    const CloudRunResult saved = runCloudDetector(settings, {image}, nullptr, false, captureTime, false, caseDir.path());
+    if (!saved.completed(1) || !saved.frames.first()->m_cloud.m_valid)
+    {
+        context.check(false, "test-case-bundle", saved.error);
+        return;
+    }
+    const float savedCoverage = saved.frames.first()->m_cloud.m_coveragePercent;
+
+    context.check(QFileInfo::exists(QDir(caseDir.path()).filePath(QStringLiteral("image.png"))),
+        "test-case-bundle", "bundle contains image.png");
+    context.check(QFileInfo::exists(QDir(caseDir.path()).filePath(QStringLiteral("settings.dat"))),
+        "test-case-bundle", "bundle contains settings.dat");
+    context.check(QFileInfo::exists(QDir(caseDir.path()).filePath(QStringLiteral("testcase.json"))),
+        "test-case-bundle", "bundle contains testcase.json");
+
+    const TestCaseBundle bundle = loadTestCaseBundle(caseDir.path());
+    context.check(bundle.valid(), "test-case-bundle", bundle.valid() ? QStringLiteral("bundle loads") : bundle.error);
+    if (!bundle.valid()) {
+        return;
+    }
+    context.check(bundle.settings.m_cloudMode == CameraSettings::CloudModeNight,
+        "test-case-bundle", "settings round-trip preserves the cloud mode");
+    context.check(bundle.captureTime == captureTime,
+        "test-case-bundle", "capture time round-trips");
+
+    const CloudRunResult rerun = runCloudDetector(bundle.settings, {bundle.image}, nullptr, false, bundle.captureTime);
+    if (!rerun.completed(1) || !rerun.frames.first()->m_cloud.m_valid)
+    {
+        context.check(false, "test-case-bundle", rerun.error);
+        return;
+    }
+    context.check(std::abs(rerun.frames.first()->m_cloud.m_coveragePercent - savedCoverage) < 0.05f,
+        "test-case-bundle", QStringLiteral("bundle rerun reproduces coverage (%1 vs %2 %)")
+            .arg(rerun.frames.first()->m_cloud.m_coveragePercent, 0, 'f', 2)
+            .arg(savedCoverage, 0, 'f', 2));
+
+    // Exercise the standalone --run-case runner itself (it repoints the clear-sky store at
+    // the bundle, so restore the harness environment afterwards)
+    const QByteArray previousClearSkyDir = qgetenv("SDRANGEL_CAMERA_CLEARSKY_DIR");
+    const int runnerExit = runTestCaseBundle(caseDir.path());
+    qputenv("SDRANGEL_CAMERA_CLEARSKY_DIR", previousClearSkyDir);
+    context.check(runnerExit == 0, "test-case-bundle", "--run-case runner succeeds on the bundle");
+    context.check(QFileInfo::exists(QDir(caseDir.path()).filePath(QStringLiteral("mask.png"))),
+        "test-case-bundle", "--run-case writes the mask overlay");
+}
+
+// Unit-level guards on the clear-sky reference model: the Day reference must never be
+// reached through a night slot's adjacency fallback, night adjacency must work within the
+// same moon state, and the raw-deviation caps must keep a smooth gradient overcast (which
+// the surface removal would otherwise absorb) from being vetoed away.
+void testReferenceModelGuards(TestContext& context)
+{
+    CameraClearSkyReference reference;
+    reference.ensureLoaded(QStringLiteral("ref-guards-test"));
+
+    const QRectF roiNorm(0.0, 0.0, 1.0, 1.0);
+    const cv::Size work(160, 120);
+    const cv::Mat eval(work, CV_8UC1, cv::Scalar(255));
+    const cv::Mat texture = cv::Mat::zeros(work, CV_8UC1);
+    const QDateTime when(QDate(2024, 1, 1), QTime(0, 0), QTimeZone::utc());
+    const auto makeGray = [&](int level) { return cv::Mat(work, CV_8UC1, cv::Scalar(level)); };
+    const auto makeBgr = [&](int b, int g, int r) { return cv::Mat(work, CV_8UC3, cv::Scalar(b, g, r)); };
+
+    // Day reference filled; a night frame whose own bin is empty must NOT fall back to it
+    reference.capture(0, makeGray(180), makeBgr(200, 150, 110), texture, eval, roiNorm, when, 10.0, -20.0);
+    cv::Mat mask(work, CV_8UC1, cv::Scalar(255));
+    const int nightSlot = CameraClearSkyReference::slotFromBin(0, true);
+    const bool dayApplied = reference.applyCueAndVeto(nightSlot, mask, makeGray(170), makeBgr(200, 150, 110), eval, roiNorm, 8);
+    context.check(!dayApplied, "ref-guards", "night slot does not fall back to the Day reference");
+
+    // Night adjacency: the neighbouring bin with the same moon state is reachable
+    reference.capture(CameraClearSkyReference::slotFromBin(1, true), makeGray(100), makeBgr(180, 140, 100), texture, eval, roiNorm, when, -7.0, 20.0);
+    cv::Mat neighbourMask(work, CV_8UC1, cv::Scalar(255));
+    const bool neighbourApplied = reference.applyCueAndVeto(nightSlot, neighbourMask, makeGray(100), makeBgr(180, 140, 100), eval, roiNorm, 8);
+    context.check(neighbourApplied, "ref-guards", "night fallback reaches the neighbouring bin (same moon state)");
+    context.check(cv::countNonZero(neighbourMask) == 0, "ref-guards", "identical frame fully vetoed via the neighbour reference");
+
+    // Gradient overcast: reference is clear blue; the frame's colour ramps to white across
+    // the image. The surface removal absorbs the ramp, but the raw-deviation cap must stop
+    // the veto erasing the in-frame detection on the whitened side.
+    const int clearSlot = CameraClearSkyReference::slotFromBin(2, false);
+    reference.capture(clearSlot, makeGray(150), makeBgr(180, 140, 100), texture, eval, roiNorm, when, -9.0, -20.0);
+    cv::Mat overcastBgr(work, CV_8UC3);
+    for (int row = 0; row < work.height; ++row)
+    {
+        cv::Vec3b *line = overcastBgr.ptr<cv::Vec3b>(row);
+        for (int col = 0; col < work.width; ++col)
+        {
+            const int red = 100 + (90 * col) / work.width; // ratio ~0.55 -> ~1.05 left to right
+            line[col] = cv::Vec3b(180, 140, static_cast<uchar>(red));
+        }
+    }
+    cv::Mat overcastMask(work, CV_8UC1, cv::Scalar(255)); // in-frame paths flagged everything
+    const bool overcastApplied = reference.applyCueAndVeto(clearSlot, overcastMask, makeGray(150), overcastBgr, eval, roiNorm, 8);
+    context.check(overcastApplied, "ref-guards", "gradient-overcast comparison applies");
+    const cv::Rect whitenedQuarter(3 * work.width / 4, 0, work.width / 4, work.height);
+    const double survived = static_cast<double>(cv::countNonZero(overcastMask(whitenedQuarter))) / whitenedQuarter.area();
+    context.check(survived > 0.6, "ref-guards",
+        QStringLiteral("whitened side survives the veto (%1 % of quarter still flagged)").arg(survived * 100.0, 0, 'f', 0));
 }
 
 void testExclusionRects(TestContext& context)
@@ -2021,6 +2269,17 @@ int main(int argc, char *argv[])
 
     const QStringList args = app.arguments();
 
+    if (args.contains(QStringLiteral("--run-case")))
+    {
+        const int idx = args.indexOf(QStringLiteral("--run-case"));
+        if (idx + 1 >= args.size())
+        {
+            std::cout << "usage: --run-case <bundle directory>\n";
+            return 1;
+        }
+        return runTestCaseBundle(args.at(idx + 1));
+    }
+
     if (args.contains(QStringLiteral("--dump-masks")))
     {
         const int idx = args.indexOf(QStringLiteral("--dump-masks"));
@@ -2048,6 +2307,8 @@ int main(int argc, char *argv[])
         {"sun-mask", testSunMoonMask},
         {"star-sense", testStarSense},
         {"clear-sky-ref", testClearSkyReference},
+        {"ref-guards", testReferenceModelGuards},
+        {"test-case-bundle", testTestCaseBundle},
         {"update-interval", testUpdateIntervalCaching},
         {"star-filtering", testStarFiltering},
         {"motion-filtering", testMotionFiltering},

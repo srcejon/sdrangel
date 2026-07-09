@@ -239,6 +239,26 @@ public:
         { }
     };
 
+    class MsgSaveCloudTestCase : public Message {
+        MESSAGE_CLASS_DECLARATION
+
+    public:
+        const QString& getDirectory() const { return m_directory; }
+
+        static MsgSaveCloudTestCase* create(const QString& directory)
+        {
+            return new MsgSaveCloudTestCase(directory);
+        }
+
+    private:
+        QString m_directory;
+
+        explicit MsgSaveCloudTestCase(const QString& directory) :
+            Message(),
+            m_directory(directory)
+        { }
+    };
+
     class MsgSaveClearSkyReference : public Message {
         MESSAGE_CLASS_DECLARATION
 

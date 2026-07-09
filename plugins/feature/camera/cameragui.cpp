@@ -1985,6 +1985,8 @@ void CameraGUI::displaySettings()
     settingsUI()->cloudEdgeMarginSpin->setValue(m_settings.m_cloudEdgeMarginPercent);
     settingsUI()->cloudMaskSunMoonCheck->setChecked(m_settings.m_cloudMaskSunMoon);
     settingsUI()->cloudSunMoonRadiusSpin->setValue(m_settings.m_cloudSunMoonRadiusDeg);
+    settingsUI()->cloudStarSenseCheck->setChecked(m_settings.m_cloudStarSense);
+    settingsUI()->cloudStarSenseMagSpin->setValue(m_settings.m_cloudStarSenseMagnitude);
     ui->starDetectButton->setChecked(m_settings.m_starDetect);
     settingsUI()->starThresholdSpin->setValue(m_settings.m_starThreshold);
     settingsUI()->starBackgroundBlurSpin->setValue(m_settings.m_starBackgroundBlur);
@@ -2988,6 +2990,8 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->cloudEdgeMarginSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_cloudEdgeMarginSpin_valueChanged);
     QObject::connect(settingsUI()->cloudMaskSunMoonCheck, &QCheckBox::toggled, this, &CameraGUI::on_cloudMaskSunMoonCheck_toggled);
     QObject::connect(settingsUI()->cloudSunMoonRadiusSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_cloudSunMoonRadiusSpin_valueChanged);
+    QObject::connect(settingsUI()->cloudStarSenseCheck, &QCheckBox::toggled, this, &CameraGUI::on_cloudStarSenseCheck_toggled);
+    QObject::connect(settingsUI()->cloudStarSenseMagSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_cloudStarSenseMagSpin_valueChanged);
     QObject::connect(settingsUI()->cloudColorButton, &QToolButton::clicked, this, &CameraGUI::on_cloudColorButton_clicked);
     QObject::connect(settingsUI()->starThresholdSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_starThresholdSpin_valueChanged);
     QObject::connect(settingsUI()->starBackgroundBlurSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_starBackgroundBlurSpin_valueChanged);
@@ -9738,6 +9742,18 @@ void CameraGUI::on_cloudSunMoonRadiusSpin_valueChanged(double value)
 {
     m_settings.m_cloudSunMoonRadiusDeg = value;
     applySetting("cloudSunMoonRadiusDeg");
+}
+
+void CameraGUI::on_cloudStarSenseCheck_toggled(bool checked)
+{
+    m_settings.m_cloudStarSense = checked;
+    applySetting("cloudStarSense");
+}
+
+void CameraGUI::on_cloudStarSenseMagSpin_valueChanged(double value)
+{
+    m_settings.m_cloudStarSenseMagnitude = value;
+    applySetting("cloudStarSenseMagnitude");
 }
 
 void CameraGUI::on_cloudColorButton_clicked()

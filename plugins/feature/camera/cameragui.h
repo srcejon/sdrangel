@@ -800,6 +800,8 @@ private slots:
     void on_cloudEdgeMarginSpin_valueChanged(double value);
     void on_cloudMaskSunMoonCheck_toggled(bool checked);
     void on_cloudSunMoonRadiusSpin_valueChanged(double value);
+    void on_cloudStarSenseCheck_toggled(bool checked);
+    void on_cloudStarSenseMagSpin_valueChanged(double value);
     void on_cloudColorButton_clicked();
     void on_starDetectButton_toggled(bool checked);
     void on_starThresholdSpin_valueChanged(int value);

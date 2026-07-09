@@ -1203,6 +1203,8 @@ void Camera::webapiFormatFeatureSettings(
     swg->setCloudEdgeMarginPercent(settings.m_cloudEdgeMarginPercent);
     swg->setCloudMaskSunMoon(settings.m_cloudMaskSunMoon ? 1 : 0);
     swg->setCloudSunMoonRadiusDeg(settings.m_cloudSunMoonRadiusDeg);
+    swg->setCloudStarSense(settings.m_cloudStarSense ? 1 : 0);
+    swg->setCloudStarSenseMagnitude(settings.m_cloudStarSenseMagnitude);
     swg->setStarDetect(settings.m_starDetect ? 1 : 0);
     swg->setStarThreshold(settings.m_starThreshold);
     swg->setStarBackgroundBlur(settings.m_starBackgroundBlur);
@@ -2051,6 +2053,12 @@ void Camera::webapiUpdateFeatureSettings(
     }
     if (featureSettingsKeys.contains("cloudSunMoonRadiusDeg")) {
         settings.m_cloudSunMoonRadiusDeg = swg->getCloudSunMoonRadiusDeg();
+    }
+    if (featureSettingsKeys.contains("cloudStarSense")) {
+        settings.m_cloudStarSense = swg->getCloudStarSense() != 0;
+    }
+    if (featureSettingsKeys.contains("cloudStarSenseMagnitude")) {
+        settings.m_cloudStarSenseMagnitude = swg->getCloudStarSenseMagnitude();
     }
     if (featureSettingsKeys.contains("starDetect")) {
         settings.m_starDetect = swg->getStarDetect() != 0;

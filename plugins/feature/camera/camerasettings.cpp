@@ -484,7 +484,9 @@ void CameraSettings::resetToDefaults()
     m_cloudEventThreshold = 80.0;
     m_cloudEdgeMarginPercent = 0.0;
     m_cloudMaskSunMoon = false;
-    m_cloudSunMoonRadiusDeg = 8.0;
+    m_cloudSunMoonRadiusDeg = 20.0;
+    m_cloudStarSense = false;
+    m_cloudStarSenseMagnitude = 4.0;
     m_starDetect = false;
     m_starThreshold = 24;
     m_starBackgroundBlur = 12;
@@ -865,6 +867,8 @@ QByteArray CameraSettings::serialize() const
     s.writeDouble(300, m_cloudEdgeMarginPercent);
     s.writeBool(301, m_cloudMaskSunMoon);
     s.writeDouble(302, m_cloudSunMoonRadiusDeg);
+    s.writeBool(303, m_cloudStarSense);
+    s.writeDouble(304, m_cloudStarSenseMagnitude);
 
     return s.final();
 }
@@ -1222,8 +1226,11 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readDouble(300, &m_cloudEdgeMarginPercent, 0.0);
         m_cloudEdgeMarginPercent = qBound(m_minCloudEdgeMargin, m_cloudEdgeMarginPercent, m_maxCloudEdgeMargin);
         d.readBool(301, &m_cloudMaskSunMoon, false);
-        d.readDouble(302, &m_cloudSunMoonRadiusDeg, 8.0);
+        d.readDouble(302, &m_cloudSunMoonRadiusDeg, 20.0);
         m_cloudSunMoonRadiusDeg = qBound(m_minCloudSunMoonRadius, m_cloudSunMoonRadiusDeg, m_maxCloudSunMoonRadius);
+        d.readBool(303, &m_cloudStarSense, false);
+        d.readDouble(304, &m_cloudStarSenseMagnitude, 4.0);
+        m_cloudStarSenseMagnitude = qBound(m_minCloudStarMagnitude, m_cloudStarSenseMagnitude, m_maxCloudStarMagnitude);
         m_cloudEventThreshold = qBound(m_minCoveragePercent, m_cloudEventThreshold, m_maxCoveragePercent);
         m_cloudDayThreshold = qBound(m_minCloudRatioThreshold, m_cloudDayThreshold, m_maxCloudRatioThreshold);
         m_cloudTextureThreshold = qBound(m_minThreshold8Bit, m_cloudTextureThreshold, m_maxThreshold8Bit);
@@ -2202,6 +2209,12 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     if (settingsKeys.contains("cloudSunMoonRadiusDeg")) {
         m_cloudSunMoonRadiusDeg = qBound(m_minCloudSunMoonRadius, settings.m_cloudSunMoonRadiusDeg, m_maxCloudSunMoonRadius);
     }
+    if (settingsKeys.contains("cloudStarSense")) {
+        m_cloudStarSense = settings.m_cloudStarSense;
+    }
+    if (settingsKeys.contains("cloudStarSenseMagnitude")) {
+        m_cloudStarSenseMagnitude = qBound(m_minCloudStarMagnitude, settings.m_cloudStarSenseMagnitude, m_maxCloudStarMagnitude);
+    }
     if (settingsKeys.contains("starDetect")) {
         m_starDetect = settings.m_starDetect;
     }
@@ -3124,6 +3137,12 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("cloudSunMoonRadiusDeg") || force) {
         ostr << " m_cloudSunMoonRadiusDeg: " << m_cloudSunMoonRadiusDeg;
+    }
+    if (settingsKeys.contains("cloudStarSense") || force) {
+        ostr << " m_cloudStarSense: " << m_cloudStarSense;
+    }
+    if (settingsKeys.contains("cloudStarSenseMagnitude") || force) {
+        ostr << " m_cloudStarSenseMagnitude: " << m_cloudStarSenseMagnitude;
     }
     if (settingsKeys.contains("starDetect") || force) {
         ostr << " m_starDetect: " << m_starDetect;

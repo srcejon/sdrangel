@@ -379,6 +379,8 @@ struct CameraSettings
     static constexpr double m_maxCloudEdgeMargin = 25.0;
     static constexpr double m_minCloudSunMoonRadius = 0.0;
     static constexpr double m_maxCloudSunMoonRadius = 45.0;
+    static constexpr double m_minCloudStarMagnitude = 0.0;
+    static constexpr double m_maxCloudStarMagnitude = 6.0;
     static constexpr double m_minStarAspectRatio = 1.0;
     static constexpr double m_maxStarAspectRatio = 10.0;
     static constexpr double m_minPlateSolveMagnitude = -2.0;
@@ -657,8 +659,10 @@ struct CameraSettings
     double m_cloudMotionOverlapThreshold; ///< Cloud overlap fraction at which a motion box is suppressed: 0.0..1.0
     double m_cloudEventThreshold; ///< Coverage percentage at which a Scheduler coverage-high event is emitted (low again 10 points below): 0..100
     double m_cloudEdgeMarginPercent; ///< Exclude a margin this % of the frame in from the sky-region edge (fisheye rim / vignette / foreground): 0 disables, 0..25
-    bool   m_cloudMaskSunMoon;  ///< Exclude a disc around the projected sun (day) / moon (night) so they are not classified as cloud
-    double m_cloudSunMoonRadiusDeg; ///< Angular radius in degrees of the sun/moon exclusion disc: 0..45
+    bool   m_cloudMaskSunMoon;  ///< Exclude the projected sun (day) / moon (night) so their bright bloom is not classified as cloud
+    double m_cloudSunMoonRadiusDeg; ///< Maximum angular radius in degrees the sun/moon exclusion grows to (dynamic bloom, capped here): 0..45
+    bool   m_cloudStarSense;    ///< Veto cloud where predicted catalog stars are visible (needs calibrated pose, position and capture time)
+    double m_cloudStarSenseMagnitude; ///< Faintest catalog star magnitude checked by star-visibility sensing: 0..6
     bool   m_starDetect;        ///< Enable star detection
     int    m_starThreshold;     ///< Threshold on the star residual image
     int    m_starBackgroundBlur; ///< Radius used to estimate the smooth sky background

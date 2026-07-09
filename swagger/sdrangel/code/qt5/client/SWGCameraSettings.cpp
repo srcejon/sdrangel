@@ -496,6 +496,10 @@ SWGCameraSettings::SWGCameraSettings() {
     m_cloud_mask_sun_moon_isSet = false;
     cloud_sun_moon_radius_deg = 0.0;
     m_cloud_sun_moon_radius_deg_isSet = false;
+    cloud_star_sense = 0;
+    m_cloud_star_sense_isSet = false;
+    cloud_star_sense_magnitude = 0.0;
+    m_cloud_star_sense_magnitude_isSet = false;
     star_detect = 0;
     m_star_detect_isSet = false;
     star_threshold = 0;
@@ -1080,6 +1084,10 @@ SWGCameraSettings::init() {
     m_cloud_mask_sun_moon_isSet = false;
     cloud_sun_moon_radius_deg = 0.0;
     m_cloud_sun_moon_radius_deg_isSet = false;
+    cloud_star_sense = 0;
+    m_cloud_star_sense_isSet = false;
+    cloud_star_sense_magnitude = 0.0;
+    m_cloud_star_sense_magnitude_isSet = false;
     star_detect = 0;
     m_star_detect_isSet = false;
     star_threshold = 0;
@@ -2046,6 +2054,8 @@ SWGCameraSettings::fromJsonObject(QJsonObject &pJson) {
     ::SWGSDRangel::setValue(&cloud_mask_sun_moon, pJson["cloudMaskSunMoon"], "qint32", "");
     
     ::SWGSDRangel::setValue(&cloud_sun_moon_radius_deg, pJson["cloudSunMoonRadiusDeg"], "double", "");
+    ::SWGSDRangel::setValue(&cloud_star_sense, pJson["cloudStarSense"], "qint32", "");
+    ::SWGSDRangel::setValue(&cloud_star_sense_magnitude, pJson["cloudStarSenseMagnitude"], "double", "");
     
     ::SWGSDRangel::setValue(&star_detect, pJson["starDetect"], "qint32", "");
     
@@ -2872,6 +2882,12 @@ SWGCameraSettings::asJsonObject() {
     }
     if(m_cloud_sun_moon_radius_deg_isSet){
         obj->insert("cloudSunMoonRadiusDeg", QJsonValue(cloud_sun_moon_radius_deg));
+    }
+    if(m_cloud_star_sense_isSet){
+        obj->insert("cloudStarSense", QJsonValue(cloud_star_sense));
+    }
+    if(m_cloud_star_sense_magnitude_isSet){
+        obj->insert("cloudStarSenseMagnitude", QJsonValue(cloud_star_sense_magnitude));
     }
     if(m_star_detect_isSet){
         obj->insert("starDetect", QJsonValue(star_detect));
@@ -5380,6 +5396,26 @@ SWGCameraSettings::setCloudSunMoonRadiusDeg(double cloud_sun_moon_radius_deg) {
 }
 
 qint32
+SWGCameraSettings::getCloudStarSense() {
+    return cloud_star_sense;
+}
+void
+SWGCameraSettings::setCloudStarSense(qint32 cloud_star_sense) {
+    this->cloud_star_sense = cloud_star_sense;
+    this->m_cloud_star_sense_isSet = true;
+}
+
+double
+SWGCameraSettings::getCloudStarSenseMagnitude() {
+    return cloud_star_sense_magnitude;
+}
+void
+SWGCameraSettings::setCloudStarSenseMagnitude(double cloud_star_sense_magnitude) {
+    this->cloud_star_sense_magnitude = cloud_star_sense_magnitude;
+    this->m_cloud_star_sense_magnitude_isSet = true;
+}
+
+qint32
 SWGCameraSettings::getStarDetect() {
     return star_detect;
 }
@@ -6627,6 +6663,12 @@ SWGCameraSettings::isSet(){
             isObjectUpdated = true; break;
         }
         if(m_cloud_sun_moon_radius_deg_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_cloud_star_sense_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_cloud_star_sense_magnitude_isSet){
             isObjectUpdated = true; break;
         }
         if(m_star_detect_isSet){

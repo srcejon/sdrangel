@@ -144,6 +144,7 @@ private:
     MessageQueue *m_msgQueueToFeature;
     CameraPipelineFramePtr m_lastInputFrame;
     CameraPipelineCloud m_lastCloud;
+    cv::Mat m_lastDebugMask;   // Debug view of the last recompute, re-rendered onto intermediate frames
     int m_framesSinceUpdate;
     QSize m_lastFrameSize;
     cv::Rect m_lastContentRect;
@@ -157,11 +158,29 @@ private:
     [[nodiscard]] bool canUseCudaCloudDetection() const;
     bool prepareWorkImagesCuda(const cv::cuda::GpuMat& bgrGpu, const cv::Rect& roi, cv::Mat& workBgr, cv::Mat& rawGray, cv::Mat& gray);
 #endif
+    // Star-visibility sensing: predicted catalog stars checked for a point-source peak in
+    // the full-resolution frame, used to veto cloud-mask components that stars shine through
+    struct CloudStarSense
+    {
+        struct Star
+        {
+            QPointF position; // full-image coordinates
+            bool visible;
+        };
+        QVector<Star> stars;
+        bool valid = false;
+    };
+
     [[nodiscard]] static bool cloudSettingsChanged(const QList<QString>& settingsKeys);
     [[nodiscard]] bool resolveNightMode(const cv::Mat& medianGray, const cv::Mat& evaluationMask, const QDateTime& captureDateTime);
-    void prepareWorkImages(const cv::Mat& bgrMat, const cv::Rect& roi, cv::Mat& workBgr, cv::Mat& rawGray, cv::Mat& gray) const;
-    void applyCloudDetection(const cv::Mat& workBgr, const cv::Mat& rawGray, const cv::Mat& gray, const cv::Rect& roi, const cv::Rect& contentRect, const QSize& imageSize, const CameraPipelineImageTransform& imageTransform, const QDateTime& captureDateTime, CameraPipelineCloud& cloud, cv::Mat* debugMask);
-    void applySunMoonMask(cv::Mat& evaluationMask, const cv::Rect& roi, const QSize& imageSize, const CameraPipelineImageTransform& imageTransform, const QDateTime& captureDateTime) const;
+    void prepareWorkImages(const QImage& image, const cv::Rect& roi, cv::Mat& workBgr, cv::Mat& rawGray, cv::Mat& gray) const;
+    void applyCloudDetection(const cv::Mat& workBgr, const cv::Mat& rawGray, const cv::Mat& gray, const cv::Rect& roi, const cv::Rect& contentRect, const QSize& imageSize, const CameraPipelineImageTransform& imageTransform, const QDateTime& captureDateTime, const CloudStarSense& starSense, CameraPipelineCloud& cloud, cv::Mat* debugMask);
+    void applySunMoonMask(cv::Mat& mask, cv::Mat& evaluationMask, const cv::Mat& gray, const cv::Rect& roi, const QSize& imageSize, const CameraPipelineImageTransform& imageTransform, const QDateTime& captureDateTime) const;
+    cv::Mat structureContrastMask(const cv::Mat& gray, const cv::Mat& evaluationMask, bool requirePixelContrast, cv::Mat* debugMask) const;
+    [[nodiscard]] CloudStarSense senseStarVisibility(const CameraPipelineFramePtr& frame, const QSize& imageSize) const;
+    static bool samplePatchGray(const CameraPipelineFramePtr& frame, const QPoint& centre, int half, cv::Mat& patch);
+    void applyStarVisibilityVeto(cv::Mat& mask, const CloudStarSense& starSense, const cv::Rect& roi) const;
+    void renderDebugView(const CameraPipelineFramePtr& frame, const cv::Size& frameCvSize, const cv::Rect& roi) const;
     void invalidateCache();
 };
 

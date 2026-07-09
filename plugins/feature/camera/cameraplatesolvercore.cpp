@@ -839,6 +839,17 @@ QVector<CameraPlateSolver::SolverContext::CatalogStar> CameraPlateSolver::Solver
     return s_catalog;
 }
 
+QVector<CameraPlateSolver::BrightStar> CameraPlateSolver::brightStarCatalog(const CameraSettings& settings)
+{
+    const QVector<SolverContext::CatalogStar> catalog = SolverContext::brightStarCatalog(settings);
+    QVector<BrightStar> stars;
+    stars.reserve(catalog.size());
+    for (const SolverContext::CatalogStar& star : catalog) {
+        stars.append({star.rightAscensionDegrees, star.declinationDegrees, star.magnitude});
+    }
+    return stars;
+}
+
 QVector<CameraPlateSolver::SolverContext::CatalogStar> CameraPlateSolver::SolverContext::bundledAliasCatalog()
 {
     static QMutex s_catalogMutex;

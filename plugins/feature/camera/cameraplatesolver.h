@@ -113,6 +113,18 @@ public:
     static QString sirilAstroCatalogPath();
     static QString sirilAstroCompressedCatalogPath();
     static bool importDownloadedCatalogArchive(const QString& archivePath, QString* errorMessage = nullptr);
+
+    // Bright-star catalog positions (user-configured file, downloaded catalog, or the
+    // bundled fallback resource), for consumers outside the solver such as the cloud
+    // detector's star-visibility sensing. Thread-safe; the underlying catalog is cached.
+    struct BrightStar
+    {
+        double rightAscensionDegrees;
+        double declinationDegrees;
+        double magnitude;
+    };
+    static QVector<BrightStar> brightStarCatalog(const CameraSettings& settings);
+
     CameraPlateSolveResult solve(const CameraSettings& settings,
                                  const QSize& imageSize,
                                  const QDateTime& captureDateTime,

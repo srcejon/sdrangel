@@ -6562,14 +6562,14 @@ car</string>
            <item row="9" column="0">
             <widget class="QLabel" name="cloudSunMoonRadiusLabel">
              <property name="text">
-              <string>Sun/moon radius</string>
+              <string>Sun/moon max radius</string>
              </property>
             </widget>
            </item>
            <item row="9" column="1">
             <widget class="QDoubleSpinBox" name="cloudSunMoonRadiusSpin">
              <property name="toolTip">
-              <string>Angular radius of the sun/moon exclusion disc, in degrees</string>
+              <string>Maximum angular radius, in degrees, that the sun/moon exclusion grows to. The mask sizes itself to the actual glare bloom (which grows with gain and exposure) up to this limit</string>
              </property>
              <property name="suffix">
               <string> °</string>
@@ -6584,18 +6584,61 @@ car</string>
               <double>1.000000000000000</double>
              </property>
              <property name="value">
-              <double>8.000000000000000</double>
+              <double>20.000000000000000</double>
+             </property>
+            </widget>
+           </item>
+           <item row="9" column="2">
+            <widget class="QLabel" name="cloudStarSenseLabel">
+             <property name="text">
+              <string>Star sense</string>
+             </property>
+            </widget>
+           </item>
+           <item row="9" column="3">
+            <widget class="QCheckBox" name="cloudStarSenseCheck">
+             <property name="toolTip">
+              <string>At night, check whether predicted catalog stars are visible and unmark detected cloud that stars shine through. Requires the camera position, capture time and a calibrated lens model (as used by the plate solver)</string>
+             </property>
+             <property name="text">
+              <string/>
              </property>
             </widget>
            </item>
            <item row="10" column="0">
+            <widget class="QLabel" name="cloudStarSenseMagLabel">
+             <property name="text">
+              <string>Star sense mag</string>
+             </property>
+            </widget>
+           </item>
+           <item row="10" column="1">
+            <widget class="QDoubleSpinBox" name="cloudStarSenseMagSpin">
+             <property name="toolTip">
+              <string>Faintest catalog star magnitude checked by star-visibility sensing. Larger values check more, fainter stars</string>
+             </property>
+             <property name="decimals">
+              <number>1</number>
+             </property>
+             <property name="maximum">
+              <double>6.000000000000000</double>
+             </property>
+             <property name="singleStep">
+              <double>0.500000000000000</double>
+             </property>
+             <property name="value">
+              <double>4.000000000000000</double>
+             </property>
+            </widget>
+           </item>
+           <item row="11" column="0">
             <widget class="QLabel" name="cloudCoverageTitleLabel">
              <property name="text">
               <string>Coverage</string>
              </property>
             </widget>
            </item>
-           <item row="10" column="1">
+           <item row="11" column="1">
             <widget class="QLabel" name="cloudCoverageLabel">
              <property name="toolTip">
               <string>Percentage of the evaluated sky classified as cloud in the latest frame</string>
@@ -6605,7 +6648,7 @@ car</string>
              </property>
             </widget>
            </item>
-           <item row="10" column="3" alignment="Qt::AlignmentFlag::AlignRight">
+           <item row="11" column="3" alignment="Qt::AlignmentFlag::AlignRight">
             <widget class="QToolButton" name="clearCloudChart">
              <property name="toolTip">
               <string>Clear cloud coverage history chart</string>
@@ -6619,7 +6662,7 @@ car</string>
              </property>
             </widget>
            </item>
-           <item row="11" column="0" colspan="4">
+           <item row="12" column="0" colspan="4">
             <widget class="QWidget" name="cloudChartContainer" native="true">
              <property name="toolTip">
               <string>Displays the cloud coverage history chart.</string>

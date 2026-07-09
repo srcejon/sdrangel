@@ -23,6 +23,7 @@
 #include <opencv2/cudafilters.hpp>
 #endif
 
+#include "cameraclearskyreference.h"
 #include "cameradetector.h"
 
 /**
@@ -131,6 +132,40 @@ public:
         { }
     };
 
+    // GUI/API request: capture the current frame as the clear-sky reference for the
+    // current sky state (sun/moon elevation at the frame's observation time)
+    class MsgSaveClearSkyReference : public Message {
+        MESSAGE_CLASS_DECLARATION
+
+    public:
+        static MsgSaveClearSkyReference* create() { return new MsgSaveClearSkyReference(); }
+
+    private:
+        MsgSaveClearSkyReference() : Message() { }
+    };
+
+    // Report to the feature/GUI: clear-sky reference store status after a save or
+    // auto-learn update ("3/7 refs ... - current: Dark [tick]")
+    class MsgReportClearSkyReference : public Message {
+        MESSAGE_CLASS_DECLARATION
+
+    public:
+        const QString& getSummary() const { return m_summary; }
+
+        static MsgReportClearSkyReference* create(const QString& summary)
+        {
+            return new MsgReportClearSkyReference(summary);
+        }
+
+    private:
+        QString m_summary;
+
+        explicit MsgReportClearSkyReference(const QString& summary) :
+            Message(),
+            m_summary(summary)
+        { }
+    };
+
     CameraCloudDetector();
     ~CameraCloudDetector() override;
     void setMessageQueueToFeature(MessageQueue *messageQueue) { m_msgQueueToFeature = messageQueue; }
@@ -139,6 +174,7 @@ protected:
     void applySettings(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force = false) override;
     void captureActiveChanged(bool active) override;
     void processNewFrame(const CameraPipelineFramePtr& frame) override;
+    bool handleStageMessage(const Message& cmd) override;
 
 private:
     MessageQueue *m_msgQueueToFeature;
@@ -150,6 +186,8 @@ private:
     cv::Rect m_lastContentRect;
     bool m_autoNight;          // Auto-mode day/night decision, kept between frames for hysteresis
     bool m_haveAutoModeState;
+    CameraClearSkyReference m_clearSkyReference;
+    bool m_saveReferencePending;
 
 #ifdef CAMERA_OPENCV_CUDA_CLOUD_DETECTION
     cv::cuda::Stream m_cudaCloudStream;
@@ -181,6 +219,7 @@ private:
     static bool samplePatchGray(const CameraPipelineFramePtr& frame, const QPoint& centre, int half, cv::Mat& patch);
     void applyStarVisibilityVeto(cv::Mat& mask, const CloudStarSense& starSense, const cv::Rect& roi) const;
     void renderDebugView(const CameraPipelineFramePtr& frame, const cv::Size& frameCvSize, const cv::Rect& roi) const;
+    [[nodiscard]] QString referenceStorageKey() const;
     void invalidateCache();
 };
 

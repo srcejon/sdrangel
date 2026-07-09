@@ -267,6 +267,7 @@ private:
     int m_lastStackDroppedCount = 0;
     int m_lastStackRejectedCount = 0;
     CameraSettingsDialog *m_settingsDialog;
+    QString m_clearSkyReferenceSummary; // Latest clear-sky reference store status from the cloud detector
     CameraDetectionHistory *m_detectionHistoryDialog;
     CameraHistogramDialog *m_histogramDialog;
     QProgressDialog *m_tensorRtProgressDialog = nullptr;
@@ -802,6 +803,9 @@ private slots:
     void on_cloudSunMoonRadiusSpin_valueChanged(double value);
     void on_cloudStarSenseCheck_toggled(bool checked);
     void on_cloudStarSenseMagSpin_valueChanged(double value);
+    void on_cloudUseReferenceCheck_toggled(bool checked);
+    void on_cloudAutoReferenceCheck_toggled(bool checked);
+    void on_cloudSaveReferenceButton_clicked();
     void on_cloudColorButton_clicked();
     void on_starDetectButton_toggled(bool checked);
     void on_starThresholdSpin_valueChanged(int value);

@@ -663,6 +663,8 @@ struct CameraSettings
     double m_cloudSunMoonRadiusDeg; ///< Maximum angular radius in degrees the sun/moon exclusion grows to (dynamic bloom, capped here): 0..45
     bool   m_cloudStarSense;    ///< Veto cloud where predicted catalog stars are visible (needs calibrated pose, position and capture time)
     double m_cloudStarSenseMagnitude; ///< Faintest catalog star magnitude checked by star-visibility sensing: 0..6
+    bool   m_cloudUseReference; ///< Compare against the saved per-camera clear-sky reference (veto static quirks, cue deviations, learned foreground)
+    bool   m_cloudAutoReference; ///< Auto-learn the clear-sky reference from verified-clear frames
     bool   m_starDetect;        ///< Enable star detection
     int    m_starThreshold;     ///< Threshold on the star residual image
     int    m_starBackgroundBlur; ///< Radius used to estimate the smooth sky background

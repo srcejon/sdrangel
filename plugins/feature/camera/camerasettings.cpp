@@ -487,6 +487,8 @@ void CameraSettings::resetToDefaults()
     m_cloudSunMoonRadiusDeg = 20.0;
     m_cloudStarSense = false;
     m_cloudStarSenseMagnitude = 4.0;
+    m_cloudUseReference = false;
+    m_cloudAutoReference = false;
     m_starDetect = false;
     m_starThreshold = 24;
     m_starBackgroundBlur = 12;
@@ -869,6 +871,8 @@ QByteArray CameraSettings::serialize() const
     s.writeDouble(302, m_cloudSunMoonRadiusDeg);
     s.writeBool(303, m_cloudStarSense);
     s.writeDouble(304, m_cloudStarSenseMagnitude);
+    s.writeBool(305, m_cloudUseReference);
+    s.writeBool(306, m_cloudAutoReference);
 
     return s.final();
 }
@@ -1231,6 +1235,8 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readBool(303, &m_cloudStarSense, false);
         d.readDouble(304, &m_cloudStarSenseMagnitude, 4.0);
         m_cloudStarSenseMagnitude = qBound(m_minCloudStarMagnitude, m_cloudStarSenseMagnitude, m_maxCloudStarMagnitude);
+        d.readBool(305, &m_cloudUseReference, false);
+        d.readBool(306, &m_cloudAutoReference, false);
         m_cloudEventThreshold = qBound(m_minCoveragePercent, m_cloudEventThreshold, m_maxCoveragePercent);
         m_cloudDayThreshold = qBound(m_minCloudRatioThreshold, m_cloudDayThreshold, m_maxCloudRatioThreshold);
         m_cloudTextureThreshold = qBound(m_minThreshold8Bit, m_cloudTextureThreshold, m_maxThreshold8Bit);
@@ -2215,6 +2221,12 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     if (settingsKeys.contains("cloudStarSenseMagnitude")) {
         m_cloudStarSenseMagnitude = qBound(m_minCloudStarMagnitude, settings.m_cloudStarSenseMagnitude, m_maxCloudStarMagnitude);
     }
+    if (settingsKeys.contains("cloudUseReference")) {
+        m_cloudUseReference = settings.m_cloudUseReference;
+    }
+    if (settingsKeys.contains("cloudAutoReference")) {
+        m_cloudAutoReference = settings.m_cloudAutoReference;
+    }
     if (settingsKeys.contains("starDetect")) {
         m_starDetect = settings.m_starDetect;
     }
@@ -3143,6 +3155,12 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("cloudStarSenseMagnitude") || force) {
         ostr << " m_cloudStarSenseMagnitude: " << m_cloudStarSenseMagnitude;
+    }
+    if (settingsKeys.contains("cloudUseReference") || force) {
+        ostr << " m_cloudUseReference: " << m_cloudUseReference;
+    }
+    if (settingsKeys.contains("cloudAutoReference") || force) {
+        ostr << " m_cloudAutoReference: " << m_cloudAutoReference;
     }
     if (settingsKeys.contains("starDetect") || force) {
         ostr << " m_starDetect: " << m_starDetect;

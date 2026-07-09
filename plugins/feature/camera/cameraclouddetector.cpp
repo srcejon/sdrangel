@@ -28,11 +28,14 @@
 
 #include "util/astronomy.h"
 #include "util/profiler.h"
+#include "camerainfo.h"
 #include "cameraclouddetector.h"
 #include "cameraplatesolver.h"
 #include "cameraskyprojector.h"
 
 MESSAGE_CLASS_DEFINITION(CameraCloudDetector::MsgReportCloudCoverage, Message)
+MESSAGE_CLASS_DEFINITION(CameraCloudDetector::MsgSaveClearSkyReference, Message)
+MESSAGE_CLASS_DEFINITION(CameraCloudDetector::MsgReportClearSkyReference, Message)
 
 namespace {
 
@@ -257,11 +260,46 @@ CameraCloudDetector::CameraCloudDetector() :
     m_msgQueueToFeature(nullptr),
     m_framesSinceUpdate(0),
     m_autoNight(true),
-    m_haveAutoModeState(false)
+    m_haveAutoModeState(false),
+    m_saveReferencePending(false)
 {
 }
 
 CameraCloudDetector::~CameraCloudDetector() = default;
+
+// Storage key identifying which camera the clear-sky reference belongs to. Live cameras
+// have a unique device id and video/stream playback uses the file path or URL as its id,
+// but image-sequence playback uses a constant id - substitute the first image path so two
+// different sequences never share a reference store. The protocol prefixes the key so ids
+// from different backends cannot collide.
+QString CameraCloudDetector::referenceStorageKey() const
+{
+    QString id = m_settings.m_cameraId;
+    if ((m_settings.m_cameraProtocol == CameraProtocol::images()) && !m_settings.m_imageFileCameraPaths.isEmpty()) {
+        id = m_settings.m_imageFileCameraPaths.first();
+    }
+    return m_settings.m_cameraProtocol + QLatin1Char('|') + id;
+}
+
+bool CameraCloudDetector::handleStageMessage(const Message& cmd)
+{
+    if (MsgSaveClearSkyReference::match(cmd))
+    {
+        // Captured on the next recompute; re-run on the last frame so a paused image or an
+        // idle interval-capture camera saves immediately rather than at the next frame
+        m_saveReferencePending = true;
+        invalidateCache();
+        if (m_lastInputFrame)
+        {
+            CameraPipelineFramePtr frame(new CameraPipelineFrame(*m_lastInputFrame));
+            frame->m_manualPreviewFrame = true;
+            submitFrame(frame);
+        }
+        return true;
+    }
+
+    return false;
+}
 
 bool CameraCloudDetector::cloudSettingsChanged(const QList<QString>& settingsKeys)
 {
@@ -292,6 +330,8 @@ bool CameraCloudDetector::cloudSettingsChanged(const QList<QString>& settingsKey
         || settingsKeys.contains("cloudSunMoonRadiusDeg")
         || settingsKeys.contains("cloudStarSense")
         || settingsKeys.contains("cloudStarSenseMagnitude")
+        || settingsKeys.contains("cloudUseReference")
+        || settingsKeys.contains("cloudAutoReference")
         // Star sensing reuses the star detector's peak threshold
         || settingsKeys.contains("starThreshold")
         // The sun/moon mask and star sensing project through the lens model
@@ -1216,11 +1256,48 @@ void CameraCloudDetector::applyCloudDetection(const cv::Mat& workBgr, const cv::
         evaluationMask = combinedMask;
     }
 
-    // The rim-margin and sun/moon masks mutate the evaluation mask in place. In the common
-    // case it aliases the cached exclusion mask (shallow cv::Mat copy), so take a private
-    // copy first to avoid corrupting the cache carried to later frames.
-    if ((m_settings.m_cloudEdgeMarginPercent > 0.0) || m_settings.m_cloudMaskSunMoon) {
+    // Clear-sky reference: resolve the sky-state slot for this frame (used by the save
+    // request, the learned foreground exclusion, the deviation cue/veto and auto-learning)
+    const QDateTime observationTime = m_settings.m_plateSolveUseCaptureDateTime
+        ? captureDateTime
+        : m_settings.m_plateSolveDateTime;
+    int referenceSlot = -1;
+    if ((m_settings.m_cloudUseReference || m_saveReferencePending) && observationTime.isValid())
+    {
+        AzAlt sunAzAlt, moonAzAlt;
+        RADec bodyRaDec;
+        Astronomy::sunPosition(sunAzAlt, bodyRaDec, m_settings.m_latitude, m_settings.m_longitude, observationTime);
+        Astronomy::moonPosition(moonAzAlt, bodyRaDec, m_settings.m_latitude, m_settings.m_longitude, observationTime);
+        referenceSlot = CameraClearSkyReference::slotFor(sunAzAlt.alt, moonAzAlt.alt);
+        m_clearSkyReference.ensureLoaded(referenceStorageKey());
+    }
+    const QRectF roiNorm(
+        static_cast<double>(roi.x) / std::max(1, imageSize.width()),
+        static_cast<double>(roi.y) / std::max(1, imageSize.height()),
+        static_cast<double>(roi.width) / std::max(1, imageSize.width()),
+        static_cast<double>(roi.height) / std::max(1, imageSize.height()));
+
+    // The rim-margin and sun/moon masks (and the learned foreground exclusion) mutate the
+    // evaluation mask in place. In the common case it aliases the cached exclusion mask
+    // (shallow cv::Mat copy), so take a private copy first to avoid corrupting the cache
+    // carried to later frames.
+    if ((m_settings.m_cloudEdgeMarginPercent > 0.0) || m_settings.m_cloudMaskSunMoon
+        || (m_settings.m_cloudUseReference && (referenceSlot >= 0))) {
         evaluationMask = evaluationMask.clone();
+    }
+
+    // Learned foreground (trees, roofs, window frames) derived from the clear-sky
+    // reference: neither clear sky nor cloud, so excluded from classification and from
+    // the coverage denominator, like a hands-free exclusion rectangle
+    if (m_settings.m_cloudUseReference && (referenceSlot >= 0))
+    {
+        const cv::Mat foreground = m_clearSkyReference.foregroundMask(gray.size(), roiNorm);
+        if (!foreground.empty())
+        {
+            cv::Mat notForeground;
+            cv::bitwise_not(foreground, notForeground);
+            cv::bitwise_and(evaluationMask, notForeground, evaluationMask);
+        }
     }
 
     // Optionally exclude a margin inward from the illuminated sky-region boundary. On
@@ -1245,6 +1322,29 @@ void CameraCloudDetector::applyCloudDetection(const cv::Mat& workBgr, const cv::
             cv::distanceTransform(illuminated, boundaryDistance, cv::DIST_L2, 5);
             cv::Mat inner = boundaryDistance > static_cast<float>(marginPx);
             cv::bitwise_and(evaluationMask, inner, evaluationMask);
+        }
+    }
+
+    // Save-reference request: capture the evaluated sky as this sky state's clear
+    // reference. Requires an observation time (to know the sky state); reports back so the
+    // GUI can show the store status.
+    if (m_saveReferencePending)
+    {
+        m_saveReferencePending = false;
+        if (referenceSlot >= 0)
+        {
+            m_clearSkyReference.ensureLoaded(referenceStorageKey());
+            m_clearSkyReference.capture(referenceSlot, gray, workBgr, textureEnergy, evaluationMask, roiNorm, observationTime);
+            if (m_msgQueueToFeature) {
+                m_msgQueueToFeature->push(MsgReportClearSkyReference::create(
+                    QStringLiteral("Saved %1 - %2").arg(CameraClearSkyReference::slotName(referenceSlot),
+                        m_clearSkyReference.statusSummary(referenceSlot))));
+            }
+        }
+        else if (m_msgQueueToFeature)
+        {
+            m_msgQueueToFeature->push(MsgReportClearSkyReference::create(
+                QStringLiteral("Cannot save reference: no observation time (set position and capture time)")));
         }
     }
 
@@ -1455,6 +1555,16 @@ void CameraCloudDetector::applyCloudDetection(const cv::Mat& workBgr, const cv::
     }
 
     cv::bitwise_and(mask, evaluationMask, mask);
+
+    // Clear-sky reference comparison: pixels standing above this camera's known clear sky
+    // are added as cloud (cue); pixels matching it within tolerances tighter than any
+    // detection margin are removed (veto) - static quirks the in-frame heuristics misread
+    // as cloud are thereby retired. Abstains when the slot is empty or the frame globally
+    // disagrees with the reference (exposure regime change).
+    if (m_settings.m_cloudUseReference && (referenceSlot >= 0)) {
+        m_clearSkyReference.applyCueAndVeto(referenceSlot, mask, gray, workBgr, evaluationMask, roiNorm, m_settings.m_cloudNightThreshold);
+    }
+
     if (debugMask && (m_settings.m_cloudDebugView == CameraSettings::CloudDebugViewThresholded)) {
         *debugMask = mask.clone();
     }
@@ -1495,6 +1605,27 @@ void CameraCloudDetector::applyCloudDetection(const cv::Mat& workBgr, const cv::
     cloud.m_coveragePercent = 100.0f * static_cast<float>(cv::countNonZero(mask)) / static_cast<float>(std::max(1, evaluatedPixels));
     cloud.m_night = night;
     cloud.m_valid = true;
+
+    // Auto-learning: blend verified-clear frames into the reference so it tracks seasons,
+    // lens dirt and slow drift, and fills slots the user never saved manually. At night,
+    // when star sensing runs, the sky must additionally prove itself clear by showing its
+    // predicted stars.
+    if (m_settings.m_cloudUseReference && m_settings.m_cloudAutoReference && (referenceSlot >= 0))
+    {
+        int visibleStars = 0;
+        for (const CloudStarSense::Star& star : starSense.stars) {
+            visibleStars += star.visible ? 1 : 0;
+        }
+        const bool starConfirmed = starSense.valid && (visibleStars >= 5);
+        if (m_clearSkyReference.autoLearn(referenceSlot, gray, workBgr, textureEnergy, evaluationMask, roiNorm, observationTime,
+                                          cloud.m_coveragePercent, night, m_settings.m_cloudStarSense, starConfirmed)
+            && m_msgQueueToFeature)
+        {
+            m_msgQueueToFeature->push(MsgReportClearSkyReference::create(
+                QStringLiteral("Auto-learned %1 - %2").arg(CameraClearSkyReference::slotName(referenceSlot),
+                    m_clearSkyReference.statusSummary(referenceSlot))));
+        }
+    }
 
     PROFILER_STOP(__FUNCTION__);
 }

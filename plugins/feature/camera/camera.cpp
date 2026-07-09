@@ -48,6 +48,7 @@ MESSAGE_CLASS_DEFINITION(Camera::MsgCaptureActive, Message)
 MESSAGE_CLASS_DEFINITION(Camera::MsgRefreshCameraList, Message)
 MESSAGE_CLASS_DEFINITION(Camera::MsgReportError, Message)
 MESSAGE_CLASS_DEFINITION(Camera::MsgDeleteStackFrame, Message)
+MESSAGE_CLASS_DEFINITION(Camera::MsgSaveClearSkyReference, Message)
 MESSAGE_CLASS_DEFINITION(Camera::MsgClearTrackedObjectHeatMap, Message)
 MESSAGE_CLASS_DEFINITION(Camera::MsgSaveCurrentImage, Message)
 
@@ -550,6 +551,24 @@ bool Camera::handleMessage(const Message& cmd)
         const MsgDeleteStackFrame& msg = (const MsgDeleteStackFrame&) cmd;
         if (m_frameStacker) {
             m_frameStacker->getInputMessageQueue()->push(CameraFrameStacker::MsgDeleteStackFrame::create(msg.getFrameIndex()));
+        }
+        return true;
+    }
+    else if (MsgSaveClearSkyReference::match(cmd))
+    {
+        if (m_cloudDetector) {
+            m_cloudDetector->getInputMessageQueue()->push(CameraCloudDetector::MsgSaveClearSkyReference::create());
+        }
+        return true;
+    }
+    else if (CameraCloudDetector::MsgReportClearSkyReference::match(cmd))
+    {
+        // Forward the reference-store status to the GUI for display
+        if (getMessageQueueToGUI())
+        {
+            const CameraCloudDetector::MsgReportClearSkyReference& report =
+                (const CameraCloudDetector::MsgReportClearSkyReference&) cmd;
+            getMessageQueueToGUI()->push(CameraCloudDetector::MsgReportClearSkyReference::create(report.getSummary()));
         }
         return true;
     }
@@ -1236,6 +1255,8 @@ void Camera::webapiFormatFeatureSettings(
     swg->setCloudSunMoonRadiusDeg(settings.m_cloudSunMoonRadiusDeg);
     swg->setCloudStarSense(settings.m_cloudStarSense ? 1 : 0);
     swg->setCloudStarSenseMagnitude(settings.m_cloudStarSenseMagnitude);
+    swg->setCloudUseReference(settings.m_cloudUseReference ? 1 : 0);
+    swg->setCloudAutoReference(settings.m_cloudAutoReference ? 1 : 0);
     swg->setStarDetect(settings.m_starDetect ? 1 : 0);
     swg->setStarThreshold(settings.m_starThreshold);
     swg->setStarBackgroundBlur(settings.m_starBackgroundBlur);
@@ -2090,6 +2111,12 @@ void Camera::webapiUpdateFeatureSettings(
     }
     if (featureSettingsKeys.contains("cloudStarSenseMagnitude")) {
         settings.m_cloudStarSenseMagnitude = swg->getCloudStarSenseMagnitude();
+    }
+    if (featureSettingsKeys.contains("cloudUseReference")) {
+        settings.m_cloudUseReference = swg->getCloudUseReference() != 0;
+    }
+    if (featureSettingsKeys.contains("cloudAutoReference")) {
+        settings.m_cloudAutoReference = swg->getCloudAutoReference() != 0;
     }
     if (featureSettingsKeys.contains("starDetect")) {
         settings.m_starDetect = swg->getStarDetect() != 0;

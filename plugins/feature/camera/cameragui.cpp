@@ -461,6 +461,17 @@ bool CameraGUI::handleMessage(const Message& message)
 {
     const CameraInfo previousCamera = selectedCameraFromSettings();
 
+    if (CameraCloudDetector::MsgReportClearSkyReference::match(message))
+    {
+        const CameraCloudDetector::MsgReportClearSkyReference& report =
+            (const CameraCloudDetector::MsgReportClearSkyReference&) message;
+        m_clearSkyReferenceSummary = report.getSummary();
+        if (m_settingsDialog) {
+            settingsUI()->cloudReferenceStatusLabel->setText(m_clearSkyReferenceSummary);
+        }
+        return true;
+    }
+
     if (Camera::MsgConfigureCamera::match(message))
     {
         const Camera::MsgConfigureCamera& cfg = (Camera::MsgConfigureCamera&) message;
@@ -1987,6 +1998,11 @@ void CameraGUI::displaySettings()
     settingsUI()->cloudSunMoonRadiusSpin->setValue(m_settings.m_cloudSunMoonRadiusDeg);
     settingsUI()->cloudStarSenseCheck->setChecked(m_settings.m_cloudStarSense);
     settingsUI()->cloudStarSenseMagSpin->setValue(m_settings.m_cloudStarSenseMagnitude);
+    settingsUI()->cloudUseReferenceCheck->setChecked(m_settings.m_cloudUseReference);
+    settingsUI()->cloudAutoReferenceCheck->setChecked(m_settings.m_cloudAutoReference);
+    if (!m_clearSkyReferenceSummary.isEmpty()) {
+        settingsUI()->cloudReferenceStatusLabel->setText(m_clearSkyReferenceSummary);
+    }
     ui->starDetectButton->setChecked(m_settings.m_starDetect);
     settingsUI()->starThresholdSpin->setValue(m_settings.m_starThreshold);
     settingsUI()->starBackgroundBlurSpin->setValue(m_settings.m_starBackgroundBlur);
@@ -2992,6 +3008,9 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->cloudSunMoonRadiusSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_cloudSunMoonRadiusSpin_valueChanged);
     QObject::connect(settingsUI()->cloudStarSenseCheck, &QCheckBox::toggled, this, &CameraGUI::on_cloudStarSenseCheck_toggled);
     QObject::connect(settingsUI()->cloudStarSenseMagSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_cloudStarSenseMagSpin_valueChanged);
+    QObject::connect(settingsUI()->cloudUseReferenceCheck, &QCheckBox::toggled, this, &CameraGUI::on_cloudUseReferenceCheck_toggled);
+    QObject::connect(settingsUI()->cloudAutoReferenceCheck, &QCheckBox::toggled, this, &CameraGUI::on_cloudAutoReferenceCheck_toggled);
+    QObject::connect(settingsUI()->cloudSaveReferenceButton, &QPushButton::clicked, this, &CameraGUI::on_cloudSaveReferenceButton_clicked);
     QObject::connect(settingsUI()->cloudColorButton, &QToolButton::clicked, this, &CameraGUI::on_cloudColorButton_clicked);
     QObject::connect(settingsUI()->starThresholdSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_starThresholdSpin_valueChanged);
     QObject::connect(settingsUI()->starBackgroundBlurSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_starBackgroundBlurSpin_valueChanged);
@@ -9754,6 +9773,23 @@ void CameraGUI::on_cloudStarSenseMagSpin_valueChanged(double value)
 {
     m_settings.m_cloudStarSenseMagnitude = value;
     applySetting("cloudStarSenseMagnitude");
+}
+
+void CameraGUI::on_cloudUseReferenceCheck_toggled(bool checked)
+{
+    m_settings.m_cloudUseReference = checked;
+    applySetting("cloudUseReference");
+}
+
+void CameraGUI::on_cloudAutoReferenceCheck_toggled(bool checked)
+{
+    m_settings.m_cloudAutoReference = checked;
+    applySetting("cloudAutoReference");
+}
+
+void CameraGUI::on_cloudSaveReferenceButton_clicked()
+{
+    m_camera->getInputMessageQueue()->push(Camera::MsgSaveClearSkyReference::create());
 }
 
 void CameraGUI::on_cloudColorButton_clicked()

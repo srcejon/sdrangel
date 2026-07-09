@@ -983,6 +983,18 @@ At night, checks whether bright catalog stars are visible at their predicted pos
 
 Sets the faintest catalog star magnitude checked by star-visibility sensing. Larger values check more, fainter stars; how faint is usable depends on the camera's sensitivity and exposure.
 
+<h4>21. Clear-sky ref</h4>
+
+Compares each frame against a saved per-camera clear-sky reference. Because the clear sky's appearance changes continuously from day through twilight to dark, and with moonlight, references are stored in seven slots keyed by the sky state (sun-elevation band and whether the moon is up); the current frame is compared against the matching slot after both are normalised by their own brightness and colour anchors, absorbing gain and exposure changes. Regions matching the reference within tight tolerances are never classified as cloud - permanently retiring this camera's static quirks (glow pockets, rim artifacts) - while regions standing above the reference in brightness or shifted toward white are classified as cloud even where the built-in heuristics see nothing. A learned foreground mask (trees, roofs, window frames - dark silhouettes at night, finely textured by day) is excluded from evaluation automatically, replacing hand-drawn exclusion rectangles. The comparison abstains when the matching slot is empty or the frame globally disagrees with it (a changed exposure regime). References persist per camera under the application data directory.
+
+<h4>22. Save ref</h4>
+
+Saves the current frame as the clear-sky reference for the current sky state. Press on a cloud-free sky; the slot (Day, Twilight, Deep twilight, Dark, each with or without moon) is chosen automatically from the sun and moon elevation at the frame's capture time, so the camera position and time must be set. The status label shows how many slots are filled - press again at other times of day and night to cover more sky states.
+
+<h4>23. Auto learn ref</h4>
+
+Automatically blends verified-clear frames into the reference: frames whose measured coverage is very low, additionally confirmed by star-visibility sensing at night when that is enabled, are merged into their slot with a slow blend (throttled to at most one update per ten minutes per slot). This fills slots that were never saved manually and keeps the reference tracking seasons, lens dirt and slow drift.
+
 On the Star Detection sub-tab:
 
 ![Star Detection tab](../../../doc/img/Camera_plugin_star_detection_tab.png)

@@ -6631,14 +6631,68 @@ car</string>
              </property>
             </widget>
            </item>
+           <item row="10" column="2">
+            <widget class="QLabel" name="cloudUseReferenceLabel">
+             <property name="text">
+              <string>Clear-sky ref</string>
+             </property>
+            </widget>
+           </item>
+           <item row="10" column="3">
+            <widget class="QCheckBox" name="cloudUseReferenceCheck">
+             <property name="toolTip">
+              <string>Compare frames against the saved per-camera clear-sky reference: regions matching the known clear sky are never classified as cloud, regions deviating from it are, and learned foreground (trees, roofs) is excluded. Save references with the Save ref button on clear skies at different times of day and night</string>
+             </property>
+             <property name="text">
+              <string/>
+             </property>
+            </widget>
+           </item>
            <item row="11" column="0">
+            <widget class="QLabel" name="cloudAutoReferenceLabel">
+             <property name="text">
+              <string>Auto learn ref</string>
+             </property>
+            </widget>
+           </item>
+           <item row="11" column="1">
+            <widget class="QCheckBox" name="cloudAutoReferenceCheck">
+             <property name="toolTip">
+              <string>Automatically blend verified-clear frames (low measured coverage; at night confirmed by star sensing when enabled) into the clear-sky reference, so it fills itself in and tracks seasons and lens changes</string>
+             </property>
+             <property name="text">
+              <string/>
+             </property>
+            </widget>
+           </item>
+           <item row="11" column="2">
+            <widget class="QPushButton" name="cloudSaveReferenceButton">
+             <property name="toolTip">
+              <string>Save the current frame as the clear-sky reference for the current sky state (determined from the sun and moon elevation at the frame's capture time). Press on a cloud-free sky</string>
+             </property>
+             <property name="text">
+              <string>Save ref</string>
+             </property>
+            </widget>
+           </item>
+           <item row="11" column="3">
+            <widget class="QLabel" name="cloudReferenceStatusLabel">
+             <property name="toolTip">
+              <string>Clear-sky reference store status: how many sky states have a saved reference</string>
+             </property>
+             <property name="text">
+              <string>-</string>
+             </property>
+            </widget>
+           </item>
+           <item row="12" column="0">
             <widget class="QLabel" name="cloudCoverageTitleLabel">
              <property name="text">
               <string>Coverage</string>
              </property>
             </widget>
            </item>
-           <item row="11" column="1">
+           <item row="12" column="1">
             <widget class="QLabel" name="cloudCoverageLabel">
              <property name="toolTip">
               <string>Percentage of the evaluated sky classified as cloud in the latest frame</string>
@@ -6648,7 +6702,7 @@ car</string>
              </property>
             </widget>
            </item>
-           <item row="11" column="3" alignment="Qt::AlignmentFlag::AlignRight">
+           <item row="12" column="3" alignment="Qt::AlignmentFlag::AlignRight">
             <widget class="QToolButton" name="clearCloudChart">
              <property name="toolTip">
               <string>Clear cloud coverage history chart</string>
@@ -6662,7 +6716,7 @@ car</string>
              </property>
             </widget>
            </item>
-           <item row="12" column="0" colspan="4">
+           <item row="13" column="0" colspan="4">
             <widget class="QWidget" name="cloudChartContainer" native="true">
              <property name="toolTip">
               <string>Displays the cloud coverage history chart.</string>

@@ -152,6 +152,7 @@ private:
     void updateDeviceFeatureCombo(const QStringList &items, const QString &selected);
     void updateFileInputList();
     void updateMapList();
+    void updateCameraList();
     void makeUIConnections();
     void limitAzElRange(double& azimuth, double& elevation) const;
 

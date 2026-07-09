@@ -111,6 +111,11 @@
           <string>From file</string>
          </property>
         </item>
+        <item>
+         <property name="text">
+          <string>From camera</string>
+         </property>
+        </item>
        </widget>
       </item>
       <item row="4" column="4">

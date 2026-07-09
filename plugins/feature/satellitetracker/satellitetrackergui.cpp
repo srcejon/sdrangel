@@ -1952,6 +1952,8 @@ void SatelliteTrackerGUI::updateDeviceFeatureCombo()
         updateMapList();
     } else if (m_settings.m_dateTimeSelect == SatelliteTrackerSettings::FROM_FILE) {
         updateFileInputList();
+    } else if (m_settings.m_dateTimeSelect == SatelliteTrackerSettings::FROM_CAMERA) {
+        updateCameraList();
     }
 }
 
@@ -2019,6 +2021,28 @@ void SatelliteTrackerGUI::updateMapList()
     updateDeviceFeatureCombo(items, m_settings.m_mapFeature);
 }
 
+void SatelliteTrackerGUI::updateCameraList()
+{
+    // Create list of Camera features
+    std::vector<FeatureSet*>& featureSets = MainCore::instance()->getFeatureeSets();
+    int featureIndex = 0;
+    QStringList items;
+
+    for (std::vector<FeatureSet*>::const_iterator it = featureSets.begin(); it != featureSets.end(); ++it, featureIndex++)
+    {
+        for (int fi = 0; fi < (*it)->getNumberOfFeatures(); fi++)
+        {
+            Feature *feature = (*it)->getFeatureAt(fi);
+
+            if (feature->getURI() == "sdrangel.feature.camera") {
+                items.append(QString("F%1:%2").arg(featureIndex).arg(fi));
+            }
+        }
+    }
+
+    updateDeviceFeatureCombo(items, m_settings.m_cameraFeature);
+}
+
 void SatelliteTrackerGUI::on_deviceFeatureSelect_currentIndexChanged(int index)
 {
     (void) index;
@@ -2027,10 +2051,16 @@ void SatelliteTrackerGUI::on_deviceFeatureSelect_currentIndexChanged(int index)
     {
         m_settings.m_mapFeature = ui->deviceFeatureSelect->currentText();
         m_settingsKeys.append("mapFeature");
-    } else
+    }
+    else if (m_settings.m_dateTimeSelect == SatelliteTrackerSettings::FROM_FILE)
     {
         m_settings.m_fileInputDevice = ui->deviceFeatureSelect->currentText();
         m_settingsKeys.append("fileInputDevice");
+    }
+    else if (m_settings.m_dateTimeSelect == SatelliteTrackerSettings::FROM_CAMERA)
+    {
+        m_settings.m_cameraFeature = ui->deviceFeatureSelect->currentText();
+        m_settingsKeys.append("cameraFeature");
     }
 
     applySettings();

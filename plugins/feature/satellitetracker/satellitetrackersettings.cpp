@@ -73,6 +73,7 @@ void SatelliteTrackerSettings::resetToDefaults()
     m_dateTimeSelect = NOW;
     m_mapFeature = "";
     m_fileInputDevice = "";
+    m_cameraFeature = "";
     m_drawRotators = MATCHING_TARGET;
     m_azimuthOffset = 0.0;
     m_elevationOffset = 0.0;
@@ -142,6 +143,7 @@ QByteArray SatelliteTrackerSettings::serialize() const
     s.writeS32(49, (int)m_drawRotators);
     s.writeDouble(50, m_azimuthOffset);
     s.writeDouble(51, m_elevationOffset);
+    s.writeString(52, m_cameraFeature);
 
     for (int i = 0; i < SAT_COL_COLUMNS; i++) {
         s.writeS32(100 + i, m_columnIndexes[i]);
@@ -240,6 +242,7 @@ bool SatelliteTrackerSettings::deserialize(const QByteArray& data)
         d.readS32(49, (int*)&m_drawRotators, (int)MATCHING_TARGET);
         d.readDouble(50, &m_azimuthOffset, 0.0);
         d.readDouble(51, &m_elevationOffset, 0.0);
+        d.readString(52, &m_cameraFeature, "");
 
         for (int i = 0; i < SAT_COL_COLUMNS; i++) {
             d.readS32(100 + i, &m_columnIndexes[i], i);
@@ -455,6 +458,9 @@ void SatelliteTrackerSettings::applySettings(const QStringList& settingsKeys, co
     if (settingsKeys.contains("fileInputDevice")) {
         m_fileInputDevice = settings.m_fileInputDevice;
     }
+    if (settingsKeys.contains("cameraFeature")) {
+        m_cameraFeature = settings.m_cameraFeature;
+    }
     if (settingsKeys.contains("drawRotators")) {
         m_drawRotators = settings.m_drawRotators;
     }
@@ -641,6 +647,9 @@ QString SatelliteTrackerSettings::getDebugString(const QStringList& settingsKeys
     if (settingsKeys.contains("fileInputDevice") || force) {
         ostr << " m_fileInputDevice: " << m_fileInputDevice.toStdString();
     }
+    if (settingsKeys.contains("cameraFeature") || force) {
+        ostr << " m_cameraFeature: " << m_cameraFeature.toStdString();
+    }
     if (settingsKeys.contains("drawRotators") || force) {
         ostr << " m_drawRotators: " << m_drawRotators;
     }
@@ -720,4 +729,3 @@ void SatelliteTrackerSettings::SatelliteDeviceSettings::getDebugString(std::ostr
         << " m_aosCommand: " << m_aosCommand.toStdString()
         << " m_losCommand: " << m_losCommand.toStdString();
 }
-

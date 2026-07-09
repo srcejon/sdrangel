@@ -32,6 +32,7 @@
 #include "settings/serializable.h"
 #include "channel/channelwebapiutils.h"
 #include "feature/featurewebapiutils.h"
+#include "maincore.h"
 
 #include "satellitetrackerworker.h"
 #include "satellitetrackerreport.h"
@@ -45,6 +46,24 @@ MESSAGE_CLASS_DEFINITION(SatelliteTracker::MsgError, Message)
 
 const char* const SatelliteTracker::m_featureIdURI = "sdrangel.feature.satellitetracker";
 const char* const SatelliteTracker::m_featureId = "SatelliteTracker";
+
+static QDateTime getFeatureReportDateTime(const QString& featureReference, const QString& fieldName)
+{
+    unsigned int featureSet = 0;
+    unsigned int featureIdx = 0;
+
+    if (!MainCore::getFeatureIndexFromId(featureReference, featureSet, featureIdx)) {
+        return QDateTime();
+    }
+
+    QString dateTimeStr;
+
+    if (!ChannelWebAPIUtils::getFeatureReportValue(featureSet, featureIdx, fieldName, dateTimeStr)) {
+        return QDateTime();
+    }
+
+    return QDateTime::fromString(dateTimeStr, Qt::ISODateWithMs);
+}
 
 SatelliteTracker::SatelliteTracker(WebAPIAdapterInterface *webAPIAdapterInterface) :
     Feature(m_featureIdURI, webAPIAdapterInterface),
@@ -1106,21 +1125,24 @@ QDateTime SatelliteTracker::currentDateTimeUtc()
     }
     else if (m_settings.m_dateTimeSelect == SatelliteTrackerSettings::FROM_MAP)
     {
-        QString dateTimeStr;
-        int featureSet = 0;
-        int featureIdx = 0;
-        if (m_settings.m_mapFeature.size() >= 4)
+        QDateTime dateTime = getFeatureReportDateTime(m_settings.m_mapFeature, "dateTime");
+
+        if (dateTime.isValid())
         {
-            QStringList numbers = m_settings.m_mapFeature.mid(1).split(":");
-            if (numbers.size() == 2)
-            {
-                featureSet = numbers[0].toInt();
-                featureIdx = numbers[1].toInt();
-            }
+            return dateTime;
         }
-        if (ChannelWebAPIUtils::getFeatureReportValue(featureSet, featureIdx, "dateTime", dateTimeStr))
+        else
         {
-            return QDateTime::fromString(dateTimeStr, Qt::ISODateWithMs);
+            return QDateTime::currentDateTimeUtc();
+        }
+    }
+    else if (m_settings.m_dateTimeSelect == SatelliteTrackerSettings::FROM_CAMERA)
+    {
+        QDateTime dateTime = getFeatureReportDateTime(m_settings.m_cameraFeature, "captureDateTime");
+
+        if (dateTime.isValid())
+        {
+            return dateTime;
         }
         else
         {

@@ -88,9 +88,10 @@ struct SatelliteTrackerSettings
     bool m_replayEnabled;               //!< Replay a pass in the past, by setting date and time to m_replayStartDateTime
     QDateTime m_replayStartDateTime;    //!< Time to start the replay at
     bool m_sendTimeToMap;               //!< Send time to map when start pressed
-    enum DateTimeSelect {NOW, CUSTOM, FROM_MAP, FROM_FILE} m_dateTimeSelect;
+    enum DateTimeSelect {NOW, CUSTOM, FROM_MAP, FROM_FILE, FROM_CAMERA} m_dateTimeSelect;
     QString m_mapFeature;               //!< Which feature when FROM_MAP
     QString m_fileInputDevice;          //!< Which device when FROM_FILE
+    QString m_cameraFeature;            //!< Which feature when FROM_CAMERA
     enum Rotators {ALL_ROTATORS, NO_ROTATORS, MATCHING_TARGET} m_drawRotators; //!< Which rotators to draw on polar chart
     double m_azimuthOffset;             //!< Offset to add to az/el sent to rotator
     double m_elevationOffset;

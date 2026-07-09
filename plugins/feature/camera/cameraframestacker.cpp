@@ -1056,14 +1056,22 @@ bool CameraFrameStacker::applyOutputScaling(CameraPipelineFrame& frame)
     const QRect contentRect = scaledContentRect(inputSize, targetSize);
     if ((targetSize == inputSize) && (contentRect.size() == inputSize) && (contentRect.topLeft() == QPoint(0, 0)))
     {
-        frame.m_imageTransform.clear();
         return true;
     }
     if (targetSize.isEmpty() || contentRect.isEmpty()) {
         return false;
     }
 
-    frame.m_imageTransform.setScaled(inputSize, contentRect);
+    QTransform outputTransform;
+    outputTransform.translate(contentRect.x(), contentRect.y());
+    outputTransform.scale(
+        static_cast<double>(contentRect.width()) / static_cast<double>(inputSize.width()),
+        static_cast<double>(contentRect.height()) / static_cast<double>(inputSize.height()));
+    if (frame.m_imageTransform.isValid()) {
+        frame.m_imageTransform.applyImageTransform(outputTransform);
+    } else {
+        frame.m_imageTransform.setScaled(inputSize, contentRect);
+    }
 
 #ifdef CAMERA_OPENCV_CUDA_STACKING
     if (canUseCudaStacking() && applyOutputScalingCuda(frame, targetSize)) {

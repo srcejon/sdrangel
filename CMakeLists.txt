@@ -548,6 +548,10 @@ elseif(ANDROID)
   set(CSPICE_INCLUDE_DIR "${EXTERNAL_LIBRARY_FOLDER}/${ANDROID_ABI}/cspice/include" CACHE INTERNAL "")
   set(CSPICE_LIBRARIES "${EXTERNAL_LIBRARY_FOLDER}/${ANDROID_ABI}/cspice/lib/libcspice.a" CACHE INTERNAL "")
 
+  set(INMARSATC_FOUND ON CACHE INTERNAL "")
+  set(INMARSATC_INCLUDE_DIR "${EXTERNAL_LIBRARY_FOLDER}/${ANDROID_ABI}/inmarsatc/include" CACHE INTERNAL "")
+  set(INMARSATC_LIBRARIES "${EXTERNAL_LIBRARY_FOLDER}/${ANDROID_ABI}/inmarsatc/lib/libinmarsatc_decoder.so" "${EXTERNAL_LIBRARY_FOLDER}/${ANDROID_ABI}/inmarsatc/lib/libinmarsatc_parser.so" CACHE INTERNAL "")
+
   set(ZLIB_FOUND ON CACHE INTERNAL "")
   set(ZLIB_INCLUDE_DIR "${EXTERNAL_LIBRARY_FOLDER}/${ANDROID_ABI}/zlib/include" CACHE INTERNAL "")
   set(ZLIB_LIBRARIES "${EXTERNAL_LIBRARY_FOLDER}/${ANDROID_ABI}/zlib/lib/libz.a" CACHE INTERNAL "")
@@ -587,6 +591,10 @@ elseif(ANDROID)
   set(GGMORSE_INCLUDE_DIR "${EXTERNAL_LIBRARY_FOLDER}/${ANDROID_ABI}/ggmorse/include/" CACHE INTERNAL "")
   set(GGMORSE_LIBRARIES "${EXTERNAL_LIBRARY_FOLDER}/${ANDROID_ABI}/ggmorse/lib/static/libggmorse.a" CACHE INTERNAL "")
 
+  set(CM256CC_FOUND ON CACHE INTERNAL "")
+  set(CM256CC_INCLUDE_DIR "${EXTERNAL_LIBRARY_FOLDER}/${ANDROID_ABI}/cm256cc/include/" CACHE INTERNAL "")
+  set(CM256CC_LIBRARIES "${EXTERNAL_LIBRARY_FOLDER}/${ANDROID_ABI}/cm256cc/lib/libcm256cc.so" CACHE INTERNAL "")
+
   set(FLAC_FOUND ON CACHE INTERNAL "")
   set(FLAC_INCLUDE_DIR "${EXTERNAL_LIBRARY_FOLDER}/${ANDROID_ABI}/flac/include/" CACHE INTERNAL "")
   set(FLAC_LIBRARIES "${EXTERNAL_LIBRARY_FOLDER}/${ANDROID_ABI}/flac/lib/libFLAC.so" CACHE INTERNAL "")
@@ -611,10 +619,53 @@ elseif(ANDROID)
   set(LIMESUITE_INCLUDE_DIR "${EXTERNAL_LIBRARY_FOLDER}/${ANDROID_ABI}/limesuite/include/" CACHE INTERNAL "")
   set(LIMESUITE_LIBRARY "${EXTERNAL_LIBRARY_FOLDER}/${ANDROID_ABI}/limesuite/lib/libLimeSuite.a" CACHE INTERNAL "")
 
+  set(OpenCV_FOUND ON CACHE INTERNAL "")
+  set(OpenCV_INCLUDE_DIRS "${EXTERNAL_LIBRARY_FOLDER}/${ANDROID_ABI}/opencv/sdk/native/jni/include/" CACHE INTERNAL "")
+  set(OpenCV_LIBS_DIR "${EXTERNAL_LIBRARY_FOLDER}/${ANDROID_ABI}/opencv/sdk/native/staticlibs/${ANDROID_ABI}")
+  set(OpenCV_LIBS    
+    "${OpenCV_LIBS_DIR}/libopencv_bgsegm.a" 
+    "${OpenCV_LIBS_DIR}/libopencv_calib3d.a" 
+    "${OpenCV_LIBS_DIR}/libopencv_core.a" 
+    "${OpenCV_LIBS_DIR}/libopencv_dnn.a" 
+    "${OpenCV_LIBS_DIR}/libopencv_features2d.a" 
+    "${OpenCV_LIBS_DIR}/libopencv_flann.a" 
+    "${OpenCV_LIBS_DIR}/libopencv_highgui.a" 
+    "${OpenCV_LIBS_DIR}/libopencv_imgcodecs.a" 
+    "${OpenCV_LIBS_DIR}/libopencv_imgproc.a" 
+    "${OpenCV_LIBS_DIR}/libopencv_photo.a" 
+    "${OpenCV_LIBS_DIR}/libopencv_video.a" 
+    "${OpenCV_LIBS_DIR}/libopencv_videoio.a" 
+    "${OpenCV_LIBS_DIR}/libopencv_ximgproc.a" 
+    CACHE INTERNAL "")
+  set(OpenCV_3RDPARTY_LIBS_DIR "${EXTERNAL_LIBRARY_FOLDER}/${ANDROID_ABI}/opencv/sdk/native/3rdparty/libs/${ANDROID_ABI}")
+  set(OpenCV_3RDPARTY_LIBS
+    "${OpenCV_3RDPARTY_LIBS_DIR}/libtegra_hal.a"
+    "${OpenCV_3RDPARTY_LIBS_DIR}/libkleidicv_hal.a"
+    "${OpenCV_3RDPARTY_LIBS_DIR}/libkleidicv_thread.a"
+    "${OpenCV_3RDPARTY_LIBS_DIR}/libkleidicv.a"
+    "${OpenCV_3RDPARTY_LIBS_DIR}/liblibtiff.a"
+    "${OpenCV_3RDPARTY_LIBS_DIR}/liblibjpeg-turbo.a"
+    "${OpenCV_3RDPARTY_LIBS_DIR}/liblibpng.a"
+    "${OpenCV_3RDPARTY_LIBS_DIR}/liblibwebp.a"
+    "${OpenCV_3RDPARTY_LIBS_DIR}/liblibopenjp2.a"
+    "${OpenCV_3RDPARTY_LIBS_DIR}/libIlmImf.a"
+    "${OpenCV_3RDPARTY_LIBS_DIR}/libittnotify.a"
+    "${OpenCV_3RDPARTY_LIBS_DIR}/libcpufeatures.a"
+    "${OpenCV_3RDPARTY_LIBS_DIR}/liblibprotobuf.a"
+  )
+  list(APPEND OpenCV_LIBS ${OpenCV_3RDPARTY_LIBS} ${ZLIB_LIBRARIES})
+  find_library(ANDROID_MEDIANDK_LIBRARY mediandk)
+  if(ANDROID_MEDIANDK_LIBRARY)
+    list(APPEND OpenCV_LIBS "${ANDROID_MEDIANDK_LIBRARY}")
+  else()
+    list(APPEND OpenCV_LIBS mediandk)
+  endif()
+  set(OpenCV_LIBS "${OpenCV_LIBS}" CACHE INTERNAL "")
+
   if (ENABLE_QT6)
     set(ANDROID_EXTRA_LIBS
-      ${EXTERNAL_LIBRARY_FOLDER}/android_openssl/latest/arm64/libssl_1_1.so
-      ${EXTERNAL_LIBRARY_FOLDER}/android_openssl/latest/arm64/libcrypto_1_1.so
+      ${EXTERNAL_LIBRARY_FOLDER}/android_openssl-master/ssl_3/${ANDROID_ABI}/libssl_3.so
+      ${EXTERNAL_LIBRARY_FOLDER}/android_openssl-master/ssl_3/${ANDROID_ABI}/libcrypto_3.so
       ${EXTERNAL_LIBRARY_FOLDER}/${ANDROID_ABI}/ffmpeg/lib/libavcodec.so
       ${EXTERNAL_LIBRARY_FOLDER}/${ANDROID_ABI}/ffmpeg/lib/libavdevice.so
       ${EXTERNAL_LIBRARY_FOLDER}/${ANDROID_ABI}/ffmpeg/lib/libavfilter.so
@@ -627,7 +678,34 @@ elseif(ANDROID)
       ${EXTERNAL_LIBRARY_FOLDER}/${ANDROID_ABI}/dsdcc/lib/libdsdcc.so
       ${EXTERNAL_LIBRARY_FOLDER}/${ANDROID_ABI}/libusb/lib/libunrooted_android.so
       ${EXTERNAL_LIBRARY_FOLDER}/${ANDROID_ABI}/libusb/lib/libusb1.0.so
+      ${EXTERNAL_LIBRARY_FOLDER}/${ANDROID_ABI}/cm256cc/lib/libcm256cc.so
       ${EXTERNAL_LIBRARY_FOLDER}/${ANDROID_ABI}/flac/lib/libFLAC.so
+      ${EXTERNAL_LIBRARY_FOLDER}/${ANDROID_ABI}/inmarsatc/lib/libinmarsatc_decoder.so
+      ${EXTERNAL_LIBRARY_FOLDER}/${ANDROID_ABI}/inmarsatc/lib/libinmarsatc_parser.so
+      ${Qt6_DIR}/../../../lib/libQt6Sql_${ANDROID_ABI}.so
+      ${Qt6_DIR}/../../../lib/libQt6SerialPort_${ANDROID_ABI}.so
+      ${Qt6_DIR}/../../../lib/libQt6Charts_${ANDROID_ABI}.so
+      ${Qt6_DIR}/../../../lib/libQt6Positioning_${ANDROID_ABI}.so
+      ${Qt6_DIR}/../../../lib/libQt6PositioningQuick_${ANDROID_ABI}.so
+      ${Qt6_DIR}/../../../lib/libQt6Location_${ANDROID_ABI}.so
+      ${Qt6_DIR}/../../../lib/libQt6Concurrent_${ANDROID_ABI}.so
+      ${Qt6_DIR}/../../../lib/libQt6MultimediaWidgets_${ANDROID_ABI}.so
+      ${Qt6_DIR}/../../../lib/libQt6TextToSpeech_${ANDROID_ABI}.so
+      ${Qt6_DIR}/../../../lib/libQt6QuickWidgets_${ANDROID_ABI}.so
+      ${Qt6_DIR}/../../../lib/libQt6QuickControls2_${ANDROID_ABI}.so
+      ${Qt6_DIR}/../../../lib/libQt6QuickWidgets_${ANDROID_ABI}.so
+      ${Qt6_DIR}/../../../lib/libQt6QuickTemplates2_${ANDROID_ABI}.so
+      ${Qt6_DIR}/../../../lib/libQt6QuickShapes_${ANDROID_ABI}.so
+      ${Qt6_DIR}/../../../lib/libQt6SvgWidgets_${ANDROID_ABI}.so
+      ${Qt6_DIR}/../../../plugins/sqldrivers/libplugins_sqldrivers_qsqlite_${ANDROID_ABI}.so
+      ${Qt6_DIR}/../../../plugins/geoservices/libplugins_geoservices_qtgeoservices_osm_${ANDROID_ABI}.so
+      ${Qt6_DIR}/../../../plugins/tls/libplugins_tls_qopensslbackend_${ANDROID_ABI}.so
+      ${Qt6_DIR}/../../../plugins/tls/libplugins_tls_qcertonlybackend_${ANDROID_ABI}.so
+      ${CMAKE_BINARY_DIR}/lib/libft8.so
+      ${CMAKE_BINARY_DIR}/lib/libmetisdevice.so
+      ${CMAKE_BINARY_DIR}/lib/libmodemm17.so
+      ${CMAKE_BINARY_DIR}/lib/libmodemmeshtastic.so
+      ${CMAKE_BINARY_DIR}/lib/libwdsp.so
       CACHE INTERNAL ""
     )
   else()
@@ -914,7 +992,9 @@ elseif(ENABLE_EXTERNAL_LIBRARIES STREQUAL "AUTO")
 endif()
 
 if (NOT ENABLE_EXTERNAL_LIBRARIES OR (ENABLE_EXTERNAL_LIBRARIES STREQUAL "AUTO"))
-    find_package(OpenCV OPTIONAL_COMPONENTS core highgui imgproc imgcodecs videoio bgsegm dnn photo cudaarithm cudaimgproc cudawarping cudafilters cudabgsegm) # modatv & camera
+    if (NOT OpenCV_FOUND)
+        find_package(OpenCV OPTIONAL_COMPONENTS core highgui imgproc imgcodecs videoio bgsegm dnn photo cudaarithm cudaimgproc cudawarping cudafilters cudabgsegm) # modatv & camera
+    endif()
     find_package(LibSigMF) # SigMF recording files support
     find_package(ZLIB) # For DAB
     find_package(FAAD) # For DAB

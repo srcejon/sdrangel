@@ -45,7 +45,7 @@ QStringList Android::listUSBDeviceSerials(int vid, int pid)
     QStringList serials;
     QJniEnvironment jniEnv;
 
-    QJniObject activity = QJniObject::callStaticObjectMethod("org/qtproject/qt5/android/QtNative", "activity", "()Landroid/app/Activity;");
+    QJniObject activity = QJniObject::callStaticObjectMethod("org/qtproject/qt/android/QtNative", "activity", "()Landroid/app/Activity;");
     if (activity.isValid())
     {
         QJniObject serialsObj = activity.callObjectMethod("listUSBDeviceSerials", "(II)[Ljava/lang/String;", vid, pid);
@@ -64,7 +64,7 @@ QStringList Android::listUSBDeviceSerials(int vid, int pid)
 int Android::openUSBDevice(const QString &serial)
 {
     int fd = -1;
-    QJniObject activity = QJniObject::callStaticObjectMethod("org/qtproject/qt5/android/QtNative", "activity", "()Landroid/app/Activity;");
+    QJniObject activity = QJniObject::callStaticObjectMethod("org/qtproject/qt/android/QtNative", "activity", "()Landroid/app/Activity;");
     if (activity.isValid())
     {
         QJniObject serialsObj = QJniObject::fromString(serial);
@@ -78,7 +78,7 @@ void Android::closeUSBDevice(int fd)
 {
     if (fd >= 0)
     {
-        QJniObject activity = QJniObject::callStaticObjectMethod("org/qtproject/qt5/android/QtNative", "activity", "()Landroid/app/Activity;");
+        QJniObject activity = QJniObject::callStaticObjectMethod("org/qtproject/qt/android/QtNative", "activity", "()Landroid/app/Activity;");
         if (activity.isValid()) {
             activity.callMethod<void>("closeUSBDevice", "(I)V", fd);
         } else {
@@ -89,7 +89,7 @@ void Android::closeUSBDevice(int fd)
 
 void Android::moveTaskToBack()
 {
-    QJniObject activity = QJniObject::callStaticObjectMethod("org/qtproject/qt5/android/QtNative", "activity", "()Landroid/app/Activity;");
+    QJniObject activity = QJniObject::callStaticObjectMethod("org/qtproject/qt/android/QtNative", "activity", "()Landroid/app/Activity;");
     if (activity.isValid()) {
         activity.callMethod<jboolean>("moveTaskToBack", "(Z)Z", true);
     }
@@ -97,7 +97,7 @@ void Android::moveTaskToBack()
 
 void Android::acquireWakeLock()
 {
-    QJniObject activity = QJniObject::callStaticObjectMethod("org/qtproject/qt5/android/QtNative", "activity", "()Landroid/app/Activity;");
+    QJniObject activity = QJniObject::callStaticObjectMethod("org/qtproject/qt/android/QtNative", "activity", "()Landroid/app/Activity;");
     if (activity.isValid()) {
         activity.callMethod<void>("acquireWakeLock");
     }
@@ -105,7 +105,7 @@ void Android::acquireWakeLock()
 
 void Android::releaseWakeLock()
 {
-    QJniObject activity = QJniObject::callStaticObjectMethod("org/qtproject/qt5/android/QtNative", "activity", "()Landroid/app/Activity;");
+    QJniObject activity = QJniObject::callStaticObjectMethod("org/qtproject/qt/android/QtNative", "activity", "()Landroid/app/Activity;");
     if (activity.isValid()) {
         activity.callMethod<void>("releaseWakeLock");
     }
@@ -113,7 +113,7 @@ void Android::releaseWakeLock()
 
 void Android::acquireScreenLock()
 {
-    QJniObject activity = QJniObject::callStaticObjectMethod("org/qtproject/qt5/android/QtNative", "activity", "()Landroid/app/Activity;");
+    QJniObject activity = QJniObject::callStaticObjectMethod("org/qtproject/qt/android/QtNative", "activity", "()Landroid/app/Activity;");
     if (activity.isValid()) {
         activity.callMethod<void>("acquireScreenLock");
     }
@@ -121,7 +121,7 @@ void Android::acquireScreenLock()
 
 void Android::releaseScreenLock()
 {
-    QJniObject activity = QJniObject::callStaticObjectMethod("org/qtproject/qt5/android/QtNative", "activity", "()Landroid/app/Activity;");
+    QJniObject activity = QJniObject::callStaticObjectMethod("org/qtproject/qt/android/QtNative", "activity", "()Landroid/app/Activity;");
     if (activity.isValid()) {
         activity.callMethod<void>("releaseScreenLock");
     }

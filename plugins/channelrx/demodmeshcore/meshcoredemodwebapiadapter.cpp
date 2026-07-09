@@ -32,8 +32,8 @@ int MeshcoreDemodWebAPIAdapter::webapiSettingsGet(
         QString& errorMessage)
 {
     (void) errorMessage;
-    response.setMeshtasticDemodSettings(new SWGSDRangel::SWGMeshtasticDemodSettings());
-    response.getMeshtasticDemodSettings()->init();
+    response.setMeshcoreDemodSettings(new SWGSDRangel::SWGMeshcoreDemodSettings());
+    response.getMeshcoreDemodSettings()->init();
     MeshcoreDemod::webapiFormatChannelSettings(response, m_settings);
     return 200;
 }

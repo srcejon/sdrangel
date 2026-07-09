@@ -110,6 +110,10 @@ SWGChannelSettings::SWGChannelSettings() {
     m_meshtastic_demod_settings_isSet = false;
     meshtastic_mod_settings = nullptr;
     m_meshtastic_mod_settings_isSet = false;
+    meshcore_demod_settings = nullptr;
+    m_meshcore_demod_settings_isSet = false;
+    meshcore_mod_settings = nullptr;
+    m_meshcore_mod_settings_isSet = false;
     navtex_demod_settings = nullptr;
     m_navtex_demod_settings_isSet = false;
     nfm_demod_settings = nullptr;
@@ -254,6 +258,10 @@ SWGChannelSettings::init() {
     m_meshtastic_demod_settings_isSet = false;
     meshtastic_mod_settings = new SWGMeshtasticModSettings();
     m_meshtastic_mod_settings_isSet = false;
+    meshcore_demod_settings = new SWGMeshcoreDemodSettings();
+    m_meshcore_demod_settings_isSet = false;
+    meshcore_mod_settings = new SWGMeshcoreModSettings();
+    m_meshcore_mod_settings_isSet = false;
     navtex_demod_settings = new SWGNavtexDemodSettings();
     m_navtex_demod_settings_isSet = false;
     nfm_demod_settings = new SWGNFMDemodSettings();
@@ -429,6 +437,12 @@ SWGChannelSettings::cleanup() {
     if(meshtastic_mod_settings != nullptr) { 
         delete meshtastic_mod_settings;
     }
+    if(meshcore_demod_settings != nullptr) { 
+        delete meshcore_demod_settings;
+    }
+    if(meshcore_mod_settings != nullptr) { 
+        delete meshcore_mod_settings;
+    }
     if(navtex_demod_settings != nullptr) { 
         delete navtex_demod_settings;
     }
@@ -603,7 +617,11 @@ SWGChannelSettings::fromJsonObject(QJsonObject &pJson) {
     
     ::SWGSDRangel::setValue(&meshtastic_demod_settings, pJson["MeshtasticDemodSettings"], "SWGMeshtasticDemodSettings", "SWGMeshtasticDemodSettings");
     
+    ::SWGSDRangel::setValue(&meshcore_demod_settings, pJson["MeshcoreDemodSettings"], "SWGMeshcoreDemodSettings", "SWGMeshcoreDemodSettings");
+    
     ::SWGSDRangel::setValue(&meshtastic_mod_settings, pJson["MeshtasticModSettings"], "SWGMeshtasticModSettings", "SWGMeshtasticModSettings");
+    
+    ::SWGSDRangel::setValue(&meshcore_mod_settings, pJson["MeshcoreModSettings"], "SWGMeshcoreModSettings", "SWGMeshcoreModSettings");
     
     ::SWGSDRangel::setValue(&navtex_demod_settings, pJson["NavtexDemodSettings"], "SWGNavtexDemodSettings", "SWGNavtexDemodSettings");
     
@@ -795,8 +813,14 @@ SWGChannelSettings::asJsonObject() {
     if((meshtastic_demod_settings != nullptr) && (meshtastic_demod_settings->isSet())){
         toJsonValue(QString("MeshtasticDemodSettings"), meshtastic_demod_settings, obj, QString("SWGMeshtasticDemodSettings"));
     }
+    if((meshcore_demod_settings != nullptr) && (meshcore_demod_settings->isSet())){
+        toJsonValue(QString("MeshcoreDemodSettings"), meshcore_demod_settings, obj, QString("SWGMeshcoreDemodSettings"));
+    }
     if((meshtastic_mod_settings != nullptr) && (meshtastic_mod_settings->isSet())){
         toJsonValue(QString("MeshtasticModSettings"), meshtastic_mod_settings, obj, QString("SWGMeshtasticModSettings"));
+    }
+    if((meshcore_mod_settings != nullptr) && (meshcore_mod_settings->isSet())){
+        toJsonValue(QString("MeshcoreModSettings"), meshcore_mod_settings, obj, QString("SWGMeshcoreModSettings"));
     }
     if((navtex_demod_settings != nullptr) && (navtex_demod_settings->isSet())){
         toJsonValue(QString("NavtexDemodSettings"), navtex_demod_settings, obj, QString("SWGNavtexDemodSettings"));
@@ -1293,6 +1317,26 @@ SWGChannelSettings::setMeshtasticModSettings(SWGMeshtasticModSettings* meshtasti
     this->m_meshtastic_mod_settings_isSet = true;
 }
 
+SWGMeshcoreDemodSettings*
+SWGChannelSettings::getMeshcoreDemodSettings() {
+    return meshcore_demod_settings;
+}
+void
+SWGChannelSettings::setMeshcoreDemodSettings(SWGMeshcoreDemodSettings* meshcore_demod_settings) {
+    this->meshcore_demod_settings = meshcore_demod_settings;
+    this->m_meshcore_demod_settings_isSet = true;
+}
+
+SWGMeshcoreModSettings*
+SWGChannelSettings::getMeshcoreModSettings() {
+    return meshcore_mod_settings;
+}
+void
+SWGChannelSettings::setMeshcoreModSettings(SWGMeshcoreModSettings* meshcore_mod_settings) {
+    this->meshcore_mod_settings = meshcore_mod_settings;
+    this->m_meshcore_mod_settings_isSet = true;
+}
+
 SWGNavtexDemodSettings*
 SWGChannelSettings::getNavtexDemodSettings() {
     return navtex_demod_settings;
@@ -1689,6 +1733,12 @@ SWGChannelSettings::isSet(){
             isObjectUpdated = true; break;
         }
         if(meshtastic_mod_settings && meshtastic_mod_settings->isSet()){
+            isObjectUpdated = true; break;
+        }
+        if(meshcore_demod_settings && meshcore_demod_settings->isSet()){
+            isObjectUpdated = true; break;
+        }
+        if(meshcore_mod_settings && meshcore_mod_settings->isSet()){
             isObjectUpdated = true; break;
         }
         if(navtex_demod_settings && navtex_demod_settings->isSet()){

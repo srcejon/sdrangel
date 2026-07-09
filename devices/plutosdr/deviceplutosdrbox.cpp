@@ -899,12 +899,12 @@ void DevicePlutoSDRBox::getRxLORange(uint64_t& minLimit, uint64_t& maxLimit)
     if (get_param(DEVICE_PHY, buff, rangeStr))
     {
         std::istringstream instream(rangeStr.substr(1, rangeStr.size() - 2));
-	    instream >> minLimit >> stepLimit >> maxLimit;
+        instream >> minLimit >> stepLimit >> maxLimit;
     }
     else
     {
         minLimit = DevicePlutoSDR::rxLOLowLimitFreq;
-	    maxLimit = DevicePlutoSDR::rxLOHighLimitFreq;
+        maxLimit = DevicePlutoSDR::rxLOHighLimitFreq;
     }
 }
 
@@ -920,12 +920,12 @@ void DevicePlutoSDRBox::getTxLORange(uint64_t& minLimit, uint64_t& maxLimit)
     if (get_param(DEVICE_PHY, buff, rangeStr))
     {
         std::istringstream instream(rangeStr.substr(1, rangeStr.size() - 2));
-	    instream >> minLimit >> stepLimit >> maxLimit;
+        instream >> minLimit >> stepLimit >> maxLimit;
     }
     else
     {
         minLimit = DevicePlutoSDR::txLOLowLimitFreq;
-	    maxLimit = DevicePlutoSDR::txLOHighLimitFreq;
+        maxLimit = DevicePlutoSDR::txLOHighLimitFreq;
     }
 }
 
@@ -940,13 +940,13 @@ void DevicePlutoSDRBox::getbbLPRxRange(uint32_t& minLimit, uint32_t& maxLimit)
 
     if (get_param(DEVICE_PHY, buff, rangeStr))
     {
-	std::istringstream instream(rangeStr.substr(1, rangeStr.size() - 2));
-	instream >> minLimit >> stepLimit >> maxLimit;
+        std::istringstream instream(rangeStr.substr(1, rangeStr.size() - 2));
+        instream >> minLimit >> stepLimit >> maxLimit;
     }
     else
     {
-	minLimit = DevicePlutoSDR::bbLPRxLowLimitFreq;
-	maxLimit = DevicePlutoSDR::bbLPRxHighLimitFreq;
+        minLimit = DevicePlutoSDR::bbLPRxLowLimitFreq;
+        maxLimit = DevicePlutoSDR::bbLPRxHighLimitFreq;
     }
 }
 
@@ -966,8 +966,8 @@ void DevicePlutoSDRBox::getbbLPTxRange(uint32_t& minLimit, uint32_t& maxLimit)
     }
     else
     {
-	minLimit = DevicePlutoSDR::bbLPTxLowLimitFreq;
-	maxLimit = DevicePlutoSDR::bbLPTxHighLimitFreq;
+        minLimit = DevicePlutoSDR::bbLPTxLowLimitFreq;
+        maxLimit = DevicePlutoSDR::bbLPTxHighLimitFreq;
     }
 }
 

@@ -167,6 +167,18 @@
 #  define MODEMMESHTASTIC_API
 #endif
 
+/* the 'MODEMMESHCORE_API' controls the import/export of 'modemmeshcore' symbols
+ */
+#if !defined(sdrangel_STATIC)
+#  ifdef modemmeshcore_EXPORTS
+#    define MODEMMESHCORE_API __SDR_EXPORT
+#  else
+#    define MODEMMESHCORE_API __SDR_IMPORT
+#  endif
+#else
+#  define MODEMMESHCORE_API
+#endif
+
 /* the 'FT8_API' controls the import/export of 'ft8' symbols
  */
 #if !defined(sdrangel_STATIC)

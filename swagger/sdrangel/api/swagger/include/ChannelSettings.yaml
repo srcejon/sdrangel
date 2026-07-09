@@ -91,6 +91,10 @@ ChannelSettings:
       $ref: "http://swgserver:8081/api/swagger/include/MeshtasticDemod.yaml#/MeshtasticDemodSettings"
     MeshtasticModSettings:
       $ref: "http://swgserver:8081/api/swagger/include/MeshtasticMod.yaml#/MeshtasticModSettings"
+    MeshcoreDemodSettings:
+      $ref: "http://swgserver:8081/api/swagger/include/MeshcoreDemod.yaml#/MeshcoreDemodSettings"
+    MeshcoreModSettings:
+      $ref: "http://swgserver:8081/api/swagger/include/MeshcoreMod.yaml#/MeshcoreModSettings"
     NavtexDemodSettings:
       $ref: "http://swgserver:8081/api/swagger/include/NavtexDemod.yaml#/NavtexDemodSettings"
     NFMDemodSettings:

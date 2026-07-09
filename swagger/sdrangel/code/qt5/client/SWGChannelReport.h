@@ -53,6 +53,8 @@
 #include "SWGM17ModReport.h"
 #include "SWGMeshtasticDemodReport.h"
 #include "SWGMeshtasticModReport.h"
+#include "SWGMeshcoreDemodReport.h"
+#include "SWGMeshcoreModReport.h"
 #include "SWGNFMDemodReport.h"
 #include "SWGNFMModReport.h"
 #include "SWGNavtexDemodReport.h"
@@ -194,6 +196,12 @@ public:
 
     SWGMeshtasticModReport* getMeshtasticModReport();
     void setMeshtasticModReport(SWGMeshtasticModReport* meshtastic_mod_report);
+
+    SWGMeshcoreDemodReport* getMeshcoreDemodReport();
+    void setMeshcoreDemodReport(SWGMeshcoreDemodReport* meshcore_demod_report);
+
+    SWGMeshcoreModReport* getMeshcoreModReport();
+    void setMeshcoreModReport(SWGMeshcoreModReport* meshcore_mod_report);
 
     SWGNavtexDemodReport* getNavtexDemodReport();
     void setNavtexDemodReport(SWGNavtexDemodReport* navtex_demod_report);
@@ -366,6 +374,12 @@ private:
 
     SWGMeshtasticModReport* meshtastic_mod_report;
     bool m_meshtastic_mod_report_isSet;
+
+    SWGMeshcoreDemodReport* meshcore_demod_report;
+    bool m_meshcore_demod_report_isSet;
+
+    SWGMeshcoreModReport* meshcore_mod_report;
+    bool m_meshcore_mod_report_isSet;
 
     SWGNavtexDemodReport* navtex_demod_report;
     bool m_navtex_demod_report_isSet;

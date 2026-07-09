@@ -41,7 +41,7 @@
 #include "SWGChannelSettings.h"
 #include "SWGWorkspaceInfo.h"
 #include "SWGChannelReport.h"
-#include "SWGMeshtasticDemodReport.h"
+#include "SWGMeshcoreDemodReport.h"
 
 #include "dsp/dspcommands.h"
 #include "device/deviceapi.h"
@@ -1234,8 +1234,8 @@ int MeshcoreDemod::webapiSettingsGet(
     QString& errorMessage)
 {
     (void) errorMessage;
-    response.setMeshtasticDemodSettings(new SWGSDRangel::SWGMeshtasticDemodSettings());
-    response.getMeshtasticDemodSettings()->init();
+    response.setMeshcoreDemodSettings(new SWGSDRangel::SWGMeshcoreDemodSettings());
+    response.getMeshcoreDemodSettings()->init();
     webapiFormatChannelSettings(response, m_settings);
 
     return 200;
@@ -1280,84 +1280,84 @@ void MeshcoreDemod::webapiUpdateChannelSettings(
         SWGSDRangel::SWGChannelSettings& response)
 {
     if (channelSettingsKeys.contains("inputFrequencyOffset")) {
-        settings.m_inputFrequencyOffset = response.getMeshtasticDemodSettings()->getInputFrequencyOffset();
+        settings.m_inputFrequencyOffset = response.getMeshcoreDemodSettings()->getInputFrequencyOffset();
     }
     if (channelSettingsKeys.contains("bandwidthIndex")) {
-        settings.m_bandwidthIndex = response.getMeshtasticDemodSettings()->getBandwidthIndex();
+        settings.m_bandwidthIndex = response.getMeshcoreDemodSettings()->getBandwidthIndex();
     }
     if (channelSettingsKeys.contains("spreadFactor")) {
-        settings.m_spreadFactor = response.getMeshtasticDemodSettings()->getSpreadFactor();
+        settings.m_spreadFactor = response.getMeshcoreDemodSettings()->getSpreadFactor();
     }
     if (channelSettingsKeys.contains("deBits")) {
-        settings.m_deBits = response.getMeshtasticDemodSettings()->getDeBits();
+        settings.m_deBits = response.getMeshcoreDemodSettings()->getDeBits();
     }
     if (channelSettingsKeys.contains("decodeActive")) {
-        settings.m_decodeActive = response.getMeshtasticDemodSettings()->getDecodeActive() != 0;
+        settings.m_decodeActive = response.getMeshcoreDemodSettings()->getDecodeActive() != 0;
     }
     if (channelSettingsKeys.contains("eomSquelchTenths")) {
-        settings.m_eomSquelchTenths = response.getMeshtasticDemodSettings()->getEomSquelchTenths();
+        settings.m_eomSquelchTenths = response.getMeshcoreDemodSettings()->getEomSquelchTenths();
     }
     if (channelSettingsKeys.contains("nbSymbolsMax")) {
-        settings.m_nbSymbolsMax = response.getMeshtasticDemodSettings()->getNbSymbolsMax();
+        settings.m_nbSymbolsMax = response.getMeshcoreDemodSettings()->getNbSymbolsMax();
     }
     if (channelSettingsKeys.contains("preambleChirps")) {
-        settings.m_preambleChirps = response.getMeshtasticDemodSettings()->getPreambleChirps();
+        settings.m_preambleChirps = response.getMeshcoreDemodSettings()->getPreambleChirps();
     }
     if (channelSettingsKeys.contains("nbParityBits")) {
-        settings.m_nbParityBits = response.getMeshtasticDemodSettings()->getNbParityBits();
+        settings.m_nbParityBits = response.getMeshcoreDemodSettings()->getNbParityBits();
     }
     if (channelSettingsKeys.contains("packetLength")) {
-        settings.m_packetLength = response.getMeshtasticDemodSettings()->getPacketLength();
+        settings.m_packetLength = response.getMeshcoreDemodSettings()->getPacketLength();
     }
     if (channelSettingsKeys.contains("sendViaUDP")) {
-        settings.m_sendViaUDP = response.getMeshtasticDemodSettings()->getSendViaUdp() != 0;
+        settings.m_sendViaUDP = response.getMeshcoreDemodSettings()->getSendViaUdp() != 0;
     }
     if (channelSettingsKeys.contains("sendJsonViaUDP")) {
-        settings.m_sendJsonViaUDP = response.getMeshtasticDemodSettings()->getSendJsonViaUdp() != 0;
+        settings.m_sendJsonViaUDP = response.getMeshcoreDemodSettings()->getSendJsonViaUdp() != 0;
     }
     if (channelSettingsKeys.contains("udpAddress")) {
-        settings.m_udpAddress = *response.getMeshtasticDemodSettings()->getUdpAddress();
+        settings.m_udpAddress = *response.getMeshcoreDemodSettings()->getUdpAddress();
     }
     if (channelSettingsKeys.contains("udpPort"))
     {
-        uint16_t port = response.getMeshtasticDemodSettings()->getUdpPort();
+        uint16_t port = response.getMeshcoreDemodSettings()->getUdpPort();
         settings.m_udpPort = port < 1024 ? 1024 : port;
     }
     if (channelSettingsKeys.contains("invertRamps")) {
-        settings.m_invertRamps = response.getMeshtasticDemodSettings()->getInvertRamps() != 0;
+        settings.m_invertRamps = response.getMeshcoreDemodSettings()->getInvertRamps() != 0;
     }
     if (channelSettingsKeys.contains("rgbColor")) {
-        settings.m_rgbColor = response.getMeshtasticDemodSettings()->getRgbColor();
+        settings.m_rgbColor = response.getMeshcoreDemodSettings()->getRgbColor();
     }
     if (channelSettingsKeys.contains("title")) {
-        settings.m_title = *response.getMeshtasticDemodSettings()->getTitle();
+        settings.m_title = *response.getMeshcoreDemodSettings()->getTitle();
     }
     if (channelSettingsKeys.contains("streamIndex")) {
-        settings.m_streamIndex = response.getMeshtasticDemodSettings()->getStreamIndex();
+        settings.m_streamIndex = response.getMeshcoreDemodSettings()->getStreamIndex();
     }
     if (channelSettingsKeys.contains("useReverseAPI")) {
-        settings.m_useReverseAPI = response.getMeshtasticDemodSettings()->getUseReverseApi() != 0;
+        settings.m_useReverseAPI = response.getMeshcoreDemodSettings()->getUseReverseApi() != 0;
     }
     if (channelSettingsKeys.contains("reverseAPIAddress")) {
-        settings.m_reverseAPIAddress = *response.getMeshtasticDemodSettings()->getReverseApiAddress();
+        settings.m_reverseAPIAddress = *response.getMeshcoreDemodSettings()->getReverseApiAddress();
     }
     if (channelSettingsKeys.contains("reverseAPIPort")) {
-        settings.m_reverseAPIPort = response.getMeshtasticDemodSettings()->getReverseApiPort();
+        settings.m_reverseAPIPort = response.getMeshcoreDemodSettings()->getReverseApiPort();
     }
     if (channelSettingsKeys.contains("reverseAPIDeviceIndex")) {
-        settings.m_reverseAPIDeviceIndex = response.getMeshtasticDemodSettings()->getReverseApiDeviceIndex();
+        settings.m_reverseAPIDeviceIndex = response.getMeshcoreDemodSettings()->getReverseApiDeviceIndex();
     }
     if (channelSettingsKeys.contains("reverseAPIChannelIndex")) {
-        settings.m_reverseAPIChannelIndex = response.getMeshtasticDemodSettings()->getReverseApiChannelIndex();
+        settings.m_reverseAPIChannelIndex = response.getMeshcoreDemodSettings()->getReverseApiChannelIndex();
     }
     if (settings.m_spectrumGUI && channelSettingsKeys.contains("spectrumConfig")) {
-        settings.m_spectrumGUI->updateFrom(channelSettingsKeys, response.getMeshtasticDemodSettings()->getSpectrumConfig());
+        settings.m_spectrumGUI->updateFrom(channelSettingsKeys, response.getMeshcoreDemodSettings()->getSpectrumConfig());
     }
     if (settings.m_channelMarker && channelSettingsKeys.contains("channelMarker")) {
-        settings.m_channelMarker->updateFrom(channelSettingsKeys, response.getMeshtasticDemodSettings()->getChannelMarker());
+        settings.m_channelMarker->updateFrom(channelSettingsKeys, response.getMeshcoreDemodSettings()->getChannelMarker());
     }
     if (settings.m_rollupState && channelSettingsKeys.contains("rollupState")) {
-        settings.m_rollupState->updateFrom(channelSettingsKeys, response.getMeshtasticDemodSettings()->getRollupState());
+        settings.m_rollupState->updateFrom(channelSettingsKeys, response.getMeshcoreDemodSettings()->getRollupState());
     }
 }
 
@@ -1366,94 +1366,94 @@ int MeshcoreDemod::webapiReportGet(
     QString& errorMessage)
 {
     (void) errorMessage;
-    response.setMeshtasticDemodReport(new SWGSDRangel::SWGMeshtasticDemodReport());
-    response.getMeshtasticDemodReport()->init();
+    response.setMeshcoreDemodReport(new SWGSDRangel::SWGMeshcoreDemodReport());
+    response.getMeshcoreDemodReport()->init();
     webapiFormatChannelReport(response);
     return 200;
 }
 
 void MeshcoreDemod::webapiFormatChannelSettings(SWGSDRangel::SWGChannelSettings& response, const MeshcoreDemodSettings& settings)
 {
-    response.getMeshtasticDemodSettings()->setInputFrequencyOffset(settings.m_inputFrequencyOffset);
-    response.getMeshtasticDemodSettings()->setBandwidthIndex(settings.m_bandwidthIndex);
-    response.getMeshtasticDemodSettings()->setSpreadFactor(settings.m_spreadFactor);
-    response.getMeshtasticDemodSettings()->setDeBits(settings.m_deBits);
-    response.getMeshtasticDemodSettings()->setDecodeActive(settings.m_decodeActive ? 1 : 0);
-    response.getMeshtasticDemodSettings()->setEomSquelchTenths(settings.m_eomSquelchTenths);
-    response.getMeshtasticDemodSettings()->setNbSymbolsMax(settings.m_nbSymbolsMax);
-    response.getMeshtasticDemodSettings()->setPreambleChirps(settings.m_preambleChirps);
-    response.getMeshtasticDemodSettings()->setNbParityBits(settings.m_nbParityBits);
-    response.getMeshtasticDemodSettings()->setPacketLength(settings.m_packetLength);
-    response.getMeshtasticDemodSettings()->setSendViaUdp(settings.m_sendViaUDP ? 1 : 0);
-    response.getMeshtasticDemodSettings()->setSendJsonViaUdp(settings.m_sendJsonViaUDP ? 1 : 0);
-    response.getMeshtasticDemodSettings()->setInvertRamps(settings.m_invertRamps ? 1 : 0);
+    response.getMeshcoreDemodSettings()->setInputFrequencyOffset(settings.m_inputFrequencyOffset);
+    response.getMeshcoreDemodSettings()->setBandwidthIndex(settings.m_bandwidthIndex);
+    response.getMeshcoreDemodSettings()->setSpreadFactor(settings.m_spreadFactor);
+    response.getMeshcoreDemodSettings()->setDeBits(settings.m_deBits);
+    response.getMeshcoreDemodSettings()->setDecodeActive(settings.m_decodeActive ? 1 : 0);
+    response.getMeshcoreDemodSettings()->setEomSquelchTenths(settings.m_eomSquelchTenths);
+    response.getMeshcoreDemodSettings()->setNbSymbolsMax(settings.m_nbSymbolsMax);
+    response.getMeshcoreDemodSettings()->setPreambleChirps(settings.m_preambleChirps);
+    response.getMeshcoreDemodSettings()->setNbParityBits(settings.m_nbParityBits);
+    response.getMeshcoreDemodSettings()->setPacketLength(settings.m_packetLength);
+    response.getMeshcoreDemodSettings()->setSendViaUdp(settings.m_sendViaUDP ? 1 : 0);
+    response.getMeshcoreDemodSettings()->setSendJsonViaUdp(settings.m_sendJsonViaUDP ? 1 : 0);
+    response.getMeshcoreDemodSettings()->setInvertRamps(settings.m_invertRamps ? 1 : 0);
 
-    if (response.getMeshtasticDemodSettings()->getUdpAddress()) {
-        *response.getMeshtasticDemodSettings()->getUdpAddress() = settings.m_udpAddress;
+    if (response.getMeshcoreDemodSettings()->getUdpAddress()) {
+        *response.getMeshcoreDemodSettings()->getUdpAddress() = settings.m_udpAddress;
     } else {
-        response.getMeshtasticDemodSettings()->setUdpAddress(new QString(settings.m_udpAddress));
+        response.getMeshcoreDemodSettings()->setUdpAddress(new QString(settings.m_udpAddress));
     }
 
-    response.getMeshtasticDemodSettings()->setUdpPort(settings.m_udpPort);
-    response.getMeshtasticDemodSettings()->setRgbColor(settings.m_rgbColor);
+    response.getMeshcoreDemodSettings()->setUdpPort(settings.m_udpPort);
+    response.getMeshcoreDemodSettings()->setRgbColor(settings.m_rgbColor);
 
-    if (response.getMeshtasticDemodSettings()->getTitle()) {
-        *response.getMeshtasticDemodSettings()->getTitle() = settings.m_title;
+    if (response.getMeshcoreDemodSettings()->getTitle()) {
+        *response.getMeshcoreDemodSettings()->getTitle() = settings.m_title;
     } else {
-        response.getMeshtasticDemodSettings()->setTitle(new QString(settings.m_title));
+        response.getMeshcoreDemodSettings()->setTitle(new QString(settings.m_title));
     }
 
-    response.getMeshtasticDemodSettings()->setUseReverseApi(settings.m_useReverseAPI ? 1 : 0);
+    response.getMeshcoreDemodSettings()->setUseReverseApi(settings.m_useReverseAPI ? 1 : 0);
 
-    if (response.getMeshtasticDemodSettings()->getReverseApiAddress()) {
-        *response.getMeshtasticDemodSettings()->getReverseApiAddress() = settings.m_reverseAPIAddress;
+    if (response.getMeshcoreDemodSettings()->getReverseApiAddress()) {
+        *response.getMeshcoreDemodSettings()->getReverseApiAddress() = settings.m_reverseAPIAddress;
     } else {
-        response.getMeshtasticDemodSettings()->setReverseApiAddress(new QString(settings.m_reverseAPIAddress));
+        response.getMeshcoreDemodSettings()->setReverseApiAddress(new QString(settings.m_reverseAPIAddress));
     }
 
-    response.getMeshtasticDemodSettings()->setReverseApiPort(settings.m_reverseAPIPort);
-    response.getMeshtasticDemodSettings()->setReverseApiDeviceIndex(settings.m_reverseAPIDeviceIndex);
-    response.getMeshtasticDemodSettings()->setReverseApiChannelIndex(settings.m_reverseAPIChannelIndex);
+    response.getMeshcoreDemodSettings()->setReverseApiPort(settings.m_reverseAPIPort);
+    response.getMeshcoreDemodSettings()->setReverseApiDeviceIndex(settings.m_reverseAPIDeviceIndex);
+    response.getMeshcoreDemodSettings()->setReverseApiChannelIndex(settings.m_reverseAPIChannelIndex);
 
     if (settings.m_spectrumGUI)
     {
-        if (response.getMeshtasticDemodSettings()->getSpectrumConfig())
+        if (response.getMeshcoreDemodSettings()->getSpectrumConfig())
         {
-            settings.m_spectrumGUI->formatTo(response.getMeshtasticDemodSettings()->getSpectrumConfig());
+            settings.m_spectrumGUI->formatTo(response.getMeshcoreDemodSettings()->getSpectrumConfig());
         }
         else
         {
             SWGSDRangel::SWGGLSpectrum *swgGLSpectrum = new SWGSDRangel::SWGGLSpectrum();
             settings.m_spectrumGUI->formatTo(swgGLSpectrum);
-            response.getMeshtasticDemodSettings()->setSpectrumConfig(swgGLSpectrum);
+            response.getMeshcoreDemodSettings()->setSpectrumConfig(swgGLSpectrum);
         }
     }
 
     if (settings.m_channelMarker)
     {
-        if (response.getMeshtasticDemodSettings()->getChannelMarker())
+        if (response.getMeshcoreDemodSettings()->getChannelMarker())
         {
-            settings.m_channelMarker->formatTo(response.getMeshtasticDemodSettings()->getChannelMarker());
+            settings.m_channelMarker->formatTo(response.getMeshcoreDemodSettings()->getChannelMarker());
         }
         else
         {
             SWGSDRangel::SWGChannelMarker *swgChannelMarker = new SWGSDRangel::SWGChannelMarker();
             settings.m_channelMarker->formatTo(swgChannelMarker);
-            response.getMeshtasticDemodSettings()->setChannelMarker(swgChannelMarker);
+            response.getMeshcoreDemodSettings()->setChannelMarker(swgChannelMarker);
         }
     }
 
     if (settings.m_rollupState)
     {
-        if (response.getMeshtasticDemodSettings()->getRollupState())
+        if (response.getMeshcoreDemodSettings()->getRollupState())
         {
-            settings.m_rollupState->formatTo(response.getMeshtasticDemodSettings()->getRollupState());
+            settings.m_rollupState->formatTo(response.getMeshcoreDemodSettings()->getRollupState());
         }
         else
         {
             SWGSDRangel::SWGRollupState *swgRollupState = new SWGSDRangel::SWGRollupState();
             settings.m_rollupState->formatTo(swgRollupState);
-            response.getMeshtasticDemodSettings()->setRollupState(swgRollupState);
+            response.getMeshcoreDemodSettings()->setRollupState(swgRollupState);
         }
     }
 }
@@ -1461,29 +1461,29 @@ void MeshcoreDemod::webapiFormatChannelSettings(SWGSDRangel::SWGChannelSettings&
 void MeshcoreDemod::webapiFormatChannelReport(SWGSDRangel::SWGChannelReport& response)
 {
     if (m_running && !m_pipelines.empty() && m_pipelines[0].basebandSink) {
-        response.getMeshtasticDemodReport()->setChannelSampleRate(m_pipelines[0].basebandSink->getChannelSampleRate());
+        response.getMeshcoreDemodReport()->setChannelSampleRate(m_pipelines[0].basebandSink->getChannelSampleRate());
     }
 
-    response.getMeshtasticDemodReport()->setChannelPowerDb(CalcDb::dbPower(getTotalPower()));
-    response.getMeshtasticDemodReport()->setSignalPowerDb(m_lastMsgSignalDb);
-    response.getMeshtasticDemodReport()->setNoisePowerDb(CalcDb::dbPower(getCurrentNoiseLevel()));
-    response.getMeshtasticDemodReport()->setSnrPowerDb(m_lastMsgSignalDb - m_lastMsgNoiseDb);
-    response.getMeshtasticDemodReport()->setNbParityBits(m_lastMsgNbParityBits);
-    response.getMeshtasticDemodReport()->setPacketLength(m_lastMsgPacketLength);
-    response.getMeshtasticDemodReport()->setNbSymbols(m_lastMsgNbSymbols);
-    response.getMeshtasticDemodReport()->setNbCodewords(m_lastMsgNbCodewords);
-    response.getMeshtasticDemodReport()->setHeaderParityStatus(m_lastMsgHeaderParityStatus);
-    response.getMeshtasticDemodReport()->setHeaderCrcStatus(m_lastMsgHeaderCRC);
-    response.getMeshtasticDemodReport()->setPayloadParityStatus(m_lastMsgPayloadParityStatus);
-    response.getMeshtasticDemodReport()->setPayloadCrcStatus(m_lastMsgPayloadCRC);
-    response.getMeshtasticDemodReport()->setMessageTimestamp(new QString(m_lastMsgTimestamp));
-    response.getMeshtasticDemodReport()->setMessageString(new QString(m_lastMsgString));
-    response.getMeshtasticDemodReport()->setFrameType(new QString(m_lastFrameType));
-    response.getMeshtasticDemodReport()->setChannelType(new QString(m_lastMsgPipelineName));
-    response.getMeshtasticDemodReport()->setDecoding(getDemodActive() ? 1 : 0);
+    response.getMeshcoreDemodReport()->setChannelPowerDb(CalcDb::dbPower(getTotalPower()));
+    response.getMeshcoreDemodReport()->setSignalPowerDb(m_lastMsgSignalDb);
+    response.getMeshcoreDemodReport()->setNoisePowerDb(CalcDb::dbPower(getCurrentNoiseLevel()));
+    response.getMeshcoreDemodReport()->setSnrPowerDb(m_lastMsgSignalDb - m_lastMsgNoiseDb);
+    response.getMeshcoreDemodReport()->setNbParityBits(m_lastMsgNbParityBits);
+    response.getMeshcoreDemodReport()->setPacketLength(m_lastMsgPacketLength);
+    response.getMeshcoreDemodReport()->setNbSymbols(m_lastMsgNbSymbols);
+    response.getMeshcoreDemodReport()->setNbCodewords(m_lastMsgNbCodewords);
+    response.getMeshcoreDemodReport()->setHeaderParityStatus(m_lastMsgHeaderParityStatus);
+    response.getMeshcoreDemodReport()->setHeaderCrcStatus(m_lastMsgHeaderCRC);
+    response.getMeshcoreDemodReport()->setPayloadParityStatus(m_lastMsgPayloadParityStatus);
+    response.getMeshcoreDemodReport()->setPayloadCrcStatus(m_lastMsgPayloadCRC);
+    response.getMeshcoreDemodReport()->setMessageTimestamp(new QString(m_lastMsgTimestamp));
+    response.getMeshcoreDemodReport()->setMessageString(new QString(m_lastMsgString));
+    response.getMeshcoreDemodReport()->setFrameType(new QString(m_lastFrameType));
+    response.getMeshcoreDemodReport()->setChannelType(new QString(m_lastMsgPipelineName));
+    response.getMeshcoreDemodReport()->setDecoding(getDemodActive() ? 1 : 0);
 
-    response.getMeshtasticDemodReport()->setMessageBytes(new QList<QString *>);
-    QList<QString *> *bytesStr = response.getMeshtasticDemodReport()->getMessageBytes();
+    response.getMeshcoreDemodReport()->setMessageBytes(new QList<QString *>);
+    QList<QString *> *bytesStr = response.getMeshcoreDemodReport()->getMessageBytes();
 
     for (QByteArray::const_iterator it = m_lastMsgBytes.begin(); it != m_lastMsgBytes.end(); ++it)
     {
@@ -1553,8 +1553,8 @@ void MeshcoreDemod::webapiFormatChannelSettings(
     swgChannelSettings->setOriginatorChannelIndex(getIndexInDeviceSet());
     swgChannelSettings->setOriginatorDeviceSetIndex(getDeviceSetIndex());
     swgChannelSettings->setChannelType(new QString(m_channelId));
-    swgChannelSettings->setMeshtasticDemodSettings(new SWGSDRangel::SWGMeshtasticDemodSettings());
-    SWGSDRangel::SWGMeshtasticDemodSettings *swgMeshcoreDemodSettings = swgChannelSettings->getMeshtasticDemodSettings();
+    swgChannelSettings->setMeshcoreDemodSettings(new SWGSDRangel::SWGMeshcoreDemodSettings());
+    SWGSDRangel::SWGMeshcoreDemodSettings *swgMeshcoreDemodSettings = swgChannelSettings->getMeshcoreDemodSettings();
 
     // transfer data that has been modified. When force is on transfer all data except reverse API data
 

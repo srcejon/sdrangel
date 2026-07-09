@@ -91,6 +91,12 @@ else()
     message(STATUS "Not building demodmeshtastic (ENABLE_CHANNELRX_DEMODMESHTASTIC=${ENABLE_CHANNELRX_DEMODMESHTASTIC})")
 endif()
 
+if (ENABLE_CHANNELRX_DEMODMESHCORE)
+    add_subdirectory(demodmeshcore)
+else()
+    message(STATUS "Not building demodmeshcore (ENABLE_CHANNELRX_DEMODMESHCORE=${ENABLE_CHANNELRX_DEMODMESHCORE})")
+endif()
+
 if (ENABLE_CHANNELRX_DEMODVOR)
     add_subdirectory(demodvor)
 else()

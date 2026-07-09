@@ -1084,6 +1084,17 @@ CameraReport:
           * 1 - idle
           * 2 - running
           * 3 - error
+    captureDateTime:
+      description: "ISO-8601 capture date/time for the current frame, or an empty string if unavailable"
+      type: string
+    detectedObjectClasses:
+      description: "Distinct object detector class names detected in the current frame"
+      type: array
+      items:
+        type: string
+    motionDetected:
+      description: "Whether motion is currently detected (1 for yes, 0 for no)"
+      type: integer
     cloudCoveragePercent:
       description: "Percentage of the evaluated sky classified as cloud in the latest analysed frame"
       type: number

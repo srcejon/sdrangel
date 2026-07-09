@@ -31,6 +31,7 @@
 #endif
 
 #include "util/profiler.h"
+#include "cameraimageutils.h"
 #include "cameraplatesolver.h"
 #include "camerastardetector.h"
 
@@ -330,7 +331,12 @@ bool CameraStarDetector::plateSolveInputSettingsChanged(const QList<QString>& se
         || settingsKeys.contains("lensCenterOffsetX")
         || settingsKeys.contains("lensCenterOffsetY")
         || settingsKeys.contains("lensDistortionK1")
-        || settingsKeys.contains("lensMirror");
+        || settingsKeys.contains("lensMirror")
+        || settingsKeys.contains("playbackProjectionEnabled")
+        || settingsKeys.contains("playbackProjectionX")
+        || settingsKeys.contains("playbackProjectionY")
+        || settingsKeys.contains("playbackProjectionWidth")
+        || settingsKeys.contains("playbackProjectionHeight");
 }
 
 bool CameraStarDetector::starDisplaySettingsChanged(const QList<QString>& settingsKeys)
@@ -436,6 +442,7 @@ void CameraStarDetector::applySettings(const CameraSettings& settings, const QLi
     if (!force && starDisplaySettingsChanged(settingsKeys) && m_lastInputFrame)
     {
         CameraPipelineFramePtr frame(new CameraPipelineFrame(*m_lastInputFrame));
+        CameraImageUtils::applyPlaybackProjectionTransform(*frame, m_settings, true);
         frame->m_manualPreviewFrame = true;
         submitFrame(frame);
     }

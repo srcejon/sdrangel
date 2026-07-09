@@ -975,7 +975,9 @@ void CameraPostProcessor::applySettings(const CameraSettings& settings, const QL
         "plateSolveLabelMode", "plateSolveLabelHideSyntheticNames", "yoloEnabled",
         "overlaySpectrum", "spectrumDevice", "spectrumOffsetX", "spectrumOffsetY", "spectrumScale", "spectrumOverlays", "windowOverlays",
         "latitude", "longitude", "altitude", "azimuth", "elevation", "roll", "fov",
-        "lensProjection", "lensCenterOffsetX", "lensCenterOffsetY", "lensDistortionK1", "owmAPIKey",
+        "lensProjection", "lensCenterOffsetX", "lensCenterOffsetY", "lensDistortionK1",
+        "playbackProjectionEnabled", "playbackProjectionX", "playbackProjectionY", "playbackProjectionWidth", "playbackProjectionHeight",
+        "owmAPIKey",
         "yoloBoxColor"
     };
     const bool postProcessChanged = force || std::any_of(kPostProcessingKeys.cbegin(), kPostProcessingKeys.cend(),
@@ -1025,7 +1027,12 @@ void CameraPostProcessor::applySettings(const CameraSettings& settings, const QL
         || settingsKeys.contains("lensProjection")
         || settingsKeys.contains("lensCenterOffsetX")
         || settingsKeys.contains("lensCenterOffsetY")
-        || settingsKeys.contains("lensDistortionK1"))
+        || settingsKeys.contains("lensDistortionK1")
+        || settingsKeys.contains("playbackProjectionEnabled")
+        || settingsKeys.contains("playbackProjectionX")
+        || settingsKeys.contains("playbackProjectionY")
+        || settingsKeys.contains("playbackProjectionWidth")
+        || settingsKeys.contains("playbackProjectionHeight"))
     {
         m_trackedObjectHeatMap = QImage();
         m_trackedObjectHeatMapDensity.clear();
@@ -1054,6 +1061,7 @@ void CameraPostProcessor::applySettings(const CameraSettings& settings, const QL
 
     if (postProcessChanged && !m_lastFrame.m_image.isNull()) {
         m_lastFrame.m_manualPreviewFrame = true;
+        CameraImageUtils::applyPlaybackProjectionTransform(m_lastFrame, m_settings, true);
         QVector<PreviewTextLabel> previewTextLabels;
         QVector<PreviewRectItem> previewRectItems;
         QVector<CameraPipelineTrackedObject> trackedObjects;

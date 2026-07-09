@@ -28,6 +28,7 @@
 #include "pipes/objectpipe.h"
 #include "util/profiler.h"
 #include "camera.h"
+#include "cameraimageutils.h"
 #include "cameraobjectdetector.h"
 #include "SWGTargetAzimuthElevation.h"
 
@@ -611,7 +612,12 @@ bool yoloDetectionSettingsChanged(const QList<QString>& settingsKeys)
         QStringLiteral("detectionRoiY"),
         QStringLiteral("detectionRoiWidth"),
         QStringLiteral("detectionRoiHeight"),
-        QStringLiteral("motionExclusionRects")
+        QStringLiteral("motionExclusionRects"),
+        QStringLiteral("playbackProjectionEnabled"),
+        QStringLiteral("playbackProjectionX"),
+        QStringLiteral("playbackProjectionY"),
+        QStringLiteral("playbackProjectionWidth"),
+        QStringLiteral("playbackProjectionHeight")
     };
 
     for (const QString& key : yoloDetectionKeys)
@@ -706,6 +712,7 @@ void CameraObjectDetector::applySettings(const CameraSettings& settings, const Q
     if (!force && canReprocessLastFrame && yoloDetectionSettingsChanged(settingsKeys) && m_lastInputFrame.hasImageData())
     {
         CameraPipelineFramePtr frame(new CameraPipelineFrame(m_lastInputFrame));
+        CameraImageUtils::applyPlaybackProjectionTransform(*frame, m_settings, true);
         frame->m_manualPreviewFrame = true;
         submitFrame(frame);
     }

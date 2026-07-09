@@ -666,6 +666,11 @@ private slots:
     void on_lensCenterOffsetYSpin_valueChanged(double value);
     void on_lensDistortionK1Spin_valueChanged(double value);
     void on_lensMirrorCheck_toggled(bool checked);
+    void on_playbackProjectionEnabledCheck_toggled(bool checked);
+    void on_playbackProjectionXSpin_valueChanged(int value);
+    void on_playbackProjectionYSpin_valueChanged(int value);
+    void on_playbackProjectionWidthSpin_valueChanged(int value);
+    void on_playbackProjectionHeightSpin_valueChanged(int value);
     void on_postProcessWhiteBalanceModeCombo_currentIndexChanged(int index);
     void on_postProcessWhiteBalanceRedGainSlider_valueChanged(int value);
     void on_postProcessWhiteBalanceRedGainSpin_valueChanged(double value);

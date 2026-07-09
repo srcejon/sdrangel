@@ -603,6 +603,8 @@ void CameraFramePreprocessor::processNewFrame(const CameraPipelineFramePtr& fram
         return;
     }
 
+    applyPlaybackProjectionTransform(*frame);
+
     cv::Mat frameMat = imageToWorkingMat(frame->m_image);
     if (shouldMaterializeRawInputImage(*frame) && (frameMat.channels() == 1))
     {
@@ -634,6 +636,11 @@ void CameraFramePreprocessor::processNewFrame(const CameraPipelineFramePtr& fram
     preprocessFrame(frame, frameMat);
 
     PROFILER_STOP(__FUNCTION__);
+}
+
+void CameraFramePreprocessor::applyPlaybackProjectionTransform(CameraPipelineFrame& frame) const
+{
+    CameraImageUtils::applyPlaybackProjectionTransform(frame, m_settings);
 }
 
 void CameraFramePreprocessor::preprocessFrame(const CameraPipelineFramePtr& frame, cv::Mat& frameMat)

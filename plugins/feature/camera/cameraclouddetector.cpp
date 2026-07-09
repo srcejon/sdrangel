@@ -28,6 +28,7 @@
 
 #include "util/astronomy.h"
 #include "util/profiler.h"
+#include "cameraimageutils.h"
 #include "camerainfo.h"
 #include "cameraclouddetector.h"
 #include "cameraplatesolver.h"
@@ -343,7 +344,12 @@ bool CameraCloudDetector::cloudSettingsChanged(const QList<QString>& settingsKey
         || settingsKeys.contains("lensCenterOffsetX")
         || settingsKeys.contains("lensCenterOffsetY")
         || settingsKeys.contains("lensDistortionK1")
-        || settingsKeys.contains("lensMirror");
+        || settingsKeys.contains("lensMirror")
+        || settingsKeys.contains("playbackProjectionEnabled")
+        || settingsKeys.contains("playbackProjectionX")
+        || settingsKeys.contains("playbackProjectionY")
+        || settingsKeys.contains("playbackProjectionWidth")
+        || settingsKeys.contains("playbackProjectionHeight");
 }
 
 void CameraCloudDetector::invalidateCache()
@@ -370,6 +376,7 @@ void CameraCloudDetector::applySettings(const CameraSettings& settings, const QL
         if (!force && m_lastInputFrame)
         {
             CameraPipelineFramePtr frame(new CameraPipelineFrame(*m_lastInputFrame));
+            CameraImageUtils::applyPlaybackProjectionTransform(*frame, m_settings, true);
             frame->m_manualPreviewFrame = true;
             submitFrame(frame);
         }

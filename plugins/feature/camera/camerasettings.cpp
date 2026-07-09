@@ -372,6 +372,11 @@ void CameraSettings::resetToDefaults()
     m_lensCenterOffsetY = 0.0;
     m_lensDistortionK1 = 0.0;
     m_lensMirror = false;
+    m_playbackProjectionEnabled = false;
+    m_playbackProjectionX = 0;
+    m_playbackProjectionY = 0;
+    m_playbackProjectionWidth = 0;
+    m_playbackProjectionHeight = 0;
     m_workspaceIndex = 0;
     m_geometryBytes.clear();
     m_postProcessWhiteBalanceMode = 0;
@@ -875,6 +880,11 @@ QByteArray CameraSettings::serialize() const
     s.writeBool(305, m_cloudUseReference);
     s.writeBool(306, m_cloudAutoReference);
     s.writeS32(307, static_cast<qint32>(m_yoloInferenceMode));
+    s.writeBool(308, m_playbackProjectionEnabled);
+    s.writeS32(309, m_playbackProjectionX);
+    s.writeS32(310, m_playbackProjectionY);
+    s.writeS32(311, m_playbackProjectionWidth);
+    s.writeS32(312, m_playbackProjectionHeight);
 
     return s.final();
 }
@@ -1239,6 +1249,11 @@ bool CameraSettings::deserialize(const QByteArray& data)
         m_cloudStarSenseMagnitude = qBound(m_minCloudStarMagnitude, m_cloudStarSenseMagnitude, m_maxCloudStarMagnitude);
         d.readBool(305, &m_cloudUseReference, false);
         d.readBool(306, &m_cloudAutoReference, false);
+        d.readBool(308, &m_playbackProjectionEnabled, false);
+        d.readS32(309, &m_playbackProjectionX, 0);
+        d.readS32(310, &m_playbackProjectionY, 0);
+        d.readS32(311, &m_playbackProjectionWidth, 0);
+        d.readS32(312, &m_playbackProjectionHeight, 0);
         m_cloudEventThreshold = qBound(m_minCoveragePercent, m_cloudEventThreshold, m_maxCoveragePercent);
         m_cloudDayThreshold = qBound(m_minCloudRatioThreshold, m_cloudDayThreshold, m_maxCloudRatioThreshold);
         m_cloudTextureThreshold = qBound(m_minThreshold8Bit, m_cloudTextureThreshold, m_maxThreshold8Bit);
@@ -1507,6 +1522,10 @@ bool CameraSettings::deserialize(const QByteArray& data)
         m_stackAlignmentMethod = qBound(StackAlignmentNone, m_stackAlignmentMethod, StackAlignmentStarCentroidMatching);
         m_scaleWidth = qBound(0, m_scaleWidth, 65535);
         m_scaleHeight = qBound(0, m_scaleHeight, 65535);
+        m_playbackProjectionX = qBound(-65535, m_playbackProjectionX, 65535);
+        m_playbackProjectionY = qBound(-65535, m_playbackProjectionY, 65535);
+        m_playbackProjectionWidth = qBound(0, m_playbackProjectionWidth, 65535);
+        m_playbackProjectionHeight = qBound(0, m_playbackProjectionHeight, 65535);
         m_keogramDirection = static_cast<KeogramDirection>(qBound(0, static_cast<int>(m_keogramDirection), 1));
         m_keogramDayMode = static_cast<KeogramDayMode>(qBound(0, static_cast<int>(m_keogramDayMode), 1));
         m_keogramSamplePeriodMinutes = qBound(1, m_keogramSamplePeriodMinutes, 1440);
@@ -1964,6 +1983,21 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     }
     if (settingsKeys.contains("lensMirror")) {
         m_lensMirror = settings.m_lensMirror;
+    }
+    if (settingsKeys.contains("playbackProjectionEnabled")) {
+        m_playbackProjectionEnabled = settings.m_playbackProjectionEnabled;
+    }
+    if (settingsKeys.contains("playbackProjectionX")) {
+        m_playbackProjectionX = qBound(-65535, settings.m_playbackProjectionX, 65535);
+    }
+    if (settingsKeys.contains("playbackProjectionY")) {
+        m_playbackProjectionY = qBound(-65535, settings.m_playbackProjectionY, 65535);
+    }
+    if (settingsKeys.contains("playbackProjectionWidth")) {
+        m_playbackProjectionWidth = qBound(0, settings.m_playbackProjectionWidth, 65535);
+    }
+    if (settingsKeys.contains("playbackProjectionHeight")) {
+        m_playbackProjectionHeight = qBound(0, settings.m_playbackProjectionHeight, 65535);
     }
     if (settingsKeys.contains("workspaceIndex")) {
         m_workspaceIndex = settings.m_workspaceIndex;
@@ -2927,6 +2961,21 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("lensMirror") || force) {
         ostr << " m_lensMirror: " << m_lensMirror;
+    }
+    if (settingsKeys.contains("playbackProjectionEnabled") || force) {
+        ostr << " m_playbackProjectionEnabled: " << m_playbackProjectionEnabled;
+    }
+    if (settingsKeys.contains("playbackProjectionX") || force) {
+        ostr << " m_playbackProjectionX: " << m_playbackProjectionX;
+    }
+    if (settingsKeys.contains("playbackProjectionY") || force) {
+        ostr << " m_playbackProjectionY: " << m_playbackProjectionY;
+    }
+    if (settingsKeys.contains("playbackProjectionWidth") || force) {
+        ostr << " m_playbackProjectionWidth: " << m_playbackProjectionWidth;
+    }
+    if (settingsKeys.contains("playbackProjectionHeight") || force) {
+        ostr << " m_playbackProjectionHeight: " << m_playbackProjectionHeight;
     }
     if (settingsKeys.contains("brightness") || force) {
         ostr << " m_brightness: " << m_brightness;

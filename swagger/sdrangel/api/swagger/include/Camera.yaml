@@ -452,6 +452,21 @@ CameraSettings:
     lensMirror:
       description: "Image is horizontally mirrored relative to the sky (1 for up-looking all-sky camera or telescope star diagonal). Plate solving and sky overlays account for the reflection."
       type: integer
+    playbackProjectionEnabled:
+      description: "Use playback content rectangle as the optical image area for video, stream and image sequence sources"
+      type: integer
+    playbackProjectionX:
+      description: "Playback optical content rectangle left position in pixels"
+      type: integer
+    playbackProjectionY:
+      description: "Playback optical content rectangle top position in pixels"
+      type: integer
+    playbackProjectionWidth:
+      description: "Playback optical content rectangle width in pixels"
+      type: integer
+    playbackProjectionHeight:
+      description: "Playback optical content rectangle height in pixels"
+      type: integer
     postProcessWhiteBalanceMode:
       description: >
         Post-processing white balance mode

@@ -25,6 +25,8 @@
 
 #include "camerapipelineframe.h"
 
+struct CameraSettings;
+
 /**
  * \brief Stateless helpers for converting between QImage and OpenCV cv::Mat in the camera pipeline.
  *
@@ -49,6 +51,7 @@ public:
     [[nodiscard]] static QImage workingMatToImage(const cv::Mat& frameMat);
     [[nodiscard]] static int bayerPatternToOpenCvCode(CameraPipelineFrame::BayerPattern bayerPattern);
     [[nodiscard]] static cv::Mat debayerRawMat(const cv::Mat& input, CameraPipelineFrame::BayerPattern bayerPattern);
+    static void applyPlaybackProjectionTransform(CameraPipelineFrame& frame, const CameraSettings& settings, bool replaceExisting = false);
 };
 
 #endif // INCLUDE_FEATURE_CAMERAIMAGEUTILS_H_

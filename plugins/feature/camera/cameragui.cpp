@@ -1850,6 +1850,11 @@ void CameraGUI::displaySettings()
     settingsUI()->lensCenterOffsetYSpin->setValue(m_settings.m_lensCenterOffsetY);
     settingsUI()->lensDistortionK1Spin->setValue(m_settings.m_lensDistortionK1);
     settingsUI()->lensMirrorCheck->setChecked(m_settings.m_lensMirror);
+    settingsUI()->playbackProjectionEnabledCheck->setChecked(m_settings.m_playbackProjectionEnabled);
+    settingsUI()->playbackProjectionXSpin->setValue(m_settings.m_playbackProjectionX);
+    settingsUI()->playbackProjectionYSpin->setValue(m_settings.m_playbackProjectionY);
+    settingsUI()->playbackProjectionWidthSpin->setValue(m_settings.m_playbackProjectionWidth);
+    settingsUI()->playbackProjectionHeightSpin->setValue(m_settings.m_playbackProjectionHeight);
     populateDirectionSourceCombo();
     applyPositionSync();
     updatePositionControls();
@@ -2875,6 +2880,11 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->lensCenterOffsetYSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_lensCenterOffsetYSpin_valueChanged);
     QObject::connect(settingsUI()->lensDistortionK1Spin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_lensDistortionK1Spin_valueChanged);
     QObject::connect(settingsUI()->lensMirrorCheck, &QCheckBox::toggled, this, &CameraGUI::on_lensMirrorCheck_toggled);
+    QObject::connect(settingsUI()->playbackProjectionEnabledCheck, &QCheckBox::toggled, this, &CameraGUI::on_playbackProjectionEnabledCheck_toggled);
+    QObject::connect(settingsUI()->playbackProjectionXSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_playbackProjectionXSpin_valueChanged);
+    QObject::connect(settingsUI()->playbackProjectionYSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_playbackProjectionYSpin_valueChanged);
+    QObject::connect(settingsUI()->playbackProjectionWidthSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_playbackProjectionWidthSpin_valueChanged);
+    QObject::connect(settingsUI()->playbackProjectionHeightSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_playbackProjectionHeightSpin_valueChanged);
     QObject::connect(settingsUI()->postProcessWhiteBalanceModeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_postProcessWhiteBalanceModeCombo_currentIndexChanged);
     QObject::connect(settingsUI()->postProcessWhiteBalanceRedGainSlider, &QSlider::valueChanged, this, &CameraGUI::on_postProcessWhiteBalanceRedGainSlider_valueChanged);
     QObject::connect(settingsUI()->postProcessWhiteBalanceRedGainSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_postProcessWhiteBalanceRedGainSpin_valueChanged);
@@ -4825,6 +4835,14 @@ void CameraGUI::updatePositionControls()
     settingsUI()->azimuthOffsetLabel->setEnabled(azElSynced);
     settingsUI()->elevationOffsetLabel->setEnabled(azElSynced);
     settingsUI()->rollOffsetLabel->setEnabled(sensorSynced);
+    settingsUI()->playbackProjectionXLabel->setEnabled(m_settings.m_playbackProjectionEnabled);
+    settingsUI()->playbackProjectionYLabel->setEnabled(m_settings.m_playbackProjectionEnabled);
+    settingsUI()->playbackProjectionWidthLabel->setEnabled(m_settings.m_playbackProjectionEnabled);
+    settingsUI()->playbackProjectionHeightLabel->setEnabled(m_settings.m_playbackProjectionEnabled);
+    settingsUI()->playbackProjectionXSpin->setEnabled(m_settings.m_playbackProjectionEnabled);
+    settingsUI()->playbackProjectionYSpin->setEnabled(m_settings.m_playbackProjectionEnabled);
+    settingsUI()->playbackProjectionWidthSpin->setEnabled(m_settings.m_playbackProjectionEnabled);
+    settingsUI()->playbackProjectionHeightSpin->setEnabled(m_settings.m_playbackProjectionEnabled);
 #ifdef QT_SENSORS_FOUND
     settingsUI()->directionSourceCombo->setEnabled(true);
 #else
@@ -8146,6 +8164,37 @@ void CameraGUI::on_lensMirrorCheck_toggled(bool checked)
 {
     m_settings.m_lensMirror = checked;
     applySetting("lensMirror");
+}
+
+void CameraGUI::on_playbackProjectionEnabledCheck_toggled(bool checked)
+{
+    m_settings.m_playbackProjectionEnabled = checked;
+    updatePositionControls();
+    applySetting("playbackProjectionEnabled");
+}
+
+void CameraGUI::on_playbackProjectionXSpin_valueChanged(int value)
+{
+    m_settings.m_playbackProjectionX = value;
+    applySetting("playbackProjectionX");
+}
+
+void CameraGUI::on_playbackProjectionYSpin_valueChanged(int value)
+{
+    m_settings.m_playbackProjectionY = value;
+    applySetting("playbackProjectionY");
+}
+
+void CameraGUI::on_playbackProjectionWidthSpin_valueChanged(int value)
+{
+    m_settings.m_playbackProjectionWidth = value;
+    applySetting("playbackProjectionWidth");
+}
+
+void CameraGUI::on_playbackProjectionHeightSpin_valueChanged(int value)
+{
+    m_settings.m_playbackProjectionHeight = value;
+    applySetting("playbackProjectionHeight");
 }
 
 void CameraGUI::updatePostProcessWhiteBalanceControls()

@@ -25,6 +25,7 @@
 
 #include "cameraimageutils.h"
 #include "cameraimagepool.h"
+#include "camerasettings.h"
 
 namespace {
 
@@ -59,6 +60,45 @@ const QImage& CameraImageUtils::ensureRgb888(const QImage& image, QImage& conver
 
     convertedImage = image.convertToFormat(QImage::Format_RGB888);
     return convertedImage;
+}
+
+void CameraImageUtils::applyPlaybackProjectionTransform(CameraPipelineFrame& frame, const CameraSettings& settings, bool replaceExisting)
+{
+    const bool playbackFrame = settings.isVideoFileCamera()
+        || settings.isImageFileSequenceCamera()
+        || settings.isStreamCamera()
+        || frame.m_playbackActiveFrame
+        || (frame.m_playbackPositionMs >= 0)
+        || (frame.m_playbackFrameNumber >= 0)
+        || (frame.m_playbackFrameRate > 0.0);
+    if (!playbackFrame) {
+        return;
+    }
+
+    if (frame.m_imageTransform.isValid())
+    {
+        if (!replaceExisting) {
+            return;
+        }
+        frame.m_imageTransform.clear();
+    }
+
+    if (!settings.m_playbackProjectionEnabled) {
+        return;
+    }
+
+    const int contentWidth = qBound(0, settings.m_playbackProjectionWidth, 65535);
+    const int contentHeight = qBound(0, settings.m_playbackProjectionHeight, 65535);
+    if ((contentWidth <= 0) || (contentHeight <= 0)) {
+        return;
+    }
+
+    const QRect contentRect(
+        settings.m_playbackProjectionX,
+        settings.m_playbackProjectionY,
+        contentWidth,
+        contentHeight);
+    frame.m_imageTransform.setScaled(contentRect.size(), contentRect);
 }
 
 cv::Mat CameraImageUtils::wrapRgb888Image(const QImage& image)

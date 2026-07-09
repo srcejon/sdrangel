@@ -1149,7 +1149,11 @@ Set the lens centre offset in pixels.
 
 Sets the first radial lens distortion coefficient.
 
-<h4>11. OpenWeatherMap API Key</h4>
+<h4>11. Playback projection</h4>
+
+For `video:`, `images:` and `stream:` playback, optionally treats a rectangular sub-area of the playback frame as the original optical image. Use this when replaying a recorded video that was scaled into a larger canvas with padding, so star detection, plate solving and sky overlays use the true content rectangle rather than the whole video frame.
+
+<h4>12. OpenWeatherMap API Key</h4>
 
 API key from openweathermap.org used to periodically fetch weather for the camera latitude and longitude.
 

@@ -109,6 +109,7 @@ private:
     bool handleMessage(const Message& cmd);
     void applySettings(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force = false);
     void processNewFrame(const CameraPipelineFramePtr& frame);
+    void applyPlaybackProjectionTransform(CameraPipelineFrame& frame) const;
     void preprocessFrame(const CameraPipelineFramePtr& frame, cv::Mat& inputMat);
     bool preserveFrameOrder() const;
     int pendingFrameLimit() const;

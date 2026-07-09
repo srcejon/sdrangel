@@ -61,15 +61,11 @@ Item {
             //gesture.enabled: true
             //gesture.acceptedGestures: MapGestureArea.PinchGesture | MapGestureArea.PanGesture
 
-            MouseArea {
-                anchors.fill: parent
-                propagateComposedEvents: true
-                onClicked: (mouse) => {
-                    // Unhighlight current aircraft
-                    guiPtr.clearHighlighted()
-                    mouse.accepted = false
-                }
-            }
+            // MouseArea stops pinch from working on Android
+            TapHandler {
+                acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchScreen
+                onTapped: guiPtr.clearHighlighted() // Unhighlight current aircraft
+            }            
 
             MapStation {
                 id: station

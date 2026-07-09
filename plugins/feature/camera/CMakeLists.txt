@@ -94,6 +94,7 @@ if(NOT SERVER_MODE)
         camerasettingsdialog.cpp
         camerasettingsdialog.ui
         camerahistogramdialog.cpp
+        cameraclearskyreferencedialog.cpp
         cameraicons.qrc
     )
     set(camera_HEADERS
@@ -104,6 +105,7 @@ if(NOT SERVER_MODE)
         cameradetectionhistoryentry.h
         camerasettingsdialog.h
         camerahistogramdialog.h
+        cameraclearskyreferencedialog.h
     )
 
     set(TARGET_NAME ${PLUGINS_PREFIX}featurecamera)

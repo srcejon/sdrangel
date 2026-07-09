@@ -170,6 +170,10 @@ public:
     ~CameraCloudDetector() override;
     void setMessageQueueToFeature(MessageQueue *messageQueue) { m_msgQueueToFeature = messageQueue; }
 
+    // Storage key identifying which camera a clear-sky reference belongs to; also used by
+    // the GUI's reference viewer to open the same store
+    [[nodiscard]] static QString referenceStorageKey(const CameraSettings& settings);
+
 protected:
     void applySettings(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force = false) override;
     void captureActiveChanged(bool active) override;
@@ -219,7 +223,6 @@ private:
     static bool samplePatchGray(const CameraPipelineFramePtr& frame, const QPoint& centre, int half, cv::Mat& patch);
     void applyStarVisibilityVeto(cv::Mat& mask, const CloudStarSense& starSense, const cv::Rect& roi) const;
     void renderDebugView(const CameraPipelineFramePtr& frame, const cv::Size& frameCvSize, const cv::Rect& roi) const;
-    [[nodiscard]] QString referenceStorageKey() const;
     void invalidateCache();
 };
 

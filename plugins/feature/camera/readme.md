@@ -945,7 +945,7 @@ Suppresses motion boxes that substantially overlap the cloud mask.
 
 Sets the fraction of a motion box that must be cloud before it is suppressed.
 
-<h4>12. Show overlay / Mask colour</h4>
+<h4>12. Show mask / Mask colour</h4>
 
 Tints cloud-classified regions on the image with the selected colour.
 
@@ -989,7 +989,7 @@ Compares each frame against a saved per-camera clear-sky reference. Because the 
 
 <h4>22. Save ref</h4>
 
-Saves the current frame as the clear-sky reference for the current sky state. Press on a cloud-free sky; the slot (Day, Twilight, Deep twilight, Dark, each with or without moon) is chosen automatically from the sun and moon elevation at the frame's capture time, so the camera position and time must be set. The status label shows how many slots are filled - press again at other times of day and night to cover more sky states.
+Saves the current frame as the clear-sky reference for the current sky state. Press on a cloud-free sky; the slot (Day, Twilight, Deep twilight, Dark, each with or without moon) is chosen automatically from the sun and moon elevation at the frame's capture time, so the camera position and time must be set. The status label shows how many slots are filled - press again at other times of day and night to cover more sky states. The View button opens a viewer showing each slot's stored maps (reconstructed clear-sky brightness, colour ratio, texture and sky mask, plus the derived foreground) so saved and auto-learned references can be checked for sensibleness; Refresh re-reads the store from disk while auto-learning runs.
 
 <h4>23. Auto learn ref</h4>
 

@@ -124,6 +124,79 @@ if(WIN32)
     endif()
 endif()
 
+set(camera_cloud_tests_SOURCES
+    cameracloudtests.cpp
+    ../cameradetector.cpp
+    ../cameraimageutils.cpp
+    ../cameraimagepool.cpp
+    ../cameraclearskyreference.cpp
+    ../cameraclouddetector.cpp
+    ../cameramotiondetector.cpp
+    ../camerastardetector.cpp
+    ../camerasettings.cpp
+    ../cameraicons.qrc
+)
+
+set(camera_cloud_tests_HEADERS
+    ../cameradetector.h
+    ../cameraimageutils.h
+    ../cameraclearskyreference.h
+    ../cameraclouddetector.h
+    ../cameramotiondetector.h
+    ../camerastardetector.h
+    ../cameraplatesolver.h
+    ../camerapipelineframe.h
+    ../camerasettings.h
+)
+
+add_executable(featurecamera_cloud_tests EXCLUDE_FROM_ALL
+    ${camera_cloud_tests_SOURCES}
+    ${camera_cloud_tests_HEADERS}
+)
+
+target_compile_definitions(featurecamera_cloud_tests PRIVATE
+    CAMERA_CLOUD_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
+)
+
+if(OpenCV_cudaarithm_FOUND AND OpenCV_cudaimgproc_FOUND AND OpenCV_cudawarping_FOUND AND OpenCV_cudafilters_FOUND)
+    target_compile_definitions(featurecamera_cloud_tests PRIVATE CAMERA_OPENCV_CUDA_CLOUD_DETECTION)
+endif()
+
+target_include_directories(featurecamera_cloud_tests PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/..
+    ${CMAKE_SOURCE_DIR}/sdrbase
+    ${CMAKE_SOURCE_DIR}/swagger/sdrangel/code/qt5/client
+    ${OpenCV_INCLUDE_DIRS}
+    ${ZLIB_INCLUDE_DIRS}
+    ${ZLIB_INCLUDE_DIR}
+)
+
+target_link_libraries(featurecamera_cloud_tests PRIVATE
+    camera_platesolver
+    Qt::Core
+    Qt::Gui
+    Qt::Network
+    ${camera_OpenCV_LIBS}
+    ${ZLIB_LIBRARIES}
+    sdrbase
+)
+
+if(Qt${QT_DEFAULT_MAJOR_VERSION}TextToSpeech_FOUND)
+    target_link_libraries(featurecamera_cloud_tests PRIVATE Qt::TextToSpeech)
+endif()
+
+if(WIN32)
+    if(EXISTS "${camera_star_tests_qt_platforms_dir}")
+        add_custom_command(TARGET featurecamera_cloud_tests POST_BUILD
+            COMMAND "${CMAKE_COMMAND}" -E make_directory "$<TARGET_FILE_DIR:featurecamera_cloud_tests>/platforms"
+            COMMAND "${CMAKE_COMMAND}" -E copy_directory
+                "${camera_star_tests_qt_platforms_dir}"
+                "$<TARGET_FILE_DIR:featurecamera_cloud_tests>/platforms"
+            COMMENT "Deploying Qt platform plugins for camera cloud tests"
+        )
+    endif()
+endif()
+
 if(OpenCV_cudaarithm_FOUND AND OpenCV_cudaimgproc_FOUND AND OpenCV_cudawarping_FOUND AND OpenCV_cudafilters_FOUND)
     add_executable(featurecamera_hdr_tests EXCLUDE_FROM_ALL
         camerahdrtests.cpp

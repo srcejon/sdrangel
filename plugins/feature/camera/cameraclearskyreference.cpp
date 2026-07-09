@@ -18,6 +18,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 #include <vector>
 
 #include <QCryptographicHash>
@@ -565,6 +566,66 @@ cv::Mat CameraClearSkyReference::foregroundMask(const cv::Size& workSize, const 
 bool CameraClearSkyReference::slotFilled(int slot) const
 {
     return (slot >= 0) && (slot < kSlotCount) && m_slots[slot].valid();
+}
+
+namespace {
+
+QImage grayMatToImage(const cv::Mat& gray8)
+{
+    QImage image(gray8.cols, gray8.rows, QImage::Format_Grayscale8);
+    for (int row = 0; row < gray8.rows; ++row) {
+        std::memcpy(image.scanLine(row), gray8.ptr<uchar>(row), static_cast<size_t>(gray8.cols));
+    }
+    return image;
+}
+
+QImage renderFloatMap(const cv::Mat& map, double scale)
+{
+    cv::Mat scaled;
+    map.convertTo(scaled, CV_8U, scale);
+    return grayMatToImage(scaled);
+}
+
+} // namespace
+
+CameraClearSkyReference::SlotPreview CameraClearSkyReference::slotPreview(int slot) const
+{
+    SlotPreview preview;
+    if ((slot < 0) || (slot >= kSlotCount) || !m_slots[slot].valid()) {
+        return preview;
+    }
+
+    const Slot& reference = m_slots[slot];
+    // Brightness is stored normalised; reconstruct the absolute clear-sky luminance
+    preview.brightness = renderFloatMap(reference.brightness, reference.brightnessAnchor);
+    // Ratio rendered as in the detector's Signal debug view: 1.0 maps to mid-grey
+    preview.ratio = renderFloatMap(reference.ratio, 128.0);
+    preview.texture = renderFloatMap(reference.texture, 16.0);
+    preview.sky = grayMatToImage(reference.sky);
+    preview.info = QStringLiteral("%1\nupdated %2\n%3 update%4\nsky median %5\nclear R/B %6")
+        .arg(slotName(slot),
+             reference.updated.isValid() ? reference.updated.toString(QStringLiteral("yyyy-MM-dd hh:mm")) : QStringLiteral("-"))
+        .arg(reference.updateCount)
+        .arg(reference.updateCount == 1 ? QStringLiteral("") : QStringLiteral("s"))
+        .arg(reference.brightnessAnchor, 0, 'f', 1)
+        .arg(reference.ratioAnchor, 0, 'f', 3);
+    preview.valid = true;
+    return preview;
+}
+
+QImage CameraClearSkyReference::foregroundPreview() const
+{
+    // Use the source slot's own ROI so the geometry check always passes for the preview
+    static constexpr int preference[] = {5, 6, 3, 4, 0};
+    for (int slot : preference)
+    {
+        if (m_slots[slot].valid())
+        {
+            const cv::Mat foreground = foregroundMask(cv::Size(kRefSize, kRefSize), m_slots[slot].roiNorm);
+            return foreground.empty() ? QImage() : grayMatToImage(foreground);
+        }
+    }
+    return QImage();
 }
 
 QString CameraClearSkyReference::statusSummary(int activeSlot) const

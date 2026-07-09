@@ -129,6 +129,8 @@
 #include "camerarecorder.h"
 #include "camerasettingsdialog.h"
 #include "cameraworker.h"
+#include "cameraclearskyreferencedialog.h"
+#include "cameraclouddetector.h"
 #include "cameragui.h"
 
 namespace {
@@ -3011,6 +3013,7 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->cloudUseReferenceCheck, &QCheckBox::toggled, this, &CameraGUI::on_cloudUseReferenceCheck_toggled);
     QObject::connect(settingsUI()->cloudAutoReferenceCheck, &QCheckBox::toggled, this, &CameraGUI::on_cloudAutoReferenceCheck_toggled);
     QObject::connect(settingsUI()->cloudSaveReferenceButton, &QPushButton::clicked, this, &CameraGUI::on_cloudSaveReferenceButton_clicked);
+    QObject::connect(settingsUI()->cloudViewReferenceButton, &QPushButton::clicked, this, &CameraGUI::on_cloudViewReferenceButton_clicked);
     QObject::connect(settingsUI()->cloudColorButton, &QToolButton::clicked, this, &CameraGUI::on_cloudColorButton_clicked);
     QObject::connect(settingsUI()->starThresholdSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_starThresholdSpin_valueChanged);
     QObject::connect(settingsUI()->starBackgroundBlurSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_starBackgroundBlurSpin_valueChanged);
@@ -9790,6 +9793,13 @@ void CameraGUI::on_cloudAutoReferenceCheck_toggled(bool checked)
 void CameraGUI::on_cloudSaveReferenceButton_clicked()
 {
     m_camera->getInputMessageQueue()->push(Camera::MsgSaveClearSkyReference::create());
+}
+
+void CameraGUI::on_cloudViewReferenceButton_clicked()
+{
+    CameraClearSkyReferenceDialog *dialog = new CameraClearSkyReferenceDialog(
+        CameraCloudDetector::referenceStorageKey(m_settings), this);
+    dialog->show();
 }
 
 void CameraGUI::on_cloudColorButton_clicked()

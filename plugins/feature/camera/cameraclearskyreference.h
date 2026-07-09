@@ -20,6 +20,7 @@
 #define INCLUDE_FEATURE_CAMERACLEARSKYREFERENCE_H_
 
 #include <QDateTime>
+#include <QImage>
 #include <QRectF>
 #include <QString>
 
@@ -93,6 +94,19 @@ public:
 
     [[nodiscard]] bool slotFilled(int slot) const;
     [[nodiscard]] QString statusSummary(int activeSlot) const;
+
+    // Human-checkable renders of a slot's stored maps, for the reference viewer dialog
+    struct SlotPreview
+    {
+        QImage brightness; // reconstructed clear-sky luminance
+        QImage ratio;      // red/blue ratio, 1.0 mapped to mid-grey
+        QImage texture;    // fine-texture energy
+        QImage sky;        // evaluated-sky mask at capture
+        QString info;      // capture time, update count, anchors
+        bool valid = false;
+    };
+    [[nodiscard]] SlotPreview slotPreview(int slot) const;
+    [[nodiscard]] QImage foregroundPreview() const; // derived foreground mask; null when none
 
 private:
     struct Slot

@@ -272,13 +272,13 @@ CameraCloudDetector::~CameraCloudDetector() = default;
 // but image-sequence playback uses a constant id - substitute the first image path so two
 // different sequences never share a reference store. The protocol prefixes the key so ids
 // from different backends cannot collide.
-QString CameraCloudDetector::referenceStorageKey() const
+QString CameraCloudDetector::referenceStorageKey(const CameraSettings& settings)
 {
-    QString id = m_settings.m_cameraId;
-    if ((m_settings.m_cameraProtocol == CameraProtocol::images()) && !m_settings.m_imageFileCameraPaths.isEmpty()) {
-        id = m_settings.m_imageFileCameraPaths.first();
+    QString id = settings.m_cameraId;
+    if ((settings.m_cameraProtocol == CameraProtocol::images()) && !settings.m_imageFileCameraPaths.isEmpty()) {
+        id = settings.m_imageFileCameraPaths.first();
     }
-    return m_settings.m_cameraProtocol + QLatin1Char('|') + id;
+    return settings.m_cameraProtocol + QLatin1Char('|') + id;
 }
 
 bool CameraCloudDetector::handleStageMessage(const Message& cmd)
@@ -1269,7 +1269,7 @@ void CameraCloudDetector::applyCloudDetection(const cv::Mat& workBgr, const cv::
         Astronomy::sunPosition(sunAzAlt, bodyRaDec, m_settings.m_latitude, m_settings.m_longitude, observationTime);
         Astronomy::moonPosition(moonAzAlt, bodyRaDec, m_settings.m_latitude, m_settings.m_longitude, observationTime);
         referenceSlot = CameraClearSkyReference::slotFor(sunAzAlt.alt, moonAzAlt.alt);
-        m_clearSkyReference.ensureLoaded(referenceStorageKey());
+        m_clearSkyReference.ensureLoaded(referenceStorageKey(m_settings));
     }
     const QRectF roiNorm(
         static_cast<double>(roi.x) / std::max(1, imageSize.width()),
@@ -1333,7 +1333,7 @@ void CameraCloudDetector::applyCloudDetection(const cv::Mat& workBgr, const cv::
         m_saveReferencePending = false;
         if (referenceSlot >= 0)
         {
-            m_clearSkyReference.ensureLoaded(referenceStorageKey());
+            m_clearSkyReference.ensureLoaded(referenceStorageKey(m_settings));
             m_clearSkyReference.capture(referenceSlot, gray, workBgr, textureEnergy, evaluationMask, roiNorm, observationTime);
             if (m_msgQueueToFeature) {
                 m_msgQueueToFeature->push(MsgReportClearSkyReference::create(

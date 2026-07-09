@@ -22,6 +22,7 @@
 #include <QGuiApplication>
 #include <QImage>
 #include <QStringList>
+#include <QTemporaryDir>
 #include <QTimeZone>
 #include <QTimer>
 
@@ -31,6 +32,7 @@
 #include "camera.h"
 #include "cameraclouddetector.h"
 #include "cameramotiondetector.h"
+#include "cameraplatesolver.h"
 #include "camerastardetector.h"
 #include "cameraskyprojector.h"
 #include "util/astronomy.h"
@@ -289,7 +291,7 @@ CloudRunResult runChain(
 
 // Frames carry an invalid capture time by default so auto-mode tests exercise the
 // deterministic brightness fallback rather than the sun elevation at the real wall clock
-CloudRunResult runCloudDetector(const CameraSettings& settings, const QVector<QImage>& images, const CameraPipelineImageTransform* imageTransform = nullptr, bool uploadToGpu = false, const QDateTime& captureDateTime = QDateTime())
+CloudRunResult runCloudDetector(const CameraSettings& settings, const QVector<QImage>& images, const CameraPipelineImageTransform* imageTransform = nullptr, bool uploadToGpu = false, const QDateTime& captureDateTime = QDateTime(), bool saveReferenceFirst = false)
 {
     CameraCloudDetector detector;
     MessageQueue outputQueue;
@@ -361,6 +363,9 @@ CloudRunResult runCloudDetector(const CameraSettings& settings, const QVector<QI
     detector.startWork();
     detector.getInputMessageQueue()->push(Camera::MsgConfigureCamera::create(settings, QList<QString>(), true));
     detector.getInputMessageQueue()->push(Camera::MsgCaptureActive::create(true, 0));
+    if (saveReferenceFirst) {
+        detector.getInputMessageQueue()->push(CameraCloudDetector::MsgSaveClearSkyReference::create());
+    }
 
     submitNext();
     timeout.start(60000);
@@ -527,15 +532,20 @@ void testSunMoonMask(TestContext& context)
     // known location and time using the same lens model the detector uses, paint a bright
     // white blob there on an otherwise-clear blue sky, and confirm the sun/moon mask removes
     // it. The moon path is identical code with the moon's ephemeris, so this covers both.
+    // Real all-sky lens calibration (rolled, off-centre, distorted), so the projection path
+    // is exercised end to end rather than in an idealised straight-up configuration.
     CameraSettings settings = makeCloudSettings();
     settings.m_cloudMode = CameraSettings::CloudModeDay;
     settings.m_latitude = 51.5;
     settings.m_longitude = -0.12;
-    settings.m_fov = 178.0f;
-    settings.m_azimuth = 0.0f;
-    settings.m_elevation = 90.0f;
-    settings.m_roll = 0.0f;
+    settings.m_fov = 159.0f;
+    settings.m_azimuth = 157.0f;
+    settings.m_elevation = 86.0f;
+    settings.m_roll = -129.0f;
     settings.m_lensProjection = CameraSettings::LensProjectionEquidistant;
+    settings.m_lensDistortionK1 = -0.0743f;
+    settings.m_lensCenterOffsetX = 6.3f;
+    settings.m_lensCenterOffsetY = -10.5f;
     settings.m_plateSolveUseCaptureDateTime = true;
     settings.m_cloudSunMoonRadiusDeg = 15.0;
 
@@ -557,10 +567,19 @@ void testSunMoonMask(TestContext& context)
         return;
     }
 
+    // A detached flare speck near the sun (inside the max-radius disc) and a genuine cloud
+    // far from the sun (outside it): the former is glare debris the removal must also clear,
+    // the latter must survive to prove the removal is bounded by the disc.
+    const QPointF speckPoint = sunPoint + QPointF(45.0, 0.0);
+    const QPointF cloudPoint = sunPoint + QPointF(250.0, 100.0);
     auto makeSunImage = [&]() {
         cv::Mat bgr(imageHeight, imageWidth, CV_8UC3, cv::Scalar(200, 120, 80));
         cv::circle(bgr, cv::Point(static_cast<int>(sunPoint.x()), static_cast<int>(sunPoint.y())),
                    30, cv::Scalar(250, 250, 250), cv::FILLED);
+        cv::circle(bgr, cv::Point(static_cast<int>(speckPoint.x()), static_cast<int>(speckPoint.y())),
+                   6, cv::Scalar(250, 250, 250), cv::FILLED);
+        cv::circle(bgr, cv::Point(static_cast<int>(cloudPoint.x()), static_cast<int>(cloudPoint.y())),
+                   40, cv::Scalar(250, 250, 250), cv::FILLED);
         addNoise(bgr, 2.0, 13579);
         return bgrToImage(bgr);
     };
@@ -584,10 +603,345 @@ void testSunMoonMask(TestContext& context)
         "sun-mask", "sun blob classified as cloud without the mask");
     context.check(!maskedFrame->m_cloud.isCloudAtImagePoint(sunPoint),
         "sun-mask", "sun disc excluded with the mask enabled");
+    context.check(!maskedFrame->m_cloud.isCloudAtImagePoint(speckPoint),
+        "sun-mask", "detached flare speck inside the disc also removed");
+    context.check(maskedFrame->m_cloud.isCloudAtImagePoint(cloudPoint),
+        "sun-mask", "genuine cloud outside the disc survives the removal");
     context.check(maskedFrame->m_cloud.m_coveragePercent < unmaskedFrame->m_cloud.m_coveragePercent,
         "sun-mask", QStringLiteral("coverage dropped from %1 to %2 %")
             .arg(unmaskedFrame->m_cloud.m_coveragePercent, 0, 'f', 1)
             .arg(maskedFrame->m_cloud.m_coveragePercent, 0, 'f', 1));
+}
+
+// Star-visibility sensing: predicted catalog stars visible through a flagged region prove it
+// is not (opaque) cloud. A dim smooth haze patch with stars shining through must be vetoed,
+// while an opaque cloud blob that blocks its stars must stay flagged.
+void testStarSense(TestContext& context)
+{
+    CameraSettings settings = makeCloudSettings();
+    settings.m_cloudMode = CameraSettings::CloudModeNight;
+    // The synthetic haze/cloud features are small relative to a real frame, so use a
+    // background radius proportionate to the 640x480 test image
+    settings.m_cloudBackgroundBlur = 8;
+    settings.m_latitude = 51.5;
+    settings.m_longitude = -0.12;
+    settings.m_fov = 178.0f;
+    settings.m_azimuth = 0.0f;
+    settings.m_elevation = 90.0f;
+    settings.m_roll = 0.0f;
+    settings.m_lensProjection = CameraSettings::LensProjectionEquidistant;
+    settings.m_plateSolveUseCaptureDateTime = true;
+    const QDateTime captureTime(QDate(2024, 1, 15), QTime(22, 0, 0), QTimeZone::utc());
+
+    // Replicate the detector's prediction rules (elevation floor, sun/moon avoidance, frame
+    // margin) so the test knows exactly which stars the detector will check
+    const SkyProjector projector = SkyProjector::create(settings, QSize(imageWidth, imageHeight));
+    AzAlt bodyAzAlt;
+    RADec bodyRaDec;
+    Astronomy::sunPosition(bodyAzAlt, bodyRaDec, settings.m_latitude, settings.m_longitude, captureTime);
+    const SkyVector sunVector = skyVectorFromAltAz(bodyAzAlt.az, bodyAzAlt.alt);
+    Astronomy::moonPosition(bodyAzAlt, bodyRaDec, settings.m_latitude, settings.m_longitude, captureTime);
+    const SkyVector moonVector = skyVectorFromAltAz(bodyAzAlt.az, bodyAzAlt.alt);
+    const double avoidCos = std::cos(skyDegToRad(10.0)); // starSenseAvoidBodyDeg
+
+    QVector<QPointF> predicted;
+    for (const CameraPlateSolver::BrightStar& star : CameraPlateSolver::brightStarCatalog(settings))
+    {
+        if (star.magnitude > settings.m_cloudStarSenseMagnitude) {
+            continue;
+        }
+        const RADec raDec{star.rightAscensionDegrees / 15.0, star.declinationDegrees}; // ra in hours
+        const AzAlt azAlt = Astronomy::raDecToAzAlt(raDec, settings.m_latitude, settings.m_longitude, captureTime);
+        if (azAlt.alt < 15.0) {
+            continue;
+        }
+        const SkyVector starVector = skyVectorFromAltAz(azAlt.az, azAlt.alt);
+        if ((skyDot(starVector, sunVector) > avoidCos) || (skyDot(starVector, moonVector) > avoidCos)) {
+            continue;
+        }
+        QPointF point;
+        if (!projector.projectAltAz(azAlt.az, azAlt.alt, point)) {
+            continue;
+        }
+        if ((point.x() < 20.0) || (point.y() < 20.0)
+            || (point.x() >= imageWidth - 20.0) || (point.y() >= imageHeight - 20.0)) {
+            continue;
+        }
+        predicted.append(point);
+    }
+    context.check(predicted.size() >= 4, "star-sense",
+        QStringLiteral("%1 predicted stars available in the frame").arg(predicted.size()));
+    if (predicted.size() < 4) {
+        return;
+    }
+
+    // Haze region: the closest pair of predicted stars, so both land inside one flagged blob
+    const auto pairDistance = [&](int a, int b) {
+        return QLineF(predicted[a], predicted[b]).length();
+    };
+    int hazeA = 0, hazeB = 1;
+    for (int a = 0; a < predicted.size(); ++a)
+    {
+        for (int b = a + 1; b < predicted.size(); ++b)
+        {
+            if (pairDistance(a, b) < pairDistance(hazeA, hazeB)) {
+                hazeA = a; hazeB = b;
+            }
+        }
+    }
+    const QPointF hazeCentre = (predicted[hazeA] + predicted[hazeB]) / 2.0;
+    const double hazeSigma = std::max(pairDistance(hazeA, hazeB) / 2.0 + 40.0, 60.0);
+
+    // Cloud region: the closest pair well clear of the haze
+    int cloudA = -1, cloudB = -1;
+    for (int a = 0; a < predicted.size(); ++a)
+    {
+        if (QLineF(predicted[a], hazeCentre).length() < 3.0 * hazeSigma) {
+            continue;
+        }
+        for (int b = a + 1; b < predicted.size(); ++b)
+        {
+            if (QLineF(predicted[b], hazeCentre).length() < 3.0 * hazeSigma) {
+                continue;
+            }
+            if ((cloudA < 0) || (pairDistance(a, b) < pairDistance(cloudA, cloudB))) {
+                cloudA = a; cloudB = b;
+            }
+        }
+    }
+    context.check(cloudA >= 0, "star-sense", "found a star pair clear of the haze for the cloud blob");
+    if (cloudA < 0) {
+        return;
+    }
+    const QPointF cloudCentre = (predicted[cloudA] + predicted[cloudB]) / 2.0;
+    const double cloudRadius = std::max(pairDistance(cloudA, cloudB) / 2.0 + 40.0, 50.0);
+
+    cv::Mat bgr(imageHeight, imageWidth, CV_8UC3, cv::Scalar(15, 15, 15));
+    // Dim smooth haze bump: enough local contrast for the dark path to flag it
+    for (int row = 0; row < imageHeight; ++row)
+    {
+        cv::Vec3b *line = bgr.ptr<cv::Vec3b>(row);
+        for (int col = 0; col < imageWidth; ++col)
+        {
+            const double dx = col - hazeCentre.x();
+            const double dy = row - hazeCentre.y();
+            const int bump = static_cast<int>(std::lround(16.0 * std::exp(-(dx * dx + dy * dy) / (2.0 * hazeSigma * hazeSigma))));
+            if (bump > 0)
+            {
+                for (int channel = 0; channel < 3; ++channel) {
+                    line[col][channel] = static_cast<uchar>(std::min(255, line[col][channel] + bump));
+                }
+            }
+        }
+    }
+    // Opaque cloud blob over the cloud star pair
+    cv::circle(bgr, cv::Point(static_cast<int>(cloudCentre.x()), static_cast<int>(cloudCentre.y())),
+               static_cast<int>(cloudRadius), cv::Scalar(70, 70, 70), cv::FILLED);
+    cv::GaussianBlur(bgr, bgr, cv::Size(15, 15), 5.0);
+    addNoise(bgr, 2.0, 97531);
+    // Stars shine everywhere except through the opaque cloud
+    for (const QPointF& point : predicted)
+    {
+        if (QLineF(point, cloudCentre).length() <= cloudRadius + 5.0) {
+            continue;
+        }
+        addStar(bgr, cv::Point(static_cast<int>(point.x()), static_cast<int>(point.y())));
+    }
+    const QImage image = bgrToImage(bgr);
+
+    settings.m_cloudStarSense = false;
+    const CloudRunResult unsensed = runCloudDetector(settings, {image}, nullptr, false, captureTime);
+    settings.m_cloudStarSense = true;
+    const CloudRunResult sensed = runCloudDetector(settings, {image}, nullptr, false, captureTime);
+
+    if (!unsensed.completed(1) || !sensed.completed(1))
+    {
+        context.check(false, "star-sense", unsensed.error + " " + sensed.error);
+        return;
+    }
+
+    const CameraPipelineFramePtr& unsensedFrame = unsensed.frames.first();
+    const CameraPipelineFramePtr& sensedFrame = sensed.frames.first();
+    context.check(unsensedFrame->m_cloud.m_valid && sensedFrame->m_cloud.m_valid, "star-sense", "both runs valid");
+    context.check(unsensedFrame->m_cloud.isCloudAtImagePoint(hazeCentre),
+        "star-sense", "haze flagged as cloud without star sensing");
+    context.check(unsensedFrame->m_cloud.isCloudAtImagePoint(cloudCentre),
+        "star-sense", "opaque cloud flagged without star sensing");
+    context.check(!sensedFrame->m_cloud.isCloudAtImagePoint(hazeCentre),
+        "star-sense", "haze with stars shining through vetoed by star sensing");
+    context.check(sensedFrame->m_cloud.isCloudAtImagePoint(cloudCentre),
+        "star-sense", "opaque cloud that blocks its stars stays flagged");
+    context.check(sensedFrame->m_cloud.m_coveragePercent < unsensedFrame->m_cloud.m_coveragePercent,
+        "star-sense", QStringLiteral("coverage dropped from %1 to %2 %")
+            .arg(unsensedFrame->m_cloud.m_coveragePercent, 0, 'f', 1)
+            .arg(sensedFrame->m_cloud.m_coveragePercent, 0, 'f', 1));
+
+#ifdef CAMERA_OPENCV_CUDA_CLOUD_DETECTION
+    // CUDA parity: a GPU-resident frame exercises the CUDA work-image preparation and the
+    // GPU patch-download path of the visibility check; the outcome must match the CPU path
+    if (cv::cuda::getCudaEnabledDeviceCount() > 0)
+    {
+        settings.m_postProcessUseCuda = true;
+        const CloudRunResult sensedGpu = runCloudDetector(settings, {image}, nullptr, true, captureTime);
+        if (sensedGpu.completed(1) && sensedGpu.frames.first()->m_cloud.m_valid)
+        {
+            const CameraPipelineFramePtr& gpuFrame = sensedGpu.frames.first();
+            context.check(!gpuFrame->m_cloud.isCloudAtImagePoint(hazeCentre),
+                "star-sense", "CUDA-input path also vetoes the haze");
+            context.check(gpuFrame->m_cloud.isCloudAtImagePoint(cloudCentre),
+                "star-sense", "CUDA-input path keeps the opaque cloud");
+            context.check(std::abs(gpuFrame->m_cloud.m_coveragePercent - sensedFrame->m_cloud.m_coveragePercent) < 1.5f,
+                "star-sense", QStringLiteral("coverage parity CPU %1 vs CUDA %2 %")
+                    .arg(sensedFrame->m_cloud.m_coveragePercent, 0, 'f', 1)
+                    .arg(gpuFrame->m_cloud.m_coveragePercent, 0, 'f', 1));
+        }
+        else
+        {
+            context.check(false, "star-sense", "CUDA-input run completed");
+        }
+    }
+#endif
+}
+
+// Clear-sky reference model: a saved reference vetoes this camera's static clear-sky
+// quirks (v1), genuine deviations from it stay detected (v1), foreground learned from the
+// reference is excluded from evaluation (v3), and auto-learning fills the store from
+// verified-clear frames without the button (v2). Persistence is exercised throughout:
+// every run constructs a fresh detector that loads the reference from disk.
+void testClearSkyReference(TestContext& context)
+{
+    const QDateTime captureTime(QDate(2024, 1, 15), QTime(22, 0, 0), QTimeZone::utc());
+    const cv::Point quirkCentre(200, 160);      // static glow pocket: false positive without a reference
+    const cv::Point cloudCentre(450, 160);      // genuine cloud in the second frame
+    const cv::Point foregroundProbe(320, 420);  // inside the dark foreground band
+
+    CameraSettings settings = makeCloudSettings();
+    settings.m_cloudMode = CameraSettings::CloudModeNight;
+    settings.m_cloudBackgroundBlur = 8; // proportionate to the small synthetic frame
+    settings.m_cloudUseReference = true;
+    settings.m_cameraId = QStringLiteral("test-clearsky");
+    settings.m_latitude = 51.5;
+    settings.m_longitude = -0.12;
+    settings.m_plateSolveUseCaptureDateTime = true;
+
+    // Clear night sky with this camera's quirks: airglow base, a smooth glow pocket the
+    // dark path misreads as cloud, and a dark foreground band (trees/roof silhouette)
+    auto makeClearImage = [&]() {
+        cv::Mat bgr(imageHeight, imageWidth, CV_8UC3, cv::Scalar(40, 40, 40));
+        for (int row = 0; row < imageHeight; ++row)
+        {
+            cv::Vec3b *line = bgr.ptr<cv::Vec3b>(row);
+            for (int col = 0; col < imageWidth; ++col)
+            {
+                const double dx = col - quirkCentre.x;
+                const double dy = row - quirkCentre.y;
+                const int bump = static_cast<int>(std::lround(18.0 * std::exp(-(dx * dx + dy * dy) / (2.0 * 50.0 * 50.0))));
+                if (bump > 0)
+                {
+                    for (int channel = 0; channel < 3; ++channel) {
+                        line[col][channel] = static_cast<uchar>(std::min(255, line[col][channel] + bump));
+                    }
+                }
+            }
+        }
+        cv::rectangle(bgr, cv::Rect(0, 360, imageWidth, imageHeight - 360), cv::Scalar(5, 5, 5), cv::FILLED);
+        addNoise(bgr, 2.0, 86420);
+        return bgrToImage(bgr);
+    };
+    const QImage clearImage = makeClearImage();
+
+    // Without a reference the glow pocket is a false positive
+    const CloudRunResult before = runCloudDetector(settings, {clearImage}, nullptr, false, captureTime);
+    if (!before.completed(1) || !before.frames.first()->m_cloud.m_valid)
+    {
+        context.check(false, "clear-sky-ref", before.error);
+        return;
+    }
+    context.check(before.frames.first()->m_cloud.isCloudAtImagePoint(QPointF(quirkCentre.x, quirkCentre.y)),
+        "clear-sky-ref", "glow quirk misread as cloud without a reference");
+
+    // Save the reference from the clear frame
+    const CloudRunResult saved = runCloudDetector(settings, {clearImage}, nullptr, false, captureTime, true);
+    context.check(saved.completed(1), "clear-sky-ref", "reference capture run completed");
+
+    // A fresh detector loads the reference from disk and vetoes the quirk
+    const CloudRunResult vetoed = runCloudDetector(settings, {clearImage}, nullptr, false, captureTime);
+    if (!vetoed.completed(1) || !vetoed.frames.first()->m_cloud.m_valid)
+    {
+        context.check(false, "clear-sky-ref", vetoed.error);
+        return;
+    }
+    context.check(!vetoed.frames.first()->m_cloud.isCloudAtImagePoint(QPointF(quirkCentre.x, quirkCentre.y)),
+        "clear-sky-ref", "glow quirk vetoed once the reference knows it");
+    context.check(vetoed.frames.first()->m_cloud.m_coveragePercent < 1.0f,
+        "clear-sky-ref", QStringLiteral("clear frame reads %1 % with the reference")
+            .arg(vetoed.frames.first()->m_cloud.m_coveragePercent, 0, 'f', 1));
+
+    // Genuine cloud deviating from the reference stays detected; foreground band is
+    // excluded from evaluation even when something bright appears there (v3)
+    cv::Mat cloudyBgr(imageHeight, imageWidth, CV_8UC3, cv::Scalar(40, 40, 40));
+    {
+        const QImage& base = clearImage;
+        for (int row = 0; row < imageHeight; ++row)
+        {
+            cv::Vec3b *line = cloudyBgr.ptr<cv::Vec3b>(row);
+            const uchar *scan = base.constScanLine(row);
+            for (int col = 0; col < imageWidth; ++col)
+            {
+                // base is RGB888 from bgrToImage
+                line[col] = cv::Vec3b(scan[3 * col + 2], scan[3 * col + 1], scan[3 * col]);
+            }
+        }
+        cv::circle(cloudyBgr, cloudCentre, 60, cv::Scalar(90, 90, 90), cv::FILLED);
+        cv::circle(cloudyBgr, foregroundProbe, 40, cv::Scalar(90, 90, 90), cv::FILLED);
+        cv::GaussianBlur(cloudyBgr, cloudyBgr, cv::Size(9, 9), 3.0);
+    }
+    const QImage cloudyImage = bgrToImage(cloudyBgr);
+
+    const CloudRunResult cloudy = runCloudDetector(settings, {cloudyImage}, nullptr, false, captureTime);
+    if (!cloudy.completed(1) || !cloudy.frames.first()->m_cloud.m_valid)
+    {
+        context.check(false, "clear-sky-ref", cloudy.error);
+        return;
+    }
+    context.check(cloudy.frames.first()->m_cloud.isCloudAtImagePoint(QPointF(cloudCentre.x, cloudCentre.y)),
+        "clear-sky-ref", "genuine cloud deviating from the reference stays detected");
+    context.check(!cloudy.frames.first()->m_cloud.isCloudAtImagePoint(QPointF(quirkCentre.x, quirkCentre.y)),
+        "clear-sky-ref", "quirk stays vetoed in the cloudy frame");
+    context.check(!cloudy.frames.first()->m_cloud.isCloudAtImagePoint(QPointF(foregroundProbe.x, foregroundProbe.y)),
+        "clear-sky-ref", "learned foreground band excluded from evaluation");
+
+    // Control: without the reference the bright blob on the foreground band is flagged
+    CameraSettings noRefSettings = settings;
+    noRefSettings.m_cloudUseReference = false;
+    const CloudRunResult control = runCloudDetector(noRefSettings, {cloudyImage}, nullptr, false, captureTime);
+    if (control.completed(1) && control.frames.first()->m_cloud.m_valid)
+    {
+        context.check(control.frames.first()->m_cloud.isCloudAtImagePoint(QPointF(foregroundProbe.x, foregroundProbe.y)),
+            "clear-sky-ref", "control: foreground blob flagged without the reference");
+    }
+    else
+    {
+        context.check(false, "clear-sky-ref", control.error);
+    }
+
+    // v2 auto-learning: with a fresh camera id and no button press, a verified-clear frame
+    // fills the slot on its own; a later run vetoes the quirk
+    CameraSettings autoSettings = settings;
+    autoSettings.m_cameraId = QStringLiteral("test-autolearn");
+    autoSettings.m_cloudAutoReference = true;
+    const CloudRunResult learnRun = runCloudDetector(autoSettings, {clearImage}, nullptr, false, captureTime);
+    context.check(learnRun.completed(1), "clear-sky-ref", "auto-learn run completed");
+    const CloudRunResult afterLearn = runCloudDetector(autoSettings, {clearImage}, nullptr, false, captureTime);
+    if (afterLearn.completed(1) && afterLearn.frames.first()->m_cloud.m_valid)
+    {
+        context.check(!afterLearn.frames.first()->m_cloud.isCloudAtImagePoint(QPointF(quirkCentre.x, quirkCentre.y)),
+            "clear-sky-ref", "auto-learned reference vetoes the quirk without a button press");
+    }
+    else
+    {
+        context.check(false, "clear-sky-ref", afterLearn.error);
+    }
 }
 
 void testExclusionRects(TestContext& context)
@@ -1276,13 +1630,12 @@ void testTwilightBrokenCloud(TestContext& context)
         "twilight-broken-cloud", "blue-sky gap classified as clear");
 }
 
-// Regression test for a fully-overcast pastel pre-dawn frame. This is the fundamental limit
-// of colour-based night detection: the overcast is bluish, so it is spectrally identical to
-// a clear blue sky and the adaptive anchor lands on the bluest cloud, leaving that cloud
-// under-detected (~69 % instead of ~90 %). Local structure cannot rescue it either (a fix
-// that flags night9's bluish region also flags the genuine clear starfield in cloud-night).
-// Only star-visibility sensing could separate them; documented here so a real improvement
-// visibly changes the numbers.
+// Regression test for a fully-overcast pastel pre-dawn frame. Colour alone cannot detect
+// the bluish-white part of the overcast: it is spectrally identical to a clear blue sky and
+// the adaptive anchor lands on the bluest cloud. The structure vote closes the gap - lumpy
+// pale cloud carries band-pass detections over 4-8 % of a region's interior where clear sky
+// measures under 0.5 %, so the unflagged pastel banks are flipped to cloud region-wide and
+// the whole overcast is detected.
 void testFullOvercastPastelLimit(TestContext& context)
 {
     const QString imagePath = QDir(QString::fromUtf8(CAMERA_CLOUD_TEST_DATA_DIR))
@@ -1306,11 +1659,12 @@ void testFullOvercastPastelLimit(TestContext& context)
 
     const CameraPipelineFramePtr& frame = result.frames.first();
     context.check(frame->m_cloud.m_valid && frame->m_cloud.m_night, "full-overcast-pastel", "classified via night path");
-    // Majority is detected, but not the ~90 % the fully-overcast sky truly is
-    context.check(coverageInRange(frame, 55.0f, 82.0f), "full-overcast-pastel",
-        coverageText(frame) + " majority detected (bluish overcast under-detected - known limit)");
+    context.check(coverageInRange(frame, 85.0f, 100.0f), "full-overcast-pastel",
+        coverageText(frame) + " expected roughly 95 % (fully overcast)");
     context.check(regionCloudFraction(frame, QRect(1000, 240, 800, 720), 20) > 0.9,
         "full-overcast-pastel", "bright pink cloud classified as cloud");
+    context.check(regionCloudFraction(frame, QRect(109, 1185, 544, 527), 20) > 0.7,
+        "full-overcast-pastel", "pale bluish-white cloud bank classified as cloud (structure vote)");
 }
 
 // Regression test for a mostly-clear dark night frame with a strong smooth sky gradient
@@ -1527,7 +1881,29 @@ int dumpMasks(const QString& outDir)
 
         CameraSettings nightSettings = makeCloudSettings();
         nightSettings.m_cloudMode = CameraSettings::CloudModeNight;
-        const CloudRunResult nightRun = runCloudDetector(nightSettings, {image});
+        // With SDRANGEL_CLOUD_STAR_SENSE set, the night run also exercises star-visibility
+        // sensing with the camera's real calibration and the file's modification time as the
+        // capture time. Safe by construction on files whose mtime is not the capture time:
+        // predicted positions then miss the real stars, nothing is "visible" and the veto
+        // abstains.
+        QDateTime nightCaptureTime;
+        if (!qgetenv("SDRANGEL_CLOUD_STAR_SENSE").isEmpty())
+        {
+            nightSettings.m_cloudStarSense = true;
+            nightSettings.m_plateSolveUseCaptureDateTime = true;
+            nightSettings.m_fov = 159.0f;
+            nightSettings.m_azimuth = 157.0f;
+            nightSettings.m_elevation = 86.0f;
+            nightSettings.m_roll = -129.0f;
+            nightSettings.m_lensProjection = CameraSettings::LensProjectionEquidistant;
+            nightSettings.m_lensDistortionK1 = -0.0743f;
+            nightSettings.m_lensCenterOffsetX = 6.3f;
+            nightSettings.m_lensCenterOffsetY = -10.5f;
+            nightSettings.m_latitude = 51.368801f;
+            nightSettings.m_longitude = -0.121f;
+            nightCaptureTime = QFileInfo(path).lastModified().toUTC();
+        }
+        const CloudRunResult nightRun = runCloudDetector(nightSettings, {image}, nullptr, false, nightCaptureTime);
 
         CameraSettings daySettings = makeCloudSettings();
         daySettings.m_cloudMode = CameraSettings::CloudModeDay;
@@ -1547,10 +1923,84 @@ int dumpMasks(const QString& outDir)
             writeMaskOverlay(path, dayRun.frames.first()->m_cloud, outDir + "/" + base + "_day.png");
         }
 
+        float maskedCov = -1.0f;
+        if (base.startsWith(QStringLiteral("sun")))
+        {
+            // The two new geometric masks are opt-in and off in the default runs above.
+            // Emit an extra "_masked" overlay for the sun* images with the fisheye edge-margin
+            // rim mask enabled (removes the lens rim and the window frame at the image edge)
+            // and the sun/moon mask configured with the camera's real lens calibration and
+            // location. The capture time defaults to the image file's modification time (these
+            // snapshots are written at capture), overridable via SDRANGEL_CLOUD_SUN_TIME
+            // (ISO 8601 UTC); SDRANGEL_CLOUD_SUN_LAT / _LON / _RADIUS override the rest.
+            CameraSettings maskedSettings = daySettings;
+            maskedSettings.m_cloudEdgeMarginPercent = 4.0;
+            maskedSettings.m_cloudMaskSunMoon = true;
+            maskedSettings.m_cloudSunMoonRadiusDeg = 25.0; // max cap; the mask sizes itself to the bloom
+            const QByteArray radiusEnv = qgetenv("SDRANGEL_CLOUD_SUN_RADIUS");
+            if (!radiusEnv.isEmpty()) {
+                maskedSettings.m_cloudSunMoonRadiusDeg = QString::fromUtf8(radiusEnv).toDouble();
+            }
+            maskedSettings.m_fov = 159.0f;
+            maskedSettings.m_azimuth = 157.0f;
+            maskedSettings.m_elevation = 86.0f;
+            maskedSettings.m_roll = -129.0f;
+            maskedSettings.m_lensProjection = CameraSettings::LensProjectionEquidistant;
+            maskedSettings.m_lensDistortionK1 = -0.0743f;
+            maskedSettings.m_lensCenterOffsetX = 6.3f;
+            maskedSettings.m_lensCenterOffsetY = -10.5f;
+            maskedSettings.m_latitude = 51.368801f;
+            maskedSettings.m_longitude = -0.121f;
+            maskedSettings.m_plateSolveUseCaptureDateTime = true;
+
+            QDateTime captureTime = QFileInfo(path).lastModified().toUTC();
+            const QByteArray timeEnv = qgetenv("SDRANGEL_CLOUD_SUN_TIME");
+            const QByteArray latEnv = qgetenv("SDRANGEL_CLOUD_SUN_LAT");
+            const QByteArray lonEnv = qgetenv("SDRANGEL_CLOUD_SUN_LON");
+            if (!timeEnv.isEmpty())
+            {
+                captureTime = QDateTime::fromString(QString::fromUtf8(timeEnv), Qt::ISODate);
+                captureTime.setTimeZone(QTimeZone::utc());
+            }
+            if (!latEnv.isEmpty()) {
+                maskedSettings.m_latitude = QString::fromUtf8(latEnv).toDouble();
+            }
+            if (!lonEnv.isEmpty()) {
+                maskedSettings.m_longitude = QString::fromUtf8(lonEnv).toDouble();
+            }
+
+            if (captureTime.isValid())
+            {
+                AzAlt sunAzAlt;
+                RADec sunRaDec;
+                Astronomy::sunPosition(sunAzAlt, sunRaDec, maskedSettings.m_latitude, maskedSettings.m_longitude, captureTime);
+                const SkyProjector projector = SkyProjector::create(maskedSettings, image.size());
+                QPointF sunPoint;
+                const bool ok = projector.projectAltAz(sunAzAlt.az, sunAzAlt.alt, sunPoint);
+                std::cout << "  " << file.toStdString() << " " << image.width() << "x" << image.height()
+                          << " time " << captureTime.toString(Qt::ISODate).toStdString()
+                          << " sun az=" << QString::number(sunAzAlt.az, 'f', 1).toStdString()
+                          << " el=" << QString::number(sunAzAlt.alt, 'f', 1).toStdString()
+                          << " -> pixel " << (ok ? QStringLiteral("(%1, %2)").arg(sunPoint.x(), 0, 'f', 0).arg(sunPoint.y(), 0, 'f', 0).toStdString() : std::string("off-frame"))
+                          << "\n";
+            }
+
+            const CloudRunResult maskedRun = runCloudDetector(maskedSettings, {image}, nullptr, false, captureTime);
+            if (maskedRun.completed(1) && maskedRun.frames.first()->m_cloud.m_valid)
+            {
+                maskedCov = maskedRun.frames.first()->m_cloud.m_coveragePercent;
+                writeMaskOverlay(path, maskedRun.frames.first()->m_cloud, outDir + "/" + base + "_masked.png");
+            }
+        }
+
         std::cout << file.toStdString() << ","
                   << QString::number(nightCov, 'f', 1).toStdString() << ","
                   << nightPath << ","
-                  << QString::number(dayCov, 'f', 1).toStdString() << "\n";
+                  << QString::number(dayCov, 'f', 1).toStdString();
+        if (maskedCov >= 0.0f) {
+            std::cout << " (masked day: " << QString::number(maskedCov, 'f', 1).toStdString() << ")";
+        }
+        std::cout << "\n";
     }
     std::cout << "overlays written to " << QDir(outDir).absolutePath().toStdString() << "\n";
     return 0;
@@ -1561,6 +2011,11 @@ int dumpMasks(const QString& outDir)
 int main(int argc, char *argv[])
 {
     QGuiApplication app(argc, argv);
+    // Isolate clear-sky reference persistence from the user's real store
+    static QTemporaryDir clearSkyDir;
+    if (clearSkyDir.isValid()) {
+        qputenv("SDRANGEL_CAMERA_CLEARSKY_DIR", clearSkyDir.path().toLocal8Bit());
+    }
     QGuiApplication::setOrganizationName(QStringLiteral("f4exb"));
     QGuiApplication::setApplicationName(QStringLiteral("SDRangel"));
 
@@ -1591,6 +2046,8 @@ int main(int argc, char *argv[])
         {"exclusion-rects", testExclusionRects},
         {"edge-margin", testEdgeMarginMask},
         {"sun-mask", testSunMoonMask},
+        {"star-sense", testStarSense},
+        {"clear-sky-ref", testClearSkyReference},
         {"update-interval", testUpdateIntervalCaching},
         {"star-filtering", testStarFiltering},
         {"motion-filtering", testMotionFiltering},

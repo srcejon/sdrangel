@@ -428,6 +428,7 @@ private:
     // release (the GUI holds the preview) is handled by CameraImagePool.
     CameraImagePool m_overlayImagePool;
     QDateTime m_captureDateTime;
+    float m_cloudCoveragePercent = std::numeric_limits<float>::quiet_NaN();
     bool m_captureActive = false;
     quint64 m_captureEpoch = 0;
     QHash<QString, QImage> m_spectrumViewImages;

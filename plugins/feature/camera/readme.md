@@ -267,7 +267,25 @@ Overlays the configured HTML on the image.
 
 ![HTML overlay](../../../doc/img/Camera_plugin_html_overlay.png)
 
-FIXME variable substituions.
+The following variables can be used in the HTML. Values are HTML-escaped before being substituted:
+
+* `${date}`: Capture date in ISO format.
+* `${time}`: Capture time in `HH:mm:ss` format.
+* `${exposure}`: Exposure time in milliseconds.
+* `${cameraId}`: Camera source identifier.
+* `${latitude}`: Camera latitude in degrees.
+* `${longitude}`: Camera longitude in degrees.
+* `${altitude}`: Camera altitude in metres.
+* `${azimuth}`: Camera azimuth in degrees.
+* `${elevation}`: Camera elevation in degrees.
+* `${roll}`: Camera roll in degrees.
+* `${temp}`: Weather temperature, or `N/A` if unavailable.
+* `${pressure}`: Weather pressure, or `N/A` if unavailable.
+* `${humidity}`: Weather humidity, or `N/A` if unavailable.
+* `${cloudCoverPercent}`: Cloud coverage percentage from the cloud detector, or `N/A` if unavailable.
+* `${cloudiness}`: Weather cloudiness, or `N/A` if unavailable.
+* `${windSpeed}`: Weather wind speed, or `N/A` if unavailable.
+* `${windDirection}`: Weather wind direction, or `N/A` if unavailable.
 
 <h3>34: Spectrum overlay</h3>
 

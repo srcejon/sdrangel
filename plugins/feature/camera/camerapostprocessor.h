@@ -29,6 +29,7 @@
 #include <QDateTime>
 #include <QPointF>
 #include <QSet>
+#include <QStringList>
 #include <QTextDocument>
 
 #include <opencv2/core/core.hpp>
@@ -252,6 +253,32 @@ public:
         { }
     };
 
+    class MsgReportFrameSummary : public Message {
+        MESSAGE_CLASS_DECLARATION
+
+    public:
+        const QDateTime& getCaptureDateTime() const { return m_captureDateTime; }
+        const QStringList& getDetectedObjectClasses() const { return m_detectedObjectClasses; }
+        bool getMotionDetected() const { return m_motionDetected; }
+
+        static MsgReportFrameSummary* create(const QDateTime& captureDateTime, const QStringList& detectedObjectClasses, bool motionDetected)
+        {
+            return new MsgReportFrameSummary(captureDateTime, detectedObjectClasses, motionDetected);
+        }
+
+    private:
+        QDateTime m_captureDateTime;
+        QStringList m_detectedObjectClasses;
+        bool m_motionDetected;
+
+        MsgReportFrameSummary(const QDateTime& captureDateTime, const QStringList& detectedObjectClasses, bool motionDetected) :
+            Message(),
+            m_captureDateTime(captureDateTime),
+            m_detectedObjectClasses(detectedObjectClasses),
+            m_motionDetected(motionDetected)
+        { }
+    };
+
     class MsgClearTrackedObjectHeatMap : public Message {
         MESSAGE_CLASS_DECLARATION
 
@@ -290,6 +317,7 @@ public:
     void submitFrame(const CameraPipelineFramePtr& frame);
     MessageQueue *getInputMessageQueue() { return &m_inputMessageQueue; }
     void setMessageQueueToGUI(MessageQueue *messageQueue) { m_msgQueueToGUI = messageQueue; }
+    void setMessageQueueToFeature(MessageQueue *messageQueue) { m_msgQueueToFeature = messageQueue; }
     void setNextStageInputMessageQueue(MessageQueue *messageQueue) { m_nextStageQueue = messageQueue; }
     void setWorkerInputMessageQueue(MessageQueue *messageQueue) { m_workerInputMessageQueue = messageQueue; }
 
@@ -387,6 +415,7 @@ private:
 
     MessageQueue m_inputMessageQueue;
     MessageQueue *m_msgQueueToGUI;
+    MessageQueue *m_msgQueueToFeature;
     MessageQueue *m_nextStageQueue;
     MessageQueue *m_workerInputMessageQueue = nullptr;
     AvailableChannelOrFeatureHandler m_availableChannelOrFeatureHandler;

@@ -51,6 +51,7 @@ constexpr bool kPipelineLatencyDebug = false;
 MESSAGE_CLASS_DEFINITION(CameraPostProcessor::MsgSpectrumFrame, Message)
 MESSAGE_CLASS_DEFINITION(CameraPostProcessor::MsgWindowOverlayFrames, Message)
 MESSAGE_CLASS_DEFINITION(CameraPostProcessor::MsgReportFrame, Message)
+MESSAGE_CLASS_DEFINITION(CameraPostProcessor::MsgReportFrameSummary, Message)
 MESSAGE_CLASS_DEFINITION(CameraPostProcessor::MsgClearTrackedObjectHeatMap, Message)
 MESSAGE_CLASS_DEFINITION(CameraPostProcessor::MsgSaveCurrentImage, Message)
 
@@ -722,10 +723,30 @@ QDateTime plateSolveOverlayDateTime(const CameraSettings& settings, const QDateT
     return QDateTime::currentDateTime();
 }
 
+QStringList detectedObjectClassesForReport(const QVector<CameraPipelineDetection>& detections)
+{
+    QStringList classes;
+
+    for (const CameraPipelineDetection& detection : detections)
+    {
+        const QString label = detection.m_label.trimmed();
+        if (!label.isEmpty() && !classes.contains(label, Qt::CaseInsensitive)) {
+            classes.append(label);
+        }
+    }
+
+    std::sort(classes.begin(), classes.end(), [](const QString& lhs, const QString& rhs) {
+        return QString::compare(lhs, rhs, Qt::CaseInsensitive) < 0;
+    });
+
+    return classes;
+}
+
 } // namespace
 
 CameraPostProcessor::CameraPostProcessor() :
     m_msgQueueToGUI(nullptr),
+    m_msgQueueToFeature(nullptr),
     m_nextStageQueue(nullptr),
     m_availableChannelOrFeatureHandler(kTrackedObjectPipeURIs),
     m_processingFrame(false)
@@ -1340,6 +1361,12 @@ void CameraPostProcessor::reportFrameToGUI(const QImage& image, const CameraPipe
             qDebug() << "CameraPostProcessor: submit->display pipeline latency" << latencyMs << "ms"
                      << "playbackPositionMs" << frame.m_playbackPositionMs;
         }
+    }
+    if (m_msgQueueToFeature) {
+        m_msgQueueToFeature->push(MsgReportFrameSummary::create(
+            frame.m_captureDateTime,
+            detectedObjectClassesForReport(frame.m_detections),
+            !frame.m_motionBoxes.isEmpty()));
     }
     if (m_msgQueueToGUI) {
         m_msgQueueToGUI->push(MsgReportFrame::create(

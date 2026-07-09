@@ -22,6 +22,7 @@
 #include <QDebug>
 #include <QJsonObject>
 #include <QList>
+#include <QMutexLocker>
 
 #include "SWGFeatureSettings.h"
 #include "SWGFeatureReport.h"
@@ -236,6 +237,7 @@ Camera::Camera(WebAPIAdapterInterface *webAPIAdapterInterface) :
     QObject::connect(m_postProcessorThread, &QThread::finished, m_postProcessor, &QObject::deleteLater);
     QObject::connect(m_postProcessorThread, &QThread::finished, m_postProcessorThread, &QThread::deleteLater);
     m_postProcessor->setMessageQueueToGUI(getMessageQueueToGUI());
+    m_postProcessor->setMessageQueueToFeature(getInputMessageQueue());
     m_postProcessor->setNextStageInputMessageQueue(getRecorderInputMessageQueue());
     m_postProcessor->setWorkerInputMessageQueue(m_worker->getInputMessageQueue());
     m_postProcessorThread->start();
@@ -472,6 +474,7 @@ void Camera::setMessageQueueToGUI(MessageQueue *queue)
     }
     if (m_postProcessor) {
         m_postProcessor->setMessageQueueToGUI(queue);
+        m_postProcessor->setMessageQueueToFeature(getInputMessageQueue());
     }
 }
 
@@ -600,6 +603,15 @@ bool Camera::handleMessage(const Message& cmd)
                 }
             }
         }
+        return true;
+    }
+    else if (CameraPostProcessor::MsgReportFrameSummary::match(cmd))
+    {
+        const CameraPostProcessor::MsgReportFrameSummary& report = (const CameraPostProcessor::MsgReportFrameSummary&) cmd;
+        QMutexLocker locker(&m_reportMutex);
+        m_reportCaptureDateTime = report.getCaptureDateTime();
+        m_reportDetectedObjectClasses = report.getDetectedObjectClasses();
+        m_reportMotionDetected = report.getMotionDetected();
         return true;
     }
 
@@ -737,7 +749,26 @@ int Camera::webapiReportGet(SWGSDRangel::SWGFeatureReport& response, QString& er
 
 void Camera::webapiFormatFeatureReport(SWGSDRangel::SWGFeatureReport& response)
 {
+    QDateTime captureDateTime;
+    QStringList detectedObjectClasses;
+    bool motionDetected = false;
+
+    {
+        QMutexLocker locker(&m_reportMutex);
+        captureDateTime = m_reportCaptureDateTime;
+        detectedObjectClasses = m_reportDetectedObjectClasses;
+        motionDetected = m_reportMotionDetected;
+    }
+
+    QList<QString*> *swgDetectedObjectClasses = new QList<QString*>();
+    for (const QString& detectedObjectClass : detectedObjectClasses) {
+        swgDetectedObjectClasses->append(new QString(detectedObjectClass));
+    }
+
     response.getCameraReport()->setRunningState(getState());
+    response.getCameraReport()->setCaptureDateTime(new QString(captureDateTime.isValid() ? captureDateTime.toString(Qt::ISODateWithMs) : QString()));
+    response.getCameraReport()->setDetectedObjectClasses(swgDetectedObjectClasses);
+    response.getCameraReport()->setMotionDetected(motionDetected ? 1 : 0);
     response.getCameraReport()->setCloudCoveragePercent(m_lastCloudCoveragePercent.load());
     response.getCameraReport()->setCloudCoverageValid(m_lastCloudCoverageValid.load() ? 1 : 0);
 }

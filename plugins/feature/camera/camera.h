@@ -22,6 +22,9 @@
 #include <atomic>
 
 #include <QByteArray>
+#include <QDateTime>
+#include <QMutex>
+#include <QStringList>
 #include <QThread>
 
 #include "feature/feature.h"
@@ -352,6 +355,10 @@ private:
     // may read them from a different thread than handleMessage
     std::atomic<float> m_lastCloudCoveragePercent{0.0f};
     std::atomic<bool> m_lastCloudCoverageValid{false};
+    QMutex m_reportMutex;
+    QDateTime m_reportCaptureDateTime;
+    QStringList m_reportDetectedObjectClasses;
+    bool m_reportMotionDetected = false;
     CameraCloudEventTracker m_cloudEventTracker;
 
     void start();

@@ -59,6 +59,8 @@ public:
         double getFrequencySpan() const { return m_frequencySpan; }
         double getFrequencyDrift() const { return m_frequencyDrift; }
         int getSampleRate() const { return m_sampleRate; }
+        quint64 getStartSample() const { return m_startSample; }
+        quint64 getEndSample() const { return m_endSample; }
 
         static MsgMeteorDetected* create(
             const QDateTime& dateTimeUtc,
@@ -72,7 +74,9 @@ public:
             double centerFrequency,
             double frequencySpan,
             double frequencyDrift,
-            int sampleRate)
+            int sampleRate,
+            quint64 startSample,
+            quint64 endSample)
         {
             return new MsgMeteorDetected(
                 dateTimeUtc,
@@ -86,7 +90,9 @@ public:
                 centerFrequency,
                 frequencySpan,
                 frequencyDrift,
-                sampleRate
+                sampleRate,
+                startSample,
+                endSample
             );
         }
 
@@ -103,6 +109,8 @@ public:
         double m_frequencySpan;
         double m_frequencyDrift;
         int m_sampleRate;
+        quint64 m_startSample;
+        quint64 m_endSample;
 
         MsgMeteorDetected(
             const QDateTime& dateTimeUtc,
@@ -116,7 +124,9 @@ public:
             double centerFrequency,
             double frequencySpan,
             double frequencyDrift,
-            int sampleRate
+            int sampleRate,
+            quint64 startSample,
+            quint64 endSample
         ) :
             Message(),
             m_dateTimeUtc(dateTimeUtc),
@@ -130,7 +140,9 @@ public:
             m_centerFrequency(centerFrequency),
             m_frequencySpan(frequencySpan),
             m_frequencyDrift(frequencyDrift),
-            m_sampleRate(sampleRate)
+            m_sampleRate(sampleRate),
+            m_startSample(startSample),
+            m_endSample(endSample)
         {}
     };
 
@@ -304,6 +316,7 @@ private:
         double m_reportFrequencySpan;
         double m_sweepScore;
         double m_peakAboveBackgroundDB;
+        double m_integratedSupportDB;
         double m_maxBandwidth;
         double m_maxContrastDB;
         double m_maxPeakRatio;
@@ -347,6 +360,7 @@ private:
             m_reportFrequencySpan(0.0),
             m_sweepScore(0.0),
             m_peakAboveBackgroundDB(0.0),
+            m_integratedSupportDB(0.0),
             m_maxBandwidth(0.0),
             m_maxContrastDB(0.0),
             m_maxPeakRatio(0.0),
@@ -420,6 +434,7 @@ private:
     int m_spectralHopSize;
     int m_spectralFFTSize;
     int m_pulseFFTSize;
+    double m_spectralEnergyScale;
     std::vector<Real> m_pulseFFTWindow;
     bool m_spectralNoiseFloorInitialized;
     bool m_spectralEventActiveForScope;
@@ -483,6 +498,7 @@ private:
     bool estimatePulseBandEnvelope(PulseReport& report) const;
     double estimatePulseTotalPower(quint64 startSample, quint64 endSample, double backgroundPower) const;
     bool reportsOverlap(quint64 firstStartSample, quint64 firstEndSample, quint64 secondStartSample, quint64 secondEndSample) const;
+    bool reportsFrequencyCompatible(const PulseReport& first, const PulseReport& second) const;
     void emitDetectionReport(const PulseReport& report, const char *source);
     QDateTime sampleCounterToDateTimeUtc(quint64 sampleCounter) const;
     QDateTime sampleCounterToDisplayDateTimeUtc(quint64 sampleCounter) const;

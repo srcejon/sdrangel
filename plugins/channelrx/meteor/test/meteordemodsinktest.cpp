@@ -60,6 +60,8 @@ namespace {
         double frequencySpan;
         double frequencyDrift;
         int sampleRate;
+        quint64 startSample;
+        quint64 endSample;
     };
 
     struct ExpectedDetection
@@ -70,6 +72,7 @@ namespace {
         double centerFrequency;
         double frequencySpan;
         double frequencyDrift;
+        double totalPowerDB;
     };
 
     struct Options
@@ -383,7 +386,9 @@ namespace {
                     detection.getCenterFrequency(),
                     detection.getFrequencySpan(),
                     detection.getFrequencyDrift(),
-                    detection.getSampleRate()
+                    detection.getSampleRate(),
+                    detection.getStartSample(),
+                    detection.getEndSample()
                 });
             }
 
@@ -454,7 +459,7 @@ namespace {
         for (int i = 0; i < detections.size(); i++)
         {
             const Detection& detection = detections[i];
-            out << QString("Detection %1: timeUtc=%2 displayTimeUtc=%3 peakAmplitude=%4 peakPowerDB=%5 backgroundPowerDB=%6 totalPowerDB=%7 durationS=%8 centerFrequencyHz=%9 frequencySpanHz=%10 frequencyDriftHz=%11 sampleRate=%12\n")
+            out << QString("Detection %1: timeUtc=%2 displayTimeUtc=%3 peakAmplitude=%4 peakPowerDB=%5 backgroundPowerDB=%6 totalPowerDB=%7 durationS=%8 centerFrequencyHz=%9 frequencySpanHz=%10 frequencyDriftHz=%11 sampleRate=%12 startSample=%13 endSample=%14\n")
                 .arg(i + 1)
                 .arg(detection.dateTimeUtc.toString(Qt::ISODateWithMs))
                 .arg(detection.displayDateTimeUtc.toString(Qt::ISODateWithMs))
@@ -466,7 +471,9 @@ namespace {
                 .arg(detection.centerFrequency, 0, 'f', 2)
                 .arg(detection.frequencySpan, 0, 'f', 2)
                 .arg(detection.frequencyDrift, 0, 'f', 2)
-                .arg(detection.sampleRate);
+                .arg(detection.sampleRate)
+                .arg(detection.startSample)
+                .arg(detection.endSample);
         }
     }
 
@@ -490,7 +497,7 @@ namespace {
         QTextStream in(&file);
         const QString header = in.readLine().trimmed();
 
-        if (header != "index,timeOffsetS,durationS,centerFrequencyHz,frequencySpanHz,frequencyDriftHz")
+        if (header != "index,timeOffsetS,durationS,centerFrequencyHz,frequencySpanHz,frequencyDriftHz,totalPowerDB")
         {
             error = QString("Unexpected CSV header in %1").arg(csvPath);
             return false;
@@ -509,9 +516,9 @@ namespace {
 
             const QStringList fields = line.split(',');
 
-            if (fields.size() != 6)
+            if (fields.size() != 7)
             {
-                error = QString("Expected 6 fields in %1 row %2").arg(csvPath).arg(row);
+                error = QString("Expected 7 fields in %1 row %2").arg(csvPath).arg(row);
                 return false;
             }
 
@@ -524,7 +531,8 @@ namespace {
                 || !parseDoubleField(fields[2], detection.durationS)
                 || !parseDoubleField(fields[3], detection.centerFrequency)
                 || !parseDoubleField(fields[4], detection.frequencySpan)
-                || !parseDoubleField(fields[5], detection.frequencyDrift))
+                || !parseDoubleField(fields[5], detection.frequencyDrift)
+                || !parseDoubleField(fields[6], detection.totalPowerDB))
             {
                 error = QString("Invalid numeric value in %1 row %2").arg(csvPath).arg(row);
                 return false;
@@ -550,6 +558,7 @@ namespace {
         constexpr double timeToleranceS = 0.050;
         constexpr double durationToleranceS = 0.010;
         constexpr double frequencyToleranceHz = 1.0;
+        constexpr double totalPowerToleranceDB = 0.5;
         bool ok = true;
 
         if (actual.size() != expected.size())
@@ -566,13 +575,11 @@ namespace {
         }
 
         const int count = std::min(actual.size(), expected.size());
-        const QDateTime firstTime = actual[0].dateTimeUtc;
-
         for (int i = 0; i < count; i++)
         {
             const Detection& detection = actual[i];
             const ExpectedDetection& expectation = expected[i];
-            const double timeOffsetS = firstTime.msecsTo(detection.dateTimeUtc) / 1000.0;
+            const double timeOffsetS = (double) detection.startSample / (double) std::max(1, detection.sampleRate);
 
             if (!nearlyEqual(timeOffsetS, expectation.timeOffsetS, timeToleranceS))
             {
@@ -621,6 +628,16 @@ namespace {
                     .arg(i + 1)
                     .arg(expectation.frequencyDrift, 0, 'f', 2)
                     .arg(detection.frequencyDrift, 0, 'f', 2);
+                ok = false;
+            }
+
+            if (!nearlyEqual(detection.totalPowerDB, expectation.totalPowerDB, totalPowerToleranceDB))
+            {
+                err << QString("%1 detection %2: expected totalPowerDB %3, got %4\n")
+                    .arg(name)
+                    .arg(i + 1)
+                    .arg(expectation.totalPowerDB, 0, 'f', 2)
+                    .arg(detection.totalPowerDB, 0, 'f', 2);
                 ok = false;
             }
         }

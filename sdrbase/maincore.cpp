@@ -22,6 +22,9 @@
 #include <QString>
 #include <QDebug>
 #include <QGeoPositionInfoSource>
+#if (QT_VERSION >= QT_VERSION_CHECK(6, 5, 0))
+#include <QPermissions>
+#endif
 
 #include "loggerwithfile.h"
 #include "dsp/dsptypes.h"
@@ -81,8 +84,7 @@ MainCore::MainCore()
 	m_masterTimer.start(50);
     m_startMsecsSinceEpoch = QDateTime::currentMSecsSinceEpoch();
     m_masterElapsedTimer.start();
-    // Position can take a while to determine, so we start updates at program startup
-    initPosition();
+    requestPermissions();
 #ifdef ANDROID
     QObject::connect(this, &MainCore::deviceStateChanged, this, &MainCore::updateWakeLock);
 #endif
@@ -359,6 +361,91 @@ void MainCore::debugMaps()
     }
 }
 
+// Request permission for location, when granted calls initPosition(), then requests permission for microphone
+void MainCore::requestLocationPermission()
+{
+#if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
+    QLocationPermission locationPermission;
+    locationPermission.setAccuracy(QLocationPermission::Precise);
+
+    switch (qApp->checkPermission(locationPermission))
+    {
+    case Qt::PermissionStatus::Undetermined:
+        qApp->requestPermission(locationPermission, [this](const QPermission& permission) {
+            if (permission.status() != Qt::PermissionStatus::Granted) {
+                qWarning() << "Failed to get location permission.";
+            } else {
+                initPosition();
+            }
+            requestMicrophonePermission();
+            });
+        break;
+    case Qt::PermissionStatus::Granted:
+        initPosition();
+        requestMicrophonePermission();
+        break;
+    case Qt::PermissionStatus::Denied:
+        qWarning() << "Location permission is denied.";
+        requestMicrophonePermission();
+        break;
+    }
+#else
+    initPosition();
+#endif
+}
+
+void MainCore::requestMicrophonePermission()
+{
+#if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
+    switch (qApp->checkPermission(QMicrophonePermission{}))
+    {
+    case Qt::PermissionStatus::Undetermined:
+        qApp->requestPermission(QMicrophonePermission{}, [this](const QPermission& permission) {
+            if (permission.status() != Qt::PermissionStatus::Granted) {
+                qWarning() << "Failed to get microphone permission.";
+            }
+            requestCameraPermission();
+            });
+        break;
+    case Qt::PermissionStatus::Granted:
+        requestCameraPermission();
+        break;
+    case Qt::PermissionStatus::Denied:
+        qWarning() << "Microphone permission is denied.";
+        requestCameraPermission();
+        break;
+    }
+#endif
+}
+
+void MainCore::requestCameraPermission()
+{
+#if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
+    switch (qApp->checkPermission(QCameraPermission{}))
+    {
+    case Qt::PermissionStatus::Undetermined:
+        qApp->requestPermission(QCameraPermission{}, [](const QPermission& permission) {
+            if (permission.status() != Qt::PermissionStatus::Granted) {
+                qWarning() << "Failed to get camera permission.";
+            }
+            });
+        break;
+    case Qt::PermissionStatus::Granted:
+        break;
+    case Qt::PermissionStatus::Denied:
+        qWarning() << "Camera permission is denied.";
+        break;
+    }
+#endif
+}
+
+// Get permission for microphone, camera and location (Required for Android and Mac)
+void MainCore::requestPermissions()
+{
+    requestLocationPermission(); // This requests microphone and camera permissions as well
+}
+
+// Position can take a while to determine, so we start updates at program startup
 void MainCore::initPosition()
 {
     m_positionSource = QGeoPositionInfoSource::createDefaultSource(this);

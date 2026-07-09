@@ -1299,6 +1299,7 @@ void CameraPostProcessor::processNewFrame(const CameraPipelineFramePtr& frame)
     }
 
     m_captureDateTime = frame->m_captureDateTime.isValid() ? frame->m_captureDateTime : QDateTime::currentDateTime();
+    m_cloudCoveragePercent = frame->m_cloud.m_valid ? frame->m_cloud.m_coveragePercent : std::numeric_limits<float>::quiet_NaN();
     QVector<PreviewTextLabel> previewTextLabels;
     QVector<PreviewRectItem> previewRectItems;
     QVector<CameraPipelineTrackedObject> trackedObjects;
@@ -1886,6 +1887,7 @@ QString CameraPostProcessor::expandOverlayTextTemplate() const
     replaceToken(QStringLiteral("${pressure}"), weatherValueString(m_weatherPressure, 1));
     replaceToken(QStringLiteral("${humidity}"), weatherValueString(m_weatherHumidity, 0));
     replaceToken(QStringLiteral("${humidty}"), weatherValueString(m_weatherHumidity, 0));
+    replaceToken(QStringLiteral("${cloudCoverPercent}"), weatherValueString(m_cloudCoveragePercent, 1));
     replaceToken(QStringLiteral("${cloudiness}"), weatherValueString(m_weatherCloudiness, 0));
     replaceToken(QStringLiteral("${windSpeed}"), weatherValueString(m_weatherWindSpeed, 0));
     replaceToken(QStringLiteral("${windDirection}"), weatherValueString(m_weatherWindDirection, 0));

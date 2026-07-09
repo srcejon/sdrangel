@@ -701,13 +701,19 @@ struct CameraSettings
     QList<WindowOverlay> m_windowOverlays; ///< GUI window or rollup captures to composite over the post-processed frame
 
     // YOLO object-detection settings
+    enum YoloInferenceMode {
+        YoloInferenceScale,
+        YoloInferenceTile,
+        YoloInferenceTileAndScale
+    };
     bool   m_yoloEnabled;        ///< Run YOLO ONNX inference and draw bounding boxes
     QString m_yoloModelPath;     ///< Path to the .onnx model file
     QString m_yoloLabelsPath;    ///< Path to a plain-text file with one class name per line (optional)
     double m_yoloConfThreshold;  ///< Minimum confidence to keep a detection: 0.0..1.0
     double m_yoloNmsThreshold;   ///< IoU threshold for non-maximum suppression: 0.0..1.0
     QColor m_yoloBoxColor;       ///< Bounding-box colour when no per-class colour is available
-    bool   m_yoloTileLargeImages; ///< Tile frames larger than the YOLO input size and batch infer the tiles
+    bool   m_yoloTileLargeImages; ///< Legacy mirror for m_yoloInferenceMode != YoloInferenceScale
+    YoloInferenceMode m_yoloInferenceMode; ///< Scale full image, tile image, or run both and merge detections
     int    m_yoloTileOverlapPercent; ///< Tile overlap percentage for large-image YOLO inference: 0..90
     QStringList m_yoloIgnoredClassNames; ///< Object class labels to ignore after detection
     enum DNNTarget {

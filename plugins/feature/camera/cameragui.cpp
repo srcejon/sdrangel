@@ -2082,9 +2082,9 @@ void CameraGUI::displaySettings()
     settingsUI()->yoloConfSpin->setValue(m_settings.m_yoloConfThreshold);
     settingsUI()->yoloNmsSpin->setValue(m_settings.m_yoloNmsThreshold);
     settingsUI()->yoloTargetCombo->setCurrentIndex((int) m_settings.m_yoloDnnTarget);
-    settingsUI()->yoloTileLargeImagesCheck->setChecked(m_settings.m_yoloTileLargeImages);
+    settingsUI()->yoloInferenceModeCombo->setCurrentIndex(static_cast<int>(m_settings.m_yoloInferenceMode));
     settingsUI()->yoloTileOverlapSpin->setValue(m_settings.m_yoloTileOverlapPercent);
-    settingsUI()->yoloTileOverlapSpin->setEnabled(m_settings.m_yoloTileLargeImages);
+    settingsUI()->yoloTileOverlapSpin->setEnabled(m_settings.m_yoloInferenceMode != CameraSettings::YoloInferenceScale);
     {
         const QSignalBlocker ignoredClassesBlocker(settingsUI()->yoloIgnoredClassNamesEdit);
         settingsUI()->yoloIgnoredClassNamesEdit->setPlainText(m_settings.m_yoloIgnoredClassNames.join(QStringLiteral("\n")));
@@ -3062,7 +3062,7 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->yoloTargetCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_yoloTargetCombo_currentIndexChanged);
     QObject::connect(settingsUI()->yoloConfSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_yoloConfSpin_valueChanged);
     QObject::connect(settingsUI()->yoloNmsSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_yoloNmsSpin_valueChanged);
-    QObject::connect(settingsUI()->yoloTileLargeImagesCheck, &QCheckBox::toggled, this, &CameraGUI::on_yoloTileLargeImagesCheck_toggled);
+    QObject::connect(settingsUI()->yoloInferenceModeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_yoloInferenceModeCombo_currentIndexChanged);
     QObject::connect(settingsUI()->yoloTileOverlapSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_yoloTileOverlapSpin_valueChanged);
     QObject::connect(settingsUI()->yoloIgnoredClassNamesEdit, &QPlainTextEdit::textChanged, this, &CameraGUI::on_yoloIgnoredClassNamesEdit_textChanged);
     QObject::connect(settingsUI()->yoloBoxColorButton, &QToolButton::clicked, this, &CameraGUI::on_yoloBoxColorButton_clicked);
@@ -10390,11 +10390,15 @@ void CameraGUI::on_yoloNmsSpin_valueChanged(double value)
     applySetting("yoloNmsThreshold");
 }
 
-void CameraGUI::on_yoloTileLargeImagesCheck_toggled(bool checked)
+void CameraGUI::on_yoloInferenceModeCombo_currentIndexChanged(int index)
 {
-    m_settings.m_yoloTileLargeImages = checked;
-    settingsUI()->yoloTileOverlapSpin->setEnabled(checked);
-    applySetting("yoloTileLargeImages");
+    m_settings.m_yoloInferenceMode = static_cast<CameraSettings::YoloInferenceMode>(qBound(
+        static_cast<int>(CameraSettings::YoloInferenceScale),
+        index,
+        static_cast<int>(CameraSettings::YoloInferenceTileAndScale)));
+    m_settings.m_yoloTileLargeImages = m_settings.m_yoloInferenceMode != CameraSettings::YoloInferenceScale;
+    settingsUI()->yoloTileOverlapSpin->setEnabled(m_settings.m_yoloInferenceMode != CameraSettings::YoloInferenceScale);
+    applySetting("yoloInferenceMode");
 }
 
 void CameraGUI::on_yoloTileOverlapSpin_valueChanged(int value)

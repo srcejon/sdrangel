@@ -159,6 +159,7 @@ private:
     void decodeYoloDetections(const cv::Mat& det, const cv::Rect& tileRect, int padX, int padY, float invScale,
         std::vector<cv::Rect>& boxes, std::vector<float>& scores, std::vector<int>& classIds) const;
     QVector<cv::Rect> makeYoloTiles(const cv::Rect& roi) const;
+    QVector<cv::Rect> makeYoloInferenceRects(const cv::Rect& roi) const;
     void processObjectDetections(const QVector<CameraPipelineDetection>& detections, const QDateTime& now, CameraPipelineFrame& frame);
     void sendFirstObjectDetectionTarget(const QVector<CameraPipelineDetection>& detections, const CameraPipelineFrame& frame) const;
     [[nodiscard]] int findCompletedPlaybackHistoryIndex(const QString& className, const CameraPipelineFrame& frame) const;

@@ -602,6 +602,7 @@ bool yoloDetectionSettingsChanged(const QList<QString>& settingsKeys)
         QStringLiteral("yoloLabelsPath"),
         QStringLiteral("yoloConfThreshold"),
         QStringLiteral("yoloNmsThreshold"),
+        QStringLiteral("yoloInferenceMode"),
         QStringLiteral("yoloTileLargeImages"),
         QStringLiteral("yoloTileOverlapPercent"),
         QStringLiteral("yoloIgnoredClassNames"),
@@ -884,7 +885,7 @@ void CameraObjectDetector::runYoloDetections(const cv::Mat& bgrMat, const cv::Re
         m_yoloBatchedInferenceSupported = true;
     }
 
-    const QVector<cv::Rect> tileRects = makeYoloTiles(roi);
+    const QVector<cv::Rect> tileRects = makeYoloInferenceRects(roi);
 
     // Letterbox each ROI/tile, batch inference where possible, then map detections back
     // to full-frame coordinates before global NMS removes overlap duplicates.
@@ -1222,7 +1223,7 @@ QVector<cv::Rect> CameraObjectDetector::makeYoloTiles(const cv::Rect& roi) const
         return tiles;
     }
 
-    if (!m_settings.m_yoloTileLargeImages || ((roi.width <= m_yoloInputSize.width) && (roi.height <= m_yoloInputSize.height)))
+    if ((roi.width <= m_yoloInputSize.width) && (roi.height <= m_yoloInputSize.height))
     {
         tiles.append(roi);
         return tiles;
@@ -1261,6 +1262,46 @@ QVector<cv::Rect> CameraObjectDetector::makeYoloTiles(const cv::Rect& roi) const
     }
 
     return tiles;
+}
+
+QVector<cv::Rect> CameraObjectDetector::makeYoloInferenceRects(const cv::Rect& roi) const
+{
+    QVector<cv::Rect> rects;
+
+    auto appendUnique = [&rects](const cv::Rect& rect)
+    {
+        for (const cv::Rect& existing : rects)
+        {
+            if ((existing.x == rect.x)
+                && (existing.y == rect.y)
+                && (existing.width == rect.width)
+                && (existing.height == rect.height))
+            {
+                return;
+            }
+        }
+        rects.append(rect);
+    };
+
+    switch (m_settings.m_yoloInferenceMode)
+    {
+    case CameraSettings::YoloInferenceScale:
+        appendUnique(roi);
+        break;
+    case CameraSettings::YoloInferenceTile:
+        for (const cv::Rect& tile : makeYoloTiles(roi)) {
+            appendUnique(tile);
+        }
+        break;
+    case CameraSettings::YoloInferenceTileAndScale:
+        appendUnique(roi);
+        for (const cv::Rect& tile : makeYoloTiles(roi)) {
+            appendUnique(tile);
+        }
+        break;
+    }
+
+    return rects;
 }
 
 void CameraObjectDetector::clearObjectDetectionState()

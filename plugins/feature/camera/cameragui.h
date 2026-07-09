@@ -847,7 +847,7 @@ private slots:
     void on_yoloTargetCombo_currentIndexChanged(int index);
     void on_yoloConfSpin_valueChanged(double value);
     void on_yoloNmsSpin_valueChanged(double value);
-    void on_yoloTileLargeImagesCheck_toggled(bool checked);
+    void on_yoloInferenceModeCombo_currentIndexChanged(int index);
     void on_yoloTileOverlapSpin_valueChanged(int value);
     void on_yoloIgnoredClassNamesEdit_textChanged();
     void on_yoloBoxColorButton_clicked();

@@ -542,6 +542,7 @@ void CameraSettings::resetToDefaults()
     m_yoloNmsThreshold = 0.45;
     m_yoloBoxColor = Qt::green;
     m_yoloTileLargeImages = true;
+    m_yoloInferenceMode = YoloInferenceTile;
     m_yoloTileOverlapPercent = 20;
     m_yoloIgnoredClassNames.clear();
     m_yoloDnnTarget = CPU;
@@ -873,6 +874,7 @@ QByteArray CameraSettings::serialize() const
     s.writeDouble(304, m_cloudStarSenseMagnitude);
     s.writeBool(305, m_cloudUseReference);
     s.writeBool(306, m_cloudAutoReference);
+    s.writeS32(307, static_cast<qint32>(m_yoloInferenceMode));
 
     return s.final();
 }
@@ -1425,6 +1427,14 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readS32(203, (qint32 *) &m_asiColorImageType, (qint32) AsiColorImageTypeRgb24);
         d.readBool(206, &m_asiAutoExposureGain, false);
         d.readBool(219, &m_yoloTileLargeImages, true);
+        m_yoloInferenceMode = m_yoloTileLargeImages ? YoloInferenceTile : YoloInferenceScale;
+        qint32 yoloInferenceMode = static_cast<qint32>(m_yoloInferenceMode);
+        d.readS32(307, &yoloInferenceMode, yoloInferenceMode);
+        m_yoloInferenceMode = static_cast<YoloInferenceMode>(qBound(
+            static_cast<qint32>(YoloInferenceScale),
+            yoloInferenceMode,
+            static_cast<qint32>(YoloInferenceTileAndScale)));
+        m_yoloTileLargeImages = m_yoloInferenceMode != YoloInferenceScale;
         d.readS32(220, &m_yoloTileOverlapPercent, 20);
         m_yoloTileOverlapPercent = qBound(0, m_yoloTileOverlapPercent, 90);
         QString yoloIgnoredClassNamesJson;
@@ -2493,8 +2503,13 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     if (settingsKeys.contains("yoloBoxColor")) {
         m_yoloBoxColor = settings.m_yoloBoxColor;
     }
+    if (settingsKeys.contains("yoloInferenceMode")) {
+        m_yoloInferenceMode = qBound(YoloInferenceScale, settings.m_yoloInferenceMode, YoloInferenceTileAndScale);
+        m_yoloTileLargeImages = m_yoloInferenceMode != YoloInferenceScale;
+    }
     if (settingsKeys.contains("yoloTileLargeImages")) {
         m_yoloTileLargeImages = settings.m_yoloTileLargeImages;
+        m_yoloInferenceMode = m_yoloTileLargeImages ? YoloInferenceTile : YoloInferenceScale;
     }
     if (settingsKeys.contains("yoloTileOverlapPercent")) {
         m_yoloTileOverlapPercent = qBound(0, settings.m_yoloTileOverlapPercent, 90);
@@ -3377,6 +3392,9 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("yoloNmsThreshold") || force) {
         ostr << " m_yoloNmsThreshold: " << m_yoloNmsThreshold;
+    }
+    if (settingsKeys.contains("yoloInferenceMode") || force) {
+        ostr << " m_yoloInferenceMode: " << m_yoloInferenceMode;
     }
     if (settingsKeys.contains("yoloTileLargeImages") || force) {
         ostr << " m_yoloTileLargeImages: " << m_yoloTileLargeImages;

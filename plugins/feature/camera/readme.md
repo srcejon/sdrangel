@@ -853,9 +853,13 @@ Selects the bounding box colour for detections.
 
 Selects the inference target: OpenCV CPU, OpenCV CUDA, OpenCV CUDA FP16, TensorRT or TensorRT FP16, depending on what is available.
 
-<h4>7. Tile large images</h4>
+<h4>7. Input mode</h4>
 
-When checked, runs object detection on overlapping YOLO-sized tiles when the input image is larger than the model input.
+Selects how the image is fed to the object detector:
+
+* Scale: scales the full input image to the YOLO model input size.
+* Tile: runs detection on overlapping YOLO-sized tiles when the input image is larger than the model input.
+* Tile & Scale: runs both Scale and Tile modes, then combines the bounding boxes with non-maximum suppression. This can detect both small objects that benefit from tiling and very large objects that do not fit inside a single tile.
 
 <h4>8. Tile overlap</h4>
 

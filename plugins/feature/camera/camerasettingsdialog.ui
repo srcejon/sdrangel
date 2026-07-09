@@ -5596,23 +5596,32 @@ Use src=file:///path/to/images/logo.png for img tags. http is not supported.</st
             </widget>
            </item>
            <item row="6" column="0">
-            <widget class="QLabel" name="yoloTileLargeImagesLabel">
+            <widget class="QLabel" name="yoloInferenceModeLabel">
              <property name="text">
-              <string>Tile large images</string>
+              <string>Input mode</string>
              </property>
             </widget>
            </item>
            <item row="6" column="1">
-            <widget class="QCheckBox" name="yoloTileLargeImagesCheck">
+            <widget class="QComboBox" name="yoloInferenceModeCombo">
              <property name="toolTip">
-              <string>Run object detection on overlapping YOLO-sized tiles when the input image is larger than the model input</string>
+              <string>Choose whether object detection scales the full image, runs on overlapping model-sized tiles, or runs both and merges the results</string>
              </property>
-             <property name="text">
-              <string/>
-             </property>
-             <property name="checked">
-              <bool>true</bool>
-             </property>
+             <item>
+              <property name="text">
+               <string>Scale</string>
+              </property>
+             </item>
+             <item>
+              <property name="text">
+               <string>Tile</string>
+              </property>
+             </item>
+             <item>
+              <property name="text">
+               <string>Tile &amp; Scale</string>
+              </property>
+             </item>
             </widget>
            </item>
            <item row="7" column="0">

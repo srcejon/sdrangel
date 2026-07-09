@@ -750,6 +750,12 @@ public:
     double getCloudStarSenseMagnitude();
     void setCloudStarSenseMagnitude(double cloud_star_sense_magnitude);
 
+    qint32 getCloudUseReference();
+    void setCloudUseReference(qint32 cloud_use_reference);
+
+    qint32 getCloudAutoReference();
+    void setCloudAutoReference(qint32 cloud_auto_reference);
+
     double getCloudSunMoonRadiusDeg();
     void setCloudSunMoonRadiusDeg(double cloud_sun_moon_radius_deg);
 
@@ -1623,6 +1629,12 @@ private:
 
     double cloud_star_sense_magnitude;
     bool m_cloud_star_sense_magnitude_isSet;
+
+    qint32 cloud_use_reference;
+    bool m_cloud_use_reference_isSet;
+
+    qint32 cloud_auto_reference;
+    bool m_cloud_auto_reference_isSet;
 
     double cloud_sun_moon_radius_deg;
     bool m_cloud_sun_moon_radius_deg_isSet;

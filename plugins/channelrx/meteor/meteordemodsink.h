@@ -526,6 +526,7 @@ private:
     std::vector<DetectionRange> m_recentDetectionRanges;
     std::vector<SpectralInterferenceRange> m_recentSpectralInterference;
     std::vector<PulseReport> m_pendingComponentReports;
+    quint64 m_nextComponentFlushSample;
     std::vector<char> m_spectralActiveBins;
     FFTEngine *m_spectralFFT;
     FFTEngine *m_pulseFFT;
@@ -596,6 +597,7 @@ private:
     void pruneRecentDetections();
     void emitOrDeferSpectralReport(const PulseReport& report);
     void queueSpectralComponentReport(const PulseReport& report);
+    void scheduleNextComponentFlush();
     void flushPendingComponentReports(bool force);
     PulseReport reportWithRobustFrequency(const PulseReport& report) const;
     bool estimatePulseBandEnvelope(PulseReport& report) const;

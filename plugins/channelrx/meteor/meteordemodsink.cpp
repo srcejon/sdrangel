@@ -36,7 +36,13 @@ MESSAGE_CLASS_DEFINITION(MeteorDemodSink::MsgMeteorDataCollected, Message)
 namespace {
     FFTEngine *createMeteorFFT()
     {
-        return FFTEngine::create(QString(), QStringLiteral("Kiss"));
+        FFTEngine *fft = FFTEngine::create(QString(), QStringLiteral("Kiss"));
+
+        if (!fft) {
+            qFatal("MeteorDemodSink: no FFT engine is available");
+        }
+
+        return fft;
     }
 
     void makeHannWindow(std::vector<Real>& window, int size)
@@ -87,6 +93,7 @@ MeteorDemodSink::MeteorDemodSink() :
     m_interpolatorDistanceRemain(0.0f),
     m_scopeSampleBufferSize(0),
     m_scopeSampleBufferIndex(0),
+    m_nextComponentFlushSample(std::numeric_limits<quint64>::max()),
     m_spectralFFT(nullptr),
     m_pulseFFT(nullptr),
     m_spectralFrameSize(0),
@@ -308,50 +315,20 @@ void MeteorDemodSink::processSpectralFrame(quint64 frameStartSample)
         std::fill(m_spectralBinPower.begin(), m_spectralBinPower.end(), 0.0);
     }
 
-    if (m_spectralFFT && ((int) m_spectralWindow.size() == m_spectralFrameSize))
-    {
-        Complex *fftIn = m_spectralFFT->in();
+    Complex *fftIn = m_spectralFFT->in();
 
-        for (int i = 0; i < m_spectralFrameSize; i++)
-        {
-            fftIn[i] = m_spectralFrameBuffer[i] * m_spectralWindow[i];
-        }
-
-        m_spectralFFT->transform();
-        const Complex *fftOut = m_spectralFFT->out();
-        const int halfSize = m_spectralFrameSize / 2;
-
-        for (int bin = -halfSize; bin < halfSize; bin++)
-        {
-            const int fftIndex = bin < 0 ? bin + m_spectralFrameSize : bin;
-            m_spectralBinPower[bin + halfSize] = std::max((double) std::norm(fftOut[fftIndex]), 1e-30);
-        }
+    for (int i = 0; i < m_spectralFrameSize; i++) {
+        fftIn[i] = m_spectralFrameBuffer[i] * m_spectralWindow[i];
     }
-    else
+
+    m_spectralFFT->transform();
+    const Complex *fftOut = m_spectralFFT->out();
+    const int halfSize = m_spectralFrameSize / 2;
+
+    for (int bin = -halfSize; bin < halfSize; bin++)
     {
-        const double twoPi = 2.0 * std::acos(-1.0);
-
-        for (int bin = -m_spectralFrameSize / 2; bin < m_spectralFrameSize / 2; bin++)
-        {
-            double realSum = 0.0;
-            double imagSum = 0.0;
-
-            for (int i = 0; i < m_spectralFrameSize; i++)
-            {
-                const double window = (int) m_spectralWindow.size() == m_spectralFrameSize
-                    ? m_spectralWindow[i]
-                    : 0.5 - 0.5 * std::cos(twoPi * (double) i / (double) (m_spectralFrameSize - 1));
-                const Complex windowedSample = m_spectralFrameBuffer[i] * (Real) window;
-                const double angle = -twoPi * (double) bin * (double) i / (double) m_spectralFrameSize;
-                const double c = std::cos(angle);
-                const double s = std::sin(angle);
-
-                realSum += windowedSample.real() * c - windowedSample.imag() * s;
-                imagSum += windowedSample.real() * s + windowedSample.imag() * c;
-            }
-
-            m_spectralBinPower[bin + m_spectralFrameSize / 2] = std::max(realSum*realSum + imagSum*imagSum, 1e-30);
-        }
+        const int fftIndex = bin < 0 ? bin + m_spectralFrameSize : bin;
+        m_spectralBinPower[bin + halfSize] = std::max((double) std::norm(fftOut[fftIndex]), 1e-30);
     }
 
     SpectralFrameSnapshot frame;
@@ -1581,10 +1558,6 @@ bool MeteorDemodSink::ensurePulseFFT(int windowSize)
         m_pulseFFT = createMeteorFFT();
     }
 
-    if (!m_pulseFFT) {
-        return false;
-    }
-
     if (m_pulseFFTSize != windowSize)
     {
         m_pulseFFT->configure(windowSize, false);
@@ -1607,57 +1580,30 @@ bool MeteorDemodSink::computePulseWindowSpectrum(int startIndex, int windowSize,
         *windowedEnergy = 0.0;
     }
 
-    if (ensurePulseFFT(windowSize) && ((int) m_pulseFFTWindow.size() == windowSize))
-    {
-        Complex *fftIn = m_pulseFFT->in();
-
-        for (int i = 0; i < windowSize; i++)
-        {
-            const Complex sample = m_pulseSamples[startIndex + i] * m_pulseFFTWindow[i];
-            fftIn[i] = sample;
-
-            if (windowedEnergy) {
-                *windowedEnergy += std::norm(sample);
-            }
-        }
-
-        m_pulseFFT->transform();
-        const Complex *fftOut = m_pulseFFT->out();
-        const int halfSize = windowSize / 2;
-
-        for (int bin = -halfSize; bin < halfSize; bin++)
-        {
-            const int fftIndex = bin < 0 ? bin + windowSize : bin;
-            binPower[bin + halfSize] = std::max((double) std::norm(fftOut[fftIndex]), 1e-30);
-        }
-
-        return true;
+    if (!ensurePulseFFT(windowSize) || ((int) m_pulseFFTWindow.size() != windowSize)) {
+        return false;
     }
 
-    const double twoPi = 2.0 * std::acos(-1.0);
+    Complex *fftIn = m_pulseFFT->in();
 
-    for (int bin = -windowSize / 2; bin < windowSize / 2; bin++)
+    for (int i = 0; i < windowSize; i++)
     {
-        double realSum = 0.0;
-        double imagSum = 0.0;
+        const Complex sample = m_pulseSamples[startIndex + i] * m_pulseFFTWindow[i];
+        fftIn[i] = sample;
 
-        for (int i = 0; i < windowSize; i++)
-        {
-            const double window = 0.5 - 0.5 * std::cos(twoPi * (double) i / (double) (windowSize - 1));
-            const Complex sample = m_pulseSamples[startIndex + i] * (Real) window;
-            const double angle = -twoPi * (double) bin * (double) i / (double) windowSize;
-            const double c = std::cos(angle);
-            const double s = std::sin(angle);
-
-            realSum += sample.real() * c - sample.imag() * s;
-            imagSum += sample.real() * s + sample.imag() * c;
-
-            if ((bin == -windowSize / 2) && windowedEnergy) {
-                *windowedEnergy += std::norm(sample);
-            }
+        if (windowedEnergy) {
+            *windowedEnergy += std::norm(sample);
         }
+    }
 
-        binPower[bin + windowSize / 2] = std::max(realSum*realSum + imagSum*imagSum, 1e-30);
+    m_pulseFFT->transform();
+    const Complex *fftOut = m_pulseFFT->out();
+    const int halfSize = windowSize / 2;
+
+    for (int bin = -halfSize; bin < halfSize; bin++)
+    {
+        const int fftIndex = bin < 0 ? bin + windowSize : bin;
+        binPower[bin + halfSize] = std::max((double) std::norm(fftOut[fftIndex]), 1e-30);
     }
 
     return true;
@@ -2398,15 +2344,41 @@ void MeteorDemodSink::queueSpectralComponentReport(const PulseReport& report)
             pending.m_displayEndSample = mergedEndSample;
         }
 
+        scheduleNextComponentFlush();
+
         return;
     }
 
     m_pendingComponentReports.push_back(report);
+    scheduleNextComponentFlush();
+}
+
+void MeteorDemodSink::scheduleNextComponentFlush()
+{
+    m_nextComponentFlushSample = std::numeric_limits<quint64>::max();
+
+    for (const PulseReport& report : m_pendingComponentReports)
+    {
+        const quint64 holdSamples = (quint64) std::max(
+            1,
+            report.m_allowComponentMerge
+                ? m_settings.m_channelSampleRate / 4
+                : m_settings.m_channelSampleRate / 2);
+        m_nextComponentFlushSample = std::min(
+            m_nextComponentFlushSample,
+            report.m_endSample + holdSamples);
+    }
 }
 
 void MeteorDemodSink::flushPendingComponentReports(bool force)
 {
-    if (m_pendingComponentReports.empty()) {
+    if (m_pendingComponentReports.empty())
+    {
+        m_nextComponentFlushSample = std::numeric_limits<quint64>::max();
+        return;
+    }
+
+    if (!force && (m_sampleCounter <= m_nextComponentFlushSample)) {
         return;
     }
 
@@ -2415,6 +2387,8 @@ void MeteorDemodSink::flushPendingComponentReports(bool force)
         m_pendingComponentReports.begin(),
         m_pendingComponentReports.end(),
         [](const PulseReport& left, const PulseReport& right) { return left.m_startSample < right.m_startSample; });
+
+    m_nextComponentFlushSample = std::numeric_limits<quint64>::max();
 
     for (const PulseReport& report : m_pendingComponentReports)
     {
@@ -2440,6 +2414,7 @@ void MeteorDemodSink::flushPendingComponentReports(bool force)
     }
 
     m_pendingComponentReports.swap(remainingReports);
+    scheduleNextComponentFlush();
 }
 
 MeteorDemodSink::PulseReport MeteorDemodSink::reportWithRobustFrequency(const PulseReport& report) const
@@ -3099,7 +3074,7 @@ void MeteorDemodSink::configureSpectralDetector()
         m_spectralFFT = createMeteorFFT();
     }
 
-    if (m_spectralFFT && (m_spectralFFTSize != m_spectralFrameSize))
+    if (m_spectralFFTSize != m_spectralFrameSize)
     {
         m_spectralFFT->configure(m_spectralFrameSize, false);
         m_spectralFFTSize = m_spectralFrameSize;
@@ -3121,6 +3096,7 @@ void MeteorDemodSink::configureSpectralDetector()
     m_spectralCalibrationFrames.clear();
     m_spectralEvents.clear();
     m_pendingComponentReports.clear();
+    m_nextComponentFlushSample = std::numeric_limits<quint64>::max();
     m_spectralNoiseFloorInitialized = false;
     m_spectralEventActiveForScope = false;
     configureDetectionHistory();

@@ -25,6 +25,7 @@
 #include <QLineEdit>
 #include <QSignalBlocker>
 #include <QSortFilterProxyModel>
+#include <QSet>
 #include <QTableView>
 
 #include <QtCharts/QChartView>
@@ -282,24 +283,37 @@ public:
         return m_rows[row].m_name;
     }
 
-    void removeSatellite(const QString& name)
+    void removeSatellitesNotIn(const QList<QString>& selectedSatellites)
     {
-        const auto it = m_rowByName.constFind(name);
+        QSet<QString> selectedSatelliteSet;
+        selectedSatelliteSet.reserve(selectedSatellites.size());
 
-        if (it == m_rowByName.constEnd()) {
-            return;
+        for (const QString& satellite : selectedSatellites) {
+            selectedSatelliteSet.insert(satellite);
         }
 
-        const int row = it.value();
-        beginRemoveRows(QModelIndex(), row, row);
-        m_rows.removeAt(row);
-        m_rowByName.remove(name);
+        for (int row = m_rows.size() - 1; row >= 0; )
+        {
+            if (selectedSatelliteSet.contains(m_rows[row].m_name))
+            {
+                row--;
+                continue;
+            }
 
-        for (int i = row; i < m_rows.size(); ++i) {
-            m_rowByName[m_rows[i].m_name] = i;
+            int firstRow = row;
+
+            while ((firstRow > 0) && !selectedSatelliteSet.contains(m_rows[firstRow - 1].m_name)) {
+                firstRow--;
+            }
+
+            beginRemoveRows(QModelIndex(), firstRow, row);
+            m_rows.remove(firstRow, row - firstRow + 1);
+            endRemoveRows();
+
+            row = firstRow - 1;
         }
 
-        endRemoveRows();
+        rebuildRowIndex();
     }
 
     void updateSatellite(const SatelliteState& satState, const SatNogsSatellite *satellite, const QDateTime& currentDateTime)
@@ -325,6 +339,15 @@ public:
     }
 
 private:
+    void rebuildRowIndex()
+    {
+        m_rowByName.clear();
+
+        for (int i = 0; i < m_rows.size(); ++i) {
+            m_rowByName.insert(m_rows[i].m_name, i);
+        }
+    }
+
     struct SatelliteTableRow
     {
         QString m_name;
@@ -594,6 +617,12 @@ bool SatelliteTrackerGUI::handleMessage(const Message& message)
         PROFILER_START();
         SatelliteTrackerReport::MsgReportSat& satReport = (SatelliteTrackerReport::MsgReportSat&) message;
         const QList<SatelliteState>& satStates = satReport.getSatelliteStates();
+        QSet<QString> selectedSatelliteSet;
+        selectedSatelliteSet.reserve(m_settings.m_satellites.size());
+
+        for (const QString& satellite : m_settings.m_satellites) {
+            selectedSatelliteSet.insert(satellite);
+        }
 
         const QDateTime currentDateTime = m_satelliteTracker->currentDateTime();
         ui->satTable->setUpdatesEnabled(false);
@@ -601,6 +630,10 @@ bool SatelliteTrackerGUI::handleMessage(const Message& message)
 
         for (const SatelliteState& satState : satStates)
         {
+            if (!selectedSatelliteSet.contains(satState.m_name)) {
+                continue;
+            }
+
             if (satState.m_name == m_settings.m_target)
             {
                 delete m_targetSatState;
@@ -692,19 +725,17 @@ bool SatelliteTrackerGUI::handleMessage(const Message& message)
 // Call when m_settings.m_satellites changes
 void SatelliteTrackerGUI::updateSelectedSats()
 {
-    // Remove unselects sats from target combo and table
+    // Remove unselected satellites from target combo and table.
+    m_satTableModel->removeSatellitesNotIn(m_settings.m_satellites);
+
     for (int i = 0; i < ui->target->count(); )
     {
         QString name = ui->target->itemText(i);
         int idx = m_settings.m_satellites.indexOf(name);
 
-        if (idx == -1)
-        {
+        if (idx == -1) {
             ui->target->removeItem(i);
-            m_satTableModel->removeSatellite(name);
-        }
-        else
-        {
+        } else {
             i++;
         }
     }

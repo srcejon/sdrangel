@@ -323,6 +323,13 @@ bool CameraCloudDetector::handleStageMessage(const Message& cmd)
             frame->m_manualPreviewFrame = true;
             submitFrame(frame);
         }
+        else if (m_msgQueueToFeature)
+        {
+            // Nothing retained to re-run on; the save fires on the next captured frame,
+            // which for an idle source may be a long wait - say so rather than nothing
+            m_msgQueueToFeature->push(MsgReportClearSkyReference::create(
+                QStringLiteral("Save test case pending: waiting for the next frame")));
+        }
         return true;
     }
     if (MsgSaveClearSkyReference::match(cmd))
@@ -344,6 +351,11 @@ bool CameraCloudDetector::handleStageMessage(const Message& cmd)
             CameraPipelineFramePtr frame(new CameraPipelineFrame(*m_lastInputFrame));
             frame->m_manualPreviewFrame = true;
             submitFrame(frame);
+        }
+        else if (m_msgQueueToFeature)
+        {
+            m_msgQueueToFeature->push(MsgReportClearSkyReference::create(
+                QStringLiteral("Save reference pending: waiting for the next frame")));
         }
         return true;
     }
@@ -439,6 +451,10 @@ void CameraCloudDetector::captureActiveChanged(bool active)
         // Release the retained tuning frame so its image buffers (CPU and GPU) are not
         // pinned while capture is stopped, and drop pending save requests: firing them on
         // whatever scene the next capture shows would save the wrong thing
+        if ((!m_saveTestCaseDir.isEmpty() || m_saveReferencePending) && m_msgQueueToFeature) {
+            m_msgQueueToFeature->push(MsgReportClearSkyReference::create(
+                QStringLiteral("Pending save cancelled: capture stopped before a frame arrived")));
+        }
         m_lastInputFrame.reset();
         m_saveTestCaseDir.clear();
         m_saveReferencePending = false;
@@ -456,14 +472,17 @@ void CameraCloudDetector::processNewFrame(const CameraPipelineFramePtr& frame)
 
     frame->m_cloud = CameraPipelineCloud();
 
+    // Retained even while detection is off, so enabling it (or requesting a save) on a
+    // paused or finished source re-runs on the displayed frame instead of waiting for a
+    // frame that may never come. The copy shares the underlying image buffers, and
+    // captureActiveChanged(false) still releases it when capture stops.
+    m_lastInputFrame.reset(new CameraPipelineFrame(*frame));
+
     if (!m_settings.m_cloudDetect)
     {
         forwardFrame(frame);
         return;
     }
-
-    // Kept so applySettings() can re-run detection on a paused image while tuning
-    m_lastInputFrame.reset(new CameraPipelineFrame(*frame));
 
     const QSize frameSize = frame->imageSize();
     if (frameSize.isEmpty()) {

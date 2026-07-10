@@ -1812,9 +1812,11 @@ void MeteorGUI::drawDetectionOverlays(GLSpectrumView *spectrumView)
 
             if ((fftOverlap > 0) && (waterfallRowDurationS > 0.0) && (timePerPixel > 0.0))
             {
-                const float direction = spectrumSettings.m_invertedWaterfall ? -1.0f : 1.0f;
                 const double durationRows = detection.m_durationS / waterfallRowDurationS;
-                yEnd = yStart + direction * (float) (durationRows * timePerPixel);
+                const float yCenter = (yStart + yEnd) * 0.5f;
+                const float halfHeight = (float) (durationRows * timePerPixel * 0.5);
+                yStart = yCenter - halfHeight;
+                yEnd = yCenter + halfHeight;
             }
 
             const int paddingPixels = std::max(0, m_settings.m_detectionBoxPaddingPixels);

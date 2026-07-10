@@ -78,7 +78,8 @@ CameraDetectionHistory::CameraDetectionHistory(const QList<CameraDetectionHistor
     m_table->setSelectionMode(QAbstractItemView::SingleSelection);
     m_table->setAlternatingRowColors(true);
     m_table->setSortingEnabled(false);
-    m_table->verticalHeader()->setVisible(false);
+    m_table->verticalHeader()->setVisible(true);
+    m_table->verticalHeader()->setSectionResizeMode(QHeaderView::ResizeToContents);
     m_table->horizontalHeader()->setStretchLastSection(false);
     m_table->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
 

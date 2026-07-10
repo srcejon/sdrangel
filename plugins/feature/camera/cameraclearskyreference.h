@@ -68,22 +68,29 @@
 class CameraClearSkyReference
 {
 public:
-    // Day plus nine 2-degree sun-elevation bins from -4 down to below -20, each split by
-    // moon above/below 5 degrees. The bins are deliberately fine: at solstice latitudes one
-    // broad twilight band spans a 4x sky-brightness range, so a reference saved late in the
-    // band would overwrite one still needed for the earlier conditions.
+    // Nine 2-degree night sun-elevation bins from -4 down to below -20, each split by
+    // moon above/below 5 degrees, plus five day bins narrowing toward the horizon (the
+    // clear sky changes fastest around sunrise/sunset - a dusk reference is useless at
+    // noon). The bins are deliberately fine: at solstice latitudes one broad band spans a
+    // 4x sky-brightness range, so a reference saved late in the band would overwrite one
+    // still needed for the earlier conditions.
     static constexpr int kNightBins = 9;
-    static constexpr int kSlotCount = 1 + 2 * kNightBins;
+    static constexpr int kDayBins = 5; // sun >= 20, 10..20, 4..10, 0..4, -4..0 degrees
+    static constexpr int kSlotCount = 1 + 2 * kNightBins + (kDayBins - 1);
 
     [[nodiscard]] static int slotFor(double sunElevationDeg, double moonElevationDeg);
     [[nodiscard]] static QString slotName(int slot);
 
-    // The slot encoding, defined once: slot 0 is Day; night slots are 1 + 2*bin + moon.
-    // All bin/moon arithmetic must go through these so the encoding has a single source.
-    [[nodiscard]] static constexpr bool slotIsNight(int slot) { return (slot >= 1) && (slot < kSlotCount); }
+    // The slot encoding, defined once: slot 0 is the high-sun day bin (backward
+    // compatible with the old single Day slot), night slots are 1 + 2*bin + moon, and the
+    // remaining day bins follow after the night slots. All bin/moon arithmetic must go
+    // through these so the encoding has a single source.
+    [[nodiscard]] static constexpr bool slotIsNight(int slot) { return (slot >= 1) && (slot <= 2 * kNightBins); }
     [[nodiscard]] static constexpr int slotFromBin(int bin, bool moonUp) { return 1 + 2 * bin + (moonUp ? 1 : 0); }
     [[nodiscard]] static constexpr int slotBin(int slot) { return (slot - 1) / 2; }
     [[nodiscard]] static constexpr bool slotMoonUp(int slot) { return ((slot - 1) % 2) != 0; }
+    [[nodiscard]] static constexpr int slotFromDayBin(int bin) { return (bin == 0) ? 0 : (2 * kNightBins + bin); }
+    [[nodiscard]] static constexpr int slotDayBin(int slot) { return (slot == 0) ? 0 : (slot - 2 * kNightBins); }
 
     // Points the store at the camera identified by the settings' camera id, loading its
     // saved references when the camera changes. Call before any other member.

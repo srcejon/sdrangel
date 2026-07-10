@@ -1273,6 +1273,44 @@ void testReferencePatchLearning(TestContext& context)
         "ref-patch", "patchwork weights survive a save/load round trip");
 }
 
+// Day sun-elevation sub-bins: the slot mapping, the day-bin adjacency fallback, and the
+// wall between day and night references (neither may ever serve the other)
+void testReferenceDayBins(TestContext& context)
+{
+    using Ref = CameraClearSkyReference;
+    context.check(Ref::slotFor(30.0, -10.0) == Ref::slotFromDayBin(0), "ref-daybins", "high sun maps to day bin 0 (slot 0)");
+    context.check(Ref::slotFor(15.0, -10.0) == Ref::slotFromDayBin(1), "ref-daybins", "sun 15 maps to day bin 1");
+    context.check(Ref::slotFor(6.0, 20.0) == Ref::slotFromDayBin(2), "ref-daybins", "sun 6 maps to day bin 2 (moon irrelevant by day)");
+    context.check(Ref::slotFor(2.0, -10.0) == Ref::slotFromDayBin(3), "ref-daybins", "sun 2 maps to day bin 3");
+    context.check(Ref::slotFor(-2.0, -10.0) == Ref::slotFromDayBin(4), "ref-daybins", "dusk maps to day bin 4");
+    context.check(Ref::slotFor(-4.5, -10.0) == Ref::slotFromBin(0, false), "ref-daybins", "below -4 degrees the night bins begin");
+    context.check(!Ref::slotIsNight(Ref::slotFromDayBin(4)), "ref-daybins", "late day bins are not night slots");
+
+    CameraClearSkyReference reference;
+    reference.ensureLoaded(QStringLiteral("ref-daybins-test"));
+    const QRectF roiNorm(0.0, 0.0, 1.0, 1.0);
+    const cv::Size work(160, 120);
+    const cv::Mat eval(work, CV_8UC1, cv::Scalar(255));
+    const cv::Mat texture = cv::Mat::zeros(work, CV_8UC1);
+    const QDateTime when(QDate(2024, 6, 1), QTime(12, 0), QTimeZone::utc());
+    const cv::Mat gray(work, CV_8UC1, cv::Scalar(150));
+    const cv::Mat bgr(work, CV_8UC3, cv::Scalar(200, 150, 110));
+
+    // Fill day bin 1: its neighbouring day bins reach it, night slots and distant day
+    // bins do not
+    reference.capture(Ref::slotFromDayBin(1), gray, bgr, texture, eval, roiNorm, when, 15.0, -20.0);
+    cv::Mat viaNeighbour(work, CV_8UC1, cv::Scalar(255));
+    context.check(reference.applyCueAndVeto(Ref::slotFromDayBin(0), viaNeighbour, gray, bgr, eval, roiNorm, 8)
+            && (cv::countNonZero(viaNeighbour) == 0),
+        "ref-daybins", "day fallback reaches the neighbouring day bin");
+    cv::Mat nightMask(work, CV_8UC1, cv::Scalar(255));
+    context.check(!reference.applyCueAndVeto(Ref::slotFromBin(0, false), nightMask, gray, bgr, eval, roiNorm, 8),
+        "ref-daybins", "a day reference never serves a night slot");
+    cv::Mat farMask(work, CV_8UC1, cv::Scalar(255));
+    context.check(!reference.applyCueAndVeto(Ref::slotFromDayBin(3), farMask, gray, bgr, eval, roiNorm, 8),
+        "ref-daybins", "day fallback spans one bin only");
+}
+
 // Unit-level guards on the clear-sky reference model: the Day reference must never be
 // reached through a night slot's adjacency fallback, night adjacency must work within the
 // same moon state, and the raw-deviation caps must keep a smooth gradient overcast (which
@@ -2445,6 +2483,7 @@ int main(int argc, char *argv[])
         {"clear-sky-ref", testClearSkyReference},
         {"ref-guards", testReferenceModelGuards},
         {"ref-patch", testReferencePatchLearning},
+        {"ref-daybins", testReferenceDayBins},
         {"test-case-bundle", testTestCaseBundle},
         {"update-interval", testUpdateIntervalCaching},
         {"star-filtering", testStarFiltering},

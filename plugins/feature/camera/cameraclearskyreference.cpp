@@ -86,7 +86,8 @@ constexpr double kForegroundDarkLevel = 24.0;  // absolute 8-bit level below whi
 constexpr double kForegroundTexture = 8.0;     // day-slot fine-texture level above which a pixel is foliage/structure
 constexpr double kForegroundMaxFraction = 0.45; // a derivation covering most of the frame is wrong; ignore it
 
-constexpr quint32 kFileMagic = 0x43535233;   // "CSR3": adds per-pixel confirmation weights
+constexpr quint32 kFileMagic = 0x43535234;   // "CSR4": day sun-elevation sub-bins
+constexpr quint32 kFileMagicV3 = 0x43535233; // "CSR3": adds per-pixel confirmation weights
 constexpr quint32 kFileMagicV2 = 0x43535232; // "CSR2": fine sun-elevation bins + per-slot sky state
 constexpr quint32 kFileMagicV1 = 0x43535231; // "CSR1": three broad night bands
 // A reference is only comparable when frame and reference were exposed similarly; beyond
@@ -262,8 +263,20 @@ bool readMat(QDataStream& stream, cv::Mat& mat)
 
 int CameraClearSkyReference::slotFor(double sunElevationDeg, double moonElevationDeg)
 {
-    if (sunElevationDeg >= -4.0) {
-        return 0; // Day (matches the detector's day/night boundary)
+    if (sunElevationDeg >= -4.0)
+    {
+        // Day sub-bins narrow toward the horizon, where the clear sky changes fastest
+        int bin = kDayBins - 1;
+        if (sunElevationDeg >= 20.0) {
+            bin = 0;
+        } else if (sunElevationDeg >= 10.0) {
+            bin = 1;
+        } else if (sunElevationDeg >= 4.0) {
+            bin = 2;
+        } else if (sunElevationDeg >= 0.0) {
+            bin = 3;
+        }
+        return slotFromDayBin(bin);
     }
     const int bin = std::clamp(static_cast<int>((-4.0 - sunElevationDeg) / 2.0), 0, kNightBins - 1);
     const bool moonUp = moonElevationDeg > 5.0;
@@ -272,11 +285,19 @@ int CameraClearSkyReference::slotFor(double sunElevationDeg, double moonElevatio
 
 QString CameraClearSkyReference::slotName(int slot)
 {
-    if (slot == 0) {
-        return QStringLiteral("Day");
-    }
     if ((slot < 0) || (slot >= kSlotCount)) {
         return QStringLiteral("?");
+    }
+    if (!slotIsNight(slot))
+    {
+        switch (slotDayBin(slot))
+        {
+        case 0: return QStringLiteral("Day sun > 20\u00b0");
+        case 1: return QStringLiteral("Day sun 10..20\u00b0");
+        case 2: return QStringLiteral("Day sun 4..10\u00b0");
+        case 3: return QStringLiteral("Day sun 0..4\u00b0");
+        default: return QStringLiteral("Day sun -4..0\u00b0");
+        }
     }
     const int bin = slotBin(slot);
     const bool moonUp = slotMoonUp(slot);
@@ -337,21 +358,21 @@ void CameraClearSkyReference::load()
     stream.setVersion(QDataStream::Qt_5_15);
     quint32 magic = 0;
     stream >> magic;
-    if ((magic != kFileMagic) && (magic != kFileMagicV2) && (magic != kFileMagicV1))
+    if ((magic != kFileMagic) && (magic != kFileMagicV3) && (magic != kFileMagicV2) && (magic != kFileMagicV1))
     {
         qWarning() << "CameraClearSkyReference: unrecognised reference file" << file.fileName();
         return;
     }
 
     const bool v1 = (magic == kFileMagicV1);
-    const bool hasWeight = (magic == kFileMagic);
+    const bool hasWeight = (magic == kFileMagic) || (magic == kFileMagicV3);
     // v1 files held Day plus three broad night bands (x moon). Each band is replicated
     // into every fine bin it covered (cv::Mat copies share pixel data, so this is cheap),
     // preserving the coverage the old single band provided; the anchor guard rejects any
     // bin where the approximation no longer corresponds to the frame's exposure.
     static constexpr int kV1FirstBin[] = {0, 0, 0, 4, 4, 7, 7}; // Twilight -4..-12, Deep -12..-18, Dark < -18
     static constexpr int kV1LastBin[] = {0, 3, 3, 6, 6, 8, 8};
-    const int slotCount = v1 ? 7 : kSlotCount;
+    const int slotCount = v1 ? 7 : ((magic == kFileMagic) ? kSlotCount : (1 + 2 * kNightBins));
 
     for (int index = 0; index < slotCount; ++index)
     {
@@ -402,6 +423,21 @@ void CameraClearSkyReference::load()
             Slot replica = loaded;
             replica.sunElevation = -4.0 - 2.0 * bin - 1.0; // bin centre
             m_slots[slotFromBin(bin, moonUp)] = replica;
+        }
+    }
+
+    // Pre-CSR4 stores held a single Day slot; replicate it into every day sub-bin (map
+    // copies share pixel data - every update builds fresh mats), preserving the coverage
+    // the old single slot provided. The anchor guard rejects any bin where the old
+    // reference no longer corresponds to the frame's exposure.
+    if ((magic != kFileMagic) && m_slots[0].valid())
+    {
+        static constexpr double kDayBinCentreSun[] = {30.0, 15.0, 7.0, 2.0, -2.0};
+        for (int bin = 1; bin < kDayBins; ++bin)
+        {
+            Slot replica = m_slots[0];
+            replica.sunElevation = kDayBinCentreSun[bin];
+            m_slots[slotFromDayBin(bin)] = replica;
         }
     }
 }
@@ -610,6 +646,12 @@ bool CameraClearSkyReference::applyCueAndVeto(int slot, cv::Mat& mask, const cv:
         anyCandidate = ((bin > 0) && slotCandidate(slotFromBin(bin - 1, moonUp)))
             || ((bin < kNightBins - 1) && slotCandidate(slotFromBin(bin + 1, moonUp)));
     }
+    else if (!anyCandidate)
+    {
+        const int bin = slotDayBin(slot);
+        anyCandidate = ((bin > 0) && slotCandidate(slotFromDayBin(bin - 1)))
+            || ((bin < kDayBins - 1) && slotCandidate(slotFromDayBin(bin + 1)));
+    }
     if (!anyCandidate) {
         return false;
     }
@@ -622,10 +664,11 @@ bool CameraClearSkyReference::applyCueAndVeto(int slot, cv::Mat& mask, const cv:
               frameBrightness, frameRatio, frameTexture, frameSky,
               frameBrightnessAnchor, frameRatioAnchor);
 
-    // Exact bin first, then the neighbouring sun-elevation bins with the same moon state.
-    // Day (slot 0) never participates in night fallback and has no fallback of its own: a
-    // night frame compared against a daylight map produces nonsense either way. The anchor
-    // guard rejects any candidate whose exposure no longer corresponds to the frame's.
+    // Exact bin first, then the neighbouring sun-elevation bins - with the same moon
+    // state at night, and within the day bins by day. Day and night never serve each
+    // other: a night frame compared against a daylight map produces nonsense either way.
+    // The anchor guard rejects any candidate whose exposure no longer corresponds to the
+    // frame's.
     const Slot *chosen = usableSlot(slot, roiNorm, frameBrightnessAnchor);
     if (!chosen && slotIsNight(slot))
     {
@@ -636,6 +679,16 @@ bool CameraClearSkyReference::applyCueAndVeto(int slot, cv::Mat& mask, const cv:
         }
         if (!chosen && (bin < kNightBins - 1)) {
             chosen = usableSlot(slotFromBin(bin + 1, moonUp), roiNorm, frameBrightnessAnchor);
+        }
+    }
+    else if (!chosen)
+    {
+        const int bin = slotDayBin(slot);
+        if (bin > 0) {
+            chosen = usableSlot(slotFromDayBin(bin - 1), roiNorm, frameBrightnessAnchor);
+        }
+        if (!chosen && (bin < kDayBins - 1)) {
+            chosen = usableSlot(slotFromDayBin(bin + 1), roiNorm, frameBrightnessAnchor);
         }
     }
     if (!chosen) {
@@ -944,14 +997,22 @@ cv::Mat CameraClearSkyReference::foregroundMask(const cv::Size& workSize, const 
             cv::bitwise_or(foreground, silhouettes, foreground);
             any = true;
         }
-        // Structure: in the day slot, foliage and buildings carry dense fine texture that
-        // sky and cloud do not
-        const Slot& daySlot = m_slots[0];
-        if (daySlot.valid() && (!darkSlot || roiMatches(daySlot, darkSlot->roiNorm)))
+        // Structure: in a day slot, foliage and buildings carry dense fine texture that
+        // sky and cloud do not. Prefer the highest-sun bin - the strongest light gives the
+        // crispest foreground texture.
+        const Slot *daySlot = nullptr;
+        for (int bin = 0; (bin < kDayBins) && !daySlot; ++bin)
         {
-            cv::Mat textured = daySlot.texture > kForegroundTexture;
-            cv::bitwise_and(textured, daySlot.sky, textured);
-            const cv::Mat dayConfirmed = daySlot.weight >= kWeightUsable;
+            const Slot& candidate = m_slots[slotFromDayBin(bin)];
+            if (candidate.valid()) {
+                daySlot = &candidate;
+            }
+        }
+        if (daySlot && (!darkSlot || roiMatches(*daySlot, darkSlot->roiNorm)))
+        {
+            cv::Mat textured = daySlot->texture > kForegroundTexture;
+            cv::bitwise_and(textured, daySlot->sky, textured);
+            const cv::Mat dayConfirmed = daySlot->weight >= kWeightUsable;
             cv::bitwise_and(textured, dayConfirmed, textured);
             cv::bitwise_or(foreground, textured, foreground);
             any = true;

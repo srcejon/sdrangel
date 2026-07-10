@@ -20,6 +20,8 @@
 #include <QVBoxLayout>
 #include "util/profiler.h"
 
+#include "gui/dialogpositioner.h"
+
 #include "camerahistogramdialog.h"
 
 CameraHistogramDialog::CameraHistogramDialog(const CameraHistogramData& histogramData, QWidget* parent)
@@ -32,6 +34,7 @@ CameraHistogramDialog::CameraHistogramDialog(const CameraHistogramData& histogra
     setWindowTitle(tr("Histogram"));
     resize(600, 400);
     setModal(false);
+    new DialogPositioner(this, true);
 
     m_chart->setTheme(QChart::ChartThemeDark);
     m_chart->legend()->setVisible(true);

@@ -1173,10 +1173,17 @@ MeteorDemodSink::SpectralCandidate MeteorDemodSink::buildSpectralCandidate(const
     candidate.m_enoughFrames = (count >= 3) || compactTwoFrameEcho;
     const bool exceptionalShortEcho = (candidate.m_peakAboveBackgroundDB >= 25.0)
         && (candidate.m_integratedSupportDB >= 15.0);
-    candidate.m_smoothSweepRejected = driftLimitEnabled
-        && (candidate.m_sweepScore >= 0.65)
-        && (std::fabs(candidate.m_robustFrequencyDrift) > sweepFrequencyLimit)
-        && ((candidate.m_durationS >= 0.5) || !exceptionalShortEcho);
+    const double spectralBinWidth = (double) std::max(1, m_settings.m_channelSampleRate)
+        / (double) std::max(1, m_spectralFrameSize);
+    const bool sustainedSmoothSweep = (candidate.m_durationS >= 0.5)
+        && (candidate.m_frameCount >= 8)
+        && (candidate.m_sweepScore >= 0.85)
+        && (std::fabs(candidate.m_robustFrequencyDrift) >= 2.0 * spectralBinWidth);
+    candidate.m_smoothSweepRejected = sustainedSmoothSweep
+        || (driftLimitEnabled
+            && (candidate.m_sweepScore >= 0.65)
+            && (std::fabs(candidate.m_robustFrequencyDrift) > sweepFrequencyLimit)
+            && ((candidate.m_durationS >= 0.5) || !exceptionalShortEcho));
     candidate.m_longDriftRejected = driftLimitEnabled
         && (candidate.m_durationS >= 1.0)
         && (std::fabs(candidate.m_robustFrequencyDrift) > sweepFrequencyLimit)

@@ -65,6 +65,7 @@ namespace {
     constexpr int DetectionSampleUtcMSecsRole = Qt::UserRole + 1;
     constexpr int DetectionOverlayIdRole = Qt::UserRole + 2;
     constexpr int DetectionDisplayUtcMSecsRole = Qt::UserRole + 3;
+    constexpr int MeteorDefaultFFTOverlap = 512;
 }
 
 MeteorGUI* MeteorGUI::create(PluginAPI* pluginAPI, DeviceUISet *deviceUISet, BasebandSampleSink *rxChannel)
@@ -336,11 +337,17 @@ void MeteorGUI::setupSpectrum()
 {
     m_spectrumVis->setGLSpectrum(m_glSpectrum);
     m_spectrumGUI->setBuddies(m_spectrumVis, m_glSpectrum);
+
+    if (QSpinBox *fftOverlap = m_spectrumGUI->findChild<QSpinBox *>("fftOverlap")) {
+        fftOverlap->setValue(MeteorDefaultFFTOverlap);
+    }
+
     m_glSpectrum->setCenterFrequency(0);
     m_glSpectrum->setSampleRate(m_settings.m_channelSampleRate);
     m_glSpectrum->setLsbDisplay(false);
 
     SpectrumSettings spectrumSettings = m_spectrumVis->getSettings();
+    spectrumSettings.m_fftOverlap = MeteorDefaultFFTOverlap;
     spectrumSettings.m_displayWaterfall = true;
     spectrumSettings.m_displayMaxHold = false;
     spectrumSettings.m_scrollBar = true;
@@ -1804,26 +1811,33 @@ void MeteorGUI::drawDetectionOverlays(GLSpectrumView *spectrumView)
 
             const bool selected = selectedIds.contains(detection.m_id);
 
-            const QDateTime endTimeUtc = detection.m_startTimeUtc.addMSecs((qint64) std::ceil(detection.m_durationS * 1000.0));
+            const qint64 durationMSecs = (qint64) std::ceil(detection.m_durationS * 1000.0);
+            const QDateTime endTimeUtc = detection.m_startTimeUtc.addMSecs(durationMSecs);
             float yStart = 0.0f;
             float yEnd = 0.0f;
 
-            if (!spectrumView->waterfallTimeToY(detection.m_startTimeUtc, yStart)
+            if (fftOverlap > 0)
+            {
+                const qint64 centerDelayMSecs = (qint64) std::llround(spectrumWindowCenterDelayS * 1000.0);
+                const QDateTime centerTimeUtc = detection.m_startTimeUtc.addMSecs(durationMSecs / 2 + centerDelayMSecs);
+                float yCenter = 0.0f;
+
+                if (!spectrumView->waterfallTimeToY(centerTimeUtc, yCenter)) {
+                    continue;
+                }
+
+                if ((waterfallRowDurationS > 0.0) && (timePerPixel > 0.0))
+                {
+                    const double durationRows = detection.m_durationS / waterfallRowDurationS;
+                    const float halfHeight = (float) (durationRows * timePerPixel * 0.5);
+                    yStart = yCenter - halfHeight;
+                    yEnd = yCenter + halfHeight;
+                }
+            }
+            else if (!spectrumView->waterfallTimeToY(detection.m_startTimeUtc, yStart)
                 || !spectrumView->waterfallTimeToY(endTimeUtc, yEnd))
             {
                 continue;
-            }
-
-            if ((fftOverlap > 0) && (waterfallRowDurationS > 0.0) && (timePerPixel > 0.0))
-            {
-                const double durationRows = detection.m_durationS / waterfallRowDurationS;
-                const double centerDelayRows = spectrumWindowCenterDelayS / waterfallRowDurationS;
-                const float timeDirection = spectrumSettings.m_invertedWaterfall ? -1.0f : 1.0f;
-                const float yCenter = (yStart + yEnd) * 0.5f
-                    + timeDirection * (float) (centerDelayRows * timePerPixel);
-                const float halfHeight = (float) (durationRows * timePerPixel * 0.5);
-                yStart = yCenter - halfHeight;
-                yEnd = yCenter + halfHeight;
             }
 
             const int paddingPixels = std::max(0, m_settings.m_detectionBoxPaddingPixels);

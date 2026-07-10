@@ -176,10 +176,15 @@ public:
             SWGSDRangel::SWGChannelSettings& response,
             const MeteorSettings& settings);
 
-    static void webapiUpdateChannelSettings(
+    static bool webapiUpdateChannelSettings(
             MeteorSettings& settings,
             const QStringList& channelSettingsKeys,
-            SWGSDRangel::SWGChannelSettings& response);
+            SWGSDRangel::SWGChannelSettings& response,
+            QString& errorMessage);
+
+    static bool validateChannelSettings(
+            const MeteorSettings& settings,
+            QString& errorMessage);
 
     static const char * const m_channelIdURI;
     static const char * const m_channelId;

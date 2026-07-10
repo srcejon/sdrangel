@@ -68,6 +68,7 @@ public:
         double m_rejectionPenalty = 0.0;
         double m_trackOccupancy = 0.0;
         double m_frequencyCoherence = 0.0;
+        double m_frameOccupiedFraction = 0.0;
         int m_frameCount = 0;
         bool m_durationOK = false;
         bool m_enoughFrames = false;
@@ -286,6 +287,7 @@ private:
         double m_contrastDB;
         double m_peakRatio;
         double m_framePeakPower;
+        double m_frameOccupiedFraction;
         int m_lowIndex;
         int m_highIndex;
 
@@ -301,6 +303,7 @@ private:
             m_contrastDB(0.0),
             m_peakRatio(0.0),
             m_framePeakPower(0.0),
+            m_frameOccupiedFraction(0.0),
             m_lowIndex(0),
             m_highIndex(0)
         {}
@@ -339,6 +342,7 @@ private:
         std::vector<double> m_trackBandwidths;
         std::vector<quint64> m_trackSamples;
         std::vector<double> m_trackStrengths;
+        std::vector<double> m_trackFrameOccupiedFractions;
 
         SpectralEvent() :
             m_valid(false),
@@ -388,6 +392,7 @@ private:
         double m_rejectionPenalty;
         double m_trackOccupancy;
         double m_frequencyCoherence;
+        double m_frameOccupiedFraction;
         int m_frameCount;
         bool m_durationOK;
         bool m_enoughFrames;
@@ -436,6 +441,7 @@ private:
             m_rejectionPenalty(0.0),
             m_trackOccupancy(0.0),
             m_frequencyCoherence(0.0),
+            m_frameOccupiedFraction(0.0),
             m_frameCount(0),
             m_durationOK(false),
             m_enoughFrames(false),

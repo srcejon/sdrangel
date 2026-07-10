@@ -500,7 +500,7 @@ namespace {
         out << "index,startSample,endSample,peakSample,durationS,centerFrequencyHz,frequencySpanHz,frequencyDriftHz,"
                "peakAboveBackgroundDB,integratedSupportDB,maxBandwidthHz,maxContrastDB,sweepScore,acceptanceScore,"
                "acceptanceThreshold,scoreMargin,signalScore,supportScore,shapeScore,rejectionPenalty,trackOccupancy,"
-               "frequencyCoherence,frameCount,durationOK,enoughFrames,sweepRejected,spectralEvidenceOK,"
+               "frequencyCoherence,frameOccupiedFraction,frameCount,durationOK,enoughFrames,sweepRejected,spectralEvidenceOK,"
                "insideUsableBandwidth,duplicate,broadbandImpulse,sweepContinuationRejected,accepted,"
                "classification,rejectionReason\n";
 
@@ -529,6 +529,7 @@ namespace {
                 << QString::number(audit.m_rejectionPenalty, 'f', 3) << ','
                 << QString::number(audit.m_trackOccupancy, 'f', 3) << ','
                 << QString::number(audit.m_frequencyCoherence, 'f', 3) << ','
+                << QString::number(audit.m_frameOccupiedFraction, 'f', 3) << ','
                 << audit.m_frameCount << ','
                 << (audit.m_durationOK ? 1 : 0) << ','
                 << (audit.m_enoughFrames ? 1 : 0) << ','

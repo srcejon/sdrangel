@@ -40,6 +40,29 @@ using namespace QtCharts;
 namespace {
 
 #if defined(Q_OS_ANDROID)
+void logWidePageWidgets(const char *pageName, const QWidget *page)
+{
+    if (!page || page->minimumSizeHint().width() < 380) {
+        return;
+    }
+
+    const QList<QWidget *> widgets = page->findChildren<QWidget *>();
+
+    for (const QWidget *widget : widgets)
+    {
+        if (widget->objectName().isEmpty() || widget->minimumSizeHint().width() < 150) {
+            continue;
+        }
+
+        qDebug() << "CameraSettingsDialog Android wide widget" << pageName
+                 << widget->metaObject()->className()
+                 << widget->objectName()
+                 << "minimum" << widget->minimumSize()
+                 << "minimumHint" << widget->minimumSizeHint()
+                 << "sizeHint" << widget->sizeHint();
+    }
+}
+
 void logTabWidgetSizeDiagnostics(const char *name, const QTabWidget *tabWidget)
 {
     if (!tabWidget) {
@@ -69,6 +92,7 @@ void logTabWidgetSizeDiagnostics(const char *name, const QTabWidget *tabWidget)
                  << "minimum" << page->minimumSize()
                  << "minimumHint" << page->minimumSizeHint()
                  << "sizeHint" << page->sizeHint();
+        logWidePageWidgets(page->objectName().toUtf8().constData(), page);
     }
 }
 #endif

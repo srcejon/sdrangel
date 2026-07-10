@@ -4298,6 +4298,181 @@ Use src=file:///path/to/images/logo.png for img tags. http is not supported.</st
            </item>
           </layout>
          </widget>
+         <widget class="QWidget" name="windowOverlaysTab">
+          <property name="toolTip">
+           <string>Window and spectrum overlay settings.</string>
+          </property>
+          <attribute name="title">
+           <string>Window Overlays</string>
+          </attribute>
+          <layout class="QVBoxLayout" name="windowOverlaysTabLayout">
+           <item>
+            <widget class="QGroupBox" name="spectrumOverlaysGroup">
+             <property name="toolTip">
+              <string>Overlay one or more spectrum displays on the camera image.</string>
+             </property>
+             <property name="title">
+              <string>Spectrum Overlays</string>
+             </property>
+             <layout class="QVBoxLayout" name="spectrumOverlaysLayout">
+              <item>
+               <widget class="QTableWidget" name="spectrumOverlaysTable">
+                <property name="toolTip">
+                 <string>List of spectrum overlays to draw on the camera image.</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <layout class="QHBoxLayout" name="spectrumOverlayButtonLayout">
+                <item>
+                 <widget class="QPushButton" name="spectrumOverlayAddButton">
+                  <property name="toolTip">
+                   <string>Add a spectrum overlay.</string>
+                  </property>
+                  <property name="text">
+                   <string>Add</string>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <widget class="QPushButton" name="spectrumOverlayRemoveButton">
+                  <property name="toolTip">
+                   <string>Remove the selected spectrum overlay.</string>
+                  </property>
+                  <property name="text">
+                   <string>Remove</string>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <widget class="QPushButton" name="spectrumOverlayUpButton">
+                  <property name="toolTip">
+                   <string>Move the selected spectrum overlay earlier in the list.</string>
+                  </property>
+                  <property name="text">
+                   <string>Up</string>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <widget class="QPushButton" name="spectrumOverlayDownButton">
+                  <property name="toolTip">
+                   <string>Move the selected spectrum overlay later in the list.</string>
+                  </property>
+                  <property name="text">
+                   <string>Down</string>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <spacer name="spectrumOverlayButtonSpacer">
+                  <property name="orientation">
+                   <enum>Qt::Orientation::Horizontal</enum>
+                  </property>
+                  <property name="sizeHint" stdset="0">
+                   <size>
+                    <width>40</width>
+                    <height>20</height>
+                   </size>
+                  </property>
+                 </spacer>
+                </item>
+               </layout>
+              </item>
+             </layout>
+            </widget>
+           </item>
+           <item>
+            <widget class="QGroupBox" name="windowOverlaysGroup">
+             <property name="toolTip">
+              <string>Overlay one or more SDRangel windows or rollups on the camera image.</string>
+             </property>
+             <property name="title">
+              <string>Window Overlays</string>
+             </property>
+             <layout class="QVBoxLayout" name="windowOverlaysLayout">
+              <item>
+               <widget class="QTableWidget" name="windowOverlaysTable">
+                <property name="toolTip">
+                 <string>List of SDRangel windows or rollups to draw on the camera image.</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <layout class="QHBoxLayout" name="windowOverlayButtonLayout">
+                <item>
+                 <widget class="QPushButton" name="windowOverlayAddButton">
+                  <property name="toolTip">
+                   <string>Add a window overlay.</string>
+                  </property>
+                  <property name="text">
+                   <string>Add</string>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <widget class="QPushButton" name="windowOverlayRemoveButton">
+                  <property name="toolTip">
+                   <string>Remove the selected window overlay.</string>
+                  </property>
+                  <property name="text">
+                   <string>Remove</string>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <widget class="QPushButton" name="windowOverlayUpButton">
+                  <property name="toolTip">
+                   <string>Move the selected window overlay earlier in the list.</string>
+                  </property>
+                  <property name="text">
+                   <string>Up</string>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <widget class="QPushButton" name="windowOverlayDownButton">
+                  <property name="toolTip">
+                   <string>Move the selected window overlay later in the list.</string>
+                  </property>
+                  <property name="text">
+                   <string>Down</string>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <spacer name="windowOverlayButtonSpacer">
+                  <property name="orientation">
+                   <enum>Qt::Orientation::Horizontal</enum>
+                  </property>
+                  <property name="sizeHint" stdset="0">
+                   <size>
+                    <width>40</width>
+                    <height>20</height>
+                   </size>
+                  </property>
+                 </spacer>
+                </item>
+               </layout>
+              </item>
+             </layout>
+            </widget>
+           </item>
+           <item>
+            <spacer name="windowOverlayVerticalSpacer">
+             <property name="orientation">
+              <enum>Qt::Orientation::Vertical</enum>
+             </property>
+             <property name="sizeHint" stdset="0">
+              <size>
+               <width>20</width>
+               <height>40</height>
+              </size>
+             </property>
+            </spacer>
+           </item>
+          </layout>
+         </widget>
         </widget>
        </item>
       </layout>

@@ -3642,12 +3642,22 @@ void CameraGUI::createWindowOverlaysTab()
         return;
     }
 
-    m_windowOverlaysTab = new QWidget(m_settingsDialog);
-    QVBoxLayout *mainLayout = new QVBoxLayout(m_windowOverlaysTab);
+    m_windowOverlaysTab = settingsUI()->windowOverlaysTab;
+    m_spectrumOverlaysTable = settingsUI()->spectrumOverlaysTable;
+    m_spectrumOverlayAddButton = settingsUI()->spectrumOverlayAddButton;
+    m_spectrumOverlayRemoveButton = settingsUI()->spectrumOverlayRemoveButton;
+    m_spectrumOverlayUpButton = settingsUI()->spectrumOverlayUpButton;
+    m_spectrumOverlayDownButton = settingsUI()->spectrumOverlayDownButton;
+    m_windowOverlaysTable = settingsUI()->windowOverlaysTable;
+    m_windowOverlayAddButton = settingsUI()->windowOverlayAddButton;
+    m_windowOverlayRemoveButton = settingsUI()->windowOverlayRemoveButton;
+    m_windowOverlayUpButton = settingsUI()->windowOverlayUpButton;
+    m_windowOverlayDownButton = settingsUI()->windowOverlayDownButton;
 
-    QGroupBox *spectrumGroup = new QGroupBox(tr("Spectrum Overlays"), m_windowOverlaysTab);
-    QVBoxLayout *spectrumLayout = new QVBoxLayout(spectrumGroup);
-    m_spectrumOverlaysTable = new QTableWidget(spectrumGroup);
+    if (!m_windowOverlaysTab || !m_spectrumOverlaysTable || !m_windowOverlaysTable) {
+        return;
+    }
+
     m_spectrumOverlaysTable->setColumnCount(5);
     m_spectrumOverlaysTable->setHorizontalHeaderLabels({
         tr("On"),
@@ -3664,24 +3674,7 @@ void CameraGUI::createWindowOverlaysTab()
     m_spectrumOverlaysTable->horizontalHeader()->setSectionResizeMode(2, QHeaderView::ResizeToContents);
     m_spectrumOverlaysTable->horizontalHeader()->setSectionResizeMode(3, QHeaderView::ResizeToContents);
     m_spectrumOverlaysTable->horizontalHeader()->setSectionResizeMode(4, QHeaderView::ResizeToContents);
-    spectrumLayout->addWidget(m_spectrumOverlaysTable);
 
-    QHBoxLayout *spectrumButtonLayout = new QHBoxLayout();
-    m_spectrumOverlayAddButton = new QPushButton(tr("Add"), spectrumGroup);
-    m_spectrumOverlayRemoveButton = new QPushButton(tr("Remove"), spectrumGroup);
-    m_spectrumOverlayUpButton = new QPushButton(tr("Up"), spectrumGroup);
-    m_spectrumOverlayDownButton = new QPushButton(tr("Down"), spectrumGroup);
-    spectrumButtonLayout->addWidget(m_spectrumOverlayAddButton);
-    spectrumButtonLayout->addWidget(m_spectrumOverlayRemoveButton);
-    spectrumButtonLayout->addWidget(m_spectrumOverlayUpButton);
-    spectrumButtonLayout->addWidget(m_spectrumOverlayDownButton);
-    spectrumButtonLayout->addStretch(1);
-    spectrumLayout->addLayout(spectrumButtonLayout);
-    mainLayout->addWidget(spectrumGroup);
-
-    QGroupBox *windowGroup = new QGroupBox(tr("Window Overlays"), m_windowOverlaysTab);
-    QVBoxLayout *windowLayout = new QVBoxLayout(windowGroup);
-    m_windowOverlaysTable = new QTableWidget(m_windowOverlaysTab);
     m_windowOverlaysTable->setColumnCount(7);
     m_windowOverlaysTable->setHorizontalHeaderLabels({
         tr("On"),
@@ -3702,22 +3695,6 @@ void CameraGUI::createWindowOverlaysTab()
     m_windowOverlaysTable->horizontalHeader()->setSectionResizeMode(4, QHeaderView::ResizeToContents);
     m_windowOverlaysTable->horizontalHeader()->setSectionResizeMode(5, QHeaderView::ResizeToContents);
     m_windowOverlaysTable->horizontalHeader()->setSectionResizeMode(6, QHeaderView::ResizeToContents);
-    windowLayout->addWidget(m_windowOverlaysTable);
-
-    QHBoxLayout *buttonLayout = new QHBoxLayout();
-    m_windowOverlayAddButton = new QPushButton(tr("Add"), windowGroup);
-    m_windowOverlayRemoveButton = new QPushButton(tr("Remove"), windowGroup);
-    m_windowOverlayUpButton = new QPushButton(tr("Up"), windowGroup);
-    m_windowOverlayDownButton = new QPushButton(tr("Down"), windowGroup);
-    buttonLayout->addWidget(m_windowOverlayAddButton);
-    buttonLayout->addWidget(m_windowOverlayRemoveButton);
-    buttonLayout->addWidget(m_windowOverlayUpButton);
-    buttonLayout->addWidget(m_windowOverlayDownButton);
-    buttonLayout->addStretch(1);
-    windowLayout->addLayout(buttonLayout);
-    mainLayout->addWidget(windowGroup);
-
-    settingsUI()->tabWidget->addTab(m_windowOverlaysTab, tr("Window Overlays"));
 
     connect(m_spectrumOverlaysTable, &QTableWidget::itemSelectionChanged, this, &CameraGUI::updateSpectrumOverlayControls);
     connect(m_spectrumOverlayAddButton, &QPushButton::clicked, this, [this]() {
@@ -3826,8 +3803,8 @@ void CameraGUI::createWindowOverlaysTab()
         updateWindowOverlayCaptureTimer();
         captureWindowOverlays();
     });
-    connect(settingsUI()->tabWidget, &QTabWidget::currentChanged, this, [this](int index) {
-        if (settingsUI()->tabWidget->widget(index) == m_windowOverlaysTab) {
+    connect(settingsUI()->overlayTabWidget, &QTabWidget::currentChanged, this, [this](int index) {
+        if (settingsUI()->overlayTabWidget->widget(index) == m_windowOverlaysTab) {
             updateSpectrumOverlaysTable();
             updateWindowOverlaysTable();
         }

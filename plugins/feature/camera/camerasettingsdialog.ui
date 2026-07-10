@@ -2496,7 +2496,7 @@
            <widget class="QLabel" name="postProcessWhiteBalanceModeLabel">
             <property name="minimumSize">
              <size>
-              <width>100</width>
+              <width>0</width>
               <height>0</height>
              </size>
             </property>
@@ -2697,7 +2697,7 @@
            <widget class="QLabel" name="histogramStretchModeLabel">
             <property name="minimumSize">
              <size>
-              <width>100</width>
+              <width>0</width>
               <height>0</height>
              </size>
             </property>
@@ -3095,7 +3095,7 @@
            <widget class="QLabel" name="gaussianBlurLabel">
             <property name="minimumSize">
              <size>
-              <width>100</width>
+              <width>0</width>
               <height>0</height>
              </size>
             </property>
@@ -3296,7 +3296,7 @@
            <widget class="QLabel" name="flipXLabel">
             <property name="minimumSize">
              <size>
-              <width>100</width>
+              <width>0</width>
               <height>0</height>
              </size>
             </property>
@@ -3617,7 +3617,7 @@
                <widget class="QLabel" name="trackObjectMinElevationLabel">
                 <property name="minimumSize">
                  <size>
-                  <width>100</width>
+                  <width>0</width>
                   <height>0</height>
                  </size>
                 </property>
@@ -5139,7 +5139,7 @@ Use src=file:///path/to/images/logo.png for img tags. http is not supported.</st
             <widget class="QLabel" name="detectionRoiWidthLabel">
              <property name="minimumSize">
               <size>
-               <width>130</width>
+               <width>0</width>
                <height>0</height>
               </size>
              </property>
@@ -5152,7 +5152,7 @@ Use src=file:///path/to/images/logo.png for img tags. http is not supported.</st
             <widget class="QLabel" name="detectionRoiXLabel">
              <property name="minimumSize">
               <size>
-               <width>130</width>
+               <width>0</width>
                <height>0</height>
               </size>
              </property>
@@ -5165,7 +5165,7 @@ Use src=file:///path/to/images/logo.png for img tags. http is not supported.</st
             <widget class="QLabel" name="detectionRoiYLabel">
              <property name="minimumSize">
               <size>
-               <width>130</width>
+               <width>0</width>
                <height>0</height>
               </size>
              </property>
@@ -5217,7 +5217,7 @@ Use src=file:///path/to/images/logo.png for img tags. http is not supported.</st
             <widget class="QLabel" name="detectionRoiHeightLabel">
              <property name="minimumSize">
               <size>
-               <width>130</width>
+               <width>0</width>
                <height>0</height>
               </size>
              </property>
@@ -5617,7 +5617,7 @@ Use src=file:///path/to/images/logo.png for img tags. http is not supported.</st
             <widget class="QLabel" name="yoloModelPathLabel">
              <property name="minimumSize">
               <size>
-               <width>130</width>
+               <width>0</width>
                <height>0</height>
               </size>
              </property>
@@ -5859,34 +5859,11 @@ car</string>
            <string>Motion Detection</string>
           </attribute>
           <layout class="QGridLayout" name="gridLayout">
-           <item row="0" column="1">
-            <widget class="QComboBox" name="motionBackgroundSubtractorCombo">
-             <property name="minimumSize">
-              <size>
-               <width>180</width>
-               <height>0</height>
-              </size>
-             </property>
-             <property name="toolTip">
-              <string>Background subtractor used for motion detection</string>
-             </property>
-             <item>
-              <property name="text">
-               <string>MOG2</string>
-              </property>
-             </item>
-             <item>
-              <property name="text">
-               <string>KNN</string>
-              </property>
-             </item>
-            </widget>
-           </item>
            <item row="3" column="0">
             <widget class="QLabel" name="motionDownscaleLabel">
              <property name="minimumSize">
               <size>
-               <width>130</width>
+               <width>0</width>
                <height>0</height>
               </size>
              </property>
@@ -5899,7 +5876,7 @@ car</string>
             <widget class="QLabel" name="motionBackgroundSubtractorLabel">
              <property name="minimumSize">
               <size>
-               <width>130</width>
+               <width>0</width>
                <height>0</height>
               </size>
              </property>
@@ -5957,7 +5934,7 @@ car</string>
             <widget class="QLabel" name="motionHistoryLabel">
              <property name="minimumSize">
               <size>
-               <width>130</width>
+               <width>0</width>
                <height>0</height>
               </size>
              </property>
@@ -6012,7 +5989,7 @@ car</string>
             <widget class="QLabel" name="motionConfirmFramesLabel">
              <property name="minimumSize">
               <size>
-               <width>130</width>
+               <width>0</width>
                <height>0</height>
               </size>
              </property>
@@ -6047,7 +6024,7 @@ car</string>
             <widget class="QLabel" name="minContourAreaLabel">
              <property name="minimumSize">
               <size>
-               <width>130</width>
+               <width>0</width>
                <height>0</height>
               </size>
              </property>
@@ -6070,7 +6047,7 @@ car</string>
             <widget class="QLabel" name="motionVarThresholdLabel">
              <property name="minimumSize">
               <size>
-               <width>130</width>
+               <width>0</width>
                <height>0</height>
               </size>
              </property>
@@ -6112,7 +6089,7 @@ car</string>
             <widget class="QLabel" name="motionOpenSizeLabel">
              <property name="minimumSize">
               <size>
-               <width>130</width>
+               <width>0</width>
                <height>0</height>
               </size>
              </property>
@@ -6138,7 +6115,7 @@ car</string>
             <widget class="QLabel" name="motionPersistenceFramesLabel">
              <property name="minimumSize">
               <size>
-               <width>130</width>
+               <width>0</width>
                <height>0</height>
               </size>
              </property>
@@ -6151,7 +6128,7 @@ car</string>
             <widget class="QLabel" name="motionCloseSizeLabel">
              <property name="minimumSize">
               <size>
-               <width>130</width>
+               <width>0</width>
                <height>0</height>
               </size>
              </property>
@@ -6164,7 +6141,7 @@ car</string>
             <widget class="QLabel" name="motionMaskViewLabel">
              <property name="minimumSize">
               <size>
-               <width>130</width>
+               <width>0</width>
                <height>0</height>
               </size>
              </property>
@@ -6177,7 +6154,7 @@ car</string>
             <widget class="QComboBox" name="motionMaskViewCombo">
              <property name="minimumSize">
               <size>
-               <width>180</width>
+               <width>0</width>
                <height>0</height>
               </size>
              </property>
@@ -6218,6 +6195,12 @@ car</string>
            </item>
            <item row="0" column="3">
             <widget class="QDoubleSpinBox" name="motionLearningRateSpin">
+             <property name="sizePolicy">
+              <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+               <horstretch>0</horstretch>
+               <verstretch>0</verstretch>
+              </sizepolicy>
+             </property>
              <property name="toolTip">
               <string>MOG2 learning rate (-1 = automatic)</string>
              </property>
@@ -6245,7 +6228,7 @@ car</string>
             <widget class="QLabel" name="motionLearningRateLabel">
              <property name="minimumSize">
               <size>
-               <width>130</width>
+               <width>0</width>
                <height>0</height>
               </size>
              </property>
@@ -6272,6 +6255,35 @@ car</string>
              <property name="checked">
               <bool>true</bool>
              </property>
+            </widget>
+           </item>
+           <item row="0" column="1">
+            <widget class="QComboBox" name="motionBackgroundSubtractorCombo">
+             <property name="sizePolicy">
+              <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+               <horstretch>0</horstretch>
+               <verstretch>0</verstretch>
+              </sizepolicy>
+             </property>
+             <property name="minimumSize">
+              <size>
+               <width>0</width>
+               <height>0</height>
+              </size>
+             </property>
+             <property name="toolTip">
+              <string>Background subtractor used for motion detection</string>
+             </property>
+             <item>
+              <property name="text">
+               <string>MOG2</string>
+              </property>
+             </item>
+             <item>
+              <property name="text">
+               <string>KNN</string>
+              </property>
+             </item>
             </widget>
            </item>
           </layout>
@@ -6653,7 +6665,7 @@ car</string>
             <widget class="QLabel" name="cloudDebugViewLabel">
              <property name="minimumSize">
               <size>
-               <width>130</width>
+               <width>0</width>
                <height>0</height>
               </size>
              </property>
@@ -6737,7 +6749,7 @@ car</string>
             <widget class="QLabel" name="cloudModeLabel">
              <property name="minimumSize">
               <size>
-               <width>130</width>
+               <width>0</width>
                <height>0</height>
               </size>
              </property>
@@ -6750,7 +6762,7 @@ car</string>
             <widget class="QComboBox" name="cloudModeCombo">
              <property name="minimumSize">
               <size>
-               <width>180</width>
+               <width>0</width>
                <height>0</height>
               </size>
              </property>
@@ -7720,7 +7732,7 @@ car</string>
             <widget class="QLabel" name="dilationLabel">
              <property name="minimumSize">
               <size>
-               <width>130</width>
+               <width>0</width>
                <height>0</height>
               </size>
              </property>
@@ -7746,7 +7758,7 @@ car</string>
             <widget class="QLabel" name="diffMaskHistoryFramesLabel">
              <property name="minimumSize">
               <size>
-               <width>130</width>
+               <width>0</width>
                <height>0</height>
               </size>
              </property>
@@ -7759,7 +7771,7 @@ car</string>
             <widget class="QLabel" name="diffMaskOpenSizeLabel">
              <property name="minimumSize">
               <size>
-               <width>130</width>
+               <width>0</width>
                <height>0</height>
               </size>
              </property>
@@ -7820,7 +7832,7 @@ car</string>
             <widget class="QLabel" name="diffMaskCloseSizeLabel">
              <property name="minimumSize">
               <size>
-               <width>130</width>
+               <width>0</width>
                <height>0</height>
               </size>
              </property>
@@ -7833,7 +7845,7 @@ car</string>
             <widget class="QLabel" name="diffThresholdLabel">
              <property name="minimumSize">
               <size>
-               <width>130</width>
+               <width>0</width>
                <height>0</height>
               </size>
              </property>
@@ -7908,7 +7920,7 @@ car</string>
            <widget class="QLabel" name="latitudeLabel">
             <property name="minimumSize">
              <size>
-              <width>100</width>
+              <width>0</width>
               <height>0</height>
              </size>
             </property>
@@ -8058,7 +8070,7 @@ Right-click: toggle continual synchronization from My Position.</string>
            <widget class="QLabel" name="directionSourceLabel">
             <property name="minimumSize">
              <size>
-              <width>100</width>
+              <width>0</width>
               <height>0</height>
              </size>
             </property>

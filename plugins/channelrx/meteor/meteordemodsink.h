@@ -19,6 +19,7 @@
 #define INCLUDE_METEORDEMODSINK_H
 
 #include <array>
+#include <functional>
 #include <vector>
 
 #include <QDateTime>
@@ -42,6 +43,46 @@ public:
     enum {
         m_scopeStreams = 5
     };
+
+    struct CandidateAudit
+    {
+        bool m_valid = false;
+        quint64 m_startSample = 0;
+        quint64 m_endSample = 0;
+        quint64 m_peakSample = 0;
+        double m_durationS = 0.0;
+        double m_centerFrequency = 0.0;
+        double m_frequencySpan = 0.0;
+        double m_frequencyDrift = 0.0;
+        double m_peakAboveBackgroundDB = 0.0;
+        double m_integratedSupportDB = 0.0;
+        double m_maxBandwidth = 0.0;
+        double m_maxContrastDB = 0.0;
+        double m_sweepScore = 0.0;
+        double m_acceptanceScore = 0.0;
+        double m_acceptanceThreshold = 0.0;
+        double m_scoreMargin = 0.0;
+        double m_signalScore = 0.0;
+        double m_supportScore = 0.0;
+        double m_shapeScore = 0.0;
+        double m_rejectionPenalty = 0.0;
+        double m_trackOccupancy = 0.0;
+        double m_frequencyCoherence = 0.0;
+        int m_frameCount = 0;
+        bool m_durationOK = false;
+        bool m_enoughFrames = false;
+        bool m_sweepRejected = false;
+        bool m_spectralEvidenceOK = false;
+        bool m_insideUsableBandwidth = false;
+        bool m_duplicate = false;
+        bool m_broadbandImpulse = false;
+        bool m_sweepContinuationRejected = false;
+        bool m_accepted = false;
+        QString m_classification;
+        QString m_rejectionReason;
+    };
+
+    using CandidateAuditCallback = std::function<void(const CandidateAudit&)>;
 
     class MsgMeteorDetected : public Message {
         MESSAGE_CLASS_DECLARATION
@@ -175,6 +216,7 @@ public:
     void setScopeSink(ScopeVis* scopeSink) { m_scopeSink = scopeSink; }
     void setSpectrumSink(SpectrumVis* spectrumSink) { m_spectrumSink = spectrumSink; }
     void setMessageQueueToGUI(MessageQueue *messageQueue) { m_messageQueueToGUI = messageQueue; }
+    void setCandidateAuditCallback(const CandidateAuditCallback& callback) { m_candidateAuditCallback = callback; }
     void setChannel(ChannelAPI *channel) { m_channel = channel; }
     void applyChannelSettings(int channelSampleRate, int channelFrequencyOffset, bool force = false);
     void applySettings(const MeteorSettings& settings, const QStringList& settingsKeys, bool force = false);
@@ -204,6 +246,7 @@ private:
         double m_robustFrequencyDrift;
         double m_confidence;
         double m_componentSupportDB;
+        bool m_allowComponentMerge;
 
         PulseReport() :
             m_valid(false),
@@ -226,7 +269,8 @@ private:
             m_robustFrequencySpan(0.0),
             m_robustFrequencyDrift(0.0),
             m_confidence(0.0),
-            m_componentSupportDB(-200.0)
+            m_componentSupportDB(-200.0),
+            m_allowComponentMerge(true)
         {}
     };
 
@@ -342,6 +386,8 @@ private:
         double m_supportScore;
         double m_shapeScore;
         double m_rejectionPenalty;
+        double m_trackOccupancy;
+        double m_frequencyCoherence;
         int m_frameCount;
         bool m_durationOK;
         bool m_enoughFrames;
@@ -353,6 +399,8 @@ private:
         bool m_spectralEvidenceOK;
         bool m_insideUsableBandwidth;
         bool m_duplicate;
+        bool m_broadbandImpulse;
+        bool m_sweepContinuationRejected;
         bool m_scoreOK;
         bool m_accepted;
         const char *m_classification;
@@ -386,6 +434,8 @@ private:
             m_supportScore(0.0),
             m_shapeScore(0.0),
             m_rejectionPenalty(0.0),
+            m_trackOccupancy(0.0),
+            m_frequencyCoherence(0.0),
             m_frameCount(0),
             m_durationOK(false),
             m_enoughFrames(false),
@@ -397,6 +447,8 @@ private:
             m_spectralEvidenceOK(false),
             m_insideUsableBandwidth(false),
             m_duplicate(false),
+            m_broadbandImpulse(false),
+            m_sweepContinuationRejected(false),
             m_scoreOK(false),
             m_accepted(false),
             m_classification("invalid"),
@@ -411,6 +463,14 @@ private:
         double m_highFrequency;
     };
 
+    struct SpectralInterferenceRange {
+        quint64 m_startSample;
+        quint64 m_endSample;
+        double m_centerFrequency;
+        double m_frequencySpan;
+        bool m_broadband;
+    };
+
     struct DisplayTimeAnchor {
         quint64 m_sampleCounter;
         QDateTime m_dateTimeUtc;
@@ -419,6 +479,7 @@ private:
     ScopeVis* m_scopeSink;
     SpectrumVis* m_spectrumSink;
     MessageQueue *m_messageQueueToGUI;
+    CandidateAuditCallback m_candidateAuditCallback;
     MeteorSettings m_settings;
     ChannelAPI *m_channel;
 
@@ -443,6 +504,7 @@ private:
     std::vector<SpectralFrameSnapshot> m_spectralCalibrationFrames;
     std::vector<SpectralEvent> m_spectralEvents;
     std::vector<DetectionRange> m_recentDetectionRanges;
+    std::vector<SpectralInterferenceRange> m_recentSpectralInterference;
     std::vector<PulseReport> m_pendingComponentReports;
     std::vector<char> m_spectralActiveBins;
     FFTEngine *m_spectralFFT;
@@ -487,6 +549,10 @@ private:
     void updateSpectralEvents(const std::vector<SpectralBand>& bands, quint64 frameCenterSample);
     void updateSpectralEvent(SpectralEvent& event, const SpectralBand& band, quint64 frameCenterSample);
     void finishSpectralEvent(const SpectralEvent& event);
+    void auditSpectralCandidate(const SpectralCandidate& candidate) const;
+    bool isSweepContinuation(const SpectralCandidate& candidate) const;
+    bool overlapsBroadbandInterference(quint64 startSample, quint64 endSample) const;
+    void rememberSpectralInterference(const SpectralCandidate& candidate);
     SpectralCandidate buildSpectralCandidate(const SpectralEvent& event) const;
     void classifySpectralCandidate(SpectralCandidate& candidate) const;
     double scoreSpectralCandidate(SpectralCandidate& candidate) const;

@@ -79,6 +79,7 @@ namespace {
     {
         QString wavPath;
         QString testDir;
+        QString candidateCsvPath;
         MeteorSettings settings;
         int chunkSamples = 4096;
         int tailMS = 2000;
@@ -244,6 +245,10 @@ namespace {
             {
                 options.testDir = value;
             }
+            else if (readOptionValue(args, i, "candidate-csv", value, error))
+            {
+                options.candidateCsvPath = value;
+            }
             else if (readOptionValue(args, i, "channel-sample-rate", value, error))
             {
                 if (!parseIntValue("channel-sample-rate", value, options.settings.m_channelSampleRate, error)) {
@@ -335,6 +340,7 @@ namespace {
         out << "  -h, --help                         Show this help text.\n";
         out << "      --wav <file.wav>               Input SDRangel stereo 16-bit I/Q WAV file.\n";
         out << "      --test-dir <directory>         Directory of paired .wav and .csv regression fixtures.\n";
+        out << "      --candidate-csv <file.csv>     Write every spectral candidate and rejection decision.\n";
         out << "      --channel-sample-rate <rate>   Detector sample rate: 100, 300, 1000, or 3000 Hz.\n";
         out << "      --input-frequency-offset <hz>  Channel input frequency offset in Hz.\n";
         out << "      --power-lpf-cutoff <hz>        Power low-pass filter cutoff in Hz.\n";
@@ -475,6 +481,69 @@ namespace {
                 .arg(detection.startSample)
                 .arg(detection.endSample);
         }
+    }
+
+    bool writeCandidateAudits(
+        const QString& path,
+        const QVector<MeteorDemodSink::CandidateAudit>& audits,
+        QString& error)
+    {
+        QFile file(path);
+
+        if (!file.open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Truncate))
+        {
+            error = QString("Unable to write candidate CSV: %1").arg(path);
+            return false;
+        }
+
+        QTextStream out(&file);
+        out << "index,startSample,endSample,peakSample,durationS,centerFrequencyHz,frequencySpanHz,frequencyDriftHz,"
+               "peakAboveBackgroundDB,integratedSupportDB,maxBandwidthHz,maxContrastDB,sweepScore,acceptanceScore,"
+               "acceptanceThreshold,scoreMargin,signalScore,supportScore,shapeScore,rejectionPenalty,trackOccupancy,"
+               "frequencyCoherence,frameCount,durationOK,enoughFrames,sweepRejected,spectralEvidenceOK,"
+               "insideUsableBandwidth,duplicate,broadbandImpulse,sweepContinuationRejected,accepted,"
+               "classification,rejectionReason\n";
+
+        for (int i = 0; i < audits.size(); i++)
+        {
+            const MeteorDemodSink::CandidateAudit& audit = audits[i];
+            out << i + 1 << ','
+                << audit.m_startSample << ','
+                << audit.m_endSample << ','
+                << audit.m_peakSample << ','
+                << QString::number(audit.m_durationS, 'f', 6) << ','
+                << QString::number(audit.m_centerFrequency, 'f', 3) << ','
+                << QString::number(audit.m_frequencySpan, 'f', 3) << ','
+                << QString::number(audit.m_frequencyDrift, 'f', 3) << ','
+                << QString::number(audit.m_peakAboveBackgroundDB, 'f', 3) << ','
+                << QString::number(audit.m_integratedSupportDB, 'f', 3) << ','
+                << QString::number(audit.m_maxBandwidth, 'f', 3) << ','
+                << QString::number(audit.m_maxContrastDB, 'f', 3) << ','
+                << QString::number(audit.m_sweepScore, 'f', 6) << ','
+                << QString::number(audit.m_acceptanceScore, 'f', 3) << ','
+                << QString::number(audit.m_acceptanceThreshold, 'f', 3) << ','
+                << QString::number(audit.m_scoreMargin, 'f', 3) << ','
+                << QString::number(audit.m_signalScore, 'f', 3) << ','
+                << QString::number(audit.m_supportScore, 'f', 3) << ','
+                << QString::number(audit.m_shapeScore, 'f', 3) << ','
+                << QString::number(audit.m_rejectionPenalty, 'f', 3) << ','
+                << QString::number(audit.m_trackOccupancy, 'f', 3) << ','
+                << QString::number(audit.m_frequencyCoherence, 'f', 3) << ','
+                << audit.m_frameCount << ','
+                << (audit.m_durationOK ? 1 : 0) << ','
+                << (audit.m_enoughFrames ? 1 : 0) << ','
+                << (audit.m_sweepRejected ? 1 : 0) << ','
+                << (audit.m_spectralEvidenceOK ? 1 : 0) << ','
+                << (audit.m_insideUsableBandwidth ? 1 : 0) << ','
+                << (audit.m_duplicate ? 1 : 0) << ','
+                << (audit.m_broadbandImpulse ? 1 : 0) << ','
+                << (audit.m_sweepContinuationRejected ? 1 : 0) << ','
+                << (audit.m_accepted ? 1 : 0) << ','
+                << audit.m_classification << ','
+                << audit.m_rejectionReason << '\n';
+        }
+
+        return true;
     }
 
     bool parseDoubleField(const QString& text, double& value)
@@ -645,7 +714,12 @@ namespace {
         return ok;
     }
 
-    bool runWavFile(const Options& options, const QString& wavPath, QVector<Detection>& detections, QString& error)
+    bool runWavFile(
+        const Options& options,
+        const QString& wavPath,
+        QVector<Detection>& detections,
+        QString& error,
+        QVector<MeteorDemodSink::CandidateAudit> *candidateAudits = nullptr)
     {
         QFile wavFile(wavPath);
 
@@ -684,6 +758,15 @@ namespace {
 
         baseband.setFifoLabel("meteor_demod_sink_test");
         baseband.setMessageQueueToGUI(&outputQueue);
+
+        if (candidateAudits)
+        {
+            baseband.setCandidateAuditCallback(
+                [candidateAudits](const MeteorDemodSink::CandidateAudit& audit) {
+                    candidateAudits->push_back(audit);
+                });
+        }
+
         baseband.startWork();
         baseband.getInputMessageQueue()->push(new DSPSignalNotification(header.m_sampleRate, centerFrequency));
         baseband.getInputMessageQueue()->push(MeteorBaseband::MsgConfigureMeteorBaseband::create(options.settings, QStringList(), true));
@@ -808,8 +891,14 @@ int main(int argc, char *argv[])
     }
 
     QVector<Detection> detections;
+    QVector<MeteorDemodSink::CandidateAudit> candidateAudits;
 
-    if (!runWavFile(options, options.wavPath, detections, error))
+    if (!runWavFile(
+        options,
+        options.wavPath,
+        detections,
+        error,
+        options.candidateCsvPath.isEmpty() ? nullptr : &candidateAudits))
     {
         err << error << "\n";
         return 1;
@@ -819,6 +908,13 @@ int main(int argc, char *argv[])
 
     if (options.details) {
         printDetails(out, detections);
+    }
+
+    if (!options.candidateCsvPath.isEmpty()
+        && !writeCandidateAudits(options.candidateCsvPath, candidateAudits, error))
+    {
+        err << error << "\n";
+        return 1;
     }
 
     if ((options.expectCount >= 0) && (detections.size() != options.expectCount))

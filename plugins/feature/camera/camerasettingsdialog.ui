@@ -2,19 +2,19 @@
 <ui version="4.0">
  <class>CameraSettingsDialog</class>
  <widget class="QDialog" name="CameraSettingsDialog">
-  <property name="toolTip">
-   <string>Configures the camera Settings Dialog setting.</string>
-  </property>
   <property name="geometry">
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>854</width>
-    <height>914</height>
+    <width>835</width>
+    <height>906</height>
    </rect>
   </property>
   <property name="windowTitle">
    <string>Camera Settings</string>
+  </property>
+  <property name="toolTip">
+   <string>Configures the camera Settings Dialog setting.</string>
   </property>
   <layout class="QVBoxLayout" name="verticalLayout">
    <item>
@@ -35,14 +35,14 @@
       <layout class="QVBoxLayout" name="cameraTabLayout">
        <item alignment="Qt::AlignmentFlag::AlignTop">
         <widget class="QWidget" name="cameraSettingsContainer" native="true">
-         <property name="toolTip">
-          <string>Container for camera capture settings.</string>
-         </property>
          <property name="sizePolicy">
           <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
            <horstretch>0</horstretch>
            <verstretch>0</verstretch>
           </sizepolicy>
+         </property>
+         <property name="toolTip">
+          <string>Container for camera capture settings.</string>
          </property>
          <layout class="QGridLayout" name="cameraSettingsLayout">
           <item row="4" column="0">
@@ -366,14 +366,14 @@
            <layout class="QHBoxLayout" name="captureLayout">
             <item>
              <widget class="QStackedWidget" name="captureValueStack">
-              <property name="toolTip">
-               <string>Shows frame-rate or interval controls for the selected capture mode.</string>
-              </property>
               <property name="sizePolicy">
                <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
                 <horstretch>0</horstretch>
                 <verstretch>0</verstretch>
                </sizepolicy>
+              </property>
+              <property name="toolTip">
+               <string>Shows frame-rate or interval controls for the selected capture mode.</string>
               </property>
               <property name="currentIndex">
                <number>0</number>
@@ -1026,14 +1026,14 @@
       <layout class="QVBoxLayout" name="verticalLayout_3">
        <item alignment="Qt::AlignmentFlag::AlignTop">
         <widget class="QWidget" name="statusContainer" native="true">
-         <property name="toolTip">
-          <string>Container for camera status values.</string>
-         </property>
          <property name="sizePolicy">
           <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
            <horstretch>0</horstretch>
            <verstretch>0</verstretch>
           </sizepolicy>
+         </property>
+         <property name="toolTip">
+          <string>Container for camera status values.</string>
          </property>
          <layout class="QHBoxLayout" name="statusLayout">
           <item>
@@ -1248,14 +1248,14 @@
        </item>
        <item>
         <widget class="QWidget" name="cameraTempChartContainer" native="true">
-         <property name="toolTip">
-          <string>Displays the camera temperature history chart.</string>
-         </property>
          <property name="minimumSize">
           <size>
            <width>0</width>
            <height>200</height>
           </size>
+         </property>
+         <property name="toolTip">
+          <string>Displays the camera temperature history chart.</string>
          </property>
         </widget>
        </item>
@@ -1284,14 +1284,14 @@
       <layout class="QVBoxLayout" name="verticalLayout_6">
        <item alignment="Qt::AlignmentFlag::AlignTop">
         <widget class="QGroupBox" name="alpacaServerSettingsGroup">
-         <property name="toolTip">
-          <string>Settings for connecting to Alpaca camera, focuser, and filter wheel servers.</string>
-         </property>
          <property name="sizePolicy">
           <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
            <horstretch>0</horstretch>
            <verstretch>0</verstretch>
           </sizepolicy>
+         </property>
+         <property name="toolTip">
+          <string>Settings for connecting to Alpaca camera, focuser, and filter wheel servers.</string>
          </property>
          <property name="title">
           <string>ASCOM Alpaca</string>
@@ -1415,14 +1415,14 @@
        </item>
        <item alignment="Qt::AlignmentFlag::AlignTop">
         <widget class="QGroupBox" name="alpacaDevicesGroup">
-         <property name="toolTip">
-          <string>Detected Alpaca devices and optional auxiliary devices.</string>
-         </property>
          <property name="sizePolicy">
           <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
            <horstretch>0</horstretch>
            <verstretch>0</verstretch>
           </sizepolicy>
+         </property>
+         <property name="toolTip">
+          <string>Detected Alpaca devices and optional auxiliary devices.</string>
          </property>
          <property name="title">
           <string>Devices</string>
@@ -1490,14 +1490,14 @@
       <layout class="QVBoxLayout" name="verticalLayout_stacking">
        <item alignment="Qt::AlignmentFlag::AlignTop">
         <widget class="QGroupBox" name="stackCalibrationGroup">
-         <property name="toolTip">
-          <string>Calibration frame files used before stacking.</string>
-         </property>
          <property name="sizePolicy">
           <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
            <horstretch>0</horstretch>
            <verstretch>0</verstretch>
           </sizepolicy>
+         </property>
+         <property name="toolTip">
+          <string>Calibration frame files used before stacking.</string>
          </property>
          <property name="title">
           <string>Calibration</string>
@@ -1604,14 +1604,14 @@
        </item>
        <item alignment="Qt::AlignmentFlag::AlignTop">
         <widget class="QGroupBox" name="stackingGroup">
-         <property name="toolTip">
-          <string>Controls for frame stacking, HDR stacking, alignment, and stack history display.</string>
-         </property>
          <property name="sizePolicy">
           <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
            <horstretch>0</horstretch>
            <verstretch>0</verstretch>
           </sizepolicy>
+         </property>
+         <property name="toolTip">
+          <string>Controls for frame stacking, HDR stacking, alignment, and stack history display.</string>
          </property>
          <property name="title">
           <string>Image Stacking</string>
@@ -2008,16 +2008,36 @@
          </layout>
         </widget>
        </item>
-       <item alignment="Qt::AlignmentFlag::AlignTop">
-        <widget class="QGroupBox" name="scaleGroup">
-         <property name="toolTip">
-          <string>Controls optional image scaling after stacking.</string>
+       <item>
+        <spacer name="verticalSpacerStacking">
+         <property name="orientation">
+          <enum>Qt::Orientation::Vertical</enum>
          </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>20</width>
+           <height>40</height>
+          </size>
+         </property>
+        </spacer>
+       </item>
+      </layout>
+     </widget>
+     <widget class="QWidget" name="scaleTab">
+      <attribute name="title">
+       <string>Scale</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="verticalLayout_13">
+       <item>
+        <widget class="QGroupBox" name="scaleGroup">
          <property name="sizePolicy">
           <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
            <horstretch>0</horstretch>
            <verstretch>0</verstretch>
           </sizepolicy>
+         </property>
+         <property name="toolTip">
+          <string>Controls optional image scaling after stacking.</string>
          </property>
          <property name="title">
           <string>Scaling</string>
@@ -2191,7 +2211,7 @@
         </widget>
        </item>
        <item>
-        <spacer name="verticalSpacerStacking">
+        <spacer name="verticalSpacer_14">
          <property name="orientation">
           <enum>Qt::Orientation::Vertical</enum>
          </property>
@@ -2215,14 +2235,14 @@
       <layout class="QVBoxLayout" name="postProcessingTabLayout">
        <item alignment="Qt::AlignmentFlag::AlignTop">
         <widget class="QGroupBox" name="colorGroup">
-         <property name="toolTip">
-          <string>Colour, brightness, contrast, white balance, saturation, and gamma processing.</string>
-         </property>
          <property name="sizePolicy">
           <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
            <horstretch>0</horstretch>
            <verstretch>0</verstretch>
           </sizepolicy>
+         </property>
+         <property name="toolTip">
+          <string>Colour, brightness, contrast, white balance, saturation, and gamma processing.</string>
          </property>
          <property name="title">
           <string>Color</string>
@@ -2660,14 +2680,14 @@
        </item>
        <item alignment="Qt::AlignmentFlag::AlignTop">
         <widget class="QGroupBox" name="histogramStretchGroup">
-         <property name="toolTip">
-          <string>Histogram stretch controls for improving image contrast.</string>
-         </property>
          <property name="sizePolicy">
           <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
            <horstretch>0</horstretch>
            <verstretch>0</verstretch>
           </sizepolicy>
+         </property>
+         <property name="toolTip">
+          <string>Histogram stretch controls for improving image contrast.</string>
          </property>
          <property name="title">
           <string>Histogram Stretch</string>
@@ -3013,14 +3033,14 @@
       <layout class="QVBoxLayout" name="verticalLayout_22">
        <item alignment="Qt::AlignmentFlag::AlignTop">
         <widget class="QGroupBox" name="filterGroup">
-         <property name="toolTip">
-          <string>Blur, sharpen, and edge-filter processing controls.</string>
-         </property>
          <property name="sizePolicy">
           <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
            <horstretch>0</horstretch>
            <verstretch>0</verstretch>
           </sizepolicy>
+         </property>
+         <property name="toolTip">
+          <string>Blur, sharpen, and edge-filter processing controls.</string>
          </property>
          <property name="title">
           <string>Filter</string>
@@ -3259,14 +3279,14 @@
        </item>
        <item alignment="Qt::AlignmentFlag::AlignTop">
         <widget class="QGroupBox" name="imageGroup">
-         <property name="toolTip">
-          <string>Image orientation, unwarp, and CUDA processing controls.</string>
-         </property>
          <property name="sizePolicy">
           <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
            <horstretch>0</horstretch>
            <verstretch>0</verstretch>
           </sizepolicy>
+         </property>
+         <property name="toolTip">
+          <string>Image orientation, unwarp, and CUDA processing controls.</string>
          </property>
          <property name="title">
           <string>Image</string>
@@ -3407,790 +3427,716 @@
       </attribute>
       <layout class="QVBoxLayout" name="verticalLayout_2">
        <item>
-        <widget class="QGroupBox" name="spectrumOverlay">
-         <property name="toolTip">
-          <string>Overlay settings for drawing a spectrum over the camera image.</string>
+        <widget class="QTabWidget" name="overlayTabWidget">
+         <property name="currentIndex">
+          <number>0</number>
          </property>
-         <property name="title">
-          <string>Spectrum Overlay</string>
-         </property>
-         <layout class="QGridLayout" name="gridLayout_3">
-          <item row="5" column="2" colspan="2">
-           <widget class="QDoubleSpinBox" name="spectrumScaleSpin">
-            <property name="toolTip">
-             <string>Spectrum overlay scale factor</string>
-            </property>
-            <property name="decimals">
-             <number>2</number>
-            </property>
-            <property name="minimum">
-             <double>0.100000000000000</double>
-            </property>
-            <property name="maximum">
-             <double>4.000000000000000</double>
-            </property>
-            <property name="singleStep">
-             <double>0.050000000000000</double>
-            </property>
-            <property name="value">
-             <double>1.000000000000000</double>
-            </property>
-           </widget>
-          </item>
-          <item row="0" column="0">
-           <widget class="QLabel" name="spectrumDeviceLabel">
-            <property name="minimumSize">
-             <size>
-              <width>100</width>
-              <height>0</height>
-             </size>
-            </property>
-            <property name="text">
-             <string>Device Set</string>
-            </property>
-           </widget>
-          </item>
-          <item row="5" column="0">
-           <widget class="QLabel" name="spectrumScaleLabel">
-            <property name="text">
-             <string>Scale</string>
-            </property>
-           </widget>
-          </item>
-          <item row="0" column="2" colspan="2">
-           <widget class="QComboBox" name="spectrumDeviceCombo">
-            <property name="toolTip">
-             <string>Device whose spectrum view to overlay</string>
-            </property>
-            <property name="sizeAdjustPolicy">
-             <enum>QComboBox::SizeAdjustPolicy::AdjustToMinimumContentsLengthWithIcon</enum>
-            </property>
-            <property name="minimumContentsLength">
-             <number>8</number>
-            </property>
-           </widget>
-          </item>
-          <item row="2" column="2">
-           <layout class="QHBoxLayout" name="spectrumOffsetLayout">
-            <item>
-             <widget class="QLabel" name="spectrumOffsetXLabel">
-              <property name="text">
-               <string>X</string>
-              </property>
-             </widget>
-            </item>
-            <item>
-             <widget class="QSlider" name="spectrumOffsetXSlider">
-              <property name="toolTip">
-               <string>Spectrum overlay X offset (px)</string>
-              </property>
-              <property name="minimum">
-               <number>0</number>
-              </property>
-              <property name="maximum">
-               <number>4096</number>
-              </property>
-              <property name="value">
-               <number>0</number>
-              </property>
-              <property name="orientation">
-               <enum>Qt::Orientation::Horizontal</enum>
-              </property>
-             </widget>
-            </item>
-            <item>
-             <widget class="QLabel" name="spectrumOffsetXValue">
-              <property name="minimumSize">
-               <size>
-                <width>40</width>
-                <height>0</height>
-               </size>
-              </property>
-              <property name="text">
-               <string>0</string>
-              </property>
-              <property name="alignment">
-               <set>Qt::AlignmentFlag::AlignRight|Qt::AlignmentFlag::AlignTrailing|Qt::AlignmentFlag::AlignVCenter</set>
-              </property>
-             </widget>
-            </item>
-            <item>
-             <widget class="Line" name="spectrumOffsetLine">
-              <property name="toolTip">
-               <string>Separates related settings.</string>
-              </property>
-              <property name="orientation">
-               <enum>Qt::Orientation::Vertical</enum>
-              </property>
-             </widget>
-            </item>
-            <item>
-             <widget class="QLabel" name="spectrumOffsetYLabel">
-              <property name="text">
-               <string>Y</string>
-              </property>
-             </widget>
-            </item>
-            <item>
-             <widget class="QSlider" name="spectrumOffsetYSlider">
-              <property name="toolTip">
-               <string>Spectrum overlay Y offset (px)</string>
-              </property>
-              <property name="minimum">
-               <number>0</number>
-              </property>
-              <property name="maximum">
-               <number>4096</number>
-              </property>
-              <property name="value">
-               <number>0</number>
-              </property>
-              <property name="orientation">
-               <enum>Qt::Orientation::Horizontal</enum>
-              </property>
-             </widget>
-            </item>
-            <item>
-             <widget class="QLabel" name="spectrumOffsetYValue">
-              <property name="minimumSize">
-               <size>
-                <width>40</width>
-                <height>0</height>
-               </size>
-              </property>
-              <property name="text">
-               <string>0</string>
-              </property>
-              <property name="alignment">
-               <set>Qt::AlignmentFlag::AlignRight|Qt::AlignmentFlag::AlignTrailing|Qt::AlignmentFlag::AlignVCenter</set>
-              </property>
-             </widget>
-            </item>
-           </layout>
-          </item>
-          <item row="2" column="0">
-           <widget class="QLabel" name="spectrumOffsetLabel">
-            <property name="text">
-             <string>Position</string>
-            </property>
-           </widget>
-          </item>
-         </layout>
-        </widget>
-       </item>
-       <item>
-        <widget class="QGroupBox" name="skyGridOverlay">
-         <property name="toolTip">
-          <string>Overlay settings for sky grids, constellations, and tracked sky objects.</string>
-         </property>
-         <property name="title">
-          <string>Sky Grid</string>
-         </property>
-         <layout class="QGridLayout" name="gridLayout_skyGridOverlay">
-          <item row="0" column="5">
-           <widget class="QToolButton" name="equatorialGridColorButton">
-            <property name="toolTip">
-             <string>Select equatorial grid colour</string>
-            </property>
-            <property name="text">
-             <string/>
-            </property>
-           </widget>
-          </item>
-          <item row="0" column="3">
-           <widget class="QDoubleSpinBox" name="gridLabelFontScaleSpin">
-            <property name="toolTip">
-             <string>Font point size for sky grid labels</string>
-            </property>
-            <property name="decimals">
-             <number>0</number>
-            </property>
-            <property name="minimum">
-             <double>4.000000000000000</double>
-            </property>
-            <property name="maximum">
-             <double>144.000000000000000</double>
-            </property>
-           </widget>
-          </item>
-          <item row="1" column="0">
-           <widget class="QLabel" name="altAzGridLabel">
-            <property name="text">
-             <string>Azimuthal grid</string>
-            </property>
-           </widget>
-          </item>
-          <item row="3" column="5">
-           <widget class="QToolButton" name="constellationColorButton">
-            <property name="toolTip">
-             <string>Select constellation overlay colour</string>
-            </property>
-            <property name="text">
-             <string/>
-            </property>
-           </widget>
-          </item>
-          <item row="0" column="0">
-           <widget class="QLabel" name="equatorialGridLabel">
-            <property name="text">
-             <string>Equatorial grid</string>
-            </property>
-           </widget>
-          </item>
-          <item row="1" column="5">
-           <widget class="QToolButton" name="altAzGridColorButton">
-            <property name="toolTip">
-             <string>Select alt-az grid colour</string>
-            </property>
-            <property name="text">
-             <string/>
-            </property>
-           </widget>
-          </item>
-          <item row="3" column="0">
-           <widget class="QLabel" name="ursaMajorStarsLabel">
-            <property name="text">
-             <string>Constellation</string>
-            </property>
-           </widget>
-          </item>
-          <item row="0" column="2">
-           <widget class="QFontComboBox" name="gridLabelFontCombo">
-            <property name="sizePolicy">
-             <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
-              <horstretch>0</horstretch>
-              <verstretch>0</verstretch>
-             </sizepolicy>
-            </property>
-            <property name="toolTip">
-             <string>Select font to use for sky grid labels</string>
-            </property>
-           </widget>
-          </item>
-          <item row="3" column="2" colspan="2">
-           <widget class="QComboBox" name="constellationOverlayCombo">
-            <property name="sizePolicy">
-             <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
-              <horstretch>1</horstretch>
-              <verstretch>0</verstretch>
-             </sizepolicy>
-            </property>
-            <property name="toolTip">
-             <string>Select which constellation major stars to overlay</string>
-            </property>
-            <item>
-             <property name="text">
-              <string>Ursa Major</string>
+         <widget class="QWidget" name="tabMapItemsOverlay">
+          <attribute name="title">
+           <string>Map Items</string>
+          </attribute>
+          <layout class="QVBoxLayout" name="verticalLayout_8">
+           <item>
+            <widget class="QGroupBox" name="groupBox_3">
+             <property name="toolTip">
+              <string>Contains settings for aDS-B / Satellite / Star Tracker Overlay.</string>
              </property>
-            </item>
-            <item>
-             <property name="text">
-              <string>Orion</string>
+             <property name="title">
+              <string>ADS-B / Satellite / Star Tracker Overlay</string>
              </property>
-            </item>
-            <item>
-             <property name="text">
-              <string>Crux</string>
+             <layout class="QGridLayout" name="gridLayout_7">
+              <item row="1" column="1">
+               <widget class="QDoubleSpinBox" name="trackObjectMaxRangeSpin">
+                <property name="toolTip">
+                 <string>Maximum line-of-sight range in kilometres for tracked object overlays. Set to 0 for no maximum.</string>
+                </property>
+                <property name="specialValueText">
+                 <string>Unlimited</string>
+                </property>
+                <property name="suffix">
+                 <string> km</string>
+                </property>
+                <property name="decimals">
+                 <number>1</number>
+                </property>
+                <property name="minimum">
+                 <double>0.000000000000000</double>
+                </property>
+                <property name="maximum">
+                 <double>1000000.000000000000000</double>
+                </property>
+                <property name="singleStep">
+                 <double>10.000000000000000</double>
+                </property>
+               </widget>
+              </item>
+              <item row="4" column="3">
+               <widget class="QToolButton" name="trackObjectClearHeatMapButton">
+                <property name="toolTip">
+                 <string>Clear tracked object heat map</string>
+                </property>
+                <property name="text">
+                 <string/>
+                </property>
+                <property name="icon">
+                 <iconset resource="../../../sdrgui/resources/res.qrc">
+                  <normaloff>:/bin.png</normaloff>:/bin.png</iconset>
+                </property>
+               </widget>
+              </item>
+              <item row="5" column="0">
+               <widget class="QCheckBox" name="trackObjectRangeCheck">
+                <property name="toolTip">
+                 <string>Append the line-of-sight range to each tracked object label in kilometres</string>
+                </property>
+                <property name="text">
+                 <string>Show range</string>
+                </property>
+               </widget>
+              </item>
+              <item row="2" column="0">
+               <widget class="QLabel" name="trackObjectsLabel">
+                <property name="text">
+                 <string>Font</string>
+                </property>
+               </widget>
+              </item>
+              <item row="2" column="1">
+               <widget class="QFontComboBox" name="trackObjectFontCombo">
+                <property name="toolTip">
+                 <string>Select font to use for tracked object labels</string>
+                </property>
+               </widget>
+              </item>
+              <item row="4" column="0">
+               <widget class="QCheckBox" name="trackObjectHeatMapCheck">
+                <property name="toolTip">
+                 <string>Show a heat map from recent tracked object positions</string>
+                </property>
+                <property name="text">
+                 <string>Show heat map</string>
+                </property>
+               </widget>
+              </item>
+              <item row="6" column="1">
+               <widget class="QComboBox" name="trackObjectLabelDisplayCombo">
+                <property name="toolTip">
+                 <string>Choose whether tracked object labels are always displayed or only displayed near detected objects</string>
+                </property>
+                <item>
+                 <property name="text">
+                  <string>Always</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>Near object</string>
+                 </property>
+                </item>
+               </widget>
+              </item>
+              <item row="2" column="3">
+               <widget class="QToolButton" name="trackObjectColorButton">
+                <property name="toolTip">
+                 <string>Select tracked object label colour</string>
+                </property>
+                <property name="text">
+                 <string/>
+                </property>
+               </widget>
+              </item>
+              <item row="6" column="0">
+               <widget class="QLabel" name="trackObjectLabelDisplayLabel">
+                <property name="text">
+                 <string>Labels</string>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="0">
+               <widget class="QLabel" name="trackObjectMaxRangeLabel">
+                <property name="text">
+                 <string>Max range</string>
+                </property>
+               </widget>
+              </item>
+              <item row="0" column="1">
+               <widget class="QDoubleSpinBox" name="trackObjectMinElevationSpin">
+                <property name="sizePolicy">
+                 <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
+                  <horstretch>1</horstretch>
+                  <verstretch>0</verstretch>
+                 </sizepolicy>
+                </property>
+                <property name="toolTip">
+                 <string>Minimum elevation in degrees for tracked object overlays</string>
+                </property>
+                <property name="suffix">
+                 <string> °</string>
+                </property>
+                <property name="decimals">
+                 <number>1</number>
+                </property>
+                <property name="minimum">
+                 <double>0.000000000000000</double>
+                </property>
+                <property name="maximum">
+                 <double>90.000000000000000</double>
+                </property>
+                <property name="singleStep">
+                 <double>1.000000000000000</double>
+                </property>
+               </widget>
+              </item>
+              <item row="2" column="2">
+               <widget class="QDoubleSpinBox" name="trackObjectFontScaleSpin">
+                <property name="toolTip">
+                 <string>Font point size for tracked object labels</string>
+                </property>
+                <property name="decimals">
+                 <number>0</number>
+                </property>
+                <property name="minimum">
+                 <double>4.000000000000000</double>
+                </property>
+                <property name="maximum">
+                 <double>144.000000000000000</double>
+                </property>
+               </widget>
+              </item>
+              <item row="3" column="0">
+               <widget class="QCheckBox" name="trackObjectTrailsCheck">
+                <property name="toolTip">
+                 <string>Show the recent track for each tracked overlay object</string>
+                </property>
+                <property name="text">
+                 <string>Show tracks</string>
+                </property>
+               </widget>
+              </item>
+              <item row="0" column="0">
+               <widget class="QLabel" name="trackObjectMinElevationLabel">
+                <property name="minimumSize">
+                 <size>
+                  <width>100</width>
+                  <height>0</height>
+                 </size>
+                </property>
+                <property name="text">
+                 <string>Min elevation</string>
+                </property>
+               </widget>
+              </item>
+              <item row="7" column="0">
+               <widget class="QLabel" name="trackObjectLabelDetectionRadiusLabel">
+                <property name="text">
+                 <string>Object radius</string>
+                </property>
+               </widget>
+              </item>
+              <item row="7" column="1">
+               <widget class="QDoubleSpinBox" name="trackObjectLabelDetectionRadiusSpin">
+                <property name="toolTip">
+                 <string>Maximum distance in pixels from the centre of a detected object for a tracked object label to be displayed</string>
+                </property>
+                <property name="suffix">
+                 <string> px</string>
+                </property>
+                <property name="decimals">
+                 <number>0</number>
+                </property>
+                <property name="minimum">
+                 <double>0.000000000000000</double>
+                </property>
+                <property name="maximum">
+                 <double>10000.000000000000000</double>
+                </property>
+                <property name="singleStep">
+                 <double>5.000000000000000</double>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </widget>
+           </item>
+           <item>
+            <spacer name="verticalSpacer_12">
+             <property name="orientation">
+              <enum>Qt::Orientation::Vertical</enum>
              </property>
-            </item>
-           </widget>
-          </item>
-         </layout>
-        </widget>
-       </item>
-       <item>
-        <widget class="QGroupBox" name="groupBox_3">
-         <property name="toolTip">
-          <string>Contains settings for aDS-B / Satellite / Star Tracker Overlay.</string>
-         </property>
-         <property name="title">
-          <string>ADS-B / Satellite / Star Tracker Overlay</string>
-         </property>
-         <layout class="QGridLayout" name="gridLayout_7">
-          <item row="1" column="0">
-           <widget class="QLabel" name="trackObjectsLabel">
-            <property name="text">
-             <string>Font</string>
-            </property>
-           </widget>
-          </item>
-          <item row="1" column="3">
-           <widget class="QToolButton" name="trackObjectColorButton">
-            <property name="toolTip">
-             <string>Select tracked object label colour</string>
-            </property>
-            <property name="text">
-             <string/>
-            </property>
-           </widget>
-          </item>
-          <item row="2" column="0" colspan="4">
-           <layout class="QHBoxLayout" name="trackObjectOverlayOptionsLayout">
-            <item>
-             <widget class="QCheckBox" name="trackObjectTrailsCheck">
-              <property name="toolTip">
-               <string>Show the recent track for each tracked overlay object</string>
-              </property>
-              <property name="text">
-               <string>Show tracks</string>
-              </property>
-             </widget>
-            </item>
-            <item>
-             <widget class="QCheckBox" name="trackObjectHeatMapCheck">
-              <property name="toolTip">
-               <string>Show a heat map from recent tracked object positions</string>
-              </property>
-              <property name="text">
-               <string>Heat map</string>
-              </property>
-             </widget>
-            </item>
-            <item>
-             <widget class="QCheckBox" name="trackObjectRangeCheck">
-              <property name="toolTip">
-               <string>Append the line-of-sight range to each tracked object label in kilometres</string>
-              </property>
-              <property name="text">
-               <string>Range</string>
-              </property>
-             </widget>
-            </item>
-            <item>
-             <widget class="QToolButton" name="trackObjectClearHeatMapButton">
-              <property name="toolTip">
-               <string>Clear tracked object heat map</string>
-              </property>
-              <property name="text">
-               <string/>
-              </property>
-              <property name="icon">
-               <iconset resource="../../../sdrgui/resources/res.qrc">
-                <normaloff>:/clear.png</normaloff>:/clear.png</iconset>
-              </property>
-             </widget>
-            </item>
-           </layout>
-          </item>
-          <item row="1" column="1">
-           <widget class="QFontComboBox" name="trackObjectFontCombo">
-            <property name="toolTip">
-             <string>Select font to use for tracked object labels</string>
-            </property>
-           </widget>
-          </item>
-          <item row="1" column="2">
-           <widget class="QDoubleSpinBox" name="trackObjectFontScaleSpin">
-            <property name="toolTip">
-             <string>Font point size for tracked object labels</string>
-            </property>
-            <property name="decimals">
-             <number>0</number>
-            </property>
-            <property name="minimum">
-             <double>4.000000000000000</double>
-            </property>
-            <property name="maximum">
-             <double>144.000000000000000</double>
-            </property>
-           </widget>
-          </item>
-          <item row="0" column="0">
-           <widget class="QLabel" name="trackObjectMinElevationLabel">
-            <property name="minimumSize">
-             <size>
-              <width>100</width>
-              <height>0</height>
-             </size>
-            </property>
-            <property name="text">
-             <string>Min elevation</string>
-            </property>
-           </widget>
-          </item>
-          <item row="0" column="1">
-           <widget class="QDoubleSpinBox" name="trackObjectMinElevationSpin">
-            <property name="sizePolicy">
-             <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
-              <horstretch>1</horstretch>
-              <verstretch>0</verstretch>
-             </sizepolicy>
-            </property>
-            <property name="toolTip">
-             <string>Minimum elevation in degrees for tracked object overlays</string>
-            </property>
-            <property name="suffix">
-             <string> °</string>
-            </property>
-            <property name="decimals">
-             <number>1</number>
-            </property>
-            <property name="minimum">
-             <double>0.000000000000000</double>
-            </property>
-            <property name="maximum">
-             <double>90.000000000000000</double>
-            </property>
-            <property name="singleStep">
-             <double>1.000000000000000</double>
-            </property>
-           </widget>
-          </item>
-          <item row="0" column="2">
-           <widget class="QLabel" name="trackObjectMaxRangeLabel">
-            <property name="text">
-             <string>Max range</string>
-            </property>
-           </widget>
-          </item>
-          <item row="0" column="3">
-           <widget class="QDoubleSpinBox" name="trackObjectMaxRangeSpin">
-            <property name="toolTip">
-             <string>Maximum line-of-sight range in kilometres for tracked object overlays. Set to 0 for no maximum.</string>
-            </property>
-            <property name="specialValueText">
-             <string>Unlimited</string>
-            </property>
-            <property name="suffix">
-             <string> km</string>
-            </property>
-            <property name="decimals">
-             <number>1</number>
-            </property>
-            <property name="minimum">
-             <double>0.000000000000000</double>
-            </property>
-            <property name="maximum">
-             <double>1000000.000000000000000</double>
-            </property>
-            <property name="singleStep">
-             <double>10.000000000000000</double>
-            </property>
-           </widget>
-          </item>
-          <item row="3" column="0">
-           <widget class="QLabel" name="trackObjectLabelDisplayLabel">
-            <property name="text">
-             <string>Labels</string>
-            </property>
-           </widget>
-          </item>
-          <item row="3" column="1">
-           <widget class="QComboBox" name="trackObjectLabelDisplayCombo">
-            <property name="toolTip">
-             <string>Choose whether tracked object labels are always displayed or only displayed near detected objects</string>
-            </property>
-            <item>
-             <property name="text">
-              <string>Always</string>
+             <property name="sizeHint" stdset="0">
+              <size>
+               <width>20</width>
+               <height>40</height>
+              </size>
              </property>
-            </item>
-            <item>
-             <property name="text">
-              <string>Near object</string>
+            </spacer>
+           </item>
+          </layout>
+         </widget>
+         <widget class="QWidget" name="tabSkyGridOverlay">
+          <attribute name="title">
+           <string>Grid</string>
+          </attribute>
+          <layout class="QVBoxLayout" name="verticalLayout_7">
+           <item>
+            <widget class="QGroupBox" name="skyGridOverlay">
+             <property name="toolTip">
+              <string>Overlay settings for sky grids, constellations, and tracked sky objects.</string>
              </property>
-            </item>
-           </widget>
-          </item>
-          <item row="3" column="2">
-           <widget class="QLabel" name="trackObjectLabelDetectionRadiusLabel">
-            <property name="text">
-             <string>Object radius</string>
-            </property>
-           </widget>
-          </item>
-          <item row="3" column="3">
-           <widget class="QDoubleSpinBox" name="trackObjectLabelDetectionRadiusSpin">
-            <property name="toolTip">
-             <string>Maximum distance in pixels from the centre of a detected object for a tracked object label to be displayed</string>
-            </property>
-            <property name="suffix">
-             <string> px</string>
-            </property>
-            <property name="decimals">
-             <number>0</number>
-            </property>
-            <property name="minimum">
-             <double>0.000000000000000</double>
-            </property>
-            <property name="maximum">
-             <double>10000.000000000000000</double>
-            </property>
-            <property name="singleStep">
-             <double>5.000000000000000</double>
-            </property>
-           </widget>
-          </item>
-         </layout>
-        </widget>
-       </item>
-       <item>
-        <widget class="QGroupBox" name="dateTimeOverlay">
-         <property name="toolTip">
-          <string>Overlay settings for drawing the date and time on the image.</string>
-         </property>
-         <property name="title">
-          <string>Date / Time Overlay</string>
-         </property>
-         <layout class="QGridLayout" name="gridLayout_2">
-          <item row="1" column="1" colspan="2">
-           <widget class="QFontComboBox" name="overlayFontCombo">
-            <property name="toolTip">
-             <string>Select font to use for date and time text</string>
-            </property>
-           </widget>
-          </item>
-          <item row="2" column="1" colspan="4">
-           <layout class="QHBoxLayout" name="dateTimePosLayout">
-            <item>
-             <widget class="QLabel" name="dateTimePosXLabel">
-              <property name="text">
-               <string>X</string>
-              </property>
-             </widget>
-            </item>
-            <item>
-             <widget class="QSlider" name="dateTimePosXSlider">
-              <property name="toolTip">
-               <string>Date/time text X position (px from left)</string>
-              </property>
-              <property name="minimum">
-               <number>0</number>
-              </property>
-              <property name="maximum">
-               <number>4096</number>
-              </property>
-              <property name="value">
-               <number>4</number>
-              </property>
-              <property name="orientation">
-               <enum>Qt::Orientation::Horizontal</enum>
-              </property>
-             </widget>
-            </item>
-            <item>
-             <widget class="QLabel" name="dateTimePosXValue">
-              <property name="minimumSize">
-               <size>
-                <width>35</width>
-                <height>0</height>
-               </size>
-              </property>
-              <property name="text">
-               <string>4</string>
-              </property>
-              <property name="alignment">
-               <set>Qt::AlignmentFlag::AlignRight|Qt::AlignmentFlag::AlignTrailing|Qt::AlignmentFlag::AlignVCenter</set>
-              </property>
-             </widget>
-            </item>
-            <item>
-             <widget class="Line" name="dateTimeLine">
-              <property name="toolTip">
-               <string>Separates related settings.</string>
-              </property>
-              <property name="orientation">
-               <enum>Qt::Orientation::Vertical</enum>
-              </property>
-             </widget>
-            </item>
-            <item>
-             <widget class="QLabel" name="dateTimePosYLabel">
-              <property name="text">
-               <string>Y</string>
-              </property>
-             </widget>
-            </item>
-            <item>
-             <widget class="QSlider" name="dateTimePosYSlider">
-              <property name="toolTip">
-               <string>Date/time text Y position (px from top; 0 = auto bottom)</string>
-              </property>
-              <property name="minimum">
-               <number>0</number>
-              </property>
-              <property name="maximum">
-               <number>4096</number>
-              </property>
-              <property name="value">
-               <number>0</number>
-              </property>
-              <property name="orientation">
-               <enum>Qt::Orientation::Horizontal</enum>
-              </property>
-             </widget>
-            </item>
-            <item>
-             <widget class="QLabel" name="dateTimePosYValue">
-              <property name="minimumSize">
-               <size>
-                <width>35</width>
-                <height>0</height>
-               </size>
-              </property>
-              <property name="text">
-               <string>0</string>
-              </property>
-              <property name="alignment">
-               <set>Qt::AlignmentFlag::AlignRight|Qt::AlignmentFlag::AlignTrailing|Qt::AlignmentFlag::AlignVCenter</set>
-              </property>
-             </widget>
-            </item>
-           </layout>
-          </item>
-          <item row="1" column="0">
-           <widget class="QLabel" name="overlayFontLabel">
-            <property name="text">
-             <string>Font</string>
-            </property>
-           </widget>
-          </item>
-          <item row="1" column="4">
-           <widget class="QToolButton" name="dateTimeColorButton">
-            <property name="toolTip">
-             <string>Select date/time text colour</string>
-            </property>
-            <property name="text">
-             <string/>
-            </property>
-           </widget>
-          </item>
-          <item row="2" column="0">
-           <widget class="QLabel" name="dateTimePosLabel">
-            <property name="text">
-             <string>Position</string>
-            </property>
-           </widget>
-          </item>
-          <item row="0" column="0">
-           <widget class="QLabel" name="dateTimeFormatLabel">
-            <property name="minimumSize">
-             <size>
-              <width>100</width>
-              <height>0</height>
-             </size>
-            </property>
-            <property name="text">
-             <string>Format</string>
-            </property>
-           </widget>
-          </item>
-          <item row="1" column="3">
-           <widget class="QDoubleSpinBox" name="overlayFontScaleSpin">
-            <property name="toolTip">
-             <string>Font point size for date/time overlay</string>
-            </property>
-            <property name="decimals">
-             <number>0</number>
-            </property>
-            <property name="minimum">
-             <double>4.000000000000000</double>
-            </property>
-            <property name="maximum">
-             <double>144.000000000000000</double>
-            </property>
-            <property name="singleStep">
-             <double>1.000000000000000</double>
-            </property>
-            <property name="value">
-             <double>12.000000000000000</double>
-            </property>
-           </widget>
-          </item>
-          <item row="0" column="1" colspan="3">
-           <widget class="QLineEdit" name="dateTimeFormatEdit">
-            <property name="sizePolicy">
-             <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
-              <horstretch>1</horstretch>
-              <verstretch>0</verstretch>
-             </sizepolicy>
-            </property>
-            <property name="toolTip">
-             <string>Date/time overlay text. Without braces, this is a Qt date/time format, e.g. yyyy-MM-dd hh:mm:ss. Use {yyyy-MM-dd hh:mm:ss} to insert the formatted date/time into literal text. Use {{ and }} for literal braces.</string>
-            </property>
-            <property name="text">
-             <string>yyyy-MM-dd hh:mm:ss</string>
-            </property>
-           </widget>
-          </item>
-          <item row="0" column="4">
-           <widget class="QToolButton" name="dateTimeUtcButton">
-            <property name="toolTip">
-             <string>Display the date/time overlay in UTC rather than local time</string>
-            </property>
-            <property name="text">
-             <string>UTC</string>
-            </property>
-            <property name="checkable">
-             <bool>true</bool>
-            </property>
-           </widget>
-          </item>
-         </layout>
-        </widget>
-       </item>
-       <item>
-        <widget class="QGroupBox" name="textOverlay">
-         <property name="toolTip">
-          <string>Overlay settings for drawing custom text or HTML on the image.</string>
-         </property>
-         <property name="title">
-          <string>HTML Overlay</string>
-         </property>
-         <layout class="QGridLayout" name="gridLayout_textOverlay">
-          <item row="2" column="0">
-           <widget class="QLabel" name="overlayTextPosLabel">
-            <property name="text">
-             <string>Position</string>
-            </property>
-           </widget>
-          </item>
-          <item row="1" column="4">
-           <widget class="QDoubleSpinBox" name="overlayTextFontScaleSpin">
-            <property name="toolTip">
-             <string>Font point size for text overlay</string>
-            </property>
-            <property name="decimals">
-             <number>0</number>
-            </property>
-            <property name="minimum">
-             <double>4.000000000000000</double>
-            </property>
-            <property name="maximum">
-             <double>144.000000000000000</double>
-            </property>
-            <property name="singleStep">
-             <double>1.000000000000000</double>
-            </property>
-            <property name="value">
-             <double>12.000000000000000</double>
-            </property>
-           </widget>
-          </item>
-          <item row="0" column="1" colspan="5">
-           <widget class="QTextEdit" name="overlayTextEdit">
-            <property name="sizePolicy">
-             <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
-              <horstretch>1</horstretch>
-              <verstretch>0</verstretch>
-             </sizepolicy>
-            </property>
-            <property name="minimumSize">
-             <size>
-              <width>0</width>
-              <height>80</height>
-             </size>
-            </property>
-            <property name="toolTip">
-             <string>HTML text to render on the image
+             <property name="title">
+              <string>Sky Grid</string>
+             </property>
+             <layout class="QGridLayout" name="gridLayout_skyGridOverlay">
+              <item row="0" column="5">
+               <widget class="QToolButton" name="equatorialGridColorButton">
+                <property name="toolTip">
+                 <string>Select equatorial grid colour</string>
+                </property>
+                <property name="text">
+                 <string/>
+                </property>
+               </widget>
+              </item>
+              <item row="0" column="3">
+               <widget class="QDoubleSpinBox" name="gridLabelFontScaleSpin">
+                <property name="toolTip">
+                 <string>Font point size for sky grid labels</string>
+                </property>
+                <property name="decimals">
+                 <number>0</number>
+                </property>
+                <property name="minimum">
+                 <double>4.000000000000000</double>
+                </property>
+                <property name="maximum">
+                 <double>144.000000000000000</double>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="0">
+               <widget class="QLabel" name="altAzGridLabel">
+                <property name="text">
+                 <string>Azimuthal grid</string>
+                </property>
+               </widget>
+              </item>
+              <item row="0" column="0">
+               <widget class="QLabel" name="equatorialGridLabel">
+                <property name="text">
+                 <string>Equatorial grid</string>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="5">
+               <widget class="QToolButton" name="altAzGridColorButton">
+                <property name="toolTip">
+                 <string>Select alt-az grid colour</string>
+                </property>
+                <property name="text">
+                 <string/>
+                </property>
+               </widget>
+              </item>
+              <item row="0" column="2">
+               <widget class="QFontComboBox" name="gridLabelFontCombo">
+                <property name="sizePolicy">
+                 <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+                  <horstretch>0</horstretch>
+                  <verstretch>0</verstretch>
+                 </sizepolicy>
+                </property>
+                <property name="toolTip">
+                 <string>Select font to use for sky grid labels</string>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </widget>
+           </item>
+           <item>
+            <widget class="QGroupBox" name="constellationGroup">
+             <property name="title">
+              <string>Constellation</string>
+             </property>
+             <layout class="QGridLayout" name="gridLayout_16">
+              <item row="1" column="0">
+               <widget class="QLabel" name="ursaMajorStarsLabel">
+                <property name="text">
+                 <string>Constellation</string>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="1">
+               <widget class="QComboBox" name="constellationOverlayCombo">
+                <property name="sizePolicy">
+                 <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+                  <horstretch>1</horstretch>
+                  <verstretch>0</verstretch>
+                 </sizepolicy>
+                </property>
+                <property name="toolTip">
+                 <string>Select which constellation major stars to overlay</string>
+                </property>
+                <item>
+                 <property name="text">
+                  <string>Ursa Major</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>Orion</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>Crux</string>
+                 </property>
+                </item>
+               </widget>
+              </item>
+              <item row="1" column="2">
+               <widget class="QToolButton" name="constellationColorButton">
+                <property name="toolTip">
+                 <string>Select constellation overlay colour</string>
+                </property>
+                <property name="text">
+                 <string/>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </widget>
+           </item>
+           <item>
+            <spacer name="verticalSpacer_11">
+             <property name="orientation">
+              <enum>Qt::Orientation::Vertical</enum>
+             </property>
+             <property name="sizeHint" stdset="0">
+              <size>
+               <width>20</width>
+               <height>40</height>
+              </size>
+             </property>
+            </spacer>
+           </item>
+          </layout>
+         </widget>
+         <widget class="QWidget" name="tabTimeOverlay">
+          <attribute name="title">
+           <string>Time</string>
+          </attribute>
+          <layout class="QVBoxLayout" name="verticalLayout_11">
+           <item>
+            <widget class="QGroupBox" name="dateTimeOverlay">
+             <property name="toolTip">
+              <string>Overlay settings for drawing the date and time on the image.</string>
+             </property>
+             <property name="title">
+              <string>Date / Time Overlay</string>
+             </property>
+             <layout class="QGridLayout" name="gridLayout_2">
+              <item row="1" column="1" colspan="2">
+               <widget class="QFontComboBox" name="overlayFontCombo">
+                <property name="toolTip">
+                 <string>Select font to use for date and time text</string>
+                </property>
+               </widget>
+              </item>
+              <item row="2" column="1" colspan="4">
+               <layout class="QHBoxLayout" name="dateTimePosLayout">
+                <item>
+                 <widget class="QLabel" name="dateTimePosXLabel">
+                  <property name="text">
+                   <string>X</string>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <widget class="QSlider" name="dateTimePosXSlider">
+                  <property name="toolTip">
+                   <string>Date/time text X position (px from left)</string>
+                  </property>
+                  <property name="minimum">
+                   <number>0</number>
+                  </property>
+                  <property name="maximum">
+                   <number>4096</number>
+                  </property>
+                  <property name="value">
+                   <number>4</number>
+                  </property>
+                  <property name="orientation">
+                   <enum>Qt::Orientation::Horizontal</enum>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <widget class="QLabel" name="dateTimePosXValue">
+                  <property name="minimumSize">
+                   <size>
+                    <width>35</width>
+                    <height>0</height>
+                   </size>
+                  </property>
+                  <property name="text">
+                   <string>4</string>
+                  </property>
+                  <property name="alignment">
+                   <set>Qt::AlignmentFlag::AlignRight|Qt::AlignmentFlag::AlignTrailing|Qt::AlignmentFlag::AlignVCenter</set>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <widget class="Line" name="dateTimeLine">
+                  <property name="toolTip">
+                   <string>Separates related settings.</string>
+                  </property>
+                  <property name="orientation">
+                   <enum>Qt::Orientation::Vertical</enum>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <widget class="QLabel" name="dateTimePosYLabel">
+                  <property name="text">
+                   <string>Y</string>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <widget class="QSlider" name="dateTimePosYSlider">
+                  <property name="toolTip">
+                   <string>Date/time text Y position (px from top; 0 = auto bottom)</string>
+                  </property>
+                  <property name="minimum">
+                   <number>0</number>
+                  </property>
+                  <property name="maximum">
+                   <number>4096</number>
+                  </property>
+                  <property name="value">
+                   <number>0</number>
+                  </property>
+                  <property name="orientation">
+                   <enum>Qt::Orientation::Horizontal</enum>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <widget class="QLabel" name="dateTimePosYValue">
+                  <property name="minimumSize">
+                   <size>
+                    <width>35</width>
+                    <height>0</height>
+                   </size>
+                  </property>
+                  <property name="text">
+                   <string>0</string>
+                  </property>
+                  <property name="alignment">
+                   <set>Qt::AlignmentFlag::AlignRight|Qt::AlignmentFlag::AlignTrailing|Qt::AlignmentFlag::AlignVCenter</set>
+                  </property>
+                 </widget>
+                </item>
+               </layout>
+              </item>
+              <item row="1" column="0">
+               <widget class="QLabel" name="overlayFontLabel">
+                <property name="text">
+                 <string>Font</string>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="4">
+               <widget class="QToolButton" name="dateTimeColorButton">
+                <property name="toolTip">
+                 <string>Select date/time text colour</string>
+                </property>
+                <property name="text">
+                 <string/>
+                </property>
+               </widget>
+              </item>
+              <item row="2" column="0">
+               <widget class="QLabel" name="dateTimePosLabel">
+                <property name="text">
+                 <string>Position</string>
+                </property>
+               </widget>
+              </item>
+              <item row="0" column="0">
+               <widget class="QLabel" name="dateTimeFormatLabel">
+                <property name="minimumSize">
+                 <size>
+                  <width>100</width>
+                  <height>0</height>
+                 </size>
+                </property>
+                <property name="text">
+                 <string>Format</string>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="3">
+               <widget class="QDoubleSpinBox" name="overlayFontScaleSpin">
+                <property name="toolTip">
+                 <string>Font point size for date/time overlay</string>
+                </property>
+                <property name="decimals">
+                 <number>0</number>
+                </property>
+                <property name="minimum">
+                 <double>4.000000000000000</double>
+                </property>
+                <property name="maximum">
+                 <double>144.000000000000000</double>
+                </property>
+                <property name="singleStep">
+                 <double>1.000000000000000</double>
+                </property>
+                <property name="value">
+                 <double>12.000000000000000</double>
+                </property>
+               </widget>
+              </item>
+              <item row="0" column="1" colspan="3">
+               <widget class="QLineEdit" name="dateTimeFormatEdit">
+                <property name="sizePolicy">
+                 <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+                  <horstretch>1</horstretch>
+                  <verstretch>0</verstretch>
+                 </sizepolicy>
+                </property>
+                <property name="toolTip">
+                 <string>Date/time overlay text. Without braces, this is a Qt date/time format, e.g. yyyy-MM-dd hh:mm:ss. Use {yyyy-MM-dd hh:mm:ss} to insert the formatted date/time into literal text. Use {{ and }} for literal braces.</string>
+                </property>
+                <property name="text">
+                 <string>yyyy-MM-dd hh:mm:ss</string>
+                </property>
+               </widget>
+              </item>
+              <item row="0" column="4">
+               <widget class="QToolButton" name="dateTimeUtcButton">
+                <property name="toolTip">
+                 <string>Display the date/time overlay in UTC rather than local time</string>
+                </property>
+                <property name="text">
+                 <string>UTC</string>
+                </property>
+                <property name="checkable">
+                 <bool>true</bool>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </widget>
+           </item>
+           <item>
+            <spacer name="verticalSpacer_10">
+             <property name="orientation">
+              <enum>Qt::Orientation::Vertical</enum>
+             </property>
+             <property name="sizeHint" stdset="0">
+              <size>
+               <width>20</width>
+               <height>40</height>
+              </size>
+             </property>
+            </spacer>
+           </item>
+          </layout>
+         </widget>
+         <widget class="QWidget" name="tabHTMLOverlay">
+          <attribute name="title">
+           <string>HTML</string>
+          </attribute>
+          <layout class="QVBoxLayout" name="verticalLayout_12">
+           <item>
+            <widget class="QGroupBox" name="textOverlay">
+             <property name="toolTip">
+              <string>Overlay settings for drawing custom text or HTML on the image.</string>
+             </property>
+             <property name="title">
+              <string>HTML Overlay</string>
+             </property>
+             <layout class="QGridLayout" name="gridLayout_textOverlay">
+              <item row="1" column="1" colspan="3">
+               <widget class="QFontComboBox" name="overlayTextFontCombo">
+                <property name="toolTip">
+                 <string>Select font to use for the text overlay</string>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="4">
+               <widget class="QDoubleSpinBox" name="overlayTextFontScaleSpin">
+                <property name="toolTip">
+                 <string>Font point size for text overlay</string>
+                </property>
+                <property name="decimals">
+                 <number>0</number>
+                </property>
+                <property name="minimum">
+                 <double>4.000000000000000</double>
+                </property>
+                <property name="maximum">
+                 <double>144.000000000000000</double>
+                </property>
+                <property name="singleStep">
+                 <double>1.000000000000000</double>
+                </property>
+                <property name="value">
+                 <double>12.000000000000000</double>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="5">
+               <widget class="QToolButton" name="overlayTextColorButton">
+                <property name="toolTip">
+                 <string>Select text overlay colour</string>
+                </property>
+                <property name="text">
+                 <string/>
+                </property>
+               </widget>
+              </item>
+              <item row="0" column="0">
+               <widget class="QLabel" name="overlayTextEditLabel">
+                <property name="minimumSize">
+                 <size>
+                  <width>100</width>
+                  <height>0</height>
+                 </size>
+                </property>
+                <property name="text">
+                 <string>HTML</string>
+                </property>
+               </widget>
+              </item>
+              <item row="0" column="1" colspan="5">
+               <widget class="QTextEdit" name="overlayTextEdit">
+                <property name="sizePolicy">
+                 <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+                  <horstretch>1</horstretch>
+                  <verstretch>0</verstretch>
+                 </sizepolicy>
+                </property>
+                <property name="minimumSize">
+                 <size>
+                  <width>0</width>
+                  <height>80</height>
+                 </size>
+                </property>
+                <property name="toolTip">
+                 <string>HTML text to render on the image
 
 Use src=file:///path/to/images/logo.png for img tags. http is not supported.</string>
-            </property>
-            <property name="layoutDirection">
-             <enum>Qt::LayoutDirection::LeftToRight</enum>
-            </property>
-            <property name="html">
-             <string>&lt;!DOCTYPE HTML PUBLIC &quot;-//W3C//DTD HTML 4.0//EN&quot; &quot;http://www.w3.org/TR/REC-html40/strict.dtd&quot;&gt;
+                </property>
+                <property name="layoutDirection">
+                 <enum>Qt::LayoutDirection::LeftToRight</enum>
+                </property>
+                <property name="html">
+                 <string>&lt;!DOCTYPE HTML PUBLIC &quot;-//W3C//DTD HTML 4.0//EN&quot; &quot;http://www.w3.org/TR/REC-html40/strict.dtd&quot;&gt;
 &lt;html&gt;&lt;head&gt;&lt;meta name=&quot;qrichtext&quot; content=&quot;1&quot; /&gt;&lt;meta charset=&quot;utf-8&quot; /&gt;&lt;style type=&quot;text/css&quot;&gt;
 p, li { white-space: pre-wrap; }
 hr { height: 1px; border-width: 0; }
@@ -4198,147 +4144,160 @@ li.unchecked::marker { content: &quot;\2610&quot;; }
 li.checked::marker { content: &quot;\2612&quot;; }
 &lt;/style&gt;&lt;/head&gt;&lt;body style=&quot; font-family:'Segoe UI'; font-size:9pt; font-weight:400; font-style:normal;&quot;&gt;
 &lt;p style=&quot;-qt-paragraph-type:empty; margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;&quot;&gt;&lt;br /&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
-            </property>
-           </widget>
-          </item>
-          <item row="1" column="0">
-           <widget class="QLabel" name="overlayTextFontLabel">
-            <property name="text">
-             <string>Font</string>
-            </property>
-           </widget>
-          </item>
-          <item row="0" column="0">
-           <widget class="QLabel" name="overlayTextEditLabel">
-            <property name="minimumSize">
-             <size>
-              <width>100</width>
-              <height>0</height>
-             </size>
-            </property>
-            <property name="text">
-             <string>HTML</string>
-            </property>
-           </widget>
-          </item>
-          <item row="1" column="1" colspan="3">
-           <widget class="QFontComboBox" name="overlayTextFontCombo">
-            <property name="toolTip">
-             <string>Select font to use for the text overlay</string>
-            </property>
-           </widget>
-          </item>
-          <item row="1" column="5">
-           <widget class="QToolButton" name="overlayTextColorButton">
-            <property name="toolTip">
-             <string>Select text overlay colour</string>
-            </property>
-            <property name="text">
-             <string/>
-            </property>
-           </widget>
-          </item>
-          <item row="2" column="1" colspan="5">
-           <layout class="QHBoxLayout" name="overlayTextPosLayout">
-            <item>
-             <widget class="QLabel" name="overlayTextPosXLabel">
-              <property name="text">
-               <string>X</string>
-              </property>
-             </widget>
-            </item>
-            <item>
-             <widget class="QSlider" name="overlayTextPosXSlider">
-              <property name="toolTip">
-               <string>Text overlay X position (px from left)</string>
-              </property>
-              <property name="minimum">
-               <number>0</number>
-              </property>
-              <property name="maximum">
-               <number>4096</number>
-              </property>
-              <property name="value">
-               <number>4</number>
-              </property>
-              <property name="orientation">
-               <enum>Qt::Orientation::Horizontal</enum>
-              </property>
-             </widget>
-            </item>
-            <item>
-             <widget class="QLabel" name="overlayTextPosXValue">
-              <property name="minimumSize">
-               <size>
-                <width>35</width>
-                <height>0</height>
-               </size>
-              </property>
-              <property name="text">
-               <string>4</string>
-              </property>
-              <property name="alignment">
-               <set>Qt::AlignmentFlag::AlignRight|Qt::AlignmentFlag::AlignTrailing|Qt::AlignmentFlag::AlignVCenter</set>
-              </property>
-             </widget>
-            </item>
-            <item>
-             <widget class="Line" name="overlayTextLine">
-              <property name="toolTip">
-               <string>HTML text to render on the image
+                </property>
+               </widget>
+              </item>
+              <item row="2" column="0">
+               <widget class="QLabel" name="overlayTextPosLabel">
+                <property name="text">
+                 <string>Position</string>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="0">
+               <widget class="QLabel" name="overlayTextFontLabel">
+                <property name="text">
+                 <string>Font</string>
+                </property>
+               </widget>
+              </item>
+              <item row="2" column="1" colspan="5">
+               <layout class="QHBoxLayout" name="overlayTextPosLayout">
+                <item>
+                 <widget class="QLabel" name="overlayTextPosXLabel">
+                  <property name="text">
+                   <string>X</string>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <widget class="QSlider" name="overlayTextPosXSlider">
+                  <property name="toolTip">
+                   <string>Text overlay X position (px from left)</string>
+                  </property>
+                  <property name="minimum">
+                   <number>0</number>
+                  </property>
+                  <property name="maximum">
+                   <number>4096</number>
+                  </property>
+                  <property name="value">
+                   <number>4</number>
+                  </property>
+                  <property name="orientation">
+                   <enum>Qt::Orientation::Horizontal</enum>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <widget class="QLabel" name="overlayTextPosXValue">
+                  <property name="minimumSize">
+                   <size>
+                    <width>35</width>
+                    <height>0</height>
+                   </size>
+                  </property>
+                  <property name="text">
+                   <string>4</string>
+                  </property>
+                  <property name="alignment">
+                   <set>Qt::AlignmentFlag::AlignRight|Qt::AlignmentFlag::AlignTrailing|Qt::AlignmentFlag::AlignVCenter</set>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <widget class="Line" name="overlayTextLine">
+                  <property name="toolTip">
+                   <string>HTML text to render on the image
 
 Use src=file:///path/to/images/logo.png for img tags. http is not supported.</string>
-              </property>
-              <property name="orientation">
-               <enum>Qt::Orientation::Vertical</enum>
-              </property>
-             </widget>
-            </item>
-            <item>
-             <widget class="QLabel" name="overlayTextPosYLabel">
-              <property name="text">
-               <string>Y</string>
-              </property>
-             </widget>
-            </item>
-            <item>
-             <widget class="QSlider" name="overlayTextPosYSlider">
-              <property name="toolTip">
-               <string>Text overlay Y position (px from top; 0 = auto bottom)</string>
-              </property>
-              <property name="minimum">
-               <number>0</number>
-              </property>
-              <property name="maximum">
-               <number>4096</number>
-              </property>
-              <property name="value">
-               <number>0</number>
-              </property>
-              <property name="orientation">
-               <enum>Qt::Orientation::Horizontal</enum>
-              </property>
-             </widget>
-            </item>
-            <item>
-             <widget class="QLabel" name="overlayTextPosYValue">
-              <property name="minimumSize">
-               <size>
-                <width>35</width>
-                <height>0</height>
-               </size>
-              </property>
-              <property name="text">
-               <string>0</string>
-              </property>
-              <property name="alignment">
-               <set>Qt::AlignmentFlag::AlignRight|Qt::AlignmentFlag::AlignTrailing|Qt::AlignmentFlag::AlignVCenter</set>
-              </property>
-             </widget>
-            </item>
-           </layout>
-          </item>
-         </layout>
+                  </property>
+                  <property name="orientation">
+                   <enum>Qt::Orientation::Vertical</enum>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <widget class="QLabel" name="overlayTextPosYLabel">
+                  <property name="text">
+                   <string>Y</string>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <widget class="QSlider" name="overlayTextPosYSlider">
+                  <property name="toolTip">
+                   <string>Text overlay Y position (px from top; 0 = auto bottom)</string>
+                  </property>
+                  <property name="minimum">
+                   <number>0</number>
+                  </property>
+                  <property name="maximum">
+                   <number>4096</number>
+                  </property>
+                  <property name="value">
+                   <number>0</number>
+                  </property>
+                  <property name="orientation">
+                   <enum>Qt::Orientation::Horizontal</enum>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <widget class="QLabel" name="overlayTextPosYValue">
+                  <property name="minimumSize">
+                   <size>
+                    <width>35</width>
+                    <height>0</height>
+                   </size>
+                  </property>
+                  <property name="text">
+                   <string>0</string>
+                  </property>
+                  <property name="alignment">
+                   <set>Qt::AlignmentFlag::AlignRight|Qt::AlignmentFlag::AlignTrailing|Qt::AlignmentFlag::AlignVCenter</set>
+                  </property>
+                 </widget>
+                </item>
+               </layout>
+              </item>
+             </layout>
+            </widget>
+           </item>
+           <item>
+            <widget class="QGroupBox" name="groupBox">
+             <property name="sizePolicy">
+              <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
+               <horstretch>0</horstretch>
+               <verstretch>0</verstretch>
+              </sizepolicy>
+             </property>
+             <property name="toolTip">
+              <string>Online weather map API settings.</string>
+             </property>
+             <property name="title">
+              <string>Weather</string>
+             </property>
+             <layout class="QFormLayout" name="formLayout">
+              <item row="0" column="0">
+               <widget class="QLabel" name="owmApiKeyLabel">
+                <property name="text">
+                 <string>OpenWeatherMap API Key</string>
+                </property>
+               </widget>
+              </item>
+              <item row="0" column="1">
+               <widget class="QLineEdit" name="owmApiKeyEdit">
+                <property name="toolTip">
+                 <string>API key from openweathermap.org used to periodically fetch weather for the camera latitude and longitude.</string>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </widget>
+           </item>
+          </layout>
+         </widget>
         </widget>
        </item>
       </layout>
@@ -4353,14 +4312,14 @@ Use src=file:///path/to/images/logo.png for img tags. http is not supported.</st
       <layout class="QVBoxLayout" name="recordingTabLayout">
        <item alignment="Qt::AlignmentFlag::AlignTop">
         <widget class="QGroupBox" name="recordingGroup">
-         <property name="toolTip">
-          <string>Image and video recording settings.</string>
-         </property>
          <property name="sizePolicy">
           <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
            <horstretch>0</horstretch>
            <verstretch>0</verstretch>
           </sizepolicy>
+         </property>
+         <property name="toolTip">
+          <string>Image and video recording settings.</string>
          </property>
          <property name="title">
           <string>Recording</string>
@@ -4685,14 +4644,14 @@ Use src=file:///path/to/images/logo.png for img tags. http is not supported.</st
        </item>
        <item alignment="Qt::AlignmentFlag::AlignTop">
         <widget class="QGroupBox" name="keogramGroup">
-         <property name="toolTip">
-          <string>Keogram recording settings for 24-hour image strips.</string>
-         </property>
          <property name="sizePolicy">
           <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
            <horstretch>0</horstretch>
            <verstretch>0</verstretch>
           </sizepolicy>
+         </property>
+         <property name="toolTip">
+          <string>Keogram recording settings for 24-hour image strips.</string>
          </property>
          <property name="title">
           <string>Keogram</string>
@@ -4823,14 +4782,14 @@ Use src=file:///path/to/images/logo.png for img tags. http is not supported.</st
        </item>
        <item alignment="Qt::AlignmentFlag::AlignTop">
         <widget class="QGroupBox" name="youtubeStreamGroup">
-         <property name="toolTip">
-          <string>YouTube live-streaming settings.</string>
-         </property>
          <property name="sizePolicy">
           <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
            <horstretch>0</horstretch>
            <verstretch>0</verstretch>
           </sizepolicy>
+         </property>
+         <property name="toolTip">
+          <string>YouTube live-streaming settings.</string>
          </property>
          <property name="title">
           <string>YouTube Live</string>
@@ -5428,7 +5387,7 @@ Use src=file:///path/to/images/logo.png for img tags. http is not supported.</st
            <item row="1" column="0">
             <widget class="QLabel" name="yoloTileModelPathLabel">
              <property name="text">
-              <string>Tile model</string>
+              <string>YOLO ONNX (tile)</string>
              </property>
             </widget>
            </item>
@@ -5494,7 +5453,7 @@ Use src=file:///path/to/images/logo.png for img tags. http is not supported.</st
               </size>
              </property>
              <property name="text">
-              <string>YOLO ONNX model</string>
+              <string>YOLO ONNX (scale)</string>
              </property>
             </widget>
            </item>
@@ -5697,17 +5656,6 @@ Use src=file:///path/to/images/logo.png for img tags. http is not supported.</st
              </property>
             </widget>
            </item>
-           <item row="9" column="1" colspan="3">
-            <widget class="QPlainTextEdit" name="yoloIgnoredClassNamesEdit">
-             <property name="toolTip">
-              <string>Object class names to ignore, one per line. Matching detections will not be drawn or recorded in object history.</string>
-             </property>
-             <property name="placeholderText">
-              <string>person
-car</string>
-             </property>
-            </widget>
-           </item>
            <item row="10" column="0">
             <spacer name="verticalSpacer_3">
              <property name="orientation">
@@ -5720,6 +5668,17 @@ car</string>
               </size>
              </property>
             </spacer>
+           </item>
+           <item row="9" column="1" colspan="2">
+            <widget class="QPlainTextEdit" name="yoloIgnoredClassNamesEdit">
+             <property name="toolTip">
+              <string>Object class names to ignore, one per line. Matching detections will not be drawn or recorded in object history.</string>
+             </property>
+             <property name="placeholderText">
+              <string>person
+car</string>
+             </property>
+            </widget>
            </item>
           </layout>
          </widget>
@@ -6156,6 +6115,455 @@ car</string>
            <string>Cloud Detection</string>
           </attribute>
           <layout class="QGridLayout" name="gridLayoutCloud">
+           <item row="10" column="3">
+            <widget class="QDoubleSpinBox" name="cloudStarSenseMagSpin">
+             <property name="toolTip">
+              <string>Faintest catalog star magnitude checked by star-visibility sensing. Larger values check more, fainter stars</string>
+             </property>
+             <property name="decimals">
+              <number>1</number>
+             </property>
+             <property name="maximum">
+              <double>6.000000000000000</double>
+             </property>
+             <property name="singleStep">
+              <double>0.500000000000000</double>
+             </property>
+             <property name="value">
+              <double>4.000000000000000</double>
+             </property>
+            </widget>
+           </item>
+           <item row="2" column="1">
+            <widget class="QSpinBox" name="cloudBackgroundBlurSpin">
+             <property name="toolTip">
+              <string>Night path: blur radius used to estimate the sky background, in downscaled pixels</string>
+             </property>
+             <property name="minimum">
+              <number>1</number>
+             </property>
+             <property name="maximum">
+              <number>128</number>
+             </property>
+             <property name="value">
+              <number>24</number>
+             </property>
+            </widget>
+           </item>
+           <item row="1" column="3">
+            <widget class="QSpinBox" name="cloudNightThresholdSpin">
+             <property name="toolTip">
+              <string>Dark night path: how much brighter than the surrounding sky a region must be to classify as cloud (0-255)</string>
+             </property>
+             <property name="maximum">
+              <number>255</number>
+             </property>
+             <property name="value">
+              <number>8</number>
+             </property>
+            </widget>
+           </item>
+           <item row="2" column="2">
+            <widget class="QLabel" name="cloudDownscaleLabel">
+             <property name="text">
+              <string>Downscale</string>
+             </property>
+            </widget>
+           </item>
+           <item row="6" column="0">
+            <widget class="QLabel" name="cloudMotionOverlapLabel">
+             <property name="text">
+              <string>Motion overlap</string>
+             </property>
+            </widget>
+           </item>
+           <item row="5" column="2">
+            <widget class="QLabel" name="cloudFilterMotionLabel">
+             <property name="text">
+              <string>Filter motion</string>
+             </property>
+            </widget>
+           </item>
+           <item row="3" column="0">
+            <widget class="QLabel" name="cloudOpenSizeLabel">
+             <property name="text">
+              <string>Open size</string>
+             </property>
+            </widget>
+           </item>
+           <item row="15" column="3" alignment="Qt::AlignmentFlag::AlignRight">
+            <widget class="QToolButton" name="clearCloudChart">
+             <property name="toolTip">
+              <string>Clear cloud coverage history chart</string>
+             </property>
+             <property name="text">
+              <string/>
+             </property>
+             <property name="icon">
+              <iconset resource="../../../sdrgui/resources/res.qrc">
+               <normaloff>:/bin.png</normaloff>:/bin.png</iconset>
+             </property>
+            </widget>
+           </item>
+           <item row="16" column="0" colspan="4">
+            <widget class="QWidget" name="cloudChartContainer" native="true">
+             <property name="sizePolicy">
+              <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+               <horstretch>0</horstretch>
+               <verstretch>0</verstretch>
+              </sizepolicy>
+             </property>
+             <property name="minimumSize">
+              <size>
+               <width>0</width>
+               <height>100</height>
+              </size>
+             </property>
+             <property name="toolTip">
+              <string>Displays the cloud coverage history chart.</string>
+             </property>
+            </widget>
+           </item>
+           <item row="10" column="1">
+            <widget class="QCheckBox" name="cloudStarSenseCheck">
+             <property name="toolTip">
+              <string>At night, check whether predicted catalog stars are visible and unmark detected cloud that stars shine through. Requires the camera position, capture time and a calibrated lens model (as used by the plate solver)</string>
+             </property>
+             <property name="text">
+              <string/>
+             </property>
+            </widget>
+           </item>
+           <item row="7" column="1">
+            <widget class="QSpinBox" name="cloudTextureThresholdSpin">
+             <property name="toolTip">
+              <string>Day path: fine-scale texture level above which a region cannot be cloud. Rejects grey/white but textured surfaces such as roofs, trees and buildings. 0 disables</string>
+             </property>
+             <property name="maximum">
+              <number>255</number>
+             </property>
+             <property name="value">
+              <number>3</number>
+             </property>
+            </widget>
+           </item>
+           <item row="8" column="0">
+            <widget class="QLabel" name="cloudEdgeMarginLabel">
+             <property name="text">
+              <string>Edge margin</string>
+             </property>
+            </widget>
+           </item>
+           <item row="9" column="0">
+            <widget class="QLabel" name="cloudMaskSunMoonLabel">
+             <property name="text">
+              <string>Mask sun/moon</string>
+             </property>
+            </widget>
+           </item>
+           <item row="10" column="2">
+            <widget class="QLabel" name="cloudStarSenseMagLabel">
+             <property name="text">
+              <string>Star sense mag</string>
+             </property>
+            </widget>
+           </item>
+           <item row="9" column="2">
+            <widget class="QLabel" name="cloudSunMoonRadiusLabel">
+             <property name="text">
+              <string>Sun/moon max radius</string>
+             </property>
+            </widget>
+           </item>
+           <item row="2" column="0">
+            <widget class="QLabel" name="cloudBackgroundBlurLabel">
+             <property name="text">
+              <string>Background blur</string>
+             </property>
+            </widget>
+           </item>
+           <item row="11" column="1">
+            <widget class="QCheckBox" name="cloudUseReferenceCheck">
+             <property name="toolTip">
+              <string>Compare frames against the saved per-camera clear-sky reference: regions matching the known clear sky are never classified as cloud, regions deviating from it are, and learned foreground (trees, roofs) is excluded. Save references with the Save ref button on clear skies at different times of day and night</string>
+             </property>
+             <property name="text">
+              <string/>
+             </property>
+            </widget>
+           </item>
+           <item row="0" column="3">
+            <widget class="QComboBox" name="cloudDebugViewCombo">
+             <property name="toolTip">
+              <string>Replace the preview image with an intermediate cloud detection stage</string>
+             </property>
+             <item>
+              <property name="text">
+               <string>Off</string>
+              </property>
+             </item>
+             <item>
+              <property name="text">
+               <string>Background</string>
+              </property>
+             </item>
+             <item>
+              <property name="text">
+               <string>Signal</string>
+              </property>
+             </item>
+             <item>
+              <property name="text">
+               <string>Thresholded</string>
+              </property>
+             </item>
+             <item>
+              <property name="text">
+               <string>Final</string>
+              </property>
+             </item>
+             <item>
+              <property name="text">
+               <string>Texture</string>
+              </property>
+             </item>
+            </widget>
+           </item>
+           <item row="1" column="1">
+            <widget class="QDoubleSpinBox" name="cloudDayThresholdSpin">
+             <property name="toolTip">
+              <string>Day path: minimum red/blue ratio classified as cloud. Clear blue sky is typically 0.55-0.8, cloud 0.9 and above</string>
+             </property>
+             <property name="maximum">
+              <double>2.000000000000000</double>
+             </property>
+             <property name="singleStep">
+              <double>0.010000000000000</double>
+             </property>
+             <property name="value">
+              <double>0.850000000000000</double>
+             </property>
+            </widget>
+           </item>
+           <item row="10" column="0">
+            <widget class="QLabel" name="cloudStarSenseLabel">
+             <property name="text">
+              <string>Star sense</string>
+             </property>
+            </widget>
+           </item>
+           <item row="1" column="2">
+            <widget class="QLabel" name="cloudNightThresholdLabel">
+             <property name="text">
+              <string>Night threshold</string>
+             </property>
+            </widget>
+           </item>
+           <item row="4" column="3">
+            <widget class="QCheckBox" name="cloudShowOverlayCheck">
+             <property name="toolTip">
+              <string>Tint cloud-classified regions on the preview image</string>
+             </property>
+             <property name="text">
+              <string/>
+             </property>
+             <property name="checked">
+              <bool>true</bool>
+             </property>
+            </widget>
+           </item>
+           <item row="4" column="2">
+            <widget class="QLabel" name="cloudShowOverlayLabel">
+             <property name="text">
+              <string>Show mask</string>
+             </property>
+            </widget>
+           </item>
+           <item row="6" column="3">
+            <widget class="QToolButton" name="cloudColorButton">
+             <property name="toolTip">
+              <string>Overlay tint colour for cloud-classified regions</string>
+             </property>
+             <property name="text">
+              <string/>
+             </property>
+            </widget>
+           </item>
+           <item row="11" column="0">
+            <widget class="QLabel" name="cloudUseReferenceLabel">
+             <property name="text">
+              <string>Clear-sky ref</string>
+             </property>
+            </widget>
+           </item>
+           <item row="6" column="2">
+            <widget class="QLabel" name="cloudColorLabel">
+             <property name="text">
+              <string>Mask colour</string>
+             </property>
+            </widget>
+           </item>
+           <item row="5" column="0">
+            <widget class="QLabel" name="cloudFilterStarsLabel">
+             <property name="text">
+              <string>Filter stars</string>
+             </property>
+            </widget>
+           </item>
+           <item row="1" column="0">
+            <widget class="QLabel" name="cloudDayThresholdLabel">
+             <property name="text">
+              <string>Day threshold</string>
+             </property>
+            </widget>
+           </item>
+           <item row="4" column="0">
+            <widget class="QLabel" name="cloudUpdateIntervalLabel">
+             <property name="text">
+              <string>Update interval</string>
+             </property>
+            </widget>
+           </item>
+           <item row="6" column="1">
+            <widget class="QDoubleSpinBox" name="cloudMotionOverlapSpin">
+             <property name="toolTip">
+              <string>Fraction of a motion box that must be cloud before it is suppressed</string>
+             </property>
+             <property name="maximum">
+              <double>1.000000000000000</double>
+             </property>
+             <property name="singleStep">
+              <double>0.050000000000000</double>
+             </property>
+             <property name="value">
+              <double>0.600000000000000</double>
+             </property>
+            </widget>
+           </item>
+           <item row="3" column="3">
+            <widget class="QSpinBox" name="cloudCloseSizeSpin">
+             <property name="toolTip">
+              <string>Kernel radius for cloud-mask morphological close (0 disables)</string>
+             </property>
+             <property name="maximum">
+              <number>20</number>
+             </property>
+             <property name="value">
+              <number>3</number>
+             </property>
+            </widget>
+           </item>
+           <item row="5" column="1">
+            <widget class="QCheckBox" name="cloudFilterStarsCheck">
+             <property name="toolTip">
+              <string>Drop star detections whose centroid falls inside the cloud mask, so cloud structure cannot produce false stars</string>
+             </property>
+             <property name="text">
+              <string/>
+             </property>
+             <property name="checked">
+              <bool>true</bool>
+             </property>
+            </widget>
+           </item>
+           <item row="7" column="2">
+            <widget class="QLabel" name="cloudEventThresholdLabel">
+             <property name="text">
+              <string>Event threshold</string>
+             </property>
+            </widget>
+           </item>
+           <item row="11" column="2">
+            <widget class="QLabel" name="cloudAutoReferenceLabel">
+             <property name="text">
+              <string>Auto learn ref</string>
+             </property>
+            </widget>
+           </item>
+           <item row="0" column="2">
+            <widget class="QLabel" name="cloudDebugViewLabel">
+             <property name="minimumSize">
+              <size>
+               <width>130</width>
+               <height>0</height>
+              </size>
+             </property>
+             <property name="text">
+              <string>Debug view</string>
+             </property>
+            </widget>
+           </item>
+           <item row="15" column="0">
+            <widget class="QLabel" name="cloudCoverageTitleLabel">
+             <property name="text">
+              <string>Coverage</string>
+             </property>
+            </widget>
+           </item>
+           <item row="3" column="1">
+            <widget class="QSpinBox" name="cloudOpenSizeSpin">
+             <property name="toolTip">
+              <string>Kernel radius for cloud-mask morphological open (0 disables)</string>
+             </property>
+             <property name="maximum">
+              <number>20</number>
+             </property>
+             <property name="value">
+              <number>1</number>
+             </property>
+            </widget>
+           </item>
+           <item row="8" column="1">
+            <widget class="QDoubleSpinBox" name="cloudEdgeMarginSpin">
+             <property name="toolTip">
+              <string>Exclude a margin this percentage of the frame in from the sky-region edge, removing the fisheye rim, vignette and foreground edges from classification. 0 disables</string>
+             </property>
+             <property name="suffix">
+              <string> %</string>
+             </property>
+             <property name="decimals">
+              <number>1</number>
+             </property>
+             <property name="maximum">
+              <double>25.000000000000000</double>
+             </property>
+             <property name="singleStep">
+              <double>1.000000000000000</double>
+             </property>
+             <property name="value">
+              <double>0.000000000000000</double>
+             </property>
+            </widget>
+           </item>
+           <item row="9" column="1">
+            <widget class="QCheckBox" name="cloudMaskSunMoonCheck">
+             <property name="toolTip">
+              <string>Exclude a disc around the projected sun (day) and moon (night) so they are not classified as cloud. Requires the camera position, capture time and lens model to be set</string>
+             </property>
+             <property name="text">
+              <string/>
+             </property>
+            </widget>
+           </item>
+           <item row="4" column="1">
+            <widget class="QSpinBox" name="cloudUpdateIntervalSpin">
+             <property name="toolTip">
+              <string>Recompute the cloud mask every this many frames. Clouds evolve slowly, so intermediate frames reuse the last mask</string>
+             </property>
+             <property name="suffix">
+              <string> frames</string>
+             </property>
+             <property name="minimum">
+              <number>1</number>
+             </property>
+             <property name="maximum">
+              <number>600</number>
+             </property>
+             <property name="value">
+              <number>10</number>
+             </property>
+            </widget>
+           </item>
            <item row="0" column="0">
             <widget class="QLabel" name="cloudModeLabel">
              <property name="minimumSize">
@@ -6197,126 +6605,49 @@ car</string>
              </item>
             </widget>
            </item>
-           <item row="0" column="2">
-            <widget class="QLabel" name="cloudDebugViewLabel">
-             <property name="minimumSize">
-              <size>
-               <width>130</width>
-               <height>0</height>
-              </size>
-             </property>
-             <property name="text">
-              <string>Debug view</string>
-             </property>
-            </widget>
-           </item>
-           <item row="0" column="3">
-            <widget class="QComboBox" name="cloudDebugViewCombo">
+           <item row="9" column="3">
+            <widget class="QDoubleSpinBox" name="cloudSunMoonRadiusSpin">
              <property name="toolTip">
-              <string>Replace the preview image with an intermediate cloud detection stage</string>
+              <string>Maximum angular radius, in degrees, that the sun/moon exclusion grows to. The mask sizes itself to the actual glare bloom (which grows with gain and exposure) up to this limit</string>
              </property>
-             <item>
-              <property name="text">
-               <string>Off</string>
-              </property>
-             </item>
-             <item>
-              <property name="text">
-               <string>Background</string>
-              </property>
-             </item>
-             <item>
-              <property name="text">
-               <string>Signal</string>
-              </property>
-             </item>
-             <item>
-              <property name="text">
-               <string>Thresholded</string>
-              </property>
-             </item>
-             <item>
-              <property name="text">
-               <string>Final</string>
-              </property>
-             </item>
-             <item>
-              <property name="text">
-               <string>Texture</string>
-              </property>
-             </item>
-            </widget>
-           </item>
-           <item row="1" column="0">
-            <widget class="QLabel" name="cloudDayThresholdLabel">
-             <property name="text">
-              <string>Day threshold</string>
+             <property name="suffix">
+              <string> °</string>
              </property>
-            </widget>
-           </item>
-           <item row="1" column="1">
-            <widget class="QDoubleSpinBox" name="cloudDayThresholdSpin">
-             <property name="toolTip">
-              <string>Day path: minimum red/blue ratio classified as cloud. Clear blue sky is typically 0.55-0.8, cloud 0.9 and above</string>
-             </property>
-             <property name="maximum">
-              <double>2.000000000000000</double>
-             </property>
-             <property name="singleStep">
-              <double>0.010000000000000</double>
-             </property>
-             <property name="value">
-              <double>0.850000000000000</double>
-             </property>
-            </widget>
-           </item>
-           <item row="1" column="2">
-            <widget class="QLabel" name="cloudNightThresholdLabel">
-             <property name="text">
-              <string>Night threshold</string>
-             </property>
-            </widget>
-           </item>
-           <item row="1" column="3">
-            <widget class="QSpinBox" name="cloudNightThresholdSpin">
-             <property name="toolTip">
-              <string>Dark night path: how much brighter than the surrounding sky a region must be to classify as cloud (0-255)</string>
-             </property>
-             <property name="maximum">
-              <number>255</number>
-             </property>
-             <property name="value">
-              <number>8</number>
-             </property>
-            </widget>
-           </item>
-           <item row="2" column="0">
-            <widget class="QLabel" name="cloudBackgroundBlurLabel">
-             <property name="text">
-              <string>Background blur</string>
-             </property>
-            </widget>
-           </item>
-           <item row="2" column="1">
-            <widget class="QSpinBox" name="cloudBackgroundBlurSpin">
-             <property name="toolTip">
-              <string>Night path: blur radius used to estimate the sky background, in downscaled pixels</string>
-             </property>
-             <property name="minimum">
+             <property name="decimals">
               <number>1</number>
              </property>
              <property name="maximum">
-              <number>128</number>
+              <double>45.000000000000000</double>
+             </property>
+             <property name="singleStep">
+              <double>1.000000000000000</double>
              </property>
              <property name="value">
-              <number>24</number>
+              <double>20.000000000000000</double>
              </property>
             </widget>
            </item>
-           <item row="2" column="2">
-            <widget class="QLabel" name="cloudDownscaleLabel">
+           <item row="7" column="0">
+            <widget class="QLabel" name="cloudTextureThresholdLabel">
              <property name="text">
-              <string>Downscale</string>
+              <string>Texture threshold</string>
+             </property>
+            </widget>
+           </item>
+           <item row="3" column="2">
+            <widget class="QLabel" name="cloudCloseSizeLabel">
+             <property name="text">
+              <string>Close size</string>
+             </property>
+            </widget>
+           </item>
+           <item row="15" column="1">
+            <widget class="QLabel" name="cloudCoverageLabel">
+             <property name="toolTip">
+              <string>Percentage of the evaluated sky classified as cloud in the latest frame</string>
+             </property>
+             <property name="text">
+              <string>-</string>
              </property>
             </widget>
            </item>
@@ -6350,116 +6681,13 @@ car</string>
              </item>
             </widget>
            </item>
-           <item row="3" column="0">
-            <widget class="QLabel" name="cloudOpenSizeLabel">
-             <property name="text">
-              <string>Open size</string>
-             </property>
-            </widget>
-           </item>
-           <item row="3" column="1">
-            <widget class="QSpinBox" name="cloudOpenSizeSpin">
+           <item row="11" column="3">
+            <widget class="QCheckBox" name="cloudAutoReferenceCheck">
              <property name="toolTip">
-              <string>Kernel radius for cloud-mask morphological open (0 disables)</string>
-             </property>
-             <property name="maximum">
-              <number>20</number>
-             </property>
-             <property name="value">
-              <number>1</number>
-             </property>
-            </widget>
-           </item>
-           <item row="3" column="2">
-            <widget class="QLabel" name="cloudCloseSizeLabel">
-             <property name="text">
-              <string>Close size</string>
-             </property>
-            </widget>
-           </item>
-           <item row="3" column="3">
-            <widget class="QSpinBox" name="cloudCloseSizeSpin">
-             <property name="toolTip">
-              <string>Kernel radius for cloud-mask morphological close (0 disables)</string>
-             </property>
-             <property name="maximum">
-              <number>20</number>
-             </property>
-             <property name="value">
-              <number>3</number>
-             </property>
-            </widget>
-           </item>
-           <item row="4" column="0">
-            <widget class="QLabel" name="cloudUpdateIntervalLabel">
-             <property name="text">
-              <string>Update interval</string>
-             </property>
-            </widget>
-           </item>
-           <item row="4" column="1">
-            <widget class="QSpinBox" name="cloudUpdateIntervalSpin">
-             <property name="toolTip">
-              <string>Recompute the cloud mask every this many frames. Clouds evolve slowly, so intermediate frames reuse the last mask</string>
-             </property>
-             <property name="suffix">
-              <string> frames</string>
-             </property>
-             <property name="minimum">
-              <number>1</number>
-             </property>
-             <property name="maximum">
-              <number>600</number>
-             </property>
-             <property name="value">
-              <number>10</number>
-             </property>
-            </widget>
-           </item>
-           <item row="4" column="2">
-            <widget class="QLabel" name="cloudShowOverlayLabel">
-             <property name="text">
-              <string>Show mask</string>
-             </property>
-            </widget>
-           </item>
-           <item row="4" column="3">
-            <widget class="QCheckBox" name="cloudShowOverlayCheck">
-             <property name="toolTip">
-              <string>Tint cloud-classified regions on the preview image</string>
+              <string>Automatically blend verified-clear frames (low measured coverage; at night confirmed by star sensing when enabled) into the clear-sky reference, so it fills itself in and tracks seasons and lens changes</string>
              </property>
              <property name="text">
               <string/>
-             </property>
-             <property name="checked">
-              <bool>true</bool>
-             </property>
-            </widget>
-           </item>
-           <item row="5" column="0">
-            <widget class="QLabel" name="cloudFilterStarsLabel">
-             <property name="text">
-              <string>Filter stars</string>
-             </property>
-            </widget>
-           </item>
-           <item row="5" column="1">
-            <widget class="QCheckBox" name="cloudFilterStarsCheck">
-             <property name="toolTip">
-              <string>Drop star detections whose centroid falls inside the cloud mask, so cloud structure cannot produce false stars</string>
-             </property>
-             <property name="text">
-              <string/>
-             </property>
-             <property name="checked">
-              <bool>true</bool>
-             </property>
-            </widget>
-           </item>
-           <item row="5" column="2">
-            <widget class="QLabel" name="cloudFilterMotionLabel">
-             <property name="text">
-              <string>Filter motion</string>
              </property>
             </widget>
            </item>
@@ -6473,73 +6701,6 @@ car</string>
              </property>
              <property name="checked">
               <bool>true</bool>
-             </property>
-            </widget>
-           </item>
-           <item row="6" column="0">
-            <widget class="QLabel" name="cloudMotionOverlapLabel">
-             <property name="text">
-              <string>Motion overlap</string>
-             </property>
-            </widget>
-           </item>
-           <item row="6" column="1">
-            <widget class="QDoubleSpinBox" name="cloudMotionOverlapSpin">
-             <property name="toolTip">
-              <string>Fraction of a motion box that must be cloud before it is suppressed</string>
-             </property>
-             <property name="maximum">
-              <double>1.000000000000000</double>
-             </property>
-             <property name="singleStep">
-              <double>0.050000000000000</double>
-             </property>
-             <property name="value">
-              <double>0.600000000000000</double>
-             </property>
-            </widget>
-           </item>
-           <item row="6" column="2">
-            <widget class="QLabel" name="cloudColorLabel">
-             <property name="text">
-              <string>Mask colour</string>
-             </property>
-            </widget>
-           </item>
-           <item row="6" column="3">
-            <widget class="QToolButton" name="cloudColorButton">
-             <property name="toolTip">
-              <string>Overlay tint colour for cloud-classified regions</string>
-             </property>
-             <property name="text">
-              <string/>
-             </property>
-            </widget>
-           </item>
-           <item row="7" column="0">
-            <widget class="QLabel" name="cloudTextureThresholdLabel">
-             <property name="text">
-              <string>Texture threshold</string>
-             </property>
-            </widget>
-           </item>
-           <item row="7" column="1">
-            <widget class="QSpinBox" name="cloudTextureThresholdSpin">
-             <property name="toolTip">
-              <string>Day path: fine-scale texture level above which a region cannot be cloud. Rejects grey/white but textured surfaces such as roofs, trees and buildings. 0 disables</string>
-             </property>
-             <property name="maximum">
-              <number>255</number>
-             </property>
-             <property name="value">
-              <number>3</number>
-             </property>
-            </widget>
-           </item>
-           <item row="7" column="2">
-            <widget class="QLabel" name="cloudEventThresholdLabel">
-             <property name="text">
-              <string>Event threshold</string>
              </property>
             </widget>
            </item>
@@ -6565,243 +6726,43 @@ car</string>
              </property>
             </widget>
            </item>
-           <item row="8" column="0">
-            <widget class="QLabel" name="cloudEdgeMarginLabel">
-             <property name="text">
-              <string>Edge margin</string>
-             </property>
-            </widget>
-           </item>
-           <item row="8" column="1">
-            <widget class="QDoubleSpinBox" name="cloudEdgeMarginSpin">
+           <item row="13" column="0">
+            <widget class="QPushButton" name="cloudSaveReferenceButton">
              <property name="toolTip">
-              <string>Exclude a margin this percentage of the frame in from the sky-region edge, removing the fisheye rim, vignette and foreground edges from classification. 0 disables</string>
+              <string>Save the current frame as the clear-sky reference for the current sky state (determined from the sun and moon elevation at the frame's capture time). Press on a cloud-free sky</string>
              </property>
-             <property name="suffix">
-              <string> %</string>
-             </property>
-             <property name="decimals">
-              <number>1</number>
-             </property>
-             <property name="maximum">
-              <double>25.000000000000000</double>
-             </property>
-             <property name="singleStep">
-              <double>1.000000000000000</double>
-             </property>
-             <property name="value">
-              <double>0.000000000000000</double>
-             </property>
-            </widget>
-           </item>
-           <item row="8" column="2">
-            <widget class="QLabel" name="cloudMaskSunMoonLabel">
              <property name="text">
-              <string>Mask sun/moon</string>
+              <string>Save ref</string>
              </property>
             </widget>
            </item>
-           <item row="8" column="3">
-            <widget class="QCheckBox" name="cloudMaskSunMoonCheck">
+           <item row="13" column="1">
+            <widget class="QPushButton" name="cloudViewReferenceButton">
              <property name="toolTip">
-              <string>Exclude a disc around the projected sun (day) and moon (night) so they are not classified as cloud. Requires the camera position, capture time and lens model to be set</string>
+              <string>View the saved clear-sky reference maps for this camera, to check they look sensible</string>
              </property>
              <property name="text">
-              <string/>
+              <string>View</string>
              </property>
             </widget>
            </item>
-           <item row="9" column="0">
-            <widget class="QLabel" name="cloudSunMoonRadiusLabel">
-             <property name="text">
-              <string>Sun/moon max radius</string>
-             </property>
-            </widget>
-           </item>
-           <item row="9" column="1">
-            <widget class="QDoubleSpinBox" name="cloudSunMoonRadiusSpin">
+           <item row="13" column="2">
+            <widget class="QPushButton" name="cloudSaveTestCaseButton">
              <property name="toolTip">
-              <string>Maximum angular radius, in degrees, that the sun/moon exclusion grows to. The mask sizes itself to the actual glare bloom (which grows with gain and exposure) up to this limit</string>
-             </property>
-             <property name="suffix">
-              <string> °</string>
-             </property>
-             <property name="decimals">
-              <number>1</number>
-             </property>
-             <property name="maximum">
-              <double>45.000000000000000</double>
-             </property>
-             <property name="singleStep">
-              <double>1.000000000000000</double>
-             </property>
-             <property name="value">
-              <double>20.000000000000000</double>
-             </property>
-            </widget>
-           </item>
-           <item row="9" column="2">
-            <widget class="QLabel" name="cloudStarSenseLabel">
-             <property name="text">
-              <string>Star sense</string>
-             </property>
-            </widget>
-           </item>
-           <item row="9" column="3">
-            <widget class="QCheckBox" name="cloudStarSenseCheck">
-             <property name="toolTip">
-              <string>At night, check whether predicted catalog stars are visible and unmark detected cloud that stars shine through. Requires the camera position, capture time and a calibrated lens model (as used by the plate solver)</string>
+              <string>Save the current image together with all settings, the capture time and the clear-sky reference as a standalone test-case bundle, runnable offline with the cloud test harness (--run-case)</string>
              </property>
              <property name="text">
-              <string/>
+              <string>Save test case</string>
              </property>
             </widget>
            </item>
-           <item row="10" column="0">
-            <widget class="QLabel" name="cloudStarSenseMagLabel">
-             <property name="text">
-              <string>Star sense mag</string>
-             </property>
-            </widget>
-           </item>
-           <item row="10" column="1">
-            <widget class="QDoubleSpinBox" name="cloudStarSenseMagSpin">
-             <property name="toolTip">
-              <string>Faintest catalog star magnitude checked by star-visibility sensing. Larger values check more, fainter stars</string>
-             </property>
-             <property name="decimals">
-              <number>1</number>
-             </property>
-             <property name="maximum">
-              <double>6.000000000000000</double>
-             </property>
-             <property name="singleStep">
-              <double>0.500000000000000</double>
-             </property>
-             <property name="value">
-              <double>4.000000000000000</double>
-             </property>
-            </widget>
-           </item>
-           <item row="10" column="2">
-            <widget class="QLabel" name="cloudUseReferenceLabel">
-             <property name="text">
-              <string>Clear-sky ref</string>
-             </property>
-            </widget>
-           </item>
-           <item row="10" column="3">
-            <widget class="QCheckBox" name="cloudUseReferenceCheck">
-             <property name="toolTip">
-              <string>Compare frames against the saved per-camera clear-sky reference: regions matching the known clear sky are never classified as cloud, regions deviating from it are, and learned foreground (trees, roofs) is excluded. Save references with the Save ref button on clear skies at different times of day and night</string>
-             </property>
-             <property name="text">
-              <string/>
-             </property>
-            </widget>
-           </item>
-           <item row="11" column="0">
-            <widget class="QLabel" name="cloudAutoReferenceLabel">
-             <property name="text">
-              <string>Auto learn ref</string>
-             </property>
-            </widget>
-           </item>
-           <item row="11" column="1">
-            <widget class="QCheckBox" name="cloudAutoReferenceCheck">
-             <property name="toolTip">
-              <string>Automatically blend verified-clear frames (low measured coverage; at night confirmed by star sensing when enabled) into the clear-sky reference, so it fills itself in and tracks seasons and lens changes</string>
-             </property>
-             <property name="text">
-              <string/>
-             </property>
-            </widget>
-           </item>
-           <item row="11" column="2">
-            <layout class="QHBoxLayout" name="cloudReferenceButtonsLayout">
-             <item>
-              <widget class="QPushButton" name="cloudSaveReferenceButton">
-               <property name="toolTip">
-                <string>Save the current frame as the clear-sky reference for the current sky state (determined from the sun and moon elevation at the frame's capture time). Press on a cloud-free sky</string>
-               </property>
-               <property name="text">
-                <string>Save ref</string>
-               </property>
-              </widget>
-             </item>
-             <item>
-              <widget class="QPushButton" name="cloudViewReferenceButton">
-               <property name="toolTip">
-                <string>View the saved clear-sky reference maps for this camera, to check they look sensible</string>
-               </property>
-               <property name="text">
-                <string>View</string>
-               </property>
-              </widget>
-             </item>
-             <item>
-              <widget class="QPushButton" name="cloudSaveTestCaseButton">
-               <property name="toolTip">
-                <string>Save the current image together with all settings, the capture time and the clear-sky reference as a standalone test-case bundle, runnable offline with the cloud test harness (--run-case)</string>
-               </property>
-               <property name="text">
-                <string>Save test case</string>
-               </property>
-              </widget>
-             </item>
-            </layout>
-           </item>
-           <item row="11" column="3">
+           <item row="14" column="0" colspan="4">
             <widget class="QLabel" name="cloudReferenceStatusLabel">
              <property name="toolTip">
               <string>Clear-sky reference store status: how many sky states have a saved reference</string>
              </property>
              <property name="text">
               <string>-</string>
-             </property>
-            </widget>
-           </item>
-           <item row="12" column="0">
-            <widget class="QLabel" name="cloudCoverageTitleLabel">
-             <property name="text">
-              <string>Coverage</string>
-             </property>
-            </widget>
-           </item>
-           <item row="12" column="1">
-            <widget class="QLabel" name="cloudCoverageLabel">
-             <property name="toolTip">
-              <string>Percentage of the evaluated sky classified as cloud in the latest frame</string>
-             </property>
-             <property name="text">
-              <string>-</string>
-             </property>
-            </widget>
-           </item>
-           <item row="12" column="3" alignment="Qt::AlignmentFlag::AlignRight">
-            <widget class="QToolButton" name="clearCloudChart">
-             <property name="toolTip">
-              <string>Clear cloud coverage history chart</string>
-             </property>
-             <property name="text">
-              <string/>
-             </property>
-             <property name="icon">
-              <iconset resource="../../../sdrgui/resources/res.qrc">
-               <normaloff>:/bin.png</normaloff>:/bin.png</iconset>
-             </property>
-            </widget>
-           </item>
-           <item row="13" column="0" colspan="4">
-            <widget class="QWidget" name="cloudChartContainer" native="true">
-             <property name="toolTip">
-              <string>Displays the cloud coverage history chart.</string>
-             </property>
-             <property name="minimumSize">
-              <size>
-               <width>0</width>
-               <height>200</height>
-              </size>
              </property>
             </widget>
            </item>
@@ -6994,14 +6955,14 @@ car</string>
              <layout class="QGridLayout" name="gridLayout_12">
               <item row="3" column="1">
                <widget class="QDoubleSpinBox" name="plateSolveSearchRadiusSpin">
-                <property name="toolTip">
-                 <string>Azimuth/elevation search radius in degrees for guided plate solving.</string>
-                </property>
                 <property name="sizePolicy">
                  <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
                   <horstretch>0</horstretch>
                   <verstretch>0</verstretch>
                  </sizepolicy>
+                </property>
+                <property name="toolTip">
+                 <string>Azimuth/elevation search radius in degrees for guided plate solving.</string>
                 </property>
                 <property name="suffix">
                  <string>°</string>
@@ -7742,59 +7703,20 @@ car</string>
       <layout class="QVBoxLayout" name="positionTabLayout">
        <item alignment="Qt::AlignmentFlag::AlignTop">
         <widget class="QGroupBox" name="cameraPositionGroup">
-         <property name="toolTip">
-          <string>Observer location used for overlays and plate solving.</string>
-         </property>
          <property name="sizePolicy">
           <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
            <horstretch>0</horstretch>
            <verstretch>0</verstretch>
           </sizepolicy>
          </property>
+         <property name="toolTip">
+          <string>Observer location used for overlays and plate solving.</string>
+         </property>
          <property name="title">
           <string>Camera position</string>
          </property>
          <layout class="QGridLayout" name="cameraPositionLayout">
-          <item row="0" column="0">
-           <widget class="QLabel" name="latitudeLabel">
-            <property name="minimumSize">
-             <size>
-              <width>100</width>
-              <height>0</height>
-             </size>
-            </property>
-            <property name="text">
-             <string>Latitude</string>
-            </property>
-           </widget>
-          </item>
-          <item row="0" column="1">
-           <widget class="QDoubleSpinBox" name="latitudeSpin">
-            <property name="toolTip">
-             <string>Observer latitude in degrees; positive is north.</string>
-            </property>
-            <property name="decimals">
-             <number>6</number>
-            </property>
-            <property name="minimum">
-             <double>-90.000000000000000</double>
-            </property>
-            <property name="maximum">
-             <double>90.000000000000000</double>
-            </property>
-            <property name="singleStep">
-             <double>0.001000000000000</double>
-            </property>
-           </widget>
-          </item>
-          <item row="1" column="0">
-           <widget class="QLabel" name="longitudeLabel">
-            <property name="text">
-             <string>Longitude</string>
-            </property>
-           </widget>
-          </item>
-          <item row="1" column="1">
+          <item row="0" column="3">
            <widget class="QDoubleSpinBox" name="longitudeSpin">
             <property name="toolTip">
              <string>Observer longitude in degrees; positive is east.</string>
@@ -7810,6 +7732,19 @@ car</string>
             </property>
             <property name="singleStep">
              <double>0.001000000000000</double>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="0">
+           <widget class="QLabel" name="latitudeLabel">
+            <property name="minimumSize">
+             <size>
+              <width>100</width>
+              <height>0</height>
+             </size>
+            </property>
+            <property name="text">
+             <string>Latitude</string>
             </property>
            </widget>
           </item>
@@ -7839,6 +7774,32 @@ car</string>
             </property>
            </widget>
           </item>
+          <item row="0" column="1">
+           <widget class="QDoubleSpinBox" name="latitudeSpin">
+            <property name="toolTip">
+             <string>Observer latitude in degrees; positive is north.</string>
+            </property>
+            <property name="decimals">
+             <number>6</number>
+            </property>
+            <property name="minimum">
+             <double>-90.000000000000000</double>
+            </property>
+            <property name="maximum">
+             <double>90.000000000000000</double>
+            </property>
+            <property name="singleStep">
+             <double>0.001000000000000</double>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="2">
+           <widget class="QLabel" name="longitudeLabel">
+            <property name="text">
+             <string>Longitude</string>
+            </property>
+           </widget>
+          </item>
           <item row="3" column="0">
            <widget class="QToolButton" name="useMyPositionButton">
             <property name="toolTip">
@@ -7859,19 +7820,71 @@ Right-click: toggle continual synchronization from My Position.</string>
        </item>
        <item alignment="Qt::AlignmentFlag::AlignTop">
         <widget class="QGroupBox" name="cameraDirectionGroup">
-         <property name="toolTip">
-          <string>Camera pointing direction and offsets used for overlays and plate solving.</string>
-         </property>
          <property name="sizePolicy">
           <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
            <horstretch>0</horstretch>
            <verstretch>0</verstretch>
           </sizepolicy>
          </property>
+         <property name="toolTip">
+          <string>Camera pointing direction and offsets used for overlays and plate solving.</string>
+         </property>
          <property name="title">
           <string>Camera direction</string>
          </property>
-         <layout class="QFormLayout" name="cameraDirectionLayout">
+         <layout class="QGridLayout" name="gridLayout_14">
+          <item row="7" column="1">
+           <widget class="QDoubleSpinBox" name="rollSpin">
+            <property name="toolTip">
+             <string>Manual camera roll angle in degrees.</string>
+            </property>
+            <property name="decimals">
+             <number>2</number>
+            </property>
+            <property name="minimum">
+             <double>0.000000000000000</double>
+            </property>
+            <property name="maximum">
+             <double>360.000000000000000</double>
+            </property>
+            <property name="singleStep">
+             <double>1.000000000000000</double>
+            </property>
+           </widget>
+          </item>
+          <item row="6" column="1">
+           <widget class="QDoubleSpinBox" name="elevationSpin">
+            <property name="toolTip">
+             <string>Manual camera elevation in degrees, used when no direction source is selected.</string>
+            </property>
+            <property name="decimals">
+             <number>4</number>
+            </property>
+            <property name="minimum">
+             <double>-90.000000000000000</double>
+            </property>
+            <property name="maximum">
+             <double>90.000000000000000</double>
+            </property>
+            <property name="singleStep">
+             <double>1.000000000000000</double>
+            </property>
+           </widget>
+          </item>
+          <item row="6" column="0">
+           <widget class="QLabel" name="elevationLabel">
+            <property name="text">
+             <string>Elevation</string>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="1">
+           <widget class="QComboBox" name="directionSourceCombo">
+            <property name="toolTip">
+             <string>Select a GS232Controller rotator or Qt Sensors compass/tilt/rotation sensor set to continually synchronize the camera direction.</string>
+            </property>
+           </widget>
+          </item>
           <item row="0" column="0">
            <widget class="QLabel" name="directionSourceLabel">
             <property name="minimumSize">
@@ -7885,21 +7898,47 @@ Right-click: toggle continual synchronization from My Position.</string>
             </property>
            </widget>
           </item>
-          <item row="0" column="1">
-           <widget class="QComboBox" name="directionSourceCombo">
-            <property name="toolTip">
-             <string>Select a GS232Controller rotator or Qt Sensors compass/tilt/rotation sensor set to continually synchronize the camera direction.</string>
+          <item row="7" column="0">
+           <widget class="QLabel" name="rollLabel">
+            <property name="text">
+             <string>Roll</string>
             </property>
            </widget>
           </item>
-          <item row="1" column="0">
+          <item row="5" column="1">
+           <widget class="QDoubleSpinBox" name="azimuthSpin">
+            <property name="toolTip">
+             <string>Manual camera azimuth in degrees, used when no direction source is selected.</string>
+            </property>
+            <property name="decimals">
+             <number>4</number>
+            </property>
+            <property name="minimum">
+             <double>0.000000000000000</double>
+            </property>
+            <property name="maximum">
+             <double>180.000000000000000</double>
+            </property>
+            <property name="singleStep">
+             <double>1.000000000000000</double>
+            </property>
+           </widget>
+          </item>
+          <item row="5" column="0">
+           <widget class="QLabel" name="azimuthLabel">
+            <property name="text">
+             <string>Azimuth</string>
+            </property>
+           </widget>
+          </item>
+          <item row="5" column="2">
            <widget class="QLabel" name="azimuthOffsetLabel">
             <property name="text">
              <string>Azimuth offset</string>
             </property>
            </widget>
           </item>
-          <item row="1" column="1">
+          <item row="5" column="3">
            <widget class="QDoubleSpinBox" name="azimuthOffsetSpin">
             <property name="toolTip">
              <string>Offset added to the selected direction source azimuth.</string>
@@ -7921,14 +7960,14 @@ Right-click: toggle continual synchronization from My Position.</string>
             </property>
            </widget>
           </item>
-          <item row="2" column="0">
+          <item row="6" column="2">
            <widget class="QLabel" name="elevationOffsetLabel">
             <property name="text">
              <string>Elevation offset</string>
             </property>
            </widget>
           </item>
-          <item row="2" column="1">
+          <item row="6" column="3">
            <widget class="QDoubleSpinBox" name="elevationOffsetSpin">
             <property name="toolTip">
              <string>Offset added to the selected direction source elevation.</string>
@@ -7950,23 +7989,23 @@ Right-click: toggle continual synchronization from My Position.</string>
             </property>
            </widget>
           </item>
-          <item row="3" column="0">
+          <item row="7" column="2">
            <widget class="QLabel" name="rollOffsetLabel">
             <property name="text">
              <string>Roll offset</string>
             </property>
            </widget>
           </item>
-          <item row="3" column="1">
+          <item row="7" column="3">
            <widget class="QDoubleSpinBox" name="rollOffsetSpin">
             <property name="toolTip">
              <string>Offset added to the roll value from the selected direction source.</string>
             </property>
-            <property name="decimals">
-             <number>4</number>
-            </property>
             <property name="suffix">
              <string>°</string>
+            </property>
+            <property name="decimals">
+             <number>4</number>
             </property>
             <property name="minimum">
              <double>-180.000000000000000</double>
@@ -7976,84 +8015,6 @@ Right-click: toggle continual synchronization from My Position.</string>
             </property>
             <property name="singleStep">
              <double>0.100000000000000</double>
-            </property>
-           </widget>
-          </item>
-          <item row="4" column="0">
-           <widget class="QLabel" name="azimuthLabel">
-            <property name="text">
-             <string>Azimuth</string>
-            </property>
-           </widget>
-          </item>
-          <item row="4" column="1">
-           <widget class="QDoubleSpinBox" name="azimuthSpin">
-            <property name="toolTip">
-             <string>Manual camera azimuth in degrees, used when no direction source is selected.</string>
-            </property>
-            <property name="decimals">
-             <number>4</number>
-            </property>
-            <property name="minimum">
-             <double>0.000000000000000</double>
-            </property>
-            <property name="maximum">
-             <double>180.000000000000000</double>
-            </property>
-            <property name="singleStep">
-             <double>1.000000000000000</double>
-            </property>
-           </widget>
-          </item>
-          <item row="5" column="0">
-           <widget class="QLabel" name="elevationLabel">
-            <property name="text">
-             <string>Elevation</string>
-            </property>
-           </widget>
-          </item>
-          <item row="5" column="1">
-           <widget class="QDoubleSpinBox" name="elevationSpin">
-            <property name="toolTip">
-             <string>Manual camera elevation in degrees, used when no direction source is selected.</string>
-            </property>
-            <property name="decimals">
-             <number>4</number>
-            </property>
-            <property name="minimum">
-             <double>-90.000000000000000</double>
-            </property>
-            <property name="maximum">
-             <double>90.000000000000000</double>
-            </property>
-            <property name="singleStep">
-             <double>1.000000000000000</double>
-            </property>
-           </widget>
-          </item>
-          <item row="6" column="0">
-           <widget class="QLabel" name="rollLabel">
-            <property name="text">
-             <string>Roll</string>
-            </property>
-           </widget>
-          </item>
-          <item row="6" column="1">
-           <widget class="QDoubleSpinBox" name="rollSpin">
-            <property name="toolTip">
-             <string>Manual camera roll angle in degrees.</string>
-            </property>
-            <property name="decimals">
-             <number>2</number>
-            </property>
-            <property name="minimum">
-             <double>0.000000000000000</double>
-            </property>
-            <property name="maximum">
-             <double>360.000000000000000</double>
-            </property>
-            <property name="singleStep">
-             <double>1.000000000000000</double>
             </property>
            </widget>
           </item>
@@ -8068,29 +8029,12 @@ Right-click: toggle continual synchronization from My Position.</string>
          <property name="title">
           <string>Camera lens and sensor</string>
          </property>
-         <layout class="QFormLayout" name="formLayout_2">
-          <item row="0" column="0">
-           <widget class="QLabel" name="fovModeLabel">
+         <layout class="QGridLayout" name="gridLayout_15">
+          <item row="7" column="0">
+           <widget class="QLabel" name="lensCenterOffsetXLabel">
             <property name="text">
-             <string>FoV setting</string>
+             <string>Center offset X</string>
             </property>
-           </widget>
-          </item>
-          <item row="0" column="1">
-           <widget class="QComboBox" name="fovModeCombo">
-            <property name="toolTip">
-             <string>Chooses whether field of view is entered directly or calculated from sensor and focal length.</string>
-            </property>
-            <item>
-             <property name="text">
-              <string>Manual</string>
-             </property>
-            </item>
-            <item>
-             <property name="text">
-              <string>Sensor/focal length</string>
-             </property>
-            </item>
            </widget>
           </item>
           <item row="1" column="0">
@@ -8098,6 +8042,28 @@ Right-click: toggle continual synchronization from My Position.</string>
             <property name="text">
              <string>FoV</string>
             </property>
+           </widget>
+          </item>
+          <item row="6" column="1">
+           <widget class="QComboBox" name="lensProjectionCombo">
+            <property name="toolTip">
+             <string>Projection model used to map image pixels to sky directions.</string>
+            </property>
+            <item>
+             <property name="text">
+              <string>Rectilinear</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>Equidistant fisheye</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>Equisolid fisheye</string>
+             </property>
+            </item>
            </widget>
           </item>
           <item row="1" column="1">
@@ -8151,43 +8117,14 @@ Right-click: toggle continual synchronization from My Position.</string>
             </property>
            </widget>
           </item>
-          <item row="3" column="0">
+          <item row="2" column="2">
            <widget class="QLabel" name="fovSensorHeightLabel">
             <property name="text">
              <string>Sensor height</string>
             </property>
            </widget>
           </item>
-          <item row="3" column="1">
-           <widget class="QDoubleSpinBox" name="fovSensorHeightSpin">
-            <property name="toolTip">
-             <string>Sensor height in millimetres used to calculate field of view.</string>
-            </property>
-            <property name="suffix">
-             <string> mm</string>
-            </property>
-            <property name="decimals">
-             <number>3</number>
-            </property>
-            <property name="minimum">
-             <double>0.001000000000000</double>
-            </property>
-            <property name="maximum">
-             <double>1000.000000000000000</double>
-            </property>
-            <property name="singleStep">
-             <double>0.100000000000000</double>
-            </property>
-           </widget>
-          </item>
-          <item row="4" column="0">
-           <widget class="QLabel" name="fovFocalLengthLabel">
-            <property name="text">
-             <string>Focal length</string>
-            </property>
-           </widget>
-          </item>
-          <item row="4" column="1">
+          <item row="5" column="1">
            <widget class="QDoubleSpinBox" name="fovFocalLengthSpin">
             <property name="toolTip">
              <string>Focal length in millimetres used to calculate field of view.</string>
@@ -8209,43 +8146,45 @@ Right-click: toggle continual synchronization from My Position.</string>
             </property>
            </widget>
           </item>
-          <item row="5" column="0">
-           <widget class="QLabel" name="lensProjectionLabel">
-            <property name="text">
-             <string>Projection</string>
-            </property>
-           </widget>
-          </item>
-          <item row="5" column="1">
-           <widget class="QComboBox" name="lensProjectionCombo">
+          <item row="0" column="1">
+           <widget class="QComboBox" name="fovModeCombo">
             <property name="toolTip">
-             <string>Projection model used to map image pixels to sky directions.</string>
+             <string>Chooses whether field of view is entered directly or calculated from sensor and focal length.</string>
             </property>
             <item>
              <property name="text">
-              <string>Rectilinear</string>
+              <string>Manual</string>
              </property>
             </item>
             <item>
              <property name="text">
-              <string>Equidistant fisheye</string>
-             </property>
-            </item>
-            <item>
-             <property name="text">
-              <string>Equisolid fisheye</string>
+              <string>Sensor/focal length</string>
              </property>
             </item>
            </widget>
           </item>
-          <item row="6" column="0">
-           <widget class="QLabel" name="lensCenterOffsetXLabel">
+          <item row="9" column="0">
+           <widget class="QLabel" name="lensDistortionK1Label">
             <property name="text">
-             <string>Center offset X</string>
+             <string>Distortion K1</string>
             </property>
            </widget>
           </item>
-          <item row="6" column="1">
+          <item row="5" column="0">
+           <widget class="QLabel" name="fovFocalLengthLabel">
+            <property name="text">
+             <string>Focal length</string>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="0">
+           <widget class="QLabel" name="fovModeLabel">
+            <property name="text">
+             <string>FoV setting</string>
+            </property>
+           </widget>
+          </item>
+          <item row="7" column="1">
            <widget class="QDoubleSpinBox" name="lensCenterOffsetXSpin">
             <property name="toolTip">
              <string>Horizontal lens centre offset in pixels.</string>
@@ -8264,40 +8203,14 @@ Right-click: toggle continual synchronization from My Position.</string>
             </property>
            </widget>
           </item>
-          <item row="7" column="0">
-           <widget class="QLabel" name="lensCenterOffsetYLabel">
+          <item row="6" column="0">
+           <widget class="QLabel" name="lensProjectionLabel">
             <property name="text">
-             <string>Center offset Y</string>
+             <string>Projection</string>
             </property>
            </widget>
           </item>
-          <item row="7" column="1">
-           <widget class="QDoubleSpinBox" name="lensCenterOffsetYSpin">
-            <property name="toolTip">
-             <string>Vertical lens centre offset in pixels.</string>
-            </property>
-            <property name="decimals">
-             <number>1</number>
-            </property>
-            <property name="minimum">
-             <double>-2048.000000000000000</double>
-            </property>
-            <property name="maximum">
-             <double>2048.000000000000000</double>
-            </property>
-            <property name="singleStep">
-             <double>0.500000000000000</double>
-            </property>
-           </widget>
-          </item>
-          <item row="8" column="0">
-           <widget class="QLabel" name="lensDistortionK1Label">
-            <property name="text">
-             <string>Distortion K1</string>
-            </property>
-           </widget>
-          </item>
-          <item row="8" column="1">
+          <item row="9" column="1">
            <widget class="QDoubleSpinBox" name="lensDistortionK1Spin">
             <property name="toolTip">
              <string>Radial distortion coefficient used by the lens projection model.</string>
@@ -8316,41 +8229,113 @@ Right-click: toggle continual synchronization from My Position.</string>
             </property>
            </widget>
           </item>
-          <item row="9" column="0" colspan="2">
+          <item row="2" column="3">
+           <widget class="QDoubleSpinBox" name="fovSensorHeightSpin">
+            <property name="toolTip">
+             <string>Sensor height in millimetres used to calculate field of view.</string>
+            </property>
+            <property name="suffix">
+             <string> mm</string>
+            </property>
+            <property name="decimals">
+             <number>3</number>
+            </property>
+            <property name="minimum">
+             <double>0.001000000000000</double>
+            </property>
+            <property name="maximum">
+             <double>1000.000000000000000</double>
+            </property>
+            <property name="singleStep">
+             <double>0.100000000000000</double>
+            </property>
+           </widget>
+          </item>
+          <item row="7" column="2">
+           <widget class="QLabel" name="lensCenterOffsetYLabel">
+            <property name="text">
+             <string>Center offset Y</string>
+            </property>
+           </widget>
+          </item>
+          <item row="7" column="3">
+           <widget class="QDoubleSpinBox" name="lensCenterOffsetYSpin">
+            <property name="toolTip">
+             <string>Vertical lens centre offset in pixels.</string>
+            </property>
+            <property name="decimals">
+             <number>1</number>
+            </property>
+            <property name="minimum">
+             <double>-2048.000000000000000</double>
+            </property>
+            <property name="maximum">
+             <double>2048.000000000000000</double>
+            </property>
+            <property name="singleStep">
+             <double>0.500000000000000</double>
+            </property>
+           </widget>
+          </item>
+          <item row="9" column="3">
            <widget class="QCheckBox" name="lensMirrorCheck">
             <property name="toolTip">
              <string>Image is horizontally mirrored relative to the sky (up-looking all-sky camera or telescope star diagonal). Plate solving and sky overlays account for the reflection.</string>
             </property>
+            <property name="text">
+             <string/>
+            </property>
+           </widget>
+          </item>
+          <item row="9" column="2">
+           <widget class="QLabel" name="lensMirrorLabel">
             <property name="text">
              <string>Mirrored</string>
             </property>
            </widget>
           </item>
          </layout>
-       </widget>
-      </item>
+        </widget>
+       </item>
        <item alignment="Qt::AlignmentFlag::AlignTop">
         <widget class="QGroupBox" name="playbackProjectionGroup">
-         <property name="toolTip">
-          <string>Projection rectangle used when replaying videos or image sequences that contain padding around the real optical image.</string>
-         </property>
          <property name="sizePolicy">
           <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
            <horstretch>0</horstretch>
            <verstretch>0</verstretch>
           </sizepolicy>
          </property>
+         <property name="toolTip">
+          <string>Projection rectangle used when replaying videos or image sequences that contain padding around the real optical image.</string>
+         </property>
          <property name="title">
           <string>Playback projection</string>
          </property>
          <layout class="QGridLayout" name="playbackProjectionLayout">
-          <item row="0" column="0" colspan="2">
-           <widget class="QCheckBox" name="playbackProjectionEnabledCheck">
+          <item row="3" column="1">
+           <widget class="QSpinBox" name="playbackProjectionWidthSpin">
             <property name="toolTip">
-             <string>Use the rectangle below as the optical image area for video, stream, and image sequence playback.</string>
+             <string>Width of the optical content rectangle in playback-frame pixels. Set to 0 to disable the transform.</string>
             </property>
+            <property name="suffix">
+             <string> px</string>
+            </property>
+            <property name="maximum">
+             <number>65535</number>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="2">
+           <widget class="QLabel" name="playbackProjectionYLabel">
             <property name="text">
-             <string>Use content rectangle</string>
+             <string>Y</string>
+            </property>
+           </widget>
+          </item>
+          <item row="3" column="0">
+           <widget class="QLabel" name="playbackProjectionWidthLabel">
+            <property name="text">
+             <string>Width</string>
             </property>
            </widget>
           </item>
@@ -8377,14 +8362,17 @@ Right-click: toggle continual synchronization from My Position.</string>
             </property>
            </widget>
           </item>
-          <item row="2" column="0">
-           <widget class="QLabel" name="playbackProjectionYLabel">
+          <item row="0" column="0" colspan="2">
+           <widget class="QCheckBox" name="playbackProjectionEnabledCheck">
+            <property name="toolTip">
+             <string>Use the rectangle below as the optical image area for video, stream, and image sequence playback.</string>
+            </property>
             <property name="text">
-             <string>Y</string>
+             <string>Use content rectangle</string>
             </property>
            </widget>
           </item>
-          <item row="2" column="1">
+          <item row="1" column="3">
            <widget class="QSpinBox" name="playbackProjectionYSpin">
             <property name="toolTip">
              <string>Top edge of the optical content rectangle in playback-frame pixels.</string>
@@ -8400,34 +8388,14 @@ Right-click: toggle continual synchronization from My Position.</string>
             </property>
            </widget>
           </item>
-          <item row="3" column="0">
-           <widget class="QLabel" name="playbackProjectionWidthLabel">
-            <property name="text">
-             <string>Width</string>
-            </property>
-           </widget>
-          </item>
-          <item row="3" column="1">
-           <widget class="QSpinBox" name="playbackProjectionWidthSpin">
-            <property name="toolTip">
-             <string>Width of the optical content rectangle in playback-frame pixels. Set to 0 to disable the transform.</string>
-            </property>
-            <property name="suffix">
-             <string> px</string>
-            </property>
-            <property name="maximum">
-             <number>65535</number>
-            </property>
-           </widget>
-          </item>
-          <item row="4" column="0">
+          <item row="3" column="2">
            <widget class="QLabel" name="playbackProjectionHeightLabel">
             <property name="text">
              <string>Height</string>
             </property>
            </widget>
           </item>
-          <item row="4" column="1">
+          <item row="3" column="3">
            <widget class="QSpinBox" name="playbackProjectionHeightSpin">
             <property name="toolTip">
              <string>Height of the optical content rectangle in playback-frame pixels. Set to 0 to disable the transform.</string>
@@ -8437,38 +8405,6 @@ Right-click: toggle continual synchronization from My Position.</string>
             </property>
             <property name="maximum">
              <number>65535</number>
-            </property>
-           </widget>
-          </item>
-         </layout>
-        </widget>
-       </item>
-       <item alignment="Qt::AlignmentFlag::AlignTop">
-        <widget class="QGroupBox" name="groupBox">
-         <property name="toolTip">
-          <string>Online weather map API settings.</string>
-         </property>
-         <property name="sizePolicy">
-          <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
-           <horstretch>0</horstretch>
-           <verstretch>0</verstretch>
-          </sizepolicy>
-         </property>
-         <property name="title">
-          <string>Weather</string>
-         </property>
-         <layout class="QFormLayout" name="formLayout">
-          <item row="0" column="0">
-           <widget class="QLabel" name="owmApiKeyLabel">
-            <property name="text">
-             <string>OpenWeatherMap API Key</string>
-            </property>
-           </widget>
-          </item>
-          <item row="0" column="1">
-           <widget class="QLineEdit" name="owmApiKeyEdit">
-            <property name="toolTip">
-             <string>API key from openweathermap.org used to periodically fetch weather for the camera latitude and longitude.</string>
             </property>
            </widget>
           </item>
@@ -8581,10 +8517,6 @@ Right-click: toggle continual synchronization from My Position.</string>
   <tabstop>saturationSlider</tabstop>
   <tabstop>saturationSpin</tabstop>
   <tabstop>defaultColorSettingsButton</tabstop>
-  <tabstop>spectrumDeviceCombo</tabstop>
-  <tabstop>spectrumOffsetXSlider</tabstop>
-  <tabstop>spectrumOffsetYSlider</tabstop>
-  <tabstop>spectrumScaleSpin</tabstop>
   <tabstop>dateTimeFormatEdit</tabstop>
   <tabstop>overlayFontCombo</tabstop>
   <tabstop>overlayFontScaleSpin</tabstop>

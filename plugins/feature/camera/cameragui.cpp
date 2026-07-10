@@ -3645,10 +3645,6 @@ void CameraGUI::createWindowOverlaysTab()
     m_windowOverlaysTab = new QWidget(m_settingsDialog);
     QVBoxLayout *mainLayout = new QVBoxLayout(m_windowOverlaysTab);
 
-    if (settingsUI()->spectrumOverlay) {
-        settingsUI()->spectrumOverlay->hide();
-    }
-
     QGroupBox *spectrumGroup = new QGroupBox(tr("Spectrum Overlays"), m_windowOverlaysTab);
     QVBoxLayout *spectrumLayout = new QVBoxLayout(spectrumGroup);
     m_spectrumOverlaysTable = new QTableWidget(spectrumGroup);

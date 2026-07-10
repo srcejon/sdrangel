@@ -103,6 +103,7 @@ public:
         int getSampleRate() const { return m_sampleRate; }
         quint64 getStartSample() const { return m_startSample; }
         quint64 getEndSample() const { return m_endSample; }
+        bool getTruncated() const { return m_truncated; }
 
         static MsgMeteorDetected* create(
             const QDateTime& dateTimeUtc,
@@ -118,7 +119,8 @@ public:
             double frequencyDrift,
             int sampleRate,
             quint64 startSample,
-            quint64 endSample)
+            quint64 endSample,
+            bool truncated)
         {
             return new MsgMeteorDetected(
                 dateTimeUtc,
@@ -134,7 +136,8 @@ public:
                 frequencyDrift,
                 sampleRate,
                 startSample,
-                endSample
+                endSample,
+                truncated
             );
         }
 
@@ -153,6 +156,7 @@ public:
         int m_sampleRate;
         quint64 m_startSample;
         quint64 m_endSample;
+        bool m_truncated;
 
         MsgMeteorDetected(
             const QDateTime& dateTimeUtc,
@@ -168,7 +172,8 @@ public:
             double frequencyDrift,
             int sampleRate,
             quint64 startSample,
-            quint64 endSample
+            quint64 endSample,
+            bool truncated
         ) :
             Message(),
             m_dateTimeUtc(dateTimeUtc),
@@ -184,7 +189,8 @@ public:
             m_frequencyDrift(frequencyDrift),
             m_sampleRate(sampleRate),
             m_startSample(startSample),
-            m_endSample(endSample)
+            m_endSample(endSample),
+            m_truncated(truncated)
         {}
     };
 
@@ -248,6 +254,7 @@ private:
         double m_confidence;
         double m_componentSupportDB;
         bool m_allowComponentMerge;
+        bool m_truncated;
 
         PulseReport() :
             m_valid(false),
@@ -271,7 +278,8 @@ private:
             m_robustFrequencyDrift(0.0),
             m_confidence(0.0),
             m_componentSupportDB(-200.0),
-            m_allowComponentMerge(true)
+            m_allowComponentMerge(true),
+            m_truncated(false)
         {}
     };
 
@@ -288,6 +296,7 @@ private:
         double m_peakRatio;
         double m_framePeakPower;
         double m_frameOccupiedFraction;
+        double m_backgroundPower;
         int m_lowIndex;
         int m_highIndex;
 
@@ -304,6 +313,7 @@ private:
             m_peakRatio(0.0),
             m_framePeakPower(0.0),
             m_frameOccupiedFraction(0.0),
+            m_backgroundPower(1e-20),
             m_lowIndex(0),
             m_highIndex(0)
         {}
@@ -311,12 +321,10 @@ private:
 
     struct SpectralFrameSnapshot {
         quint64 m_startSample;
-        double m_peakPower;
         std::vector<double> m_binPower;
 
         SpectralFrameSnapshot() :
-            m_startSample(0),
-            m_peakPower(1e-20)
+            m_startSample(0)
         {}
     };
 
@@ -327,6 +335,8 @@ private:
         int m_missingFrames;
         double m_peakPower;
         double m_backgroundPower;
+        double m_backgroundPowerSum;
+        int m_backgroundFrameCount;
         double m_totalPower;
         double m_minFrequency;
         double m_maxFrequency;
@@ -351,6 +361,8 @@ private:
             m_missingFrames(0),
             m_peakPower(0.0),
             m_backgroundPower(1e-20),
+            m_backgroundPowerSum(0.0),
+            m_backgroundFrameCount(0),
             m_totalPower(0.0),
             m_minFrequency(0.0),
             m_maxFrequency(0.0),
@@ -408,6 +420,7 @@ private:
         bool m_sweepContinuationRejected;
         bool m_scoreOK;
         bool m_accepted;
+        bool m_truncated;
         const char *m_classification;
         const char *m_rejectionReason;
 
@@ -457,6 +470,7 @@ private:
             m_sweepContinuationRejected(false),
             m_scoreOK(false),
             m_accepted(false),
+            m_truncated(false),
             m_classification("invalid"),
             m_rejectionReason("invalid")
         {}
@@ -551,7 +565,7 @@ private:
     void processSpectralFrame(quint64 frameStartSample);
     void initializeSpectralNoiseFloor();
     void processCalibratedSpectralFrame(const SpectralFrameSnapshot& frame);
-    std::vector<SpectralBand> detectSpectralBands(const std::vector<double>& binPower, double framePeakPower);
+    std::vector<SpectralBand> detectSpectralBands(const std::vector<double>& binPower);
     void updateSpectralEvents(const std::vector<SpectralBand>& bands, quint64 frameCenterSample);
     void updateSpectralEvent(SpectralEvent& event, const SpectralBand& band, quint64 frameCenterSample);
     void finishSpectralEvent(const SpectralEvent& event);

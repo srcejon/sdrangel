@@ -757,6 +757,7 @@ namespace {
         MeteorBaseband baseband;
         SampleVector samples;
 
+        baseband.setInactivityFlushEnabled(false);
         baseband.setFifoLabel("meteor_demod_sink_test");
         baseband.setMessageQueueToGUI(&outputQueue);
 

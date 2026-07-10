@@ -433,7 +433,7 @@ private:
             m_maxContrastDB(0.0),
             m_maxPeakRatio(0.0),
             m_acceptanceScore(0.0),
-            m_acceptanceThreshold(5.0),
+            m_acceptanceThreshold(9.0),
             m_scoreMargin(0.0),
             m_signalScore(0.0),
             m_supportScore(0.0),

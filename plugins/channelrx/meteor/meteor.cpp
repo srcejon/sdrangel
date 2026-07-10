@@ -32,6 +32,10 @@ MESSAGE_CLASS_DEFINITION(Meteor::MsgCameraMeteorDetected, Message)
 const char * const Meteor::m_channelIdURI = "sdrangel.channel.meteor";
 const char * const Meteor::m_channelId = "Meteor";
 
+namespace {
+    constexpr int CameraEventExpirySeconds = 10 * 60;
+}
+
 Meteor::Meteor(DeviceAPI *deviceAPI) :
     ChannelAPI(m_channelIdURI, ChannelAPI::StreamSingleSink),
     m_deviceAPI(deviceAPI),
@@ -70,6 +74,9 @@ Meteor::Meteor(DeviceAPI *deviceAPI) :
         &Meteor::eventMessageEnqueued,
         Qt::QueuedConnection
     );
+    m_cameraEventExpiryTimer.setInterval(60 * 1000);
+    connect(&m_cameraEventExpiryTimer, &QTimer::timeout, this, &Meteor::pruneCameraMeteorEvents);
+    m_cameraEventExpiryTimer.start();
     m_eventSourceHandler.scanAvailableChannelsAndFeatures();
 }
 
@@ -215,14 +222,30 @@ void Meteor::handleEvent(const MainCore::MsgEvent& eventMessage)
 
     if (eventMessage.getEvent() == MainCore::MsgEvent::CameraObjectDetectedEvent)
     {
+        pruneCameraMeteorEvents();
+
         if (!m_cameraMeteorEvents.contains(source))
         {
             const QMap<QString, QString> fields = parseEventDataFields(eventMessage.getData());
             CameraMeteorEvent cameraEvent;
             cameraEvent.m_startTimeUtc = eventTime.toUTC();
+            cameraEvent.m_receivedTimeUtc = QDateTime::currentDateTimeUtc();
             cameraEvent.m_hasMagnitude = parseEventDoubleField(fields, QStringLiteral("magnitude"), cameraEvent.m_magnitude);
             cameraEvent.m_hasFlux = parseEventDoubleField(fields, QStringLiteral("flux"), cameraEvent.m_flux);
             m_cameraMeteorEvents.insert(source, cameraEvent);
+
+            if (source && !m_cameraEventSources.contains(source))
+            {
+                m_cameraEventSources.insert(source);
+                connect(
+                    const_cast<QObject *>(source),
+                    &QObject::destroyed,
+                    this,
+                    [this, source]() {
+                        m_cameraMeteorEvents.remove(source);
+                        m_cameraEventSources.remove(source);
+                    });
+            }
         }
 
         return;
@@ -256,6 +279,20 @@ void Meteor::handleEvent(const MainCore::MsgEvent& eventMessage)
             cameraEvent.m_magnitude,
             cameraEvent.m_hasFlux,
             cameraEvent.m_flux));
+    }
+}
+
+void Meteor::pruneCameraMeteorEvents()
+{
+    const QDateTime cutoffUtc = QDateTime::currentDateTimeUtc().addSecs(-CameraEventExpirySeconds);
+
+    for (auto it = m_cameraMeteorEvents.begin(); it != m_cameraMeteorEvents.end();)
+    {
+        if (!it->m_receivedTimeUtc.isValid() || (it->m_receivedTimeUtc < cutoffUtc)) {
+            it = m_cameraMeteorEvents.erase(it);
+        } else {
+            ++it;
+        }
     }
 }
 

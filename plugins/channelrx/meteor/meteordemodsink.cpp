@@ -1956,38 +1956,43 @@ void MeteorDemodSink::finishPulse(bool forceRejected)
     const bool broadbandContaminatedPulse = overlapsBroadbandInterference(m_pulseStartSample, endSample);
     const bool accepted = (directAccepted || validatesPendingBroadPulse) && !broadbandContaminatedPulse;
 
-    qDebug() << "MeteorDemodSink::finishPulse:"
-             << " accepted:" << accepted
-             << " directAccepted:" << directAccepted
-             << " broadPulseCandidate:" << broadPulseCandidate
-             << " broadValidationLineOK:" << broadValidationLineOK
-             << " validatesPendingBroadPulse:" << validatesPendingBroadPulse
-             << " forceRejected:" << forceRejected
-             << " durationOK:" << durationOK
-             << " compactClippedMeteor:" << compactClippedMeteor
-             << " driftOK:" << driftOK
-             << " sweepRejected:" << sweepRejected
-             << " spectralEvidenceOK:" << spectralEvidenceOK
-             << " stableLineOK:" << stableLineOK
-             << " boundedBandOK:" << boundedBandOK
-             << " veryShortLineOK:" << veryShortLineOK
-             << " shortStandaloneLine:" << shortStandaloneLine
-             << " strongShortLine:" << strongShortLine
-             << " strongCoherentLine:" << strongCoherentLine
-             << " durationS:" << durationS
-             << " peakPowerDB:" << 10.0 * std::log10(std::max(m_pulsePeakPower, 1e-20))
-             << " backgroundPowerDB:" << 10.0 * std::log10(std::max(m_noiseFloor, 1e-20))
-             << " peakAboveBackgroundDB:" << peakAboveBackgroundDB
-             << " centerFrequency:" << centerFrequency
-             << " frequencySpan:" << frequencySpan
-             << " frequencyDrift:" << frequencyDrift
-             << " sweepScore:" << sweepScore
-             << " spectralProminence:" << spectralProminence
-             << " frequencyConcentration:" << frequencyConcentration
-             << " spectralBandwidth:" << spectralBandwidth
-             << " spectralBandContrastDB:" << spectralBandContrastDB
-             << " startSample:" << m_pulseStartSample
-             << " endSample:" << endSample;
+    if (accepted
+        || broadPulseCandidate
+        || (durationOK && driftOK && (strongShortLine || strongCoherentLine)))
+    {
+        qDebug() << "MeteorDemodSink::finishPulse:"
+                 << " accepted:" << accepted
+                 << " directAccepted:" << directAccepted
+                 << " broadPulseCandidate:" << broadPulseCandidate
+                 << " broadValidationLineOK:" << broadValidationLineOK
+                 << " validatesPendingBroadPulse:" << validatesPendingBroadPulse
+                 << " forceRejected:" << forceRejected
+                 << " durationOK:" << durationOK
+                 << " compactClippedMeteor:" << compactClippedMeteor
+                 << " driftOK:" << driftOK
+                 << " sweepRejected:" << sweepRejected
+                 << " spectralEvidenceOK:" << spectralEvidenceOK
+                 << " stableLineOK:" << stableLineOK
+                 << " boundedBandOK:" << boundedBandOK
+                 << " veryShortLineOK:" << veryShortLineOK
+                 << " shortStandaloneLine:" << shortStandaloneLine
+                 << " strongShortLine:" << strongShortLine
+                 << " strongCoherentLine:" << strongCoherentLine
+                 << " durationS:" << durationS
+                 << " peakPowerDB:" << 10.0 * std::log10(std::max(m_pulsePeakPower, 1e-20))
+                 << " backgroundPowerDB:" << 10.0 * std::log10(std::max(m_noiseFloor, 1e-20))
+                 << " peakAboveBackgroundDB:" << peakAboveBackgroundDB
+                 << " centerFrequency:" << centerFrequency
+                 << " frequencySpan:" << frequencySpan
+                 << " frequencyDrift:" << frequencyDrift
+                 << " sweepScore:" << sweepScore
+                 << " spectralProminence:" << spectralProminence
+                 << " frequencyConcentration:" << frequencyConcentration
+                 << " spectralBandwidth:" << spectralBandwidth
+                 << " spectralBandContrastDB:" << spectralBandContrastDB
+                 << " startSample:" << m_pulseStartSample
+                 << " endSample:" << endSample;
+    }
 
     const bool powerLineFallback = !accepted
         && (strongShortLine || strongCoherentLine)
@@ -2674,24 +2679,16 @@ bool MeteorDemodSink::copyDetectionSamples(quint64 startSample, quint64 endSampl
 
 double MeteorDemodSink::estimatePulseTotalPower(quint64 startSample, quint64 endSample, double backgroundPower) const
 {
-    if ((endSample < startSample) || m_pulseSamples.empty()) {
+    ComplexVector samples;
+
+    if (!copyDetectionSamples(startSample, endSample, samples)) {
         return 0.0;
     }
 
-    const quint64 pulseEndSample = m_pulseStartSample + (quint64) m_pulseSamples.size() - 1;
-    const quint64 clippedStartSample = std::max(startSample, m_pulseStartSample);
-    const quint64 clippedEndSample = std::min(endSample, pulseEndSample);
-
-    if (clippedEndSample < clippedStartSample) {
-        return 0.0;
-    }
-
-    const int firstIndex = (int) (clippedStartSample - m_pulseStartSample);
-    const int lastIndex = (int) (clippedEndSample - m_pulseStartSample);
     double totalPower = 0.0;
 
-    for (int i = firstIndex; i <= lastIndex; i++) {
-        totalPower += std::max(0.0, (double) std::norm(m_pulseSamples[i]) - backgroundPower);
+    for (const Complex& sample : samples) {
+        totalPower += std::max(0.0, (double) std::norm(sample) - backgroundPower);
     }
 
     return totalPower;

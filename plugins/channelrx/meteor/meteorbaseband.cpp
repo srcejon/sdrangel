@@ -32,6 +32,7 @@ MESSAGE_CLASS_DEFINITION(MeteorBaseband::MsgConfigureMeteorBaseband, Message)
 MeteorBaseband::MeteorBaseband() :
     m_spectrumVis(nullptr),
     m_running(false),
+    m_inactivityFlushEnabled(true),
     m_inactivityTimer(new QTimer(this))
 {
     qDebug("MeteorBaseband::MeteorBaseband");
@@ -70,10 +71,13 @@ void MeteorBaseband::startWork()
     m_running = true;
     m_lastDataTimer.start();
 
-    if (QThread::currentThread() == thread()) {
-        startInactivityTimer();
-    } else {
-        QMetaObject::invokeMethod(this, "startInactivityTimer", Qt::QueuedConnection);
+    if (m_inactivityFlushEnabled)
+    {
+        if (QThread::currentThread() == thread()) {
+            startInactivityTimer();
+        } else {
+            QMetaObject::invokeMethod(this, "startInactivityTimer", Qt::QueuedConnection);
+        }
     }
 }
 
@@ -158,7 +162,11 @@ void MeteorBaseband::handleInactivity()
 {
     QMutexLocker mutexLocker(&m_mutex);
 
-    if (!m_running || !m_lastDataTimer.isValid() || (m_lastDataTimer.elapsed() < 250)) {
+    if (!m_inactivityFlushEnabled
+        || !m_running
+        || !m_lastDataTimer.isValid()
+        || (m_lastDataTimer.elapsed() < 250))
+    {
         return;
     }
 

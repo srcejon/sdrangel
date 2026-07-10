@@ -33,7 +33,9 @@
 #include <QMenu>
 #include <QMessageBox>
 #include <QPushButton>
+#include <QSaveFile>
 #include <QScrollBar>
+#include <QSignalBlocker>
 #include <QSpinBox>
 #include <QStandardPaths>
 #include <QTableWidget>
@@ -66,6 +68,27 @@ namespace {
     constexpr int DetectionOverlayIdRole = Qt::UserRole + 2;
     constexpr int DetectionDisplayUtcMSecsRole = Qt::UserRole + 3;
     constexpr int MeteorDefaultFFTOverlap = 512;
+    constexpr qint64 AutomaticRMOBSaveIntervalS = 60;
+
+    class NumericTableWidgetItem : public QTableWidgetItem
+    {
+    public:
+        explicit NumericTableWidgetItem(const QString& text) :
+            QTableWidgetItem(text)
+        {}
+
+        bool operator<(const QTableWidgetItem& other) const override
+        {
+            const QVariant left = data(Qt::UserRole);
+            const QVariant right = other.data(Qt::UserRole);
+
+            if (left.isValid() && right.isValid()) {
+                return left.toDouble() < right.toDouble();
+            }
+
+            return QTableWidgetItem::operator<(other);
+        }
+    };
 }
 
 MeteorGUI* MeteorGUI::create(PluginAPI* pluginAPI, DeviceUISet *deviceUISet, BasebandSampleSink *rxChannel)
@@ -791,7 +814,7 @@ bool MeteorGUI::saveRMOBReport(const QString& fileName, const QDate& reportMonth
         return false;
     }
 
-    QFile file(fileName);
+    QSaveFile file(fileName);
 
     if (!file.open(QIODevice::WriteOnly | QIODevice::Text))
     {
@@ -851,11 +874,30 @@ bool MeteorGUI::saveRMOBReport(const QString& fileName, const QDate& reportMonth
     out << "[Pre-Amplifier]\n";
     out << "[Receiver]" << rmobReceiverName() << "\n";
     out << "[Observing Method]SDRangel\n";
+    out.flush();
+
+    if ((out.status() != QTextStream::Ok) || !file.commit())
+    {
+        if (error) {
+            *error = QString("Failed to save file %1: %2").arg(fileName, file.errorString());
+        }
+
+        return false;
+    }
+
     return true;
 }
 
 void MeteorGUI::on_clearDetections_clicked()
 {
+    for (const QDate& date : m_hourlyData.keys()) {
+        markRMOBDirty(date);
+    }
+
+    for (const QDate& date : m_hourlyCounts.keys()) {
+        markRMOBDirty(date);
+    }
+
     m_totalCount = 0;
     m_hourlyCounts.clear();
     m_hourlyData.clear();
@@ -911,7 +953,9 @@ void MeteorGUI::on_detectionsTable_customContextMenuRequested(const QPoint& pos)
         m_detectionsTable->selectRow(item->row());
     }
 
-    if (selectedDetectionOverlayIds().isEmpty()) {
+    if (!m_detectionsTable->selectionModel()
+        || m_detectionsTable->selectionModel()->selectedRows().isEmpty())
+    {
         return;
     }
 
@@ -1023,14 +1067,14 @@ void MeteorGUI::applySetting(const QString& settingsKey)
 
 void MeteorGUI::applySettings(const QStringList& settingsKeys, bool force)
 {
-    m_settingsKeys.append(settingsKeys);
-
-    if (m_doApplySettings)
-    {
-        Meteor::MsgConfigureMeteor* message = Meteor::MsgConfigureMeteor::create(m_settings, m_settingsKeys, force);
-        m_meteor->getInputMessageQueue()->push(message);
-        m_settingsKeys.clear();
+    if (!m_doApplySettings) {
+        return;
     }
+
+    m_settingsKeys.append(settingsKeys);
+    Meteor::MsgConfigureMeteor* message = Meteor::MsgConfigureMeteor::create(m_settings, m_settingsKeys, force);
+    m_meteor->getInputMessageQueue()->push(message);
+    m_settingsKeys.clear();
 }
 
 void MeteorGUI::applyAllSettings()
@@ -1052,6 +1096,15 @@ void MeteorGUI::displaySettings()
     setTitle(m_channelMarker.getTitle());
 
     blockApplySettings(true);
+    const QSignalBlocker frequencyModeBlocker(m_frequencyMode);
+    const QSignalBlocker sampleRateBlocker(m_sampleRate);
+    const QSignalBlocker powerLPFCutoffBlocker(m_powerLPFCutoff);
+    const QSignalBlocker detectionThresholdBlocker(m_detectionThreshold);
+    const QSignalBlocker minDurationBlocker(m_minDuration);
+    const QSignalBlocker maxDurationBlocker(m_maxDuration);
+    const QSignalBlocker maxFrequencyDriftBlocker(m_maxFrequencyDrift);
+    const QSignalBlocker detectionBoxPaddingBlocker(m_detectionBoxPadding);
+    const QSignalBlocker detectionLabelsBlocker(m_detectionLabels);
 
     m_frequencyMode->setCurrentIndex((int) m_settings.m_frequencyMode);
     on_frequencyMode_currentIndexChanged((int) m_settings.m_frequencyMode);
@@ -1155,6 +1208,7 @@ void MeteorGUI::addDetection(const MeteorDemodSink::MsgMeteorDetected& detection
     markHourData(date, hour);
     m_hourlyCounts[date][hour]++;
     m_totalCount++;
+    markRMOBDirty(date);
 
     const quint64 overlayId = m_nextDetectionOverlayId++;
     const DetectionOverlay overlay = {
@@ -1223,6 +1277,7 @@ void MeteorGUI::addCameraDetection(const Meteor::MsgCameraMeteorDetected& detect
     markHourData(date, hour);
     m_hourlyCounts[date][hour]++;
     m_totalCount++;
+    markRMOBDirty(date);
 
     const bool sortingEnabled = m_detectionsTable->isSortingEnabled();
     m_detectionsTable->setSortingEnabled(false);
@@ -1441,7 +1496,19 @@ bool MeteorGUI::markHourData(const QDate& date, int hour)
 
     const bool hadData = m_hourlyData[date][hour];
     m_hourlyData[date][hour] = true;
+
+    if (!hadData) {
+        markRMOBDirty(date);
+    }
+
     return !hadData;
+}
+
+void MeteorGUI::markRMOBDirty(const QDate& date)
+{
+    if (date.isValid()) {
+        m_dirtyRMOBMonths.insert(QDate(date.year(), date.month(), 1));
+    }
 }
 
 bool MeteorGUI::hasHourData(const QDate& date, int hour) const
@@ -1469,13 +1536,21 @@ QString MeteorGUI::automaticRMOBReportFileName(const QDate& date) const
         .arg(date.month(), 2, 10, QLatin1Char('0')));
 }
 
-void MeteorGUI::saveAutomaticRMOBReports() const
+bool MeteorGUI::saveAutomaticRMOBReports() const
 {
-    const QList<QDate> months = colorgrammeMonthDates();
+    QSet<QDate> months = m_dirtyRMOBMonths;
+
+    for (const QDate& date : colorgrammeMonthDates()) {
+        months.insert(QDate(date.year(), date.month(), 1));
+    }
+
+    bool success = true;
 
     for (const QDate& monthDate : months) {
-        saveRMOBReport(automaticRMOBReportFileName(monthDate), monthDate);
+        success = saveRMOBReport(automaticRMOBReportFileName(monthDate), monthDate) && success;
     }
+
+    return success;
 }
 
 QDate MeteorGUI::colorgrammeMonthDate() const
@@ -1716,6 +1791,8 @@ void MeteorGUI::deleteSelectedDetections()
             if (m_hourlyCounts.contains(date) && (hour >= 0) && (hour < m_hourlyCounts[date].size()) && (m_hourlyCounts[date][hour] > 0)) {
                 m_hourlyCounts[date][hour]--;
             }
+
+            markRMOBDirty(date);
 
             if (m_totalCount > 0) {
                 m_totalCount--;
@@ -2097,7 +2174,7 @@ int MeteorGUI::sampleRateIndex(int sampleRate) const
 
 QTableWidgetItem *MeteorGUI::makeTableItem(const QString& text, const QVariant& sortValue) const
 {
-    QTableWidgetItem *item = new QTableWidgetItem(text);
+    QTableWidgetItem *item = new NumericTableWidgetItem(text);
     item->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
 
     if (sortValue.isValid()) {
@@ -2124,5 +2201,18 @@ void MeteorGUI::tick()
     if ((m_tickCount++ % 20) == 0)
     {
         updateCounters();
+
+        const QDateTime nowUtc = QDateTime::currentDateTimeUtc();
+
+        if (!m_dirtyRMOBMonths.isEmpty()
+            && (!m_lastAutomaticRMOBSaveUtc.isValid()
+                || (m_lastAutomaticRMOBSaveUtc.secsTo(nowUtc) >= AutomaticRMOBSaveIntervalS)))
+        {
+            if (saveAutomaticRMOBReports()) {
+                m_dirtyRMOBMonths.clear();
+            }
+
+            m_lastAutomaticRMOBSaveUtc = nowUtc;
+        }
     }
 }

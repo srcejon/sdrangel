@@ -79,6 +79,7 @@ public:
     void setSpectrumSink(SpectrumVis* spectrumSink) { m_spectrumVis = spectrumSink; m_sink.setSpectrumSink(spectrumSink); }
     void setMessageQueueToGUI(MessageQueue *messageQueue) { m_sink.setMessageQueueToGUI(messageQueue); }
     void setCandidateAuditCallback(const MeteorDemodSink::CandidateAuditCallback& callback) { m_sink.setCandidateAuditCallback(callback); }
+    void setInactivityFlushEnabled(bool enabled) { m_inactivityFlushEnabled = enabled; }
     bool isRunning() const { return m_running; }
     void setFifoLabel(const QString& label) { m_sampleFifo.setLabel(label); }
 
@@ -90,6 +91,7 @@ private:
     MeteorSettings m_settings;
     SpectrumVis *m_spectrumVis;
     bool m_running;
+    bool m_inactivityFlushEnabled;
     QTimer *m_inactivityTimer;
     QElapsedTimer m_lastDataTimer;
     QRecursiveMutex m_mutex;

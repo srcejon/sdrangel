@@ -478,6 +478,22 @@ std::vector<MeteorDemodSink::SpectralBand> MeteorDemodSink::detectSpectralBands(
         (double) m_settings.m_channelSampleRate * 0.45,
         std::max(220.0, (double) m_settings.m_channelSampleRate * 0.25)
     );
+    const int edgeBins = std::max(0, (int) std::ceil(0.05 * (double) binPower.size()));
+    const int usableLowIndex = std::min(edgeBins, (int) binPower.size() - 1);
+    const int usableHighIndex = std::max(usableLowIndex, (int) binPower.size() - edgeBins - 1);
+    int occupiedBins = 0;
+
+    for (int i = usableLowIndex; i <= usableHighIndex; i++)
+    {
+        const double noise = std::max({m_spectralNoiseFloor[i], minimumBinNoise, 1e-30});
+
+        if ((binPower[i] / noise) >= spanRatio) {
+            occupiedBins++;
+        }
+    }
+
+    const double frameOccupiedFraction = (double) occupiedBins
+        / (double) std::max(1, usableHighIndex - usableLowIndex + 1);
 
     for (int i = 0; i < (int) binPower.size(); i++)
     {
@@ -543,6 +559,7 @@ std::vector<MeteorDemodSink::SpectralBand> MeteorDemodSink::detectSpectralBands(
         band.m_contrastDB = 10.0 * std::log10(std::max(peakPower, 1e-30) / std::max(peakNoise, 1e-30));
         band.m_peakRatio = peakRatio;
         band.m_framePeakPower = framePeakPower;
+        band.m_frameOccupiedFraction = frameOccupiedFraction;
 
         if ((band.m_bandwidth <= maxBandWidth) && (band.m_totalExcessPower > 0.0)) {
             bands.push_back(band);
@@ -723,6 +740,7 @@ void MeteorDemodSink::updateSpectralEvent(SpectralEvent& event, const SpectralBa
     event.m_trackBandwidths.push_back(band.m_bandwidth);
     event.m_trackSamples.push_back(frameCenterSample);
     event.m_trackStrengths.push_back(std::max(band.m_totalExcessPower, 1e-30));
+    event.m_trackFrameOccupiedFractions.push_back(band.m_frameOccupiedFraction);
 }
 
 void MeteorDemodSink::finishSpectralEvent(const SpectralEvent& event)
@@ -849,6 +867,13 @@ bool MeteorDemodSink::isSweepContinuation(const SpectralCandidate& candidate) co
             continue;
         }
 
+        if (!range.m_broadband
+            && (candidate.m_startSample <= range.m_endSample)
+            && (candidate.m_endSample >= range.m_startSample))
+        {
+            return true;
+        }
+
         const double centerDistance = std::fabs(candidate.m_robustCenterFrequency - range.m_centerFrequency);
         const double compatibleDistance = std::max(
             0.25 * (double) m_settings.m_channelSampleRate,
@@ -935,6 +960,7 @@ void MeteorDemodSink::auditSpectralCandidate(const SpectralCandidate& candidate)
     audit.m_rejectionPenalty = candidate.m_rejectionPenalty;
     audit.m_trackOccupancy = candidate.m_trackOccupancy;
     audit.m_frequencyCoherence = candidate.m_frequencyCoherence;
+    audit.m_frameOccupiedFraction = candidate.m_frameOccupiedFraction;
     audit.m_frameCount = candidate.m_frameCount;
     audit.m_durationOK = candidate.m_durationOK;
     audit.m_enoughFrames = candidate.m_enoughFrames;
@@ -1081,6 +1107,16 @@ MeteorDemodSink::SpectralCandidate MeteorDemodSink::buildSpectralCandidate(const
         0.0,
         1.0);
 
+    if ((event.m_trackFrameOccupiedFractions.size() == event.m_trackFrequencies.size())
+        && (event.m_trackStrengths.size() == event.m_trackFrequencies.size()))
+    {
+        candidate.m_frameOccupiedFraction = weightedQuantile(
+            event.m_trackFrameOccupiedFractions,
+            event.m_trackStrengths,
+            0.5,
+            0.0);
+    }
+
     if (event.m_trackStrengths.size() == event.m_trackFrequencies.size())
     {
         std::vector<double> frequencyDeviations(count);
@@ -1170,7 +1206,13 @@ MeteorDemodSink::SpectralCandidate MeteorDemodSink::buildSpectralCandidate(const
         && (candidate.m_maxContrastDB >= 14.0)
         && (candidate.m_integratedSupportDB >= -7.0)
         && (candidate.m_frequencyCoherence >= 0.75);
-    candidate.m_enoughFrames = (count >= 3) || compactTwoFrameEcho;
+    const bool localizedWideTwoFrameEcho = (count == 2)
+        && (candidate.m_frameOccupiedFraction < 0.45)
+        && (candidate.m_peakAboveBackgroundDB >= 12.0)
+        && (candidate.m_maxContrastDB >= 18.0)
+        && (candidate.m_integratedSupportDB >= 0.0)
+        && (candidate.m_frequencyCoherence >= 0.75);
+    candidate.m_enoughFrames = (count >= 3) || compactTwoFrameEcho || localizedWideTwoFrameEcho;
     const bool exceptionalShortEcho = (candidate.m_peakAboveBackgroundDB >= 25.0)
         && (candidate.m_integratedSupportDB >= 15.0);
     const double spectralBinWidth = (double) std::max(1, m_settings.m_channelSampleRate)
@@ -1205,7 +1247,8 @@ MeteorDemodSink::SpectralCandidate MeteorDemodSink::buildSpectralCandidate(const
         && (candidate.m_frameCount <= 3)
         && (candidate.m_peakAboveBackgroundDB >= 12.0)
         && (candidate.m_robustFrequencySpan >= 0.12 * (double) m_settings.m_channelSampleRate)
-        && (candidate.m_maxBandwidth >= 0.10 * (double) m_settings.m_channelSampleRate);
+        && (candidate.m_maxBandwidth >= 0.10 * (double) m_settings.m_channelSampleRate)
+        && (candidate.m_frameOccupiedFraction >= 0.45);
     candidate.m_insideUsableBandwidth = std::fabs(candidate.m_robustCenterFrequency) <= (double) m_settings.m_channelSampleRate * 0.45;
     candidate.m_duplicate = isDuplicateDetection(
         candidate.m_startSample,
@@ -1913,38 +1956,43 @@ void MeteorDemodSink::finishPulse(bool forceRejected)
     const bool broadbandContaminatedPulse = overlapsBroadbandInterference(m_pulseStartSample, endSample);
     const bool accepted = (directAccepted || validatesPendingBroadPulse) && !broadbandContaminatedPulse;
 
-    qDebug() << "MeteorDemodSink::finishPulse:"
-             << " accepted:" << accepted
-             << " directAccepted:" << directAccepted
-             << " broadPulseCandidate:" << broadPulseCandidate
-             << " broadValidationLineOK:" << broadValidationLineOK
-             << " validatesPendingBroadPulse:" << validatesPendingBroadPulse
-             << " forceRejected:" << forceRejected
-             << " durationOK:" << durationOK
-             << " compactClippedMeteor:" << compactClippedMeteor
-             << " driftOK:" << driftOK
-             << " sweepRejected:" << sweepRejected
-             << " spectralEvidenceOK:" << spectralEvidenceOK
-             << " stableLineOK:" << stableLineOK
-             << " boundedBandOK:" << boundedBandOK
-             << " veryShortLineOK:" << veryShortLineOK
-             << " shortStandaloneLine:" << shortStandaloneLine
-             << " strongShortLine:" << strongShortLine
-             << " strongCoherentLine:" << strongCoherentLine
-             << " durationS:" << durationS
-             << " peakPowerDB:" << 10.0 * std::log10(std::max(m_pulsePeakPower, 1e-20))
-             << " backgroundPowerDB:" << 10.0 * std::log10(std::max(m_noiseFloor, 1e-20))
-             << " peakAboveBackgroundDB:" << peakAboveBackgroundDB
-             << " centerFrequency:" << centerFrequency
-             << " frequencySpan:" << frequencySpan
-             << " frequencyDrift:" << frequencyDrift
-             << " sweepScore:" << sweepScore
-             << " spectralProminence:" << spectralProminence
-             << " frequencyConcentration:" << frequencyConcentration
-             << " spectralBandwidth:" << spectralBandwidth
-             << " spectralBandContrastDB:" << spectralBandContrastDB
-             << " startSample:" << m_pulseStartSample
-             << " endSample:" << endSample;
+    if (accepted
+        || broadPulseCandidate
+        || (durationOK && driftOK && (strongShortLine || strongCoherentLine)))
+    {
+        qDebug() << "MeteorDemodSink::finishPulse:"
+                 << " accepted:" << accepted
+                 << " directAccepted:" << directAccepted
+                 << " broadPulseCandidate:" << broadPulseCandidate
+                 << " broadValidationLineOK:" << broadValidationLineOK
+                 << " validatesPendingBroadPulse:" << validatesPendingBroadPulse
+                 << " forceRejected:" << forceRejected
+                 << " durationOK:" << durationOK
+                 << " compactClippedMeteor:" << compactClippedMeteor
+                 << " driftOK:" << driftOK
+                 << " sweepRejected:" << sweepRejected
+                 << " spectralEvidenceOK:" << spectralEvidenceOK
+                 << " stableLineOK:" << stableLineOK
+                 << " boundedBandOK:" << boundedBandOK
+                 << " veryShortLineOK:" << veryShortLineOK
+                 << " shortStandaloneLine:" << shortStandaloneLine
+                 << " strongShortLine:" << strongShortLine
+                 << " strongCoherentLine:" << strongCoherentLine
+                 << " durationS:" << durationS
+                 << " peakPowerDB:" << 10.0 * std::log10(std::max(m_pulsePeakPower, 1e-20))
+                 << " backgroundPowerDB:" << 10.0 * std::log10(std::max(m_noiseFloor, 1e-20))
+                 << " peakAboveBackgroundDB:" << peakAboveBackgroundDB
+                 << " centerFrequency:" << centerFrequency
+                 << " frequencySpan:" << frequencySpan
+                 << " frequencyDrift:" << frequencyDrift
+                 << " sweepScore:" << sweepScore
+                 << " spectralProminence:" << spectralProminence
+                 << " frequencyConcentration:" << frequencyConcentration
+                 << " spectralBandwidth:" << spectralBandwidth
+                 << " spectralBandContrastDB:" << spectralBandContrastDB
+                 << " startSample:" << m_pulseStartSample
+                 << " endSample:" << endSample;
+    }
 
     const bool powerLineFallback = !accepted
         && (strongShortLine || strongCoherentLine)
@@ -2216,15 +2264,21 @@ void MeteorDemodSink::queueSpectralComponentReport(const PulseReport& report)
 
     for (PulseReport& pending : m_pendingComponentReports)
     {
-        if (!report.m_allowComponentMerge || !pending.m_allowComponentMerge) {
-            continue;
-        }
-
         const quint64 gapSamples = report.m_endSample < pending.m_startSample
             ? pending.m_startSample - report.m_endSample
             : (report.m_startSample > pending.m_endSample ? report.m_startSample - pending.m_endSample : 0);
+        const double reportSpan = std::max(std::fabs(report.m_duplicateFrequencySpan), std::fabs(report.m_frequencySpan));
+        const double pendingSpan = std::max(std::fabs(pending.m_duplicateFrequencySpan), std::fabs(pending.m_frequencySpan));
+        const bool broadTemporalDuplicate = (gapSamples == 0)
+            && (std::max(reportSpan, pendingSpan) >= 0.20 * (double) std::max(1, m_settings.m_channelSampleRate));
 
-        if ((gapSamples > mergeGapSamples) || !reportsFrequencyCompatible(report, pending)) {
+        if ((!report.m_allowComponentMerge || !pending.m_allowComponentMerge) && !broadTemporalDuplicate) {
+            continue;
+        }
+
+        if ((gapSamples > mergeGapSamples)
+            || (!reportsFrequencyCompatible(report, pending) && !broadTemporalDuplicate))
+        {
             continue;
         }
 
@@ -2625,24 +2679,16 @@ bool MeteorDemodSink::copyDetectionSamples(quint64 startSample, quint64 endSampl
 
 double MeteorDemodSink::estimatePulseTotalPower(quint64 startSample, quint64 endSample, double backgroundPower) const
 {
-    if ((endSample < startSample) || m_pulseSamples.empty()) {
+    ComplexVector samples;
+
+    if (!copyDetectionSamples(startSample, endSample, samples)) {
         return 0.0;
     }
 
-    const quint64 pulseEndSample = m_pulseStartSample + (quint64) m_pulseSamples.size() - 1;
-    const quint64 clippedStartSample = std::max(startSample, m_pulseStartSample);
-    const quint64 clippedEndSample = std::min(endSample, pulseEndSample);
-
-    if (clippedEndSample < clippedStartSample) {
-        return 0.0;
-    }
-
-    const int firstIndex = (int) (clippedStartSample - m_pulseStartSample);
-    const int lastIndex = (int) (clippedEndSample - m_pulseStartSample);
     double totalPower = 0.0;
 
-    for (int i = firstIndex; i <= lastIndex; i++) {
-        totalPower += std::max(0.0, (double) std::norm(m_pulseSamples[i]) - backgroundPower);
+    for (const Complex& sample : samples) {
+        totalPower += std::max(0.0, (double) std::norm(sample) - backgroundPower);
     }
 
     return totalPower;

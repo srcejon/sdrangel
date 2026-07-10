@@ -20,7 +20,9 @@
 
 #include <QDateTime>
 #include <QMap>
+#include <QSet>
 #include <QThread>
+#include <QTimer>
 
 #include "availablechannelorfeaturehandler.h"
 #include "channel/channelapi.h"
@@ -195,17 +197,21 @@ private:
     struct CameraMeteorEvent
     {
         QDateTime m_startTimeUtc;
+        QDateTime m_receivedTimeUtc;
         bool m_hasMagnitude = false;
         double m_magnitude = 0.0;
         bool m_hasFlux = false;
         double m_flux = 0.0;
     };
     QMap<const QObject*, CameraMeteorEvent> m_cameraMeteorEvents;
+    QSet<const QObject*> m_cameraEventSources;
+    QTimer m_cameraEventExpiryTimer;
 
     virtual bool handleMessage(const Message& cmd);
     void applySettings(const MeteorSettings& settings, const QStringList& settingsKeys, bool force = false);
     void handleEventMessageQueue(MessageQueue *messageQueue);
     void handleEvent(const MainCore::MsgEvent& eventMessage);
+    void pruneCameraMeteorEvents();
     static QMap<QString, QString> parseEventDataFields(const QString& data);
     static bool parseEventDoubleField(const QMap<QString, QString>& fields, const QString& name, double& value);
     static bool isMeteorObjectEvent(const MainCore::MsgEvent& eventMessage);

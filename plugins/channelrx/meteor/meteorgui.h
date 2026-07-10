@@ -19,6 +19,7 @@
 #define INCLUDE_METEORGUI_H
 
 #include <QDate>
+#include <QDateTime>
 #include <QList>
 #include <QMap>
 #include <QSet>
@@ -138,6 +139,8 @@ private:
     QDateTime m_detectionOverlayWindowEndUtc;
     QMap<QDate, QVector<int> > m_hourlyCounts;
     QMap<QDate, QVector<bool> > m_hourlyData;
+    QSet<QDate> m_dirtyRMOBMonths;
+    QDateTime m_lastAutomaticRMOBSaveUtc;
 
     struct DetectionOverlay
     {
@@ -179,7 +182,8 @@ private:
     bool loadRMOBReport(const QString& fileName);
     bool saveRMOBReport(const QString& fileName, QString *error = nullptr) const;
     bool saveRMOBReport(const QString& fileName, const QDate& monthDate, QString *error = nullptr) const;
-    void saveAutomaticRMOBReports() const;
+    bool saveAutomaticRMOBReports() const;
+    void markRMOBDirty(const QDate& date);
     QString automaticRMOBReportFileName(const QDate& date) const;
     QColor colorgrammeColor(int count, int maxCount) const;
     QDate colorgrammeMonthDate() const;

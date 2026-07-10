@@ -869,6 +869,7 @@ bool CameraGUI::handleMessage(const Message& message)
                 m_tensorRtProgressDialog->setMinimumDuration(0);
                 m_tensorRtProgressDialog->setRange(0, 0);
                 m_tensorRtProgressDialog->setAttribute(Qt::WA_DeleteOnClose, false);
+                new DialogPositioner(m_tensorRtProgressDialog, true);
             }
 
             const QFileInfo modelInfo(report.getModelPath());
@@ -1660,7 +1661,6 @@ bool CameraGUI::chooseStreamUrl(int comboIndex, const QString& previousCameraPro
     const QString& previousCameraId,
     const QString& previousAlpacaHost, quint16 previousAlpacaPort)
 {
-    bool ok = false;
     QStringList history = m_settings.m_streamUrlHistory;
     const QString currentUrl = m_settings.isStreamCamera() ? m_settings.m_streamUrl : QString();
     if (!currentUrl.isEmpty()) {
@@ -1671,16 +1671,18 @@ bool CameraGUI::chooseStreamUrl(int comboIndex, const QString& previousCameraPro
         history.append(QStringLiteral("rtsp://"));
     }
 
-    const QString url = QInputDialog::getItem(
-        this,
-        tr("Open Stream"),
-        tr("Stream URL"),
-        history,
-        0,
-        true,
-        &ok).trimmed();
+    QInputDialog dialog(this);
+    dialog.setInputMode(QInputDialog::TextInput);
+    dialog.setWindowTitle(tr("Open Stream"));
+    dialog.setLabelText(tr("Stream URL"));
+    dialog.setComboBoxItems(history);
+    dialog.setComboBoxEditable(true);
+    dialog.setTextValue(history.first());
+    new DialogPositioner(&dialog, true);
 
-    if (!ok || url.isEmpty())
+    const QString url = dialog.exec() == QDialog::Accepted ? dialog.textValue().trimmed() : QString();
+
+    if (url.isEmpty())
     {
         restorePreviousCameraSelection(
             previousCameraProtocol,
@@ -4955,6 +4957,7 @@ void CameraGUI::updateKeogramPreview(const QImage& image, const QString& fileNam
         m_keogramPreviewLabel->setMinimumSize(320, 180);
         m_keogramPreviewLabel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
         layout->addWidget(m_keogramPreviewLabel);
+        new DialogPositioner(m_keogramPreviewDialog, true);
     }
 
     if (!fileName.isEmpty()) {

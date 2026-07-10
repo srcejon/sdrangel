@@ -25,6 +25,8 @@
 #include <QTimer>
 #include <QVBoxLayout>
 
+#include "gui/dialogpositioner.h"
+
 #include "cameraclearskyreference.h"
 #include "cameraclearskyreferencedialog.h"
 
@@ -75,6 +77,7 @@ CameraClearSkyReferenceDialog::CameraClearSkyReferenceDialog(const QString& stor
     layout->addWidget(buttons);
 
     resize(1000, 700);
+    new DialogPositioner(this, true);
     refresh();
 }
 

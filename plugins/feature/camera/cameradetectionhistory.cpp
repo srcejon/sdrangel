@@ -25,6 +25,8 @@
 #include <QTextStream>
 #include <QVBoxLayout>
 
+#include "gui/dialogpositioner.h"
+
 #include "cameradetectionhistory.h"
 
 namespace {
@@ -70,6 +72,7 @@ CameraDetectionHistory::CameraDetectionHistory(const QList<CameraDetectionHistor
     setWindowTitle(tr("Detection History"));
     resize(720, 360);
     setModal(false);
+    new DialogPositioner(this, true);
 
     m_table->setColumnCount(5);
     m_table->setHorizontalHeaderLabels({tr("Class"), tr("First detected"), tr("Disappeared"), tr("Position"), tr("Peak confidence")});

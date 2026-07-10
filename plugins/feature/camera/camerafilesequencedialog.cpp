@@ -40,6 +40,7 @@
 #include <QVariant>
 #include <QVBoxLayout>
 
+#include "gui/dialogpositioner.h"
 #include "util/fits.h"
 
 namespace
@@ -106,6 +107,7 @@ CameraFileSequenceDialog::CameraFileSequenceDialog(const QStringList& fileNames,
 {
     setWindowTitle(tr("Image Sequence Files"));
     resize(760, 420);
+    new DialogPositioner(this, true);
 
     m_fileList->setSelectionMode(QAbstractItemView::ExtendedSelection);
     m_fileList->setDragDropMode(QAbstractItemView::InternalMove);

@@ -15,6 +15,9 @@
 // along with this program. If not, see <http://www.gnu.org/licenses/>.          //
 ///////////////////////////////////////////////////////////////////////////////////
 
+#include <cmath>
+#include <limits>
+
 #include <QDebug>
 
 #include "SWGChannelSettings.h"
@@ -444,9 +447,19 @@ int Meteor::webapiSettingsPutPatch(
         SWGSDRangel::SWGChannelSettings& response,
         QString& errorMessage)
 {
-    (void) errorMessage;
     MeteorSettings settings = m_settings;
-    webapiUpdateChannelSettings(settings, channelSettingsKeys, response);
+
+    if (!webapiUpdateChannelSettings(settings, channelSettingsKeys, response, errorMessage)) {
+        return 400;
+    }
+
+    if (channelSettingsKeys.contains("streamIndex")
+        && ((uint32_t) settings.m_streamIndex >= getNumberOfDeviceStreams()))
+    {
+        errorMessage = QString("streamIndex must be less than the device stream count (%1)")
+            .arg(getNumberOfDeviceStreams());
+        return 400;
+    }
 
     MsgConfigureMeteor *msg = MsgConfigureMeteor::create(settings, channelSettingsKeys, force);
     m_inputMessageQueue.push(msg);
@@ -487,6 +500,7 @@ void Meteor::webapiFormatChannelSettings(
     swg->setMaxFrequencyDrift(settings.m_maxFrequencyDrift);
     swg->setDetectionsTableColumnHidden(settings.m_detectionsTableColumnHidden);
     swg->setDetectionBoxPaddingPixels(settings.m_detectionBoxPaddingPixels);
+    swg->setDetectionLabelMode((int) settings.m_detectionLabelMode);
     swg->setRgbColor(settings.m_rgbColor);
 
     if (swg->getTitle()) {
@@ -521,17 +535,6 @@ void Meteor::webapiFormatChannelSettings(
         }
     }
 
-    if (settings.m_scopeGUI)
-    {
-        if (swg->getScopeGui()) {
-            settings.m_scopeGUI->formatTo(swg->getScopeGui());
-        } else {
-            SWGSDRangel::SWGGLScope *swgScopeGUI = new SWGSDRangel::SWGGLScope();
-            settings.m_scopeGUI->formatTo(swgScopeGUI);
-            swg->setScopeGui(swgScopeGUI);
-        }
-    }
-
     if (settings.m_rollupState)
     {
         if (swg->getRollupState()) {
@@ -544,73 +547,224 @@ void Meteor::webapiFormatChannelSettings(
     }
 }
 
-void Meteor::webapiUpdateChannelSettings(
+bool Meteor::webapiUpdateChannelSettings(
         MeteorSettings& settings,
         const QStringList& channelSettingsKeys,
-        SWGSDRangel::SWGChannelSettings& response)
+        SWGSDRangel::SWGChannelSettings& response,
+        QString& errorMessage)
 {
     SWGSDRangel::SWGMeteorSettings *swg = response.getMeteorSettings();
 
+    if (!swg)
+    {
+        errorMessage = "Missing MeteorSettings object";
+        return false;
+    }
+
+    MeteorSettings updatedSettings = settings;
+
     if (channelSettingsKeys.contains("inputFrequencyOffset")) {
-        settings.m_inputFrequencyOffset = swg->getInputFrequencyOffset();
+        const qint64 offset = swg->getInputFrequencyOffset();
+
+        if ((offset < std::numeric_limits<qint32>::min())
+            || (offset > std::numeric_limits<qint32>::max()))
+        {
+            errorMessage = "inputFrequencyOffset is outside the supported 32-bit range";
+            return false;
+        }
+
+        updatedSettings.m_inputFrequencyOffset = (qint32) offset;
     }
     if (channelSettingsKeys.contains("frequencyMode")) {
-        settings.m_frequencyMode = (MeteorSettings::FrequencyMode) swg->getFrequencyMode();
+        updatedSettings.m_frequencyMode = (MeteorSettings::FrequencyMode) swg->getFrequencyMode();
     }
     if (channelSettingsKeys.contains("frequency")) {
-        settings.m_frequency = swg->getFrequency();
+        updatedSettings.m_frequency = swg->getFrequency();
     }
     if (channelSettingsKeys.contains("channelSampleRate")) {
-        settings.m_channelSampleRate = swg->getChannelSampleRate();
+        updatedSettings.m_channelSampleRate = swg->getChannelSampleRate();
     }
     if (channelSettingsKeys.contains("powerLPFCutoff")) {
-        settings.m_powerLPFCutoff = swg->getPowerLpfCutoff();
+        updatedSettings.m_powerLPFCutoff = swg->getPowerLpfCutoff();
     }
     if (channelSettingsKeys.contains("detectionThresholdDB")) {
-        settings.m_detectionThresholdDB = swg->getDetectionThresholdDb();
+        updatedSettings.m_detectionThresholdDB = swg->getDetectionThresholdDb();
     }
     if (channelSettingsKeys.contains("minDurationMS")) {
-        settings.m_minDurationMS = swg->getMinDurationMs();
+        updatedSettings.m_minDurationMS = swg->getMinDurationMs();
     }
     if (channelSettingsKeys.contains("maxDurationMS")) {
-        settings.m_maxDurationMS = swg->getMaxDurationMs();
+        updatedSettings.m_maxDurationMS = swg->getMaxDurationMs();
     }
     if (channelSettingsKeys.contains("maxFrequencyDrift")) {
-        settings.m_maxFrequencyDrift = swg->getMaxFrequencyDrift();
+        updatedSettings.m_maxFrequencyDrift = swg->getMaxFrequencyDrift();
     }
     if (channelSettingsKeys.contains("detectionsTableColumnHidden")) {
-        settings.m_detectionsTableColumnHidden = swg->getDetectionsTableColumnHidden();
+        const qint32 columnMask = swg->getDetectionsTableColumnHidden();
+
+        if (columnMask < 0)
+        {
+            errorMessage = "detectionsTableColumnHidden must not be negative";
+            return false;
+        }
+
+        updatedSettings.m_detectionsTableColumnHidden = (quint32) columnMask;
     }
     if (channelSettingsKeys.contains("detectionBoxPaddingPixels")) {
-        settings.m_detectionBoxPaddingPixels = swg->getDetectionBoxPaddingPixels();
+        updatedSettings.m_detectionBoxPaddingPixels = swg->getDetectionBoxPaddingPixels();
+    }
+    if (channelSettingsKeys.contains("detectionLabelMode")) {
+        updatedSettings.m_detectionLabelMode = (MeteorSettings::DetectionLabelMode) swg->getDetectionLabelMode();
     }
     if (channelSettingsKeys.contains("rgbColor")) {
-        settings.m_rgbColor = swg->getRgbColor();
+        updatedSettings.m_rgbColor = (quint32) swg->getRgbColor();
     }
-    if (channelSettingsKeys.contains("title")) {
-        settings.m_title = *swg->getTitle();
+    if (channelSettingsKeys.contains("title"))
+    {
+        if (!swg->getTitle())
+        {
+            errorMessage = "title must not be null";
+            return false;
+        }
+
+        updatedSettings.m_title = *swg->getTitle();
     }
     if (channelSettingsKeys.contains("streamIndex")) {
-        settings.m_streamIndex = swg->getStreamIndex();
+        updatedSettings.m_streamIndex = swg->getStreamIndex();
     }
     if (channelSettingsKeys.contains("workspaceIndex")) {
-        settings.m_workspaceIndex = swg->getWorkspaceIndex();
+        updatedSettings.m_workspaceIndex = swg->getWorkspaceIndex();
     }
-    if (channelSettingsKeys.contains("hidden")) {
-        settings.m_hidden = swg->getHidden() != 0;
+    if (channelSettingsKeys.contains("hidden"))
+    {
+        if ((swg->getHidden() != 0) && (swg->getHidden() != 1))
+        {
+            errorMessage = "hidden must be 0 or 1";
+            return false;
+        }
+
+        updatedSettings.m_hidden = swg->getHidden() != 0;
     }
+
+    if (!validateChannelSettings(updatedSettings, errorMessage)) {
+        return false;
+    }
+
+    if (settings.m_channelMarker && channelSettingsKeys.contains("channelMarker") && !swg->getChannelMarker())
+    {
+        errorMessage = "channelMarker must not be null";
+        return false;
+    }
+    if (settings.m_spectrumGUI && channelSettingsKeys.contains("spectrumGUI") && !swg->getSpectrumGui())
+    {
+        errorMessage = "spectrumGUI must not be null";
+        return false;
+    }
+    if (settings.m_rollupState && channelSettingsKeys.contains("rollupState") && !swg->getRollupState())
+    {
+        errorMessage = "rollupState must not be null";
+        return false;
+    }
+
+    settings = updatedSettings;
+
     if (settings.m_channelMarker && channelSettingsKeys.contains("channelMarker")) {
         settings.m_channelMarker->updateFrom(channelSettingsKeys, swg->getChannelMarker());
     }
     if (settings.m_spectrumGUI && channelSettingsKeys.contains("spectrumGUI")) {
         settings.m_spectrumGUI->updateFrom(channelSettingsKeys, swg->getSpectrumGui());
     }
-    if (settings.m_scopeGUI && channelSettingsKeys.contains("scopeGUI")) {
-        settings.m_scopeGUI->updateFrom(channelSettingsKeys, swg->getScopeGui());
-    }
     if (settings.m_rollupState && channelSettingsKeys.contains("rollupState")) {
         settings.m_rollupState->updateFrom(channelSettingsKeys, swg->getRollupState());
     }
+
+    return true;
+}
+
+bool Meteor::validateChannelSettings(const MeteorSettings& settings, QString& errorMessage)
+{
+    if ((settings.m_frequencyMode != MeteorSettings::Offset)
+        && (settings.m_frequencyMode != MeteorSettings::Absolute))
+    {
+        errorMessage = "frequencyMode must be 0 (offset) or 1 (absolute)";
+        return false;
+    }
+    if (settings.m_frequency < 0)
+    {
+        errorMessage = "frequency must not be negative";
+        return false;
+    }
+    if ((settings.m_channelSampleRate != 100)
+        && (settings.m_channelSampleRate != 300)
+        && (settings.m_channelSampleRate != 1000)
+        && (settings.m_channelSampleRate != 3000))
+    {
+        errorMessage = "channelSampleRate must be 100, 300, 1000, or 3000";
+        return false;
+    }
+
+    const float maxPowerLPFCutoff = settings.m_channelSampleRate * 0.45f;
+
+    if (!std::isfinite(settings.m_powerLPFCutoff)
+        || (settings.m_powerLPFCutoff < 0.1f)
+        || (settings.m_powerLPFCutoff > maxPowerLPFCutoff))
+    {
+        errorMessage = QString("powerLPFCutoff must be finite and between 0.1 and %1 Hz")
+            .arg(maxPowerLPFCutoff);
+        return false;
+    }
+    if (!std::isfinite(settings.m_detectionThresholdDB)
+        || (settings.m_detectionThresholdDB < 1.0f)
+        || (settings.m_detectionThresholdDB > 60.0f))
+    {
+        errorMessage = "detectionThresholdDB must be finite and between 1.0 and 60.0 dB";
+        return false;
+    }
+    if ((settings.m_minDurationMS < 1) || (settings.m_minDurationMS > 10000))
+    {
+        errorMessage = "minDurationMS must be between 1 and 10000";
+        return false;
+    }
+    if ((settings.m_maxDurationMS < 1) || (settings.m_maxDurationMS > 60000))
+    {
+        errorMessage = "maxDurationMS must be between 1 and 60000";
+        return false;
+    }
+    if (settings.m_minDurationMS > settings.m_maxDurationMS)
+    {
+        errorMessage = "minDurationMS must not exceed maxDurationMS";
+        return false;
+    }
+    if (!std::isfinite(settings.m_maxFrequencyDrift)
+        || (settings.m_maxFrequencyDrift < 0.0f)
+        || (settings.m_maxFrequencyDrift > 1500.0f))
+    {
+        errorMessage = "maxFrequencyDrift must be finite and between 0.0 and 1500.0 Hz";
+        return false;
+    }
+    if ((settings.m_detectionBoxPaddingPixels < 0) || (settings.m_detectionBoxPaddingPixels > 100))
+    {
+        errorMessage = "detectionBoxPaddingPixels must be between 0 and 100";
+        return false;
+    }
+    if ((settings.m_detectionLabelMode < MeteorSettings::DetectionLabelNone)
+        || (settings.m_detectionLabelMode > MeteorSettings::DetectionLabelRight))
+    {
+        errorMessage = "detectionLabelMode must be 0 (none), 1 (top), or 2 (right)";
+        return false;
+    }
+    if (settings.m_streamIndex < 0)
+    {
+        errorMessage = "streamIndex must not be negative";
+        return false;
+    }
+    if (settings.m_workspaceIndex < 0)
+    {
+        errorMessage = "workspaceIndex must not be negative";
+        return false;
+    }
+
+    return true;
 }
 
 void Meteor::handleIndexInDeviceSetChanged(int index)

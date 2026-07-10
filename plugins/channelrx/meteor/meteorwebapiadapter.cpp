@@ -31,7 +31,13 @@ int MeteorWebAPIAdapter::webapiSettingsPutPatch(
         QString& errorMessage)
 {
     (void) force;
-    (void) errorMessage;
-    Meteor::webapiUpdateChannelSettings(m_settings, channelSettingsKeys, response);
+    MeteorSettings settings = m_settings;
+
+    if (!Meteor::webapiUpdateChannelSettings(settings, channelSettingsKeys, response, errorMessage)) {
+        return 400;
+    }
+
+    m_settings = settings;
+    Meteor::webapiFormatChannelSettings(response, m_settings);
     return 200;
 }

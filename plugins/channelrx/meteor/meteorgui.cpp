@@ -67,6 +67,7 @@ namespace {
     constexpr int DetectionSampleUtcMSecsRole = Qt::UserRole + 1;
     constexpr int DetectionOverlayIdRole = Qt::UserRole + 2;
     constexpr int DetectionDisplayUtcMSecsRole = Qt::UserRole + 3;
+    constexpr int DetectionRadioRole = Qt::UserRole + 4;
     constexpr int MeteorDefaultFFTOverlap = 512;
     constexpr qint64 AutomaticRMOBSaveIntervalS = 60;
 
@@ -1196,10 +1197,9 @@ void MeteorGUI::addDetection(const MeteorDemodSink::MsgMeteorDetected& detection
     const QDateTime displayTimeUtc = detection.getDisplayDateTimeUtc().isValid()
         ? detection.getDisplayDateTimeUtc()
         : sampleTimeUtc;
-    const QDateTime sampleLocalTime = sampleTimeUtc.toLocalTime();
     const QDateTime displayLocalTime = displayTimeUtc.toLocalTime();
-    const QDate date = sampleLocalTime.date();
-    const int hour = sampleLocalTime.time().hour();
+    const QDate date = displayLocalTime.date();
+    const int hour = displayLocalTime.time().hour();
 
     if (!m_hourlyCounts.contains(date)) {
         m_hourlyCounts[date] = QVector<int>(24, 0);
@@ -1243,12 +1243,20 @@ void MeteorGUI::addDetection(const MeteorDemodSink::MsgMeteorDetected& detection
     timeItem->setData(DetectionSampleUtcMSecsRole, sampleTimeUtc.toMSecsSinceEpoch());
     timeItem->setData(DetectionOverlayIdRole, QVariant::fromValue<qulonglong>(overlayId));
     timeItem->setData(DetectionDisplayUtcMSecsRole, displayTimeUtc.toMSecsSinceEpoch());
+    timeItem->setData(DetectionRadioRole, true);
+    if (detection.getTruncated()) {
+        timeItem->setToolTip(tr("Detection duration was clipped to the configured maximum."));
+    }
     m_detectionsTable->setItem(row, 0, timeItem);
     m_detectionsTable->setItem(row, 1, makeTableItem(QString::number(detection.getPeakPowerDB(), 'f', 1), detection.getPeakPowerDB()));
     m_detectionsTable->setItem(row, 2, makeTableItem(QString::number(detection.getBackgroundPowerDB(), 'f', 1), detection.getBackgroundPowerDB()));
     m_detectionsTable->setItem(row, 3, makeTableItem(QString::number(detection.getTotalPowerDB(), 'f', 1), detection.getTotalPowerDB()));
     m_detectionsTable->setItem(row, 4, makeTableItem(QString::number(detection.getPeakAmplitude(), 'f', 4), detection.getPeakAmplitude()));
-    m_detectionsTable->setItem(row, 5, makeTableItem(QString::number(detection.getDurationS() * 1000.0, 'f', 1), detection.getDurationS()));
+    QTableWidgetItem *durationItem = makeTableItem(QString::number(detection.getDurationS() * 1000.0, 'f', 1), detection.getDurationS());
+    if (detection.getTruncated()) {
+        durationItem->setToolTip(tr("Detection duration was clipped to the configured maximum."));
+    }
+    m_detectionsTable->setItem(row, 5, durationItem);
     m_detectionsTable->setItem(row, 6, makeTableItem(QString::number(detection.getCenterFrequency(), 'f', 1), detection.getCenterFrequency()));
     m_detectionsTable->setItem(row, 7, makeTableItem(QString::number(detection.getFrequencySpan(), 'f', 1), detection.getFrequencySpan()));
     m_detectionsTable->setItem(row, 8, makeTableItem(QString::number(detection.getFrequencyDrift(), 'f', 1), detection.getFrequencyDrift()));
@@ -1267,17 +1275,7 @@ void MeteorGUI::addCameraDetection(const Meteor::MsgCameraMeteorDetected& detect
 {
     const QDateTime utcTime = detection.getDateTimeUtc().toUTC();
     const QDateTime localTime = utcTime.toLocalTime();
-    const QDate date = localTime.date();
-    const int hour = localTime.time().hour();
-
-    if (!m_hourlyCounts.contains(date)) {
-        m_hourlyCounts[date] = QVector<int>(24, 0);
-    }
-
-    markHourData(date, hour);
-    m_hourlyCounts[date][hour]++;
     m_totalCount++;
-    markRMOBDirty(date);
 
     const bool sortingEnabled = m_detectionsTable->isSortingEnabled();
     m_detectionsTable->setSortingEnabled(false);
@@ -1287,6 +1285,7 @@ void MeteorGUI::addCameraDetection(const Meteor::MsgCameraMeteorDetected& detect
     QTableWidgetItem *timeItem = makeTableItem(localTime.toString("yyyy-MM-dd HH:mm:ss.zzz"), localTime.toMSecsSinceEpoch());
     timeItem->setData(DetectionSampleUtcMSecsRole, utcTime.toMSecsSinceEpoch());
     timeItem->setData(DetectionDisplayUtcMSecsRole, utcTime.toMSecsSinceEpoch());
+    timeItem->setData(DetectionRadioRole, false);
     m_detectionsTable->setItem(row, 0, timeItem);
     m_detectionsTable->setItem(row, 1, makeTableItem(QString()));
     m_detectionsTable->setItem(row, 2, makeTableItem(QString()));
@@ -1338,7 +1337,15 @@ void MeteorGUI::updateHistogram()
     QBarSeries *series = new QBarSeries();
     int maxCount = 1;
 
-    for (auto it = m_hourlyCounts.cbegin(); it != m_hourlyCounts.cend(); ++it)
+    constexpr int histogramDayCount = 7;
+    auto firstDay = m_hourlyCounts.cend();
+    int days = 0;
+    while ((firstDay != m_hourlyCounts.cbegin()) && (days < histogramDayCount)) {
+        --firstDay;
+        ++days;
+    }
+
+    for (auto it = firstDay; it != m_hourlyCounts.cend(); ++it)
     {
         QBarSet *set = new QBarSet(it.key().toString(Qt::ISODate));
 
@@ -1780,9 +1787,10 @@ void MeteorGUI::deleteSelectedDetections()
         }
 
         bool timeOK = false;
-        const qint64 utcMSecs = timeItem->data(DetectionSampleUtcMSecsRole).toLongLong(&timeOK);
+        const bool radioDetection = timeItem->data(DetectionRadioRole).toBool();
+        const qint64 utcMSecs = timeItem->data(DetectionDisplayUtcMSecsRole).toLongLong(&timeOK);
 
-        if (timeOK)
+        if (timeOK && radioDetection)
         {
             const QDateTime localTime = QDateTime::fromMSecsSinceEpoch(utcMSecs, Qt::UTC).toLocalTime();
             const QDate date = localTime.date();
@@ -1794,9 +1802,10 @@ void MeteorGUI::deleteSelectedDetections()
 
             markRMOBDirty(date);
 
-            if (m_totalCount > 0) {
-                m_totalCount--;
-            }
+        }
+
+        if (m_totalCount > 0) {
+            m_totalCount--;
         }
 
         rowsToDelete.push_back(rowIndex.row());

@@ -674,7 +674,10 @@ void CameraObjectDetector::applySettings(const CameraSettings& settings, const Q
         m_yoloLoadedModelPath.clear();
         m_reportedErrorKeys.clear();
         m_appliedYoloDnnTarget = -1;
-        m_yoloBatchedInferenceSupported = true;
+        // Several modern YOLO ONNX graphs include layers that OpenCV DNN cannot
+        // shape-infer with a batch dimension. TensorRT still batches tiles, but
+        // OpenCV DNN uses per-tile inference to avoid noisy internal failures.
+        m_yoloBatchedInferenceSupported = false;
     }
 
     if (settingsKeys.contains("yoloLabelsPath") || (force && m_yoloLoadedLabelsPath != m_settings.m_yoloLabelsPath))
@@ -816,7 +819,8 @@ void CameraObjectDetector::runYoloDetections(const cv::Mat& bgrMat, const cv::Re
         m_yoloLoadedModelPath.clear();
         // A newly-loaded net has default backend/target; force re-apply on next inference.
         m_appliedYoloDnnTarget = -1;
-        m_yoloBatchedInferenceSupported = true;
+        // Keep OpenCV DNN tile inference per-tile; see the model-load reset above.
+        m_yoloBatchedInferenceSupported = false;
 #ifdef CAMERA_TENSORRT_YOLO
         m_yoloTensorRt.reset();
 #endif

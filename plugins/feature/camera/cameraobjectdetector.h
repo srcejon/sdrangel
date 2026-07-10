@@ -143,7 +143,7 @@ private:
     // from the current setting, avoiding a per-frame call that can rebuild the network's
     // compute graph when targets change.
     int m_appliedYoloDnnTarget = -1;
-    bool m_yoloBatchedInferenceSupported = true;
+    bool m_yoloBatchedInferenceSupported = false;
     QString m_yoloLoadedModelPath;
     QSet<QString> m_reportedErrorKeys;
     QStringList m_yoloLabels;

@@ -23,7 +23,6 @@
 
 
 #include "SWGChannelMarker.h"
-#include "SWGGLScope.h"
 #include "SWGGLSpectrum.h"
 #include "SWGRollupState.h"
 #include <QString>
@@ -79,6 +78,9 @@ public:
     qint32 getDetectionBoxPaddingPixels();
     void setDetectionBoxPaddingPixels(qint32 detection_box_padding_pixels);
 
+    qint32 getDetectionLabelMode();
+    void setDetectionLabelMode(qint32 detection_label_mode);
+
     qint32 getRgbColor();
     void setRgbColor(qint32 rgb_color);
 
@@ -99,9 +101,6 @@ public:
 
     SWGGLSpectrum* getSpectrumGui();
     void setSpectrumGui(SWGGLSpectrum* spectrum_gui);
-
-    SWGGLScope* getScopeGui();
-    void setScopeGui(SWGGLScope* scope_gui);
 
     SWGRollupState* getRollupState();
     void setRollupState(SWGRollupState* rollup_state);
@@ -143,6 +142,9 @@ private:
     qint32 detection_box_padding_pixels;
     bool m_detection_box_padding_pixels_isSet;
 
+    qint32 detection_label_mode;
+    bool m_detection_label_mode_isSet;
+
     qint32 rgb_color;
     bool m_rgb_color_isSet;
 
@@ -163,9 +165,6 @@ private:
 
     SWGGLSpectrum* spectrum_gui;
     bool m_spectrum_gui_isSet;
-
-    SWGGLScope* scope_gui;
-    bool m_scope_gui_isSet;
 
     SWGRollupState* rollup_state;
     bool m_rollup_state_isSet;

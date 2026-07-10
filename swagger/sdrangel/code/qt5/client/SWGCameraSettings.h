@@ -420,6 +420,21 @@ public:
     qint32 getLensMirror();
     void setLensMirror(qint32 lens_mirror);
 
+    qint32 getPlaybackProjectionEnabled();
+    void setPlaybackProjectionEnabled(qint32 playback_projection_enabled);
+
+    qint32 getPlaybackProjectionX();
+    void setPlaybackProjectionX(qint32 playback_projection_x);
+
+    qint32 getPlaybackProjectionY();
+    void setPlaybackProjectionY(qint32 playback_projection_y);
+
+    qint32 getPlaybackProjectionWidth();
+    void setPlaybackProjectionWidth(qint32 playback_projection_width);
+
+    qint32 getPlaybackProjectionHeight();
+    void setPlaybackProjectionHeight(qint32 playback_projection_height);
+
     qint32 getPostProcessWhiteBalanceMode();
     void setPostProcessWhiteBalanceMode(qint32 post_process_white_balance_mode);
 
@@ -851,6 +866,9 @@ public:
 
     QString* getYoloModelPath();
     void setYoloModelPath(QString* yolo_model_path);
+
+    QString* getYoloTileModelPath();
+    void setYoloTileModelPath(QString* yolo_tile_model_path);
 
     QString* getYoloLabelsPath();
     void setYoloLabelsPath(QString* yolo_labels_path);
@@ -1300,6 +1318,21 @@ private:
     qint32 lens_mirror;
     bool m_lens_mirror_isSet;
 
+    qint32 playback_projection_enabled;
+    bool m_playback_projection_enabled_isSet;
+
+    qint32 playback_projection_x;
+    bool m_playback_projection_x_isSet;
+
+    qint32 playback_projection_y;
+    bool m_playback_projection_y_isSet;
+
+    qint32 playback_projection_width;
+    bool m_playback_projection_width_isSet;
+
+    qint32 playback_projection_height;
+    bool m_playback_projection_height_isSet;
+
     qint32 post_process_white_balance_mode;
     bool m_post_process_white_balance_mode_isSet;
 
@@ -1731,6 +1764,9 @@ private:
 
     QString* yolo_model_path;
     bool m_yolo_model_path_isSet;
+
+    QString* yolo_tile_model_path;
+    bool m_yolo_tile_model_path_isSet;
 
     QString* yolo_labels_path;
     bool m_yolo_labels_path_isSet;

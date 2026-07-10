@@ -4204,6 +4204,26 @@ margin-bottom: 20px;
       "type" : "integer",
       "description" : "Image is horizontally mirrored relative to the sky (1 for up-looking all-sky camera or telescope star diagonal). Plate solving and sky overlays account for the reflection."
     },
+    "playbackProjectionEnabled" : {
+      "type" : "integer",
+      "description" : "Use playback content rectangle as the optical image area for video, stream and image sequence sources"
+    },
+    "playbackProjectionX" : {
+      "type" : "integer",
+      "description" : "Playback optical content rectangle left position in pixels"
+    },
+    "playbackProjectionY" : {
+      "type" : "integer",
+      "description" : "Playback optical content rectangle top position in pixels"
+    },
+    "playbackProjectionWidth" : {
+      "type" : "integer",
+      "description" : "Playback optical content rectangle width in pixels"
+    },
+    "playbackProjectionHeight" : {
+      "type" : "integer",
+      "description" : "Playback optical content rectangle height in pixels"
+    },
     "postProcessWhiteBalanceMode" : {
       "type" : "integer",
       "description" : "Post-processing white balance mode\n  * 0 - Off\n  * 1 - Auto\n  * 2 - Manual\n"
@@ -4679,6 +4699,14 @@ margin-bottom: 20px;
       "format" : "double",
       "description" : "Faintest catalog star magnitude checked by star-visibility sensing: 0 to 6"
     },
+    "cloudUseReference" : {
+      "type" : "integer",
+      "description" : "Compare against the saved per-camera clear-sky reference: veto static quirks, cue deviations, exclude learned foreground (1 for yes, 0 for no)"
+    },
+    "cloudAutoReference" : {
+      "type" : "integer",
+      "description" : "Auto-learn the clear-sky reference from verified-clear frames (1 for yes, 0 for no)"
+    },
     "cloudSunMoonRadiusDeg" : {
       "type" : "number",
       "format" : "double",
@@ -4813,7 +4841,11 @@ margin-bottom: 20px;
     },
     "yoloModelPath" : {
       "type" : "string",
-      "description" : "Path to the YOLO .onnx model file"
+      "description" : "Path to the YOLO .onnx model file used for scaled/full-image inference"
+    },
+    "yoloTileModelPath" : {
+      "type" : "string",
+      "description" : "Optional path to the YOLO .onnx model file used for tiled inference. If empty, yoloModelPath is used"
     },
     "yoloLabelsPath" : {
       "type" : "string",
@@ -13119,47 +13151,71 @@ margin-bottom: 20px;
     },
     "frequencyMode" : {
       "type" : "integer",
-      "description" : "Frequency entry mode\n  * 0 - Offset from device centre frequency\n  * 1 - Absolute RF frequency\n"
+      "description" : "Frequency entry mode\n  * 0 - Offset from device centre frequency\n  * 1 - Absolute RF frequency\n",
+      "minimum" : 0,
+      "maximum" : 1
     },
     "frequency" : {
       "type" : "integer",
       "format" : "int64",
-      "description" : "Absolute RF frequency in Hz"
+      "description" : "Absolute RF frequency in Hz",
+      "minimum" : 0
     },
     "channelSampleRate" : {
       "type" : "integer",
-      "description" : "Channel sample rate in samples per second"
+      "description" : "Channel sample rate in samples per second: 100, 300, 1000, or 3000",
+      "minimum" : 100,
+      "maximum" : 3000
     },
     "powerLPFCutoff" : {
       "type" : "number",
       "format" : "float",
-      "description" : "Power envelope low-pass cutoff in Hz"
+      "description" : "Power envelope low-pass cutoff in Hz",
+      "minimum" : 0.1,
+      "maximum" : 1350.0
     },
     "detectionThresholdDB" : {
       "type" : "number",
       "format" : "float",
-      "description" : "Detection threshold above background in dB"
+      "description" : "Detection threshold above background in dB",
+      "minimum" : 1.0,
+      "maximum" : 60.0
     },
     "minDurationMS" : {
       "type" : "integer",
-      "description" : "Minimum meteor detection duration in milliseconds"
+      "description" : "Minimum meteor detection duration in milliseconds",
+      "minimum" : 1,
+      "maximum" : 10000
     },
     "maxDurationMS" : {
       "type" : "integer",
-      "description" : "Maximum meteor detection duration in milliseconds"
+      "description" : "Maximum meteor detection duration in milliseconds",
+      "minimum" : 1,
+      "maximum" : 60000
     },
     "maxFrequencyDrift" : {
       "type" : "number",
       "format" : "float",
-      "description" : "Maximum allowed detection frequency drift in Hz"
+      "description" : "Maximum allowed detection frequency drift in Hz",
+      "minimum" : 0.0,
+      "maximum" : 1500.0
     },
     "detectionsTableColumnHidden" : {
       "type" : "integer",
-      "description" : "Bit mask of hidden detection table columns"
+      "description" : "Bit mask of hidden detection table columns",
+      "minimum" : 0
     },
     "detectionBoxPaddingPixels" : {
       "type" : "integer",
-      "description" : "Padding around detection overlay boxes in pixels"
+      "description" : "Padding around detection overlay boxes in pixels",
+      "minimum" : 0,
+      "maximum" : 100
+    },
+    "detectionLabelMode" : {
+      "type" : "integer",
+      "description" : "Detection overlay label placement\n  * 0 - No label\n  * 1 - Above the box\n  * 2 - To the right of the box\n",
+      "minimum" : 0,
+      "maximum" : 2
     },
     "rgbColor" : {
       "type" : "integer"
@@ -13169,22 +13225,23 @@ margin-bottom: 20px;
     },
     "streamIndex" : {
       "type" : "integer",
-      "description" : "MIMO stream index. Not relevant when connected to a single Rx device."
+      "description" : "MIMO stream index. Not relevant when connected to a single Rx device.",
+      "minimum" : 0
     },
     "workspaceIndex" : {
-      "type" : "integer"
+      "type" : "integer",
+      "minimum" : 0
     },
     "hidden" : {
-      "type" : "integer"
+      "type" : "integer",
+      "minimum" : 0,
+      "maximum" : 1
     },
     "channelMarker" : {
       "$ref" : "#/definitions/ChannelMarker"
     },
     "spectrumGUI" : {
       "$ref" : "#/definitions/GLSpectrum"
-    },
-    "scopeGUI" : {
-      "$ref" : "#/definitions/GLScope"
     },
     "rollupState" : {
       "$ref" : "#/definitions/RollupState"
@@ -62617,7 +62674,7 @@ except ApiException as e:
           </div>
           <div id="generator">
             <div class="content">
-              Generated 2026-07-09T10:50:17.044+02:00
+              Generated 2026-07-11T00:20:46.185+02:00
             </div>
           </div>
       </div>

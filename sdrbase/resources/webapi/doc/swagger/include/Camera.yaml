@@ -452,6 +452,21 @@ CameraSettings:
     lensMirror:
       description: "Image is horizontally mirrored relative to the sky (1 for up-looking all-sky camera or telescope star diagonal). Plate solving and sky overlays account for the reflection."
       type: integer
+    playbackProjectionEnabled:
+      description: "Use playback content rectangle as the optical image area for video, stream and image sequence sources"
+      type: integer
+    playbackProjectionX:
+      description: "Playback optical content rectangle left position in pixels"
+      type: integer
+    playbackProjectionY:
+      description: "Playback optical content rectangle top position in pixels"
+      type: integer
+    playbackProjectionWidth:
+      description: "Playback optical content rectangle width in pixels"
+      type: integer
+    playbackProjectionHeight:
+      description: "Playback optical content rectangle height in pixels"
+      type: integer
     postProcessWhiteBalanceMode:
       description: >
         Post-processing white balance mode
@@ -863,6 +878,12 @@ CameraSettings:
       description: "Faintest catalog star magnitude checked by star-visibility sensing: 0 to 6"
       type: number
       format: double
+    cloudUseReference:
+      description: "Compare against the saved per-camera clear-sky reference: veto static quirks, cue deviations, exclude learned foreground (1 for yes, 0 for no)"
+      type: integer
+    cloudAutoReference:
+      description: "Auto-learn the clear-sky reference from verified-clear frames (1 for yes, 0 for no)"
+      type: integer
     cloudSunMoonRadiusDeg:
       description: "Maximum angular radius in degrees the sun/moon exclusion grows to; the mask sizes itself to the actual glare bloom up to this cap: 0 to 45"
       type: number
@@ -994,7 +1015,10 @@ CameraSettings:
       description: "Run YOLO ONNX inference and draw bounding boxes (1 for yes, 0 for no)"
       type: integer
     yoloModelPath:
-      description: "Path to the YOLO .onnx model file"
+      description: "Path to the YOLO .onnx model file used for scaled/full-image inference"
+      type: string
+    yoloTileModelPath:
+      description: "Optional path to the YOLO .onnx model file used for tiled inference. If empty, yoloModelPath is used"
       type: string
     yoloLabelsPath:
       description: "Path to a plain-text file with one class name per line"

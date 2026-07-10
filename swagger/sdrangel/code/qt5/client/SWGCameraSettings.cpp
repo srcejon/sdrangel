@@ -278,6 +278,16 @@ SWGCameraSettings::SWGCameraSettings() {
     m_lens_distortion_k1_isSet = false;
     lens_mirror = 0;
     m_lens_mirror_isSet = false;
+    playback_projection_enabled = 0;
+    m_playback_projection_enabled_isSet = false;
+    playback_projection_x = 0;
+    m_playback_projection_x_isSet = false;
+    playback_projection_y = 0;
+    m_playback_projection_y_isSet = false;
+    playback_projection_width = 0;
+    m_playback_projection_width_isSet = false;
+    playback_projection_height = 0;
+    m_playback_projection_height_isSet = false;
     post_process_white_balance_mode = 0;
     m_post_process_white_balance_mode_isSet = false;
     post_process_white_balance_red_gain = 0.0;
@@ -566,6 +576,8 @@ SWGCameraSettings::SWGCameraSettings() {
     m_yolo_enabled_isSet = false;
     yolo_model_path = nullptr;
     m_yolo_model_path_isSet = false;
+    yolo_tile_model_path = nullptr;
+    m_yolo_tile_model_path_isSet = false;
     yolo_labels_path = nullptr;
     m_yolo_labels_path_isSet = false;
     yolo_conf_threshold = 0.0;
@@ -870,6 +882,16 @@ SWGCameraSettings::init() {
     m_lens_distortion_k1_isSet = false;
     lens_mirror = 0;
     m_lens_mirror_isSet = false;
+    playback_projection_enabled = 0;
+    m_playback_projection_enabled_isSet = false;
+    playback_projection_x = 0;
+    m_playback_projection_x_isSet = false;
+    playback_projection_y = 0;
+    m_playback_projection_y_isSet = false;
+    playback_projection_width = 0;
+    m_playback_projection_width_isSet = false;
+    playback_projection_height = 0;
+    m_playback_projection_height_isSet = false;
     post_process_white_balance_mode = 0;
     m_post_process_white_balance_mode_isSet = false;
     post_process_white_balance_red_gain = 0.0;
@@ -1158,6 +1180,8 @@ SWGCameraSettings::init() {
     m_yolo_enabled_isSet = false;
     yolo_model_path = new QString("");
     m_yolo_model_path_isSet = false;
+    yolo_tile_model_path = new QString("");
+    m_yolo_tile_model_path_isSet = false;
     yolo_labels_path = new QString("");
     m_yolo_labels_path_isSet = false;
     yolo_conf_threshold = 0.0;
@@ -1413,6 +1437,11 @@ SWGCameraSettings::cleanup() {
 
 
 
+
+
+
+
+
     if(date_time_format != nullptr) { 
         delete date_time_format;
     }
@@ -1528,6 +1557,8 @@ SWGCameraSettings::cleanup() {
 
 
 
+
+
     if(plate_solve_date_time != nullptr) { 
         delete plate_solve_date_time;
     }
@@ -1546,6 +1577,9 @@ SWGCameraSettings::cleanup() {
 
     if(yolo_model_path != nullptr) { 
         delete yolo_model_path;
+    }
+    if(yolo_tile_model_path != nullptr) { 
+        delete yolo_tile_model_path;
     }
     if(yolo_labels_path != nullptr) { 
         delete yolo_labels_path;
@@ -1847,6 +1881,16 @@ SWGCameraSettings::fromJsonObject(QJsonObject &pJson) {
     
     ::SWGSDRangel::setValue(&lens_mirror, pJson["lensMirror"], "qint32", "");
     
+    ::SWGSDRangel::setValue(&playback_projection_enabled, pJson["playbackProjectionEnabled"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&playback_projection_x, pJson["playbackProjectionX"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&playback_projection_y, pJson["playbackProjectionY"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&playback_projection_width, pJson["playbackProjectionWidth"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&playback_projection_height, pJson["playbackProjectionHeight"], "qint32", "");
+    
     ::SWGSDRangel::setValue(&post_process_white_balance_mode, pJson["postProcessWhiteBalanceMode"], "qint32", "");
     
     ::SWGSDRangel::setValue(&post_process_white_balance_red_gain, pJson["postProcessWhiteBalanceRedGain"], "double", "");
@@ -2066,7 +2110,9 @@ SWGCameraSettings::fromJsonObject(QJsonObject &pJson) {
     ::SWGSDRangel::setValue(&cloud_star_sense, pJson["cloudStarSense"], "qint32", "");
     
     ::SWGSDRangel::setValue(&cloud_star_sense_magnitude, pJson["cloudStarSenseMagnitude"], "double", "");
+    
     ::SWGSDRangel::setValue(&cloud_use_reference, pJson["cloudUseReference"], "qint32", "");
+    
     ::SWGSDRangel::setValue(&cloud_auto_reference, pJson["cloudAutoReference"], "qint32", "");
     
     ::SWGSDRangel::setValue(&cloud_sun_moon_radius_deg, pJson["cloudSunMoonRadiusDeg"], "double", "");
@@ -2132,6 +2178,8 @@ SWGCameraSettings::fromJsonObject(QJsonObject &pJson) {
     ::SWGSDRangel::setValue(&yolo_enabled, pJson["yoloEnabled"], "qint32", "");
     
     ::SWGSDRangel::setValue(&yolo_model_path, pJson["yoloModelPath"], "QString", "QString");
+    
+    ::SWGSDRangel::setValue(&yolo_tile_model_path, pJson["yoloTileModelPath"], "QString", "QString");
     
     ::SWGSDRangel::setValue(&yolo_labels_path, pJson["yoloLabelsPath"], "QString", "QString");
     
@@ -2570,6 +2618,21 @@ SWGCameraSettings::asJsonObject() {
     if(m_lens_mirror_isSet){
         obj->insert("lensMirror", QJsonValue(lens_mirror));
     }
+    if(m_playback_projection_enabled_isSet){
+        obj->insert("playbackProjectionEnabled", QJsonValue(playback_projection_enabled));
+    }
+    if(m_playback_projection_x_isSet){
+        obj->insert("playbackProjectionX", QJsonValue(playback_projection_x));
+    }
+    if(m_playback_projection_y_isSet){
+        obj->insert("playbackProjectionY", QJsonValue(playback_projection_y));
+    }
+    if(m_playback_projection_width_isSet){
+        obj->insert("playbackProjectionWidth", QJsonValue(playback_projection_width));
+    }
+    if(m_playback_projection_height_isSet){
+        obj->insert("playbackProjectionHeight", QJsonValue(playback_projection_height));
+    }
     if(m_post_process_white_balance_mode_isSet){
         obj->insert("postProcessWhiteBalanceMode", QJsonValue(post_process_white_balance_mode));
     }
@@ -3001,6 +3064,9 @@ SWGCameraSettings::asJsonObject() {
     }
     if(yolo_model_path != nullptr && *yolo_model_path != QString("")){
         toJsonValue(QString("yoloModelPath"), yolo_model_path, obj, QString("QString"));
+    }
+    if(yolo_tile_model_path != nullptr && *yolo_tile_model_path != QString("")){
+        toJsonValue(QString("yoloTileModelPath"), yolo_tile_model_path, obj, QString("QString"));
     }
     if(yolo_labels_path != nullptr && *yolo_labels_path != QString("")){
         toJsonValue(QString("yoloLabelsPath"), yolo_labels_path, obj, QString("QString"));
@@ -4323,6 +4389,56 @@ void
 SWGCameraSettings::setLensMirror(qint32 lens_mirror) {
     this->lens_mirror = lens_mirror;
     this->m_lens_mirror_isSet = true;
+}
+
+qint32
+SWGCameraSettings::getPlaybackProjectionEnabled() {
+    return playback_projection_enabled;
+}
+void
+SWGCameraSettings::setPlaybackProjectionEnabled(qint32 playback_projection_enabled) {
+    this->playback_projection_enabled = playback_projection_enabled;
+    this->m_playback_projection_enabled_isSet = true;
+}
+
+qint32
+SWGCameraSettings::getPlaybackProjectionX() {
+    return playback_projection_x;
+}
+void
+SWGCameraSettings::setPlaybackProjectionX(qint32 playback_projection_x) {
+    this->playback_projection_x = playback_projection_x;
+    this->m_playback_projection_x_isSet = true;
+}
+
+qint32
+SWGCameraSettings::getPlaybackProjectionY() {
+    return playback_projection_y;
+}
+void
+SWGCameraSettings::setPlaybackProjectionY(qint32 playback_projection_y) {
+    this->playback_projection_y = playback_projection_y;
+    this->m_playback_projection_y_isSet = true;
+}
+
+qint32
+SWGCameraSettings::getPlaybackProjectionWidth() {
+    return playback_projection_width;
+}
+void
+SWGCameraSettings::setPlaybackProjectionWidth(qint32 playback_projection_width) {
+    this->playback_projection_width = playback_projection_width;
+    this->m_playback_projection_width_isSet = true;
+}
+
+qint32
+SWGCameraSettings::getPlaybackProjectionHeight() {
+    return playback_projection_height;
+}
+void
+SWGCameraSettings::setPlaybackProjectionHeight(qint32 playback_projection_height) {
+    this->playback_projection_height = playback_projection_height;
+    this->m_playback_projection_height_isSet = true;
 }
 
 qint32
@@ -5766,6 +5882,16 @@ SWGCameraSettings::setYoloModelPath(QString* yolo_model_path) {
 }
 
 QString*
+SWGCameraSettings::getYoloTileModelPath() {
+    return yolo_tile_model_path;
+}
+void
+SWGCameraSettings::setYoloTileModelPath(QString* yolo_tile_model_path) {
+    this->yolo_tile_model_path = yolo_tile_model_path;
+    this->m_yolo_tile_model_path_isSet = true;
+}
+
+QString*
 SWGCameraSettings::getYoloLabelsPath() {
     return yolo_labels_path;
 }
@@ -6378,6 +6504,21 @@ SWGCameraSettings::isSet(){
         if(m_lens_mirror_isSet){
             isObjectUpdated = true; break;
         }
+        if(m_playback_projection_enabled_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_playback_projection_x_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_playback_projection_y_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_playback_projection_width_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_playback_projection_height_isSet){
+            isObjectUpdated = true; break;
+        }
         if(m_post_process_white_balance_mode_isSet){
             isObjectUpdated = true; break;
         }
@@ -6808,6 +6949,9 @@ SWGCameraSettings::isSet(){
             isObjectUpdated = true; break;
         }
         if(yolo_model_path && *yolo_model_path != QString("")){
+            isObjectUpdated = true; break;
+        }
+        if(yolo_tile_model_path && *yolo_tile_model_path != QString("")){
             isObjectUpdated = true; break;
         }
         if(yolo_labels_path && *yolo_labels_path != QString("")){

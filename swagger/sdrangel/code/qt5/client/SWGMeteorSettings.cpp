@@ -50,6 +50,8 @@ SWGMeteorSettings::SWGMeteorSettings() {
     m_detections_table_column_hidden_isSet = false;
     detection_box_padding_pixels = 0;
     m_detection_box_padding_pixels_isSet = false;
+    detection_label_mode = 0;
+    m_detection_label_mode_isSet = false;
     rgb_color = 0;
     m_rgb_color_isSet = false;
     title = nullptr;
@@ -64,8 +66,6 @@ SWGMeteorSettings::SWGMeteorSettings() {
     m_channel_marker_isSet = false;
     spectrum_gui = nullptr;
     m_spectrum_gui_isSet = false;
-    scope_gui = nullptr;
-    m_scope_gui_isSet = false;
     rollup_state = nullptr;
     m_rollup_state_isSet = false;
 }
@@ -98,6 +98,8 @@ SWGMeteorSettings::init() {
     m_detections_table_column_hidden_isSet = false;
     detection_box_padding_pixels = 0;
     m_detection_box_padding_pixels_isSet = false;
+    detection_label_mode = 0;
+    m_detection_label_mode_isSet = false;
     rgb_color = 0;
     m_rgb_color_isSet = false;
     title = new QString("");
@@ -112,14 +114,13 @@ SWGMeteorSettings::init() {
     m_channel_marker_isSet = false;
     spectrum_gui = new SWGGLSpectrum();
     m_spectrum_gui_isSet = false;
-    scope_gui = new SWGGLScope();
-    m_scope_gui_isSet = false;
     rollup_state = new SWGRollupState();
     m_rollup_state_isSet = false;
 }
 
 void
 SWGMeteorSettings::cleanup() {
+
 
 
 
@@ -143,9 +144,6 @@ SWGMeteorSettings::cleanup() {
     }
     if(spectrum_gui != nullptr) { 
         delete spectrum_gui;
-    }
-    if(scope_gui != nullptr) { 
-        delete scope_gui;
     }
     if(rollup_state != nullptr) { 
         delete rollup_state;
@@ -185,6 +183,8 @@ SWGMeteorSettings::fromJsonObject(QJsonObject &pJson) {
     
     ::SWGSDRangel::setValue(&detection_box_padding_pixels, pJson["detectionBoxPaddingPixels"], "qint32", "");
     
+    ::SWGSDRangel::setValue(&detection_label_mode, pJson["detectionLabelMode"], "qint32", "");
+    
     ::SWGSDRangel::setValue(&rgb_color, pJson["rgbColor"], "qint32", "");
     
     ::SWGSDRangel::setValue(&title, pJson["title"], "QString", "QString");
@@ -198,8 +198,6 @@ SWGMeteorSettings::fromJsonObject(QJsonObject &pJson) {
     ::SWGSDRangel::setValue(&channel_marker, pJson["channelMarker"], "SWGChannelMarker", "SWGChannelMarker");
     
     ::SWGSDRangel::setValue(&spectrum_gui, pJson["spectrumGUI"], "SWGGLSpectrum", "SWGGLSpectrum");
-    
-    ::SWGSDRangel::setValue(&scope_gui, pJson["scopeGUI"], "SWGGLScope", "SWGGLScope");
     
     ::SWGSDRangel::setValue(&rollup_state, pJson["rollupState"], "SWGRollupState", "SWGRollupState");
     
@@ -252,6 +250,9 @@ SWGMeteorSettings::asJsonObject() {
     if(m_detection_box_padding_pixels_isSet){
         obj->insert("detectionBoxPaddingPixels", QJsonValue(detection_box_padding_pixels));
     }
+    if(m_detection_label_mode_isSet){
+        obj->insert("detectionLabelMode", QJsonValue(detection_label_mode));
+    }
     if(m_rgb_color_isSet){
         obj->insert("rgbColor", QJsonValue(rgb_color));
     }
@@ -272,9 +273,6 @@ SWGMeteorSettings::asJsonObject() {
     }
     if((spectrum_gui != nullptr) && (spectrum_gui->isSet())){
         toJsonValue(QString("spectrumGUI"), spectrum_gui, obj, QString("SWGGLSpectrum"));
-    }
-    if((scope_gui != nullptr) && (scope_gui->isSet())){
-        toJsonValue(QString("scopeGUI"), scope_gui, obj, QString("SWGGLScope"));
     }
     if((rollup_state != nullptr) && (rollup_state->isSet())){
         toJsonValue(QString("rollupState"), rollup_state, obj, QString("SWGRollupState"));
@@ -394,6 +392,16 @@ SWGMeteorSettings::setDetectionBoxPaddingPixels(qint32 detection_box_padding_pix
 }
 
 qint32
+SWGMeteorSettings::getDetectionLabelMode() {
+    return detection_label_mode;
+}
+void
+SWGMeteorSettings::setDetectionLabelMode(qint32 detection_label_mode) {
+    this->detection_label_mode = detection_label_mode;
+    this->m_detection_label_mode_isSet = true;
+}
+
+qint32
 SWGMeteorSettings::getRgbColor() {
     return rgb_color;
 }
@@ -463,16 +471,6 @@ SWGMeteorSettings::setSpectrumGui(SWGGLSpectrum* spectrum_gui) {
     this->m_spectrum_gui_isSet = true;
 }
 
-SWGGLScope*
-SWGMeteorSettings::getScopeGui() {
-    return scope_gui;
-}
-void
-SWGMeteorSettings::setScopeGui(SWGGLScope* scope_gui) {
-    this->scope_gui = scope_gui;
-    this->m_scope_gui_isSet = true;
-}
-
 SWGRollupState*
 SWGMeteorSettings::getRollupState() {
     return rollup_state;
@@ -521,6 +519,9 @@ SWGMeteorSettings::isSet(){
         if(m_detection_box_padding_pixels_isSet){
             isObjectUpdated = true; break;
         }
+        if(m_detection_label_mode_isSet){
+            isObjectUpdated = true; break;
+        }
         if(m_rgb_color_isSet){
             isObjectUpdated = true; break;
         }
@@ -540,9 +541,6 @@ SWGMeteorSettings::isSet(){
             isObjectUpdated = true; break;
         }
         if(spectrum_gui && spectrum_gui->isSet()){
-            isObjectUpdated = true; break;
-        }
-        if(scope_gui && scope_gui->isSet()){
             isObjectUpdated = true; break;
         }
         if(rollup_state && rollup_state->isSet()){

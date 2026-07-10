@@ -56,7 +56,7 @@ constexpr double kVetoRawBrightnessCap = 0.30; // raw |brightness deviation| abo
 constexpr double kVetoRawRatioCap = 0.12;      // raw |anchored ratio deviation| above this blocks the veto
 
 // Cue: deviation from the reference strong enough to flag as cloud on its own
-constexpr double kCueBrightness = 0.18;     // relative to the sky anchor
+constexpr double kCueBrightness = 0.12;     // relative to the sky anchor
 constexpr double kCueRatio = 0.12;
 
 // Frame-level sanity: if the sky disagrees with the reference this much at the median, the
@@ -502,7 +502,7 @@ bool CameraClearSkyReference::roiMatches(const Slot& slot, const QRectF& roiNorm
 // Builds the reference-resolution maps from the detector's work images: box-smoothed
 // normalised luminance, red/blue ratio, fine texture, and the evaluated-sky mask, plus the
 // robust anchors both sides of a later comparison are normalised by
-void CameraClearSkyReference::buildMaps(const cv::Mat& gray, const cv::Mat& workBgr, const cv::Mat& texture, const cv::Mat& evaluationMask,
+void CameraClearSkyReference::buildMaps(bool dayAnchors, const cv::Mat& gray, const cv::Mat& workBgr, const cv::Mat& texture, const cv::Mat& evaluationMask,
                                         cv::Mat& brightnessOut, cv::Mat& ratioOut, cv::Mat& textureOut, cv::Mat& skyOut,
                                         double& brightnessAnchorOut, double& ratioAnchorOut,
                                         const cv::Mat& anchorMask)
@@ -531,7 +531,21 @@ void CameraClearSkyReference::buildMaps(const cv::Mat& gray, const cv::Mat& work
         cv::bitwise_and(skyOut, anchorRef, anchorRegion);
     }
 
-    brightnessAnchorOut = std::max(1, maskedPercentile8U(grayRef, anchorRegion, 0.5));
+    // By day, the anchor must survive an evaluation region dominated by dark pixels
+    // (fisheye surround, roofs, trees on a camera with no exclusions configured): the
+    // plain median collapses to the dark side and stores a meaningless anchor (observed:
+    // a dusk Day slot stored anchor 1.0). Day sky is bright by definition, so anchor on
+    // the non-dark pixels; at night the dark sky IS the signal and the overall median
+    // remains the right measure.
+    cv::Mat dayAnchorRegion;
+    if (dayAnchors)
+    {
+        cv::bitwise_and(anchorRegion, grayRef >= kDarkPixel, dayAnchorRegion);
+        if (cv::countNonZero(dayAnchorRegion) == 0) {
+            dayAnchorRegion = anchorRegion;
+        }
+    }
+    brightnessAnchorOut = std::max(1, maskedPercentile8U(grayRef, dayAnchors ? dayAnchorRegion : anchorRegion, 0.5));
 
     cv::Mat grayF;
     grayRef.convertTo(grayF, CV_32F);
@@ -562,7 +576,7 @@ void CameraClearSkyReference::capture(int slot, const cv::Mat& gray, const cv::M
     }
 
     Slot& target = m_slots[slot];
-    buildMaps(gray, workBgr, texture, evaluationMask,
+    buildMaps(!slotIsNight(slot), gray, workBgr, texture, evaluationMask,
               target.brightness, target.ratio, target.texture, target.sky,
               target.brightnessAnchor, target.ratioAnchor);
     // A user-trusted whole-frame capture confirms every evaluated pixel outright
@@ -604,7 +618,7 @@ bool CameraClearSkyReference::applyCueAndVeto(int slot, cv::Mat& mask, const cv:
     // reference resolution
     cv::Mat frameBrightness, frameRatio, frameTexture, frameSky;
     double frameBrightnessAnchor = 0.0, frameRatioAnchor = 0.0;
-    buildMaps(gray, workBgr, cv::Mat(), evaluationMask,
+    buildMaps(!slotIsNight(slot), gray, workBgr, cv::Mat(), evaluationMask,
               frameBrightness, frameRatio, frameTexture, frameSky,
               frameBrightnessAnchor, frameRatioAnchor);
 
@@ -776,7 +790,7 @@ CameraClearSkyReference::LearnResult CameraClearSkyReference::autoLearn(int slot
 
     cv::Mat brightness, ratio, textureMap, sky;
     double brightnessAnchor = 0.0, ratioAnchor = 0.0;
-    buildMaps(gray, workBgr, texture, evaluationMask, brightness, ratio, textureMap, sky, brightnessAnchor, ratioAnchor);
+    buildMaps(!slotIsNight(slot), gray, workBgr, texture, evaluationMask, brightness, ratio, textureMap, sky, brightnessAnchor, ratioAnchor);
 
     if (replace)
     {
@@ -842,7 +856,7 @@ bool CameraClearSkyReference::learnPatches(Slot& target, bool replace, const cv:
 
     cv::Mat brightness, ratio, textureMap, sky;
     double brightnessAnchor = 0.0, ratioAnchor = 0.0;
-    buildMaps(gray, workBgr, texture, evaluationMask, brightness, ratio, textureMap, sky, brightnessAnchor, ratioAnchor, confirmedClearMask);
+    buildMaps(false, gray, workBgr, texture, evaluationMask, brightness, ratio, textureMap, sky, brightnessAnchor, ratioAnchor, confirmedClearMask);
 
     if (replace) {
         target = Slot();

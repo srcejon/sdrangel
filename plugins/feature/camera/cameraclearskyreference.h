@@ -178,7 +178,9 @@ private:
     bool saveToPath(const QString& path) const;
     [[nodiscard]] static bool roiNormsMatch(const QRectF& a, const QRectF& b);
     [[nodiscard]] static bool roiMatches(const Slot& slot, const QRectF& roiNorm);
-    static void buildMaps(const cv::Mat& gray, const cv::Mat& workBgr, const cv::Mat& texture, const cv::Mat& evaluationMask,
+    // dayAnchors: anchor on non-dark pixels (day sky is bright; dark pixels are
+    // foreground/surround), false for night slots where the dark sky is the signal
+    static void buildMaps(bool dayAnchors, const cv::Mat& gray, const cv::Mat& workBgr, const cv::Mat& texture, const cv::Mat& evaluationMask,
                           cv::Mat& brightnessOut, cv::Mat& ratioOut, cv::Mat& textureOut, cv::Mat& skyOut,
                           double& brightnessAnchorOut, double& ratioAnchorOut,
                           const cv::Mat& anchorMask = cv::Mat());

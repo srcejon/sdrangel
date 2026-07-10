@@ -3,12 +3,14 @@ set(meteor_demod_sink_test_SOURCES
     ../meteorsettings.cpp
     ../meteordemodsink.cpp
     ../meteorbaseband.cpp
+    ../rmobreport.cpp
 )
 
 set(meteor_demod_sink_test_HEADERS
     ../meteorsettings.h
     ../meteordemodsink.h
     ../meteorbaseband.h
+    ../rmobreport.h
 )
 
 add_executable(meteor_demod_sink_test EXCLUDE_FROM_ALL

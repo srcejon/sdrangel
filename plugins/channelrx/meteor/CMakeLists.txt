@@ -10,6 +10,7 @@ set(meteor_SOURCES
     meteorsettings.cpp
     meteorbaseband.cpp
     meteordemodsink.cpp
+    rmobreport.cpp
     meteorplugin.cpp
 )
 
@@ -19,6 +20,7 @@ set(meteor_HEADERS
     meteorsettings.h
     meteorbaseband.h
     meteordemodsink.h
+    rmobreport.h
     meteorplugin.h
 )
 

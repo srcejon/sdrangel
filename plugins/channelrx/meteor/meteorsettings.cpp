@@ -27,7 +27,6 @@
 MeteorSettings::MeteorSettings() :
     m_channelMarker(nullptr),
     m_spectrumGUI(nullptr),
-    m_scopeGUI(nullptr),
     m_rollupState(nullptr)
 {
     resetToDefaults();
@@ -38,7 +37,7 @@ void MeteorSettings::resetToDefaults()
     m_inputFrequencyOffset = 0;
     m_frequencyMode = Offset;
     m_frequency = 0;
-    m_channelSampleRate = 1000;
+    m_channelSampleRate = m_defaultSampleRate;
     m_powerLPFCutoff = 50.0f;
     m_detectionThresholdDB = 6.0f;
     m_minDurationMS = 5;
@@ -84,10 +83,6 @@ QByteArray MeteorSettings::serialize() const
         s.writeBlob(25, m_spectrumGUI->serialize());
     }
 
-    if (m_scopeGUI) {
-        s.writeBlob(26, m_scopeGUI->serialize());
-    }
-
     if (m_rollupState) {
         s.writeBlob(30, m_rollupState->serialize());
     }
@@ -116,7 +111,8 @@ bool MeteorSettings::deserialize(const QByteArray& data)
         d.readS32(1, &m_inputFrequencyOffset, 0);
         d.readS32(2, (int *) &m_frequencyMode, (int) Offset);
         d.readS64(3, &m_frequency, 0);
-        d.readS32(4, &m_channelSampleRate, 1000);
+        d.readS32(4, &m_channelSampleRate, m_defaultSampleRate);
+        m_channelSampleRate = validatedSampleRate(m_channelSampleRate);
         d.readFloat(5, &m_powerLPFCutoff, 50.0f);
         d.readFloat(6, &m_detectionThresholdDB, 6.0f);
         d.readS32(7, &m_minDurationMS, 5);
@@ -145,12 +141,6 @@ bool MeteorSettings::deserialize(const QByteArray& data)
         {
             d.readBlob(25, &bytetmp);
             m_spectrumGUI->deserialize(bytetmp);
-        }
-
-        if (m_scopeGUI)
-        {
-            d.readBlob(26, &bytetmp);
-            m_scopeGUI->deserialize(bytetmp);
         }
 
         if (m_rollupState)
@@ -184,7 +174,7 @@ void MeteorSettings::applySettings(const QStringList& settingsKeys, const Meteor
         m_frequency = settings.m_frequency;
     }
     if (settingsKeys.contains("channelSampleRate")) {
-        m_channelSampleRate = settings.m_channelSampleRate;
+        m_channelSampleRate = validatedSampleRate(settings.m_channelSampleRate);
     }
     if (settingsKeys.contains("powerLPFCutoff")) {
         m_powerLPFCutoff = settings.m_powerLPFCutoff;

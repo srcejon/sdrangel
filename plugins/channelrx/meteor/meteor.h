@@ -126,7 +126,6 @@ public:
     virtual void setMessageQueueToGUI(MessageQueue *queue);
 
     SpectrumVis *getSpectrumVis() { return &m_spectrumVis; }
-    ScopeVis *getScopeVis() { return &m_scopeVis; }
     int getChannelSampleRate() const { return m_basebandSink->getChannelSampleRate(); }
 
     using BasebandSampleSink::feed;
@@ -195,7 +194,6 @@ private:
     MeteorBaseband* m_basebandSink;
     MeteorSettings m_settings;
     SpectrumVis m_spectrumVis;
-    ScopeVis m_scopeVis;
     int m_basebandSampleRate;
     qint64 m_centerFrequency;
     AvailableChannelOrFeatureHandler m_eventSourceHandler;

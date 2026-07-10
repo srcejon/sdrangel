@@ -28,6 +28,7 @@
 #include <QList>
 #include <QStringList>
 #include <QTextStream>
+#include <QTemporaryDir>
 #include <QVector>
 #include <QtEndian>
 #include <QtGlobal>
@@ -41,12 +42,90 @@
 #include "meteorbaseband.h"
 #include "meteordemodsink.h"
 #include "meteorsettings.h"
+#include "rmobreport.h"
 
 #ifndef METEOR_TEST_DATA_DIR
 #define METEOR_TEST_DATA_DIR ""
 #endif
 
 namespace {
+    bool runRMOBReportTests(QTextStream& errorStream)
+    {
+        QTemporaryDir temporaryDir;
+
+        if (!temporaryDir.isValid())
+        {
+            errorStream << "RMOB test: failed to create temporary directory\n";
+            return false;
+        }
+
+        const QDate monthDate(2026, 5, 1);
+        const QDate firstDay(2026, 5, 1);
+        RMOBReport::Data expected;
+        expected.m_hourlyCounts[firstDay] = QVector<int>(24, 0);
+        expected.m_hourlyData[firstDay] = QVector<bool>(24, false);
+        expected.m_hourlyCounts[firstDay][0] = 3;
+        expected.m_hourlyData[firstDay][0] = true;
+        expected.m_hourlyData[firstDay][1] = true;
+
+        RMOBReport::Metadata metadata;
+        metadata.m_observer = "TEST";
+        metadata.m_latitude = 50.0535;
+        metadata.m_longitude = 19.8235;
+        metadata.m_frequency = 143050000;
+        metadata.m_receiver = "Test receiver";
+
+        const QString fileName = temporaryDir.filePath("meteor_2026_05.rmob.txt");
+        QString error;
+
+        if (!RMOBReport::save(fileName, monthDate, expected, metadata, &error))
+        {
+            errorStream << "RMOB test: " << error << "\n";
+            return false;
+        }
+
+        QFile reportFile(fileName);
+
+        if (!reportFile.open(QIODevice::ReadOnly | QIODevice::Text))
+        {
+            errorStream << "RMOB test: failed to reopen saved report\n";
+            return false;
+        }
+
+        const QString reportText = QString::fromUtf8(reportFile.readAll());
+
+        if (!reportText.startsWith("may|00h|01h|")
+            || !reportText.contains("01|3   |0   |??? |")
+            || !reportText.contains("[Observer]TEST\n")
+            || !reportText.contains("[Frequencies]0143.050.000\n")
+            || !reportText.contains("[Receiver]Test receiver\n"))
+        {
+            errorStream << "RMOB test: saved report content is incorrect\n";
+            return false;
+        }
+
+        RMOBReport::Data actual;
+
+        if (!RMOBReport::load(fileName, monthDate, actual, &error))
+        {
+            errorStream << "RMOB test: " << error << "\n";
+            return false;
+        }
+
+        const bool roundTripOK = (actual.m_totalCount == 3)
+            && (actual.m_hourlyCounts.value(firstDay).value(0) == 3)
+            && (actual.m_hourlyCounts.value(firstDay).value(1) == 0)
+            && actual.m_hourlyData.value(firstDay).value(0)
+            && actual.m_hourlyData.value(firstDay).value(1)
+            && !actual.m_hourlyData.value(firstDay).value(2);
+
+        if (!roundTripOK) {
+            errorStream << "RMOB test: round-trip data differs\n";
+        }
+
+        return roundTripOK;
+    }
+
     struct Detection
     {
         QDateTime dateTimeUtc;
@@ -155,9 +234,7 @@ namespace {
 
     bool validateOptions(Options& options, QString& error)
     {
-        const QList<int> allowedSampleRates({100, 300, 1000, 3000});
-
-        if (!allowedSampleRates.contains(options.settings.m_channelSampleRate))
+        if (!MeteorSettings::isSupportedSampleRate(options.settings.m_channelSampleRate))
         {
             error = QString("Invalid --channel-sample-rate %1; expected 100, 300, 1000, or 3000")
                 .arg(options.settings.m_channelSampleRate);
@@ -512,9 +589,9 @@ namespace {
                 << audit.m_endSample << ','
                 << audit.m_peakSample << ','
                 << QString::number(audit.m_durationS, 'f', 6) << ','
-                << QString::number(audit.m_centerFrequency, 'f', 3) << ','
-                << QString::number(audit.m_frequencySpan, 'f', 3) << ','
-                << QString::number(audit.m_frequencyDrift, 'f', 3) << ','
+                << QString::number(audit.m_robustCenterFrequency, 'f', 3) << ','
+                << QString::number(audit.m_robustFrequencySpan, 'f', 3) << ','
+                << QString::number(audit.m_robustFrequencyDrift, 'f', 3) << ','
                 << QString::number(audit.m_peakAboveBackgroundDB, 'f', 3) << ','
                 << QString::number(audit.m_integratedSupportDB, 'f', 3) << ','
                 << QString::number(audit.m_maxBandwidth, 'f', 3) << ','
@@ -885,6 +962,10 @@ int main(int argc, char *argv[])
     {
         printHelp(out);
         return 0;
+    }
+
+    if (!runRMOBReportTests(err)) {
+        return 2;
     }
 
     if (!options.testDir.isEmpty() && options.wavPath.isEmpty())

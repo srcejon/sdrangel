@@ -32,7 +32,6 @@
 class ChannelAPI;
 class DownChannelizer;
 class MessageQueue;
-class ScopeVis;
 class SpectrumVis;
 
 class MeteorBaseband : public QObject
@@ -75,10 +74,11 @@ public:
     void setBasebandSampleRate(int sampleRate);
     int getChannelSampleRate() const;
     void setChannel(ChannelAPI *channel);
-    void setScopeSink(ScopeVis* scopeSink);
     void setSpectrumSink(SpectrumVis* spectrumSink) { m_spectrumVis = spectrumSink; m_sink.setSpectrumSink(spectrumSink); }
     void setMessageQueueToGUI(MessageQueue *messageQueue) { m_sink.setMessageQueueToGUI(messageQueue); }
     void setCandidateAuditCallback(const MeteorDemodSink::CandidateAuditCallback& callback) { m_sink.setCandidateAuditCallback(callback); }
+    void setDetectorTunables(const MeteorDemodSink::DetectorTunables& tunables) { m_sink.setDetectorTunables(tunables); }
+    const MeteorDemodSink::DetectorTunables& getDetectorTunables() const { return m_sink.getDetectorTunables(); }
     void setInactivityFlushEnabled(bool enabled) { m_inactivityFlushEnabled = enabled; }
     bool isRunning() const { return m_running; }
     void setFifoLabel(const QString& label) { m_sampleFifo.setLabel(label); }

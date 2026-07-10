@@ -155,8 +155,6 @@ private:
 
     QVector<DetectionOverlay> m_detectionOverlays;
 
-    static const int m_sampleRates[4];
-
     explicit MeteorGUI(PluginAPI* pluginAPI, DeviceUISet *deviceUISet, BasebandSampleSink *rxChannel, QWidget* parent = nullptr);
     virtual ~MeteorGUI();
 
@@ -188,8 +186,6 @@ private:
     QColor colorgrammeColor(int count, int maxCount) const;
     QDate colorgrammeMonthDate() const;
     QList<QDate> colorgrammeMonthDates() const;
-    QString formatRMOBFrequency(qint64 frequency) const;
-    QString formatRMOBCoordinate(double coordinate, bool latitude) const;
     qint64 rmobReportFrequency() const;
     QString rmobReceiverName() const;
     void drawDetectionOverlays(GLSpectrumView *spectrumView);

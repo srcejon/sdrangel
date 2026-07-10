@@ -53,7 +53,6 @@ Meteor::Meteor(DeviceAPI *deviceAPI) :
     setObjectName(m_channelId);
 
     m_basebandSink = new MeteorBaseband();
-    m_basebandSink->setScopeSink(&m_scopeVis);
     m_basebandSink->setSpectrumSink(&m_spectrumVis);
     m_basebandSink->setChannel(this);
     m_basebandSink->moveToThread(&m_thread);
@@ -694,10 +693,7 @@ bool Meteor::validateChannelSettings(const MeteorSettings& settings, QString& er
         errorMessage = "frequency must not be negative";
         return false;
     }
-    if ((settings.m_channelSampleRate != 100)
-        && (settings.m_channelSampleRate != 300)
-        && (settings.m_channelSampleRate != 1000)
-        && (settings.m_channelSampleRate != 3000))
+    if (!MeteorSettings::isSupportedSampleRate(settings.m_channelSampleRate))
     {
         errorMessage = "channelSampleRate must be 100, 300, 1000, or 3000";
         return false;

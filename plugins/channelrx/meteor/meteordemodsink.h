@@ -18,7 +18,8 @@
 #ifndef INCLUDE_METEORDEMODSINK_H
 #define INCLUDE_METEORDEMODSINK_H
 
-#include <array>
+#include <algorithm>
+#include <cmath>
 #include <functional>
 #include <vector>
 
@@ -34,31 +35,97 @@
 
 class ChannelAPI;
 class MessageQueue;
-class ScopeVis;
 class SpectrumVis;
 class FFTEngine;
 
 class MeteorDemodSink : public ChannelSampleSink {
 public:
-    enum {
-        m_scopeStreams = 5
+    struct DetectorTunables
+    {
+        double m_spectralActiveNoiseAlpha = 0.0005;
+        double m_spectralRisingNoiseAlpha = 0.05;
+        double m_spectralStableNoiseAlpha = 0.02;
+        double m_scalarNoiseTimeConstantS = 10.0;
+        double m_scalarRisingNoiseAlpha = 0.05;
+        double m_edgeExclusionFraction = 0.05;
+        double m_usableBandwidthRateFraction = 0.45;
+        double m_compactBandwidthRateFraction = 0.05;
+        double m_stableBandwidthRateFraction = 0.22;
+        double m_twoFrameMaxBandwidthRateFraction = 0.065;
+        double m_twoFrameMinFrequencyCoherence = 0.75;
+        double m_twoFrameMinIntegratedSupportDB = -7.0;
+        double m_localizedTwoFrameMinPeakDB = 12.0;
+        double m_localizedTwoFrameMinContrastDB = 18.0;
+        double m_morphologyRescueContrastDB = 14.0;
+        double m_localizedOccupiedMaxFraction = 0.45;
+        double m_sustainedSweepMinDurationS = 0.5;
+        int m_sustainedSweepMinFrames = 8;
+        double m_sustainedSweepMinR2 = 0.85;
+        double m_sustainedSweepMinDriftBins = 2.0;
+        double m_compactSweepMinDurationS = 0.2;
+        int m_compactSweepMinFrames = 4;
+        double m_compactSweepMaxTrackOccupancy = 0.80;
+        double m_compactSweepMaxContrastDB = 18.0;
+        double m_compactSweepMinR2 = 0.85;
+        double m_compactSweepMinDriftBins = 4.0;
+        double m_driftSweepMinR2 = 0.65;
+        double m_broadbandImpulseMaxDurationS = 0.22;
+        int m_broadbandImpulseMaxFrames = 3;
+        double m_broadbandImpulseMinPeakDB = 12.0;
+        double m_broadbandImpulseMinSpanRateFraction = 0.12;
+        double m_broadbandImpulseMinBandwidthRateFraction = 0.10;
+        double m_broadbandImpulseMinOccupiedFraction = 0.45;
+        double m_shortCandidateAcceptanceScore = 9.5;
+        double m_candidateAcceptanceScore = 9.0;
+        double m_weakSupportDB = -8.0;
+        double m_weakSupportScorePenalty = 1.0;
+        double m_scoreDurationFloorS = 0.05;
+        double m_scoreDurationRangeS = 0.45;
+        double m_powerSweepMinR2 = 0.75;
+        double m_powerStableBandwidthRateFraction = 0.18;
+        double m_powerBoundedMinProminenceDB = 9.0;
+        double m_powerStrongCoherentMinPeakDB = 18.0;
+        double m_powerStrongCoherentMinProminenceDB = 18.0;
+        double m_frequencyRefinementOuterProbeFraction = 0.85;
+        double m_duplicateFrequencyOverlapFraction = 0.65;
+        double m_duplicateStrongFrequencyOverlapFraction = 0.85;
     };
 
-    struct CandidateAudit
+    struct DetectionRecord
     {
         bool m_valid = false;
+        QDateTime m_dateTimeUtc;
+        QDateTime m_displayDateTimeUtc;
         quint64 m_startSample = 0;
         quint64 m_endSample = 0;
-        quint64 m_peakSample = 0;
+        bool m_hasDisplaySamples = false;
+        quint64 m_displayStartSample = 0;
+        quint64 m_displayEndSample = 0;
+        double m_peakPower = 0.0;
+        double m_backgroundPower = 1e-20;
+        double m_totalPower = 0.0;
         double m_durationS = 0.0;
+        double m_displayDurationS = 0.0;
         double m_centerFrequency = 0.0;
         double m_frequencySpan = 0.0;
         double m_frequencyDrift = 0.0;
+        int m_sampleRate = 0;
+        bool m_truncated = false;
+    };
+
+    struct SpectralCandidate : DetectionRecord
+    {
+        quint64 m_peakSample = 0;
+        double m_robustCenterFrequency = 0.0;
+        double m_robustFrequencySpan = 0.0;
+        double m_robustFrequencyDrift = 0.0;
+        double m_reportFrequencySpan = 0.0;
+        double m_sweepScore = 0.0;
         double m_peakAboveBackgroundDB = 0.0;
         double m_integratedSupportDB = 0.0;
         double m_maxBandwidth = 0.0;
         double m_maxContrastDB = 0.0;
-        double m_sweepScore = 0.0;
+        double m_maxPeakRatio = 0.0;
         double m_acceptanceScore = 0.0;
         double m_acceptanceThreshold = 0.0;
         double m_scoreMargin = 0.0;
@@ -72,125 +139,56 @@ public:
         int m_frameCount = 0;
         bool m_durationOK = false;
         bool m_enoughFrames = false;
+        bool m_smoothSweepRejected = false;
+        bool m_longDriftRejected = false;
         bool m_sweepRejected = false;
+        bool m_strongLineOK = false;
+        bool m_boundedBandOK = false;
         bool m_spectralEvidenceOK = false;
         bool m_insideUsableBandwidth = false;
         bool m_duplicate = false;
         bool m_broadbandImpulse = false;
         bool m_sweepContinuationRejected = false;
+        bool m_scoreOK = false;
         bool m_accepted = false;
-        QString m_classification;
-        QString m_rejectionReason;
+        QString m_classification = QStringLiteral("invalid");
+        QString m_rejectionReason = QStringLiteral("invalid");
     };
 
+    using CandidateAudit = SpectralCandidate;
     using CandidateAuditCallback = std::function<void(const CandidateAudit&)>;
 
     class MsgMeteorDetected : public Message {
         MESSAGE_CLASS_DECLARATION
 
     public:
-        const QDateTime& getDateTimeUtc() const { return m_dateTimeUtc; }
-        const QDateTime& getDisplayDateTimeUtc() const { return m_displayDateTimeUtc; }
-        double getPeakAmplitude() const { return m_peakAmplitude; }
-        double getPeakPowerDB() const { return m_peakPowerDB; }
-        double getBackgroundPowerDB() const { return m_backgroundPowerDB; }
-        double getTotalPowerDB() const { return m_totalPowerDB; }
-        double getDurationS() const { return m_durationS; }
-        double getDisplayDurationS() const { return m_displayDurationS; }
-        double getCenterFrequency() const { return m_centerFrequency; }
-        double getFrequencySpan() const { return m_frequencySpan; }
-        double getFrequencyDrift() const { return m_frequencyDrift; }
-        int getSampleRate() const { return m_sampleRate; }
-        quint64 getStartSample() const { return m_startSample; }
-        quint64 getEndSample() const { return m_endSample; }
-        bool getTruncated() const { return m_truncated; }
+        const DetectionRecord& getDetection() const { return m_detection; }
+        const QDateTime& getDateTimeUtc() const { return m_detection.m_dateTimeUtc; }
+        const QDateTime& getDisplayDateTimeUtc() const { return m_detection.m_displayDateTimeUtc; }
+        double getPeakAmplitude() const { return std::sqrt(std::max(0.0, m_detection.m_peakPower)); }
+        double getPeakPowerDB() const { return 10.0 * std::log10(std::max(1e-20, m_detection.m_peakPower)); }
+        double getBackgroundPowerDB() const { return 10.0 * std::log10(std::max(1e-20, m_detection.m_backgroundPower)); }
+        double getTotalPowerDB() const { return 10.0 * std::log10(std::max(1e-20, m_detection.m_totalPower)); }
+        double getDurationS() const { return m_detection.m_durationS; }
+        double getDisplayDurationS() const { return m_detection.m_displayDurationS; }
+        double getCenterFrequency() const { return m_detection.m_centerFrequency; }
+        double getFrequencySpan() const { return m_detection.m_frequencySpan; }
+        double getFrequencyDrift() const { return m_detection.m_frequencyDrift; }
+        int getSampleRate() const { return m_detection.m_sampleRate; }
+        quint64 getStartSample() const { return m_detection.m_startSample; }
+        quint64 getEndSample() const { return m_detection.m_endSample; }
+        bool getTruncated() const { return m_detection.m_truncated; }
 
-        static MsgMeteorDetected* create(
-            const QDateTime& dateTimeUtc,
-            const QDateTime& displayDateTimeUtc,
-            double peakAmplitude,
-            double peakPowerDB,
-            double backgroundPowerDB,
-            double totalPowerDB,
-            double durationS,
-            double displayDurationS,
-            double centerFrequency,
-            double frequencySpan,
-            double frequencyDrift,
-            int sampleRate,
-            quint64 startSample,
-            quint64 endSample,
-            bool truncated)
-        {
-            return new MsgMeteorDetected(
-                dateTimeUtc,
-                displayDateTimeUtc,
-                peakAmplitude,
-                peakPowerDB,
-                backgroundPowerDB,
-                totalPowerDB,
-                durationS,
-                displayDurationS,
-                centerFrequency,
-                frequencySpan,
-                frequencyDrift,
-                sampleRate,
-                startSample,
-                endSample,
-                truncated
-            );
+        static MsgMeteorDetected* create(const DetectionRecord& detection) {
+            return new MsgMeteorDetected(detection);
         }
 
     private:
-        QDateTime m_dateTimeUtc;
-        QDateTime m_displayDateTimeUtc;
-        double m_peakAmplitude;
-        double m_peakPowerDB;
-        double m_backgroundPowerDB;
-        double m_totalPowerDB;
-        double m_durationS;
-        double m_displayDurationS;
-        double m_centerFrequency;
-        double m_frequencySpan;
-        double m_frequencyDrift;
-        int m_sampleRate;
-        quint64 m_startSample;
-        quint64 m_endSample;
-        bool m_truncated;
+        DetectionRecord m_detection;
 
-        MsgMeteorDetected(
-            const QDateTime& dateTimeUtc,
-            const QDateTime& displayDateTimeUtc,
-            double peakAmplitude,
-            double peakPowerDB,
-            double backgroundPowerDB,
-            double totalPowerDB,
-            double durationS,
-            double displayDurationS,
-            double centerFrequency,
-            double frequencySpan,
-            double frequencyDrift,
-            int sampleRate,
-            quint64 startSample,
-            quint64 endSample,
-            bool truncated
-        ) :
+        explicit MsgMeteorDetected(const DetectionRecord& detection) :
             Message(),
-            m_dateTimeUtc(dateTimeUtc),
-            m_displayDateTimeUtc(displayDateTimeUtc),
-            m_peakAmplitude(peakAmplitude),
-            m_peakPowerDB(peakPowerDB),
-            m_backgroundPowerDB(backgroundPowerDB),
-            m_totalPowerDB(totalPowerDB),
-            m_durationS(durationS),
-            m_displayDurationS(displayDurationS),
-            m_centerFrequency(centerFrequency),
-            m_frequencySpan(frequencySpan),
-            m_frequencyDrift(frequencyDrift),
-            m_sampleRate(sampleRate),
-            m_startSample(startSample),
-            m_endSample(endSample),
-            m_truncated(truncated)
+            m_detection(detection)
         {}
     };
 
@@ -220,31 +218,18 @@ public:
     virtual void feed(const SampleVector::const_iterator& begin, const SampleVector::const_iterator& end);
     bool flushPendingPulse();
 
-    void setScopeSink(ScopeVis* scopeSink) { m_scopeSink = scopeSink; }
     void setSpectrumSink(SpectrumVis* spectrumSink) { m_spectrumSink = spectrumSink; }
     void setMessageQueueToGUI(MessageQueue *messageQueue) { m_messageQueueToGUI = messageQueue; }
     void setCandidateAuditCallback(const CandidateAuditCallback& callback) { m_candidateAuditCallback = callback; }
+    void setDetectorTunables(const DetectorTunables& tunables) { m_detectorTunables = tunables; }
+    const DetectorTunables& getDetectorTunables() const { return m_detectorTunables; }
     void setChannel(ChannelAPI *channel) { m_channel = channel; }
     void applyChannelSettings(int channelSampleRate, int channelFrequencyOffset, bool force = false);
     void applySettings(const MeteorSettings& settings, const QStringList& settingsKeys, bool force = false);
     int getOutputSampleRate() const { return m_settings.m_channelSampleRate; }
 
 private:
-    struct PulseReport {
-        bool m_valid;
-        QDateTime m_dateTimeUtc;
-        quint64 m_startSample;
-        quint64 m_endSample;
-        bool m_hasDisplaySamples;
-        quint64 m_displayStartSample;
-        quint64 m_displayEndSample;
-        double m_peakPower;
-        double m_backgroundPower;
-        double m_totalPower;
-        double m_durationS;
-        double m_centerFrequency;
-        double m_frequencySpan;
-        double m_frequencyDrift;
+    struct PulseReport : DetectionRecord {
         double m_reportFrequencySpan;
         double m_duplicateFrequencySpan;
         bool m_hasRobustFrequency;
@@ -254,22 +239,7 @@ private:
         double m_confidence;
         double m_componentSupportDB;
         bool m_allowComponentMerge;
-        bool m_truncated;
-
         PulseReport() :
-            m_valid(false),
-            m_startSample(0),
-            m_endSample(0),
-            m_hasDisplaySamples(false),
-            m_displayStartSample(0),
-            m_displayEndSample(0),
-            m_peakPower(0.0),
-            m_backgroundPower(1e-20),
-            m_totalPower(0.0),
-            m_durationS(0.0),
-            m_centerFrequency(0.0),
-            m_frequencySpan(0.0),
-            m_frequencyDrift(0.0),
             m_reportFrequencySpan(0.0),
             m_duplicateFrequencySpan(0.0),
             m_hasRobustFrequency(false),
@@ -278,8 +248,7 @@ private:
             m_robustFrequencyDrift(0.0),
             m_confidence(0.0),
             m_componentSupportDB(-200.0),
-            m_allowComponentMerge(true),
-            m_truncated(false)
+            m_allowComponentMerge(true)
         {}
     };
 
@@ -374,108 +343,6 @@ private:
         {}
     };
 
-    struct SpectralCandidate {
-        bool m_valid;
-        quint64 m_startSample;
-        quint64 m_endSample;
-        quint64 m_peakSample;
-        quint64 m_displayStartSample;
-        quint64 m_displayEndSample;
-        double m_durationS;
-        double m_centerFrequency;
-        double m_frequencySpan;
-        double m_frequencyDrift;
-        double m_robustCenterFrequency;
-        double m_robustFrequencySpan;
-        double m_robustFrequencyDrift;
-        double m_reportFrequencySpan;
-        double m_sweepScore;
-        double m_peakAboveBackgroundDB;
-        double m_integratedSupportDB;
-        double m_maxBandwidth;
-        double m_maxContrastDB;
-        double m_maxPeakRatio;
-        double m_acceptanceScore;
-        double m_acceptanceThreshold;
-        double m_scoreMargin;
-        double m_signalScore;
-        double m_supportScore;
-        double m_shapeScore;
-        double m_rejectionPenalty;
-        double m_trackOccupancy;
-        double m_frequencyCoherence;
-        double m_frameOccupiedFraction;
-        int m_frameCount;
-        bool m_durationOK;
-        bool m_enoughFrames;
-        bool m_smoothSweepRejected;
-        bool m_longDriftRejected;
-        bool m_sweepRejected;
-        bool m_strongLineOK;
-        bool m_boundedBandOK;
-        bool m_spectralEvidenceOK;
-        bool m_insideUsableBandwidth;
-        bool m_duplicate;
-        bool m_broadbandImpulse;
-        bool m_sweepContinuationRejected;
-        bool m_scoreOK;
-        bool m_accepted;
-        bool m_truncated;
-        const char *m_classification;
-        const char *m_rejectionReason;
-
-        SpectralCandidate() :
-            m_valid(false),
-            m_startSample(0),
-            m_endSample(0),
-            m_peakSample(0),
-            m_displayStartSample(0),
-            m_displayEndSample(0),
-            m_durationS(0.0),
-            m_centerFrequency(0.0),
-            m_frequencySpan(0.0),
-            m_frequencyDrift(0.0),
-            m_robustCenterFrequency(0.0),
-            m_robustFrequencySpan(0.0),
-            m_robustFrequencyDrift(0.0),
-            m_reportFrequencySpan(0.0),
-            m_sweepScore(0.0),
-            m_peakAboveBackgroundDB(0.0),
-            m_integratedSupportDB(0.0),
-            m_maxBandwidth(0.0),
-            m_maxContrastDB(0.0),
-            m_maxPeakRatio(0.0),
-            m_acceptanceScore(0.0),
-            m_acceptanceThreshold(9.0),
-            m_scoreMargin(0.0),
-            m_signalScore(0.0),
-            m_supportScore(0.0),
-            m_shapeScore(0.0),
-            m_rejectionPenalty(0.0),
-            m_trackOccupancy(0.0),
-            m_frequencyCoherence(0.0),
-            m_frameOccupiedFraction(0.0),
-            m_frameCount(0),
-            m_durationOK(false),
-            m_enoughFrames(false),
-            m_smoothSweepRejected(false),
-            m_longDriftRejected(false),
-            m_sweepRejected(false),
-            m_strongLineOK(false),
-            m_boundedBandOK(false),
-            m_spectralEvidenceOK(false),
-            m_insideUsableBandwidth(false),
-            m_duplicate(false),
-            m_broadbandImpulse(false),
-            m_sweepContinuationRejected(false),
-            m_scoreOK(false),
-            m_accepted(false),
-            m_truncated(false),
-            m_classification("invalid"),
-            m_rejectionReason("invalid")
-        {}
-    };
-
     struct DetectionRange {
         quint64 m_startSample;
         quint64 m_endSample;
@@ -496,10 +363,10 @@ private:
         QDateTime m_dateTimeUtc;
     };
 
-    ScopeVis* m_scopeSink;
     SpectrumVis* m_spectrumSink;
     MessageQueue *m_messageQueueToGUI;
     CandidateAuditCallback m_candidateAuditCallback;
+    DetectorTunables m_detectorTunables;
     MeteorSettings m_settings;
     ChannelAPI *m_channel;
 
@@ -511,9 +378,7 @@ private:
     Real m_interpolatorDistanceRemain;
     Lowpass<Real> m_powerLowpass;
 
-    std::array<ComplexVector, m_scopeStreams> m_scopeSampleBuffer;
-    int m_scopeSampleBufferSize;
-    int m_scopeSampleBufferIndex;
+    int m_spectrumBufferSize;
     ComplexVector m_spectrumBuffer;
     ComplexVector m_pulseSamples;
     ComplexVector m_detectionSampleRing;
@@ -540,8 +405,6 @@ private:
     quint64 m_detectionSampleRingStartSample;
     std::vector<Real> m_pulseFFTWindow;
     bool m_spectralNoiseFloorInitialized;
-    bool m_spectralEventActiveForScope;
-
     quint64 m_sampleCounter;
     std::vector<DisplayTimeAnchor> m_displayTimeAnchors;
     quint64 m_nextDisplayTimeAnchorSample;
@@ -558,11 +421,11 @@ private:
     double m_pulsePeakPower;
     PulseReport m_pendingBroadPulse;
     void processOneSample(Complex& ci, bool realSample = true);
-    bool processDetectorSample(const Complex& sample, double power, double filteredPower);
+    void processDetectorSample(const Complex& sample, double power, double filteredPower);
     void startPulse(const Complex& sample, double power);
     void updatePulse(const Complex& sample, double power);
     void finishPulse(bool forceRejected);
-    bool processSpectralSample(const Complex& sample, double power);
+    void processSpectralSample(const Complex& sample);
     void processSpectralFrame(quint64 frameStartSample);
     void initializeSpectralNoiseFloor();
     void processCalibratedSpectralFrame(const SpectralFrameSnapshot& frame);
@@ -632,9 +495,8 @@ private:
     void configurePowerLowpass();
     void configureDetectionHistory();
     void configureSpectralDetector();
-    void resizeScopeBuffers();
+    void resizeSpectrumBuffer();
     void resetDetector();
-    void sampleToScope(const Complex& sample, double power, double filteredPower, bool detected);
     void feedSpectrum(const Complex& sample);
 };
 

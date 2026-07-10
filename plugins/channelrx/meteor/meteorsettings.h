@@ -18,6 +18,8 @@
 #ifndef INCLUDE_METEORSETTINGS_H
 #define INCLUDE_METEORSETTINGS_H
 
+#include <array>
+
 #include <QByteArray>
 #include <QString>
 
@@ -25,6 +27,26 @@ class Serializable;
 
 struct MeteorSettings
 {
+    inline static constexpr std::array<int, 4> m_supportedSampleRates = {100, 300, 1000, 3000};
+    inline static constexpr int m_defaultSampleRate = 1000;
+
+    static constexpr bool isSupportedSampleRate(int sampleRate)
+    {
+        for (int supportedSampleRate : m_supportedSampleRates)
+        {
+            if (sampleRate == supportedSampleRate) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    static constexpr int validatedSampleRate(int sampleRate)
+    {
+        return isSupportedSampleRate(sampleRate) ? sampleRate : m_defaultSampleRate;
+    }
+
     enum FrequencyMode {
         Offset,
         Absolute
@@ -50,7 +72,6 @@ struct MeteorSettings
     QString m_title;
     Serializable *m_channelMarker;
     Serializable *m_spectrumGUI;
-    Serializable *m_scopeGUI;
     Serializable *m_rollupState;
     int m_streamIndex;
     int m_workspaceIndex;
@@ -61,7 +82,6 @@ struct MeteorSettings
     void resetToDefaults();
     void setChannelMarker(Serializable *channelMarker) { m_channelMarker = channelMarker; }
     void setSpectrumGUI(Serializable *spectrumGUI) { m_spectrumGUI = spectrumGUI; }
-    void setScopeGUI(Serializable *scopeGUI) { m_scopeGUI = scopeGUI; }
     void setRollupState(Serializable *rollupState) { m_rollupState = rollupState; }
     QByteArray serialize() const;
     bool deserialize(const QByteArray& data);

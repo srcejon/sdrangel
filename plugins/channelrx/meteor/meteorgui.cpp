@@ -16,7 +16,6 @@
 ///////////////////////////////////////////////////////////////////////////////////
 
 #include <algorithm>
-#include <cstdlib>
 #include <cmath>
 
 #include <QComboBox>
@@ -25,15 +24,12 @@
 #include <QDoubleSpinBox>
 #include <QFile>
 #include <QFileDialog>
-#include <QFileInfo>
 #include <QFontMetrics>
 #include <QHeaderView>
 #include <QLabel>
-#include <QLocale>
 #include <QMenu>
 #include <QMessageBox>
 #include <QPushButton>
-#include <QSaveFile>
 #include <QScrollBar>
 #include <QSignalBlocker>
 #include <QSpinBox>
@@ -59,9 +55,8 @@
 #include "util/csv.h"
 
 #include "meteorgui.h"
+#include "rmobreport.h"
 #include "ui_meteorgui.h"
-
-const int MeteorGUI::m_sampleRates[4] = {100, 300, 1000, 3000};
 
 namespace {
     constexpr int DetectionSampleUtcMSecsRole = Qt::UserRole + 1;
@@ -535,7 +530,7 @@ void MeteorGUI::on_sampleRate_currentIndexChanged(int index)
         return;
     }
 
-    m_settings.m_channelSampleRate = m_sampleRates[index];
+    m_settings.m_channelSampleRate = MeteorSettings::m_supportedSampleRates[index];
     const double maxCutoff = std::max(0.1, m_settings.m_channelSampleRate * 0.45);
     m_powerLPFCutoff->setMaximum(maxCutoff);
 
@@ -725,75 +720,15 @@ void MeteorGUI::on_saveColorgramme_clicked()
 
 bool MeteorGUI::loadRMOBReport(const QString& fileName)
 {
-    QFile file(fileName);
+    RMOBReport::Data data;
 
-    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+    if (!RMOBReport::load(fileName, QDate::currentDate(), data)) {
         return false;
     }
 
-    const QDate monthDate = QDate::currentDate();
-    const int year = monthDate.year();
-    const int month = monthDate.month();
-    const int daysInMonth = monthDate.daysInMonth();
-    QMap<QDate, QVector<int> > hourlyCounts;
-    QMap<QDate, QVector<bool> > hourlyData;
-    int totalCount = 0;
-    QTextStream in(&file);
-
-    while (!in.atEnd())
-    {
-        const QString line = in.readLine();
-
-        if (line.startsWith('[')) {
-            break;
-        }
-
-        const QStringList fields = line.split('|');
-
-        if (fields.size() < 25) {
-            continue;
-        }
-
-        bool dayOK = false;
-        const int day = fields[0].trimmed().toInt(&dayOK);
-
-        if (!dayOK || (day < 1) || (day > daysInMonth)) {
-            continue;
-        }
-
-        const QDate date(year, month, day);
-
-        if (!hourlyCounts.contains(date)) {
-            hourlyCounts[date] = QVector<int>(24, 0);
-        }
-
-        if (!hourlyData.contains(date)) {
-            hourlyData[date] = QVector<bool>(24, false);
-        }
-
-        for (int hour = 0; hour < 24; hour++)
-        {
-            const QString value = fields.value(hour + 1).trimmed();
-
-            if ((value.isEmpty()) || (value == "???")) {
-                continue;
-            }
-
-            bool countOK = false;
-            const int count = value.toInt(&countOK);
-
-            if (countOK)
-            {
-                hourlyData[date][hour] = true;
-                hourlyCounts[date][hour] = std::max(0, count);
-                totalCount += std::max(0, count);
-            }
-        }
-    }
-
-    m_hourlyCounts = hourlyCounts;
-    m_hourlyData = hourlyData;
-    m_totalCount = totalCount;
+    m_hourlyCounts = data.m_hourlyCounts;
+    m_hourlyData = data.m_hourlyData;
+    m_totalCount = data.m_totalCount;
     return true;
 }
 
@@ -804,89 +739,18 @@ bool MeteorGUI::saveRMOBReport(const QString& fileName, QString *error) const
 
 bool MeteorGUI::saveRMOBReport(const QString& fileName, const QDate& reportMonthDate, QString *error) const
 {
-    QDir dir = QFileInfo(fileName).absoluteDir();
+    RMOBReport::Data data;
+    data.m_hourlyCounts = m_hourlyCounts;
+    data.m_hourlyData = m_hourlyData;
 
-    if (!dir.exists() && !dir.mkpath("."))
-    {
-        if (error) {
-            *error = QString("Failed to create directory %1").arg(dir.absolutePath());
-        }
+    RMOBReport::Metadata metadata;
+    metadata.m_observer = MainCore::instance()->getSettings().getStationName();
+    metadata.m_latitude = MainCore::instance()->getSettings().getLatitude();
+    metadata.m_longitude = MainCore::instance()->getSettings().getLongitude();
+    metadata.m_frequency = rmobReportFrequency();
+    metadata.m_receiver = rmobReceiverName();
 
-        return false;
-    }
-
-    QSaveFile file(fileName);
-
-    if (!file.open(QIODevice::WriteOnly | QIODevice::Text))
-    {
-        if (error) {
-            *error = QString("Failed to open file %1").arg(fileName);
-        }
-
-        return false;
-    }
-
-    const QDate monthDate = reportMonthDate.isValid() ? reportMonthDate : QDate::currentDate();
-    const int year = monthDate.year();
-    const int month = monthDate.month();
-    const int daysInMonth = monthDate.daysInMonth();
-    const QString monthName = QLocale::c().standaloneMonthName(month, QLocale::ShortFormat).toLower();
-    QTextStream out(&file);
-
-    out << monthName << "|";
-
-    for (int hour = 0; hour < 24; hour++) {
-        out << QString("%1h|").arg(hour, 2, 10, QLatin1Char('0'));
-    }
-
-    out << "\n";
-
-    for (int day = 1; day <= daysInMonth; day++)
-    {
-        const QDate date(year, month, day);
-
-        out << QString("%1|").arg(day, 2, 10, QLatin1Char('0'));
-
-        for (int hour = 0; hour < 24; hour++)
-        {
-            const QString value = hasHourData(date, hour)
-                ? QString::number(m_hourlyCounts[date].value(hour, 0))
-                : QString("???");
-            out << QString("%1|").arg(value, -4, QLatin1Char(' '));
-        }
-
-        out << "\n";
-    }
-
-    const float latitude = MainCore::instance()->getSettings().getLatitude();
-    const float longitude = MainCore::instance()->getSettings().getLongitude();
-
-    out << "[Observer]" << MainCore::instance()->getSettings().getStationName() << "\n";
-    out << "[Country]\n";
-    out << "[City]\n";
-    out << "[Longitude]" << formatRMOBCoordinate(longitude, false) << "\n";
-    out << "[Latitude ]" << formatRMOBCoordinate(latitude, true) << "\n";
-    out << "[Longitude GMAP]" << QString::number(longitude, 'f', 4) << "\n";
-    out << "[Latitude GMAP]" << QString("%1%2").arg(latitude >= 0.0f ? "+" : "").arg(latitude, 0, 'f', 4) << "\n";
-    out << "[Frequencies]" << formatRMOBFrequency(rmobReportFrequency()) << "\n";
-    out << "[Antenna]\n";
-    out << "[Azimut Antenna]\n";
-    out << "[Elevation Antenna]\n";
-    out << "[Pre-Amplifier]\n";
-    out << "[Receiver]" << rmobReceiverName() << "\n";
-    out << "[Observing Method]SDRangel\n";
-    out.flush();
-
-    if ((out.status() != QTextStream::Ok) || !file.commit())
-    {
-        if (error) {
-            *error = QString("Failed to save file %1: %2").arg(fileName, file.errorString());
-        }
-
-        return false;
-    }
-
-    return true;
+    return RMOBReport::save(fileName, reportMonthDate, data, metadata, error);
 }
 
 void MeteorGUI::on_clearDetections_clicked()
@@ -1604,55 +1468,6 @@ QList<QDate> MeteorGUI::colorgrammeMonthDates() const
     return months;
 }
 
-QString MeteorGUI::formatRMOBFrequency(qint64 frequency) const
-{
-    if (frequency <= 0) {
-        return QString();
-    }
-
-    const qint64 frequencyHz = std::llabs(frequency);
-    const qint64 mhz = frequencyHz / 1000000;
-    const qint64 khz = (frequencyHz / 1000) % 1000;
-    const qint64 hz = frequencyHz % 1000;
-
-    return QString("%1.%2.%3")
-        .arg(mhz, 4, 10, QLatin1Char('0'))
-        .arg(khz, 3, 10, QLatin1Char('0'))
-        .arg(hz, 3, 10, QLatin1Char('0'));
-}
-
-QString MeteorGUI::formatRMOBCoordinate(double coordinate, bool latitude) const
-{
-    const double absCoordinate = std::fabs(coordinate);
-    int degrees = (int) std::floor(absCoordinate);
-    double minutesDecimal = (absCoordinate - (double) degrees) * 60.0;
-    int minutes = (int) std::floor(minutesDecimal);
-    int seconds = (int) std::round((minutesDecimal - (double) minutes) * 60.0);
-
-    if (seconds >= 60)
-    {
-        seconds -= 60;
-        minutes++;
-    }
-
-    if (minutes >= 60)
-    {
-        minutes -= 60;
-        degrees++;
-    }
-
-    const QChar hemisphere = latitude
-        ? (coordinate >= 0.0 ? QChar('N') : QChar('S'))
-        : (coordinate >= 0.0 ? QChar('E') : QChar('W'));
-
-    return QString("%1%2%3%4 %5")
-        .arg(degrees, 3, 10, QLatin1Char('0'))
-        .arg(QChar(0x00b0))
-        .arg(minutes, 2, 10, QLatin1Char('0'))
-        .arg(seconds, 2, 10, QLatin1Char('0'))
-        .arg(hemisphere);
-}
-
 qint64 MeteorGUI::rmobReportFrequency() const
 {
     double centerFrequency = 0.0;
@@ -2171,9 +1986,9 @@ QString MeteorGUI::detectionOverlayLabel(const DetectionOverlay& detection) cons
 
 int MeteorGUI::sampleRateIndex(int sampleRate) const
 {
-    for (int i = 0; i < 4; i++)
+    for (int i = 0; i < (int) MeteorSettings::m_supportedSampleRates.size(); i++)
     {
-        if (m_sampleRates[i] == sampleRate) {
+        if (MeteorSettings::m_supportedSampleRates[i] == sampleRate) {
             return i;
         }
     }

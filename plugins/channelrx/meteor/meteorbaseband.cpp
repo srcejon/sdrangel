@@ -105,15 +105,6 @@ void MeteorBaseband::setChannel(ChannelAPI *channel)
     m_sink.setChannel(channel);
 }
 
-void MeteorBaseband::setScopeSink(ScopeVis* scopeSink)
-{
-    if (scopeSink) {
-        scopeSink->setNbStreams(MeteorDemodSink::m_scopeStreams);
-    }
-
-    m_sink.setScopeSink(scopeSink);
-}
-
 void MeteorBaseband::feed(const SampleVector::const_iterator& begin, const SampleVector::const_iterator& end)
 {
     m_sampleFifo.write(begin, end);

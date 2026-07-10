@@ -1137,6 +1137,102 @@ void testTestCaseBundle(TestContext& context)
         "test-case-bundle", "--run-case writes the mask overlay");
 }
 
+// Incremental (patchwork) reference learning: when no frame is ever wholly clear, the
+// confirmed-clear regions of partly cloudy frames must assemble into a usable reference.
+// A pixel joins the comparison only after two throttle-separated confirmations, the
+// anchors must come from the confirmed region alone (cloud elsewhere must not bias them),
+// a half-assembled slot must not block the neighbouring-bin fallback, and a later
+// verified-clear whole frame must adopt the never-confirmed gaps outright.
+void testReferencePatchLearning(TestContext& context)
+{
+    CameraClearSkyReference reference;
+    reference.ensureLoaded(QStringLiteral("ref-patch-test"));
+
+    const QRectF roiNorm(0.0, 0.0, 1.0, 1.0);
+    const cv::Size work(160, 120);
+    const cv::Mat eval(work, CV_8UC1, cv::Scalar(255));
+    const cv::Mat texture = cv::Mat::zeros(work, CV_8UC1);
+    const QDateTime start(QDate(2024, 6, 1), QTime(1, 0), QTimeZone::utc());
+    const int slot = CameraClearSkyReference::slotFromBin(2, false);
+
+    // Frame: clear sky (gray 60) on the left 40%, bright cloud (gray 220) on the right
+    // 60%. The whole-sky median brightness lands on the CLOUD, so a whole-frame capture
+    // would store a contaminated anchor - the patch path must anchor on the clear region.
+    const int clearWidth = (work.width * 2) / 5;
+    const cv::Rect cloudRect(clearWidth, 0, work.width - clearWidth, work.height);
+    cv::Mat gray(work, CV_8UC1, cv::Scalar(60));
+    gray(cloudRect).setTo(220);
+    cv::Mat bgr(work, CV_8UC3, cv::Scalar(60, 60, 60));
+    bgr(cloudRect).setTo(cv::Scalar(220, 220, 220));
+    // The detector always keeps confirmed regions a dilation clearance away from
+    // anything flagged as cloud; mirror that here, or the reference-resolution smoothing
+    // would bleed the cloud step into the confirmed pixels
+    const int clearance = 8;
+    cv::Mat confirmed = cv::Mat::zeros(work, CV_8UC1);
+    confirmed(cv::Rect(0, 0, clearWidth - clearance, work.height)).setTo(255);
+
+    const auto learnMixed = [&](const QDateTime& when) {
+        // Coverage 50% with strong star confirmation: the whole-frame gates must refuse
+        // this (star-strong bootstrap caps at 35%), leaving only the patch path
+        return reference.autoLearn(slot, gray, bgr, texture, eval, roiNorm, when,
+                                   50.0f, true, true, 30, 25, confirmed);
+    };
+
+    context.check(learnMixed(start) == CameraClearSkyReference::LearnResult::Patches,
+        "ref-patch", "unverified frame learns its confirmed patches");
+
+    // One confirmation is not yet trusted: the comparison abstains entirely
+    cv::Mat once(work, CV_8UC1, cv::Scalar(255));
+    context.check(!reference.applyCueAndVeto(slot, once, gray, bgr, eval, roiNorm, 8),
+        "ref-patch", "a single confirmation is not yet usable");
+
+    // ... and a half-assembled slot must not block the fallback to a usable neighbour
+    reference.capture(CameraClearSkyReference::slotFromBin(3, false), gray, bgr, texture, eval, roiNorm, start, -10.0, -20.0);
+    cv::Mat viaNeighbour(work, CV_8UC1, cv::Scalar(255));
+    context.check(reference.applyCueAndVeto(slot, viaNeighbour, gray, bgr, eval, roiNorm, 8)
+            && (cv::countNonZero(viaNeighbour) < static_cast<int>(0.05 * work.area())),
+        "ref-patch", "half-assembled slot does not block the neighbouring-bin fallback");
+
+    context.check(learnMixed(start.addSecs(60)) == CameraClearSkyReference::LearnResult::None,
+        "ref-patch", "patch learning honours the throttle");
+    context.check(learnMixed(start.addSecs(700)) == CameraClearSkyReference::LearnResult::Patches,
+        "ref-patch", "second confirmation accepted after the throttle");
+
+    // The confirmed region is now established. A fully clear frame carries the CLEAR
+    // anchor (60): if the patch path had anchored on the whole mixed sky (220), the
+    // anchor guard would reject this comparison outright.
+    cv::Mat clearGray(work, CV_8UC1, cv::Scalar(60));
+    cv::Mat clearBgr(work, CV_8UC3, cv::Scalar(60, 60, 60));
+    cv::Mat mask(work, CV_8UC1, cv::Scalar(255));
+    context.check(reference.applyCueAndVeto(slot, mask, clearGray, clearBgr, eval, roiNorm, 8),
+        "ref-patch", "patchwork reference applies (anchors from the confirmed region)");
+    const cv::Rect vetoRect(0, 0, clearWidth - 2 * clearance, work.height);
+    const double confirmedFlagged = static_cast<double>(cv::countNonZero(mask(vetoRect))) / vetoRect.area();
+    const double gapFlagged = static_cast<double>(cv::countNonZero(mask(cloudRect))) / cloudRect.area();
+    context.check(confirmedFlagged < 0.1, "ref-patch",
+        QStringLiteral("confirmed region vetoed (%1 % still flagged)").arg(confirmedFlagged * 100.0, 0, 'f', 1));
+    context.check(gapFlagged > 0.9, "ref-patch",
+        QStringLiteral("unconfirmed gap untouched (%1 % still flagged)").arg(gapFlagged * 100.0, 0, 'f', 1));
+
+    // A verified-clear whole frame adopts the never-confirmed gaps outright
+    const auto frameLearn = reference.autoLearn(slot, clearGray, clearBgr, texture, eval, roiNorm, start.addSecs(1400),
+                                                1.0f, true, true, 30, 26, cv::Mat());
+    context.check(frameLearn == CameraClearSkyReference::LearnResult::Frame,
+        "ref-patch", "verified-clear frame learns whole-frame");
+    cv::Mat adopted(work, CV_8UC1, cv::Scalar(255));
+    context.check(reference.applyCueAndVeto(slot, adopted, clearGray, clearBgr, eval, roiNorm, 8)
+            && (cv::countNonZero(adopted(cloudRect)) == 0),
+        "ref-patch", "whole-frame learn adopts the never-confirmed gap outright");
+
+    // Weights persist: a fresh instance reloading the store behaves identically
+    CameraClearSkyReference reloaded;
+    reloaded.ensureLoaded(QStringLiteral("ref-patch-test"));
+    cv::Mat reloadedMask(work, CV_8UC1, cv::Scalar(255));
+    context.check(reloaded.applyCueAndVeto(slot, reloadedMask, clearGray, clearBgr, eval, roiNorm, 8)
+            && (cv::countNonZero(reloadedMask) == 0),
+        "ref-patch", "patchwork weights survive a save/load round trip");
+}
+
 // Unit-level guards on the clear-sky reference model: the Day reference must never be
 // reached through a night slot's adjacency fallback, night adjacency must work within the
 // same moon state, and the raw-deviation caps must keep a smooth gradient overcast (which
@@ -2308,6 +2404,7 @@ int main(int argc, char *argv[])
         {"star-sense", testStarSense},
         {"clear-sky-ref", testClearSkyReference},
         {"ref-guards", testReferenceModelGuards},
+        {"ref-patch", testReferencePatchLearning},
         {"test-case-bundle", testTestCaseBundle},
         {"update-interval", testUpdateIntervalCaching},
         {"star-filtering", testStarFiltering},

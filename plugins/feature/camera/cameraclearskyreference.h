@@ -54,6 +54,12 @@
  * dark slots and finely textured in the day slot. Foreground is excluded from cloud
  * evaluation automatically, replacing hand-drawn exclusion rectangles for fixed cameras.
  *
+ * References need not come from a single fully clear frame: when auto-learning is enabled,
+ * regions confirmed clear (predicted stars visible at night, confidently blue sky by day)
+ * accumulate patchwork-style into the slot under per-pixel weights, and a pixel joins the
+ * comparison once confirmed on two separate occasions. Sites that never get a wholly clear
+ * sky still assemble complete references over time.
+ *
  * References persist on disk per camera (keyed by camera id) under the application data
  * directory, overridable via SDRANGEL_CAMERA_CLEARSKY_DIR (used by the test harness).
  *
@@ -95,14 +101,24 @@ public:
     // disagrees with the reference (exposure regime change).
     bool applyCueAndVeto(int slot, cv::Mat& mask, const cv::Mat& gray, const cv::Mat& workBgr, const cv::Mat& evaluationMask, const QRectF& roiNorm, int nightThreshold) const;
 
+    enum class LearnResult { None, Frame, Patches };
+
     // Auto-learning: blends a verified-clear frame into its slot (first fill copies).
     // Gated on measured coverage, star-sensing confirmation at night (when star sensing
     // is enabled), and a per-slot time throttle. When star sensing strongly confirms a
     // clear sky (most predicted stars visible everywhere), learning is allowed even at
     // high measured coverage - measured coverage may be exactly the false positives an
-    // empty slot cannot yet veto. Returns true when the slot was updated.
-    bool autoLearn(int slot, const cv::Mat& gray, const cv::Mat& workBgr, const cv::Mat& texture, const cv::Mat& evaluationMask, const QRectF& roiNorm, const QDateTime& when,
-                   float coveragePercent, bool night, bool starSenseEnabled, int starsExpected, int starsVisible);
+    // empty slot cannot yet veto. When the frame as a whole fails the gates, regions the
+    // detector confirmed clear (confirmedClearMask, work resolution, may be empty) still
+    // accumulate under per-pixel weights - the patchwork path for skies that are never
+    // wholly clear.
+    LearnResult autoLearn(int slot, const cv::Mat& gray, const cv::Mat& workBgr, const cv::Mat& texture, const cv::Mat& evaluationMask, const QRectF& roiNorm, const QDateTime& when,
+                          float coveragePercent, bool night, bool starSenseEnabled, int starsExpected, int starsVisible,
+                          const cv::Mat& confirmedClearMask = cv::Mat());
+
+    // Cheap pre-check for the detector: true when the slot's learning throttle has lapsed
+    // (or the slot would be replaced), so building the confirmed-clear mask is worthwhile
+    [[nodiscard]] bool learnDue(int slot, const QRectF& roiNorm, const QDateTime& when) const;
 
     // Static foreground mask (255 = foreground) derived from the darkest filled night
     // slot's silhouettes and the day slot's fine texture, resized to workSize. Empty when
@@ -119,6 +135,7 @@ public:
         QImage ratio;      // red/blue ratio, 1.0 mapped to mid-grey
         QImage texture;    // fine-texture energy
         QImage sky;        // evaluated-sky mask at capture
+        QImage filled;     // per-pixel confirmation weight from patchwork learning
         QString info;      // capture time, update count, anchors
         bool valid = false;
     };
@@ -136,6 +153,7 @@ private:
         cv::Mat ratio;        // CV_32F refSize: red / (blue + 1)
         cv::Mat texture;      // CV_32F refSize: fine-texture energy
         cv::Mat sky;          // CV_8U refSize: evaluated-sky mask at capture
+        cv::Mat weight;       // CV_32F refSize: per-pixel confirmation weight [0..1]; pixels join comparison at the usable threshold
         double brightnessAnchor = 0.0; // robust sky median luminance at capture
         double ratioAnchor = 0.0;      // clear-sky (low percentile) ratio at capture
         double sunElevation = 0.0;     // sky state at capture, for diagnostics
@@ -158,7 +176,9 @@ private:
     [[nodiscard]] static bool roiMatches(const Slot& slot, const QRectF& roiNorm);
     static void buildMaps(const cv::Mat& gray, const cv::Mat& workBgr, const cv::Mat& texture, const cv::Mat& evaluationMask,
                           cv::Mat& brightnessOut, cv::Mat& ratioOut, cv::Mat& textureOut, cv::Mat& skyOut,
-                          double& brightnessAnchorOut, double& ratioAnchorOut);
+                          double& brightnessAnchorOut, double& ratioAnchorOut,
+                          const cv::Mat& anchorMask = cv::Mat());
+    bool learnPatches(Slot& target, bool replace, const cv::Mat& gray, const cv::Mat& workBgr, const cv::Mat& texture, const cv::Mat& evaluationMask, const cv::Mat& confirmedClearMask, const QRectF& roiNorm, const QDateTime& when);
 
     QString m_cameraId;
     bool m_loaded = false;

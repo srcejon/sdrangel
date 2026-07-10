@@ -72,12 +72,22 @@ constexpr float kAutoLearnMaxCoverageDay = 2.0f;   // day clear-sky detection is
 constexpr qint64 kAutoLearnThrottleSecs = 600;
 constexpr double kAutoLearnAlpha = 0.15;
 
+// Incremental (patchwork) learning: confirmed-clear regions accumulate per-pixel weight,
+// and a pixel joins the comparison once confirmed on two throttle-separated occasions.
+// The minimum patch size keeps degenerate slivers from creating slots, and comparisons
+// abstain below the minimum usable overlap.
+constexpr double kPatchLearnWeight = 0.5;
+constexpr double kWeightUsable = 0.75;
+constexpr int kMinValidPixels = (kRefSize * kRefSize) / 50;
+constexpr int kMinPatchPixels = (kRefSize * kRefSize) / 200;
+
 // Foreground derivation
 constexpr double kForegroundDarkLevel = 24.0;  // absolute 8-bit level below which a dark-slot pixel is silhouette, not sky
 constexpr double kForegroundTexture = 8.0;     // day-slot fine-texture level above which a pixel is foliage/structure
 constexpr double kForegroundMaxFraction = 0.45; // a derivation covering most of the frame is wrong; ignore it
 
-constexpr quint32 kFileMagic = 0x43535232;   // "CSR2": fine sun-elevation bins + per-slot sky state
+constexpr quint32 kFileMagic = 0x43535233;   // "CSR3": adds per-pixel confirmation weights
+constexpr quint32 kFileMagicV2 = 0x43535232; // "CSR2": fine sun-elevation bins + per-slot sky state
 constexpr quint32 kFileMagicV1 = 0x43535231; // "CSR1": three broad night bands
 // A reference is only comparable when frame and reference were exposed similarly; beyond
 // this anchor ratio the normalised shapes no longer correspond and the comparison abstains
@@ -327,13 +337,14 @@ void CameraClearSkyReference::load()
     stream.setVersion(QDataStream::Qt_5_15);
     quint32 magic = 0;
     stream >> magic;
-    if ((magic != kFileMagic) && (magic != kFileMagicV1))
+    if ((magic != kFileMagic) && (magic != kFileMagicV2) && (magic != kFileMagicV1))
     {
         qWarning() << "CameraClearSkyReference: unrecognised reference file" << file.fileName();
         return;
     }
 
     const bool v1 = (magic == kFileMagicV1);
+    const bool hasWeight = (magic == kFileMagic);
     // v1 files held Day plus three broad night bands (x moon). Each band is replicated
     // into every fine bin it covered (cv::Mat copies share pixel data, so this is cheap),
     // preserving the coverage the old single band provided; the anchor guard rejects any
@@ -357,6 +368,7 @@ void CameraClearSkyReference::load()
         stream >> loaded.roiNorm >> loaded.updated >> loaded.updateCount;
         if (!readMat(stream, loaded.brightness) || !readMat(stream, loaded.ratio)
             || !readMat(stream, loaded.texture) || !readMat(stream, loaded.sky)
+            || (hasWeight && !readMat(stream, loaded.weight))
             || (stream.status() != QDataStream::Ok))
         {
             qWarning() << "CameraClearSkyReference: failed to read reference file" << file.fileName();
@@ -364,6 +376,10 @@ void CameraClearSkyReference::load()
                 reset = Slot();
             }
             return;
+        }
+        // Pre-weight formats were whole-frame captures: everything evaluated is confirmed
+        if (!hasWeight) {
+            loaded.sky.convertTo(loaded.weight, CV_32F, 1.0 / 255.0);
         }
         if (!v1)
         {
@@ -436,6 +452,7 @@ bool CameraClearSkyReference::saveToPath(const QString& path) const
         writeMat(stream, slot.ratio);
         writeMat(stream, slot.texture);
         writeMat(stream, slot.sky);
+        writeMat(stream, slot.weight);
     }
     if (!file.commit())
     {
@@ -454,6 +471,11 @@ const CameraClearSkyReference::Slot* CameraClearSkyReference::usableSlot(int slo
     }
     const Slot& candidate = m_slots[slot];
     if (!candidate.valid() || !roiMatches(candidate, roiNorm)) {
+        return nullptr;
+    }
+    // A slot still assembling patchwork-style must not shadow a usable neighbouring bin
+    if (candidate.weight.empty()
+        || (cv::countNonZero(candidate.weight >= kWeightUsable) < kMinValidPixels)) {
         return nullptr;
     }
     const double high = std::max(frameAnchor, candidate.brightnessAnchor);
@@ -482,7 +504,8 @@ bool CameraClearSkyReference::roiMatches(const Slot& slot, const QRectF& roiNorm
 // robust anchors both sides of a later comparison are normalised by
 void CameraClearSkyReference::buildMaps(const cv::Mat& gray, const cv::Mat& workBgr, const cv::Mat& texture, const cv::Mat& evaluationMask,
                                         cv::Mat& brightnessOut, cv::Mat& ratioOut, cv::Mat& textureOut, cv::Mat& skyOut,
-                                        double& brightnessAnchorOut, double& ratioAnchorOut)
+                                        double& brightnessAnchorOut, double& ratioAnchorOut,
+                                        const cv::Mat& anchorMask)
 {
     const cv::Size refSize(kRefSize, kRefSize);
     cv::Mat grayRef, bgrRef;
@@ -495,7 +518,20 @@ void CameraClearSkyReference::buildMaps(const cv::Mat& gray, const cv::Mat& work
         cv::resize(texture, textureRef, refSize, 0.0, 0.0, cv::INTER_AREA);
     }
 
-    brightnessAnchorOut = std::max(1, maskedPercentile8U(grayRef, skyOut, 0.5));
+    // Anchors normally come from the whole evaluated sky; patchwork learning restricts
+    // them to the confirmed-clear region so cloud elsewhere in the frame cannot bias them
+    cv::Mat anchorRegion;
+    if (anchorMask.empty()) {
+        anchorRegion = skyOut;
+    }
+    else
+    {
+        cv::Mat anchorRef;
+        cv::resize(anchorMask, anchorRef, refSize, 0.0, 0.0, cv::INTER_NEAREST);
+        cv::bitwise_and(skyOut, anchorRef, anchorRegion);
+    }
+
+    brightnessAnchorOut = std::max(1, maskedPercentile8U(grayRef, anchorRegion, 0.5));
 
     cv::Mat grayF;
     grayRef.convertTo(grayF, CV_32F);
@@ -512,7 +548,7 @@ void CameraClearSkyReference::buildMaps(const cv::Mat& gray, const cv::Mat& work
     ratioOut = red / (blue + 1.0f);
 
     cv::Mat brightSky;
-    cv::bitwise_and(skyOut, grayRef >= kDarkPixel, brightSky);
+    cv::bitwise_and(anchorRegion, grayRef >= kDarkPixel, brightSky);
     ratioAnchorOut = maskedPercentile32F(ratioOut, brightSky, 0.05);
 
     textureRef.convertTo(textureOut, CV_32F);
@@ -529,6 +565,8 @@ void CameraClearSkyReference::capture(int slot, const cv::Mat& gray, const cv::M
     buildMaps(gray, workBgr, texture, evaluationMask,
               target.brightness, target.ratio, target.texture, target.sky,
               target.brightnessAnchor, target.ratioAnchor);
+    // A user-trusted whole-frame capture confirms every evaluated pixel outright
+    target.sky.convertTo(target.weight, CV_32F, 1.0 / 255.0);
     target.sunElevation = sunElevationDeg;
     target.moonElevation = moonElevationDeg;
     target.roiNorm = roiNorm;
@@ -591,9 +629,12 @@ bool CameraClearSkyReference::applyCueAndVeto(int slot, cv::Mat& mask, const cv:
     }
     const Slot& reference = *chosen;
 
+    // Only pixels the reference has actually confirmed clear participate; a patchwork
+    // slot's unconfirmed gaps neither veto nor cue
+    const cv::Mat usable = reference.weight >= kWeightUsable;
     cv::Mat valid;
-    cv::bitwise_and(reference.sky, frameSky, valid);
-    if (cv::countNonZero(valid) < (kRefSize * kRefSize) / 20) {
+    cv::bitwise_and(usable, frameSky, valid);
+    if (cv::countNonZero(valid) < kMinValidPixels) {
         return false;
     }
 
@@ -671,14 +712,33 @@ bool CameraClearSkyReference::applyCueAndVeto(int slot, cv::Mat& mask, const cv:
     return true;
 }
 
-bool CameraClearSkyReference::autoLearn(int slot, const cv::Mat& gray, const cv::Mat& workBgr, const cv::Mat& texture, const cv::Mat& evaluationMask, const QRectF& roiNorm, const QDateTime& when,
-                                        float coveragePercent, bool night, bool starSenseEnabled, int starsExpected, int starsVisible)
+bool CameraClearSkyReference::learnDue(int slot, const QRectF& roiNorm, const QDateTime& when) const
 {
     if ((slot < 0) || (slot >= kSlotCount)) {
         return false;
     }
+    const Slot& target = m_slots[slot];
+    if (!target.valid() || !roiMatches(target, roiNorm)) {
+        return true;
+    }
+    return !(target.updated.isValid() && when.isValid()
+        && (target.updated.secsTo(when) < kAutoLearnThrottleSecs));
+}
+
+CameraClearSkyReference::LearnResult CameraClearSkyReference::autoLearn(int slot, const cv::Mat& gray, const cv::Mat& workBgr, const cv::Mat& texture, const cv::Mat& evaluationMask, const QRectF& roiNorm, const QDateTime& when,
+                                                                        float coveragePercent, bool night, bool starSenseEnabled, int starsExpected, int starsVisible,
+                                                                        const cv::Mat& confirmedClearMask)
+{
+    if ((slot < 0) || (slot >= kSlotCount)) {
+        return LearnResult::None;
+    }
     Slot& target = m_slots[slot];
     const bool replace = !target.valid() || !roiMatches(target, roiNorm);
+
+    if (!replace && target.updated.isValid() && when.isValid()
+        && (target.updated.secsTo(when) < kAutoLearnThrottleSecs)) {
+        return LearnResult::None;
+    }
 
     // Strong star confirmation (most predicted stars visible across the sky) overrides the
     // coverage gate ONLY when bootstrapping an empty slot: there, high measured coverage is
@@ -693,17 +753,22 @@ bool CameraClearSkyReference::autoLearn(int slot, const cv::Mat& gray, const cv:
     const float maxCoverage = (starStrong && replace)
         ? kAutoLearnStarMaxCoverage
         : (night ? kAutoLearnMaxCoverageNight : kAutoLearnMaxCoverageDay);
-    if (coveragePercent > maxCoverage) {
-        return false;
-    }
+    bool frameVerified = coveragePercent <= maxCoverage;
     // At night, when star sensing runs it must confirm the sky is genuinely clear; low
     // measured coverage alone could be a dark overcast the detector under-reads
     if (night && starSenseEnabled && !starStrong && (starsVisible < kStarConfirmMinVisible)) {
-        return false;
+        frameVerified = false;
     }
-    if (!replace && target.updated.isValid() && when.isValid()
-        && (target.updated.secsTo(when) < kAutoLearnThrottleSecs)) {
-        return false;
+
+    if (!frameVerified)
+    {
+        // The frame as a whole is not verified clear, but parts of it may be: accumulate
+        // the detector's confirmed-clear regions patchwork-style under per-pixel weights
+        if (confirmedClearMask.empty()
+            || !learnPatches(target, replace, gray, workBgr, texture, evaluationMask, confirmedClearMask, roiNorm, when)) {
+            return LearnResult::None;
+        }
+        return LearnResult::Patches;
     }
 
     cv::Mat brightness, ratio, textureMap, sky;
@@ -716,6 +781,7 @@ bool CameraClearSkyReference::autoLearn(int slot, const cv::Mat& gray, const cv:
         target.ratio = ratio;
         target.texture = textureMap;
         target.sky = sky;
+        sky.convertTo(target.weight, CV_32F, 1.0 / 255.0);
         target.brightnessAnchor = brightnessAnchor;
         target.ratioAnchor = ratioAnchor;
         target.roiNorm = roiNorm;
@@ -723,16 +789,96 @@ bool CameraClearSkyReference::autoLearn(int slot, const cv::Mat& gray, const cv:
     }
     else
     {
-        // Slow exponential blend so one mis-verified frame cannot poison the reference
-        const double alpha = kAutoLearnAlpha;
-        target.brightness = target.brightness * (1.0 - alpha) + brightness * alpha;
-        target.ratio = target.ratio * (1.0 - alpha) + ratio * alpha;
-        target.texture = target.texture * (1.0 - alpha) + textureMap * alpha;
-        cv::bitwise_and(target.sky, sky, target.sky);
-        target.brightnessAnchor = target.brightnessAnchor * (1.0 - alpha) + brightnessAnchor * alpha;
-        target.ratioAnchor = target.ratioAnchor * (1.0 - alpha) + ratioAnchor * alpha;
+        // Slow exponential blend where the reference is established, so one mis-verified
+        // frame cannot poison it; a patch-bootstrapped slot's never-confirmed gaps are
+        // adopted outright, since this frame as a whole is verified clear. Every update
+        // builds a fresh mat: v1-migrated bins can share map storage.
+        const cv::Mat established = target.weight >= kWeightUsable;
+        cv::Mat alphaMap(target.weight.size(), CV_32F, cv::Scalar(1.0));
+        alphaMap.setTo(kAutoLearnAlpha, established);
+        cv::Mat oneMinusAlpha;
+        cv::subtract(cv::Scalar::all(1.0), alphaMap, oneMinusAlpha);
+        target.brightness = target.brightness.mul(oneMinusAlpha) + brightness.mul(alphaMap);
+        target.ratio = target.ratio.mul(oneMinusAlpha) + ratio.mul(alphaMap);
+        target.texture = target.texture.mul(oneMinusAlpha) + textureMap.mul(alphaMap);
+        cv::Mat mergedSky;
+        cv::bitwise_or(target.sky, sky, mergedSky);
+        target.sky = mergedSky;
+        cv::Mat skyWeight, mergedWeight;
+        sky.convertTo(skyWeight, CV_32F, 1.0 / 255.0);
+        cv::max(target.weight, skyWeight, mergedWeight);
+        target.weight = mergedWeight;
+        target.brightnessAnchor = target.brightnessAnchor * (1.0 - kAutoLearnAlpha) + brightnessAnchor * kAutoLearnAlpha;
+        target.ratioAnchor = target.ratioAnchor * (1.0 - kAutoLearnAlpha) + ratioAnchor * kAutoLearnAlpha;
         ++target.updateCount;
     }
+    target.updated = when;
+    m_foregroundDirty = true;
+    save();
+    return LearnResult::Frame;
+}
+
+// Accumulates the confirmed-clear regions of a frame into the slot under per-pixel
+// weights: each confirmation adds kPatchLearnWeight, and a pixel joins the comparison
+// once its weight reaches the usable threshold (two throttle-separated confirmations).
+// Values are normalised by anchors measured over the confirmed region only, so cloud
+// elsewhere in the frame cannot bias them.
+bool CameraClearSkyReference::learnPatches(Slot& target, bool replace, const cv::Mat& gray, const cv::Mat& workBgr, const cv::Mat& texture, const cv::Mat& evaluationMask, const cv::Mat& confirmedClearMask, const QRectF& roiNorm, const QDateTime& when)
+{
+    const cv::Size refSize(kRefSize, kRefSize);
+    cv::Mat patchRef, skyRef;
+    cv::resize(confirmedClearMask, patchRef, refSize, 0.0, 0.0, cv::INTER_NEAREST);
+    cv::resize(evaluationMask, skyRef, refSize, 0.0, 0.0, cv::INTER_NEAREST);
+    cv::Mat trimmed;
+    cv::bitwise_and(patchRef, skyRef, trimmed);
+    patchRef = trimmed;
+    const int patchPixels = cv::countNonZero(patchRef);
+    if (patchPixels < kMinPatchPixels) {
+        return false;
+    }
+
+    cv::Mat brightness, ratio, textureMap, sky;
+    double brightnessAnchor = 0.0, ratioAnchor = 0.0;
+    buildMaps(gray, workBgr, texture, evaluationMask, brightness, ratio, textureMap, sky, brightnessAnchor, ratioAnchor, confirmedClearMask);
+
+    if (replace) {
+        target = Slot();
+    }
+    if (target.brightness.empty())
+    {
+        target.brightness = cv::Mat::zeros(refSize, CV_32F);
+        target.ratio = cv::Mat::zeros(refSize, CV_32F);
+        target.texture = cv::Mat::zeros(refSize, CV_32F);
+        target.weight = cv::Mat::zeros(refSize, CV_32F);
+        target.sky = cv::Mat::zeros(refSize, CV_8UC1);
+        target.brightnessAnchor = brightnessAnchor;
+        target.ratioAnchor = ratioAnchor;
+        target.roiNorm = roiNorm;
+    }
+
+    // Weighted per-pixel blend confined to the confirmed region: outside it every map is
+    // unchanged; inside, the new observation contributes kPatchLearnWeight against the
+    // weight already accumulated. Every update builds a fresh mat - v1-migrated bins can
+    // share map storage.
+    const int usableBefore = cv::countNonZero(target.weight >= kWeightUsable);
+    cv::Mat contribution;
+    patchRef.convertTo(contribution, CV_32F, kPatchLearnWeight / 255.0);
+    const cv::Mat total = target.weight + contribution;
+    const cv::Mat safeTotal = cv::max(total, 1e-6);
+    target.brightness = (target.brightness.mul(target.weight) + brightness.mul(contribution)) / safeTotal;
+    target.ratio = (target.ratio.mul(target.weight) + ratio.mul(contribution)) / safeTotal;
+    target.texture = (target.texture.mul(target.weight) + textureMap.mul(contribution)) / safeTotal;
+    target.weight = cv::min(total, 1.0);
+    cv::Mat mergedSky;
+    cv::bitwise_or(target.sky, patchRef, mergedSky);
+    target.sky = mergedSky;
+
+    // Anchors blend in proportion to the patch's share of the confirmed area so far
+    const double anchorAlpha = static_cast<double>(patchPixels) / std::max(1, usableBefore + patchPixels);
+    target.brightnessAnchor = target.brightnessAnchor * (1.0 - anchorAlpha) + brightnessAnchor * anchorAlpha;
+    target.ratioAnchor = target.ratioAnchor * (1.0 - anchorAlpha) + ratioAnchor * anchorAlpha;
+
+    ++target.updateCount;
     target.updated = when;
     m_foregroundDirty = true;
     save();
@@ -748,14 +894,22 @@ cv::Mat CameraClearSkyReference::foregroundMask(const cv::Size& workSize, const 
         // Silhouettes: in the darkest filled night slot (deepest sun-elevation bin,
         // moonless preferred), foreground (trees, roofs, frames) is darker than the
         // airglow-lit sky
+        // Prefer well-confirmed slots: a patchwork slot only holds data where the sky
+        // happened to be confirmed clear, which is never the foreground silhouette
+        const auto filledFraction = [](const Slot& slot) {
+            return static_cast<double>(cv::countNonZero(slot.weight >= kWeightUsable)) / (kRefSize * kRefSize);
+        };
         const Slot *darkSlot = nullptr;
-        for (int bin = kNightBins - 1; (bin >= 0) && !darkSlot; --bin)
+        for (int pass = 0; (pass < 2) && !darkSlot; ++pass)
         {
-            for (int moon = 0; (moon <= 1) && !darkSlot; ++moon)
+            for (int bin = kNightBins - 1; (bin >= 0) && !darkSlot; --bin)
             {
-                const int slot = slotFromBin(bin, moon != 0);
-                if (m_slots[slot].valid()) {
-                    darkSlot = &m_slots[slot];
+                for (int moon = 0; (moon <= 1) && !darkSlot; ++moon)
+                {
+                    const int slot = slotFromBin(bin, moon != 0);
+                    if (m_slots[slot].valid() && ((pass == 1) || (filledFraction(m_slots[slot]) >= 0.3))) {
+                        darkSlot = &m_slots[slot];
+                    }
                 }
             }
         }
@@ -767,6 +921,9 @@ cv::Mat CameraClearSkyReference::foregroundMask(const cv::Size& workSize, const 
             const cv::Mat absolute = darkSlot->brightness * darkSlot->brightnessAnchor;
             cv::Mat silhouettes = absolute < kForegroundDarkLevel;
             cv::bitwise_and(silhouettes, darkSlot->sky, silhouettes);
+            // Unconfirmed patchwork gaps hold no data; without this they would all read as "dark"
+            const cv::Mat darkConfirmed = darkSlot->weight >= kWeightUsable;
+            cv::bitwise_and(silhouettes, darkConfirmed, silhouettes);
             cv::bitwise_or(foreground, silhouettes, foreground);
             any = true;
         }
@@ -777,6 +934,8 @@ cv::Mat CameraClearSkyReference::foregroundMask(const cv::Size& workSize, const 
         {
             cv::Mat textured = daySlot.texture > kForegroundTexture;
             cv::bitwise_and(textured, daySlot.sky, textured);
+            const cv::Mat dayConfirmed = daySlot.weight >= kWeightUsable;
+            cv::bitwise_and(textured, dayConfirmed, textured);
             cv::bitwise_or(foreground, textured, foreground);
             any = true;
         }
@@ -850,13 +1009,16 @@ CameraClearSkyReference::SlotPreview CameraClearSkyReference::slotPreview(int sl
     preview.ratio = renderFloatMap(reference.ratio, 128.0);
     preview.texture = renderFloatMap(reference.texture, 16.0);
     preview.sky = grayMatToImage(reference.sky);
-    preview.info = QStringLiteral("%1\nupdated %2\n%3 update%4\nsky median %5\nclear R/B %6")
+    preview.filled = renderFloatMap(reference.weight, 255.0);
+    const double filledPercent = 100.0 * cv::countNonZero(reference.weight >= kWeightUsable) / (kRefSize * kRefSize);
+    preview.info = QStringLiteral("%1\nupdated %2\n%3 update%4\nsky median %5\nclear R/B %6\nfilled %7%")
         .arg(slotName(slot),
              reference.updated.isValid() ? reference.updated.toString(QStringLiteral("yyyy-MM-dd hh:mm")) : QStringLiteral("-"))
         .arg(reference.updateCount)
         .arg(reference.updateCount == 1 ? QStringLiteral("") : QStringLiteral("s"))
         .arg(reference.brightnessAnchor, 0, 'f', 1)
-        .arg(reference.ratioAnchor, 0, 'f', 3);
+        .arg(reference.ratioAnchor, 0, 'f', 3)
+        .arg(filledPercent, 0, 'f', 0);
     preview.valid = true;
     return preview;
 }

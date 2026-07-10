@@ -86,7 +86,7 @@ void CameraClearSkyReferenceDialog::refresh()
     CameraClearSkyReference reference;
     reference.ensureLoaded(m_storageKey);
 
-    const QStringList headers{tr("Slot"), tr("Clear-sky brightness"), tr("Colour (R/B)"), tr("Texture"), tr("Sky mask")};
+    const QStringList headers{tr("Slot"), tr("Clear-sky brightness"), tr("Colour (R/B)"), tr("Texture"), tr("Sky mask"), tr("Filled")};
     for (int col = 0; col < headers.size(); ++col)
     {
         QLabel *header = new QLabel(QStringLiteral("<b>%1</b>").arg(headers[col]));
@@ -102,7 +102,7 @@ void CameraClearSkyReferenceDialog::refresh()
         {
             QLabel *empty = new QLabel(QStringLiteral("%1: %2").arg(CameraClearSkyReference::slotName(slot), tr("empty")));
             empty->setStyleSheet(QStringLiteral("color: gray"));
-            m_grid->addWidget(empty, row, 0, 1, 5);
+            m_grid->addWidget(empty, row, 0, 1, 6);
             ++row;
             continue;
         }
@@ -114,6 +114,7 @@ void CameraClearSkyReferenceDialog::refresh()
         m_grid->addWidget(imageLabel(preview.ratio, this), row, 2);
         m_grid->addWidget(imageLabel(preview.texture, this), row, 3);
         m_grid->addWidget(imageLabel(preview.sky, this), row, 4);
+        m_grid->addWidget(imageLabel(preview.filled, this), row, 5);
         ++row;
         ++filled;
     }
@@ -128,7 +129,7 @@ void CameraClearSkyReferenceDialog::refresh()
     {
         QLabel *none = new QLabel(tr("No references saved for this camera yet. Enable 'Clear-sky ref' and press 'Save ref' on a cloud-free sky, or enable 'Auto learn ref'."));
         none->setWordWrap(true);
-        m_grid->addWidget(none, row, 0, 1, 5);
+        m_grid->addWidget(none, row, 0, 1, 6);
     }
     m_grid->setRowStretch(row + 1, 1);
 }

@@ -111,6 +111,11 @@ constexpr double starSenseAvoidBodyDeg = 10.0; // degrees: skip stars this close
 constexpr int starSensePatchHalf = 12;        // half-size in full-res pixels of the patch searched around each prediction
 constexpr int starSenseMinStars = 2;          // minimum expected stars on a component before the veto may judge it
 constexpr double starSenseVisibleFraction = 0.5; // veto a component when at least this fraction of its expected stars are visible
+// Incremental reference learning: how far around a visible predicted star the sky counts
+// as confirmed clear (fraction of the work-image long side), and how far below the day
+// threshold the red/blue ratio must sit for a day pixel to count as confidently blue sky
+constexpr double starClearRadiusFraction = 0.04;
+constexpr double dayClearRatioMargin = 0.10;
 
 // Percentile of the 8-bit values where mask is non-zero (0.5 = median), as a robust
 // sky-level estimate that ignores excluded regions and is insensitive to outliers
@@ -1753,20 +1758,86 @@ void CameraCloudDetector::applyCloudDetection(const cv::Mat& workBgr, const cv::
     // Auto-learning: blend verified-clear frames into the reference so it tracks seasons,
     // lens dirt and slow drift, and fills slots the user never saved manually. At night,
     // when star sensing runs, the sky must additionally prove itself clear by showing its
-    // predicted stars.
-    if (m_settings.m_cloudUseReference && m_settings.m_cloudAutoReference && (referenceSlot >= 0))
+    // predicted stars. When the frame as a whole is not verified clear, regions that are -
+    // sky around visible predicted stars at night, confidently blue sky by day - still
+    // accumulate into the reference, so it assembles patchwork-style at sites that never
+    // get a wholly clear sky.
+    if (m_settings.m_cloudUseReference && m_settings.m_cloudAutoReference && (referenceSlot >= 0)
+        && m_clearSkyReference.learnDue(referenceSlot, roiNorm, observationTime))
     {
         int visibleStars = 0;
         for (const CloudStarSense::Star& star : starSense.stars) {
             visibleStars += star.visible ? 1 : 0;
         }
-        if (m_clearSkyReference.autoLearn(referenceSlot, gray, workBgr, textureEnergy, evaluationMask, roiNorm, observationTime,
-                                          cloud.m_coveragePercent, night, m_settings.m_cloudStarSense,
-                                          starSense.valid ? starSense.stars.size() : 0, visibleStars)
-            && m_msgQueueToFeature)
+
+        cv::Mat confirmedClear;
+        if (night)
         {
+            // Sky around a visible predicted star is clear along that line of sight -
+            // cloud would have hidden the star
+            if (starSense.valid && (visibleStars > 0))
+            {
+                confirmedClear = cv::Mat::zeros(mask.size(), CV_8UC1);
+                const double scaleX = static_cast<double>(mask.cols) / roi.width;
+                const double scaleY = static_cast<double>(mask.rows) / roi.height;
+                const int radius = std::max(4, cvRound(starClearRadiusFraction * std::max(mask.cols, mask.rows)));
+                for (const CloudStarSense::Star& star : starSense.stars)
+                {
+                    if (!star.visible) {
+                        continue;
+                    }
+                    const cv::Point centre(cvRound((star.position.x() - roi.x) * scaleX),
+                                           cvRound((star.position.y() - roi.y) * scaleY));
+                    if ((centre.x >= 0) && (centre.y >= 0) && (centre.x < mask.cols) && (centre.y < mask.rows)) {
+                        cv::circle(confirmedClear, centre, radius, cv::Scalar(255), cv::FILLED);
+                    }
+                }
+            }
+        }
+        else
+        {
+            // Confidently blue sky: ratio well below the day cloud threshold, bright
+            // enough to be sky rather than shadowed structure, and not finely textured
+            std::vector<cv::Mat> channels;
+            cv::split(workBgr, channels);
+            cv::Mat blue, red;
+            channels[0].convertTo(blue, CV_32F);
+            channels[2].convertTo(red, CV_32F);
+            cv::compare(red, (blue + 1.0f) * (m_settings.m_cloudDayThreshold - dayClearRatioMargin), confirmedClear, cv::CMP_LT);
+            const int daySkyLevel = maskedPercentile(gray, evaluationMask, 0.5);
+            const cv::Mat brightMask = gray >= std::max(dayMinBrightness, daySkyLevel / 2);
+            cv::bitwise_and(confirmedClear, brightMask, confirmedClear);
+            if (m_settings.m_cloudTextureThreshold > 0)
+            {
+                const cv::Mat smoothMask = textureEnergy < m_settings.m_cloudTextureThreshold;
+                cv::bitwise_and(confirmedClear, smoothMask, confirmedClear);
+            }
+        }
+        if (!confirmedClear.empty())
+        {
+            // Stand clear of everything the final mask flagged, so a cloud edge (or its
+            // undetected fringe) is never learned as clear sky
+            const int clearance = std::max(4, cvRound(starClearRadiusFraction * std::max(mask.cols, mask.rows)));
+            const cv::Mat kernel = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(2 * clearance + 1, 2 * clearance + 1));
+            cv::Mat inflated;
+            cv::dilate(mask, inflated, kernel);
+            cv::Mat notCloud;
+            cv::bitwise_not(inflated, notCloud);
+            cv::bitwise_and(confirmedClear, notCloud, confirmedClear);
+            cv::bitwise_and(confirmedClear, evaluationMask, confirmedClear);
+        }
+
+        const CameraClearSkyReference::LearnResult learned = m_clearSkyReference.autoLearn(
+            referenceSlot, gray, workBgr, textureEnergy, evaluationMask, roiNorm, observationTime,
+            cloud.m_coveragePercent, night, m_settings.m_cloudStarSense,
+            starSense.valid ? starSense.stars.size() : 0, visibleStars, confirmedClear);
+        if ((learned != CameraClearSkyReference::LearnResult::None) && m_msgQueueToFeature)
+        {
+            const QString what = (learned == CameraClearSkyReference::LearnResult::Frame)
+                ? QStringLiteral("Auto-learned %1 - %2")
+                : QStringLiteral("Learned clear patches in %1 - %2");
             m_msgQueueToFeature->push(MsgReportClearSkyReference::create(
-                QStringLiteral("Auto-learned %1 - %2").arg(CameraClearSkyReference::slotName(referenceSlot),
+                what.arg(CameraClearSkyReference::slotName(referenceSlot),
                     m_clearSkyReference.statusSummary(referenceSlot))));
         }
     }

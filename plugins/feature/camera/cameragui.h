@@ -442,6 +442,7 @@ private:
     static QString windowOverlayDisplayName(const QMdiSubWindow *window);
     void updateVideoFileControls();
     void updateVideoPreRecordBufferMemoryLabel();
+    void initialiseYoloPathCombos();
     void submitQtImageFrame(const QImage& image, qint64 playbackPositionMs = -1, int playbackFrameNumber = -1);
     bool isHdrStackingSupported() const;
     bool isHdrStackingActiveForQt() const;

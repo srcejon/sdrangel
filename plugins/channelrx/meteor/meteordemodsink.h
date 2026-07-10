@@ -59,6 +59,8 @@ public:
         double getFrequencySpan() const { return m_frequencySpan; }
         double getFrequencyDrift() const { return m_frequencyDrift; }
         int getSampleRate() const { return m_sampleRate; }
+        quint64 getStartSample() const { return m_startSample; }
+        quint64 getEndSample() const { return m_endSample; }
 
         static MsgMeteorDetected* create(
             const QDateTime& dateTimeUtc,
@@ -72,7 +74,9 @@ public:
             double centerFrequency,
             double frequencySpan,
             double frequencyDrift,
-            int sampleRate)
+            int sampleRate,
+            quint64 startSample,
+            quint64 endSample)
         {
             return new MsgMeteorDetected(
                 dateTimeUtc,
@@ -86,7 +90,9 @@ public:
                 centerFrequency,
                 frequencySpan,
                 frequencyDrift,
-                sampleRate
+                sampleRate,
+                startSample,
+                endSample
             );
         }
 
@@ -103,6 +109,8 @@ public:
         double m_frequencySpan;
         double m_frequencyDrift;
         int m_sampleRate;
+        quint64 m_startSample;
+        quint64 m_endSample;
 
         MsgMeteorDetected(
             const QDateTime& dateTimeUtc,
@@ -116,7 +124,9 @@ public:
             double centerFrequency,
             double frequencySpan,
             double frequencyDrift,
-            int sampleRate
+            int sampleRate,
+            quint64 startSample,
+            quint64 endSample
         ) :
             Message(),
             m_dateTimeUtc(dateTimeUtc),
@@ -130,7 +140,9 @@ public:
             m_centerFrequency(centerFrequency),
             m_frequencySpan(frequencySpan),
             m_frequencyDrift(frequencyDrift),
-            m_sampleRate(sampleRate)
+            m_sampleRate(sampleRate),
+            m_startSample(startSample),
+            m_endSample(endSample)
         {}
     };
 
@@ -190,6 +202,8 @@ private:
         double m_robustCenterFrequency;
         double m_robustFrequencySpan;
         double m_robustFrequencyDrift;
+        double m_confidence;
+        double m_componentSupportDB;
 
         PulseReport() :
             m_valid(false),
@@ -210,7 +224,9 @@ private:
             m_hasRobustFrequency(false),
             m_robustCenterFrequency(0.0),
             m_robustFrequencySpan(0.0),
-            m_robustFrequencyDrift(0.0)
+            m_robustFrequencyDrift(0.0),
+            m_confidence(0.0),
+            m_componentSupportDB(-200.0)
         {}
     };
 
@@ -243,6 +259,17 @@ private:
             m_framePeakPower(0.0),
             m_lowIndex(0),
             m_highIndex(0)
+        {}
+    };
+
+    struct SpectralFrameSnapshot {
+        quint64 m_startSample;
+        double m_peakPower;
+        std::vector<double> m_binPower;
+
+        SpectralFrameSnapshot() :
+            m_startSample(0),
+            m_peakPower(1e-20)
         {}
     };
 
@@ -304,6 +331,7 @@ private:
         double m_reportFrequencySpan;
         double m_sweepScore;
         double m_peakAboveBackgroundDB;
+        double m_integratedSupportDB;
         double m_maxBandwidth;
         double m_maxContrastDB;
         double m_maxPeakRatio;
@@ -347,6 +375,7 @@ private:
             m_reportFrequencySpan(0.0),
             m_sweepScore(0.0),
             m_peakAboveBackgroundDB(0.0),
+            m_integratedSupportDB(0.0),
             m_maxBandwidth(0.0),
             m_maxContrastDB(0.0),
             m_maxPeakRatio(0.0),
@@ -406,13 +435,15 @@ private:
     int m_scopeSampleBufferIndex;
     ComplexVector m_spectrumBuffer;
     ComplexVector m_pulseSamples;
+    ComplexVector m_detectionSampleRing;
     ComplexVector m_spectralFrameBuffer;
     std::vector<Real> m_spectralWindow;
     std::vector<double> m_spectralBinPower;
     std::vector<double> m_spectralNoiseFloor;
+    std::vector<SpectralFrameSnapshot> m_spectralCalibrationFrames;
     std::vector<SpectralEvent> m_spectralEvents;
     std::vector<DetectionRange> m_recentDetectionRanges;
-    std::vector<PulseReport> m_pendingSpectralReports;
+    std::vector<PulseReport> m_pendingComponentReports;
     std::vector<char> m_spectralActiveBins;
     FFTEngine *m_spectralFFT;
     FFTEngine *m_pulseFFT;
@@ -420,6 +451,10 @@ private:
     int m_spectralHopSize;
     int m_spectralFFTSize;
     int m_pulseFFTSize;
+    double m_spectralEnergyScale;
+    int m_detectionSampleRingStart;
+    int m_detectionSampleRingCount;
+    quint64 m_detectionSampleRingStartSample;
     std::vector<Real> m_pulseFFTWindow;
     bool m_spectralNoiseFloorInitialized;
     bool m_spectralEventActiveForScope;
@@ -446,6 +481,8 @@ private:
     void finishPulse(bool forceRejected);
     bool processSpectralSample(const Complex& sample, double power);
     void processSpectralFrame(quint64 frameStartSample);
+    void initializeSpectralNoiseFloor();
+    void processCalibratedSpectralFrame(const SpectralFrameSnapshot& frame);
     std::vector<SpectralBand> detectSpectralBands(const std::vector<double>& binPower, double framePeakPower);
     void updateSpectralEvents(const std::vector<SpectralBand>& bands, quint64 frameCenterSample);
     void updateSpectralEvent(SpectralEvent& event, const SpectralBand& band, quint64 frameCenterSample);
@@ -472,17 +509,16 @@ private:
     void rememberDetection(quint64 startSample, quint64 endSample, double centerFrequency, double frequencySpan);
     void pruneRecentDetections();
     void emitOrDeferSpectralReport(const PulseReport& report);
+    void queueSpectralComponentReport(const PulseReport& report);
+    void flushPendingComponentReports(bool force);
     PulseReport reportWithRobustFrequency(const PulseReport& report) const;
-    void finishPendingSpectralReportsForPulse(
-        quint64 pulseEndSample,
-        bool usePulseEnvelope,
-        bool usePulseFrequency,
-        double pulseCenterFrequency,
-        double pulseFrequencySpan,
-        double pulseFrequencyDrift);
     bool estimatePulseBandEnvelope(PulseReport& report) const;
+    bool refineSpectralComponentEnvelope(PulseReport& report) const;
+    bool refineBandEnvelope(PulseReport& report, bool allowShrink) const;
+    void appendDetectionSample(const Complex& sample);
+    bool copyDetectionSamples(quint64 startSample, quint64 endSample, ComplexVector& samples) const;
     double estimatePulseTotalPower(quint64 startSample, quint64 endSample, double backgroundPower) const;
-    bool reportsOverlap(quint64 firstStartSample, quint64 firstEndSample, quint64 secondStartSample, quint64 secondEndSample) const;
+    bool reportsFrequencyCompatible(const PulseReport& first, const PulseReport& second) const;
     void emitDetectionReport(const PulseReport& report, const char *source);
     QDateTime sampleCounterToDateTimeUtc(quint64 sampleCounter) const;
     QDateTime sampleCounterToDisplayDateTimeUtc(quint64 sampleCounter) const;
@@ -506,6 +542,7 @@ private:
     static double averageFrequency(const std::vector<double>& frequencies, int begin, int end);
     void configureInterpolator();
     void configurePowerLowpass();
+    void configureDetectionHistory();
     void configureSpectralDetector();
     void resizeScopeBuffers();
     void resetDetector();

@@ -36,3 +36,14 @@ target_link_libraries(meteor_demod_sink_test PRIVATE
     Qt::Gui
     sdrbase
 )
+
+add_custom_target(meteor_demod_sink_regression
+    COMMAND $<TARGET_FILE:meteor_demod_sink_test>
+        --test-dir "${CMAKE_CURRENT_LIST_DIR}/tests"
+    COMMAND $<TARGET_FILE:meteor_demod_sink_test>
+        --test-dir "${CMAKE_CURRENT_LIST_DIR}/tests"
+        --chunk-samples 127
+    DEPENDS meteor_demod_sink_test
+    USES_TERMINAL
+    VERBATIM
+)

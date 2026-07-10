@@ -1184,6 +1184,17 @@ CameraGUI::CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *
     initialiseVideoRecordBitrateCombo();
     initialiseYouTubeBitrateCombo();
     initialiseYoloPathCombos();
+
+    for (QComboBox *combo : {
+            settingsUI()->plateSolveStartModeCombo,
+            settingsUI()->plateSolveCatalogSourceCombo,
+            settingsUI()->plateSolveLabelModeCombo,
+            settingsUI()->plateSolveApplyModeCombo})
+    {
+        combo->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
+        combo->setMinimumContentsLength(8);
+    }
+
     createWindowOverlaysTab();
 
 #ifndef CAMERA_TENSORRT_YOLO

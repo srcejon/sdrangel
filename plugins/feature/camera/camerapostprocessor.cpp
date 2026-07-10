@@ -2494,7 +2494,7 @@ void CameraPostProcessor::applyTrackedObjectOverlay(const CameraPipelineFrame& f
         {
             QString label = object.m_label;
             if (m_settings.m_trackObjectRange && std::isfinite(azEl.getDistance())) {
-                label += QStringLiteral("\nRange %1 km").arg(azEl.getDistance() / 1000.0, 0, 'f', 1);
+                label += QStringLiteral("\n%1 km").arg(azEl.getDistance() / 1000.0, 0, 'f', 1);
             }
 
             if (drawLabels) {

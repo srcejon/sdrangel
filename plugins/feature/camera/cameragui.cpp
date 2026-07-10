@@ -29,6 +29,7 @@
 #include <QClipboard>
 #include <QColorDialog>
 #include <QComboBox>
+#include <QCryptographicHash>
 #include <QDateTime>
 #include <QDateTimeEdit>
 #include <QDesktopServices>
@@ -62,9 +63,11 @@
 #include <QPushButton>
 #include <QRegularExpression>
 #include <QSet>
+#include <QSaveFile>
 #include <QSignalBlocker>
 #include <QSizePolicy>
 #include <QSpinBox>
+#include <QStandardPaths>
 #include <QStandardItemModel>
 #include <QTableWidget>
 #include <QTableWidgetItem>
@@ -10308,6 +10311,111 @@ void CameraGUI::applyYoloPathSetting(const QString& settingKey, const QString& p
     applySetting(settingKey);
 }
 
+#if defined(Q_OS_ANDROID)
+QString CameraGUI::copyAndroidContentFile(
+    const QString& contentUri,
+    const QString& fallbackSuffix,
+    QString *errorMessage) const
+{
+    if (!contentUri.startsWith(QStringLiteral("content://"), Qt::CaseInsensitive)) {
+        return contentUri;
+    }
+
+    QFile sourceFile(contentUri);
+
+    if (!sourceFile.open(QIODevice::ReadOnly))
+    {
+        if (errorMessage) {
+            *errorMessage = tr("Cannot read %1: %2").arg(contentUri, sourceFile.errorString());
+        }
+
+        return QString();
+    }
+
+    const QString appDataDirectory = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+
+    if (appDataDirectory.isEmpty())
+    {
+        if (errorMessage) {
+            *errorMessage = tr("Cannot determine the application data directory.");
+        }
+
+        return QString();
+    }
+
+    QDir directory(appDataDirectory);
+    const QString yoloDirectory = QStringLiteral("camera/yolo");
+
+    if (!directory.mkpath(yoloDirectory))
+    {
+        if (errorMessage) {
+            *errorMessage = tr("Cannot create %1.").arg(directory.filePath(yoloDirectory));
+        }
+
+        return QString();
+    }
+
+    QString suffix = QFileInfo(QUrl(contentUri).path()).suffix();
+    if (suffix.isEmpty()) {
+        suffix = fallbackSuffix;
+    }
+
+    const QString contentHash = QString::fromLatin1(
+        QCryptographicHash::hash(contentUri.toUtf8(), QCryptographicHash::Sha256).toHex().left(16));
+    const QString filename = QStringLiteral("content-%1.%2").arg(contentHash, suffix);
+    const QString destination = directory.filePath(yoloDirectory + QLatin1Char('/') + filename);
+    QSaveFile destinationFile(destination);
+
+    if (!destinationFile.open(QIODevice::WriteOnly))
+    {
+        if (errorMessage) {
+            *errorMessage = tr("Cannot create %1: %2").arg(destination, destinationFile.errorString());
+        }
+
+        return QString();
+    }
+
+    while (!sourceFile.atEnd())
+    {
+        const QByteArray chunk = sourceFile.read(1024 * 1024);
+
+        if (chunk.isEmpty() && !sourceFile.atEnd())
+        {
+            destinationFile.cancelWriting();
+
+            if (errorMessage) {
+                *errorMessage = tr("Cannot read %1: %2").arg(contentUri, sourceFile.errorString());
+            }
+
+            return QString();
+        }
+
+        if (destinationFile.write(chunk) != chunk.size())
+        {
+            destinationFile.cancelWriting();
+
+            if (errorMessage) {
+                *errorMessage = tr("Cannot write %1: %2").arg(destination, destinationFile.errorString());
+            }
+
+            return QString();
+        }
+    }
+
+    if (!destinationFile.commit())
+    {
+        if (errorMessage) {
+            *errorMessage = tr("Cannot finalize %1: %2").arg(destination, destinationFile.errorString());
+        }
+
+        return QString();
+    }
+
+    qDebug() << "CameraGUI: copied Android content URI for YOLO" << contentUri << "to" << destination;
+    return destination;
+}
+#endif
+
 void CameraGUI::requestYoloDownload(const QString& settingKey, const QString& path)
 {
     if (!(path.startsWith("http://") || path.startsWith("https://")))
@@ -10495,8 +10603,17 @@ void CameraGUI::on_yoloModelPathButton_clicked()
 
     if (!fileName.isEmpty())
     {
-        settingsUI()->yoloModelPathCombo->setCurrentText(fileName);
-        applyYoloPathSetting("yoloModelPath", fileName);
+        QString accessibleFileName = fileName;
+#if defined(Q_OS_ANDROID)
+        QString errorMessage;
+        accessibleFileName = copyAndroidContentFile(fileName, QStringLiteral("onnx"), &errorMessage);
+        if (accessibleFileName.isEmpty()) {
+            QMessageBox::warning(this, tr("Model selection failed"), errorMessage);
+            return;
+        }
+#endif
+        settingsUI()->yoloModelPathCombo->setCurrentText(accessibleFileName);
+        applyYoloPathSetting("yoloModelPath", accessibleFileName);
     }
 }
 
@@ -10520,8 +10637,17 @@ void CameraGUI::on_yoloTileModelPathButton_clicked()
 
     if (!fileName.isEmpty())
     {
-        settingsUI()->yoloTileModelPathCombo->setCurrentText(fileName);
-        applyYoloPathSetting("yoloTileModelPath", fileName);
+        QString accessibleFileName = fileName;
+#if defined(Q_OS_ANDROID)
+        QString errorMessage;
+        accessibleFileName = copyAndroidContentFile(fileName, QStringLiteral("onnx"), &errorMessage);
+        if (accessibleFileName.isEmpty()) {
+            QMessageBox::warning(this, tr("Model selection failed"), errorMessage);
+            return;
+        }
+#endif
+        settingsUI()->yoloTileModelPathCombo->setCurrentText(accessibleFileName);
+        applyYoloPathSetting("yoloTileModelPath", accessibleFileName);
     }
 }
 
@@ -10545,8 +10671,17 @@ void CameraGUI::on_yoloLabelsPathButton_clicked()
 
     if (!fileName.isEmpty())
     {
-        settingsUI()->yoloLabelsPathCombo->setCurrentText(fileName);
-        applyYoloPathSetting("yoloLabelsPath", fileName);
+        QString accessibleFileName = fileName;
+#if defined(Q_OS_ANDROID)
+        QString errorMessage;
+        accessibleFileName = copyAndroidContentFile(fileName, QStringLiteral("txt"), &errorMessage);
+        if (accessibleFileName.isEmpty()) {
+            QMessageBox::warning(this, tr("Labels selection failed"), errorMessage);
+            return;
+        }
+#endif
+        settingsUI()->yoloLabelsPathCombo->setCurrentText(accessibleFileName);
+        applyYoloPathSetting("yoloLabelsPath", accessibleFileName);
     }
 }
 

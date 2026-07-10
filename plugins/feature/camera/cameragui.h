@@ -492,6 +492,10 @@ private:
     int findCameraComboIndex(const QString& protocol, const QString& cameraId,
                              const QString& alpacaHost = QString(), quint16 alpacaPort = 0) const;
     void applyYoloPathSetting(const QString& settingKey, const QString& path);
+#if defined(Q_OS_ANDROID)
+    QString copyAndroidContentFile(const QString& contentUri, const QString& fallbackSuffix,
+                                   QString *errorMessage) const;
+#endif
     void requestYoloDownload(const QString& settingKey, const QString& path);
     void handleYoloDownloadComplete(const QString& filename, bool success, const QString& url, const QString& errorMessage);
     void requestPlateSolveCatalogDownload();

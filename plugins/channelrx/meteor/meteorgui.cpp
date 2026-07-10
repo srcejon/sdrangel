@@ -33,6 +33,7 @@
 #include <QMenu>
 #include <QMessageBox>
 #include <QPushButton>
+#include <QScrollBar>
 #include <QSpinBox>
 #include <QStandardPaths>
 #include <QTableWidget>
@@ -348,6 +349,19 @@ void MeteorGUI::setupSpectrum()
     m_glSpectrum->setPaintGLCallback([this](GLSpectrumView *spectrumView) {
         drawDetectionOverlays(spectrumView);
     });
+
+    GLSpectrumView *spectrumView = m_glSpectrum->getSpectrumView();
+    QScrollBar *scrollBar = spectrumView->parentWidget()
+        ? spectrumView->parentWidget()->findChild<QScrollBar *>(QString(), Qt::FindDirectChildrenOnly)
+        : nullptr;
+
+    if (scrollBar)
+    {
+        connect(scrollBar, &QScrollBar::valueChanged, this, [this, spectrumView]() {
+            m_detectionOverlayWindowValid = false;
+            spectrumView->update();
+        });
+    }
 }
 
 bool MeteorGUI::handleMessage(const Message& message)
@@ -853,7 +867,9 @@ void MeteorGUI::on_detectionsTable_itemSelectionChanged()
 {
     const QList<QTableWidgetItem*> selectedItems = m_detectionsTable->selectedItems();
 
-    if (selectedItems.isEmpty()) {
+    if (selectedItems.isEmpty())
+    {
+        m_glSpectrum->getSpectrumView()->update();
         return;
     }
 
@@ -1728,9 +1744,8 @@ void MeteorGUI::deleteSelectedDetections()
 void MeteorGUI::drawDetectionOverlays(GLSpectrumView *spectrumView)
 {
     const QColor color(255, 190, 0);
-    const QSet<quint64> selectedIds = m_highlightAllDetectionOverlays
-        ? QSet<quint64>()
-        : selectedDetectionOverlayIds();
+    const QColor selectedColor(255, 225, 96);
+    const QSet<quint64> selectedIds = selectedDetectionOverlayIds();
     struct LabelOverlay
     {
         const DetectionOverlay *m_detection;
@@ -1738,6 +1753,7 @@ void MeteorGUI::drawDetectionOverlays(GLSpectrumView *spectrumView)
         float m_yStart;
         float m_xMax;
         float m_yEnd;
+        bool m_selected;
     };
     QVector<LabelOverlay> labelOverlays;
     QDateTime visibleStartUtc;
@@ -1761,6 +1777,8 @@ void MeteorGUI::drawDetectionOverlays(GLSpectrumView *spectrumView)
             if (!m_highlightAllDetectionOverlays && !selectedIds.contains(detection.m_id)) {
                 continue;
             }
+
+            const bool selected = selectedIds.contains(detection.m_id);
 
             const QDateTime endTimeUtc = detection.m_startTimeUtc.addMSecs((qint64) std::ceil(detection.m_durationS * 1000.0));
             float yStart = 0.0f;
@@ -1792,10 +1810,16 @@ void MeteorGUI::drawDetectionOverlays(GLSpectrumView *spectrumView)
 
             yStart = std::clamp(yStart - paddingY, 0.0f, 1.0f);
             yEnd = std::clamp(yEnd + paddingY, 0.0f, 1.0f);
-            spectrumView->drawWaterfallOverlayBox(xMin, yStart, xMax, yEnd, color, 1.0f);
+            spectrumView->drawWaterfallOverlayBox(
+                xMin,
+                yStart,
+                xMax,
+                yEnd,
+                selected ? selectedColor : color,
+                1.0f);
 
             if (m_settings.m_detectionLabelMode != MeteorSettings::DetectionLabelNone) {
-                labelOverlays.push_back({&detection, xMin, yStart, xMax, yEnd});
+                labelOverlays.push_back({&detection, xMin, yStart, xMax, yEnd, selected});
             }
 
             if (!visibleStartUtc.isValid() || (detection.m_startTimeUtc < visibleStartUtc)) {
@@ -1969,11 +1993,20 @@ void MeteorGUI::drawDetectionOverlays(GLSpectrumView *spectrumView)
             QLabel *labelWidget = new QLabel(spectrumView);
             labelWidget->setAttribute(Qt::WA_TransparentForMouseEvents, true);
             labelWidget->setAlignment(Qt::AlignCenter);
-            labelWidget->setStyleSheet("QLabel { color: rgb(255, 190, 0); background-color: rgba(0, 0, 0, 190); padding: 1px 3px; }");
             m_detectionOverlayLabels.push_back(labelWidget);
         }
 
         QLabel *labelWidget = m_detectionOverlayLabels[labelIndex++];
+        const QVariant selectedProperty = labelWidget->property("meteorSelected");
+
+        if (!selectedProperty.isValid() || (selectedProperty.toBool() != overlay.m_selected))
+        {
+            labelWidget->setProperty("meteorSelected", overlay.m_selected);
+            labelWidget->setStyleSheet(overlay.m_selected
+                ? "QLabel { color: rgb(255, 225, 96); background-color: rgba(0, 0, 0, 190); padding: 1px 3px; }"
+                : "QLabel { color: rgb(255, 190, 0); background-color: rgba(0, 0, 0, 190); padding: 1px 3px; }");
+        }
+
         labelWidget->setText(label);
         labelWidget->setGeometry(labelRect);
         labelWidget->show();

@@ -22,6 +22,8 @@
 #include <QDateTime>
 #include <QDialog>
 
+QT_FORWARD_DECLARE_CLASS(QShowEvent)
+
 #include "ui_camerasettingsdialog.h"
 
 #if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
@@ -72,6 +74,9 @@ public:
     void clearCameraStatus();
     void shrinkToVisibleContent();
 
+protected:
+    void showEvent(QShowEvent *event) override;
+
 private:
     Ui::CameraSettingsDialog *ui;
     CameraSettingsChart *m_tempChart;
@@ -85,6 +90,10 @@ private:
     qint64 m_lastCloudSampleMs;
 
     void updateCloudAxes();
+
+#if defined(Q_OS_ANDROID)
+    void logAndroidSizeDiagnostics() const;
+#endif
 
 private slots:
     void on_clearChart_clicked();

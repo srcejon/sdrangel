@@ -542,6 +542,7 @@ void CameraSettings::resetToDefaults()
     m_windowOverlays.clear();
     m_yoloEnabled = false;
     m_yoloModelPath.clear();
+    m_yoloTileModelPath.clear();
     m_yoloLabelsPath.clear();
     m_yoloConfThreshold = 0.5;
     m_yoloNmsThreshold = 0.45;
@@ -885,6 +886,7 @@ QByteArray CameraSettings::serialize() const
     s.writeS32(310, m_playbackProjectionY);
     s.writeS32(311, m_playbackProjectionWidth);
     s.writeS32(312, m_playbackProjectionHeight);
+    s.writeString(313, m_yoloTileModelPath);
 
     return s.final();
 }
@@ -1389,6 +1391,7 @@ bool CameraSettings::deserialize(const QByteArray& data)
         m_overlayTextPosY = qBound(m_minUiPixelOffset, m_overlayTextPosY, m_maxUiPixelOffset);
         d.readBool(162, &m_yoloEnabled, false);
         d.readString(163, &m_yoloModelPath, "");
+        d.readString(313, &m_yoloTileModelPath, "");
         d.readString(164, &m_yoloLabelsPath, "");
         d.readDouble(165, &m_yoloConfThreshold, 0.5);
         d.readDouble(166, &m_yoloNmsThreshold, 0.45);
@@ -2525,6 +2528,9 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     if (settingsKeys.contains("yoloModelPath")) {
         m_yoloModelPath = settings.m_yoloModelPath;
     }
+    if (settingsKeys.contains("yoloTileModelPath")) {
+        m_yoloTileModelPath = settings.m_yoloTileModelPath;
+    }
     if (settingsKeys.contains("yoloLabelsPath")) {
         m_yoloLabelsPath = settings.m_yoloLabelsPath;
     }
@@ -3432,6 +3438,9 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("yoloModelPath") || force) {
         ostr << " m_yoloModelPath: " << m_yoloModelPath.toStdString();
+    }
+    if (settingsKeys.contains("yoloTileModelPath") || force) {
+        ostr << " m_yoloTileModelPath: " << m_yoloTileModelPath.toStdString();
     }
     if (settingsKeys.contains("yoloLabelsPath") || force) {
         ostr << " m_yoloLabelsPath: " << m_yoloLabelsPath.toStdString();

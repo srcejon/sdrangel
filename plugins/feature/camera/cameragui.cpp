@@ -2063,22 +2063,30 @@ void CameraGUI::displaySettings()
     {
         const bool yoloEnabled = m_settings.m_yoloEnabled;
         QComboBox *modelPathCombo = settingsUI()->yoloModelPathCombo;
+        QComboBox *tileModelPathCombo = settingsUI()->yoloTileModelPathCombo;
         QComboBox *labelsPathCombo = settingsUI()->yoloLabelsPathCombo;
         const QSignalBlocker yoloButtonBlocker(ui->yoloButton);
         const QSignalBlocker modelComboBlocker(modelPathCombo);
+        const QSignalBlocker tileModelComboBlocker(tileModelPathCombo);
         const QSignalBlocker labelsComboBlocker(labelsPathCombo);
         QLineEdit *modelLineEdit = modelPathCombo->lineEdit();
+        QLineEdit *tileModelLineEdit = tileModelPathCombo->lineEdit();
         QLineEdit *labelsLineEdit = labelsPathCombo->lineEdit();
         const bool modelLineEditWasBlocked = modelLineEdit && modelLineEdit->blockSignals(true);
+        const bool tileModelLineEditWasBlocked = tileModelLineEdit && tileModelLineEdit->blockSignals(true);
         const bool labelsLineEditWasBlocked = labelsLineEdit && labelsLineEdit->blockSignals(true);
 
         modelPathCombo->setCurrentText(m_settings.m_yoloModelPath);
+        tileModelPathCombo->setCurrentText(m_settings.m_yoloTileModelPath);
         labelsPathCombo->setCurrentText(m_settings.m_yoloLabelsPath);
         updateYoloButtonEnabled();
         ui->yoloButton->setChecked(yoloEnabled && ui->yoloButton->isEnabled());
 
         if (modelLineEdit) {
             modelLineEdit->blockSignals(modelLineEditWasBlocked);
+        }
+        if (tileModelLineEdit) {
+            tileModelLineEdit->blockSignals(tileModelLineEditWasBlocked);
         }
         if (labelsLineEdit) {
             labelsLineEdit->blockSignals(labelsLineEditWasBlocked);
@@ -3064,6 +3072,12 @@ void CameraGUI::makeUIConnections()
         QObject::connect(settingsUI()->yoloModelPathCombo->lineEdit(), &QLineEdit::textChanged, this, [this]() { updateYoloButtonEnabled(); });
     }
     QObject::connect(settingsUI()->yoloModelPathButton, &QPushButton::clicked, this, &CameraGUI::on_yoloModelPathButton_clicked);
+    QObject::connect(settingsUI()->yoloTileModelPathCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_yoloTileModelPathCombo_currentIndexChanged);
+    if (settingsUI()->yoloTileModelPathCombo->lineEdit()) {
+        QObject::connect(settingsUI()->yoloTileModelPathCombo->lineEdit(), &QLineEdit::editingFinished, this, &CameraGUI::on_yoloTileModelPathEdit_editingFinished);
+        QObject::connect(settingsUI()->yoloTileModelPathCombo->lineEdit(), &QLineEdit::textChanged, this, [this]() { updateYoloButtonEnabled(); });
+    }
+    QObject::connect(settingsUI()->yoloTileModelPathButton, &QPushButton::clicked, this, &CameraGUI::on_yoloTileModelPathButton_clicked);
     QObject::connect(settingsUI()->yoloLabelsPathCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_yoloLabelsPathCombo_currentIndexChanged);
     if (settingsUI()->yoloLabelsPathCombo->lineEdit()) {
         QObject::connect(settingsUI()->yoloLabelsPathCombo->lineEdit(), &QLineEdit::editingFinished, this, &CameraGUI::on_yoloLabelsPathEdit_editingFinished);
@@ -10175,7 +10189,8 @@ void CameraGUI::on_yoloButton_toggled(bool checked)
 
 void CameraGUI::updateYoloButtonEnabled()
 {
-    const bool hasModelPath = !settingsUI()->yoloModelPathCombo->currentText().trimmed().isEmpty();
+    const bool hasModelPath = !settingsUI()->yoloModelPathCombo->currentText().trimmed().isEmpty()
+        || !settingsUI()->yoloTileModelPathCombo->currentText().trimmed().isEmpty();
     const bool hasLabelsPath = !settingsUI()->yoloLabelsPathCombo->currentText().trimmed().isEmpty();
     const bool enabled = hasModelPath && hasLabelsPath;
 
@@ -10204,6 +10219,10 @@ void CameraGUI::applyYoloPathSetting(const QString& settingKey, const QString& p
     if (settingKey == "yoloModelPath")
     {
         m_settings.m_yoloModelPath = path;
+    }
+    else if (settingKey == "yoloTileModelPath")
+    {
+        m_settings.m_yoloTileModelPath = path;
     }
     else if (settingKey == "yoloLabelsPath")
     {
@@ -10337,7 +10356,12 @@ void CameraGUI::handleYoloDownloadComplete(const QString& filename, bool success
         return;
     }
 
-    QComboBox *combo = (settingKey == "yoloModelPath") ? settingsUI()->yoloModelPathCombo : settingsUI()->yoloLabelsPathCombo;
+    QComboBox *combo = settingsUI()->yoloLabelsPathCombo;
+    if (settingKey == "yoloModelPath") {
+        combo = settingsUI()->yoloModelPathCombo;
+    } else if (settingKey == "yoloTileModelPath") {
+        combo = settingsUI()->yoloTileModelPathCombo;
+    }
     const QSignalBlocker blocker(combo);
     combo->setCurrentText(filename);
     applyYoloPathSetting(settingKey, filename);
@@ -10402,6 +10426,31 @@ void CameraGUI::on_yoloModelPathButton_clicked()
     {
         settingsUI()->yoloModelPathCombo->setCurrentText(fileName);
         applyYoloPathSetting("yoloModelPath", fileName);
+    }
+}
+
+void CameraGUI::on_yoloTileModelPathCombo_currentIndexChanged(int index)
+{
+    if (index >= 0) {
+        requestYoloDownload("yoloTileModelPath", settingsUI()->yoloTileModelPathCombo->itemText(index));
+    }
+}
+
+void CameraGUI::on_yoloTileModelPathEdit_editingFinished()
+{
+    requestYoloDownload("yoloTileModelPath", settingsUI()->yoloTileModelPathCombo->currentText().trimmed());
+}
+
+void CameraGUI::on_yoloTileModelPathButton_clicked()
+{
+    const QString fileName = QFileDialog::getOpenFileName(
+        this, tr("Select YOLO tiled-inference ONNX model"), m_settings.m_yoloTileModelPath.isEmpty() ? m_settings.m_yoloModelPath : m_settings.m_yoloTileModelPath,
+        tr("ONNX model (*.onnx);;All files (*)"));
+
+    if (!fileName.isEmpty())
+    {
+        settingsUI()->yoloTileModelPathCombo->setCurrentText(fileName);
+        applyYoloPathSetting("yoloTileModelPath", fileName);
     }
 }
 

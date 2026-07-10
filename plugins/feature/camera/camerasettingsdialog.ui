@@ -5250,14 +5250,14 @@ Use src=file:///path/to/images/logo.png for img tags. http is not supported.</st
            <string>Object Detection</string>
           </attribute>
           <layout class="QGridLayout" name="gridLayout_4">
-           <item row="3" column="0">
+           <item row="4" column="0">
             <widget class="QLabel" name="yoloNmsLabel">
              <property name="text">
               <string>NMS</string>
              </property>
             </widget>
            </item>
-           <item row="4" column="0">
+           <item row="5" column="0">
             <widget class="QLabel" name="yoloBoxColorLabel">
              <property name="text">
               <string>BBox Colour</string>
@@ -5425,14 +5425,57 @@ Use src=file:///path/to/images/logo.png for img tags. http is not supported.</st
              </property>
             </widget>
            </item>
-           <item row="2" column="0">
+           <item row="1" column="0">
+            <widget class="QLabel" name="yoloTileModelPathLabel">
+             <property name="text">
+              <string>Tile model</string>
+             </property>
+            </widget>
+           </item>
+           <item row="1" column="1">
+            <widget class="QComboBox" name="yoloTileModelPathCombo">
+             <property name="sizePolicy">
+              <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+               <horstretch>0</horstretch>
+               <verstretch>0</verstretch>
+              </sizepolicy>
+             </property>
+             <property name="toolTip">
+              <string>Optional YOLO ONNX model file used for tiled inference. Leave empty to use the main YOLO model.</string>
+             </property>
+             <property name="editable">
+              <bool>true</bool>
+             </property>
+            </widget>
+           </item>
+           <item row="1" column="3">
+            <widget class="QPushButton" name="yoloTileModelPathButton">
+             <property name="maximumSize">
+              <size>
+               <width>30</width>
+               <height>16777215</height>
+              </size>
+             </property>
+             <property name="toolTip">
+              <string>Browse for optional tiled-inference ONNX model file</string>
+             </property>
+             <property name="text">
+              <string/>
+             </property>
+             <property name="icon">
+              <iconset resource="../../../sdrgui/resources/res.qrc">
+               <normaloff>:/load.png</normaloff>:/load.png</iconset>
+             </property>
+            </widget>
+           </item>
+           <item row="3" column="0">
             <widget class="QLabel" name="yoloConfLabel">
              <property name="text">
               <string>Confidence</string>
              </property>
             </widget>
            </item>
-           <item row="4" column="1">
+           <item row="5" column="1">
             <widget class="QToolButton" name="yoloBoxColorButton">
              <property name="toolTip">
               <string>Bounding box colour for detections</string>
@@ -5455,7 +5498,7 @@ Use src=file:///path/to/images/logo.png for img tags. http is not supported.</st
              </property>
             </widget>
            </item>
-           <item row="1" column="1">
+           <item row="2" column="1">
             <widget class="QComboBox" name="yoloLabelsPathCombo">
              <property name="sizePolicy">
               <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
@@ -5476,7 +5519,7 @@ Use src=file:///path/to/images/logo.png for img tags. http is not supported.</st
              </item>
             </widget>
            </item>
-           <item row="1" column="3">
+           <item row="2" column="3">
             <widget class="QPushButton" name="yoloLabelsPathButton">
              <property name="maximumSize">
               <size>
@@ -5496,7 +5539,7 @@ Use src=file:///path/to/images/logo.png for img tags. http is not supported.</st
              </property>
             </widget>
            </item>
-           <item row="5" column="1">
+           <item row="6" column="1">
             <widget class="QComboBox" name="yoloTargetCombo">
              <property name="sizePolicy">
               <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
@@ -5537,7 +5580,7 @@ Use src=file:///path/to/images/logo.png for img tags. http is not supported.</st
              </item>
             </widget>
            </item>
-           <item row="2" column="1">
+           <item row="3" column="1">
             <widget class="QDoubleSpinBox" name="yoloConfSpin">
              <property name="toolTip">
               <string>Minimum confidence threshold for detections (0-1)</string>
@@ -5559,14 +5602,14 @@ Use src=file:///path/to/images/logo.png for img tags. http is not supported.</st
              </property>
             </widget>
            </item>
-           <item row="1" column="0">
+           <item row="2" column="0">
             <widget class="QLabel" name="yoloLabelsLabel">
              <property name="text">
               <string>Labels</string>
              </property>
             </widget>
            </item>
-           <item row="3" column="1">
+           <item row="4" column="1">
             <widget class="QDoubleSpinBox" name="yoloNmsSpin">
              <property name="toolTip">
               <string>Non-maximum suppression IoU threshold (0-1)</string>
@@ -5588,21 +5631,21 @@ Use src=file:///path/to/images/logo.png for img tags. http is not supported.</st
              </property>
             </widget>
            </item>
-           <item row="5" column="0">
+           <item row="6" column="0">
             <widget class="QLabel" name="yoloTargetLabel">
              <property name="text">
               <string>Target</string>
              </property>
             </widget>
            </item>
-           <item row="6" column="0">
+           <item row="7" column="0">
             <widget class="QLabel" name="yoloInferenceModeLabel">
              <property name="text">
               <string>Input mode</string>
              </property>
             </widget>
            </item>
-           <item row="6" column="1">
+           <item row="7" column="1">
             <widget class="QComboBox" name="yoloInferenceModeCombo">
              <property name="toolTip">
               <string>Choose whether object detection scales the full image, runs on overlapping model-sized tiles, or runs both and merges the results</string>
@@ -5624,14 +5667,14 @@ Use src=file:///path/to/images/logo.png for img tags. http is not supported.</st
              </item>
             </widget>
            </item>
-           <item row="7" column="0">
+           <item row="8" column="0">
             <widget class="QLabel" name="yoloTileOverlapLabel">
              <property name="text">
               <string>Tile overlap</string>
              </property>
             </widget>
            </item>
-           <item row="7" column="1">
+           <item row="8" column="1">
             <widget class="QSpinBox" name="yoloTileOverlapSpin">
              <property name="toolTip">
               <string>Percentage overlap between adjacent YOLO tiles</string>
@@ -5647,14 +5690,14 @@ Use src=file:///path/to/images/logo.png for img tags. http is not supported.</st
              </property>
             </widget>
            </item>
-           <item row="8" column="0">
+           <item row="9" column="0">
             <widget class="QLabel" name="yoloIgnoredClassNamesLabel">
              <property name="text">
               <string>Ignored classes</string>
              </property>
             </widget>
            </item>
-           <item row="8" column="1" colspan="3">
+           <item row="9" column="1" colspan="3">
             <widget class="QPlainTextEdit" name="yoloIgnoredClassNamesEdit">
              <property name="toolTip">
               <string>Object class names to ignore, one per line. Matching detections will not be drawn or recorded in object history.</string>
@@ -5665,7 +5708,7 @@ car</string>
              </property>
             </widget>
            </item>
-           <item row="9" column="0">
+           <item row="10" column="0">
             <spacer name="verticalSpacer_3">
              <property name="orientation">
               <enum>Qt::Orientation::Vertical</enum>

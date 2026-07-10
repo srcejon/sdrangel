@@ -38,9 +38,9 @@ class Camera;
  * \brief Detection stage that runs YOLO object detection and tracks detected objects.
  *
  * Runs a YOLO model over the detection ROI (tiling large frames), decoding and NMS-filtering
- * the raw outputs into CameraPipelineFrame::m_detections. Inference uses either the OpenCV DNN
- * backend (m_yoloNet, with a selectable backend/target) or, when CAMERA_TENSORRT_YOLO is
- * defined, the faster batched CameraYoloTensorRt engine. Detections are then turned into a
+ * the raw outputs into CameraPipelineFrame::m_detections. Scale and tile inference can use
+ * separate model states; each uses either OpenCV DNN or, when CAMERA_TENSORRT_YOLO is defined,
+ * the faster batched CameraYoloTensorRt engine. Detections are then turned into a
  * per-class appearance/disappearance history (with debounce deadlines) reported to the GUI, and
  * the first detection can be forwarded to the feature as an azimuth/elevation target.
  *
@@ -132,19 +132,23 @@ private:
     Camera *m_camera;
     MessageQueue *m_msgQueueToGUI;
     MessageQueue *m_msgQueueToFeature;
-    cv::dnn::Net m_yoloNet;
-    cv::Size m_yoloInputSize;
+
+    struct YoloModelState
+    {
+        cv::dnn::Net m_net;
+        cv::Size m_inputSize = cv::Size(640, 640);
 #ifdef CAMERA_TENSORRT_YOLO
-    CameraYoloTensorRt m_yoloTensorRt;
+        CameraYoloTensorRt m_tensorRt;
 #endif
-    // Last YOLO DNN target (as CameraSettings::YoloDnnTarget value cast to int) that we
-    // successfully applied to m_yoloNet via setPreferable{Backend,Target}. -1 = not yet
-    // applied (e.g. just after the net was loaded). We re-apply only when this differs
-    // from the current setting, avoiding a per-frame call that can rebuild the network's
-    // compute graph when targets change.
-    int m_appliedYoloDnnTarget = -1;
-    bool m_yoloBatchedInferenceSupported = false;
-    QString m_yoloLoadedModelPath;
+        // Last YOLO DNN target (as CameraSettings::YoloDnnTarget value cast to int) that
+        // was applied via setPreferable{Backend,Target}. -1 = not yet applied.
+        int m_appliedDnnTarget = -1;
+        bool m_batchedInferenceSupported = false;
+        QString m_loadedModelPath;
+    };
+
+    YoloModelState m_yoloScaleModel;
+    YoloModelState m_yoloTileModel;
     QSet<QString> m_reportedErrorKeys;
     QStringList m_yoloLabels;
     QString m_yoloLoadedLabelsPath;
@@ -156,10 +160,14 @@ private:
     CameraPipelineFrame m_lastInputFrame;
     CameraMeteorPhotometer m_meteorPhotometer;
     void runYoloDetections(const cv::Mat& bgrMat, const cv::Rect& roi, QVector<CameraPipelineDetection>& detections);
+    void resetYoloModelState(YoloModelState& modelState);
+    bool ensureYoloModelLoaded(YoloModelState& modelState, const QString& modelPath, bool useTensorRt);
+    bool runYoloModelDetections(YoloModelState& modelState, const QString& modelPath, const cv::Mat& bgrMat,
+        const QVector<cv::Rect>& inferenceRects, std::vector<cv::Rect>& boxes, std::vector<float>& scores, std::vector<int>& classIds,
+        bool useTensorRt);
     void decodeYoloDetections(const cv::Mat& det, const cv::Rect& tileRect, int padX, int padY, float invScale,
         std::vector<cv::Rect>& boxes, std::vector<float>& scores, std::vector<int>& classIds) const;
-    QVector<cv::Rect> makeYoloTiles(const cv::Rect& roi) const;
-    QVector<cv::Rect> makeYoloInferenceRects(const cv::Rect& roi) const;
+    QVector<cv::Rect> makeYoloTiles(const cv::Rect& roi, const cv::Size& inputSize) const;
     void processObjectDetections(const QVector<CameraPipelineDetection>& detections, const QDateTime& now, CameraPipelineFrame& frame);
     void sendFirstObjectDetectionTarget(const QVector<CameraPipelineDetection>& detections, const CameraPipelineFrame& frame) const;
     [[nodiscard]] int findCompletedPlaybackHistoryIndex(const QString& className, const CameraPipelineFrame& frame) const;

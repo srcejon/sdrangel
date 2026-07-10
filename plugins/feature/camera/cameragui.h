@@ -848,6 +848,9 @@ private slots:
     void on_yoloModelPathCombo_currentIndexChanged(int index);
     void on_yoloModelPathEdit_editingFinished();
     void on_yoloModelPathButton_clicked();
+    void on_yoloTileModelPathCombo_currentIndexChanged(int index);
+    void on_yoloTileModelPathEdit_editingFinished();
+    void on_yoloTileModelPathButton_clicked();
     void on_yoloLabelsPathCombo_currentIndexChanged(int index);
     void on_yoloLabelsPathEdit_editingFinished();
     void on_yoloLabelsPathButton_clicked();

@@ -40,6 +40,7 @@
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QFontDatabase>
+#include <QFrame>
 #include <QGraphicsSimpleTextItem>
 #include <QGraphicsPixmapItem>
 #include <QGraphicsView>
@@ -112,6 +113,7 @@
 #include "gui/audioselectdialog.h"
 #include "gui/basicfeaturesettingsdialog.h"
 #include "gui/dialogpositioner.h"
+#include "gui/flowlayout.h"
 #include "dsp/dspengine.h"
 #include "maincore.h"
 #include "feature/featureset.h"
@@ -1142,6 +1144,7 @@ CameraGUI::CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *
 
     RollupContents *rollupContents = getRollupContents();
     ui->setupUi(rollupContents);
+    createToolbarFlowLayout();
     rollupContents->arrangeRollups();
     connect(this, SIGNAL(customContextMenuRequested(const QPoint &)), this, SLOT(onMenuDialogCalled(const QPoint &)));
 
@@ -1284,6 +1287,56 @@ CameraGUI::CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *
     m_resizer.enableChildMouseTracking();
 
     m_camera->getInputMessageQueue()->push(Camera::MsgRefreshCameraList::create());
+}
+
+void CameraGUI::createToolbarFlowLayout()
+{
+    QHBoxLayout *toolbarLayout = ui->horizontalLayout_2;
+    ui->verticalLayout->removeItem(toolbarLayout);
+
+    auto *flowLayout = new FlowLayout(nullptr, 0, 2, 2);
+    QHBoxLayout *groupLayout = nullptr;
+
+    const auto finishGroup = [&]() {
+        if (!groupLayout) {
+            return;
+        }
+
+        if (groupLayout->count() > 0) {
+            flowLayout->addItem(groupLayout);
+        } else {
+            delete groupLayout;
+        }
+
+        groupLayout = nullptr;
+    };
+
+    while (toolbarLayout->count() > 0)
+    {
+        QLayoutItem *item = toolbarLayout->takeAt(0);
+        QFrame *separator = qobject_cast<QFrame*>(item->widget());
+
+        if (item->spacerItem() || (separator && separator->frameShape() == QFrame::VLine))
+        {
+            delete separator;
+            delete item;
+            finishGroup();
+            continue;
+        }
+
+        if (!groupLayout)
+        {
+            groupLayout = new QHBoxLayout();
+            groupLayout->setContentsMargins(0, 0, 0, 0);
+            groupLayout->setSpacing(2);
+        }
+
+        groupLayout->addItem(item);
+    }
+
+    finishGroup();
+    delete toolbarLayout;
+    ui->verticalLayout->addItem(flowLayout);
 }
 
 CameraGUI::~CameraGUI()

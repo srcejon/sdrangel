@@ -367,6 +367,7 @@ private:
     Ui::CameraSettingsDialog *settingsUI() const;
     bool handleMessage(const Message& message);
     void makeUIConnections();
+    void createToolbarFlowLayout();
     void updateCameraSettingsVisibility();
     void updateHistogramStretchControls();
     void updateMotionExclusionRectsTable();

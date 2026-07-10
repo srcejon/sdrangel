@@ -1766,6 +1766,10 @@ void MeteorGUI::drawDetectionOverlays(GLSpectrumView *spectrumView)
     const double waterfallRowDurationS = m_settings.m_channelSampleRate > 0
         ? (double) (fftHopSize * timingRate) / (double) m_settings.m_channelSampleRate
         : 0.0;
+    const double spectrumWindowCenterDelayS = m_settings.m_channelSampleRate > 0
+        ? (double) (fftSize + (timingRate - 1) * fftHopSize)
+            / (2.0 * (double) m_settings.m_channelSampleRate)
+        : 0.0;
     struct LabelOverlay
     {
         const DetectionOverlay *m_detection;
@@ -1813,7 +1817,10 @@ void MeteorGUI::drawDetectionOverlays(GLSpectrumView *spectrumView)
             if ((fftOverlap > 0) && (waterfallRowDurationS > 0.0) && (timePerPixel > 0.0))
             {
                 const double durationRows = detection.m_durationS / waterfallRowDurationS;
-                const float yCenter = (yStart + yEnd) * 0.5f;
+                const double centerDelayRows = spectrumWindowCenterDelayS / waterfallRowDurationS;
+                const float timeDirection = spectrumSettings.m_invertedWaterfall ? -1.0f : 1.0f;
+                const float yCenter = (yStart + yEnd) * 0.5f
+                    + timeDirection * (float) (centerDelayRows * timePerPixel);
                 const float halfHeight = (float) (durationRows * timePerPixel * 0.5);
                 yStart = yCenter - halfHeight;
                 yEnd = yCenter + halfHeight;

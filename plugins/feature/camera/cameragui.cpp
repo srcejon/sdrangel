@@ -1183,6 +1183,7 @@ CameraGUI::CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *
     new DialogPositioner(m_settingsDialog, false);
     initialiseVideoRecordBitrateCombo();
     initialiseYouTubeBitrateCombo();
+    initialiseYoloPathCombos();
     createWindowOverlaysTab();
 
 #ifndef CAMERA_TENSORRT_YOLO
@@ -1288,6 +1289,34 @@ CameraGUI::CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *
     m_resizer.enableChildMouseTracking();
 
     m_camera->getInputMessageQueue()->push(Camera::MsgRefreshCameraList::create());
+}
+
+void CameraGUI::initialiseYoloPathCombos()
+{
+    QComboBox *modelPathCombo = settingsUI()->yoloModelPathCombo;
+    QComboBox *tileModelPathCombo = settingsUI()->yoloTileModelPathCombo;
+    QComboBox *labelsPathCombo = settingsUI()->yoloLabelsPathCombo;
+    const QString modelUrlPrefix = QStringLiteral("https://huggingface.co/sdrangel/object_detection/resolve/main/");
+
+    for (const char *modelName : {
+            "yolo26n.onnx", "yolo26m.onnx", "yolo26s.onnx", "yolo26l.onnx", "yolo26x.onnx",
+            "yolo11n.onnx", "yolo11m.onnx", "yolo11s.onnx", "yolo11l.onnx", "yolo11x.onnx",
+            "yolov8n.onnx", "yolov8m.onnx", "yolov8s.onnx", "yolov8l.onnx", "yolov8x.onnx",
+            "yolov5nu.onnx", "yolov5mu.onnx", "yolov5su.onnx", "yolov5lu.onnx", "yolov5xu.onnx",
+            "yolov5n6u.onnx", "yolov5m6u.onnx", "yolov5s6u.onnx", "yolov5l6u.onnx", "yolov5x6u.onnx"})
+    {
+        modelPathCombo->addItem(modelUrlPrefix + QLatin1String(modelName));
+    }
+
+    labelsPathCombo->addItem(modelUrlPrefix + QStringLiteral("coco_classes.txt"));
+
+    // Paths can be long URLs. Keep them in the drop-down, but do not let their
+    // text define the minimum width of the whole settings dialog.
+    for (QComboBox *combo : {modelPathCombo, tileModelPathCombo, labelsPathCombo})
+    {
+        combo->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
+        combo->setMinimumContentsLength(0);
+    }
 }
 
 void CameraGUI::createToolbarFlowLayout()

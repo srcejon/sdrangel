@@ -22,6 +22,9 @@
 #include <QApplication>
 #include <QPainter>
 #include <QScreen>
+#include <QShowEvent>
+#include <QTabWidget>
+#include <QTimer>
 #include <QVBoxLayout>
 #include <QGraphicsLayout>
 #include <QtCharts/QChart>
@@ -35,6 +38,40 @@ using namespace QtCharts;
 #endif
 
 namespace {
+
+#if defined(Q_OS_ANDROID)
+void logTabWidgetSizeDiagnostics(const char *name, const QTabWidget *tabWidget)
+{
+    if (!tabWidget) {
+        return;
+    }
+
+    qDebug() << "CameraSettingsDialog Android size" << name
+             << "size" << tabWidget->size()
+             << "minimum" << tabWidget->minimumSize()
+             << "minimumHint" << tabWidget->minimumSizeHint()
+             << "sizeHint" << tabWidget->sizeHint()
+             << "current" << tabWidget->currentIndex()
+             << "tabs" << tabWidget->count();
+
+    for (int index = 0; index < tabWidget->count(); ++index)
+    {
+        const QWidget *page = tabWidget->widget(index);
+
+        if (!page) {
+            continue;
+        }
+
+        qDebug() << "CameraSettingsDialog Android page" << name << index
+                 << tabWidget->tabText(index)
+                 << "visible" << page->isVisible()
+                 << "size" << page->size()
+                 << "minimum" << page->minimumSize()
+                 << "minimumHint" << page->minimumSizeHint()
+                 << "sizeHint" << page->sizeHint();
+    }
+}
+#endif
 
 void updateTemperatureAxes(QLineSeries* series, QDateTimeAxis* axisX, QValueAxis* axisY)
 {
@@ -162,6 +199,44 @@ CameraSettingsDialog::~CameraSettingsDialog()
 {
     delete ui;
 }
+
+void CameraSettingsDialog::showEvent(QShowEvent *event)
+{
+    QDialog::showEvent(event);
+
+#if defined(Q_OS_ANDROID)
+    // Run after Qt has applied the platform window geometry, rather than reporting
+    // the pre-show size used by shrinkToVisibleContent().
+    QTimer::singleShot(0, this, [this]() {
+        logAndroidSizeDiagnostics();
+    });
+#endif
+}
+
+#if defined(Q_OS_ANDROID)
+void CameraSettingsDialog::logAndroidSizeDiagnostics() const
+{
+    const QScreen *dialogScreen = screen() ? screen() : QApplication::primaryScreen();
+
+    qDebug() << "CameraSettingsDialog Android screen"
+             << (dialogScreen ? dialogScreen->name() : QStringLiteral("none"))
+             << "available" << (dialogScreen ? dialogScreen->availableGeometry() : QRect())
+             << "geometry" << (dialogScreen ? dialogScreen->geometry() : QRect())
+             << "devicePixelRatio" << (dialogScreen ? dialogScreen->devicePixelRatio() : 0.0);
+    qDebug() << "CameraSettingsDialog Android dialog"
+             << "size" << size()
+             << "geometry" << geometry()
+             << "frameGeometry" << frameGeometry()
+             << "minimum" << minimumSize()
+             << "minimumHint" << minimumSizeHint()
+             << "sizeHint" << sizeHint()
+             << "maximum" << maximumSize();
+
+    logTabWidgetSizeDiagnostics("settings", ui->tabWidget);
+    logTabWidgetSizeDiagnostics("overlay", ui->overlayTabWidget);
+    logTabWidgetSizeDiagnostics("detection", ui->detectionTabWidget);
+}
+#endif
 
 void CameraSettingsDialog::appendTemperatureSample(const QDateTime& timestamp, double temperatureC)
 {

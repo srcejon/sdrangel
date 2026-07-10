@@ -1746,6 +1746,26 @@ void MeteorGUI::drawDetectionOverlays(GLSpectrumView *spectrumView)
     const QColor color(255, 190, 0);
     const QColor selectedColor(255, 225, 96);
     const QSet<quint64> selectedIds = selectedDetectionOverlayIds();
+    const SpectrumSettings spectrumSettings = m_spectrumVis->getSettings();
+    const double timePerPixel = spectrumView->waterfallTimePerPixel();
+    const int fftSize = std::max(1, spectrumSettings.m_fftSize);
+    const int fftOverlap = std::clamp(spectrumSettings.m_fftOverlap, 0, fftSize - 1);
+    const int fftHopSize = fftSize - fftOverlap;
+    int timingRate = 1;
+
+    if ((spectrumSettings.m_averagingMode == SpectrumSettings::AvgModeFixed)
+        || (spectrumSettings.m_averagingMode == SpectrumSettings::AvgModeMax))
+    {
+        timingRate = std::max(
+            1,
+            (int) SpectrumSettings::getAveragingValue(
+                spectrumSettings.m_averagingIndex,
+                spectrumSettings.m_averagingMode));
+    }
+
+    const double waterfallRowDurationS = m_settings.m_channelSampleRate > 0
+        ? (double) (fftHopSize * timingRate) / (double) m_settings.m_channelSampleRate
+        : 0.0;
     struct LabelOverlay
     {
         const DetectionOverlay *m_detection;
@@ -1788,6 +1808,13 @@ void MeteorGUI::drawDetectionOverlays(GLSpectrumView *spectrumView)
                 || !spectrumView->waterfallTimeToY(endTimeUtc, yEnd))
             {
                 continue;
+            }
+
+            if ((fftOverlap > 0) && (waterfallRowDurationS > 0.0) && (timePerPixel > 0.0))
+            {
+                const float direction = spectrumSettings.m_invertedWaterfall ? -1.0f : 1.0f;
+                const double durationRows = detection.m_durationS / waterfallRowDurationS;
+                yEnd = yStart + direction * (float) (durationRows * timePerPixel);
             }
 
             const int paddingPixels = std::max(0, m_settings.m_detectionBoxPaddingPixels);
@@ -1882,8 +1909,6 @@ void MeteorGUI::drawDetectionOverlays(GLSpectrumView *spectrumView)
     }
 
     const double frequencyPerPixel = spectrumView->waterfallFrequencyPerPixel();
-    const double timePerPixel = spectrumView->waterfallTimePerPixel();
-
     if ((frequencyPerPixel <= 0.0) || (timePerPixel <= 0.0))
     {
         hideDetectionOverlayLabels();
@@ -1927,7 +1952,6 @@ void MeteorGUI::drawDetectionOverlays(GLSpectrumView *spectrumView)
     const int waterfallWidth = std::max(1, (int) std::round(1.0 / onePixelFraction));
     const int waterfallHeight = std::max(1, (int) std::round(1.0 / timePerPixel));
     const int leftMargin = std::clamp(spectrumView->width() - rightMargin - waterfallWidth, 0, spectrumView->width());
-    const SpectrumSettings spectrumSettings = m_spectrumVis->getSettings();
     const int topMargin = fontMetrics.ascent() * 2;
     const int bottomMargin = fontMetrics.ascent();
     const int frequencyScaleHeight = fontMetrics.height() * 3;

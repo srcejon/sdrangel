@@ -1039,7 +1039,7 @@ TestCaseBundle loadTestCaseBundle(const QString& directory)
     return bundle;
 }
 
-int runTestCaseBundle(const QString& directory)
+int runTestCaseBundle(const QString& directory, bool debugViews)
 {
     // The bundle doubles as the clear-sky reference store for this run
     qputenv("SDRANGEL_CAMERA_CLEARSKY_DIR", QDir(directory).absolutePath().toLocal8Bit());
@@ -1072,6 +1072,39 @@ int runTestCaseBundle(const QString& directory)
     const QString maskPath = QDir(directory).filePath(QStringLiteral("mask.png"));
     writeMaskOverlay(QDir(directory).filePath(QStringLiteral("image.png")), frame->m_cloud, maskPath);
     std::cout << "mask overlay written to " << maskPath.toStdString() << "\n";
+
+    std::cout << "settings: mode " << bundle.settings.m_cloudMode
+              << " dayThreshold " << bundle.settings.m_cloudDayThreshold
+              << " textureThreshold " << bundle.settings.m_cloudTextureThreshold
+              << " nightThreshold " << bundle.settings.m_cloudNightThreshold
+              << " downscale " << bundle.settings.m_cloudDownscale
+              << " open/close " << bundle.settings.m_cloudOpenSize << "/" << bundle.settings.m_cloudCloseSize
+              << " edgeMargin " << bundle.settings.m_cloudEdgeMarginPercent
+              << " sunMoonMask " << bundle.settings.m_cloudMaskSunMoon << " r=" << bundle.settings.m_cloudSunMoonRadiusDeg
+              << " starSense " << bundle.settings.m_cloudStarSense
+              << " useReference " << bundle.settings.m_cloudUseReference << "\n";
+
+    // Each classification stage rendered as the detector's debug views, for diagnosis
+    if (!debugViews) {
+        return 0;
+    }
+    const struct { CameraSettings::CloudDebugView view; const char *name; } views[] = {
+        {CameraSettings::CloudDebugViewBackground, "background"},
+        {CameraSettings::CloudDebugViewSignal, "signal"},
+        {CameraSettings::CloudDebugViewTexture, "texture"},
+        {CameraSettings::CloudDebugViewThresholded, "thresholded"},
+        {CameraSettings::CloudDebugViewFinal, "final"},
+    };
+    for (const auto& v : views)
+    {
+        CameraSettings debugSettings = bundle.settings;
+        debugSettings.m_cloudDebugView = v.view;
+        const CloudRunResult debugRun = runCloudDetector(debugSettings, {bundle.image}, nullptr, false, bundle.captureTime);
+        if (debugRun.completed(1) && !debugRun.frames.first()->m_image.isNull()) {
+            debugRun.frames.first()->m_image.save(QDir(directory).filePath(QStringLiteral("debug_%1.png").arg(QLatin1String(v.name))));
+        }
+    }
+    std::cout << "debug views written\n";
     return 0;
 }
 
@@ -1130,7 +1163,7 @@ void testTestCaseBundle(TestContext& context)
     // Exercise the standalone --run-case runner itself (it repoints the clear-sky store at
     // the bundle, so restore the harness environment afterwards)
     const QByteArray previousClearSkyDir = qgetenv("SDRANGEL_CAMERA_CLEARSKY_DIR");
-    const int runnerExit = runTestCaseBundle(caseDir.path());
+    const int runnerExit = runTestCaseBundle(caseDir.path(), false);
     qputenv("SDRANGEL_CAMERA_CLEARSKY_DIR", previousClearSkyDir);
     context.check(runnerExit == 0, "test-case-bundle", "--run-case runner succeeds on the bundle");
     context.check(QFileInfo::exists(QDir(caseDir.path()).filePath(QStringLiteral("mask.png"))),
@@ -1177,6 +1210,13 @@ void testReferencePatchLearning(TestContext& context)
         return reference.autoLearn(slot, gray, bgr, texture, eval, roiNorm, when,
                                    50.0f, true, true, 30, 25, confirmed);
     };
+
+    // Day slots must refuse patch learning outright: no day-time colour test proves a
+    // pixel clear (dark cloud and blue sky share the same red/blue ratio on IR-sensitive
+    // cameras - observed poisoning a Day reference in the field within two updates)
+    context.check(reference.autoLearn(0, gray, bgr, texture, eval, roiNorm, start,
+                                      50.0f, false, false, 0, 0, confirmed) == CameraClearSkyReference::LearnResult::None,
+        "ref-patch", "day slot refuses patchwork confirmation");
 
     context.check(learnMixed(start) == CameraClearSkyReference::LearnResult::Patches,
         "ref-patch", "unverified frame learns its confirmed patches");
@@ -2373,7 +2413,7 @@ int main(int argc, char *argv[])
             std::cout << "usage: --run-case <bundle directory>\n";
             return 1;
         }
-        return runTestCaseBundle(args.at(idx + 1));
+        return runTestCaseBundle(args.at(idx + 1), args.contains(QStringLiteral("--debug-views")));
     }
 
     if (args.contains(QStringLiteral("--dump-masks")))

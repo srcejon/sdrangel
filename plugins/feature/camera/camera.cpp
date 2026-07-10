@@ -50,6 +50,7 @@ MESSAGE_CLASS_DEFINITION(Camera::MsgReportError, Message)
 MESSAGE_CLASS_DEFINITION(Camera::MsgDeleteStackFrame, Message)
 MESSAGE_CLASS_DEFINITION(Camera::MsgSaveCloudTestCase, Message)
 MESSAGE_CLASS_DEFINITION(Camera::MsgSaveClearSkyReference, Message)
+MESSAGE_CLASS_DEFINITION(Camera::MsgClearClearSkyReference, Message)
 MESSAGE_CLASS_DEFINITION(Camera::MsgClearTrackedObjectHeatMap, Message)
 MESSAGE_CLASS_DEFINITION(Camera::MsgSaveCurrentImage, Message)
 
@@ -562,6 +563,13 @@ bool Camera::handleMessage(const Message& cmd)
             const MsgSaveCloudTestCase& saveMsg = (const MsgSaveCloudTestCase&) cmd;
             m_cloudDetector->getInputMessageQueue()->push(
                 CameraCloudDetector::MsgSaveCloudTestCase::create(saveMsg.getDirectory()));
+        }
+        return true;
+    }
+    else if (MsgClearClearSkyReference::match(cmd))
+    {
+        if (m_cloudDetector) {
+            m_cloudDetector->getInputMessageQueue()->push(CameraCloudDetector::MsgClearClearSkyReference::create());
         }
         return true;
     }

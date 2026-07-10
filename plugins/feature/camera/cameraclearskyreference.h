@@ -125,6 +125,10 @@ public:
     // insufficient data or when the derivation looks implausible (covers most of the sky).
     [[nodiscard]] cv::Mat foregroundMask(const cv::Size& workSize, const QRectF& roiNorm) const;
 
+    // Deletes every slot and the persisted store file - recovery when a reference has
+    // learned cloud as clear sky
+    void clear();
+
     [[nodiscard]] bool slotFilled(int slot) const;
     [[nodiscard]] QString statusSummary(int activeSlot) const;
 

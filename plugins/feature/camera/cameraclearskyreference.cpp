@@ -763,8 +763,11 @@ CameraClearSkyReference::LearnResult CameraClearSkyReference::autoLearn(int slot
     if (!frameVerified)
     {
         // The frame as a whole is not verified clear, but parts of it may be: accumulate
-        // the detector's confirmed-clear regions patchwork-style under per-pixel weights
-        if (confirmedClearMask.empty()
+        // the detector's confirmed-clear regions patchwork-style under per-pixel weights.
+        // Night slots only - star visibility is physical proof of a clear line of sight,
+        // while no day-time colour test is (dark cloud and blue sky share the same
+        // red/blue ratio on IR-sensitive cameras).
+        if (!slotIsNight(slot) || confirmedClearMask.empty()
             || !learnPatches(target, replace, gray, workBgr, texture, evaluationMask, confirmedClearMask, roiNorm, when)) {
             return LearnResult::None;
         }
@@ -968,6 +971,15 @@ cv::Mat CameraClearSkyReference::foregroundMask(const cv::Size& workSize, const 
     cv::Mat work;
     cv::resize(m_foregroundCache, work, workSize, 0.0, 0.0, cv::INTER_NEAREST);
     return work;
+}
+
+void CameraClearSkyReference::clear()
+{
+    for (Slot& slot : m_slots) {
+        slot = Slot();
+    }
+    m_foregroundDirty = true;
+    QFile::remove(storagePath());
 }
 
 bool CameraClearSkyReference::slotFilled(int slot) const

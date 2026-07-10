@@ -9856,32 +9856,20 @@ void CameraGUI::on_cloudAutoReferenceCheck_toggled(bool checked)
 
 void CameraGUI::on_cloudSaveReferenceButton_clicked()
 {
-    // A stopped feature's pipeline stages do not service their message queues, so the
-    // request would silently do nothing
-    if (m_camera->getState() != Feature::StRunning)
-    {
-        m_clearSkyReferenceSummary = tr("Cannot save reference: camera is not started");
-        settingsUI()->cloudReferenceStatusLabel->setText(m_clearSkyReferenceSummary);
-        return;
-    }
     m_camera->getInputMessageQueue()->push(Camera::MsgSaveClearSkyReference::create());
 }
 
 void CameraGUI::on_cloudViewReferenceButton_clicked()
 {
     CameraClearSkyReferenceDialog *dialog = new CameraClearSkyReferenceDialog(
-        CameraCloudDetector::referenceStorageKey(m_settings), this);
+        CameraCloudDetector::referenceStorageKey(m_settings),
+        [this]() { m_camera->getInputMessageQueue()->push(Camera::MsgClearClearSkyReference::create()); },
+        this);
     dialog->show();
 }
 
 void CameraGUI::on_cloudSaveTestCaseButton_clicked()
 {
-    if (m_camera->getState() != Feature::StRunning)
-    {
-        m_clearSkyReferenceSummary = tr("Cannot save test case: camera is not started");
-        settingsUI()->cloudReferenceStatusLabel->setText(m_clearSkyReferenceSummary);
-        return;
-    }
     const QString directory = QFileDialog::getExistingDirectory(this, tr("Save cloud test case to directory"));
     if (!directory.isEmpty()) {
         m_camera->getInputMessageQueue()->push(Camera::MsgSaveCloudTestCase::create(directory));

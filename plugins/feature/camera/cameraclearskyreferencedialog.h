@@ -21,6 +21,8 @@
 
 #include <QDialog>
 
+#include <functional>
+
 class QGridLayout;
 
 /**
@@ -36,13 +38,17 @@ class CameraClearSkyReferenceDialog : public QDialog
 {
     Q_OBJECT
 public:
-    explicit CameraClearSkyReferenceDialog(const QString& storageKey, QWidget *parent = nullptr);
+    // clearRequested is invoked when the user confirms deleting this camera's reference
+    // store; the owner routes it to the running detector so the in-memory store clears too
+    explicit CameraClearSkyReferenceDialog(const QString& storageKey, std::function<void()> clearRequested, QWidget *parent = nullptr);
 
 private slots:
     void refresh();
+    void clearReferences();
 
 private:
     QString m_storageKey;
+    std::function<void()> m_clearRequested;
     QGridLayout *m_grid;
 };
 

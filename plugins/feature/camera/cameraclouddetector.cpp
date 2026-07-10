@@ -41,6 +41,7 @@
 MESSAGE_CLASS_DEFINITION(CameraCloudDetector::MsgReportCloudCoverage, Message)
 MESSAGE_CLASS_DEFINITION(CameraCloudDetector::MsgSaveCloudTestCase, Message)
 MESSAGE_CLASS_DEFINITION(CameraCloudDetector::MsgSaveClearSkyReference, Message)
+MESSAGE_CLASS_DEFINITION(CameraCloudDetector::MsgClearClearSkyReference, Message)
 MESSAGE_CLASS_DEFINITION(CameraCloudDetector::MsgReportClearSkyReference, Message)
 
 namespace {
@@ -112,10 +113,8 @@ constexpr int starSensePatchHalf = 12;        // half-size in full-res pixels of
 constexpr int starSenseMinStars = 2;          // minimum expected stars on a component before the veto may judge it
 constexpr double starSenseVisibleFraction = 0.5; // veto a component when at least this fraction of its expected stars are visible
 // Incremental reference learning: how far around a visible predicted star the sky counts
-// as confirmed clear (fraction of the work-image long side), and how far below the day
-// threshold the red/blue ratio must sit for a day pixel to count as confidently blue sky
+// as confirmed clear (fraction of the work-image long side)
 constexpr double starClearRadiusFraction = 0.04;
-constexpr double dayClearRatioMargin = 0.10;
 
 // Percentile of the 8-bit values where mask is non-zero (0.5 = median), as a robust
 // sky-level estimate that ignores excluded regions and is insensitive to outliers
@@ -332,6 +331,17 @@ bool CameraCloudDetector::handleStageMessage(const Message& cmd)
         }
         return true;
     }
+    if (MsgClearClearSkyReference::match(cmd))
+    {
+        m_clearSkyReference.ensureLoaded(referenceStorageKey(m_settings));
+        m_clearSkyReference.clear();
+        invalidateCache();
+        if (m_msgQueueToFeature) {
+            m_msgQueueToFeature->push(MsgReportClearSkyReference::create(
+                QStringLiteral("Clear-sky references deleted for this camera")));
+        }
+        return true;
+    }
     if (MsgSaveClearSkyReference::match(cmd))
     {
         if (!m_settings.m_cloudDetect)
@@ -448,19 +458,27 @@ void CameraCloudDetector::captureActiveChanged(bool active)
 {
     if (!active)
     {
-        // Release the retained tuning frame so its image buffers (CPU and GPU) are not
-        // pinned while capture is stopped, and drop pending save requests: firing them on
-        // whatever scene the next capture shows would save the wrong thing
+        // Keep the retained frame so a stopped camera can still save a test case or
+        // reference of the frozen display, but downgrade it to CPU so no GPU buffers stay
+        // pinned. Pending latched saves are dropped (they only wait when no frame ever
+        // arrived, and firing on a later capture would save the wrong scene).
+        if (m_lastInputFrame)
+        {
+            m_lastInputFrame->ensureCpuImageFromCuda();
+            m_lastInputFrame->clearCudaCache();
+        }
         if ((!m_saveTestCaseDir.isEmpty() || m_saveReferencePending) && m_msgQueueToFeature) {
             m_msgQueueToFeature->push(MsgReportClearSkyReference::create(
                 QStringLiteral("Pending save cancelled: capture stopped before a frame arrived")));
         }
-        m_lastInputFrame.reset();
         m_saveTestCaseDir.clear();
         m_saveReferencePending = false;
         return;
     }
 
+    // Fresh capture: drop the previous run's retained frame so a save request just after
+    // a restart cannot resurrect the old scene before the first new frame arrives
+    m_lastInputFrame.reset();
     invalidateCache();
 }
 
@@ -742,8 +760,11 @@ bool CameraCloudDetector::resolveNightMode(const cv::Mat& medianGray, const cv::
 // fisheye lens model the overlays use projects them onto the frame. When a near-saturated
 // glare sits at the projected position, the connected component of the cloud mask touching it
 // is deleted - the classifier's own false positive, sized exactly to the bloom at the current
-// gain and exposure - clipped to the configured maximum radius. Runs after classification and
-// morphology, before coverage is measured, so the freed pixels count as the clear sky they are.
+// gain and exposure - clipped to the configured maximum radius. The removed region is also
+// excluded from the evaluated area: under the bloom, cloud and clear sky are indistinguishable,
+// and counting the removal as clear sky biased measured coverage down on sunlit cloud (a field
+// case lost a whole flagged cloud sheet around the sun to the removal and read 5 % on an
+// overcast sky). Runs after classification and morphology, before coverage is measured.
 void CameraCloudDetector::applySunMoonMask(cv::Mat& mask, cv::Mat& evaluationMask, const cv::Mat& gray, const cv::Rect& roi, const QSize& imageSize, const CameraPipelineImageTransform& imageTransform, const QDateTime& captureDateTime) const
 {
     if (!m_settings.m_cloudMaskSunMoon || (m_settings.m_cloudSunMoonRadiusDeg <= 0.0)) {
@@ -886,6 +907,7 @@ void CameraCloudDetector::applySunMoonMask(cv::Mat& mask, cv::Mat& evaluationMas
             }
         }
         mask(window).setTo(0, removal);
+        evaluationMask(window).setTo(0, removal);
     };
 
     AzAlt azAlt;
@@ -1397,7 +1419,9 @@ void CameraCloudDetector::applyCloudDetection(const cv::Mat& workBgr, const cv::
     // Pixels considered sky: not in an exclusion rectangle, and inside the real image
     // content when output scaling has padded the frame with borders
     const cv::Mat& exclusionMask = cachedExclusionMask(roi, gray.size());
-    cv::Mat evaluationMask = exclusionMask;
+    // Deep copy: the sun/moon mask excludes per-frame regions from evaluation, and a
+    // shallow share would burn those (moving) discs into the cached exclusion mask
+    cv::Mat evaluationMask = exclusionMask.clone();
     const cv::Rect contentInRoi = contentRect & roi;
     if (contentInRoi != roi)
     {
@@ -1789,6 +1813,12 @@ void CameraCloudDetector::applyCloudDetection(const cv::Mat& workBgr, const cv::
             visibleStars += star.visible ? 1 : 0;
         }
 
+        // Patchwork confirmation is night-only: a visible predicted star is physical
+        // proof the line of sight is clear. Day colour is NOT proof - on IR-sensitive
+        // all-sky cameras dark cloud carries the same red/blue ratio as blue sky, and a
+        // colour-based day rule was observed learning an overcast sky as the clear
+        // reference within two updates. Day slots fill only from verified-clear whole
+        // frames or a manual Save ref.
         cv::Mat confirmedClear;
         if (night)
         {
@@ -1811,25 +1841,6 @@ void CameraCloudDetector::applyCloudDetection(const cv::Mat& workBgr, const cv::
                         cv::circle(confirmedClear, centre, radius, cv::Scalar(255), cv::FILLED);
                     }
                 }
-            }
-        }
-        else
-        {
-            // Confidently blue sky: ratio well below the day cloud threshold, bright
-            // enough to be sky rather than shadowed structure, and not finely textured
-            std::vector<cv::Mat> channels;
-            cv::split(workBgr, channels);
-            cv::Mat blue, red;
-            channels[0].convertTo(blue, CV_32F);
-            channels[2].convertTo(red, CV_32F);
-            cv::compare(red, (blue + 1.0f) * (m_settings.m_cloudDayThreshold - dayClearRatioMargin), confirmedClear, cv::CMP_LT);
-            const int daySkyLevel = maskedPercentile(gray, evaluationMask, 0.5);
-            const cv::Mat brightMask = gray >= std::max(dayMinBrightness, daySkyLevel / 2);
-            cv::bitwise_and(confirmedClear, brightMask, confirmedClear);
-            if (m_settings.m_cloudTextureThreshold > 0)
-            {
-                const cv::Mat smoothMask = textureEnergy < m_settings.m_cloudTextureThreshold;
-                cv::bitwise_and(confirmedClear, smoothMask, confirmedClear);
             }
         }
         if (!confirmedClear.empty())

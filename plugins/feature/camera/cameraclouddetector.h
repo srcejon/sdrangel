@@ -167,6 +167,18 @@ public:
         MsgSaveClearSkyReference() : Message() { }
     };
 
+    // GUI request: delete this camera's clear-sky reference store (recovery from a
+    // reference that learned cloud as clear sky)
+    class MsgClearClearSkyReference : public Message {
+        MESSAGE_CLASS_DECLARATION
+
+    public:
+        static MsgClearClearSkyReference* create() { return new MsgClearClearSkyReference(); }
+
+    private:
+        MsgClearClearSkyReference() : Message() { }
+    };
+
     // Report to the feature/GUI: clear-sky reference store status after a save or
     // auto-learn update ("3/7 refs ... - current: Dark [tick]")
     class MsgReportClearSkyReference : public Message {

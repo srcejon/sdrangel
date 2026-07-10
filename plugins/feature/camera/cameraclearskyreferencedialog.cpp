@@ -19,8 +19,10 @@
 #include <QDialogButtonBox>
 #include <QGridLayout>
 #include <QLabel>
+#include <QMessageBox>
 #include <QPushButton>
 #include <QScrollArea>
+#include <QTimer>
 #include <QVBoxLayout>
 
 #include "cameraclearskyreference.h"
@@ -46,9 +48,10 @@ QLabel* imageLabel(const QImage& image, QWidget *parent)
 
 } // namespace
 
-CameraClearSkyReferenceDialog::CameraClearSkyReferenceDialog(const QString& storageKey, QWidget *parent) :
+CameraClearSkyReferenceDialog::CameraClearSkyReferenceDialog(const QString& storageKey, std::function<void()> clearRequested, QWidget *parent) :
     QDialog(parent),
     m_storageKey(storageKey),
+    m_clearRequested(std::move(clearRequested)),
     m_grid(nullptr)
 {
     setWindowTitle(tr("Clear-sky references"));
@@ -66,11 +69,31 @@ CameraClearSkyReferenceDialog::CameraClearSkyReferenceDialog(const QString& stor
     QDialogButtonBox *buttons = new QDialogButtonBox(QDialogButtonBox::Close, this);
     QPushButton *refreshButton = buttons->addButton(tr("Refresh"), QDialogButtonBox::ActionRole);
     connect(refreshButton, &QPushButton::clicked, this, &CameraClearSkyReferenceDialog::refresh);
+    QPushButton *clearButton = buttons->addButton(tr("Delete all"), QDialogButtonBox::DestructiveRole);
+    connect(clearButton, &QPushButton::clicked, this, &CameraClearSkyReferenceDialog::clearReferences);
     connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
     layout->addWidget(buttons);
 
     resize(1000, 700);
     refresh();
+}
+
+// Deletes this camera's whole reference store after confirmation - the recovery path when
+// a reference has learned cloud as clear sky and is vetoing genuine detections
+void CameraClearSkyReferenceDialog::clearReferences()
+{
+    const QMessageBox::StandardButton answer = QMessageBox::question(this,
+        tr("Delete clear-sky references"),
+        tr("Delete all saved clear-sky references for this camera? Saved and auto-learned slots are lost and rebuild from scratch."),
+        QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+    if (answer != QMessageBox::Yes) {
+        return;
+    }
+    if (m_clearRequested) {
+        m_clearRequested();
+    }
+    // The delete runs on the detector thread; re-read the store after it has had a moment
+    QTimer::singleShot(500, this, &CameraClearSkyReferenceDialog::refresh);
 }
 
 void CameraClearSkyReferenceDialog::refresh()

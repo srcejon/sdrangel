@@ -274,6 +274,21 @@ public:
         { }
     };
 
+    class MsgClearClearSkyReference : public Message {
+        MESSAGE_CLASS_DECLARATION
+
+    public:
+        static MsgClearClearSkyReference* create()
+        {
+            return new MsgClearClearSkyReference();
+        }
+
+    private:
+        MsgClearClearSkyReference() :
+            Message()
+        { }
+    };
+
     class MsgClearTrackedObjectHeatMap : public Message {
         MESSAGE_CLASS_DECLARATION
 

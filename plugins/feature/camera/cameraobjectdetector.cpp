@@ -600,6 +600,7 @@ bool yoloDetectionSettingsChanged(const QList<QString>& settingsKeys)
     static const QStringList yoloDetectionKeys = {
         QStringLiteral("yoloEnabled"),
         QStringLiteral("yoloModelPath"),
+        QStringLiteral("yoloTileModelPath"),
         QStringLiteral("yoloLabelsPath"),
         QStringLiteral("yoloConfThreshold"),
         QStringLiteral("yoloNmsThreshold"),
@@ -634,16 +635,17 @@ bool yoloDetectionSettingsChanged(const QList<QString>& settingsKeys)
 CameraObjectDetector::CameraObjectDetector(Camera *camera) :
     m_camera(camera),
     m_msgQueueToGUI(nullptr),
-    m_msgQueueToFeature(nullptr),
-    m_yoloInputSize(640, 640)
+    m_msgQueueToFeature(nullptr)
 {
 #ifdef CAMERA_TENSORRT_YOLO
-    m_yoloTensorRt.setProgressCallback([this](bool active, const QString& modelPath, const QString& enginePath)
+    auto progressCallback = [this](bool active, const QString& modelPath, const QString& enginePath)
     {
         if (m_msgQueueToGUI) {
             m_msgQueueToGUI->push(MsgReportTensorRtConversion::create(active, modelPath, enginePath));
         }
-    });
+    };
+    m_yoloScaleModel.m_tensorRt.setProgressCallback(progressCallback);
+    m_yoloTileModel.m_tensorRt.setProgressCallback(progressCallback);
 #endif
 }
 
@@ -665,19 +667,19 @@ void CameraObjectDetector::applySettings(const CameraSettings& settings, const Q
     qDebug() << "CameraObjectDetector::applySettings:" << settings.getDebugString(settingsKeys, force) << "force:" << force;
     CameraDetectionStage::applySettings(settings, settingsKeys, force);
 
-    if (settingsKeys.contains("yoloModelPath") || (force && m_yoloLoadedModelPath != m_settings.m_yoloModelPath))
+    const QString effectiveScaleModelPath = m_settings.m_yoloModelPath.isEmpty() ? m_settings.m_yoloTileModelPath : m_settings.m_yoloModelPath;
+    const QString effectiveTileModelPath = m_settings.m_yoloTileModelPath.isEmpty() ? effectiveScaleModelPath : m_settings.m_yoloTileModelPath;
+    const bool loadedScaleModelChanged = !m_yoloScaleModel.m_loadedModelPath.isEmpty()
+        && (m_yoloScaleModel.m_loadedModelPath != effectiveScaleModelPath);
+    const bool loadedTileModelChanged = !m_yoloTileModel.m_loadedModelPath.isEmpty()
+        && (m_yoloTileModel.m_loadedModelPath != effectiveTileModelPath);
+    if (settingsKeys.contains("yoloModelPath")
+        || settingsKeys.contains("yoloTileModelPath")
+        || (force && (loadedScaleModelChanged || loadedTileModelChanged)))
     {
-        m_yoloNet = cv::dnn::Net();
-#ifdef CAMERA_TENSORRT_YOLO
-        m_yoloTensorRt.reset();
-#endif
-        m_yoloLoadedModelPath.clear();
+        resetYoloModelState(m_yoloScaleModel);
+        resetYoloModelState(m_yoloTileModel);
         m_reportedErrorKeys.clear();
-        m_appliedYoloDnnTarget = -1;
-        // Several modern YOLO ONNX graphs include layers that OpenCV DNN cannot
-        // shape-infer with a batch dimension. TensorRT still batches tiles, but
-        // OpenCV DNN uses per-tile inference to avoid noisy internal failures.
-        m_yoloBatchedInferenceSupported = false;
     }
 
     if (settingsKeys.contains("yoloLabelsPath") || (force && m_yoloLoadedLabelsPath != m_settings.m_yoloLabelsPath))
@@ -741,7 +743,7 @@ void CameraObjectDetector::processNewFrame(const CameraPipelineFramePtr& frame)
     frame->m_detections.clear();
     frame->m_meteorPhotometry.clear();
 
-    if (!m_settings.m_yoloEnabled || m_settings.m_yoloModelPath.isEmpty())
+    if (!m_settings.m_yoloEnabled || (m_settings.m_yoloModelPath.isEmpty() && m_settings.m_yoloTileModelPath.isEmpty()))
     {
         const QDateTime detectionTime = frame->m_captureDateTime.isValid() ? frame->m_captureDateTime : QDateTime::currentDateTime();
         processObjectDetections(frame->m_detections, detectionTime, *frame);
@@ -812,288 +814,48 @@ void CameraObjectDetector::runYoloDetections(const cv::Mat& bgrMat, const cv::Re
         false;
 #endif
 
-    if ((m_yoloLoadedModelPath != m_settings.m_yoloModelPath) || (!useTensorRt && m_yoloNet.empty()))
-    {
-        m_yoloNet = cv::dnn::Net();
-        m_yoloInputSize = cv::Size(640, 640);
-        m_yoloLoadedModelPath.clear();
-        // A newly-loaded net has default backend/target; force re-apply on next inference.
-        m_appliedYoloDnnTarget = -1;
-        // Keep OpenCV DNN tile inference per-tile; see the model-load reset above.
-        m_yoloBatchedInferenceSupported = false;
-#ifdef CAMERA_TENSORRT_YOLO
-        m_yoloTensorRt.reset();
-#endif
-
-        if (!m_settings.m_yoloModelPath.isEmpty() && !(m_settings.m_yoloModelPath.startsWith("http://") || m_settings.m_yoloModelPath.startsWith("https://")))
-        {
-            const QString localFile = m_settings.m_yoloModelPath;
-            try
-            {
-                const cv::Size modelInputSize = readOnnxInputSize(localFile);
-
-                if ((modelInputSize.width > 0) && (modelInputSize.height > 0))
-                {
-                    m_yoloInputSize = modelInputSize;
-                }
-                else
-                {
-                    qWarning() << "CameraObjectDetector::runYoloDetections: unable to read model input size, using fallback 640x640 for"
-                               << localFile;
-                }
-
-                if (!useTensorRt) {
-                    m_yoloNet = cv::dnn::readNetFromONNX(localFile.toStdString());
-                }
-
-                m_yoloLoadedModelPath = m_settings.m_yoloModelPath;
-                qDebug() << "CameraObjectDetector::runYoloDetections: loaded model" << localFile
-                         << "with input size" << m_yoloInputSize.width << "x" << m_yoloInputSize.height;
-            }
-            catch (const cv::Exception& e)
-            {
-                qWarning() << "CameraObjectDetector::runYoloDetections: failed to load model:" << e.what();
-                reportErrorToFeature(
-                    QStringLiteral("yoloModelLoad:%1").arg(localFile),
-                    tr("YOLO model load failed"),
-                    tr("Failed to load YOLO model:\n%1\n\n%2").arg(localFile, QString::fromUtf8(e.what())));
-                return;
-            }
-        }
-        else
-        {
-            return;
-        }
-    }
-
-    if (!useTensorRt && m_yoloNet.empty()) {
-        return;
-    }
-
-    // Only push backend/target into the net when they change. The previous unconditional
-    // setter on every frame can cause the network to rebuild its compute graph (especially
-    // when transitioning between CPU and CUDA), and is a measurable cost even when the
-    // values are identical.
-    const int requestedTarget = static_cast<int>(m_settings.m_yoloDnnTarget);
-    if (!useTensorRt && (m_appliedYoloDnnTarget != requestedTarget))
-    {
-        if (m_settings.m_yoloDnnTarget == CameraSettings::CUDA)
-        {
-            m_yoloNet.setPreferableBackend(cv::dnn::DNN_BACKEND_CUDA);
-            m_yoloNet.setPreferableTarget(cv::dnn::DNN_TARGET_CUDA);
-        }
-        else if (m_settings.m_yoloDnnTarget == CameraSettings::CUDA_FP16)
-        {
-            m_yoloNet.setPreferableBackend(cv::dnn::DNN_BACKEND_CUDA);
-            m_yoloNet.setPreferableTarget(cv::dnn::DNN_TARGET_CUDA_FP16);
-        }
-        else
-        {
-            m_yoloNet.setPreferableBackend(cv::dnn::DNN_BACKEND_DEFAULT);
-            m_yoloNet.setPreferableTarget(cv::dnn::DNN_TARGET_CPU);
-        }
-        m_appliedYoloDnnTarget = requestedTarget;
-        m_yoloBatchedInferenceSupported = true;
-    }
-
-    const QVector<cv::Rect> tileRects = makeYoloInferenceRects(roi);
-
-    // Letterbox each ROI/tile, batch inference where possible, then map detections back
-    // to full-frame coordinates before global NMS removes overlap duplicates.
-    const int targetW = m_yoloInputSize.width;
-    const int targetH = m_yoloInputSize.height;
-    if ((targetW <= 0) || (targetH <= 0) || tileRects.isEmpty()) {
-        return;
-    }
-
-    std::vector<cv::Mat> letterboxes;
-    std::vector<int> padXs;
-    std::vector<int> padYs;
-    std::vector<float> invScales;
-    letterboxes.reserve(static_cast<size_t>(tileRects.size()));
-    padXs.reserve(static_cast<size_t>(tileRects.size()));
-    padYs.reserve(static_cast<size_t>(tileRects.size()));
-    invScales.reserve(static_cast<size_t>(tileRects.size()));
-
-    for (const cv::Rect& tileRect : tileRects)
-    {
-        cv::Mat tileMat = bgrMat(tileRect);
-        const float scale = std::min(
-            static_cast<float>(targetW) / static_cast<float>(std::max(1, tileMat.cols)),
-            static_cast<float>(targetH) / static_cast<float>(std::max(1, tileMat.rows)));
-        const int newW = std::max(1, static_cast<int>(std::round(tileMat.cols * scale)));
-        const int newH = std::max(1, static_cast<int>(std::round(tileMat.rows * scale)));
-        const int padX = (targetW - newW) / 2;
-        const int padY = (targetH - newH) / 2;
-
-        cv::Mat letterbox(targetH, targetW, tileMat.type(), cv::Scalar(114, 114, 114));
-        cv::Mat resized;
-        cv::resize(tileMat, resized, cv::Size(newW, newH), 0.0, 0.0, cv::INTER_LINEAR);
-        resized.copyTo(letterbox(cv::Rect(padX, padY, newW, newH)));
-
-        letterboxes.push_back(letterbox);
-        padXs.push_back(padX);
-        padYs.push_back(padY);
-        invScales.push_back((scale > 0.0f) ? (1.0f / scale) : 1.0f);
-    }
-
     const float confThresh = static_cast<float>(m_settings.m_yoloConfThreshold);
     const float nmsThresh = static_cast<float>(m_settings.m_yoloNmsThreshold);
     std::vector<cv::Rect> boxes;
     std::vector<float> scores;
     std::vector<int> classIds;
 
-    auto decodeOutput = [&](cv::Mat output, int firstTile, int tileCount) -> bool
+    const QString scaleModelPath = m_settings.m_yoloModelPath.isEmpty() ? m_settings.m_yoloTileModelPath : m_settings.m_yoloModelPath;
+    const QString tileModelPath = m_settings.m_yoloTileModelPath.isEmpty() ? scaleModelPath : m_settings.m_yoloTileModelPath;
+    if (scaleModelPath.isEmpty())
     {
-        if ((output.dims == 3) && (output.size[0] == tileCount))
-        {
-            for (int localTileIndex = 0; localTileIndex < tileCount; ++localTileIndex)
-            {
-                const int tileIndex = firstTile + localTileIndex;
-                cv::Mat det(output.size[1], output.size[2], output.type(), output.ptr(localTileIndex));
-                decodeYoloDetections(det, tileRects[tileIndex], padXs[tileIndex], padYs[tileIndex], invScales[tileIndex], boxes, scores, classIds);
-            }
-            return true;
-        }
-
-        if ((output.dims == 2) && (tileCount > 1))
-        {
-            qWarning() << "CameraObjectDetector::runYoloDetections: unsupported 2D batched YOLO output"
-                       << output.rows << "x" << output.cols << "tiles" << tileCount
-                       << "- retrying with per-tile inference";
-            return false;
-        }
-
-        if (tileCount == 1)
-        {
-            cv::Mat det = output;
-            if (det.dims == 3) {
-                det = det.reshape(1, det.size[1]);
-            }
-            decodeYoloDetections(det, tileRects[firstTile], padXs[firstTile], padYs[firstTile], invScales[firstTile], boxes, scores, classIds);
-            return true;
-        }
-
-        return false;
-    };
-
-    bool useOpenCvDnn = !useTensorRt;
-#ifdef CAMERA_TENSORRT_YOLO
-    if (useTensorRt)
-    {
-        QString tensorRtError;
-        std::vector<cv::Mat> tensorRtOutputs;
-        const int maxBatch = std::max(1, std::min(16, static_cast<int>(letterboxes.size())));
-        if (m_yoloTensorRt.ensureLoaded(
-                m_settings.m_yoloModelPath,
-                m_yoloInputSize,
-                maxBatch,
-                m_settings.m_yoloDnnTarget == CameraSettings::TensorRT_FP16,
-                tensorRtError)
-            && m_yoloTensorRt.infer(letterboxes, tensorRtOutputs, tensorRtError))
-        {
-            for (int tileIndex = 0; tileIndex < static_cast<int>(tensorRtOutputs.size()); ++tileIndex) {
-                decodeOutput(tensorRtOutputs[static_cast<size_t>(tileIndex)], tileIndex, 1);
-            }
-            useOpenCvDnn = false;
-        }
-        else
-        {
-            qWarning() << "CameraObjectDetector::runYoloDetections: TensorRT inference unavailable, falling back to OpenCV DNN:"
-                       << tensorRtError;
-            m_yoloTensorRt.reset();
-
-            if (m_yoloNet.empty())
-            {
-                try
-                {
-                    m_yoloNet = cv::dnn::readNetFromONNX(m_settings.m_yoloModelPath.toStdString());
-                    m_appliedYoloDnnTarget = -1;
-                }
-                catch (const cv::Exception& e)
-                {
-                    qWarning() << "CameraObjectDetector::runYoloDetections: OpenCV fallback model load failed:" << e.what();
-                    return;
-                }
-            }
-            useOpenCvDnn = true;
-        }
-    }
-#endif
-
-    bool batchInferenceFailed = false;
-    if (useOpenCvDnn && ((tileRects.size() == 1) || m_yoloBatchedInferenceSupported))
-    {
-        std::vector<cv::Mat> outputs;
-        cv::Mat blob;
-        cv::dnn::blobFromImages(letterboxes, blob, 1.0 / 255.0, m_yoloInputSize, cv::Scalar(), true, false);
-        m_yoloNet.setInput(blob);
-
-        try
-        {
-            m_yoloNet.forward(outputs, m_yoloNet.getUnconnectedOutLayersNames());
-            if (!outputs.empty())
-            {
-                const size_t boxCount = boxes.size();
-                const size_t scoreCount = scores.size();
-                const size_t classIdCount = classIds.size();
-                const bool decoded = decodeOutput(outputs[0], 0, tileRects.size());
-
-                if (!decoded)
-                {
-                    boxes.resize(boxCount);
-                    scores.resize(scoreCount);
-                    classIds.resize(classIdCount);
-
-                    if (tileRects.size() <= 1)
-                    {
-                        qWarning() << "CameraObjectDetector::runYoloDetections: unable to decode YOLO output"
-                                   << outputs[0].dims << outputs[0].rows << "x" << outputs[0].cols;
-                        return;
-                    }
-
-                    m_yoloBatchedInferenceSupported = false;
-                    batchInferenceFailed = true;
-                }
-            }
-        }
-        catch (const cv::Exception& e)
-        {
-            if (tileRects.size() <= 1)
-            {
-                qWarning() << "CameraObjectDetector::runYoloDetections: inference failed:" << e.what();
-                return;
-            }
-
-            m_yoloBatchedInferenceSupported = false;
-            batchInferenceFailed = true;
-            qWarning() << "CameraObjectDetector::runYoloDetections: batched inference failed for this model/target; using per-tile inference:" << e.what();
-        }
+        PROFILER_STOP("YOLO");
+        return;
     }
 
-    if (useOpenCvDnn && (batchInferenceFailed || ((tileRects.size() > 1) && !m_yoloBatchedInferenceSupported)))
+    const bool needsScaleModel = (m_settings.m_yoloInferenceMode == CameraSettings::YoloInferenceScale)
+        || (m_settings.m_yoloInferenceMode == CameraSettings::YoloInferenceTileAndScale);
+    const bool needsTileModel = (m_settings.m_yoloInferenceMode == CameraSettings::YoloInferenceTile)
+        || (m_settings.m_yoloInferenceMode == CameraSettings::YoloInferenceTileAndScale);
+    const bool useSharedModelState = needsScaleModel && needsTileModel && (scaleModelPath == tileModelPath);
+    YoloModelState& tileModelState = useSharedModelState ? m_yoloScaleModel : m_yoloTileModel;
+
+    if (needsScaleModel && !ensureYoloModelLoaded(m_yoloScaleModel, scaleModelPath, useTensorRt))
     {
-        for (int tileIndex = 0; tileIndex < tileRects.size(); ++tileIndex)
-        {
-            std::vector<cv::Mat> tileOutputs;
-            cv::Mat tileBlob;
-            cv::dnn::blobFromImage(letterboxes[tileIndex], tileBlob, 1.0 / 255.0, m_yoloInputSize, cv::Scalar(), true, false);
-            m_yoloNet.setInput(tileBlob);
+        PROFILER_STOP("YOLO");
+        return;
+    }
+    if (needsTileModel && !useSharedModelState && !ensureYoloModelLoaded(m_yoloTileModel, tileModelPath, useTensorRt))
+    {
+        PROFILER_STOP("YOLO");
+        return;
+    }
 
-            try
-            {
-                m_yoloNet.forward(tileOutputs, m_yoloNet.getUnconnectedOutLayersNames());
-            }
-            catch (const cv::Exception& e)
-            {
-                qWarning() << "CameraObjectDetector::runYoloDetections: tile inference failed:" << tileIndex << e.what();
-                continue;
-            }
-
-            if (!tileOutputs.empty()) {
-                decodeOutput(tileOutputs[0], tileIndex, 1);
-            }
-        }
+    if (needsScaleModel)
+    {
+        QVector<cv::Rect> scaleRects;
+        scaleRects.append(roi);
+        runYoloModelDetections(m_yoloScaleModel, scaleModelPath, bgrMat, scaleRects, boxes, scores, classIds, useTensorRt);
+    }
+    if (needsTileModel)
+    {
+        const QVector<cv::Rect> tileRects = makeYoloTiles(roi, tileModelState.m_inputSize);
+        runYoloModelDetections(tileModelState, tileModelPath, bgrMat, tileRects, boxes, scores, classIds, useTensorRt);
     }
 
     std::vector<int> indices;
@@ -1123,7 +885,291 @@ void CameraObjectDetector::runYoloDetections(const cv::Mat& bgrMat, const cv::Re
         detections.append(detection);
     }
 
-    PROFILER_STOP(tileRects.size() > 1 ? "YOLO tiled" : "YOLO");
+    PROFILER_STOP(needsTileModel ? "YOLO tiled" : "YOLO");
+}
+
+void CameraObjectDetector::resetYoloModelState(YoloModelState& modelState)
+{
+    modelState.m_net = cv::dnn::Net();
+    modelState.m_inputSize = cv::Size(640, 640);
+    modelState.m_loadedModelPath.clear();
+    modelState.m_appliedDnnTarget = -1;
+    // Several modern YOLO ONNX graphs include layers that OpenCV DNN cannot
+    // shape-infer with a batch dimension. TensorRT still batches tiles, but
+    // OpenCV DNN uses per-tile inference to avoid noisy internal failures.
+    modelState.m_batchedInferenceSupported = false;
+#ifdef CAMERA_TENSORRT_YOLO
+    modelState.m_tensorRt.reset();
+#endif
+}
+
+bool CameraObjectDetector::ensureYoloModelLoaded(YoloModelState& modelState, const QString& modelPath, bool useTensorRt)
+{
+    if (modelPath.isEmpty() || modelPath.startsWith("http://") || modelPath.startsWith("https://")) {
+        return false;
+    }
+
+    if ((modelState.m_loadedModelPath != modelPath) || (!useTensorRt && modelState.m_net.empty()))
+    {
+        resetYoloModelState(modelState);
+
+        try
+        {
+            const cv::Size modelInputSize = readOnnxInputSize(modelPath);
+
+            if ((modelInputSize.width > 0) && (modelInputSize.height > 0))
+            {
+                modelState.m_inputSize = modelInputSize;
+            }
+            else
+            {
+                qWarning() << "CameraObjectDetector::runYoloDetections: unable to read model input size, using fallback 640x640 for"
+                           << modelPath;
+            }
+
+            if (!useTensorRt) {
+                modelState.m_net = cv::dnn::readNetFromONNX(modelPath.toStdString());
+            }
+
+            modelState.m_loadedModelPath = modelPath;
+            qDebug() << "CameraObjectDetector::runYoloDetections: loaded model" << modelPath
+                     << "with input size" << modelState.m_inputSize.width << "x" << modelState.m_inputSize.height;
+        }
+        catch (const cv::Exception& e)
+        {
+            qWarning() << "CameraObjectDetector::runYoloDetections: failed to load model:" << e.what();
+            reportErrorToFeature(
+                QStringLiteral("yoloModelLoad:%1").arg(modelPath),
+                tr("YOLO model load failed"),
+                tr("Failed to load YOLO model:\n%1\n\n%2").arg(modelPath, QString::fromUtf8(e.what())));
+            return false;
+        }
+    }
+
+    if (!useTensorRt && modelState.m_net.empty()) {
+        return false;
+    }
+
+    const int requestedTarget = static_cast<int>(m_settings.m_yoloDnnTarget);
+    if (!useTensorRt && (modelState.m_appliedDnnTarget != requestedTarget))
+    {
+        if (m_settings.m_yoloDnnTarget == CameraSettings::CUDA)
+        {
+            modelState.m_net.setPreferableBackend(cv::dnn::DNN_BACKEND_CUDA);
+            modelState.m_net.setPreferableTarget(cv::dnn::DNN_TARGET_CUDA);
+        }
+        else if (m_settings.m_yoloDnnTarget == CameraSettings::CUDA_FP16)
+        {
+            modelState.m_net.setPreferableBackend(cv::dnn::DNN_BACKEND_CUDA);
+            modelState.m_net.setPreferableTarget(cv::dnn::DNN_TARGET_CUDA_FP16);
+        }
+        else
+        {
+            modelState.m_net.setPreferableBackend(cv::dnn::DNN_BACKEND_DEFAULT);
+            modelState.m_net.setPreferableTarget(cv::dnn::DNN_TARGET_CPU);
+        }
+        modelState.m_appliedDnnTarget = requestedTarget;
+        modelState.m_batchedInferenceSupported = false;
+    }
+
+    return true;
+}
+
+bool CameraObjectDetector::runYoloModelDetections(YoloModelState& modelState, const QString& modelPath, const cv::Mat& bgrMat,
+    const QVector<cv::Rect>& inferenceRects, std::vector<cv::Rect>& boxes, std::vector<float>& scores, std::vector<int>& classIds,
+    bool useTensorRt)
+{
+    const int targetW = modelState.m_inputSize.width;
+    const int targetH = modelState.m_inputSize.height;
+    if ((targetW <= 0) || (targetH <= 0) || inferenceRects.isEmpty()) {
+        return false;
+    }
+
+    std::vector<cv::Mat> letterboxes;
+    std::vector<int> padXs;
+    std::vector<int> padYs;
+    std::vector<float> invScales;
+    letterboxes.reserve(static_cast<size_t>(inferenceRects.size()));
+    padXs.reserve(static_cast<size_t>(inferenceRects.size()));
+    padYs.reserve(static_cast<size_t>(inferenceRects.size()));
+    invScales.reserve(static_cast<size_t>(inferenceRects.size()));
+
+    for (const cv::Rect& inferenceRect : inferenceRects)
+    {
+        cv::Mat tileMat = bgrMat(inferenceRect);
+        const float scale = std::min(
+            static_cast<float>(targetW) / static_cast<float>(std::max(1, tileMat.cols)),
+            static_cast<float>(targetH) / static_cast<float>(std::max(1, tileMat.rows)));
+        const int newW = std::max(1, static_cast<int>(std::round(tileMat.cols * scale)));
+        const int newH = std::max(1, static_cast<int>(std::round(tileMat.rows * scale)));
+        const int padX = (targetW - newW) / 2;
+        const int padY = (targetH - newH) / 2;
+
+        cv::Mat letterbox(targetH, targetW, tileMat.type(), cv::Scalar(114, 114, 114));
+        cv::Mat resized;
+        cv::resize(tileMat, resized, cv::Size(newW, newH), 0.0, 0.0, cv::INTER_LINEAR);
+        resized.copyTo(letterbox(cv::Rect(padX, padY, newW, newH)));
+
+        letterboxes.push_back(letterbox);
+        padXs.push_back(padX);
+        padYs.push_back(padY);
+        invScales.push_back((scale > 0.0f) ? (1.0f / scale) : 1.0f);
+    }
+
+    auto decodeOutput = [&](cv::Mat output, int firstTile, int tileCount) -> bool
+    {
+        if ((output.dims == 3) && (output.size[0] == tileCount))
+        {
+            for (int localTileIndex = 0; localTileIndex < tileCount; ++localTileIndex)
+            {
+                const int tileIndex = firstTile + localTileIndex;
+                cv::Mat det(output.size[1], output.size[2], output.type(), output.ptr(localTileIndex));
+                decodeYoloDetections(det, inferenceRects[tileIndex], padXs[tileIndex], padYs[tileIndex], invScales[tileIndex], boxes, scores, classIds);
+            }
+            return true;
+        }
+
+        if ((output.dims == 2) && (tileCount > 1))
+        {
+            qWarning() << "CameraObjectDetector::runYoloDetections: unsupported 2D batched YOLO output"
+                       << output.rows << "x" << output.cols << "tiles" << tileCount
+                       << "- retrying with per-tile inference";
+            return false;
+        }
+
+        if (tileCount == 1)
+        {
+            cv::Mat det = output;
+            if (det.dims == 3) {
+                det = det.reshape(1, det.size[1]);
+            }
+            decodeYoloDetections(det, inferenceRects[firstTile], padXs[firstTile], padYs[firstTile], invScales[firstTile], boxes, scores, classIds);
+            return true;
+        }
+
+        return false;
+    };
+
+    bool useOpenCvDnn = !useTensorRt;
+#ifdef CAMERA_TENSORRT_YOLO
+    if (useTensorRt)
+    {
+        QString tensorRtError;
+        std::vector<cv::Mat> tensorRtOutputs;
+        const int maxBatch = std::max(1, std::min(16, static_cast<int>(letterboxes.size())));
+        if (modelState.m_tensorRt.ensureLoaded(
+                modelPath,
+                modelState.m_inputSize,
+                maxBatch,
+                m_settings.m_yoloDnnTarget == CameraSettings::TensorRT_FP16,
+                tensorRtError)
+            && modelState.m_tensorRt.infer(letterboxes, tensorRtOutputs, tensorRtError))
+        {
+            for (int tileIndex = 0; tileIndex < static_cast<int>(tensorRtOutputs.size()); ++tileIndex) {
+                decodeOutput(tensorRtOutputs[static_cast<size_t>(tileIndex)], tileIndex, 1);
+            }
+            useOpenCvDnn = false;
+        }
+        else
+        {
+            qWarning() << "CameraObjectDetector::runYoloDetections: TensorRT inference unavailable, falling back to OpenCV DNN:"
+                       << tensorRtError;
+            modelState.m_tensorRt.reset();
+
+            if (modelState.m_net.empty())
+            {
+                try
+                {
+                    modelState.m_net = cv::dnn::readNetFromONNX(modelPath.toStdString());
+                    modelState.m_appliedDnnTarget = -1;
+                }
+                catch (const cv::Exception& e)
+                {
+                    qWarning() << "CameraObjectDetector::runYoloDetections: OpenCV fallback model load failed:" << e.what();
+                    return false;
+                }
+            }
+            useOpenCvDnn = true;
+        }
+    }
+#endif
+
+    bool batchInferenceFailed = false;
+    if (useOpenCvDnn && ((inferenceRects.size() == 1) || modelState.m_batchedInferenceSupported))
+    {
+        std::vector<cv::Mat> outputs;
+        cv::Mat blob;
+        cv::dnn::blobFromImages(letterboxes, blob, 1.0 / 255.0, modelState.m_inputSize, cv::Scalar(), true, false);
+        modelState.m_net.setInput(blob);
+
+        try
+        {
+            modelState.m_net.forward(outputs, modelState.m_net.getUnconnectedOutLayersNames());
+            if (!outputs.empty())
+            {
+                const size_t boxCount = boxes.size();
+                const size_t scoreCount = scores.size();
+                const size_t classIdCount = classIds.size();
+                const bool decoded = decodeOutput(outputs[0], 0, inferenceRects.size());
+
+                if (!decoded)
+                {
+                    boxes.resize(boxCount);
+                    scores.resize(scoreCount);
+                    classIds.resize(classIdCount);
+
+                    if (inferenceRects.size() <= 1)
+                    {
+                        qWarning() << "CameraObjectDetector::runYoloDetections: unable to decode YOLO output"
+                                   << outputs[0].dims << outputs[0].rows << "x" << outputs[0].cols;
+                        return false;
+                    }
+
+                    modelState.m_batchedInferenceSupported = false;
+                    batchInferenceFailed = true;
+                }
+            }
+        }
+        catch (const cv::Exception& e)
+        {
+            if (inferenceRects.size() <= 1)
+            {
+                qWarning() << "CameraObjectDetector::runYoloDetections: inference failed:" << e.what();
+                return false;
+            }
+
+            modelState.m_batchedInferenceSupported = false;
+            batchInferenceFailed = true;
+            qWarning() << "CameraObjectDetector::runYoloDetections: batched inference failed for this model/target; using per-tile inference:" << e.what();
+        }
+    }
+
+    if (useOpenCvDnn && (batchInferenceFailed || ((inferenceRects.size() > 1) && !modelState.m_batchedInferenceSupported)))
+    {
+        for (int tileIndex = 0; tileIndex < inferenceRects.size(); ++tileIndex)
+        {
+            std::vector<cv::Mat> tileOutputs;
+            cv::Mat tileBlob;
+            cv::dnn::blobFromImage(letterboxes[tileIndex], tileBlob, 1.0 / 255.0, modelState.m_inputSize, cv::Scalar(), true, false);
+            modelState.m_net.setInput(tileBlob);
+
+            try
+            {
+                modelState.m_net.forward(tileOutputs, modelState.m_net.getUnconnectedOutLayersNames());
+            }
+            catch (const cv::Exception& e)
+            {
+                qWarning() << "CameraObjectDetector::runYoloDetections: tile inference failed:" << tileIndex << e.what();
+                continue;
+            }
+
+            if (!tileOutputs.empty()) {
+                decodeOutput(tileOutputs[0], tileIndex, 1);
+            }
+        }
+    }
+
+    return true;
 }
 
 void CameraObjectDetector::decodeYoloDetections(const cv::Mat& det, const cv::Rect& tileRect, int padX, int padY, float invScale,
@@ -1224,17 +1270,17 @@ void CameraObjectDetector::decodeYoloDetections(const cv::Mat& det, const cv::Re
     }
 }
 
-QVector<cv::Rect> CameraObjectDetector::makeYoloTiles(const cv::Rect& roi) const
+QVector<cv::Rect> CameraObjectDetector::makeYoloTiles(const cv::Rect& roi, const cv::Size& inputSize) const
 {
-    const int tileW = std::min(m_yoloInputSize.width, roi.width);
-    const int tileH = std::min(m_yoloInputSize.height, roi.height);
+    const int tileW = std::min(inputSize.width, roi.width);
+    const int tileH = std::min(inputSize.height, roi.height);
     QVector<cv::Rect> tiles;
 
     if ((tileW <= 0) || (tileH <= 0)) {
         return tiles;
     }
 
-    if ((roi.width <= m_yoloInputSize.width) && (roi.height <= m_yoloInputSize.height))
+    if ((roi.width <= inputSize.width) && (roi.height <= inputSize.height))
     {
         tiles.append(roi);
         return tiles;
@@ -1273,46 +1319,6 @@ QVector<cv::Rect> CameraObjectDetector::makeYoloTiles(const cv::Rect& roi) const
     }
 
     return tiles;
-}
-
-QVector<cv::Rect> CameraObjectDetector::makeYoloInferenceRects(const cv::Rect& roi) const
-{
-    QVector<cv::Rect> rects;
-
-    auto appendUnique = [&rects](const cv::Rect& rect)
-    {
-        for (const cv::Rect& existing : rects)
-        {
-            if ((existing.x == rect.x)
-                && (existing.y == rect.y)
-                && (existing.width == rect.width)
-                && (existing.height == rect.height))
-            {
-                return;
-            }
-        }
-        rects.append(rect);
-    };
-
-    switch (m_settings.m_yoloInferenceMode)
-    {
-    case CameraSettings::YoloInferenceScale:
-        appendUnique(roi);
-        break;
-    case CameraSettings::YoloInferenceTile:
-        for (const cv::Rect& tile : makeYoloTiles(roi)) {
-            appendUnique(tile);
-        }
-        break;
-    case CameraSettings::YoloInferenceTileAndScale:
-        appendUnique(roi);
-        for (const cv::Rect& tile : makeYoloTiles(roi)) {
-            appendUnique(tile);
-        }
-        break;
-    }
-
-    return rects;
 }
 
 void CameraObjectDetector::clearObjectDetectionState()

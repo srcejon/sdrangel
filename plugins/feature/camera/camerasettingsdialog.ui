@@ -6,7 +6,7 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>835</width>
+    <width>821</width>
     <height>906</height>
    </rect>
   </property>
@@ -3442,7 +3442,7 @@
               <string>Contains settings for aDS-B / Satellite / Star Tracker Overlay.</string>
              </property>
              <property name="title">
-              <string>ADS-B / Satellite / Star Tracker Overlay</string>
+              <string>ADS-B / Satellite / AIS / Star Tracker Overlay</string>
              </property>
              <layout class="QGridLayout" name="gridLayout_7">
               <item row="1" column="1">
@@ -4298,14 +4298,11 @@ Use src=file:///path/to/images/logo.png for img tags. http is not supported.</st
            </item>
           </layout>
          </widget>
-         <widget class="QWidget" name="windowOverlaysTab">
-          <property name="toolTip">
-           <string>Window and spectrum overlay settings.</string>
-          </property>
+         <widget class="QWidget" name="spectrumOverlayTab">
           <attribute name="title">
-           <string>Window Overlays</string>
+           <string>Spectrum</string>
           </attribute>
-          <layout class="QVBoxLayout" name="windowOverlaysTabLayout">
+          <layout class="QVBoxLayout" name="verticalLayout_10">
            <item>
             <widget class="QGroupBox" name="spectrumOverlaysGroup">
              <property name="toolTip">
@@ -4382,6 +4379,16 @@ Use src=file:///path/to/images/logo.png for img tags. http is not supported.</st
              </layout>
             </widget>
            </item>
+          </layout>
+         </widget>
+         <widget class="QWidget" name="windowOverlaysTab">
+          <property name="toolTip">
+           <string>Window and spectrum overlay settings.</string>
+          </property>
+          <attribute name="title">
+           <string>Window</string>
+          </attribute>
+          <layout class="QVBoxLayout" name="windowOverlaysTabLayout">
            <item>
             <widget class="QGroupBox" name="windowOverlaysGroup">
              <property name="toolTip">
@@ -4457,19 +4464,6 @@ Use src=file:///path/to/images/logo.png for img tags. http is not supported.</st
               </item>
              </layout>
             </widget>
-           </item>
-           <item>
-            <spacer name="windowOverlayVerticalSpacer">
-             <property name="orientation">
-              <enum>Qt::Orientation::Vertical</enum>
-             </property>
-             <property name="sizeHint" stdset="0">
-              <size>
-               <width>20</width>
-               <height>40</height>
-              </size>
-             </property>
-            </spacer>
            </item>
           </layout>
          </widget>

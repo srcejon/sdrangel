@@ -680,8 +680,7 @@ elseif(ANDROID)
       ${EXTERNAL_LIBRARY_FOLDER}/${ANDROID_ABI}/libusb/lib/libusb1.0.so
       ${EXTERNAL_LIBRARY_FOLDER}/${ANDROID_ABI}/cm256cc/lib/libcm256cc.so
       ${EXTERNAL_LIBRARY_FOLDER}/${ANDROID_ABI}/flac/lib/libFLAC.so
-      ${EXTERNAL_LIBRARY_FOLDER}/${ANDROID_ABI}/inmarsatc/lib/libinmarsatc_decoder.so
-      ${EXTERNAL_LIBRARY_FOLDER}/${ANDROID_ABI}/inmarsatc/lib/libinmarsatc_parser.so
+      ${INMARSATC_LIBRARIES}
       ${Qt6_DIR}/../../../lib/libQt6Sql_${ANDROID_ABI}.so
       ${Qt6_DIR}/../../../lib/libQt6SerialPort_${ANDROID_ABI}.so
       ${Qt6_DIR}/../../../lib/libQt6Charts_${ANDROID_ABI}.so
@@ -697,6 +696,9 @@ elseif(ANDROID)
       ${Qt6_DIR}/../../../lib/libQt6QuickTemplates2_${ANDROID_ABI}.so
       ${Qt6_DIR}/../../../lib/libQt6QuickShapes_${ANDROID_ABI}.so
       ${Qt6_DIR}/../../../lib/libQt6SvgWidgets_${ANDROID_ABI}.so
+      ${Qt6_DIR}/../../../lib/libQt6Sensors_${ANDROID_ABI}.so
+      ${Qt6_DIR}/../../../plugins/sensors/libplugins_sensors_qtsensors_android_${ANDROID_ABI}.so
+      ${Qt6_DIR}/../../../plugins/sensors/libplugins_sensors_qtsensors_generic_${ANDROID_ABI}.so
       ${Qt6_DIR}/../../../plugins/sqldrivers/libplugins_sqldrivers_qsqlite_${ANDROID_ABI}.so
       ${Qt6_DIR}/../../../plugins/geoservices/libplugins_geoservices_qtgeoservices_osm_${ANDROID_ABI}.so
       ${Qt6_DIR}/../../../plugins/tls/libplugins_tls_qopensslbackend_${ANDROID_ABI}.so
@@ -866,7 +868,8 @@ if (BUILD_GUI)
                             TextToSpeech
                             Svg
                             SvgWidgets
-                            StateMachine)
+                            StateMachine
+                            Sensors)
         else()
             find_package(Qt5
                            REQUIRED COMPONENTS
@@ -1221,6 +1224,7 @@ if (BUILD_GUI)
               Qt::Svg
               Qt::QmlModels
               Qt::Quick
+              Qt::Sensors
               sdrbase
               sdrgui
               logging

@@ -4,7 +4,7 @@ The Scheduler feature runs user-defined actions either at a selected date and ti
 
 Rules can be one-shot or recurring daily or monthly. Daily recurrence can be limited to selected weekdays. Monthly recurrence clamps invalid dates to the last day of shorter months, and missed startup occurrences are skipped.
 
-Time rules can also have an optional duration. When set, actions that start acquisition, file sink recording, compatible channel recording/scanning, or a feature are automatically stopped after the duration elapses.
+Time rules can also have an optional duration in seconds, minutes, or hours. When set, actions that start acquisition, file sink recording, compatible channel recording/scanning, or a feature are automatically stopped after the duration elapses.
 
 Event rules match `MainCore::MsgEvent` messages by event type, optional source channel/feature, optional data regular expression, and optional delay in seconds or minutes. Delayed actions re-check that the rule still exists and is enabled before they run.
 

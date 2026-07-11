@@ -157,6 +157,17 @@ CameraSettingsDialog::CameraSettingsDialog(QWidget *parent) :
 {
     ui->setupUi(this);
 
+#if defined(Q_OS_ANDROID)
+    // The tab widget now fits the available Android screen width exactly. The
+    // dialog's default outer margins would add 8 px on each side and push the
+    // window off-screen, while each page already supplies its own padding.
+    if (QLayout *dialogLayout = layout())
+    {
+        const QMargins margins = dialogLayout->contentsMargins();
+        dialogLayout->setContentsMargins(0, margins.top(), 0, margins.bottom());
+    }
+#endif
+
     m_tempChart = new QChart();
     m_tempChart->setTheme(QChart::ChartThemeDark);
     m_tempChart->setTitle(tr("CCD temperature vs time"));

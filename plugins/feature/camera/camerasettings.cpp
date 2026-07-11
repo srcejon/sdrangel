@@ -359,6 +359,7 @@ void CameraSettings::resetToDefaults()
     m_roll = 0.0f;
     m_rotator.clear();
     m_directionSensor.clear();
+    m_sensorOpticalAxis = SensorOpticalAxisAuto;
     m_azimuthOffset = 0.0f;
     m_elevationOffset = 0.0f;
     m_rollOffset = 0.0f;
@@ -887,6 +888,7 @@ QByteArray CameraSettings::serialize() const
     s.writeS32(311, m_playbackProjectionWidth);
     s.writeS32(312, m_playbackProjectionHeight);
     s.writeString(313, m_yoloTileModelPath);
+    s.writeS32(314, static_cast<qint32>(m_sensorOpticalAxis));
 
     return s.final();
 }
@@ -1471,6 +1473,12 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readBool(268, &m_scaleKeepAspectRatio, true);
         d.readString(269, &m_trackObjectFontFamily, "");
         d.readString(270, &m_directionSensor, "");
+        qint32 sensorOpticalAxis = static_cast<qint32>(SensorOpticalAxisAuto);
+        d.readS32(314, &sensorOpticalAxis, sensorOpticalAxis);
+        m_sensorOpticalAxis = static_cast<SensorOpticalAxis>(qBound(
+            static_cast<qint32>(SensorOpticalAxisAuto),
+            sensorOpticalAxis,
+            static_cast<qint32>(SensorOpticalAxisFront)));
         d.readFloat(271, &m_azimuthOffset, 0.0f);
         d.readFloat(272, &m_elevationOffset, 0.0f);
         d.readFloat(273, &m_rollOffset, 0.0f);
@@ -1944,6 +1952,12 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     }
     if (settingsKeys.contains("directionSensor")) {
         m_directionSensor = settings.m_directionSensor;
+    }
+    if (settingsKeys.contains("sensorOpticalAxis")) {
+        m_sensorOpticalAxis = static_cast<SensorOpticalAxis>(qBound(
+            static_cast<qint32>(SensorOpticalAxisAuto),
+            static_cast<qint32>(settings.m_sensorOpticalAxis),
+            static_cast<qint32>(SensorOpticalAxisFront)));
     }
     if (settingsKeys.contains("azimuthOffset")) {
         m_azimuthOffset = normalizeSignedDegrees(settings.m_azimuthOffset);
@@ -2928,6 +2942,9 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("directionSensor") || force) {
         ostr << " m_directionSensor: " << m_directionSensor.toStdString();
+    }
+    if (settingsKeys.contains("sensorOpticalAxis") || force) {
+        ostr << " m_sensorOpticalAxis: " << m_sensorOpticalAxis;
     }
     if (settingsKeys.contains("azimuthOffset") || force) {
         ostr << " m_azimuthOffset: " << m_azimuthOffset;

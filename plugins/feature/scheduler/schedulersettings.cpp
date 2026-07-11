@@ -18,6 +18,7 @@
 #include <QDataStream>
 #include <QIODevice>
 #include <QUuid>
+#include <limits>
 
 #include "settings/serializable.h"
 #include "util/simpleserializer.h"
@@ -577,12 +578,26 @@ QDateTime SchedulerSettings::nextDateTime(const ScheduleRule& rule, const QDateT
 
 int SchedulerSettings::delaySeconds(const ScheduleRule& rule)
 {
-    const int delay = qMax(0, rule.m_eventDelay);
-    return rule.m_eventDelayUnit == DelayMinutes ? delay * 60 : delay;
+    qint64 delay = qMax<qint64>(0, rule.m_eventDelay);
+
+    if (rule.m_eventDelayUnit == DelayMinutes) {
+        delay *= 60;
+    } else if (rule.m_eventDelayUnit == DelayHours) {
+        delay *= 60 * 60;
+    }
+
+    return static_cast<int>(qMin(delay, static_cast<qint64>(std::numeric_limits<int>::max())));
 }
 
 int SchedulerSettings::durationSeconds(const ScheduleRule& rule)
 {
-    const int duration = qMax(0, rule.m_duration);
-    return rule.m_durationUnit == DelayMinutes ? duration * 60 : duration;
+    qint64 duration = qMax<qint64>(0, rule.m_duration);
+
+    if (rule.m_durationUnit == DelayMinutes) {
+        duration *= 60;
+    } else if (rule.m_durationUnit == DelayHours) {
+        duration *= 60 * 60;
+    }
+
+    return static_cast<int>(qMin(duration, static_cast<qint64>(std::numeric_limits<int>::max())));
 }

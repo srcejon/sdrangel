@@ -330,6 +330,7 @@ private:
     bool m_directionRotationReadingValid = false;
     bool m_directionTiltReadingValid = false;
 #endif
+    CameraSettings::SensorOpticalAxis m_resolvedSensorOpticalAxis = CameraSettings::SensorOpticalAxisRear;
 
     // Qt camera code appears to need to be on GUI thread. Would hang on clean up in the worker thread.
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
@@ -388,6 +389,7 @@ private:
     QString starDetectionSearchTarget(const CameraPipelineStarDetection& star) const;
     void showStarDetectionInfoDialog(const CameraPipelineStarDetection& star);
     void populateDirectionSourceCombo();
+    void updateDirectionSensorOpticalAxis();
     void startDirectionSensors();
     void stopDirectionSensors();
     void syncFromDirectionSensors();
@@ -492,6 +494,10 @@ private:
     int findCameraComboIndex(const QString& protocol, const QString& cameraId,
                              const QString& alpacaHost = QString(), quint16 alpacaPort = 0) const;
     void applyYoloPathSetting(const QString& settingKey, const QString& path);
+#if defined(Q_OS_ANDROID)
+    QString copyAndroidContentFile(const QString& contentUri, const QString& fallbackSuffix,
+                                   QString *errorMessage) const;
+#endif
     void requestYoloDownload(const QString& settingKey, const QString& path);
     void handleYoloDownloadComplete(const QString& filename, bool success, const QString& url, const QString& errorMessage);
     void requestPlateSolveCatalogDownload();
@@ -657,6 +663,7 @@ private slots:
     void on_azimuthOffsetSpin_valueChanged(double value);
     void on_elevationOffsetSpin_valueChanged(double value);
     void on_rollOffsetSpin_valueChanged(double value);
+    void on_sensorOpticalAxisCombo_currentIndexChanged(int index);
     void on_directionSourceCombo_currentIndexChanged(int index);
     void on_fovModeCombo_currentIndexChanged(int index);
     void on_fovSpin_valueChanged(double value);

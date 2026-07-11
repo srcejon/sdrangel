@@ -109,6 +109,8 @@ int timerDelayMs(int value, SchedulerSettings::DelayUnit unit, const QString& ki
 
     if (unit == SchedulerSettings::DelayMinutes) {
         delayMs *= 60;
+    } else if (unit == SchedulerSettings::DelayHours) {
+        delayMs *= 60 * 60;
     }
 
     if (delayMs > std::numeric_limits<int>::max())

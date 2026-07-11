@@ -18,16 +18,46 @@
 #ifdef ANDROID
 
 #include <QDebug>
+#include <QFile>
+
+#include <atomic>
 
 #include <android/log.h>
 
 #include "android.h"
+
+namespace {
+
+int nextDocumentTreeRequestCode()
+{
+    static std::atomic<int> requestCode {2301};
+    return requestCode.fetch_add(1, std::memory_order_relaxed);
+}
+
+} // namespace
 
 #if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
 
 #include <QtCore/private/qandroidextras_p.h>
 #include <QJniObject>
 #include <QJniEnvironment>
+
+namespace {
+
+QJniObject androidActivity()
+{
+    return QJniObject::callStaticObjectMethod(
+        "org/qtproject/qt/android/QtNative", "activity", "()Landroid/app/Activity;");
+}
+
+QJniObject uriFromString(const QString& value)
+{
+    const QJniObject string = QJniObject::fromString(value);
+    return QJniObject::callStaticObjectMethod(
+        "android/net/Uri", "parse", "(Ljava/lang/String;)Landroid/net/Uri;", string.object<jstring>());
+}
+
+} // namespace
 
 void Android::sendIntent()
 {
@@ -127,6 +157,148 @@ void Android::releaseScreenLock()
     }
 }
 
+void Android::selectDocumentTree(const std::function<void(const QString&)>& callback)
+{
+    static constexpr jint readPermission = 0x00000001;
+    static constexpr jint writePermission = 0x00000002;
+    static constexpr jint persistablePermission = 0x00000040;
+    static constexpr jint prefixPermission = 0x00000080;
+
+    const QJniObject action = QJniObject::fromString("android.intent.action.OPEN_DOCUMENT_TREE");
+    QJniObject intent("android/content/Intent", "(Ljava/lang/String;)V", action.object<jstring>());
+    intent.callObjectMethod(
+        "addFlags", "(I)Landroid/content/Intent;",
+        readPermission | writePermission | persistablePermission | prefixPermission);
+
+    QtAndroidPrivate::startActivity(intent, nextDocumentTreeRequestCode(), [callback](int, int resultCode, const QJniObject& data) {
+        QString selectedUri;
+
+        if ((resultCode == -1) && data.isValid())
+        {
+            const QJniObject uri = data.callObjectMethod("getData", "()Landroid/net/Uri;");
+            const QJniObject activity = androidActivity();
+
+            if (uri.isValid() && activity.isValid())
+            {
+                const QJniObject resolver = activity.callObjectMethod(
+                    "getContentResolver", "()Landroid/content/ContentResolver;");
+                const jint grantedFlags = data.callMethod<jint>("getFlags") & 0x00000003;
+
+                if (resolver.isValid()) {
+                    resolver.callMethod<void>(
+                        "takePersistableUriPermission", "(Landroid/net/Uri;I)V",
+                        uri.object<jobject>(), grantedFlags);
+                }
+
+                selectedUri = uri.toString();
+            }
+        }
+
+        if (callback) {
+            callback(selectedUri);
+        }
+    });
+}
+
+bool Android::copyFileToDocumentTree(const QString& sourceFileName,
+                                     const QString& treeUri,
+                                     const QString& displayName,
+                                     const QString& mimeType,
+                                     QString *errorMessage)
+{
+    QFile source(sourceFileName);
+    if (!source.open(QIODevice::ReadOnly))
+    {
+        if (errorMessage) {
+            *errorMessage = QStringLiteral("Cannot open %1: %2").arg(sourceFileName, source.errorString());
+        }
+        return false;
+    }
+
+    const QJniObject activity = androidActivity();
+    const QJniObject tree = uriFromString(treeUri);
+    if (!activity.isValid() || !tree.isValid())
+    {
+        if (errorMessage) {
+            *errorMessage = QStringLiteral("The Android output folder is no longer available.");
+        }
+        return false;
+    }
+
+    const QJniObject resolver = activity.callObjectMethod(
+        "getContentResolver", "()Landroid/content/ContentResolver;");
+    const QJniObject treeDocumentId = QJniObject::callStaticObjectMethod(
+        "android/provider/DocumentsContract", "getTreeDocumentId",
+        "(Landroid/net/Uri;)Ljava/lang/String;", tree.object<jobject>());
+    if (!resolver.isValid() || !treeDocumentId.isValid())
+    {
+        if (errorMessage) {
+            *errorMessage = QStringLiteral("Cannot access the selected Android output folder.");
+        }
+        return false;
+    }
+    const QJniObject parent = QJniObject::callStaticObjectMethod(
+        "android/provider/DocumentsContract", "buildDocumentUriUsingTree",
+        "(Landroid/net/Uri;Ljava/lang/String;)Landroid/net/Uri;",
+        tree.object<jobject>(), treeDocumentId.object<jstring>());
+    if (!parent.isValid())
+    {
+        if (errorMessage) {
+            *errorMessage = QStringLiteral("Cannot access the selected Android output folder.");
+        }
+        return false;
+    }
+    const QJniObject mime = QJniObject::fromString(mimeType);
+    const QJniObject name = QJniObject::fromString(displayName);
+    const QJniObject document = QJniObject::callStaticObjectMethod(
+        "android/provider/DocumentsContract", "createDocument",
+        "(Landroid/content/ContentResolver;Landroid/net/Uri;Ljava/lang/String;Ljava/lang/String;)Landroid/net/Uri;",
+        resolver.object<jobject>(), parent.object<jobject>(), mime.object<jstring>(), name.object<jstring>());
+
+    if (!document.isValid())
+    {
+        if (errorMessage) {
+            *errorMessage = QStringLiteral("Cannot create %1 in the selected Android folder.").arg(displayName);
+        }
+        return false;
+    }
+
+    const QJniObject mode = QJniObject::fromString("w");
+    QJniObject descriptor = resolver.callObjectMethod(
+        "openFileDescriptor", "(Landroid/net/Uri;Ljava/lang/String;)Landroid/os/ParcelFileDescriptor;",
+        document.object<jobject>(), mode.object<jstring>());
+    const int fd = descriptor.isValid() ? descriptor.callMethod<jint>("getFd") : -1;
+    QFile destination;
+    bool ok = (fd >= 0) && destination.open(fd, QIODevice::WriteOnly, QFileDevice::DontCloseHandle);
+
+    while (ok && !source.atEnd())
+    {
+        const QByteArray chunk = source.read(1024 * 1024);
+        ok = !chunk.isEmpty() && (destination.write(chunk) == chunk.size());
+    }
+
+    if (ok) {
+        ok = destination.flush();
+    }
+    destination.close();
+    if (descriptor.isValid()) {
+        descriptor.callMethod<void>("close");
+    }
+
+    if (!ok)
+    {
+        QJniObject::callStaticMethod<jboolean>(
+            "android/provider/DocumentsContract", "deleteDocument",
+            "(Landroid/content/ContentResolver;Landroid/net/Uri;)Z",
+            resolver.object<jobject>(), document.object<jobject>());
+        if (errorMessage) {
+            *errorMessage = QStringLiteral("Cannot copy %1 to the selected Android folder.").arg(displayName);
+        }
+    }
+
+    return ok;
+}
+
 #else // QT_VERSION
 
 #include <QtAndroid>
@@ -134,6 +306,23 @@ void Android::releaseScreenLock()
 #include <QAndroidJniObject>
 #include <QAndroidJniEnvironment>
 #include <QAndroidActivityResultReceiver>
+
+namespace {
+
+QAndroidJniObject androidActivity()
+{
+    return QAndroidJniObject::callStaticObjectMethod(
+        "org/qtproject/qt5/android/QtNative", "activity", "()Landroid/app/Activity;");
+}
+
+QAndroidJniObject uriFromString(const QString& value)
+{
+    const QAndroidJniObject string = QAndroidJniObject::fromString(value);
+    return QAndroidJniObject::callStaticObjectMethod(
+        "android/net/Uri", "parse", "(Ljava/lang/String;)Landroid/net/Uri;", string.object<jstring>());
+}
+
+} // namespace
 
 void Android::sendIntent()
 {
@@ -229,6 +418,134 @@ void Android::releaseScreenLock()
     if (activity.isValid()) {
         activity.callMethod<void>("releaseScreenLock");
     }
+}
+
+void Android::selectDocumentTree(const std::function<void(const QString&)>& callback)
+{
+    static constexpr jint permissionFlags = 0x00000001 | 0x00000002 | 0x00000040 | 0x00000080;
+    const QAndroidJniObject action = QAndroidJniObject::fromString("android.intent.action.OPEN_DOCUMENT_TREE");
+    QAndroidJniObject intent("android/content/Intent", "(Ljava/lang/String;)V", action.object<jstring>());
+    intent.callObjectMethod("addFlags", "(I)Landroid/content/Intent;", permissionFlags);
+
+    QtAndroid::startActivity(intent, nextDocumentTreeRequestCode(), [callback](int, int resultCode, const QAndroidJniObject& data) {
+        QString selectedUri;
+        if ((resultCode == -1) && data.isValid())
+        {
+            const QAndroidJniObject uri = data.callObjectMethod("getData", "()Landroid/net/Uri;");
+            const QAndroidJniObject activity = androidActivity();
+            if (uri.isValid() && activity.isValid())
+            {
+                const QAndroidJniObject resolver = activity.callObjectMethod(
+                    "getContentResolver", "()Landroid/content/ContentResolver;");
+                const jint grantedFlags = data.callMethod<jint>("getFlags") & 0x00000003;
+                if (resolver.isValid()) {
+                    resolver.callMethod<void>(
+                        "takePersistableUriPermission", "(Landroid/net/Uri;I)V",
+                        uri.object<jobject>(), grantedFlags);
+                }
+                selectedUri = uri.toString();
+            }
+        }
+        if (callback) {
+            callback(selectedUri);
+        }
+    });
+}
+
+bool Android::copyFileToDocumentTree(const QString& sourceFileName,
+                                     const QString& treeUri,
+                                     const QString& displayName,
+                                     const QString& mimeType,
+                                     QString *errorMessage)
+{
+    QFile source(sourceFileName);
+    if (!source.open(QIODevice::ReadOnly))
+    {
+        if (errorMessage) {
+            *errorMessage = QStringLiteral("Cannot open %1: %2").arg(sourceFileName, source.errorString());
+        }
+        return false;
+    }
+
+    const QAndroidJniObject activity = androidActivity();
+    const QAndroidJniObject tree = uriFromString(treeUri);
+    if (!activity.isValid() || !tree.isValid())
+    {
+        if (errorMessage) {
+            *errorMessage = QStringLiteral("The Android output folder is no longer available.");
+        }
+        return false;
+    }
+
+    const QAndroidJniObject resolver = activity.callObjectMethod(
+        "getContentResolver", "()Landroid/content/ContentResolver;");
+    const QAndroidJniObject treeDocumentId = QAndroidJniObject::callStaticObjectMethod(
+        "android/provider/DocumentsContract", "getTreeDocumentId",
+        "(Landroid/net/Uri;)Ljava/lang/String;", tree.object<jobject>());
+    if (!resolver.isValid() || !treeDocumentId.isValid())
+    {
+        if (errorMessage) {
+            *errorMessage = QStringLiteral("Cannot access the selected Android output folder.");
+        }
+        return false;
+    }
+    const QAndroidJniObject parent = QAndroidJniObject::callStaticObjectMethod(
+        "android/provider/DocumentsContract", "buildDocumentUriUsingTree",
+        "(Landroid/net/Uri;Ljava/lang/String;)Landroid/net/Uri;",
+        tree.object<jobject>(), treeDocumentId.object<jstring>());
+    if (!parent.isValid())
+    {
+        if (errorMessage) {
+            *errorMessage = QStringLiteral("Cannot access the selected Android output folder.");
+        }
+        return false;
+    }
+    const QAndroidJniObject mime = QAndroidJniObject::fromString(mimeType);
+    const QAndroidJniObject name = QAndroidJniObject::fromString(displayName);
+    const QAndroidJniObject document = QAndroidJniObject::callStaticObjectMethod(
+        "android/provider/DocumentsContract", "createDocument",
+        "(Landroid/content/ContentResolver;Landroid/net/Uri;Ljava/lang/String;Ljava/lang/String;)Landroid/net/Uri;",
+        resolver.object<jobject>(), parent.object<jobject>(), mime.object<jstring>(), name.object<jstring>());
+
+    if (!document.isValid())
+    {
+        if (errorMessage) {
+            *errorMessage = QStringLiteral("Cannot create %1 in the selected Android folder.").arg(displayName);
+        }
+        return false;
+    }
+
+    const QAndroidJniObject mode = QAndroidJniObject::fromString("w");
+    QAndroidJniObject descriptor = resolver.callObjectMethod(
+        "openFileDescriptor", "(Landroid/net/Uri;Ljava/lang/String;)Landroid/os/ParcelFileDescriptor;",
+        document.object<jobject>(), mode.object<jstring>());
+    const int fd = descriptor.isValid() ? descriptor.callMethod<jint>("getFd") : -1;
+    QFile destination;
+    bool ok = (fd >= 0) && destination.open(fd, QIODevice::WriteOnly, QFileDevice::DontCloseHandle);
+    while (ok && !source.atEnd())
+    {
+        const QByteArray chunk = source.read(1024 * 1024);
+        ok = !chunk.isEmpty() && (destination.write(chunk) == chunk.size());
+    }
+    if (ok) {
+        ok = destination.flush();
+    }
+    destination.close();
+    if (descriptor.isValid()) {
+        descriptor.callMethod<void>("close");
+    }
+
+    if (!ok)
+    {
+        QAndroidJniObject::callStaticMethod<jboolean>(
+            "android/provider/DocumentsContract", "deleteDocument",
+            "(Landroid/content/ContentResolver;Landroid/net/Uri;)Z",
+            resolver.object<jobject>(), document.object<jobject>());
+        if (errorMessage) {
+            *errorMessage = QStringLiteral("Cannot copy %1 to the selected Android folder.").arg(displayName);
+        }
+    }
+    return ok;
 }
 
 #endif // QT6

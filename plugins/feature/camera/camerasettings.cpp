@@ -304,6 +304,7 @@ void CameraSettings::resetToDefaults()
     m_streamUrlHistory.clear();
     m_streamBufferingSeconds = 1.0;
     m_videoFileName = "camera.mp4";
+    m_recordingOutputDirectoryUri.clear();
     m_recordRawFits = false;
     m_recordCalibratedMedia = true;
     m_recordFilteredMedia = false;
@@ -889,6 +890,7 @@ QByteArray CameraSettings::serialize() const
     s.writeS32(312, m_playbackProjectionHeight);
     s.writeString(313, m_yoloTileModelPath);
     s.writeS32(314, static_cast<qint32>(m_sensorOpticalAxis));
+    s.writeString(315, m_recordingOutputDirectoryUri);
 
     return s.final();
 }
@@ -956,6 +958,7 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readString(15, &m_imageFileName, "camera.jpg");
         d.readBool(16, &m_saveVideo, false);
         d.readString(17, &m_videoFileName, "camera.mp4");
+        d.readString(315, &m_recordingOutputDirectoryUri, "");
         d.readBool(18, &m_videoHwAcceleration, true);
         d.readS32(208, &m_videoPreRecordBufferSeconds, 0);
         m_videoPreRecordBufferSeconds = qBound(0, m_videoPreRecordBufferSeconds, 60);
@@ -1766,6 +1769,9 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     }
     if (settingsKeys.contains("videoFileName")) {
         m_videoFileName = settings.m_videoFileName;
+    }
+    if (settingsKeys.contains("recordingOutputDirectoryUri")) {
+        m_recordingOutputDirectoryUri = settings.m_recordingOutputDirectoryUri;
     }
     if (settingsKeys.contains("videoFileCameraPath")) {
         m_videoFileCameraPath = settings.m_videoFileCameraPath;
@@ -2765,6 +2771,9 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("videoFileName") || force) {
         ostr << " m_videoFileName: " << m_videoFileName.toStdString();
+    }
+    if (settingsKeys.contains("recordingOutputDirectoryUri") || force) {
+        ostr << " m_recordingOutputDirectoryUri: " << m_recordingOutputDirectoryUri.toStdString();
     }
     if (settingsKeys.contains("videoFileCameraPath") || force) {
         ostr << " m_videoFileCameraPath: " << m_videoFileCameraPath.toStdString();

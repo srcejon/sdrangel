@@ -21,7 +21,10 @@
 #include <limits>
 
 #include <QDebug>
+#include <QDir>
+#include <QFile>
 #include <QFileInfo>
+#include <QStandardPaths>
 #include <QVariantMap>
 
 #include "camera.h"
@@ -30,6 +33,10 @@
 #include "cameravideowriter.h"
 #include "camerayoutubestreamer.h"
 #include "util/fits.h"
+
+#if defined(Q_OS_ANDROID)
+#include "util/android.h"
+#endif
 
 MESSAGE_CLASS_DEFINITION(CameraRecorder::MsgSetVideoRecordingEnabled, Message)
 MESSAGE_CLASS_DEFINITION(CameraRecorder::MsgReportSaveVideoState, Message)
@@ -331,6 +338,7 @@ void CameraRecorder::applySettings(const CameraSettings& settings, const QList<Q
 
     const bool wasSavingVideo = m_settings.m_saveVideo;
     const QString previousVideoFileName = m_settings.m_videoFileName;
+    const QString previousRecordingOutputDirectoryUri = m_settings.m_recordingOutputDirectoryUri;
     const CameraSettings::VideoCodec previousVideoCodec = m_settings.m_videoCodec;
     const int previousVideoRecordBitrateKbps = m_settings.m_videoRecordBitrateKbps;
     const bool previousRecordCalibratedMedia = m_settings.m_recordCalibratedMedia;
@@ -360,6 +368,7 @@ void CameraRecorder::applySettings(const CameraSettings& settings, const QList<Q
 
     if (force
         || settingsKeys.contains("videoFileName")
+        || settingsKeys.contains("recordingOutputDirectoryUri")
         || settingsKeys.contains("videoCodec")
         || settingsKeys.contains("videoRecordBitrateKbps")
         || settingsKeys.contains("recordCalibratedMedia")
@@ -368,6 +377,7 @@ void CameraRecorder::applySettings(const CameraSettings& settings, const QList<Q
         || settingsKeys.contains("videoHwAcceleration"))
     {
         if ((previousVideoFileName != m_settings.m_videoFileName)
+            || (previousRecordingOutputDirectoryUri != m_settings.m_recordingOutputDirectoryUri)
             || (previousVideoCodec != m_settings.m_videoCodec)
             || (previousVideoRecordBitrateKbps != m_settings.m_videoRecordBitrateKbps)
             || (previousRecordCalibratedMedia != m_settings.m_recordCalibratedMedia)
@@ -551,9 +561,12 @@ void CameraRecorder::processNewFrame(const CameraPipelineFramePtr& frame)
             }
             else
             {
-                const QString rawFitsFilename = createTimestampedOutputFilename(m_settings.m_imageFileName, QStringLiteral("raw"), QStringLiteral("fits"));
+                const QString rawFitsFilename = prepareOutputFilename(
+                    createTimestampedOutputFilename(m_settings.m_imageFileName, QStringLiteral("raw"), QStringLiteral("fits")));
                 const CameraPipelineFrame::BayerPattern bayerPattern = haveCapturedRawFrame ? frame->m_rawInputBayerPattern : CameraPipelineFrame::BayerNone;
-                if (saveRawFits(rawFitsFilename, rawFitsImage, bayerPattern, *frame)) {
+                if (!rawFitsFilename.isEmpty()
+                    && saveRawFits(rawFitsFilename, rawFitsImage, bayerPattern, *frame)
+                    && exportOutputFile(rawFitsFilename, QStringLiteral("image/fits"), QStringLiteral("raw"))) {
                     savedImageFrame = m_settings.m_saveImage;
                 }
             }
@@ -561,10 +574,16 @@ void CameraRecorder::processNewFrame(const CameraPipelineFramePtr& frame)
 
         if (shouldSaveCalibratedMedia())
         {
-            const QString calibratedFilename = createTimestampedOutputFilename(m_settings.m_imageFileName, QStringLiteral("calibrated"));
+            const QString calibratedFilename = prepareOutputFilename(
+                createTimestampedOutputFilename(m_settings.m_imageFileName, QStringLiteral("calibrated")));
             qDebug() << "CameraRecorder: Saving calibrated image to" << calibratedFilename;
-            if (calibratedImage.save(calibratedFilename)) {
-                savedImageFrame = m_settings.m_saveImage;
+            const QString mimeType = QFileInfo(calibratedFilename).suffix().compare(QLatin1String("png"), Qt::CaseInsensitive) == 0
+                ? QStringLiteral("image/png") : QStringLiteral("image/jpeg");
+            const bool savedLocally = !calibratedFilename.isEmpty() && calibratedImage.save(calibratedFilename);
+            if (savedLocally) {
+                if (exportOutputFile(calibratedFilename, mimeType, QStringLiteral("calibrated"))) {
+                    savedImageFrame = m_settings.m_saveImage;
+                }
             } else {
                 qWarning() << "CameraRecorder: Failed to save calibrated image to" << calibratedFilename;
                 reportErrorToFeature(QStringLiteral("image-save:calibrated"),
@@ -575,10 +594,16 @@ void CameraRecorder::processNewFrame(const CameraPipelineFramePtr& frame)
 
         if (shouldSaveFilteredMedia())
         {
-            const QString filteredFilename = createTimestampedOutputFilename(m_settings.m_imageFileName, QStringLiteral("filtered"));
+            const QString filteredFilename = prepareOutputFilename(
+                createTimestampedOutputFilename(m_settings.m_imageFileName, QStringLiteral("filtered")));
             qDebug() << "CameraRecorder: Saving filtered image to" << filteredFilename;
-            if (filteredImage.save(filteredFilename)) {
-                savedImageFrame = m_settings.m_saveImage;
+            const QString mimeType = QFileInfo(filteredFilename).suffix().compare(QLatin1String("png"), Qt::CaseInsensitive) == 0
+                ? QStringLiteral("image/png") : QStringLiteral("image/jpeg");
+            const bool savedLocally = !filteredFilename.isEmpty() && filteredImage.save(filteredFilename);
+            if (savedLocally) {
+                if (exportOutputFile(filteredFilename, mimeType, QStringLiteral("filtered"))) {
+                    savedImageFrame = m_settings.m_saveImage;
+                }
             } else {
                 qWarning() << "CameraRecorder: Failed to save filtered image to" << filteredFilename;
                 reportErrorToFeature(QStringLiteral("image-save:filtered"),
@@ -589,10 +614,16 @@ void CameraRecorder::processNewFrame(const CameraPipelineFramePtr& frame)
 
         if (shouldSavePostProcessedMedia())
         {
-            const QString processedFilename = createTimestampedOutputFilename(m_settings.m_imageFileName, QStringLiteral("post"));
+            const QString processedFilename = prepareOutputFilename(
+                createTimestampedOutputFilename(m_settings.m_imageFileName, QStringLiteral("post")));
             qDebug() << "CameraRecorder: Saving post-processed image to" << processedFilename;
-            if (processedImage.save(processedFilename)) {
-                savedImageFrame = m_settings.m_saveImage;
+            const QString mimeType = QFileInfo(processedFilename).suffix().compare(QLatin1String("png"), Qt::CaseInsensitive) == 0
+                ? QStringLiteral("image/png") : QStringLiteral("image/jpeg");
+            const bool savedLocally = !processedFilename.isEmpty() && processedImage.save(processedFilename);
+            if (savedLocally) {
+                if (exportOutputFile(processedFilename, mimeType, QStringLiteral("post"))) {
+                    savedImageFrame = m_settings.m_saveImage;
+                }
             } else {
                 qWarning() << "CameraRecorder: Failed to save post-processed image to" << processedFilename;
                 reportErrorToFeature(QStringLiteral("image-save:post"),
@@ -824,6 +855,68 @@ QString CameraRecorder::createTimestampedOutputFilename(const QString& baseFileN
     return fileInfo.path() + "/" + fileInfo.baseName() + infix + timestamp + "." + suffix;
 }
 
+QString CameraRecorder::prepareOutputFilename(const QString& desiredFileName)
+{
+#if defined(Q_OS_ANDROID)
+    if (!m_settings.m_recordingOutputDirectoryUri.isEmpty())
+    {
+        const QString cachePath = QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
+        QDir cacheDirectory(cachePath);
+        const QString recordingDirectory = QStringLiteral("camera/recordings");
+        if (cachePath.isEmpty() || !cacheDirectory.mkpath(recordingDirectory))
+        {
+            reportErrorToFeature(
+                QStringLiteral("android-recording-cache"),
+                tr("Camera recording error"),
+                tr("Cannot create the temporary recording directory."));
+            return QString();
+        }
+
+        const QString localFileName = cacheDirectory.filePath(
+            recordingDirectory + QLatin1Char('/') + QFileInfo(desiredFileName).fileName());
+        QFile::remove(localFileName);
+        return localFileName;
+    }
+#endif
+    return desiredFileName;
+}
+
+bool CameraRecorder::exportOutputFile(const QString& localFileName,
+                                      const QString& mimeType,
+                                      const QString& variant)
+{
+#if defined(Q_OS_ANDROID)
+    if (!m_settings.m_recordingOutputDirectoryUri.isEmpty())
+    {
+        const QString displayName = QFileInfo(localFileName).fileName();
+        QString error;
+        if (Android::copyFileToDocumentTree(
+                localFileName,
+                m_settings.m_recordingOutputDirectoryUri,
+                displayName,
+                mimeType,
+                &error))
+        {
+            QFile::remove(localFileName);
+            qDebug() << "CameraRecorder: exported Android recording" << displayName;
+            return true;
+        }
+
+        qWarning() << "CameraRecorder: failed to export Android recording" << localFileName << error;
+        reportErrorToFeature(
+            QStringLiteral("android-recording-export:%1:%2").arg(variant, displayName),
+            tr("Camera recording error"),
+            tr("The recording was retained in the application cache because it could not be copied to the selected folder:\n%1\n\n%2")
+                .arg(localFileName, error));
+        return false;
+    }
+#else
+    Q_UNUSED(mimeType)
+    Q_UNUSED(variant)
+#endif
+    return true;
+}
+
 bool CameraRecorder::shouldSaveRawFits() const
 {
     return m_settings.m_recordRawFits;
@@ -899,17 +992,43 @@ bool CameraRecorder::saveRawFits(const QString& fileName,
 
 void CameraRecorder::closeVideoWriters()
 {
-    m_calibratedVideoWriter.reset();
-    m_filteredVideoWriter.reset();
-    m_processedVideoWriter.reset();
-    m_calibratedVideoWriterSize = QSize();
-    m_filteredVideoWriterSize = QSize();
-    m_processedVideoWriterSize = QSize();
+    closeVideoWriter(m_calibratedVideoWriter, m_calibratedVideoWriterSize, QStringLiteral("calibrated"));
+    closeVideoWriter(m_filteredVideoWriter, m_filteredVideoWriterSize, QStringLiteral("filtered"));
+    closeVideoWriter(m_processedVideoWriter, m_processedVideoWriterSize, QStringLiteral("post"));
     m_reportedVideoWriterErrorKeys.clear();
     m_recordAudioLeadRefVideoMs = -1;
     m_recordAudioFirstChunkMs = -1;
     m_recordPreRecordLeadMs = 0;
     m_recordAudioLeadLogged = false;
+}
+
+void CameraRecorder::closeVideoWriter(std::unique_ptr<CameraVideoWriter>& writer,
+                                      QSize& openedSize,
+                                      const QString& variant)
+{
+    if (!writer)
+    {
+        openedSize = QSize();
+        return;
+    }
+
+    const QString fileName = writer->fileName();
+    writer->close();
+    writer.reset();
+    openedSize = QSize();
+
+#if defined(Q_OS_ANDROID)
+    if (!m_settings.m_recordingOutputDirectoryUri.isEmpty() && !fileName.isEmpty())
+    {
+        const QString suffix = QFileInfo(fileName).suffix().toLower();
+        const QString mimeType = (suffix == QLatin1String("mov"))
+            ? QStringLiteral("video/quicktime")
+            : QStringLiteral("video/mp4");
+        exportOutputFile(fileName, mimeType, variant);
+    }
+#else
+    Q_UNUSED(variant)
+#endif
 }
 
 void CameraRecorder::closeYouTubeStream()
@@ -1377,13 +1496,14 @@ bool CameraRecorder::ensureVideoWriter(std::unique_ptr<CameraVideoWriter>& write
         && (std::abs(writer->fps() - requestedFrameRate) <= 0.001)) {
         return true;
     }
-    if (writer)
-    {
-        writer.reset();
-        *openedSize = QSize();
+    if (writer) {
+        closeVideoWriter(writer, *openedSize, variant);
     }
 
-    const QString filename = createTimestampedOutputFilename(baseFileName, variant);
+    const QString filename = prepareOutputFilename(createTimestampedOutputFilename(baseFileName, variant));
+    if (filename.isEmpty()) {
+        return false;
+    }
     CameraVideoWriter::Settings writerSettings;
     writerSettings.m_fileName = filename;
     writerSettings.m_codec = m_settings.m_videoCodec;
@@ -1418,6 +1538,11 @@ bool CameraRecorder::ensureVideoWriter(std::unique_ptr<CameraVideoWriter>& write
                              tr("Camera video recording error"),
                              errorMessage);
         writer.reset();
+#if defined(Q_OS_ANDROID)
+        if (!m_settings.m_recordingOutputDirectoryUri.isEmpty()) {
+            QFile::remove(filename);
+        }
+#endif
     }
 
     return writer && writer->isOpen();

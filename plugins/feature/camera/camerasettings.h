@@ -484,6 +484,7 @@ struct CameraSettings
     QStringList m_streamUrlHistory;
     double m_streamBufferingSeconds; ///< Decoded media cushion for stream: camera sources
     QString m_videoFileName;
+    QString m_recordingOutputDirectoryUri; ///< Android Storage Access Framework output tree URI
     bool m_recordRawFits;          ///< Save uncalibrated Bayer still images as FITS
     bool m_recordCalibratedMedia;  ///< Save calibrated/debayered image/video media
     bool m_recordFilteredMedia;    ///< Save camera image processor output image/video media

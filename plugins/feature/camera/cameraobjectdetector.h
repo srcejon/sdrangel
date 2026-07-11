@@ -113,6 +113,7 @@ public:
 
     explicit CameraObjectDetector(Camera *camera);
     ~CameraObjectDetector() override;
+    [[nodiscard]] static bool isVulkanDnnAvailable();
     void setMessageQueueToGUI(MessageQueue *messageQueue) { m_msgQueueToGUI = messageQueue; }
     void setMessageQueueToFeature(MessageQueue *messageQueue) { m_msgQueueToFeature = messageQueue; }
 
@@ -143,6 +144,7 @@ private:
         // Last YOLO DNN target (as CameraSettings::YoloDnnTarget value cast to int) that
         // was applied via setPreferable{Backend,Target}. -1 = not yet applied.
         int m_appliedDnnTarget = -1;
+        int m_failedDnnTarget = -1;
         bool m_batchedInferenceSupported = false;
         QString m_loadedModelPath;
     };
@@ -162,6 +164,7 @@ private:
     void runYoloDetections(const cv::Mat& bgrMat, const cv::Rect& roi, QVector<CameraPipelineDetection>& detections);
     void resetYoloModelState(YoloModelState& modelState);
     bool ensureYoloModelLoaded(YoloModelState& modelState, const QString& modelPath, bool useTensorRt);
+    bool forwardYoloOpenCv(YoloModelState& modelState, const cv::Mat& blob, std::vector<cv::Mat>& outputs, QString& errorMessage);
     bool runYoloModelDetections(YoloModelState& modelState, const QString& modelPath, const cv::Mat& bgrMat,
         const QVector<cv::Rect>& inferenceRects, std::vector<cv::Rect>& boxes, std::vector<float>& scores, std::vector<int>& classIds,
         bool useTensorRt);

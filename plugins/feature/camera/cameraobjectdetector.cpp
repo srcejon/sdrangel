@@ -649,6 +649,36 @@ CameraObjectDetector::CameraObjectDetector(Camera *camera) :
 #endif
 }
 
+bool CameraObjectDetector::isVulkanDnnAvailable()
+{
+    static const bool available = []() {
+#if (CV_VERSION_MAJOR > 4) || ((CV_VERSION_MAJOR == 4) && (CV_VERSION_MINOR >= 10))
+        try
+        {
+            const std::vector<std::pair<cv::dnn::Backend, cv::dnn::Target>> backends = cv::dnn::getAvailableBackends();
+            return std::any_of(backends.cbegin(), backends.cend(), [](const auto& backend) {
+                return (backend.first == cv::dnn::DNN_BACKEND_VKCOM)
+                    && (backend.second == cv::dnn::DNN_TARGET_VULKAN);
+            });
+        }
+        catch (const cv::Exception& e)
+        {
+            qWarning() << "CameraObjectDetector: cannot query OpenCV DNN Vulkan availability:" << e.what();
+            return false;
+        }
+#elif defined(Q_OS_ANDROID)
+        // Older OpenCV releases expose the VKCOM/Vulkan enums but not the
+        // backend-enumeration API. Let the first inference probe support;
+        // forwardYoloOpenCv() falls back to CPU if it is unavailable.
+        return true;
+#else
+        return false;
+#endif
+    }();
+
+    return available;
+}
+
 CameraObjectDetector::~CameraObjectDetector() = default;
 
 bool CameraObjectDetector::handleStageMessage(const Message& cmd)
@@ -894,6 +924,7 @@ void CameraObjectDetector::resetYoloModelState(YoloModelState& modelState)
     modelState.m_inputSize = cv::Size(640, 640);
     modelState.m_loadedModelPath.clear();
     modelState.m_appliedDnnTarget = -1;
+    modelState.m_failedDnnTarget = -1;
     // Several modern YOLO ONNX graphs include layers that OpenCV DNN cannot
     // shape-infer with a batch dimension. TensorRT still batches tiles, but
     // OpenCV DNN uses per-tile inference to avoid noisy internal failures.
@@ -953,7 +984,25 @@ bool CameraObjectDetector::ensureYoloModelLoaded(YoloModelState& modelState, con
     const int requestedTarget = static_cast<int>(m_settings.m_yoloDnnTarget);
     if (!useTensorRt && (modelState.m_appliedDnnTarget != requestedTarget))
     {
-        if (m_settings.m_yoloDnnTarget == CameraSettings::CUDA)
+        modelState.m_failedDnnTarget = -1;
+#if defined(Q_OS_ANDROID)
+        const bool cudaTargetUnavailable = (m_settings.m_yoloDnnTarget == CameraSettings::CUDA)
+            || (m_settings.m_yoloDnnTarget == CameraSettings::CUDA_FP16);
+#else
+        const bool cudaTargetUnavailable = false;
+#endif
+        if (cudaTargetUnavailable)
+        {
+            modelState.m_net.setPreferableBackend(cv::dnn::DNN_BACKEND_OPENCV);
+            modelState.m_net.setPreferableTarget(cv::dnn::DNN_TARGET_CPU);
+            modelState.m_failedDnnTarget = requestedTarget;
+            qWarning() << "CameraObjectDetector: OpenCV CUDA DNN selected on Android; using CPU";
+            reportErrorToFeature(
+                QStringLiteral("yolo-cuda-android"),
+                tr("YOLO CUDA unavailable"),
+                tr("OpenCV CUDA DNN is not available on Android. Object detection will use the CPU; select Vulkan for GPU acceleration."));
+        }
+        else if (m_settings.m_yoloDnnTarget == CameraSettings::CUDA)
         {
             modelState.m_net.setPreferableBackend(cv::dnn::DNN_BACKEND_CUDA);
             modelState.m_net.setPreferableTarget(cv::dnn::DNN_TARGET_CUDA);
@@ -962,6 +1011,40 @@ bool CameraObjectDetector::ensureYoloModelLoaded(YoloModelState& modelState, con
         {
             modelState.m_net.setPreferableBackend(cv::dnn::DNN_BACKEND_CUDA);
             modelState.m_net.setPreferableTarget(cv::dnn::DNN_TARGET_CUDA_FP16);
+        }
+        else if (m_settings.m_yoloDnnTarget == CameraSettings::Vulkan)
+        {
+            if (isVulkanDnnAvailable())
+            {
+                try
+                {
+                    modelState.m_net.setPreferableBackend(cv::dnn::DNN_BACKEND_VKCOM);
+                    modelState.m_net.setPreferableTarget(cv::dnn::DNN_TARGET_VULKAN);
+                }
+                catch (const cv::Exception& e)
+                {
+                    modelState.m_net.setPreferableBackend(cv::dnn::DNN_BACKEND_OPENCV);
+                    modelState.m_net.setPreferableTarget(cv::dnn::DNN_TARGET_CPU);
+                    modelState.m_failedDnnTarget = requestedTarget;
+                    qWarning() << "CameraObjectDetector: cannot select OpenCV Vulkan DNN; using CPU:" << e.what();
+                    reportErrorToFeature(
+                        QStringLiteral("yolo-vulkan-selection:%1").arg(modelState.m_loadedModelPath),
+                        tr("YOLO Vulkan fallback"),
+                        tr("OpenCV could not enable Vulkan DNN for the selected model. Object detection will continue on the CPU.\n\n%1")
+                            .arg(QString::fromUtf8(e.what())));
+                }
+            }
+            else
+            {
+                modelState.m_net.setPreferableBackend(cv::dnn::DNN_BACKEND_OPENCV);
+                modelState.m_net.setPreferableTarget(cv::dnn::DNN_TARGET_CPU);
+                modelState.m_failedDnnTarget = requestedTarget;
+                qWarning() << "CameraObjectDetector: OpenCV Vulkan DNN is unavailable; using CPU";
+                reportErrorToFeature(
+                    QStringLiteral("yolo-vulkan-unavailable"),
+                    tr("YOLO Vulkan unavailable"),
+                    tr("This OpenCV build or Android device does not provide the Vulkan DNN backend. Object detection will use the CPU."));
+            }
         }
         else
         {
@@ -973,6 +1056,53 @@ bool CameraObjectDetector::ensureYoloModelLoaded(YoloModelState& modelState, con
     }
 
     return true;
+}
+
+bool CameraObjectDetector::forwardYoloOpenCv(YoloModelState& modelState,
+                                             const cv::Mat& blob,
+                                             std::vector<cv::Mat>& outputs,
+                                             QString& errorMessage)
+{
+    auto forward = [&]() {
+        outputs.clear();
+        modelState.m_net.setInput(blob);
+        modelState.m_net.forward(outputs, modelState.m_net.getUnconnectedOutLayersNames());
+    };
+
+    try
+    {
+        forward();
+        return true;
+    }
+    catch (const cv::Exception& e)
+    {
+        errorMessage = QString::fromUtf8(e.what());
+        if ((m_settings.m_yoloDnnTarget != CameraSettings::Vulkan)
+            || (modelState.m_failedDnnTarget == static_cast<int>(CameraSettings::Vulkan))) {
+            return false;
+        }
+
+        qWarning() << "CameraObjectDetector: Vulkan DNN inference failed; retrying on CPU:" << e.what();
+        modelState.m_failedDnnTarget = static_cast<int>(CameraSettings::Vulkan);
+        modelState.m_net.setPreferableBackend(cv::dnn::DNN_BACKEND_OPENCV);
+        modelState.m_net.setPreferableTarget(cv::dnn::DNN_TARGET_CPU);
+        reportErrorToFeature(
+            QStringLiteral("yolo-vulkan-fallback:%1").arg(modelState.m_loadedModelPath),
+            tr("YOLO Vulkan fallback"),
+            tr("The selected YOLO model could not run with OpenCV Vulkan DNN. Object detection will continue on the CPU.\n\n%1")
+                .arg(errorMessage));
+
+        try
+        {
+            forward();
+            return true;
+        }
+        catch (const cv::Exception& cpuException)
+        {
+            errorMessage = QString::fromUtf8(cpuException.what());
+            return false;
+        }
+    }
 }
 
 bool CameraObjectDetector::runYoloModelDetections(YoloModelState& modelState, const QString& modelPath, const cv::Mat& bgrMat,
@@ -1100,11 +1230,9 @@ bool CameraObjectDetector::runYoloModelDetections(YoloModelState& modelState, co
         std::vector<cv::Mat> outputs;
         cv::Mat blob;
         cv::dnn::blobFromImages(letterboxes, blob, 1.0 / 255.0, modelState.m_inputSize, cv::Scalar(), true, false);
-        modelState.m_net.setInput(blob);
-
-        try
+        QString inferenceError;
+        if (forwardYoloOpenCv(modelState, blob, outputs, inferenceError))
         {
-            modelState.m_net.forward(outputs, modelState.m_net.getUnconnectedOutLayersNames());
             if (!outputs.empty())
             {
                 const size_t boxCount = boxes.size();
@@ -1130,17 +1258,17 @@ bool CameraObjectDetector::runYoloModelDetections(YoloModelState& modelState, co
                 }
             }
         }
-        catch (const cv::Exception& e)
+        else
         {
             if (inferenceRects.size() <= 1)
             {
-                qWarning() << "CameraObjectDetector::runYoloDetections: inference failed:" << e.what();
+                qWarning() << "CameraObjectDetector::runYoloDetections: inference failed:" << inferenceError;
                 return false;
             }
 
             modelState.m_batchedInferenceSupported = false;
             batchInferenceFailed = true;
-            qWarning() << "CameraObjectDetector::runYoloDetections: batched inference failed for this model/target; using per-tile inference:" << e.what();
+            qWarning() << "CameraObjectDetector::runYoloDetections: batched inference failed for this model/target; using per-tile inference:" << inferenceError;
         }
     }
 
@@ -1151,15 +1279,10 @@ bool CameraObjectDetector::runYoloModelDetections(YoloModelState& modelState, co
             std::vector<cv::Mat> tileOutputs;
             cv::Mat tileBlob;
             cv::dnn::blobFromImage(letterboxes[tileIndex], tileBlob, 1.0 / 255.0, modelState.m_inputSize, cv::Scalar(), true, false);
-            modelState.m_net.setInput(tileBlob);
-
-            try
+            QString inferenceError;
+            if (!forwardYoloOpenCv(modelState, tileBlob, tileOutputs, inferenceError))
             {
-                modelState.m_net.forward(tileOutputs, modelState.m_net.getUnconnectedOutLayersNames());
-            }
-            catch (const cv::Exception& e)
-            {
-                qWarning() << "CameraObjectDetector::runYoloDetections: tile inference failed:" << tileIndex << e.what();
+                qWarning() << "CameraObjectDetector::runYoloDetections: tile inference failed:" << tileIndex << inferenceError;
                 continue;
             }
 

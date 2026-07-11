@@ -1494,7 +1494,7 @@ bool CameraSettings::deserialize(const QByteArray& data)
         if (isStreamCamera() && m_streamUrl.isEmpty()) {
             m_streamUrl = m_videoFileCameraPath;
         }
-        m_yoloDnnTarget = qBound(CPU, m_yoloDnnTarget, TensorRT_FP16);
+        m_yoloDnnTarget = qBound(CPU, m_yoloDnnTarget, Vulkan);
         d.readS32(221, reinterpret_cast<qint32*>(&m_stackDisplayMode), static_cast<qint32>(StackDisplayStacked));
         d.readS32(222, &m_stackDisplayFrameIndex, 0);
         d.readBool(223, &m_stackRejectBadFrames, false);
@@ -2578,7 +2578,7 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
         m_yoloIgnoredClassNames = settings.m_yoloIgnoredClassNames;
     }
     if (settingsKeys.contains("yoloDnnTarget")) {
-        m_yoloDnnTarget = qBound(CPU, settings.m_yoloDnnTarget, TensorRT_FP16);
+        m_yoloDnnTarget = qBound(CPU, settings.m_yoloDnnTarget, Vulkan);
     }
     if (settingsKeys.contains("audioMute")) {
         m_audioMute = settings.m_audioMute;

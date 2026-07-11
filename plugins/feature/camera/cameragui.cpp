@@ -1215,6 +1215,20 @@ CameraGUI::CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *
 
     createWindowOverlaysTab();
 
+#if defined(Q_OS_ANDROID)
+    if (QStandardItemModel *yoloTargetModel = qobject_cast<QStandardItemModel*>(settingsUI()->yoloTargetCombo->model()))
+    {
+        for (int target : {static_cast<int>(CameraSettings::CUDA), static_cast<int>(CameraSettings::CUDA_FP16)})
+        {
+            if (QStandardItem *item = yoloTargetModel->item(target))
+            {
+                item->setEnabled(false);
+                item->setToolTip(tr("OpenCV CUDA DNN is not available on Android; use Vulkan instead"));
+            }
+        }
+    }
+#endif
+
 #ifndef CAMERA_TENSORRT_YOLO
     if (QStandardItemModel *yoloTargetModel = qobject_cast<QStandardItemModel*>(settingsUI()->yoloTargetCombo->model()))
     {
@@ -1228,6 +1242,21 @@ CameraGUI::CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *
         }
     }
 #endif
+
+    bool vulkanDnnAvailable = false;
+#if defined(Q_OS_ANDROID)
+    vulkanDnnAvailable = CameraObjectDetector::isVulkanDnnAvailable();
+#endif
+    if (QStandardItemModel *yoloTargetModel = qobject_cast<QStandardItemModel*>(settingsUI()->yoloTargetCombo->model()))
+    {
+        if (QStandardItem *item = yoloTargetModel->item(static_cast<int>(CameraSettings::Vulkan)))
+        {
+            item->setEnabled(vulkanDnnAvailable);
+            item->setToolTip(vulkanDnnAvailable
+                ? tr("Use the OpenCV Vulkan DNN backend")
+                : tr("OpenCV Vulkan DNN is not available on this platform or device"));
+        }
+    }
 
     settingsUI()->azimuthSpin->setRange(
         static_cast<double>(CameraSettings::m_minAzimuth),

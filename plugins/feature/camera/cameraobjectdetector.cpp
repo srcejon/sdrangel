@@ -837,13 +837,6 @@ void CameraObjectDetector::runYoloDetections(const cv::Mat& bgrMat, const cv::Re
         }
     }
 
-    const bool useTensorRt =
-#ifdef CAMERA_TENSORRT_YOLO
-        (m_settings.m_yoloDnnTarget == CameraSettings::TensorRT) || (m_settings.m_yoloDnnTarget == CameraSettings::TensorRT_FP16);
-#else
-        false;
-#endif
-
     const float confThresh = static_cast<float>(m_settings.m_yoloConfThreshold);
     const float nmsThresh = static_cast<float>(m_settings.m_yoloNmsThreshold);
     std::vector<cv::Rect> boxes;
@@ -864,13 +857,15 @@ void CameraObjectDetector::runYoloDetections(const cv::Mat& bgrMat, const cv::Re
         || (m_settings.m_yoloInferenceMode == CameraSettings::YoloInferenceTileAndScale);
     const bool useSharedModelState = needsScaleModel && needsTileModel && (scaleModelPath == tileModelPath);
     YoloModelState& tileModelState = useSharedModelState ? m_yoloScaleModel : m_yoloTileModel;
+    const YoloBackend scaleBackend = yoloBackendForModel(scaleModelPath);
+    const YoloBackend tileBackend = yoloBackendForModel(tileModelPath);
 
-    if (needsScaleModel && !ensureYoloModelLoaded(m_yoloScaleModel, scaleModelPath, useTensorRt))
+    if (needsScaleModel && !ensureYoloModelLoaded(m_yoloScaleModel, scaleModelPath, scaleBackend))
     {
         PROFILER_STOP("YOLO");
         return;
     }
-    if (needsTileModel && !useSharedModelState && !ensureYoloModelLoaded(m_yoloTileModel, tileModelPath, useTensorRt))
+    if (needsTileModel && !useSharedModelState && !ensureYoloModelLoaded(m_yoloTileModel, tileModelPath, tileBackend))
     {
         PROFILER_STOP("YOLO");
         return;
@@ -880,12 +875,12 @@ void CameraObjectDetector::runYoloDetections(const cv::Mat& bgrMat, const cv::Re
     {
         QVector<cv::Rect> scaleRects;
         scaleRects.append(roi);
-        runYoloModelDetections(m_yoloScaleModel, scaleModelPath, bgrMat, scaleRects, boxes, scores, classIds, useTensorRt);
+        runYoloModelDetections(m_yoloScaleModel, scaleModelPath, bgrMat, scaleRects, boxes, scores, classIds, scaleBackend);
     }
     if (needsTileModel)
     {
         const QVector<cv::Rect> tileRects = makeYoloTiles(roi, tileModelState.m_inputSize);
-        runYoloModelDetections(tileModelState, tileModelPath, bgrMat, tileRects, boxes, scores, classIds, useTensorRt);
+        runYoloModelDetections(tileModelState, tileModelPath, bgrMat, tileRects, boxes, scores, classIds, tileBackend);
     }
 
     std::vector<int> indices;
@@ -925,6 +920,7 @@ void CameraObjectDetector::resetYoloModelState(YoloModelState& modelState)
     modelState.m_loadedModelPath.clear();
     modelState.m_appliedDnnTarget = -1;
     modelState.m_failedDnnTarget = -1;
+    modelState.m_liteRt.reset();
     // Several modern YOLO ONNX graphs include layers that OpenCV DNN cannot
     // shape-infer with a batch dimension. TensorRT still batches tiles, but
     // OpenCV DNN uses per-tile inference to avoid noisy internal failures.
@@ -934,10 +930,68 @@ void CameraObjectDetector::resetYoloModelState(YoloModelState& modelState)
 #endif
 }
 
-bool CameraObjectDetector::ensureYoloModelLoaded(YoloModelState& modelState, const QString& modelPath, bool useTensorRt)
+CameraObjectDetector::YoloBackend CameraObjectDetector::yoloBackendForModel(const QString& modelPath) const
+{
+    if (modelPath.endsWith(QStringLiteral(".tflite"), Qt::CaseInsensitive)) {
+        return m_settings.m_yoloDnnTarget == CameraSettings::LiteRT_GPU ? YoloBackend::LiteRtGpu : YoloBackend::LiteRtCpu;
+    }
+    if ((m_settings.m_yoloDnnTarget == CameraSettings::TensorRT)
+        || (m_settings.m_yoloDnnTarget == CameraSettings::TensorRT_FP16)) {
+        return YoloBackend::TensorRt;
+    }
+    return YoloBackend::OpenCv;
+}
+
+bool CameraObjectDetector::ensureYoloModelLoaded(YoloModelState& modelState, const QString& modelPath, YoloBackend backend)
 {
     if (modelPath.isEmpty() || modelPath.startsWith("http://") || modelPath.startsWith("https://")) {
         return false;
+    }
+
+    const bool useTensorRt = backend == YoloBackend::TensorRt;
+    const bool useLiteRt = (backend == YoloBackend::LiteRtCpu) || (backend == YoloBackend::LiteRtGpu);
+    if (!useLiteRt && ((m_settings.m_yoloDnnTarget == CameraSettings::LiteRT_CPU)
+        || (m_settings.m_yoloDnnTarget == CameraSettings::LiteRT_GPU)))
+    {
+        reportErrorToFeature(
+            QStringLiteral("yolo-litert-model:%1").arg(modelPath),
+            tr("LiteRT model required"),
+            tr("The LiteRT targets require a .tflite model. Select a .tflite file or choose an OpenCV/TensorRT target."));
+        return false;
+    }
+
+    if (useLiteRt)
+    {
+#ifdef CAMERA_LITERT_YOLO
+        if (modelState.m_loadedModelPath != modelPath) {
+            resetYoloModelState(modelState);
+        }
+        QString liteRtError;
+        if (!modelState.m_liteRt.ensureLoaded(modelPath, backend == YoloBackend::LiteRtGpu, liteRtError))
+        {
+            reportErrorToFeature(
+                QStringLiteral("yolo-litert-load:%1:%2").arg(modelPath).arg(static_cast<int>(backend)),
+                tr("LiteRT model load failed"),
+                tr("Failed to load YOLO LiteRT model:\n%1\n\n%2").arg(modelPath, liteRtError));
+            return false;
+        }
+        modelState.m_inputSize = modelState.m_liteRt.inputSize();
+        modelState.m_loadedModelPath = modelPath;
+        if ((backend == YoloBackend::LiteRtGpu) && !modelState.m_liteRt.gpuActive())
+        {
+            reportErrorToFeature(
+                QStringLiteral("yolo-litert-gpu-fallback:%1").arg(modelPath),
+                tr("LiteRT GPU fallback"),
+                tr("The selected model or Android device could not use the LiteRT GPU delegate. Object detection will continue with LiteRT CPU."));
+        }
+        return true;
+#else
+        reportErrorToFeature(
+            QStringLiteral("yolo-litert-unavailable"),
+            tr("LiteRT unavailable"),
+            tr("This Android build does not include LiteRT. Configure it with the LiteRT runtime and GPU delegate libraries."));
+        return false;
+#endif
     }
 
     if ((modelState.m_loadedModelPath != modelPath) || (!useTensorRt && modelState.m_net.empty()))
@@ -1107,7 +1161,7 @@ bool CameraObjectDetector::forwardYoloOpenCv(YoloModelState& modelState,
 
 bool CameraObjectDetector::runYoloModelDetections(YoloModelState& modelState, const QString& modelPath, const cv::Mat& bgrMat,
     const QVector<cv::Rect>& inferenceRects, std::vector<cv::Rect>& boxes, std::vector<float>& scores, std::vector<int>& classIds,
-    bool useTensorRt)
+    YoloBackend backend)
 {
     const int targetW = modelState.m_inputSize.width;
     const int targetH = modelState.m_inputSize.height;
@@ -1180,9 +1234,30 @@ bool CameraObjectDetector::runYoloModelDetections(YoloModelState& modelState, co
         return false;
     };
 
-    bool useOpenCvDnn = !useTensorRt;
+    bool useOpenCvDnn = backend == YoloBackend::OpenCv;
+#ifdef CAMERA_LITERT_YOLO
+    if ((backend == YoloBackend::LiteRtCpu) || (backend == YoloBackend::LiteRtGpu))
+    {
+        for (int tileIndex = 0; tileIndex < static_cast<int>(letterboxes.size()); ++tileIndex)
+        {
+            std::vector<cv::Mat> liteRtOutputs;
+            QString liteRtError;
+            if (!modelState.m_liteRt.infer(letterboxes[static_cast<size_t>(tileIndex)], liteRtOutputs, liteRtError))
+            {
+                qWarning() << "CameraObjectDetector::runYoloDetections: LiteRT inference failed:" << tileIndex << liteRtError;
+                reportErrorToFeature(
+                    QStringLiteral("yolo-litert-inference:%1").arg(modelPath),
+                    tr("LiteRT inference failed"), liteRtError);
+                continue;
+            }
+            if (!liteRtOutputs.empty()) {
+                decodeOutput(liteRtOutputs.front(), tileIndex, 1);
+            }
+        }
+    }
+#endif
 #ifdef CAMERA_TENSORRT_YOLO
-    if (useTensorRt)
+    if (backend == YoloBackend::TensorRt)
     {
         QString tensorRtError;
         std::vector<cv::Mat> tensorRtOutputs;

@@ -21,7 +21,7 @@ The Camera plugin also supports a variety of post-processing, detection and over
 * Image stacking with alignment and quality rejection
 * HDR stacking with multiple exposure brackets and merging algorithms
 * Histogram stretching and colour adjustment
-* YOLO AI object detection (CPU, OpenCV CUDA, Android Vulkan or TensorRT acceleration)
+* YOLO AI object detection (ONNX with OpenCV/TensorRT, or Android LiteRT `.tflite` models with CPU/GPU acceleration)
 * Motion detection
 * Star detection and plate solving
 * Cloud detection
@@ -854,7 +854,9 @@ Selects the bounding box colour for detections.
 
 <h4>6. Target</h4>
 
-Selects the inference target: OpenCV CPU, OpenCV CUDA, OpenCV CUDA FP16, TensorRT, TensorRT FP16 or OpenCV Vulkan, depending on what is available. Vulkan is offered on Android when OpenCV reports the VKCOM/Vulkan backend. If a model contains layers that Vulkan cannot execute, detection continues using the OpenCV CPU backend.
+Selects the inference target: OpenCV CPU, OpenCV CUDA, OpenCV CUDA FP16, TensorRT, TensorRT FP16, OpenCV Vulkan, LiteRT CPU or LiteRT GPU, depending on what is available. ONNX models use OpenCV or TensorRT. On Android, `.tflite` models use LiteRT and never pass through OpenCV; LiteRT GPU uses the Android GPU delegate and falls back to LiteRT CPU if the device or model is not supported by that delegate. Vulkan is offered on Android when OpenCV reports the VKCOM/Vulkan backend.
+
+Android LiteRT support is optional at build time. Configure with `ENABLE_CAMERA_LITERT=ON` and set `LITERT_ROOT` to an extracted Android LiteRT package, or set `LITERT_INCLUDE_DIR`, `LITERT_LIBRARY` and `LITERT_GPU_DELEGATE_LIBRARY` explicitly. The runtime must provide `tensorflow/lite/c/c_api.h`, the LiteRT/TensorFlow Lite C runtime and the GPU delegate; shared libraries are added to the Android package automatically. Models must have one fixed NHWC input shaped `[1, height, width, 3]`. Float32, uint8 and int8 input/output tensors are supported.
 
 <h4>7. Input mode</h4>
 
@@ -1172,6 +1174,8 @@ API key from openweathermap.org used to periodically fetch weather for the camer
 from ultralytics import YOLO
 model = YOLO("yolov8n.pt")
 model.export(format="onnx", opset=12)
+# For Android LiteRT CPU/GPU:
+model.export(format="tflite")
 ```
 
 COCO class list: https://raw.githubusercontent.com/amikelive/coco-labels/refs/heads/master/coco-labels-2014_2017.txt

@@ -1,5 +1,6 @@
 project(camera)
 option(ENABLE_CAMERA_TENSORRT "Enable optional TensorRT YOLO inference in the camera feature" OFF)
+option(ENABLE_CAMERA_LITERT "Enable optional Android LiteRT YOLO inference" ${ANDROID})
 
 set(camera_SOURCES
     camera.cpp
@@ -9,6 +10,7 @@ set(camera_SOURCES
     cameramotiondetector.cpp
     camerastardetector.cpp
     cameraobjectdetector.cpp
+    camerayololitert.cpp
     cameradiffdetector.cpp
     cameraframepreprocessor.cpp
     cameraframealigner.cpp
@@ -44,6 +46,7 @@ set(camera_HEADERS
     cameramotiondetector.h
     camerastardetector.h
     cameraobjectdetector.h
+    camerayololitert.h
     camerayolotensorrt.h
     cameradiffdetector.h
     cameraframepreprocessor.h
@@ -270,6 +273,53 @@ if(ENABLE_CAMERA_TENSORRT)
         message(STATUS "Camera TensorRT YOLO support enabled")
     else()
         message(WARNING "ENABLE_CAMERA_TENSORRT is ON, but TensorRT or CUDA runtime libraries were not found; camera TensorRT support is disabled")
+    endif()
+endif()
+
+if(ANDROID AND ENABLE_CAMERA_LITERT)
+    find_path(LITERT_INCLUDE_DIR tensorflow/lite/c/c_api.h
+        HINTS
+            "$ENV{LITERT_ROOT}/include"
+            "$ENV{LITERT_ROOT}/headers"
+            "${LITERT_ROOT}/include"
+            "${LITERT_ROOT}/headers"
+            "${EXTERNAL_LIBRARY_FOLDER}/${ANDROID_ABI}/litert/include"
+    )
+    find_library(LITERT_LIBRARY
+        NAMES tensorflowlite_c tensorflowlite tensorflow-lite tensorflowlite_jni
+        HINTS
+            "$ENV{LITERT_ROOT}/lib/${ANDROID_ABI}"
+            "$ENV{LITERT_ROOT}/lib"
+            "$ENV{LITERT_ROOT}/jni/${ANDROID_ABI}"
+            "${LITERT_ROOT}/lib/${ANDROID_ABI}"
+            "${LITERT_ROOT}/lib"
+            "${LITERT_ROOT}/jni/${ANDROID_ABI}"
+            "${EXTERNAL_LIBRARY_FOLDER}/${ANDROID_ABI}/litert/lib"
+    )
+    find_library(LITERT_GPU_DELEGATE_LIBRARY
+        NAMES tensorflowlite_gpu_delegate tensorflow-lite-gpu-delegate tensorflowlite_gpu_jni
+        HINTS
+            "$ENV{LITERT_ROOT}/lib/${ANDROID_ABI}"
+            "$ENV{LITERT_ROOT}/lib"
+            "$ENV{LITERT_ROOT}/jni/${ANDROID_ABI}"
+            "${LITERT_ROOT}/lib/${ANDROID_ABI}"
+            "${LITERT_ROOT}/lib"
+            "${LITERT_ROOT}/jni/${ANDROID_ABI}"
+            "${EXTERNAL_LIBRARY_FOLDER}/${ANDROID_ABI}/litert/lib"
+    )
+
+    if(LITERT_INCLUDE_DIR AND LITERT_LIBRARY AND LITERT_GPU_DELEGATE_LIBRARY)
+        target_compile_definitions(${TARGET_NAME} PRIVATE CAMERA_LITERT_YOLO)
+        target_include_directories(${TARGET_NAME} PRIVATE ${LITERT_INCLUDE_DIR})
+        target_link_libraries(${TARGET_NAME} PRIVATE ${LITERT_LIBRARY} ${LITERT_GPU_DELEGATE_LIBRARY})
+        foreach(litert_lib IN ITEMS ${LITERT_LIBRARY} ${LITERT_GPU_DELEGATE_LIBRARY})
+            if(litert_lib MATCHES "\\.so$")
+                set_property(GLOBAL APPEND PROPERTY SDRANGEL_ANDROID_EXTRA_LIBS ${litert_lib})
+            endif()
+        endforeach()
+        message(STATUS "Camera Android LiteRT YOLO support enabled")
+    else()
+        message(WARNING "ENABLE_CAMERA_LITERT is ON, but the LiteRT C runtime and GPU delegate were not found; camera LiteRT support is disabled. Set LITERT_ROOT or LITERT_INCLUDE_DIR/LITERT_LIBRARY/LITERT_GPU_DELEGATE_LIBRARY.")
     endif()
 endif()
 

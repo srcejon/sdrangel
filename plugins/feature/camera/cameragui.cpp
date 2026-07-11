@@ -1244,6 +1244,20 @@ CameraGUI::CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *
     }
 #endif
 
+#if !defined(Q_OS_ANDROID) || !defined(CAMERA_LITERT_YOLO)
+    if (QStandardItemModel *yoloTargetModel = qobject_cast<QStandardItemModel*>(settingsUI()->yoloTargetCombo->model()))
+    {
+        for (int target : {static_cast<int>(CameraSettings::LiteRT_CPU), static_cast<int>(CameraSettings::LiteRT_GPU)})
+        {
+            if (QStandardItem *item = yoloTargetModel->item(target))
+            {
+                item->setEnabled(false);
+                item->setToolTip(tr("LiteRT support is only available in Android builds configured with the LiteRT runtime"));
+            }
+        }
+    }
+#endif
+
     bool vulkanDnnAvailable = false;
 #if defined(Q_OS_ANDROID)
     vulkanDnnAvailable = CameraObjectDetector::isVulkanDnnAvailable();
@@ -10578,6 +10592,29 @@ void CameraGUI::applyYoloPathSetting(const QString& settingKey, const QString& p
         return;
     }
 
+#if defined(Q_OS_ANDROID) && defined(CAMERA_LITERT_YOLO)
+    if ((settingKey == "yoloModelPath") || (settingKey == "yoloTileModelPath"))
+    {
+        const bool liteRtModel = path.endsWith(QStringLiteral(".tflite"), Qt::CaseInsensitive);
+        const bool liteRtTarget = (m_settings.m_yoloDnnTarget == CameraSettings::LiteRT_CPU)
+            || (m_settings.m_yoloDnnTarget == CameraSettings::LiteRT_GPU);
+        if (liteRtModel && !liteRtTarget)
+        {
+            m_settings.m_yoloDnnTarget = CameraSettings::LiteRT_GPU;
+            const QSignalBlocker blocker(settingsUI()->yoloTargetCombo);
+            settingsUI()->yoloTargetCombo->setCurrentIndex(static_cast<int>(m_settings.m_yoloDnnTarget));
+            applySetting("yoloDnnTarget");
+        }
+        else if (!liteRtModel && liteRtTarget)
+        {
+            m_settings.m_yoloDnnTarget = CameraSettings::CPU;
+            const QSignalBlocker blocker(settingsUI()->yoloTargetCombo);
+            settingsUI()->yoloTargetCombo->setCurrentIndex(static_cast<int>(m_settings.m_yoloDnnTarget));
+            applySetting("yoloDnnTarget");
+        }
+    }
+#endif
+
     updateYoloButtonEnabled();
     applySetting(settingKey);
 }
@@ -10869,15 +10906,15 @@ void CameraGUI::on_yoloModelPathEdit_editingFinished()
 void CameraGUI::on_yoloModelPathButton_clicked()
 {
     const QString fileName = QFileDialog::getOpenFileName(
-        this, tr("Select YOLO ONNX model"), m_settings.m_yoloModelPath,
-        tr("ONNX model (*.onnx);;All files (*)"));
+        this, tr("Select YOLO model"), m_settings.m_yoloModelPath,
+        tr("YOLO models (*.onnx *.tflite);;ONNX model (*.onnx);;LiteRT model (*.tflite);;All files (*)"));
 
     if (!fileName.isEmpty())
     {
         QString accessibleFileName = fileName;
 #if defined(Q_OS_ANDROID)
         QString errorMessage;
-        accessibleFileName = copyAndroidContentFile(fileName, QStringLiteral("onnx"), &errorMessage);
+        accessibleFileName = copyAndroidContentFile(fileName, QStringLiteral("dnn"), &errorMessage);
         if (accessibleFileName.isEmpty()) {
             QMessageBox::warning(this, tr("Model selection failed"), errorMessage);
             return;
@@ -10903,15 +10940,15 @@ void CameraGUI::on_yoloTileModelPathEdit_editingFinished()
 void CameraGUI::on_yoloTileModelPathButton_clicked()
 {
     const QString fileName = QFileDialog::getOpenFileName(
-        this, tr("Select YOLO tiled-inference ONNX model"), m_settings.m_yoloTileModelPath.isEmpty() ? m_settings.m_yoloModelPath : m_settings.m_yoloTileModelPath,
-        tr("ONNX model (*.onnx);;All files (*)"));
+        this, tr("Select YOLO tiled-inference model"), m_settings.m_yoloTileModelPath.isEmpty() ? m_settings.m_yoloModelPath : m_settings.m_yoloTileModelPath,
+        tr("YOLO models (*.onnx *.tflite);;ONNX model (*.onnx);;LiteRT model (*.tflite);;All files (*)"));
 
     if (!fileName.isEmpty())
     {
         QString accessibleFileName = fileName;
 #if defined(Q_OS_ANDROID)
         QString errorMessage;
-        accessibleFileName = copyAndroidContentFile(fileName, QStringLiteral("onnx"), &errorMessage);
+        accessibleFileName = copyAndroidContentFile(fileName, QStringLiteral("dnn"), &errorMessage);
         if (accessibleFileName.isEmpty()) {
             QMessageBox::warning(this, tr("Model selection failed"), errorMessage);
             return;

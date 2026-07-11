@@ -723,9 +723,9 @@ struct CameraSettings
         YoloInferenceTile,
         YoloInferenceTileAndScale
     };
-    bool   m_yoloEnabled;        ///< Run YOLO ONNX inference and draw bounding boxes
-    QString m_yoloModelPath;     ///< Path to the .onnx model file used for scaled/full-image inference
-    QString m_yoloTileModelPath; ///< Optional path to the .onnx model file used for tiled inference; empty = use m_yoloModelPath
+    bool   m_yoloEnabled;        ///< Run YOLO ONNX/LiteRT inference and draw bounding boxes
+    QString m_yoloModelPath;     ///< Path to the .onnx or .tflite model used for scaled/full-image inference
+    QString m_yoloTileModelPath; ///< Optional .onnx or .tflite model used for tiled inference; empty = use m_yoloModelPath
     QString m_yoloLabelsPath;    ///< Path to a plain-text file with one class name per line (optional)
     double m_yoloConfThreshold;  ///< Minimum confidence to keep a detection: 0.0..1.0
     double m_yoloNmsThreshold;   ///< IoU threshold for non-maximum suppression: 0.0..1.0
@@ -741,6 +741,8 @@ struct CameraSettings
         TensorRT,
         TensorRT_FP16,
         Vulkan,
+        LiteRT_CPU,
+        LiteRT_GPU,
     } m_yoloDnnTarget;          ///< OpenCV DNN target backend for running the YOLO model
 
     // Audio settings (Qt camera only)

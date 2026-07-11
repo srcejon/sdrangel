@@ -5436,7 +5436,7 @@ Use src=file:///path/to/images/logo.png for img tags. http is not supported.</st
               </sizepolicy>
              </property>
              <property name="toolTip">
-              <string>Path to YOLO ONNX model file</string>
+              <string>Path to a YOLO ONNX or LiteRT model file</string>
              </property>
              <property name="editable">
               <bool>true</bool>
@@ -5452,7 +5452,7 @@ Use src=file:///path/to/images/logo.png for img tags. http is not supported.</st
               </size>
              </property>
              <property name="toolTip">
-              <string>Browse for ONNX model file</string>
+              <string>Browse for an ONNX or LiteRT model file</string>
              </property>
              <property name="text">
               <string/>
@@ -5466,7 +5466,7 @@ Use src=file:///path/to/images/logo.png for img tags. http is not supported.</st
            <item row="1" column="0">
             <widget class="QLabel" name="yoloTileModelPathLabel">
              <property name="text">
-              <string>YOLO ONNX (tile)</string>
+              <string>YOLO model (tile)</string>
              </property>
             </widget>
            </item>
@@ -5479,7 +5479,7 @@ Use src=file:///path/to/images/logo.png for img tags. http is not supported.</st
               </sizepolicy>
              </property>
              <property name="toolTip">
-              <string>Optional YOLO ONNX model file used for tiled inference. Leave empty to use the main YOLO model.</string>
+              <string>Optional YOLO ONNX or LiteRT model used for tiled inference. Leave empty to use the main YOLO model.</string>
              </property>
              <property name="editable">
               <bool>true</bool>
@@ -5495,7 +5495,7 @@ Use src=file:///path/to/images/logo.png for img tags. http is not supported.</st
               </size>
              </property>
              <property name="toolTip">
-              <string>Browse for optional tiled-inference ONNX model file</string>
+              <string>Browse for an optional tiled-inference ONNX or LiteRT model file</string>
              </property>
              <property name="text">
               <string/>
@@ -5532,7 +5532,7 @@ Use src=file:///path/to/images/logo.png for img tags. http is not supported.</st
               </size>
              </property>
              <property name="text">
-              <string>YOLO ONNX (scale)</string>
+              <string>YOLO model (scale)</string>
              </property>
             </widget>
            </item>
@@ -5611,11 +5611,21 @@ Use src=file:///path/to/images/logo.png for img tags. http is not supported.</st
                <string>TensorRT FP16</string>
               </property>
              </item>
-             <item>
-              <property name="text">
-               <string>OpenCV Vulkan</string>
-              </property>
-             </item>
+            <item>
+             <property name="text">
+              <string>OpenCV Vulkan</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>LiteRT CPU</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>LiteRT GPU</string>
+             </property>
+            </item>
             </widget>
            </item>
            <item row="3" column="1">

@@ -28,6 +28,7 @@
 #include "cameradetectionhistoryentry.h"
 #include "cameradetector.h"
 #include "camerameteorphotometer.h"
+#include "camerayololitert.h"
 #ifdef CAMERA_TENSORRT_YOLO
 #include "camerayolotensorrt.h"
 #endif
@@ -39,16 +40,16 @@ class Camera;
  *
  * Runs a YOLO model over the detection ROI (tiling large frames), decoding and NMS-filtering
  * the raw outputs into CameraPipelineFrame::m_detections. Scale and tile inference can use
- * separate model states; each uses either OpenCV DNN or, when CAMERA_TENSORRT_YOLO is defined,
- * the faster batched CameraYoloTensorRt engine. Detections are then turned into a
+ * separate model states; ONNX models use OpenCV DNN or TensorRT, while Android .tflite models
+ * use LiteRT CPU or its GPU delegate. Detections are then turned into a
  * per-class appearance/disappearance history (with debounce deadlines) reported to the GUI, and
  * the first detection can be forwarded to the feature as an azimuth/elevation target.
  *
  * \note Derives from CameraDetectionStage and runs on its own QThread; see that base class for
  *       threading, frame-backlog and ROI/exclusion handling.
  * \note Holds a back-pointer to the owning Camera plus message queues to the GUI and feature.
- *       The DNN net/target and the TensorRT engine are loaded/rebuilt lazily when the model,
- *       labels or target settings change; ignored class names are filtered out of results.
+ *       Runtime state is loaded/rebuilt lazily when the model, labels or target settings
+ *       change; ignored class names are filtered out of results.
  */
 class CameraObjectDetector : public CameraDetectionStage
 {
@@ -138,6 +139,7 @@ private:
     {
         cv::dnn::Net m_net;
         cv::Size m_inputSize = cv::Size(640, 640);
+        CameraYoloLiteRt m_liteRt;
 #ifdef CAMERA_TENSORRT_YOLO
         CameraYoloTensorRt m_tensorRt;
 #endif
@@ -161,13 +163,20 @@ private:
     QList<CameraDetectionHistoryEntry> m_completedObjectDetectionHistory;
     CameraPipelineFrame m_lastInputFrame;
     CameraMeteorPhotometer m_meteorPhotometer;
+    enum class YoloBackend {
+        OpenCv,
+        TensorRt,
+        LiteRtCpu,
+        LiteRtGpu
+    };
     void runYoloDetections(const cv::Mat& bgrMat, const cv::Rect& roi, QVector<CameraPipelineDetection>& detections);
     void resetYoloModelState(YoloModelState& modelState);
-    bool ensureYoloModelLoaded(YoloModelState& modelState, const QString& modelPath, bool useTensorRt);
+    [[nodiscard]] YoloBackend yoloBackendForModel(const QString& modelPath) const;
+    bool ensureYoloModelLoaded(YoloModelState& modelState, const QString& modelPath, YoloBackend backend);
     bool forwardYoloOpenCv(YoloModelState& modelState, const cv::Mat& blob, std::vector<cv::Mat>& outputs, QString& errorMessage);
     bool runYoloModelDetections(YoloModelState& modelState, const QString& modelPath, const cv::Mat& bgrMat,
         const QVector<cv::Rect>& inferenceRects, std::vector<cv::Rect>& boxes, std::vector<float>& scores, std::vector<int>& classIds,
-        bool useTensorRt);
+        YoloBackend backend);
     void decodeYoloDetections(const cv::Mat& det, const cv::Rect& tileRect, int padX, int padY, float invScale,
         std::vector<cv::Rect>& boxes, std::vector<float>& scores, std::vector<int>& classIds) const;
     QVector<cv::Rect> makeYoloTiles(const cv::Rect& roi, const cv::Size& inputSize) const;

@@ -300,7 +300,7 @@ void CameraStarDetector::reportPlateSolveStatus(bool solving) const
     }
 }
 
-bool CameraStarDetector::plateSolveInputSettingsChanged(const QList<QString>& settingsKeys)
+bool CameraStarDetector::plateSolveInputSettingsChanged(const QList<QString>& settingsKeys, bool applyDirectionChanges)
 {
     return settingsKeys.contains("plateSolve")
         || settingsKeys.contains("plateSolveMaxMagnitude")
@@ -318,9 +318,10 @@ bool CameraStarDetector::plateSolveInputSettingsChanged(const QList<QString>& se
         || settingsKeys.contains("longitude")
         || settingsKeys.contains("altitude")
         || settingsKeys.contains("positionSync")
-        || settingsKeys.contains("azimuth")
-        || settingsKeys.contains("elevation")
-        || settingsKeys.contains("roll")
+        || (applyDirectionChanges && settingsKeys.contains("azimuth"))
+        || (applyDirectionChanges && settingsKeys.contains("elevation"))
+        || (applyDirectionChanges && settingsKeys.contains("roll"))
+        || settingsKeys.contains("directionApplyToCurrentImage")
         || settingsKeys.contains("rotator")
         || settingsKeys.contains("fov")
         || settingsKeys.contains("fovMode")
@@ -339,7 +340,7 @@ bool CameraStarDetector::plateSolveInputSettingsChanged(const QList<QString>& se
         || settingsKeys.contains("playbackProjectionHeight");
 }
 
-bool CameraStarDetector::starDisplaySettingsChanged(const QList<QString>& settingsKeys)
+bool CameraStarDetector::starDisplaySettingsChanged(const QList<QString>& settingsKeys, bool applyDirectionChanges)
 {
     return settingsKeys.contains("starDetect")
         || settingsKeys.contains("starDebugView")
@@ -350,7 +351,7 @@ bool CameraStarDetector::starDisplaySettingsChanged(const QList<QString>& settin
         || settingsKeys.contains("starMaxAspectRatio")
         || settingsKeys.contains("starColor")
         || settingsKeys.contains("plateSolveLabelMode")
-        || plateSolveInputSettingsChanged(settingsKeys);
+        || plateSolveInputSettingsChanged(settingsKeys, applyDirectionChanges);
 }
 
 #ifdef CAMERA_OPENCV_CUDA_DETECTION
@@ -433,13 +434,13 @@ void CameraStarDetector::applySettings(const CameraSettings& settings, const QLi
     qDebug() << "CameraStarDetector::applySettings:" << settings.getDebugString(settingsKeys, force) << "force:" << force;
     if ((force && !settings.m_plateSolve)
         || (!force && settingsKeys.contains("plateSolve") && !settings.m_plateSolve)
-        || (!force && settings.m_plateSolve && plateSolveInputSettingsChanged(settingsKeys)))
+        || (!force && settings.m_plateSolve && plateSolveInputSettingsChanged(settingsKeys, settings.m_directionApplyToCurrentImage)))
     {
         requestPlateSolveCancellation();
     }
     CameraDetectionStage::applySettings(settings, settingsKeys, force);
 
-    if (!force && starDisplaySettingsChanged(settingsKeys) && m_lastInputFrame)
+    if (!force && starDisplaySettingsChanged(settingsKeys, settings.m_directionApplyToCurrentImage) && m_lastInputFrame)
     {
         CameraPipelineFramePtr frame(new CameraPipelineFrame(*m_lastInputFrame));
         CameraImageUtils::applyPlaybackProjectionTransform(*frame, m_settings, true);
@@ -668,7 +669,7 @@ void CameraStarDetector::processNewFrame(const CameraPipelineFramePtr& frame)
             }
         }
 
-        CameraSettings solveSettings = m_settings;
+        CameraSettings solveSettings = CameraImageUtils::projectionSettingsForFrame(m_settings, *frame);
         solveSettings.m_lensMirror = false; // input already flipped above
         const QSize solveImageSize = frame->opticalImageSize();
         const CameraPlateSolveResult plateSolveResult = m_plateSolver.solve(

@@ -974,14 +974,19 @@ void CameraPostProcessor::applySettings(const CameraSettings& settings, const QL
         "motionBoxColor", "starColor", "showStarDetectionBoxes",
         "plateSolveLabelMode", "plateSolveLabelHideSyntheticNames", "yoloEnabled",
         "overlaySpectrum", "spectrumDevice", "spectrumOffsetX", "spectrumOffsetY", "spectrumScale", "spectrumOverlays", "windowOverlays",
-        "latitude", "longitude", "altitude", "azimuth", "elevation", "roll", "fov",
+        "latitude", "longitude", "altitude", "azimuth", "elevation", "roll", "directionApplyToCurrentImage", "fov",
         "lensProjection", "lensCenterOffsetX", "lensCenterOffsetY", "lensDistortionK1",
         "playbackProjectionEnabled", "playbackProjectionX", "playbackProjectionY", "playbackProjectionWidth", "playbackProjectionHeight",
         "owmAPIKey",
         "yoloBoxColor"
     };
     const bool postProcessChanged = force || std::any_of(kPostProcessingKeys.cbegin(), kPostProcessingKeys.cend(),
-        [&settingsKeys](const QString& k) { return settingsKeys.contains(k); });
+        [&settingsKeys, &settings](const QString& k) {
+            const bool directionValue = (k == QStringLiteral("azimuth"))
+                || (k == QStringLiteral("elevation"))
+                || (k == QStringLiteral("roll"));
+            return settingsKeys.contains(k) && (!directionValue || settings.m_directionApplyToCurrentImage);
+        });
     const bool sourceChanged = force
         || settingsKeys.contains("cameraId")
         || settingsKeys.contains("cameraProtocol")
@@ -1020,9 +1025,10 @@ void CameraPostProcessor::applySettings(const CameraSettings& settings, const QL
         || settingsKeys.contains("latitude")
         || settingsKeys.contains("longitude")
         || settingsKeys.contains("altitude")
-        || settingsKeys.contains("azimuth")
-        || settingsKeys.contains("elevation")
-        || settingsKeys.contains("roll")
+        || (settings.m_directionApplyToCurrentImage && settingsKeys.contains("azimuth"))
+        || (settings.m_directionApplyToCurrentImage && settingsKeys.contains("elevation"))
+        || (settings.m_directionApplyToCurrentImage && settingsKeys.contains("roll"))
+        || settingsKeys.contains("directionApplyToCurrentImage")
         || settingsKeys.contains("fov")
         || settingsKeys.contains("lensProjection")
         || settingsKeys.contains("lensCenterOffsetX")
@@ -1869,7 +1875,7 @@ void CameraPostProcessor::applyDateTimeOverlay(QImage& image, bool drawLabel, QV
     PROFILER_STOP(__FUNCTION__);
 }
 
-QString CameraPostProcessor::expandOverlayTextTemplate() const
+QString CameraPostProcessor::expandOverlayTextTemplate(const CameraSettings& settings) const
 {
     QString overlayText = m_settings.m_overlayTextString;
     const auto replaceToken = [&overlayText](const QString& token, const QString& value)
@@ -1888,9 +1894,9 @@ QString CameraPostProcessor::expandOverlayTextTemplate() const
     replaceToken(QStringLiteral("${latitude}"), QString::number(m_settings.m_latitude, 'f', 6));
     replaceToken(QStringLiteral("${longitude}"), QString::number(m_settings.m_longitude, 'f', 6));
     replaceToken(QStringLiteral("${altitude}"), QString::number(m_settings.m_altitude, 'f', 2));
-    replaceToken(QStringLiteral("${azimuth}"), QString::number(m_settings.m_azimuth, 'f', 2));
-    replaceToken(QStringLiteral("${elevation}"), QString::number(m_settings.m_elevation, 'f', 2));
-    replaceToken(QStringLiteral("${roll}"), QString::number(m_settings.m_roll, 'f', 2));
+    replaceToken(QStringLiteral("${azimuth}"), QString::number(settings.m_azimuth, 'f', 2));
+    replaceToken(QStringLiteral("${elevation}"), QString::number(settings.m_elevation, 'f', 2));
+    replaceToken(QStringLiteral("${roll}"), QString::number(settings.m_roll, 'f', 2));
     replaceToken(QStringLiteral("${temp}"), weatherValueString(m_weatherTemperature, 1));
     replaceToken(QStringLiteral("${pressure}"), weatherValueString(m_weatherPressure, 1));
     replaceToken(QStringLiteral("${humidity}"), weatherValueString(m_weatherHumidity, 0));
@@ -2128,13 +2134,15 @@ void CameraPostProcessor::applySkyGridOverlay(const CameraPipelineFrame& frame, 
 {
     PROFILER_START();
 
+    const CameraSettings settings = CameraImageUtils::projectionSettingsForFrame(m_settings, frame);
+
     const bool drawEquatorial = m_settings.m_equatorialGrid;
     const bool drawAltAz = m_settings.m_altAzGrid;
     if (!drawEquatorial && !drawAltAz) {
         return;
     }
 
-    const SkyProjector projector = SkyProjector::create(m_settings, image.size(), frame.m_imageTransform);
+    const SkyProjector projector = SkyProjector::create(settings, image.size(), frame.m_imageTransform);
     if (!projector.valid) {
         return;
     }
@@ -2149,16 +2157,16 @@ void CameraPostProcessor::applySkyGridOverlay(const CameraPipelineFrame& frame, 
     key.m_size = image.size();
     key.m_drawEquatorial = drawEquatorial;
     key.m_drawAltAz = drawAltAz;
-    key.m_altAzColor = m_settings.m_altAzGridColor.rgba();
-    key.m_equatorialColor = m_settings.m_equatorialGridColor.rgba();
-    key.m_lensProjection = static_cast<int>(m_settings.m_lensProjection);
-    key.m_azimuth = m_settings.m_azimuth;
-    key.m_elevation = m_settings.m_elevation;
-    key.m_roll = m_settings.m_roll;
-    key.m_fov = m_settings.m_fov;
-    key.m_lensCenterOffsetX = m_settings.m_lensCenterOffsetX;
-    key.m_lensCenterOffsetY = m_settings.m_lensCenterOffsetY;
-    key.m_lensDistortionK1 = m_settings.m_lensDistortionK1;
+    key.m_altAzColor = settings.m_altAzGridColor.rgba();
+    key.m_equatorialColor = settings.m_equatorialGridColor.rgba();
+    key.m_lensProjection = static_cast<int>(settings.m_lensProjection);
+    key.m_azimuth = settings.m_azimuth;
+    key.m_elevation = settings.m_elevation;
+    key.m_roll = settings.m_roll;
+    key.m_fov = settings.m_fov;
+    key.m_lensCenterOffsetX = settings.m_lensCenterOffsetX;
+    key.m_lensCenterOffsetY = settings.m_lensCenterOffsetY;
+    key.m_lensDistortionK1 = settings.m_lensDistortionK1;
     key.m_opticalSize = frame.opticalImageSize();
     if (frame.m_imageTransform.isValid())
     {
@@ -2169,8 +2177,8 @@ void CameraPostProcessor::applySkyGridOverlay(const CameraPipelineFrame& frame, 
         key.m_opticalToImageDx = frame.m_imageTransform.m_opticalToImage.dx();
         key.m_opticalToImageDy = frame.m_imageTransform.m_opticalToImage.dy();
     }
-    key.m_latitude = drawEquatorial ? static_cast<double>(m_settings.m_latitude) : 0.0;
-    key.m_longitude = drawEquatorial ? static_cast<double>(m_settings.m_longitude) : 0.0;
+    key.m_latitude = drawEquatorial ? static_cast<double>(settings.m_latitude) : 0.0;
+    key.m_longitude = drawEquatorial ? static_cast<double>(settings.m_longitude) : 0.0;
     key.m_equatorialTimeBucket = drawEquatorial
         ? utcDateTime.toMSecsSinceEpoch() / SkyGridOverlayCache::m_equatorialQuantumMs
         : 0;
@@ -2179,7 +2187,7 @@ void CameraPostProcessor::applySkyGridOverlay(const CameraPipelineFrame& frame, 
     {
         QImage overlay(image.size(), QImage::Format_ARGB32_Premultiplied);
         overlay.fill(Qt::transparent);
-        renderSkyGridLines(overlay, projector, m_settings, utcDateTime, drawEquatorial, drawAltAz);
+        renderSkyGridLines(overlay, projector, settings, utcDateTime, drawEquatorial, drawAltAz);
         m_skyGridOverlayCache.m_overlay = overlay;
         m_skyGridOverlayCache.m_key = key;
         m_skyGridOverlayCache.m_valid = true;
@@ -2199,7 +2207,7 @@ void CameraPostProcessor::applySkyGridOverlay(const CameraPipelineFrame& frame, 
     font.setPointSizeF(m_settings.m_gridLabelFontScale);
     painter.setFont(font);
     const QFontMetrics fontMetrics(font);
-    renderSkyGridLabels(painter, image.rect(), projector, m_settings, utcDateTime, drawEquatorial, drawAltAz, drawLabels, previewTextLabels, font, fontMetrics);
+    renderSkyGridLabels(painter, image.rect(), projector, settings, utcDateTime, drawEquatorial, drawAltAz, drawLabels, previewTextLabels, font, fontMetrics);
 
     PROFILER_STOP(__FUNCTION__);
 }
@@ -2208,11 +2216,13 @@ void CameraPostProcessor::applyConstellationOverlay(const CameraPipelineFrame& f
 {
     PROFILER_START();
 
+    const CameraSettings settings = CameraImageUtils::projectionSettingsForFrame(m_settings, frame);
+
     if (!m_settings.m_constellation) {
         return;
     }
 
-    const SkyProjector projector = SkyProjector::create(m_settings, image.size(), frame.m_imageTransform);
+    const SkyProjector projector = SkyProjector::create(settings, image.size(), frame.m_imageTransform);
     if (!projector.valid) {
         return;
     }
@@ -2226,13 +2236,13 @@ void CameraPostProcessor::applyConstellationOverlay(const CameraPipelineFrame& f
     switch (m_settings.m_constellationOverlay)
     {
     case CameraSettings::ConstellationOverlayUrsaMajor:
-        drawConstellationStars(painter, image, projector, utcDateTime, m_settings, kUrsaMajorStars);
+        drawConstellationStars(painter, image, projector, utcDateTime, settings, kUrsaMajorStars);
         break;
     case CameraSettings::ConstellationOverlayOrion:
-        drawConstellationStars(painter, image, projector, utcDateTime, m_settings, kOrionStars);
+        drawConstellationStars(painter, image, projector, utcDateTime, settings, kOrionStars);
         break;
     case CameraSettings::ConstellationOverlayCrux:
-        drawConstellationStars(painter, image, projector, utcDateTime, m_settings, kCruxStars);
+        drawConstellationStars(painter, image, projector, utcDateTime, settings, kCruxStars);
         break;
     }
 
@@ -2242,6 +2252,8 @@ void CameraPostProcessor::applyConstellationOverlay(const CameraPipelineFrame& f
 void CameraPostProcessor::applyTrackedObjectOverlay(const CameraPipelineFrame& frame, QImage& image, bool drawLabels, QVector<PreviewTextLabel> *previewTextLabels, QVector<CameraPipelineTrackedObject> *trackedObjects)
 {
     PROFILER_START();
+
+    const CameraSettings projectionSettings = CameraImageUtils::projectionSettingsForFrame(m_settings, frame);
 
     if (!m_settings.m_trackObjects) {
         return;
@@ -2261,7 +2273,7 @@ void CameraPostProcessor::applyTrackedObjectOverlay(const CameraPipelineFrame& f
         return;
     }
 
-    const SkyProjector projector = SkyProjector::create(m_settings, image.size(), frame.m_imageTransform);
+    const SkyProjector projector = SkyProjector::create(projectionSettings, image.size(), frame.m_imageTransform);
     if (!projector.valid) {
         return;
     }
@@ -2553,7 +2565,8 @@ QImage CameraPostProcessor::applyPostProcessing(
         }
     }
     const bool needsWindowOverlays = !m_windowOverlayFrames.isEmpty();
-    const QString expandedOverlayText = expandOverlayTextTemplate();
+    const CameraSettings projectionSettings = CameraImageUtils::projectionSettingsForFrame(m_settings, frame);
+    const QString expandedOverlayText = expandOverlayTextTemplate(projectionSettings);
     // Build the overlay text document once with font/style/HTML used for both the
     // empty-check and rendering, so we only call QTextDocument::setHtml() once per frame.
     QTextDocument overlayTextDocument;

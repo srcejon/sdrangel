@@ -488,7 +488,7 @@ private:
     void applyTrackedObjectOverlay(const CameraPipelineFrame& frame, QImage& image, bool drawLabels, QVector<PreviewTextLabel> *previewTextLabels, QVector<CameraPipelineTrackedObject> *trackedObjects = nullptr);
     void applyDateTimeOverlay(QImage& image, bool drawLabel, QVector<PreviewTextLabel> *previewTextLabels) const;
     void applyTextOverlay(QImage& image, QTextDocument& overlayTextDocument) const;
-    [[nodiscard]] QString expandOverlayTextTemplate() const;
+    [[nodiscard]] QString expandOverlayTextTemplate(const CameraSettings& settings) const;
     void updateTrackedMapObject(const QObject* pipeSource, SWGSDRangel::SWGMapItem* swgMapItem);
     void updateTrackedObjectPipeRegistration();
     void registerTrackedObjectPipes();

@@ -363,6 +363,7 @@ void CameraSettings::resetToDefaults()
     m_sensorOpticalAxis = SensorOpticalAxisAuto;
     m_directionSensorFilterEnabled = false;
     m_directionSensorFilterTimeConstant = 0.5;
+    m_directionApplyToCurrentImage = true;
     m_azimuthOffset = 0.0f;
     m_elevationOffset = 0.0f;
     m_rollOffset = 0.0f;
@@ -895,6 +896,7 @@ QByteArray CameraSettings::serialize() const
     s.writeString(315, m_recordingOutputDirectoryUri);
     s.writeBool(316, m_directionSensorFilterEnabled);
     s.writeDouble(317, m_directionSensorFilterTimeConstant);
+    s.writeBool(318, m_directionApplyToCurrentImage);
 
     return s.final();
 }
@@ -1489,6 +1491,7 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readBool(316, &m_directionSensorFilterEnabled, false);
         d.readDouble(317, &m_directionSensorFilterTimeConstant, 0.5);
         m_directionSensorFilterTimeConstant = qBound(0.05, m_directionSensorFilterTimeConstant, 10.0);
+        d.readBool(318, &m_directionApplyToCurrentImage, true);
         d.readFloat(271, &m_azimuthOffset, 0.0f);
         d.readFloat(272, &m_elevationOffset, 0.0f);
         d.readFloat(273, &m_rollOffset, 0.0f);
@@ -1977,6 +1980,9 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     }
     if (settingsKeys.contains("directionSensorFilterTimeConstant")) {
         m_directionSensorFilterTimeConstant = qBound(0.05, settings.m_directionSensorFilterTimeConstant, 10.0);
+    }
+    if (settingsKeys.contains("directionApplyToCurrentImage")) {
+        m_directionApplyToCurrentImage = settings.m_directionApplyToCurrentImage;
     }
     if (settingsKeys.contains("azimuthOffset")) {
         m_azimuthOffset = normalizeSignedDegrees(settings.m_azimuthOffset);
@@ -2973,6 +2979,9 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("directionSensorFilterTimeConstant") || force) {
         ostr << " m_directionSensorFilterTimeConstant: " << m_directionSensorFilterTimeConstant;
+    }
+    if (settingsKeys.contains("directionApplyToCurrentImage") || force) {
+        ostr << " m_directionApplyToCurrentImage: " << m_directionApplyToCurrentImage;
     }
     if (settingsKeys.contains("azimuthOffset") || force) {
         ostr << " m_azimuthOffset: " << m_azimuthOffset;

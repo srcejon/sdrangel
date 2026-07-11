@@ -973,8 +973,14 @@ bool CameraRecorder::saveRawFits(const QString& fileName,
     headers.insert(QStringLiteral("SITELAT"), m_settings.m_latitude);
     headers.insert(QStringLiteral("SITELONG"), m_settings.m_longitude);
     headers.insert(QStringLiteral("SITEELEV"), m_settings.m_altitude);
-    headers.insert(QStringLiteral("AZSTART"), m_settings.m_azimuth);
-    headers.insert(QStringLiteral("ELSTART"), m_settings.m_elevation);
+    const double captureAzimuth = frame.m_captureDirection.m_valid
+        ? frame.m_captureDirection.m_azimuth
+        : m_settings.m_azimuth;
+    const double captureElevation = frame.m_captureDirection.m_valid
+        ? frame.m_captureDirection.m_elevation
+        : m_settings.m_elevation;
+    headers.insert(QStringLiteral("AZSTART"), captureAzimuth);
+    headers.insert(QStringLiteral("ELSTART"), captureElevation);
     if (!m_settings.m_cameraDescription.isEmpty()) {
         headers.insert(QStringLiteral("INSTRUME"), m_settings.m_cameraDescription);
     }

@@ -8060,6 +8060,19 @@ Right-click: toggle continual synchronization from My Position.</string>
             </property>
            </widget>
           </item>
+          <item row="3" column="0" colspan="4">
+           <widget class="QCheckBox" name="directionApplyToCurrentImageCheck">
+            <property name="toolTip">
+             <string>When enabled, azimuth, elevation, and roll changes reproject the currently displayed image. Disable this for a moving camera so each frame retains the direction sampled when it was captured.</string>
+            </property>
+            <property name="text">
+             <string>Apply direction changes to current image</string>
+            </property>
+            <property name="checked">
+             <bool>true</bool>
+            </property>
+           </widget>
+          </item>
           <item row="7" column="0">
            <widget class="QLabel" name="rollLabel">
             <property name="text">

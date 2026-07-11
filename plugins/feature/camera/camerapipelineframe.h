@@ -70,6 +70,15 @@ struct CameraPipelineTrackedObject
     double m_elevation = 0.0;
 };
 
+/** Camera pointing sampled when a frame enters the capture pipeline. */
+struct CameraPipelineDirection
+{
+    float m_azimuth = 0.0f;
+    float m_elevation = 0.0f;
+    float m_roll = 0.0f;
+    bool m_valid = false;
+};
+
 /**
  * \brief Photometry result for one detected meteor object.
  *
@@ -412,6 +421,7 @@ struct CameraPipelineFrame
     QImage m_rawInputImage;
     CameraHistogramData m_histogramData;
     QDateTime m_captureDateTime;
+    CameraPipelineDirection m_captureDirection;
     quint64 m_captureEpoch = 0;
     qint64 m_pipelineInputWallClockMs = 0;
     bool m_manualPreviewFrame = false;

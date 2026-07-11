@@ -33,6 +33,7 @@
 #include "maincore.h"
 #include "util/profiler.h"
 #include "camera.h"
+#include "cameraimageutils.h"
 #include "cameraalpacacontroller.h"
 #include "cameraasicontroller.h"
 #include "camerafinder.h"
@@ -484,6 +485,7 @@ void CameraWorker::populateFrameExposureMetadata(CameraPipelineFrame& frame) con
     }
 
     frame.m_captureDateTime = captureDateTime.isValid() ? captureDateTime : QDateTime::currentDateTime();
+    CameraImageUtils::captureDirection(frame, m_settings);
     frame.m_captureEpoch = m_captureEpoch;
     frame.m_pipelineInputWallClockMs = QDateTime::currentMSecsSinceEpoch();
     frame.m_manualPreviewFrame = false;

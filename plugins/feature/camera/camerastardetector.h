@@ -70,7 +70,7 @@ public:
     ~CameraStarDetector() override;
     void setMessageQueueToGUI(MessageQueue *messageQueue) { m_msgQueueToGUI = messageQueue; }
     void requestPlateSolveCancellation();
-    [[nodiscard]] static bool plateSolveInputSettingsChanged(const QList<QString>& settingsKeys);
+    [[nodiscard]] static bool plateSolveInputSettingsChanged(const QList<QString>& settingsKeys, bool applyDirectionChanges = true);
 
 protected:
     void applySettings(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force = false) override;
@@ -82,7 +82,7 @@ private:
     CameraPlateSolver m_plateSolver;
     MessageQueue *m_msgQueueToGUI;
 
-    [[nodiscard]] static bool starDisplaySettingsChanged(const QList<QString>& settingsKeys);
+    [[nodiscard]] static bool starDisplaySettingsChanged(const QList<QString>& settingsKeys, bool applyDirectionChanges);
     void reportPlateSolveStatus(bool solving) const;
 
 #ifdef CAMERA_OPENCV_CUDA_DETECTION

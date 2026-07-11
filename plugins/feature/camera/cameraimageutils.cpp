@@ -62,6 +62,26 @@ const QImage& CameraImageUtils::ensureRgb888(const QImage& image, QImage& conver
     return convertedImage;
 }
 
+void CameraImageUtils::captureDirection(CameraPipelineFrame& frame, const CameraSettings& settings)
+{
+    frame.m_captureDirection.m_azimuth = settings.m_azimuth;
+    frame.m_captureDirection.m_elevation = settings.m_elevation;
+    frame.m_captureDirection.m_roll = settings.m_roll;
+    frame.m_captureDirection.m_valid = true;
+}
+
+CameraSettings CameraImageUtils::projectionSettingsForFrame(const CameraSettings& settings, const CameraPipelineFrame& frame)
+{
+    CameraSettings projectionSettings = settings;
+    if (!settings.m_directionApplyToCurrentImage && frame.m_captureDirection.m_valid)
+    {
+        projectionSettings.m_azimuth = frame.m_captureDirection.m_azimuth;
+        projectionSettings.m_elevation = frame.m_captureDirection.m_elevation;
+        projectionSettings.m_roll = frame.m_captureDirection.m_roll;
+    }
+    return projectionSettings;
+}
+
 void CameraImageUtils::applyPlaybackProjectionTransform(CameraPipelineFrame& frame, const CameraSettings& settings, bool replaceExisting)
 {
     const bool playbackFrame = settings.isVideoFileCamera()

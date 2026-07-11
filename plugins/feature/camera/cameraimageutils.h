@@ -51,6 +51,8 @@ public:
     [[nodiscard]] static QImage workingMatToImage(const cv::Mat& frameMat);
     [[nodiscard]] static int bayerPatternToOpenCvCode(CameraPipelineFrame::BayerPattern bayerPattern);
     [[nodiscard]] static cv::Mat debayerRawMat(const cv::Mat& input, CameraPipelineFrame::BayerPattern bayerPattern);
+    static void captureDirection(CameraPipelineFrame& frame, const CameraSettings& settings);
+    [[nodiscard]] static CameraSettings projectionSettingsForFrame(const CameraSettings& settings, const CameraPipelineFrame& frame);
     static void applyPlaybackProjectionTransform(CameraPipelineFrame& frame, const CameraSettings& settings, bool replaceExisting = false);
 };
 

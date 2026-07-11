@@ -40,7 +40,7 @@ The Camera feature can send events to the Scheduler feature when motion or YOLO 
 Recoding images and video can also be triggered via the Scheduler feature, allowing triggering based on time or RF events.
 
 Camera position can be set manually or track GPS. Camera direction can be set manually or track a Rotator controller feature (for telescopes or mounted cameras)
-or sensors such as a compass or accelerometer (for laptop webcams). Optional time-based smoothing stabilizes noisy Qt Sensors azimuth, elevation and roll readings without affecting manual or rotator directions.
+or sensors such as a compass or accelerometer (for laptop webcams). Optional time-based smoothing stabilizes noisy Qt Sensors azimuth, elevation and roll readings without affecting manual or rotator directions. Direction changes can either reproject the current image for manual fixed-camera alignment, or apply only to subsequently captured frames so a stopped image from a moving camera retains its captured orientation.
 
 <h2>Interface</h2>
 

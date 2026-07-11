@@ -674,6 +674,7 @@ private slots:
     void on_sensorOpticalAxisCombo_currentIndexChanged(int index);
     void on_directionSensorFilterCheck_toggled(bool checked);
     void on_directionSensorFilterTimeConstantSpin_valueChanged(double value);
+    void on_directionApplyToCurrentImageCheck_toggled(bool checked);
     void on_directionSourceCombo_currentIndexChanged(int index);
     void on_fovModeCombo_currentIndexChanged(int index);
     void on_fovSpin_valueChanged(double value);

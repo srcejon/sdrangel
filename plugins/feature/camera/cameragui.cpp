@@ -129,6 +129,7 @@
 #include "cameraskyprojector.h"
 #include "ui_cameragui.h"
 #include "camera.h"
+#include "cameraimageutils.h"
 #include "cameradetectionhistory.h"
 #include "cameraframestacker.h"
 #include "camerahistogramdialog.h"
@@ -1995,6 +1996,7 @@ void CameraGUI::displaySettings()
     settingsUI()->sensorOpticalAxisCombo->setCurrentIndex(static_cast<int>(m_settings.m_sensorOpticalAxis));
     settingsUI()->directionSensorFilterCheck->setChecked(m_settings.m_directionSensorFilterEnabled);
     settingsUI()->directionSensorFilterTimeConstantSpin->setValue(m_settings.m_directionSensorFilterTimeConstant);
+    settingsUI()->directionApplyToCurrentImageCheck->setChecked(m_settings.m_directionApplyToCurrentImage);
     updateDirectionSensorOpticalAxis();
     settingsUI()->fovModeCombo->setCurrentIndex(static_cast<int>(m_settings.m_fovMode));
     settingsUI()->fovSpin->setValue(m_settings.m_fov);
@@ -3038,6 +3040,7 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->sensorOpticalAxisCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_sensorOpticalAxisCombo_currentIndexChanged);
     QObject::connect(settingsUI()->directionSensorFilterCheck, &QCheckBox::toggled, this, &CameraGUI::on_directionSensorFilterCheck_toggled);
     QObject::connect(settingsUI()->directionSensorFilterTimeConstantSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_directionSensorFilterTimeConstantSpin_valueChanged);
+    QObject::connect(settingsUI()->directionApplyToCurrentImageCheck, &QCheckBox::toggled, this, &CameraGUI::on_directionApplyToCurrentImageCheck_toggled);
     QObject::connect(settingsUI()->directionSourceCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_directionSourceCombo_currentIndexChanged);
     QObject::connect(settingsUI()->fovModeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_fovModeCombo_currentIndexChanged);
     QObject::connect(settingsUI()->fovSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_fovSpin_valueChanged);
@@ -4658,6 +4661,7 @@ void CameraGUI::applyQtExposureTimeMs(double exposureTimeMs)
 void CameraGUI::populateFrameExposureMetadata(CameraPipelineFrame& frame, double exposureTimeMs, int hdrExposureIndex, int hdrExposureCount, const QDateTime& captureDateTime) const
 {
     frame.m_captureDateTime = captureDateTime.isValid() ? captureDateTime : QDateTime::currentDateTime();
+    CameraImageUtils::captureDirection(frame, m_settings);
     frame.m_exposureTimeMs = std::max(CameraSettings::m_minExposureTimeMs, exposureTimeMs);
     frame.m_hdrExposureIndex = hdrExposureIndex;
     frame.m_hdrExposureCount = hdrExposureCount;
@@ -8416,6 +8420,12 @@ void CameraGUI::on_directionSensorFilterTimeConstantSpin_valueChanged(double val
         syncFromDirectionSensors();
     }
     applySetting("directionSensorFilterTimeConstant");
+}
+
+void CameraGUI::on_directionApplyToCurrentImageCheck_toggled(bool checked)
+{
+    m_settings.m_directionApplyToCurrentImage = checked;
+    applySetting("directionApplyToCurrentImage");
 }
 
 void CameraGUI::on_directionSourceCombo_currentIndexChanged(int index)

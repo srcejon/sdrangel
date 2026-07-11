@@ -85,6 +85,7 @@ private:
         QImage m_unprocessedImage;
         QImage m_rawInputImage;
         QDateTime m_captureDateTime;
+        CameraPipelineDirection m_captureDirection;
         quint64 m_captureEpoch = 0;
         qint64 m_pipelineInputWallClockMs = 0;
         qint64 m_playbackPositionMs = -1;

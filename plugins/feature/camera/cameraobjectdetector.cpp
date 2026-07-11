@@ -424,7 +424,7 @@ ObjectTargetVector rotateAroundAxis(const ObjectTargetVector& vector, const Obje
 
 CameraSettings targetProjectionSettings(const CameraSettings& settings, const CameraPipelineFrame& frame)
 {
-    CameraSettings projectionSettings = settings;
+    CameraSettings projectionSettings = CameraImageUtils::projectionSettingsForFrame(settings, frame);
     if (frame.m_plateSolve.m_solved)
     {
         projectionSettings.m_azimuth = frame.m_plateSolve.m_azimuth;

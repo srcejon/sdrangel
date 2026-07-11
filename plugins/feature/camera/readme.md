@@ -279,10 +279,13 @@ The following variables can be used in the HTML. Values are HTML-escaped before 
 * `${azimuth}`: Camera azimuth in degrees.
 * `${elevation}`: Camera elevation in degrees.
 * `${roll}`: Camera roll in degrees.
+* `${cloudCoverPercent}`: Cloud coverage percentage from the cloud detector, or `N/A` if unavailable.
+
+From OpenWeatherMap API (requires an API key to be set in the Camera Settings dialog):
+
 * `${temp}`: Weather temperature, or `N/A` if unavailable.
 * `${pressure}`: Weather pressure, or `N/A` if unavailable.
 * `${humidity}`: Weather humidity, or `N/A` if unavailable.
-* `${cloudCoverPercent}`: Cloud coverage percentage from the cloud detector, or `N/A` if unavailable.
 * `${cloudiness}`: Weather cloudiness, or `N/A` if unavailable.
 * `${windSpeed}`: Weather wind speed, or `N/A` if unavailable.
 * `${windDirection}`: Weather wind direction, or `N/A` if unavailable.

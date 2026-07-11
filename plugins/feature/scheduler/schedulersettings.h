@@ -68,7 +68,8 @@ struct SchedulerSettings
     enum DelayUnit
     {
         DelaySeconds = 0,
-        DelayMinutes
+        DelayMinutes,
+        DelayHours
     };
 
     enum SettingValueType

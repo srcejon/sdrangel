@@ -315,6 +315,8 @@ private:
     bool writePendingAudio(CameraVideoWriter& writer, const QString& variant);
     void trimPendingAudio();
     [[nodiscard]] static QString createTimestampedOutputFilename(const QString& baseFileName, const QString& variant, const QString& suffixOverride = QString());
+    [[nodiscard]] QString prepareOutputFilename(const QString& desiredFileName);
+    bool exportOutputFile(const QString& localFileName, const QString& mimeType, const QString& variant);
     [[nodiscard]] bool shouldSaveRawFits() const;
     [[nodiscard]] bool shouldSaveCalibratedMedia() const;
     [[nodiscard]] bool shouldSaveFilteredMedia() const;
@@ -324,6 +326,7 @@ private:
                                    CameraPipelineFrame::BayerPattern bayerPattern,
                                    const CameraPipelineFrame& frame) const;
     void closeVideoWriters();
+    void closeVideoWriter(std::unique_ptr<CameraVideoWriter>& writer, QSize& openedSize, const QString& variant);
     void closeYouTubeStream();
     void updateYouTubeStream(const QImage& calibratedImage, const QImage& processedImage, qint64 videoContentMs);
     bool ensureVideoWriter(std::unique_ptr<CameraVideoWriter>& writer, const QString& baseFileName, const QImage& frameForSize, const QString& variant, double frameRate);

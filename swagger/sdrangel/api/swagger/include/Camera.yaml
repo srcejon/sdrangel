@@ -209,6 +209,9 @@ CameraSettings:
     videoFileName:
       description: "File path for recorded video output"
       type: string
+    recordingOutputDirectoryUri:
+      description: "Android Storage Access Framework document-tree URI used for completed recordings"
+      type: string
     videoCodec:
       description: >
         Codec used for saved video recordings

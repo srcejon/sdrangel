@@ -26,6 +26,8 @@
 #include <QtGlobal>
 #include <QString>
 
+#include <functional>
+
 #include "export.h"
 
 // Android specific functions
@@ -43,6 +45,12 @@ public:
     static void releaseWakeLock();
     static void acquireScreenLock();
     static void releaseScreenLock();
+    static void selectDocumentTree(const std::function<void(const QString&)>& callback);
+    static bool copyFileToDocumentTree(const QString& sourceFileName,
+                                       const QString& treeUri,
+                                       const QString& displayName,
+                                       const QString& mimeType,
+                                       QString *errorMessage = nullptr);
 
 };
 

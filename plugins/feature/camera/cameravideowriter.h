@@ -73,6 +73,7 @@ public:
     [[nodiscard]] CameraSettings::VideoCodec codec() const { return m_settings.m_codec; }
     [[nodiscard]] int bitrateKbps() const { return m_settings.m_bitrateKbps; }
     [[nodiscard]] double fps() const { return m_settings.m_fps; }
+    [[nodiscard]] QString fileName() const { return m_settings.m_fileName; }
     [[nodiscard]] static QString codecName(CameraSettings::VideoCodec codec);
     [[nodiscard]] QString codecName() const;
     [[nodiscard]] bool open(const Settings& settings, const QImage& firstFrame, QString& errorMessage);

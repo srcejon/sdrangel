@@ -60,6 +60,7 @@
 #include <QPixmap>
 #include <QPlainTextEdit>
 #include <QProgressDialog>
+#include <QPointer>
 #include <QPushButton>
 #include <QRegularExpression>
 #include <QSet>
@@ -138,6 +139,10 @@
 #include "cameraclearskyreferencedialog.h"
 #include "cameraclouddetector.h"
 #include "cameragui.h"
+
+#if defined(Q_OS_ANDROID)
+#include "util/android.h"
+#endif
 
 namespace {
 
@@ -1891,6 +1896,15 @@ void CameraGUI::displaySettings()
     settingsUI()->imagePathEdit->setText(m_settings.m_imageFileName);
     ui->saveVideoCheck->setChecked(m_settings.m_saveVideo);
     settingsUI()->videoPathEdit->setText(m_settings.m_videoFileName);
+    settingsUI()->recordingOutputDirectoryUriEdit->setText(m_settings.m_recordingOutputDirectoryUri);
+#if !defined(Q_OS_ANDROID)
+    settingsUI()->recordingOutputDirectoryUriLabel->hide();
+    settingsUI()->recordingOutputDirectoryUriEdit->hide();
+    settingsUI()->recordingOutputDirectoryUriButton->hide();
+#else
+    settingsUI()->imagePathButton->hide();
+    settingsUI()->videoPathButton->hide();
+#endif
     ui->keogramButton->setChecked(m_settings.m_keogramEnabled);
     settingsUI()->keogramPathEdit->setText(m_settings.m_keogramFileName);
     settingsUI()->keogramDirectionCombo->setCurrentIndex(static_cast<int>(m_settings.m_keogramDirection));
@@ -2896,6 +2910,7 @@ void CameraGUI::makeUIConnections()
     QObject::connect(ui->saveVideoCheck, &QCheckBox::toggled, this, &CameraGUI::on_saveVideoCheck_toggled);
     QObject::connect(settingsUI()->videoPathEdit, &QLineEdit::editingFinished, this, &CameraGUI::on_videoPathEdit_editingFinished);
     QObject::connect(settingsUI()->videoPathButton, &QToolButton::clicked, this, &CameraGUI::on_videoPathButton_clicked);
+    QObject::connect(settingsUI()->recordingOutputDirectoryUriButton, &QToolButton::clicked, this, &CameraGUI::on_recordingOutputDirectoryUriButton_clicked);
     QObject::connect(ui->keogramButton, &QToolButton::toggled, this, &CameraGUI::on_keogramButton_toggled);
     QObject::connect(settingsUI()->keogramPathEdit, &QLineEdit::editingFinished, this, &CameraGUI::on_keogramPathEdit_editingFinished);
     QObject::connect(settingsUI()->keogramPathButton, &QToolButton::clicked, this, &CameraGUI::on_keogramPathButton_clicked);
@@ -7785,6 +7800,22 @@ void CameraGUI::on_videoPathButton_clicked()
         applySetting("videoFileName");
         applyVideoToolTip();
     }
+}
+
+void CameraGUI::on_recordingOutputDirectoryUriButton_clicked()
+{
+#if defined(Q_OS_ANDROID)
+    const QPointer<CameraGUI> guard(this);
+    Android::selectDocumentTree([guard](const QString& treeUri) {
+        if (!guard || treeUri.isEmpty()) {
+            return;
+        }
+
+        guard->m_settings.m_recordingOutputDirectoryUri = treeUri;
+        guard->settingsUI()->recordingOutputDirectoryUriEdit->setText(treeUri);
+        guard->applySetting("recordingOutputDirectoryUri");
+    });
+#endif
 }
 
 void CameraGUI::on_keogramButton_toggled(bool checked)

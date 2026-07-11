@@ -604,6 +604,7 @@ private slots:
     void on_saveVideoCheck_toggled(bool checked);
     void on_videoPathEdit_editingFinished();
     void on_videoPathButton_clicked();
+    void on_recordingOutputDirectoryUriButton_clicked();
     void on_keogramButton_toggled(bool checked);
     void on_keogramPathEdit_editingFinished();
     void on_keogramPathButton_clicked();

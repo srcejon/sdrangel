@@ -491,6 +491,174 @@ namespace {
         return true;
     }
 
+    void appendSyntheticSignal(
+        SampleVector& samples,
+        int sampleRate,
+        double durationS,
+        double amplitude,
+        double startFrequency,
+        double endFrequency,
+        quint32& noiseState)
+    {
+        constexpr double pi = 3.14159265358979323846;
+        const int count = std::max(1, (int) std::llround(durationS * (double) sampleRate));
+        double phase = 2.0 * pi * startFrequency
+            * (double) samples.size() / (double) sampleRate;
+
+        for (int i = 0; i < count; i++)
+        {
+            noiseState = 1664525U * noiseState + 1013904223U;
+            const double noiseReal = ((double) ((noiseState >> 16) & 0xffU) / 127.5 - 1.0) * 2.0;
+            noiseState = 1664525U * noiseState + 1013904223U;
+            const double noiseImag = ((double) ((noiseState >> 16) & 0xffU) / 127.5 - 1.0) * 2.0;
+            const double fraction = count > 1 ? (double) i / (double) (count - 1) : 0.0;
+            const double frequency = startFrequency + fraction * (endFrequency - startFrequency);
+            phase += 2.0 * pi * frequency / (double) sampleRate;
+            samples.emplace_back(
+                (FixReal) std::llround(noiseReal + amplitude * std::cos(phase)),
+                (FixReal) std::llround(noiseImag + amplitude * std::sin(phase)));
+        }
+    }
+
+    bool runSyntheticScenario(
+        const QString& name,
+        const SampleVector& samples,
+        int expectedCount,
+        double minimumFirstDurationS,
+        QTextStream& errorStream)
+    {
+        constexpr int sampleRate = 1000;
+        MessageQueue outputQueue;
+        MeteorBaseband baseband;
+        MeteorSettings settings;
+        QVector<Detection> detections;
+        SampleVector chunk;
+        int diagnosticCaptureCount = 0;
+
+        settings.m_channelSampleRate = sampleRate;
+        settings.m_minDurationMS = 20;
+        settings.m_maxDurationMS = 20000;
+        baseband.setInactivityFlushEnabled(false);
+        baseband.setFifoLabel("meteor_synthetic_test");
+        baseband.setMessageQueueToGUI(&outputQueue);
+        baseband.setDiagnosticCaptureCallback(
+            [&diagnosticCaptureCount](
+                quint64,
+                const MeteorDemodSink::DetectionRecord&,
+                const ComplexVector& capturedSamples)
+            {
+                if (!capturedSamples.empty()) {
+                    diagnosticCaptureCount++;
+                }
+            });
+        baseband.startWork();
+        baseband.getInputMessageQueue()->push(new DSPSignalNotification(sampleRate, 143050000));
+        baseband.getInputMessageQueue()->push(
+            MeteorBaseband::MsgConfigureMeteorBaseband::create(settings, QStringList(), true));
+        processEvents();
+
+        for (int offset = 0; offset < (int) samples.size(); offset += 127)
+        {
+            const int count = std::min(127, (int) samples.size() - offset);
+            chunk.assign(samples.begin() + offset, samples.begin() + offset + count);
+            feedSamples(baseband, chunk, outputQueue, detections);
+        }
+
+        chunk.assign(3000, Sample(0, 0));
+        feedSamples(baseband, chunk, outputQueue, detections);
+        processEvents();
+        drainDetections(outputQueue, detections);
+        baseband.stopWork();
+
+        bool ok = detections.size() == expectedCount;
+
+        if (diagnosticCaptureCount != detections.size())
+        {
+            errorStream << QString("Synthetic %1: expected %2 diagnostic captures, got %3\n")
+                .arg(name)
+                .arg(detections.size())
+                .arg(diagnosticCaptureCount);
+            ok = false;
+        }
+
+        if (!ok)
+        {
+            errorStream << QString("Synthetic %1: expected %2 detections, got %3\n")
+                .arg(name)
+                .arg(expectedCount)
+                .arg(detections.size());
+
+            for (int i = 0; i < detections.size(); i++)
+            {
+                errorStream << QString("  actual %1: start=%2 duration=%3 center=%4 span=%5 drift=%6\n")
+                    .arg(i + 1)
+                    .arg(detections[i].startSample)
+                    .arg(detections[i].durationS, 0, 'f', 3)
+                    .arg(detections[i].centerFrequency, 0, 'f', 1)
+                    .arg(detections[i].frequencySpan, 0, 'f', 1)
+                    .arg(detections[i].frequencyDrift, 0, 'f', 1);
+            }
+        }
+
+        if ((minimumFirstDurationS > 0.0)
+            && (detections.isEmpty() || (detections.first().durationS < minimumFirstDurationS)))
+        {
+            errorStream << QString("Synthetic %1: first duration was shorter than %2 s\n")
+                .arg(name)
+                .arg(minimumFirstDurationS, 0, 'f', 2);
+            if (!detections.isEmpty()) {
+                errorStream << QString("  actual first: start=%1 duration=%2 center=%3 span=%4\n")
+                    .arg(detections.first().startSample)
+                    .arg(detections.first().durationS, 0, 'f', 3)
+                    .arg(detections.first().centerFrequency, 0, 'f', 1)
+                    .arg(detections.first().frequencySpan, 0, 'f', 1);
+            }
+            ok = false;
+        }
+
+        return ok;
+    }
+
+    bool runSyntheticDetectorTests(QTextStream& errorStream)
+    {
+        constexpr int sampleRate = 1000;
+        bool ok = true;
+        quint32 noiseState = 0x31415926U;
+        SampleVector samples;
+
+        appendSyntheticSignal(samples, sampleRate, 2.0, 0.0, 0.0, 0.0, noiseState);
+        appendSyntheticSignal(samples, sampleRate, 1.5, 70.0, 55.0, 55.0, noiseState);
+        appendSyntheticSignal(samples, sampleRate, 0.18, 12.0, 55.0, 55.0, noiseState);
+        appendSyntheticSignal(samples, sampleRate, 1.7, 58.0, 55.0, 58.0, noiseState);
+        appendSyntheticSignal(samples, sampleRate, 2.0, 0.0, 0.0, 0.0, noiseState);
+        ok = runSyntheticScenario("faded-long-trail", samples, 1, 2.5, errorStream) && ok;
+
+        samples.clear();
+        appendSyntheticSignal(samples, sampleRate, 2.0, 0.0, 0.0, 0.0, noiseState);
+        appendSyntheticSignal(samples, sampleRate, 0.6, 65.0, -150.0, -150.0, noiseState);
+        appendSyntheticSignal(samples, sampleRate, 3.0, 0.0, 0.0, 0.0, noiseState);
+        appendSyntheticSignal(samples, sampleRate, 0.6, 65.0, 150.0, 150.0, noiseState);
+        appendSyntheticSignal(samples, sampleRate, 2.0, 0.0, 0.0, 0.0, noiseState);
+        ok = runSyntheticScenario("separate-echoes", samples, 2, 0.0, errorStream) && ok;
+
+        samples.clear();
+        appendSyntheticSignal(samples, sampleRate, 2.0, 0.0, 0.0, 0.0, noiseState);
+        appendSyntheticSignal(samples, sampleRate, 3.0, 60.0, -220.0, 220.0, noiseState);
+        appendSyntheticSignal(samples, sampleRate, 2.0, 0.0, 0.0, 0.0, noiseState);
+        ok = runSyntheticScenario("smooth-sweep", samples, 0, 0.0, errorStream) && ok;
+
+        bool truncated = false;
+        const quint64 clippedEnd = MeteorDemodSink::clipDetectionEndSample(2000, 23999, 20000, truncated);
+
+        if (!truncated || (clippedEnd != 21999))
+        {
+            errorStream << "Synthetic max-duration: clipping boundary is incorrect\n";
+            ok = false;
+        }
+
+        return ok;
+    }
+
     bool readWavChunk(QFile& file, int maxSamples, SampleVector& samples, qint64& remainingBytes, QString& error)
     {
         const int bytesPerSample = 2 * (int) sizeof(qint16);
@@ -579,7 +747,7 @@ namespace {
                "acceptanceThreshold,scoreMargin,signalScore,supportScore,shapeScore,rejectionPenalty,trackOccupancy,"
                "frequencyCoherence,frameOccupiedFraction,frameCount,durationOK,enoughFrames,sweepRejected,spectralEvidenceOK,"
                "insideUsableBandwidth,duplicate,broadbandImpulse,sweepContinuationRejected,accepted,"
-               "classification,rejectionReason\n";
+               "parentEventId,associationDecision,classification,rejectionReason\n";
 
         for (int i = 0; i < audits.size(); i++)
         {
@@ -617,6 +785,8 @@ namespace {
                 << (audit.m_broadbandImpulse ? 1 : 0) << ','
                 << (audit.m_sweepContinuationRejected ? 1 : 0) << ','
                 << (audit.m_accepted ? 1 : 0) << ','
+                << audit.m_parentEventId << ','
+                << audit.m_associationDecision << ','
                 << audit.m_classification << ','
                 << audit.m_rejectionReason << '\n';
         }
@@ -965,6 +1135,10 @@ int main(int argc, char *argv[])
     }
 
     if (!runRMOBReportTests(err)) {
+        return 2;
+    }
+
+    if (!runSyntheticDetectorTests(err)) {
         return 2;
     }
 

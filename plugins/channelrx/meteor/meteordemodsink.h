@@ -56,6 +56,13 @@ public:
         double m_twoFrameMinIntegratedSupportDB = -7.0;
         double m_localizedTwoFrameMinPeakDB = 12.0;
         double m_localizedTwoFrameMinContrastDB = 18.0;
+        double m_coherentWideTwoFrameMinBandwidthRateFraction = 0.09;
+        double m_coherentWideTwoFrameMaxBandwidthRateFraction = 0.13;
+        double m_coherentWideTwoFrameMaxOccupiedFraction = 0.25;
+        double m_coherentWideTwoFrameMinPeakDB = 11.5;
+        double m_coherentWideTwoFrameMinContrastDB = 14.0;
+        double m_coherentWideTwoFrameMinIntegratedSupportDB = 5.0;
+        double m_coherentWideTwoFrameMinFrequencyCoherence = 0.9;
         double m_morphologyRescueContrastDB = 14.0;
         double m_localizedOccupiedMaxFraction = 0.45;
         double m_sustainedSweepMinDurationS = 0.5;
@@ -89,6 +96,16 @@ public:
         double m_frequencyRefinementOuterProbeFraction = 0.85;
         double m_duplicateFrequencyOverlapFraction = 0.65;
         double m_duplicateStrongFrequencyOverlapFraction = 0.85;
+        double m_continuationThresholdReductionDB = 3.0;
+        double m_continuationOrdinaryHoldS = 1.0;
+        double m_continuationStrongHoldS = 3.0;
+        double m_continuationMaxEvidenceGapS = 0.75;
+        double m_continuationStrongPeakDB = 12.0;
+        double m_continuationFrequencyPaddingBins = 2.5;
+        double m_parentFrequencyLowQuantile = 0.10;
+        double m_parentFrequencyHighQuantile = 0.90;
+        int m_maxActiveMeteorEvents = 16;
+        int m_maxParentObservations = 512;
     };
 
     struct DetectionRecord
@@ -151,12 +168,18 @@ public:
         bool m_sweepContinuationRejected = false;
         bool m_scoreOK = false;
         bool m_accepted = false;
+        quint64 m_parentEventId = 0;
+        QString m_associationDecision = QStringLiteral("none");
         QString m_classification = QStringLiteral("invalid");
         QString m_rejectionReason = QStringLiteral("invalid");
     };
 
     using CandidateAudit = SpectralCandidate;
     using CandidateAuditCallback = std::function<void(const CandidateAudit&)>;
+    using DiagnosticCaptureCallback = std::function<void(
+        quint64,
+        const DetectionRecord&,
+        const ComplexVector&)>;
 
     class MsgMeteorDetected : public Message {
         MESSAGE_CLASS_DECLARATION
@@ -221,12 +244,18 @@ public:
     void setSpectrumSink(SpectrumVis* spectrumSink) { m_spectrumSink = spectrumSink; }
     void setMessageQueueToGUI(MessageQueue *messageQueue) { m_messageQueueToGUI = messageQueue; }
     void setCandidateAuditCallback(const CandidateAuditCallback& callback) { m_candidateAuditCallback = callback; }
+    void setDiagnosticCaptureCallback(const DiagnosticCaptureCallback& callback) { m_diagnosticCaptureCallback = callback; }
     void setDetectorTunables(const DetectorTunables& tunables) { m_detectorTunables = tunables; }
     const DetectorTunables& getDetectorTunables() const { return m_detectorTunables; }
     void setChannel(ChannelAPI *channel) { m_channel = channel; }
     void applyChannelSettings(int channelSampleRate, int channelFrequencyOffset, bool force = false);
     void applySettings(const MeteorSettings& settings, const QStringList& settingsKeys, bool force = false);
     int getOutputSampleRate() const { return m_settings.m_channelSampleRate; }
+    static quint64 clipDetectionEndSample(
+        quint64 startSample,
+        quint64 endSample,
+        quint64 maximumDurationSamples,
+        bool& truncated);
 
 private:
     struct PulseReport : DetectionRecord {
@@ -239,6 +268,7 @@ private:
         double m_confidence;
         double m_componentSupportDB;
         bool m_allowComponentMerge;
+        bool m_spectralParentEligible;
         PulseReport() :
             m_reportFrequencySpan(0.0),
             m_duplicateFrequencySpan(0.0),
@@ -248,8 +278,37 @@ private:
             m_robustFrequencyDrift(0.0),
             m_confidence(0.0),
             m_componentSupportDB(-200.0),
-            m_allowComponentMerge(true)
+            m_allowComponentMerge(true),
+            m_spectralParentEligible(false)
         {}
+    };
+
+    struct MeteorEventObservation {
+        quint64 m_sample = 0;
+        double m_centerFrequency = 0.0;
+        double m_lowFrequency = 0.0;
+        double m_highFrequency = 0.0;
+        double m_weight = 1.0;
+        double m_peakPower = 0.0;
+        double m_backgroundPower = 1e-20;
+        bool m_broadband = false;
+    };
+
+    struct ActiveMeteorEvent {
+        quint64 m_id = 0;
+        PulseReport m_report;
+        quint64 m_lastEvidenceSample = 0;
+        quint64 m_lastComponentSample = 0;
+        int m_componentCount = 0;
+        int m_spectralComponentCount = 0;
+        bool m_strong = false;
+        bool m_extendedByContinuation = false;
+        std::vector<MeteorEventObservation> m_observations;
+    };
+
+    struct AssociationResult {
+        quint64 m_parentEventId = 0;
+        QString m_decision = QStringLiteral("rejected");
     };
 
     struct SpectralBand {
@@ -366,6 +425,7 @@ private:
     SpectrumVis* m_spectrumSink;
     MessageQueue *m_messageQueueToGUI;
     CandidateAuditCallback m_candidateAuditCallback;
+    DiagnosticCaptureCallback m_diagnosticCaptureCallback;
     DetectorTunables m_detectorTunables;
     MeteorSettings m_settings;
     ChannelAPI *m_channel;
@@ -390,7 +450,8 @@ private:
     std::vector<SpectralEvent> m_spectralEvents;
     std::vector<DetectionRange> m_recentDetectionRanges;
     std::vector<SpectralInterferenceRange> m_recentSpectralInterference;
-    std::vector<PulseReport> m_pendingComponentReports;
+    std::vector<ActiveMeteorEvent> m_activeMeteorEvents;
+    quint64 m_nextMeteorEventId;
     quint64 m_nextComponentFlushSample;
     std::vector<char> m_spectralActiveBins;
     FFTEngine *m_spectralFFT;
@@ -430,6 +491,11 @@ private:
     void initializeSpectralNoiseFloor();
     void processCalibratedSpectralFrame(const SpectralFrameSnapshot& frame);
     std::vector<SpectralBand> detectSpectralBands(const std::vector<double>& binPower);
+    bool frequencyProtectedByActiveMeteor(double frequency) const;
+    void protectActiveMeteorNoiseBins();
+    void updateActiveMeteorEvents(const std::vector<SpectralBand>& bands, quint64 frameCenterSample);
+    bool bandCompatibleWithActiveMeteor(const ActiveMeteorEvent& event, const SpectralBand& band) const;
+    void addMeteorEventObservation(ActiveMeteorEvent& event, const MeteorEventObservation& observation);
     void updateSpectralEvents(const std::vector<SpectralBand>& bands, quint64 frameCenterSample);
     void updateSpectralEvent(SpectralEvent& event, const SpectralBand& band, quint64 frameCenterSample);
     void finishSpectralEvent(const SpectralEvent& event);
@@ -458,10 +524,12 @@ private:
     void rememberDetection(quint64 startSample, quint64 endSample);
     void rememberDetection(quint64 startSample, quint64 endSample, double centerFrequency, double frequencySpan);
     void pruneRecentDetections();
-    void emitOrDeferSpectralReport(const PulseReport& report);
-    void queueSpectralComponentReport(const PulseReport& report);
+    AssociationResult emitOrDeferSpectralReport(const PulseReport& report);
+    AssociationResult queueSpectralComponentReport(const PulseReport& report);
     void scheduleNextComponentFlush();
     void flushPendingComponentReports(bool force);
+    void finalizeActiveMeteorEvent(ActiveMeteorEvent& event);
+    void updateReportFromActiveMeteorEvent(ActiveMeteorEvent& event) const;
     PulseReport reportWithRobustFrequency(const PulseReport& report) const;
     bool estimatePulseBandEnvelope(PulseReport& report) const;
     bool refineSpectralComponentEnvelope(PulseReport& report) const;

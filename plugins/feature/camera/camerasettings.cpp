@@ -361,6 +361,8 @@ void CameraSettings::resetToDefaults()
     m_rotator.clear();
     m_directionSensor.clear();
     m_sensorOpticalAxis = SensorOpticalAxisAuto;
+    m_directionSensorFilterEnabled = false;
+    m_directionSensorFilterTimeConstant = 0.5;
     m_azimuthOffset = 0.0f;
     m_elevationOffset = 0.0f;
     m_rollOffset = 0.0f;
@@ -891,6 +893,8 @@ QByteArray CameraSettings::serialize() const
     s.writeString(313, m_yoloTileModelPath);
     s.writeS32(314, static_cast<qint32>(m_sensorOpticalAxis));
     s.writeString(315, m_recordingOutputDirectoryUri);
+    s.writeBool(316, m_directionSensorFilterEnabled);
+    s.writeDouble(317, m_directionSensorFilterTimeConstant);
 
     return s.final();
 }
@@ -1482,6 +1486,9 @@ bool CameraSettings::deserialize(const QByteArray& data)
             static_cast<qint32>(SensorOpticalAxisAuto),
             sensorOpticalAxis,
             static_cast<qint32>(SensorOpticalAxisFront)));
+        d.readBool(316, &m_directionSensorFilterEnabled, false);
+        d.readDouble(317, &m_directionSensorFilterTimeConstant, 0.5);
+        m_directionSensorFilterTimeConstant = qBound(0.05, m_directionSensorFilterTimeConstant, 10.0);
         d.readFloat(271, &m_azimuthOffset, 0.0f);
         d.readFloat(272, &m_elevationOffset, 0.0f);
         d.readFloat(273, &m_rollOffset, 0.0f);
@@ -1964,6 +1971,12 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
             static_cast<qint32>(SensorOpticalAxisAuto),
             static_cast<qint32>(settings.m_sensorOpticalAxis),
             static_cast<qint32>(SensorOpticalAxisFront)));
+    }
+    if (settingsKeys.contains("directionSensorFilterEnabled")) {
+        m_directionSensorFilterEnabled = settings.m_directionSensorFilterEnabled;
+    }
+    if (settingsKeys.contains("directionSensorFilterTimeConstant")) {
+        m_directionSensorFilterTimeConstant = qBound(0.05, settings.m_directionSensorFilterTimeConstant, 10.0);
     }
     if (settingsKeys.contains("azimuthOffset")) {
         m_azimuthOffset = normalizeSignedDegrees(settings.m_azimuthOffset);
@@ -2954,6 +2967,12 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("sensorOpticalAxis") || force) {
         ostr << " m_sensorOpticalAxis: " << m_sensorOpticalAxis;
+    }
+    if (settingsKeys.contains("directionSensorFilterEnabled") || force) {
+        ostr << " m_directionSensorFilterEnabled: " << m_directionSensorFilterEnabled;
+    }
+    if (settingsKeys.contains("directionSensorFilterTimeConstant") || force) {
+        ostr << " m_directionSensorFilterTimeConstant: " << m_directionSensorFilterTimeConstant;
     }
     if (settingsKeys.contains("azimuthOffset") || force) {
         ostr << " m_azimuthOffset: " << m_azimuthOffset;

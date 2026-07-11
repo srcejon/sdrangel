@@ -125,6 +125,7 @@
 #include "pipes/objectpipe.h"
 
 #include "cameraplatesolver.h"
+#include "cameraskyprojector.h"
 #include "ui_cameragui.h"
 #include "camera.h"
 #include "cameradetectionhistory.h"
@@ -174,6 +175,15 @@ bool directionSourceIsSensor(const QString& sourceId)
 QString directionSourceValue(const QString& sourceId, const QString& prefix)
 {
     return sourceId.mid(prefix.size());
+}
+
+SkyVector qtEulerTransform(const SkyVector& vector, double xDegrees, double yDegrees, double zDegrees)
+{
+    // QRotationReading uses intrinsic Z-X-Y rotations. With column vectors,
+    // the corresponding device-to-world matrix is Rz * Rx * Ry.
+    SkyVector transformed = skyRotateAroundAxis(vector, {0.0, 1.0, 0.0}, skyDegToRad(yDegrees));
+    transformed = skyRotateAroundAxis(transformed, {1.0, 0.0, 0.0}, skyDegToRad(xDegrees));
+    return skyRotateAroundAxis(transformed, {0.0, 0.0, 1.0}, skyDegToRad(zDegrees));
 }
 
 double normalizeSignedDegrees(double value)
@@ -4861,6 +4871,8 @@ void CameraGUI::syncFromDirectionSensors()
     double azimuth = m_settings.m_azimuth;
     double elevation = m_settings.m_elevation;
     double roll = m_settings.m_roll;
+    SkyVector imageUpWorld {0.0, 0.0, 0.0};
+    bool imageUpValid = false;
 
     if (const QCompassReading *compassReading = m_directionCompassSensor->reading())
     {
@@ -4874,10 +4886,22 @@ void CameraGUI::syncFromDirectionSensors()
 
     if (const QRotationReading *rotationReading = m_directionRotationSensor->reading())
     {
-        const double readingRoll = rotationReading->z();
-        if (std::isfinite(readingRoll))
+        const double xRotation = rotationReading->x();
+        const double yRotation = rotationReading->y();
+        const double zRotation = rotationReading->z();
+        if (std::isfinite(xRotation) && std::isfinite(yRotation) && std::isfinite(zRotation))
         {
-            roll = readingRoll;
+            imageUpWorld = qtEulerTransform({0.0, 1.0, 0.0}, xRotation, yRotation, zRotation);
+
+            // Qt's Z zero is backend-specific. Align the transformed device
+            // Y axis with the compass heading, which is explicitly magnetic
+            // north referenced. At zero X/Y rotation, Qt Z maps device Y to
+            // azimuth -Z, hence the compass + Z correction.
+            imageUpWorld = skyRotateAroundAxis(
+                imageUpWorld,
+                {0.0, 0.0, 1.0},
+                skyDegToRad(azimuth + zRotation));
+            imageUpValid = skyLength(imageUpWorld) > 1e-9;
             m_directionRotationReadingValid = true;
         }
     }
@@ -4907,22 +4931,44 @@ void CameraGUI::syncFromDirectionSensors()
     {
         azimuth += 180.0;
         elevation = -elevation;
-        roll = -roll;
     }
 
     azimuth += m_settings.m_azimuthOffset;
     elevation += m_settings.m_elevationOffset;
-    roll += m_settings.m_rollOffset;
 
     azimuth = std::fmod(azimuth, 360.0);
     if (azimuth < 0.0) {
         azimuth += 360.0;
     }
-    roll = normalizeSignedDegrees(roll);
     elevation = qBound(
         static_cast<double>(CameraSettings::m_minElevation),
         elevation,
         static_cast<double>(CameraSettings::m_maxElevation));
+
+    if (!imageUpValid) {
+        return;
+    }
+
+    const double azimuthRadians = skyDegToRad(azimuth);
+    const SkyVector center = skyNormalize(skyVectorFromAltAz(azimuth, elevation));
+    const SkyVector zeroRollRight = skyNormalize({std::cos(azimuthRadians), -std::sin(azimuthRadians), 0.0});
+    const SkyVector zeroRollUp = skyNormalize(skyCross(zeroRollRight, center));
+    const double imageUpAlongCenter = skyDot(imageUpWorld, center);
+    const SkyVector projectedImageUp = skyNormalize({
+        imageUpWorld.x - center.x * imageUpAlongCenter,
+        imageUpWorld.y - center.y * imageUpAlongCenter,
+        imageUpWorld.z - center.z * imageUpAlongCenter
+    });
+
+    if ((skyLength(zeroRollUp) <= 1e-9) || (skyLength(projectedImageUp) <= 1e-9)) {
+        return;
+    }
+
+    static constexpr double kRadiansToDegrees = 180.0 / 3.14159265358979323846;
+    roll = std::atan2(
+        skyDot(projectedImageUp, zeroRollRight),
+        skyDot(projectedImageUp, zeroRollUp)) * kRadiansToDegrees;
+    roll = normalizeSignedDegrees(roll + m_settings.m_rollOffset);
 
     if ((std::fabs(static_cast<double>(m_settings.m_azimuth) - azimuth) < 0.05)
         && (std::fabs(static_cast<double>(m_settings.m_elevation) - elevation) < 0.05)

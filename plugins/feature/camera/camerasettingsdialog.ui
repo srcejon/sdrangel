@@ -7949,6 +7949,35 @@ Right-click: toggle continual synchronization from My Position.</string>
             </property>
            </widget>
           </item>
+          <item row="1" column="0">
+           <widget class="QLabel" name="sensorOpticalAxisLabel">
+            <property name="text">
+             <string>Optical axis</string>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="1">
+           <widget class="QComboBox" name="sensorOpticalAxisCombo">
+            <property name="toolTip">
+             <string>Choose how the camera optical axis relates to the Qt Sensors device coordinates. Auto uses the selected Qt camera position and defaults to rear-facing for other camera sources.</string>
+            </property>
+            <item>
+             <property name="text">
+              <string>Auto</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>Rear</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>Front</string>
+             </property>
+            </item>
+           </widget>
+          </item>
           <item row="7" column="0">
            <widget class="QLabel" name="rollLabel">
             <property name="text">

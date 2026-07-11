@@ -154,6 +154,13 @@ struct CameraSettings
         LensProjectionEquisolid
     };
 
+    enum SensorOpticalAxis
+    {
+        SensorOpticalAxisAuto = 0,
+        SensorOpticalAxisRear,
+        SensorOpticalAxisFront
+    };
+
     enum HistogramStretch
     {
         HistogramStretchOff = 0,
@@ -532,6 +539,7 @@ struct CameraSettings
     float m_roll;                  ///< Camera roll about optical axis in degrees
     QString m_rotator;             ///< "<featureSetIndex>:<featureIndex>" of rotator to follow
     QString m_directionSensor;      ///< Qt Sensors compass identifier used to follow camera azimuth/elevation
+    SensorOpticalAxis m_sensorOpticalAxis; ///< Camera optical axis relative to the Qt Sensors device coordinates
     float m_azimuthOffset;         ///< Offset added to synced rotator/sensor azimuth in degrees
     float m_elevationOffset;       ///< Offset added to synced rotator/sensor elevation in degrees
     float m_rollOffset;            ///< Offset added to synced sensor roll in degrees

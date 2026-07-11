@@ -1481,6 +1481,8 @@ void CameraGUI::setSelectedCamera(const QString& protocol, const QString& camera
         m_settings.m_alpacaHost = alpacaHost;
         m_settings.m_alpacaPort = alpacaPort;
     }
+
+    updateDirectionSensorOpticalAxis();
 }
 
 CameraInfo CameraGUI::comboCameraInfo(int index) const
@@ -1937,6 +1939,8 @@ void CameraGUI::displaySettings()
     settingsUI()->elevationOffsetSpin->setValue(m_settings.m_elevationOffset);
     settingsUI()->rollOffsetSpin->setValue(m_settings.m_rollOffset);
     settingsUI()->rollSpin->setValue(m_settings.m_roll);
+    settingsUI()->sensorOpticalAxisCombo->setCurrentIndex(static_cast<int>(m_settings.m_sensorOpticalAxis));
+    updateDirectionSensorOpticalAxis();
     settingsUI()->fovModeCombo->setCurrentIndex(static_cast<int>(m_settings.m_fovMode));
     settingsUI()->fovSpin->setValue(m_settings.m_fov);
     settingsUI()->fovSensorWidthSpin->setValue(m_settings.m_fovSensorWidthMm);
@@ -2975,6 +2979,7 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->elevationOffsetSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_elevationOffsetSpin_valueChanged);
     QObject::connect(settingsUI()->rollOffsetSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_rollOffsetSpin_valueChanged);
     QObject::connect(settingsUI()->rollSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_rollSpin_valueChanged);
+    QObject::connect(settingsUI()->sensorOpticalAxisCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_sensorOpticalAxisCombo_currentIndexChanged);
     QObject::connect(settingsUI()->directionSourceCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_directionSourceCombo_currentIndexChanged);
     QObject::connect(settingsUI()->fovModeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_fovModeCombo_currentIndexChanged);
     QObject::connect(settingsUI()->fovSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_fovSpin_valueChanged);
@@ -4721,10 +4726,61 @@ void CameraGUI::populateDirectionSourceCombo()
     }
 }
 
+void CameraGUI::updateDirectionSensorOpticalAxis()
+{
+    if (m_settings.m_sensorOpticalAxis != CameraSettings::SensorOpticalAxisAuto)
+    {
+        m_resolvedSensorOpticalAxis = m_settings.m_sensorOpticalAxis;
+        return;
+    }
+
+    // Rear-facing is the most common sensor/camera mounting and is also the
+    // useful fallback for non-Qt cameras whose position cannot be queried.
+    m_resolvedSensorOpticalAxis = CameraSettings::SensorOpticalAxisRear;
+
+    if (!m_settings.isQtCamera()) {
+        return;
+    }
+
+    const QString targetId = m_settings.cameraIdString();
+    const QString targetDescription = m_settings.cameraDescription();
+
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+    for (const QCameraDevice& device : QMediaDevices::videoInputs())
+    {
+        if ((QString::fromUtf8(device.id()) != targetId) && (device.description() != targetDescription)) {
+            continue;
+        }
+
+        if (device.position() == QCameraDevice::FrontFace) {
+            m_resolvedSensorOpticalAxis = CameraSettings::SensorOpticalAxisFront;
+        } else if (device.position() == QCameraDevice::BackFace) {
+            m_resolvedSensorOpticalAxis = CameraSettings::SensorOpticalAxisRear;
+        }
+        break;
+    }
+#else
+    for (const QCameraInfo& info : QCameraInfo::availableCameras())
+    {
+        if ((info.deviceName() != targetId) && (info.description() != targetDescription)) {
+            continue;
+        }
+
+        if (info.position() == QCamera::FrontFace) {
+            m_resolvedSensorOpticalAxis = CameraSettings::SensorOpticalAxisFront;
+        } else if (info.position() == QCamera::BackFace) {
+            m_resolvedSensorOpticalAxis = CameraSettings::SensorOpticalAxisRear;
+        }
+        break;
+    }
+#endif
+}
+
 void CameraGUI::startDirectionSensors()
 {
 #ifdef QT_SENSORS_FOUND
     stopDirectionSensors();
+    updateDirectionSensorOpticalAxis();
 
     if (m_settings.m_directionSensor.isEmpty()) {
         return;
@@ -4832,9 +4888,8 @@ void CameraGUI::syncFromDirectionSensors()
         const double yRotation = tiltReading->yRotation();
         if (std::isfinite(xRotation) && std::isfinite(yRotation))
         {
-            // Qt tilt is relative to a face-up device. Treat face-up as zenith,
-            // and a 90-degree tilt as horizon. This gives a useful camera
-            // elevation estimate for phones/tablets exposing compass + tilt.
+            // Use the front-facing optical-axis convention here. A rear-facing
+            // camera reverses the complete pointing vector below.
             const double tiltDegrees = std::min(180.0, std::hypot(xRotation, yRotation));
             elevation = qBound(
                 static_cast<double>(CameraSettings::m_minElevation),
@@ -4846,6 +4901,13 @@ void CameraGUI::syncFromDirectionSensors()
 
     if (!m_directionCompassReadingValid || !m_directionRotationReadingValid || !m_directionTiltReadingValid) {
         return;
+    }
+
+    if (m_resolvedSensorOpticalAxis == CameraSettings::SensorOpticalAxisRear)
+    {
+        azimuth += 180.0;
+        elevation = -elevation;
+        roll = -roll;
     }
 
     azimuth += m_settings.m_azimuthOffset;
@@ -4915,6 +4977,8 @@ void CameraGUI::updatePositionControls()
     settingsUI()->azimuthSpin->setReadOnly(azElSynced);
     settingsUI()->elevationSpin->setReadOnly(azElSynced);
     settingsUI()->rollSpin->setReadOnly(sensorSynced);
+    settingsUI()->sensorOpticalAxisCombo->setEnabled(sensorSynced);
+    settingsUI()->sensorOpticalAxisLabel->setEnabled(sensorSynced);
     settingsUI()->azimuthOffsetSpin->setEnabled(azElSynced);
     settingsUI()->elevationOffsetSpin->setEnabled(azElSynced);
     settingsUI()->rollOffsetSpin->setEnabled(sensorSynced);
@@ -8155,6 +8219,19 @@ void CameraGUI::on_rollOffsetSpin_valueChanged(double value)
         syncFromDirectionSensors();
     }
     applySetting("rollOffset");
+}
+
+void CameraGUI::on_sensorOpticalAxisCombo_currentIndexChanged(int index)
+{
+    m_settings.m_sensorOpticalAxis = static_cast<CameraSettings::SensorOpticalAxis>(qBound(
+        static_cast<int>(CameraSettings::SensorOpticalAxisAuto),
+        index,
+        static_cast<int>(CameraSettings::SensorOpticalAxisFront)));
+    updateDirectionSensorOpticalAxis();
+    if (!m_settings.m_directionSensor.isEmpty()) {
+        syncFromDirectionSensors();
+    }
+    applySetting("sensorOpticalAxis");
 }
 
 void CameraGUI::on_directionSourceCombo_currentIndexChanged(int index)

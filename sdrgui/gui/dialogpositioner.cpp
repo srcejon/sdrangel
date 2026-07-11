@@ -94,6 +94,16 @@ void DialogPositioner::positionDialog(QWidget *dialog)
         pos.setY(desktop.height() - geometry.height());
         move = true;
     }
+    if (pos.x() < 0)
+    {
+        pos.setX(0);
+        move = true;
+    }
+    if (pos.y() < 0)
+    {
+        pos.setY(0);
+        move = true;
+    }
     if (move) {
         dialog->move(pos);
     }

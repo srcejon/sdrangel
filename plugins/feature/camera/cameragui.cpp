@@ -1993,6 +1993,8 @@ void CameraGUI::displaySettings()
     settingsUI()->rollOffsetSpin->setValue(m_settings.m_rollOffset);
     settingsUI()->rollSpin->setValue(m_settings.m_roll);
     settingsUI()->sensorOpticalAxisCombo->setCurrentIndex(static_cast<int>(m_settings.m_sensorOpticalAxis));
+    settingsUI()->directionSensorFilterCheck->setChecked(m_settings.m_directionSensorFilterEnabled);
+    settingsUI()->directionSensorFilterTimeConstantSpin->setValue(m_settings.m_directionSensorFilterTimeConstant);
     updateDirectionSensorOpticalAxis();
     settingsUI()->fovModeCombo->setCurrentIndex(static_cast<int>(m_settings.m_fovMode));
     settingsUI()->fovSpin->setValue(m_settings.m_fov);
@@ -3034,6 +3036,8 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->rollOffsetSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_rollOffsetSpin_valueChanged);
     QObject::connect(settingsUI()->rollSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_rollSpin_valueChanged);
     QObject::connect(settingsUI()->sensorOpticalAxisCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_sensorOpticalAxisCombo_currentIndexChanged);
+    QObject::connect(settingsUI()->directionSensorFilterCheck, &QCheckBox::toggled, this, &CameraGUI::on_directionSensorFilterCheck_toggled);
+    QObject::connect(settingsUI()->directionSensorFilterTimeConstantSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_directionSensorFilterTimeConstantSpin_valueChanged);
     QObject::connect(settingsUI()->directionSourceCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_directionSourceCombo_currentIndexChanged);
     QObject::connect(settingsUI()->fovModeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_fovModeCombo_currentIndexChanged);
     QObject::connect(settingsUI()->fovSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_fovSpin_valueChanged);
@@ -4899,6 +4903,15 @@ void CameraGUI::stopDirectionSensors()
     m_directionRotationReadingValid = false;
     m_directionTiltReadingValid = false;
 #endif
+    resetDirectionSensorFilter();
+}
+
+void CameraGUI::resetDirectionSensorFilter()
+{
+#ifdef QT_SENSORS_FOUND
+    m_directionSensorFilterValid = false;
+    m_directionSensorFilterTimer.invalidate();
+#endif
 }
 
 void CameraGUI::syncFromDirectionSensors()
@@ -5014,9 +5027,45 @@ void CameraGUI::syncFromDirectionSensors()
         skyDot(projectedImageUp, zeroRollUp)) * kRadiansToDegrees;
     roll = normalizeSignedDegrees(roll + m_settings.m_rollOffset);
 
-    if ((std::fabs(static_cast<double>(m_settings.m_azimuth) - azimuth) < 0.05)
+    if (m_settings.m_directionSensorFilterEnabled)
+    {
+        if (!m_directionSensorFilterValid)
+        {
+            m_filteredDirectionAzimuth = azimuth;
+            m_filteredDirectionElevation = elevation;
+            m_filteredDirectionRoll = roll;
+            m_directionSensorFilterValid = true;
+            m_directionSensorFilterTimer.start();
+        }
+        else
+        {
+            const double elapsedSeconds = std::max(0.0, m_directionSensorFilterTimer.nsecsElapsed() / 1.0e9);
+            m_directionSensorFilterTimer.restart();
+            const double timeConstant = qBound(0.05, m_settings.m_directionSensorFilterTimeConstant, 10.0);
+            const double alpha = qBound(0.0, -std::expm1(-elapsedSeconds / timeConstant), 1.0);
+
+            m_filteredDirectionAzimuth += alpha * normalizeSignedDegrees(azimuth - m_filteredDirectionAzimuth);
+            m_filteredDirectionAzimuth = std::fmod(m_filteredDirectionAzimuth, 360.0);
+            if (m_filteredDirectionAzimuth < 0.0) {
+                m_filteredDirectionAzimuth += 360.0;
+            }
+            m_filteredDirectionElevation += alpha * (elevation - m_filteredDirectionElevation);
+            m_filteredDirectionRoll = normalizeSignedDegrees(
+                m_filteredDirectionRoll + alpha * normalizeSignedDegrees(roll - m_filteredDirectionRoll));
+        }
+
+        azimuth = m_filteredDirectionAzimuth;
+        elevation = m_filteredDirectionElevation;
+        roll = m_filteredDirectionRoll;
+    }
+    else if (m_directionSensorFilterValid)
+    {
+        resetDirectionSensorFilter();
+    }
+
+    if ((std::fabs(normalizeSignedDegrees(static_cast<double>(m_settings.m_azimuth) - azimuth)) < 0.05)
         && (std::fabs(static_cast<double>(m_settings.m_elevation) - elevation) < 0.05)
-        && (std::fabs(static_cast<double>(m_settings.m_roll) - roll) < 0.05))
+        && (std::fabs(normalizeSignedDegrees(static_cast<double>(m_settings.m_roll) - roll)) < 0.05))
     {
         return;
     }
@@ -5069,6 +5118,10 @@ void CameraGUI::updatePositionControls()
     settingsUI()->rollSpin->setReadOnly(sensorSynced);
     settingsUI()->sensorOpticalAxisCombo->setEnabled(sensorSynced);
     settingsUI()->sensorOpticalAxisLabel->setEnabled(sensorSynced);
+    settingsUI()->directionSensorFilterLabel->setEnabled(sensorSynced);
+    settingsUI()->directionSensorFilterCheck->setEnabled(sensorSynced);
+    settingsUI()->directionSensorFilterTimeConstantLabel->setEnabled(sensorSynced && m_settings.m_directionSensorFilterEnabled);
+    settingsUI()->directionSensorFilterTimeConstantSpin->setEnabled(sensorSynced && m_settings.m_directionSensorFilterEnabled);
     settingsUI()->azimuthOffsetSpin->setEnabled(azElSynced);
     settingsUI()->elevationOffsetSpin->setEnabled(azElSynced);
     settingsUI()->rollOffsetSpin->setEnabled(sensorSynced);
@@ -8300,6 +8353,7 @@ void CameraGUI::on_azimuthOffsetSpin_valueChanged(double value)
 {
     m_settings.m_azimuthOffset = static_cast<float>(value);
     if (!m_settings.m_directionSensor.isEmpty()) {
+        resetDirectionSensorFilter();
         syncFromDirectionSensors();
     } else if (!m_settings.m_rotator.isEmpty()) {
         syncFromSelectedGs232Controller();
@@ -8311,6 +8365,7 @@ void CameraGUI::on_elevationOffsetSpin_valueChanged(double value)
 {
     m_settings.m_elevationOffset = static_cast<float>(value);
     if (!m_settings.m_directionSensor.isEmpty()) {
+        resetDirectionSensorFilter();
         syncFromDirectionSensors();
     } else if (!m_settings.m_rotator.isEmpty()) {
         syncFromSelectedGs232Controller();
@@ -8322,6 +8377,7 @@ void CameraGUI::on_rollOffsetSpin_valueChanged(double value)
 {
     m_settings.m_rollOffset = static_cast<float>(value);
     if (!m_settings.m_directionSensor.isEmpty()) {
+        resetDirectionSensorFilter();
         syncFromDirectionSensors();
     }
     applySetting("rollOffset");
@@ -8335,9 +8391,31 @@ void CameraGUI::on_sensorOpticalAxisCombo_currentIndexChanged(int index)
         static_cast<int>(CameraSettings::SensorOpticalAxisFront)));
     updateDirectionSensorOpticalAxis();
     if (!m_settings.m_directionSensor.isEmpty()) {
+        resetDirectionSensorFilter();
         syncFromDirectionSensors();
     }
     applySetting("sensorOpticalAxis");
+}
+
+void CameraGUI::on_directionSensorFilterCheck_toggled(bool checked)
+{
+    m_settings.m_directionSensorFilterEnabled = checked;
+    resetDirectionSensorFilter();
+    updatePositionControls();
+    if (!m_settings.m_directionSensor.isEmpty()) {
+        syncFromDirectionSensors();
+    }
+    applySetting("directionSensorFilterEnabled");
+}
+
+void CameraGUI::on_directionSensorFilterTimeConstantSpin_valueChanged(double value)
+{
+    m_settings.m_directionSensorFilterTimeConstant = qBound(0.05, value, 10.0);
+    resetDirectionSensorFilter();
+    if (!m_settings.m_directionSensor.isEmpty()) {
+        syncFromDirectionSensors();
+    }
+    applySetting("directionSensorFilterTimeConstant");
 }
 
 void CameraGUI::on_directionSourceCombo_currentIndexChanged(int index)

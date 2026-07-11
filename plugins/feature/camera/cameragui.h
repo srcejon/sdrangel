@@ -41,6 +41,7 @@
 #endif
 #ifdef QT_SENSORS_FOUND
 #include <QSensor>
+#include <QElapsedTimer>
 class QCompass;
 class QRotationSensor;
 class QTiltSensor;
@@ -329,6 +330,11 @@ private:
     bool m_directionCompassReadingValid = false;
     bool m_directionRotationReadingValid = false;
     bool m_directionTiltReadingValid = false;
+    bool m_directionSensorFilterValid = false;
+    double m_filteredDirectionAzimuth = 0.0;
+    double m_filteredDirectionElevation = 0.0;
+    double m_filteredDirectionRoll = 0.0;
+    QElapsedTimer m_directionSensorFilterTimer;
 #endif
     CameraSettings::SensorOpticalAxis m_resolvedSensorOpticalAxis = CameraSettings::SensorOpticalAxisRear;
 
@@ -392,6 +398,7 @@ private:
     void updateDirectionSensorOpticalAxis();
     void startDirectionSensors();
     void stopDirectionSensors();
+    void resetDirectionSensorFilter();
     void syncFromDirectionSensors();
     void applyPositionSync();
     void updatePositionControls();
@@ -665,6 +672,8 @@ private slots:
     void on_elevationOffsetSpin_valueChanged(double value);
     void on_rollOffsetSpin_valueChanged(double value);
     void on_sensorOpticalAxisCombo_currentIndexChanged(int index);
+    void on_directionSensorFilterCheck_toggled(bool checked);
+    void on_directionSensorFilterTimeConstantSpin_valueChanged(double value);
     void on_directionSourceCombo_currentIndexChanged(int index);
     void on_fovModeCombo_currentIndexChanged(int index);
     void on_fovSpin_valueChanged(double value);

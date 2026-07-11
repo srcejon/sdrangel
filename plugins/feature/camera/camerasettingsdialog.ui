@@ -8011,6 +8011,55 @@ Right-click: toggle continual synchronization from My Position.</string>
             </item>
            </widget>
           </item>
+          <item row="2" column="0">
+           <widget class="QLabel" name="directionSensorFilterLabel">
+            <property name="text">
+             <string>Sensor smoothing</string>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="1">
+           <widget class="QCheckBox" name="directionSensorFilterCheck">
+            <property name="toolTip">
+             <string>Smooth noisy Qt Sensors azimuth, elevation, and roll readings. Rotator and manual direction values are unaffected.</string>
+            </property>
+            <property name="text">
+             <string>Enabled</string>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="2">
+           <widget class="QLabel" name="directionSensorFilterTimeConstantLabel">
+            <property name="text">
+             <string>Time constant</string>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="3">
+           <widget class="QDoubleSpinBox" name="directionSensorFilterTimeConstantSpin">
+            <property name="toolTip">
+             <string>Smoothing response time in seconds. Larger values are steadier but react more slowly to movement.</string>
+            </property>
+            <property name="suffix">
+             <string> s</string>
+            </property>
+            <property name="decimals">
+             <number>2</number>
+            </property>
+            <property name="minimum">
+             <double>0.050000000000000</double>
+            </property>
+            <property name="maximum">
+             <double>10.000000000000000</double>
+            </property>
+            <property name="singleStep">
+             <double>0.050000000000000</double>
+            </property>
+            <property name="value">
+             <double>0.500000000000000</double>
+            </property>
+           </widget>
+          </item>
           <item row="7" column="0">
            <widget class="QLabel" name="rollLabel">
             <property name="text">

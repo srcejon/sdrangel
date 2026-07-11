@@ -541,6 +541,8 @@ struct CameraSettings
     QString m_rotator;             ///< "<featureSetIndex>:<featureIndex>" of rotator to follow
     QString m_directionSensor;      ///< Qt Sensors compass identifier used to follow camera azimuth/elevation
     SensorOpticalAxis m_sensorOpticalAxis; ///< Camera optical axis relative to the Qt Sensors device coordinates
+    bool m_directionSensorFilterEnabled; ///< Smooth Qt Sensors direction readings
+    double m_directionSensorFilterTimeConstant; ///< Qt Sensors smoothing time constant in seconds
     float m_azimuthOffset;         ///< Offset added to synced rotator/sensor azimuth in degrees
     float m_elevationOffset;       ///< Offset added to synced rotator/sensor elevation in degrees
     float m_rollOffset;            ///< Offset added to synced sensor roll in degrees

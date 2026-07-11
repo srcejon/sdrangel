@@ -21,7 +21,7 @@ The Camera plugin also supports a variety of post-processing, detection and over
 * Image stacking with alignment and quality rejection
 * HDR stacking with multiple exposure brackets and merging algorithms
 * Histogram stretching and colour adjustment
-* YOLO AI object detection (CPU, OpenCV CUDA or TensorRT acceleration)
+* YOLO AI object detection (CPU, OpenCV CUDA, Android Vulkan or TensorRT acceleration)
 * Motion detection
 * Star detection and plate solving
 * Cloud detection
@@ -851,7 +851,7 @@ Selects the bounding box colour for detections.
 
 <h4>6. Target</h4>
 
-Selects the inference target: OpenCV CPU, OpenCV CUDA, OpenCV CUDA FP16, TensorRT or TensorRT FP16, depending on what is available.
+Selects the inference target: OpenCV CPU, OpenCV CUDA, OpenCV CUDA FP16, TensorRT, TensorRT FP16 or OpenCV Vulkan, depending on what is available. Vulkan is offered on Android when OpenCV reports the VKCOM/Vulkan backend. If a model contains layers that Vulkan cannot execute, detection continues using the OpenCV CPU backend.
 
 <h4>7. Input mode</h4>
 

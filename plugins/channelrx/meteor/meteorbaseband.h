@@ -77,6 +77,7 @@ public:
     void setSpectrumSink(SpectrumVis* spectrumSink) { m_spectrumVis = spectrumSink; m_sink.setSpectrumSink(spectrumSink); }
     void setMessageQueueToGUI(MessageQueue *messageQueue) { m_sink.setMessageQueueToGUI(messageQueue); }
     void setCandidateAuditCallback(const MeteorDemodSink::CandidateAuditCallback& callback) { m_sink.setCandidateAuditCallback(callback); }
+    void setDiagnosticCaptureCallback(const MeteorDemodSink::DiagnosticCaptureCallback& callback) { m_sink.setDiagnosticCaptureCallback(callback); }
     void setDetectorTunables(const MeteorDemodSink::DetectorTunables& tunables) { m_sink.setDetectorTunables(tunables); }
     const MeteorDemodSink::DetectorTunables& getDetectorTunables() const { return m_sink.getDetectorTunables(); }
     void setInactivityFlushEnabled(bool enabled) { m_inactivityFlushEnabled = enabled; }

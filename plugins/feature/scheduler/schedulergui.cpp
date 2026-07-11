@@ -56,6 +56,7 @@ namespace {
 
 constexpr int MaxTimerDelaySeconds = std::numeric_limits<int>::max() / 1000;
 constexpr int MaxTimerDelayMinutes = MaxTimerDelaySeconds / 60;
+constexpr int MaxTimerDelayHours = MaxTimerDelayMinutes / 60;
 
 }
 
@@ -199,6 +200,7 @@ SchedulerGUI::SchedulerGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Fea
     ui->eventDelayUnit->addItem(tr("minutes"), SchedulerSettings::DelayMinutes);
     ui->durationUnit->addItem(tr("seconds"), SchedulerSettings::DelaySeconds);
     ui->durationUnit->addItem(tr("minutes"), SchedulerSettings::DelayMinutes);
+    ui->durationUnit->addItem(tr("hours"), SchedulerSettings::DelayHours);
     updateEventDelayLimit();
     updateDurationLimit();
 
@@ -1971,6 +1973,9 @@ QString SchedulerGUI::durationText(const SchedulerSettings::ScheduleRule& rule) 
     if (rule.m_durationUnit == SchedulerSettings::DelayMinutes) {
         return tr("%1 min").arg(rule.m_duration);
     }
+    if (rule.m_durationUnit == SchedulerSettings::DelayHours) {
+        return tr("%1 h").arg(rule.m_duration);
+    }
     return tr("%1 s").arg(duration);
 }
 
@@ -2488,6 +2493,10 @@ QDate SchedulerGUI::noDateUntil()
 
 int SchedulerGUI::maximumTimerValue(SchedulerSettings::DelayUnit unit)
 {
+    if (unit == SchedulerSettings::DelayHours) {
+        return MaxTimerDelayHours;
+    }
+
     return unit == SchedulerSettings::DelayMinutes ? MaxTimerDelayMinutes : MaxTimerDelaySeconds;
 }
 

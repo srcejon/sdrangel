@@ -90,6 +90,7 @@ MeteorDemodSink::MeteorDemodSink() :
     m_interpolatorDistance(48.0f),
     m_interpolatorDistanceRemain(0.0f),
     m_spectrumBufferSize(0),
+    m_nextMeteorEventId(1),
     m_nextComponentFlushSample(std::numeric_limits<quint64>::max()),
     m_spectralFFT(nullptr),
     m_pulseFFT(nullptr),
@@ -151,7 +152,7 @@ void MeteorDemodSink::feed(const SampleVector::const_iterator& begin, const Samp
 
 bool MeteorDemodSink::flushPendingPulse()
 {
-    if (!m_pulseActive && m_spectralEvents.empty() && m_pendingComponentReports.empty()) {
+    if (!m_pulseActive && m_spectralEvents.empty() && m_activeMeteorEvents.empty()) {
         return false;
     }
 
@@ -405,6 +406,8 @@ void MeteorDemodSink::processCalibratedSpectralFrame(const SpectralFrameSnapshot
         }
     }
 
+    protectActiveMeteorNoiseBins();
+
     for (int i = 0; i < (int) frame.m_binPower.size(); i++)
     {
         const double alpha = m_spectralActiveBins[i]
@@ -415,7 +418,9 @@ void MeteorDemodSink::processCalibratedSpectralFrame(const SpectralFrameSnapshot
         m_spectralNoiseFloor[i] = (1.0 - alpha) * std::max(m_spectralNoiseFloor[i], 1e-30) + alpha * frame.m_binPower[i];
     }
 
-    updateSpectralEvents(bands, frame.m_startSample + (quint64) (m_spectralFrameSize / 2));
+    const quint64 frameCenterSample = frame.m_startSample + (quint64) (m_spectralFrameSize / 2);
+    updateSpectralEvents(bands, frameCenterSample);
+    updateActiveMeteorEvents(bands, frameCenterSample);
 }
 
 std::vector<MeteorDemodSink::SpectralBand> MeteorDemodSink::detectSpectralBands(const std::vector<double>& binPower)
@@ -432,6 +437,12 @@ std::vector<MeteorDemodSink::SpectralBand> MeteorDemodSink::detectSpectralBands(
     const double growThresholdDB = std::max(3.0, seedThresholdDB - 5.0);
     const double thresholdRatio = std::pow(10.0, seedThresholdDB / 10.0);
     const double spanRatio = std::pow(10.0, growThresholdDB / 10.0);
+    const double continuationThresholdRatio = std::pow(
+        10.0,
+        std::max(3.0, seedThresholdDB - m_detectorTunables.m_continuationThresholdReductionDB) / 10.0);
+    const double continuationSpanRatio = std::pow(
+        10.0,
+        std::max(2.0, growThresholdDB - m_detectorTunables.m_continuationThresholdReductionDB) / 10.0);
     const double binWidth = (double) m_settings.m_channelSampleRate / (double) m_spectralFrameSize;
     const double maxBandWidth = std::min(
         (double) m_settings.m_channelSampleRate * m_detectorTunables.m_usableBandwidthRateFraction,
@@ -461,23 +472,46 @@ std::vector<MeteorDemodSink::SpectralBand> MeteorDemodSink::detectSpectralBands(
     for (int i = usableLowIndex; i <= usableHighIndex; i++)
     {
         const double ratio = binPower[i] / std::max({m_spectralNoiseFloor[i], minimumBinNoise, 1e-30});
+        const double frequency = ((double) i - (double) m_spectralFrameSize / 2.0) * binWidth;
+        const bool continuationBin = frequencyProtectedByActiveMeteor(frequency);
+        const double localThresholdRatio = continuationBin ? continuationThresholdRatio : thresholdRatio;
 
-        if (ratio < thresholdRatio) {
+        if (ratio < localThresholdRatio) {
             continue;
         }
 
         int lowIndex = i;
         int highIndex = i;
 
-        while ((lowIndex > minAllowedIndex)
-            && ((binPower[lowIndex - 1] / std::max({m_spectralNoiseFloor[lowIndex - 1], minimumBinNoise, 1e-30})) >= spanRatio))
+        while (lowIndex > minAllowedIndex)
         {
+            const double lowFrequency = ((double) (lowIndex - 1) - (double) m_spectralFrameSize / 2.0) * binWidth;
+            const double lowSpanRatio = frequencyProtectedByActiveMeteor(lowFrequency)
+                ? continuationSpanRatio
+                : spanRatio;
+
+            if ((binPower[lowIndex - 1]
+                / std::max({m_spectralNoiseFloor[lowIndex - 1], minimumBinNoise, 1e-30})) < lowSpanRatio)
+            {
+                break;
+            }
+
             lowIndex--;
         }
 
-        while ((highIndex < usableHighIndex)
-            && ((binPower[highIndex + 1] / std::max({m_spectralNoiseFloor[highIndex + 1], minimumBinNoise, 1e-30})) >= spanRatio))
+        while (highIndex < usableHighIndex)
         {
+            const double highFrequency = ((double) (highIndex + 1) - (double) m_spectralFrameSize / 2.0) * binWidth;
+            const double highSpanRatio = frequencyProtectedByActiveMeteor(highFrequency)
+                ? continuationSpanRatio
+                : spanRatio;
+
+            if ((binPower[highIndex + 1]
+                / std::max({m_spectralNoiseFloor[highIndex + 1], minimumBinNoise, 1e-30})) < highSpanRatio)
+            {
+                break;
+            }
+
             highIndex++;
         }
 
@@ -539,6 +573,242 @@ std::vector<MeteorDemodSink::SpectralBand> MeteorDemodSink::detectSpectralBands(
     }
 
     return bands;
+}
+
+bool MeteorDemodSink::frequencyProtectedByActiveMeteor(double frequency) const
+{
+    const double binWidth = (double) std::max(1, m_settings.m_channelSampleRate)
+        / (double) std::max(1, m_spectralFrameSize);
+    const double padding = std::max(
+        12.0,
+        m_detectorTunables.m_continuationFrequencyPaddingBins * binWidth);
+
+    for (const ActiveMeteorEvent& event : m_activeMeteorEvents)
+    {
+        const PulseReport& report = event.m_report;
+
+        if (!report.m_spectralParentEligible) {
+            continue;
+        }
+
+        if ((event.m_spectralComponentCount < 2) && (report.m_durationS < 1.0)) {
+            continue;
+        }
+
+        const double center = report.m_hasRobustFrequency
+            ? report.m_robustCenterFrequency
+            : report.m_centerFrequency;
+        const double reportSpan = std::max({
+            std::fabs(report.m_robustFrequencySpan),
+            std::fabs(report.m_duplicateFrequencySpan),
+            std::fabs(report.m_frequencySpan),
+            binWidth});
+        const double span = std::min(
+            reportSpan,
+            std::max(24.0, m_detectorTunables.m_compactBandwidthRateFraction
+                * (double) std::max(1, m_settings.m_channelSampleRate)));
+
+        if ((frequency >= center - 0.5 * span - padding)
+            && (frequency <= center + 0.5 * span + padding))
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+void MeteorDemodSink::protectActiveMeteorNoiseBins()
+{
+    if (m_spectralActiveBins.empty()) {
+        return;
+    }
+
+    const double binWidth = (double) std::max(1, m_settings.m_channelSampleRate)
+        / (double) std::max(1, m_spectralFrameSize);
+
+    for (int i = 0; i < (int) m_spectralActiveBins.size(); i++)
+    {
+        const double frequency = ((double) i - (double) m_spectralFrameSize / 2.0) * binWidth;
+
+        if (frequencyProtectedByActiveMeteor(frequency)) {
+            m_spectralActiveBins[i] = 1;
+        }
+    }
+}
+
+bool MeteorDemodSink::bandCompatibleWithActiveMeteor(
+    const ActiveMeteorEvent& event,
+    const SpectralBand& band) const
+{
+    const PulseReport& report = event.m_report;
+    const double binWidth = (double) std::max(1, m_settings.m_channelSampleRate)
+        / (double) std::max(1, m_spectralFrameSize);
+    const double padding = std::max(
+        12.0,
+        m_detectorTunables.m_continuationFrequencyPaddingBins * binWidth);
+    const double center = report.m_hasRobustFrequency
+        ? report.m_robustCenterFrequency
+        : report.m_centerFrequency;
+    const double reportSpan = std::max({
+        std::fabs(report.m_robustFrequencySpan),
+        std::fabs(report.m_duplicateFrequencySpan),
+        std::fabs(report.m_frequencySpan),
+        binWidth});
+    const double span = std::min(
+        reportSpan,
+        std::max(24.0, m_detectorTunables.m_compactBandwidthRateFraction
+            * (double) std::max(1, m_settings.m_channelSampleRate)));
+    const double eventLow = center - 0.5 * span;
+    const double eventHigh = center + 0.5 * span;
+    const double overlap = std::max(
+        0.0,
+        std::min(eventHigh + padding, band.m_highFrequency)
+            - std::max(eventLow - padding, band.m_lowFrequency));
+    const double centerDistance = std::fabs(band.m_centerFrequency - center);
+
+    return (overlap > 0.0)
+        && (centerDistance <= std::max(padding, 0.35 * span));
+}
+
+void MeteorDemodSink::addMeteorEventObservation(
+    ActiveMeteorEvent& event,
+    const MeteorEventObservation& observation)
+{
+    if ((int) event.m_observations.size() >= m_detectorTunables.m_maxParentObservations)
+    {
+        std::vector<MeteorEventObservation> compacted;
+        compacted.reserve(event.m_observations.size() / 2 + 1);
+
+        for (int i = 0; i < (int) event.m_observations.size(); i += 2) {
+            compacted.push_back(event.m_observations[i]);
+        }
+
+        event.m_observations.swap(compacted);
+    }
+
+    event.m_observations.push_back(observation);
+}
+
+void MeteorDemodSink::updateActiveMeteorEvents(
+    const std::vector<SpectralBand>& bands,
+    quint64 frameCenterSample)
+{
+    if (m_activeMeteorEvents.empty() || bands.empty()) {
+        return;
+    }
+
+    const quint64 maxEvidenceGapSamples = (quint64) std::max(
+        1.0,
+        m_detectorTunables.m_continuationMaxEvidenceGapS
+            * (double) std::max(1, m_settings.m_channelSampleRate));
+    std::vector<bool> bandMatched(bands.size(), false);
+
+    for (ActiveMeteorEvent& event : m_activeMeteorEvents)
+    {
+        if (!event.m_report.m_spectralParentEligible) {
+            continue;
+        }
+
+        if ((event.m_spectralComponentCount < 2) && (event.m_report.m_durationS < 1.0)) {
+            continue;
+        }
+
+        if ((frameCenterSample > event.m_lastEvidenceSample)
+            && ((frameCenterSample - event.m_lastEvidenceSample) > maxEvidenceGapSamples))
+        {
+            continue;
+        }
+
+        int bestBand = -1;
+        double bestScore = std::numeric_limits<double>::max();
+        const double eventCenter = event.m_report.m_hasRobustFrequency
+            ? event.m_report.m_robustCenterFrequency
+            : event.m_report.m_centerFrequency;
+
+        for (int i = 0; i < (int) bands.size(); i++)
+        {
+            const SpectralBand& band = bands[i];
+            const double maxContinuationBandwidth = std::max(
+                24.0,
+                m_detectorTunables.m_compactBandwidthRateFraction
+                    * (double) std::max(1, m_settings.m_channelSampleRate));
+            const bool broadband = (band.m_frameOccupiedFraction
+                    >= m_detectorTunables.m_broadbandImpulseMinOccupiedFraction)
+                || (band.m_bandwidth > maxContinuationBandwidth);
+
+            if (bandMatched[i] || broadband || !bandCompatibleWithActiveMeteor(event, band)) {
+                continue;
+            }
+
+            bool supportedByTrack = false;
+
+            for (const SpectralEvent& spectralEvent : m_spectralEvents)
+            {
+                if (!spectralEvent.m_valid
+                    || (spectralEvent.m_lastCenterSample != frameCenterSample)
+                    || (spectralEvent.m_trackFrequencies.size() < 2))
+                {
+                    continue;
+                }
+
+                const double trackCenter = spectralEvent.m_trackFrequencies.back();
+                const double trackTolerance = std::max(
+                    12.0,
+                    0.5 * std::max(band.m_bandwidth, spectralEvent.m_maxBandwidth));
+
+                if (std::fabs(trackCenter - band.m_centerFrequency) <= trackTolerance)
+                {
+                    supportedByTrack = true;
+                    break;
+                }
+            }
+
+            if (!supportedByTrack) {
+                continue;
+            }
+
+            const double score = std::fabs(band.m_centerFrequency - eventCenter)
+                - 0.1 * std::min(30.0, band.m_contrastDB);
+
+            if (score < bestScore)
+            {
+                bestScore = score;
+                bestBand = i;
+            }
+        }
+
+        if (bestBand < 0) {
+            continue;
+        }
+
+        const SpectralBand& band = bands[bestBand];
+        bandMatched[bestBand] = true;
+        const quint64 oldEndSample = event.m_report.m_endSample;
+        const quint64 evidenceEndSample = frameCenterSample
+            + (quint64) std::max(1, m_spectralHopSize / 2);
+
+        event.m_lastEvidenceSample = std::max(event.m_lastEvidenceSample, frameCenterSample);
+        event.m_report.m_endSample = std::max(event.m_report.m_endSample, evidenceEndSample);
+        event.m_report.m_displayEndSample = event.m_report.m_endSample;
+        event.m_report.m_peakPower = std::max(event.m_report.m_peakPower, band.m_framePeakPower);
+        event.m_report.m_totalPower += std::max(band.m_totalExcessPower, 0.0) * m_spectralEnergyScale;
+        event.m_extendedByContinuation = event.m_extendedByContinuation
+            || (event.m_report.m_endSample > oldEndSample);
+
+        MeteorEventObservation observation;
+        observation.m_sample = frameCenterSample;
+        observation.m_centerFrequency = band.m_centerFrequency;
+        observation.m_lowFrequency = band.m_lowFrequency;
+        observation.m_highFrequency = band.m_highFrequency;
+        observation.m_weight = std::max(band.m_totalExcessPower, 1e-30);
+        observation.m_peakPower = band.m_framePeakPower;
+        observation.m_backgroundPower = band.m_backgroundPower;
+        observation.m_broadband = false;
+        addMeteorEventObservation(event, observation);
+    }
+
+    scheduleNextComponentFlush();
 }
 
 void MeteorDemodSink::updateSpectralEvents(const std::vector<SpectralBand>& bands, quint64 frameCenterSample)
@@ -731,9 +1001,9 @@ void MeteorDemodSink::finishSpectralEvent(const SpectralEvent& event)
         rememberSpectralInterference(candidate);
     }
 
-    auditSpectralCandidate(candidate);
-
-    if (!candidate.m_valid) {
+    if (!candidate.m_valid)
+    {
+        auditSpectralCandidate(candidate);
         return;
     }
 
@@ -792,7 +1062,9 @@ void MeteorDemodSink::finishSpectralEvent(const SpectralEvent& event)
                  << " displayEndSample:" << candidate.m_displayEndSample;
     }
 
-    if (!candidate.m_accepted) {
+    if (!candidate.m_accepted)
+    {
+        auditSpectralCandidate(candidate);
         return;
     }
 
@@ -820,8 +1092,12 @@ void MeteorDemodSink::finishSpectralEvent(const SpectralEvent& event)
     report.m_confidence = candidate.m_scoreMargin;
     report.m_componentSupportDB = candidate.m_integratedSupportDB;
     report.m_truncated = candidate.m_truncated;
+    report.m_spectralParentEligible = true;
 
-    emitOrDeferSpectralReport(report);
+    const AssociationResult association = emitOrDeferSpectralReport(report);
+    candidate.m_parentEventId = association.m_parentEventId;
+    candidate.m_associationDecision = association.m_decision;
+    auditSpectralCandidate(candidate);
 }
 
 bool MeteorDemodSink::isSweepContinuation(const SpectralCandidate& candidate) const
@@ -1192,7 +1468,29 @@ MeteorDemodSink::SpectralCandidate MeteorDemodSink::buildSpectralCandidate(const
         && (candidate.m_maxContrastDB >= m_detectorTunables.m_localizedTwoFrameMinContrastDB)
         && (candidate.m_integratedSupportDB >= 0.0)
         && (candidate.m_frequencyCoherence >= m_detectorTunables.m_twoFrameMinFrequencyCoherence);
-    candidate.m_enoughFrames = (count >= 3) || compactTwoFrameEcho || localizedWideTwoFrameEcho;
+    const bool coherentWideTwoFrameEcho = (count == 2)
+        && !recentCompatibleFragment
+        && (candidate.m_maxBandwidth
+            >= m_detectorTunables.m_coherentWideTwoFrameMinBandwidthRateFraction
+                * (double) m_settings.m_channelSampleRate)
+        && (candidate.m_maxBandwidth
+            <= m_detectorTunables.m_coherentWideTwoFrameMaxBandwidthRateFraction
+                * (double) m_settings.m_channelSampleRate)
+        && (candidate.m_frameOccupiedFraction
+            < m_detectorTunables.m_coherentWideTwoFrameMaxOccupiedFraction)
+        && (candidate.m_peakAboveBackgroundDB
+            >= m_detectorTunables.m_coherentWideTwoFrameMinPeakDB)
+        && (candidate.m_maxContrastDB
+            >= m_detectorTunables.m_coherentWideTwoFrameMinContrastDB)
+        && (candidate.m_integratedSupportDB
+            >= m_detectorTunables.m_coherentWideTwoFrameMinIntegratedSupportDB)
+        && (candidate.m_frequencyCoherence
+            >= m_detectorTunables.m_coherentWideTwoFrameMinFrequencyCoherence)
+        && (candidate.m_sweepScore < m_detectorTunables.m_driftSweepMinR2);
+    candidate.m_enoughFrames = (count >= 3)
+        || compactTwoFrameEcho
+        || localizedWideTwoFrameEcho
+        || coherentWideTwoFrameEcho;
     const bool exceptionalShortEcho = (candidate.m_peakAboveBackgroundDB >= 25.0)
         && (candidate.m_integratedSupportDB >= 15.0);
     const double spectralBinWidth = (double) std::max(1, m_settings.m_channelSampleRate)
@@ -2221,10 +2519,10 @@ void MeteorDemodSink::pruneRecentDetections()
     );
 }
 
-void MeteorDemodSink::emitOrDeferSpectralReport(const PulseReport& report)
+MeteorDemodSink::AssociationResult MeteorDemodSink::emitOrDeferSpectralReport(const PulseReport& report)
 {
     if (!report.m_valid) {
-        return;
+        return {};
     }
 
     PulseReport outputReport = reportWithRobustFrequency(report);
@@ -2234,7 +2532,7 @@ void MeteorDemodSink::emitOrDeferSpectralReport(const PulseReport& report)
     if ((durationMS < (double) m_settings.m_minDurationMS)
         || (durationMS > (double) m_settings.m_maxDurationMS))
     {
-        return;
+        return {0, QStringLiteral("duration-rejected")};
     }
 
     const double duplicateFrequencySpan = outputReport.m_duplicateFrequencySpan > 0.0
@@ -2247,16 +2545,23 @@ void MeteorDemodSink::emitOrDeferSpectralReport(const PulseReport& report)
         outputReport.m_centerFrequency,
         duplicateFrequencySpan))
     {
-        queueSpectralComponentReport(outputReport);
+        return queueSpectralComponentReport(outputReport);
     }
+
+    return {0, QStringLiteral("duplicate-rejected")};
 }
 
-void MeteorDemodSink::queueSpectralComponentReport(const PulseReport& report)
+MeteorDemodSink::AssociationResult MeteorDemodSink::queueSpectralComponentReport(const PulseReport& report)
 {
     const quint64 mergeGapSamples = (quint64) std::max(1, m_settings.m_channelSampleRate / 4);
+    const quint64 maxEvidenceGapSamples = (quint64) std::max(
+        1.0,
+        m_detectorTunables.m_continuationMaxEvidenceGapS
+            * (double) std::max(1, m_settings.m_channelSampleRate));
 
-    for (PulseReport& pending : m_pendingComponentReports)
+    for (ActiveMeteorEvent& event : m_activeMeteorEvents)
     {
+        PulseReport& pending = event.m_report;
         const quint64 gapSamples = report.m_endSample < pending.m_startSample
             ? pending.m_startSample - report.m_endSample
             : (report.m_startSample > pending.m_endSample ? report.m_startSample - pending.m_endSample : 0);
@@ -2264,12 +2569,21 @@ void MeteorDemodSink::queueSpectralComponentReport(const PulseReport& report)
         const double pendingSpan = std::max(std::fabs(pending.m_duplicateFrequencySpan), std::fabs(pending.m_frequencySpan));
         const bool broadTemporalDuplicate = (gapSamples == 0)
             && (std::max(reportSpan, pendingSpan) >= 0.20 * (double) std::max(1, m_settings.m_channelSampleRate));
+        const bool evidenceBridge = (gapSamples <= mergeGapSamples)
+            || ((report.m_startSample <= event.m_lastEvidenceSample + maxEvidenceGapSamples)
+                && (event.m_lastEvidenceSample >= event.m_lastComponentSample));
 
-        if ((!report.m_allowComponentMerge || !pending.m_allowComponentMerge) && !broadTemporalDuplicate) {
+        const bool hasSpectralPrimary = report.m_spectralParentEligible
+            || pending.m_spectralParentEligible;
+
+        if ((!report.m_allowComponentMerge || !pending.m_allowComponentMerge)
+            && !broadTemporalDuplicate
+            && !hasSpectralPrimary)
+        {
             continue;
         }
 
-        if ((gapSamples > mergeGapSamples)
+        if (!evidenceBridge
             || (!reportsFrequencyCompatible(report, pending) && !broadTemporalDuplicate))
         {
             continue;
@@ -2279,13 +2593,15 @@ void MeteorDemodSink::queueSpectralComponentReport(const PulseReport& report)
             && (report.m_confidence >= 0.0);
         const bool pendingHasClearlyBroaderMorphology = (pendingSpan > 1.75 * std::max(1.0, reportSpan))
             && (pending.m_confidence >= 0.0);
-        const bool reportIsPrimary = reportHasClearlyBroaderMorphology
+        const bool reportIsPrimary = (report.m_spectralParentEligible && !pending.m_spectralParentEligible)
+            || ((report.m_spectralParentEligible == pending.m_spectralParentEligible)
+                && (reportHasClearlyBroaderMorphology
             || (!pendingHasClearlyBroaderMorphology
                 && ((report.m_componentSupportDB > pending.m_componentSupportDB + 0.25)
                     || ((std::fabs(report.m_componentSupportDB - pending.m_componentSupportDB) <= 0.25)
                         && ((report.m_confidence > pending.m_confidence + 0.5)
                             || ((std::fabs(report.m_confidence - pending.m_confidence) <= 0.5)
-                                && (report.m_durationS > pending.m_durationS))))));
+                                && (report.m_durationS > pending.m_durationS))))))));
         const quint64 mergedStartSample = std::min(report.m_startSample, pending.m_startSample);
         const quint64 mergedEndSample = std::max(report.m_endSample, pending.m_endSample);
 
@@ -2309,10 +2625,30 @@ void MeteorDemodSink::queueSpectralComponentReport(const PulseReport& report)
         pending.m_durationS = (double) (mergedEndSample - mergedStartSample + 1)
             / (double) std::max(1, m_settings.m_channelSampleRate);
         pending.m_peakPower = std::max(pending.m_peakPower, report.m_peakPower);
-        pending.m_totalPower = std::max(pending.m_totalPower, report.m_totalPower);
+        pending.m_totalPower += report.m_totalPower;
         pending.m_confidence = std::max(pending.m_confidence, report.m_confidence);
         pending.m_componentSupportDB = std::max(pending.m_componentSupportDB, report.m_componentSupportDB);
         pending.m_truncated = pending.m_truncated || report.m_truncated;
+        pending.m_spectralParentEligible = pending.m_spectralParentEligible
+            || report.m_spectralParentEligible;
+        event.m_lastEvidenceSample = std::max(event.m_lastEvidenceSample, report.m_endSample);
+        event.m_lastComponentSample = std::max(event.m_lastComponentSample, report.m_endSample);
+        event.m_componentCount++;
+        event.m_spectralComponentCount += report.m_spectralParentEligible ? 1 : 0;
+        event.m_strong = event.m_strong
+            || (10.0 * std::log10(std::max(pending.m_peakPower, 1e-20)
+                / std::max(pending.m_backgroundPower, 1e-20))
+                >= m_detectorTunables.m_continuationStrongPeakDB);
+
+        MeteorEventObservation observation;
+        observation.m_sample = report.m_startSample + (report.m_endSample - report.m_startSample) / 2;
+        observation.m_centerFrequency = report.m_centerFrequency;
+        observation.m_lowFrequency = report.m_centerFrequency - 0.5 * report.m_frequencySpan;
+        observation.m_highFrequency = report.m_centerFrequency + 0.5 * report.m_frequencySpan;
+        observation.m_weight = std::max(report.m_peakPower - report.m_backgroundPower, 1e-20);
+        observation.m_peakPower = report.m_peakPower;
+        observation.m_backgroundPower = report.m_backgroundPower;
+        addMeteorEventObservation(event, observation);
 
         if (pending.m_hasDisplaySamples || report.m_hasDisplaySamples)
         {
@@ -2323,33 +2659,93 @@ void MeteorDemodSink::queueSpectralComponentReport(const PulseReport& report)
 
         scheduleNextComponentFlush();
 
-        return;
+        qDebug() << "MeteorDemodSink::queueSpectralComponentReport: attached component"
+                 << " parentEventId:" << event.m_id
+                 << " componentCount:" << event.m_componentCount
+                 << " gapSamples:" << gapSamples
+                 << " startSample:" << report.m_startSample
+                 << " endSample:" << report.m_endSample;
+        return {event.m_id, QStringLiteral("attached")};
     }
 
-    m_pendingComponentReports.push_back(report);
+    if ((int) m_activeMeteorEvents.size() >= m_detectorTunables.m_maxActiveMeteorEvents)
+    {
+        auto oldest = std::min_element(
+            m_activeMeteorEvents.begin(),
+            m_activeMeteorEvents.end(),
+            [](const ActiveMeteorEvent& left, const ActiveMeteorEvent& right) {
+                return left.m_lastEvidenceSample < right.m_lastEvidenceSample;
+            });
+
+        if (oldest != m_activeMeteorEvents.end())
+        {
+            finalizeActiveMeteorEvent(*oldest);
+            m_activeMeteorEvents.erase(oldest);
+        }
+    }
+
+    ActiveMeteorEvent event;
+    event.m_id = m_nextMeteorEventId++;
+    event.m_report = report;
+    event.m_lastEvidenceSample = report.m_endSample;
+    event.m_lastComponentSample = report.m_endSample;
+    event.m_componentCount = 1;
+    event.m_spectralComponentCount = report.m_spectralParentEligible ? 1 : 0;
+    event.m_strong = 10.0 * std::log10(std::max(report.m_peakPower, 1e-20)
+            / std::max(report.m_backgroundPower, 1e-20))
+        >= m_detectorTunables.m_continuationStrongPeakDB;
+
+    MeteorEventObservation observation;
+    observation.m_sample = report.m_startSample + (report.m_endSample - report.m_startSample) / 2;
+    observation.m_centerFrequency = report.m_centerFrequency;
+    observation.m_lowFrequency = report.m_centerFrequency - 0.5 * report.m_frequencySpan;
+    observation.m_highFrequency = report.m_centerFrequency + 0.5 * report.m_frequencySpan;
+    observation.m_weight = std::max(report.m_peakPower - report.m_backgroundPower, 1e-20);
+    observation.m_peakPower = report.m_peakPower;
+    observation.m_backgroundPower = report.m_backgroundPower;
+    addMeteorEventObservation(event, observation);
+    const quint64 parentEventId = event.m_id;
+    m_activeMeteorEvents.push_back(std::move(event));
     scheduleNextComponentFlush();
+
+    qDebug() << "MeteorDemodSink::queueSpectralComponentReport: created parent"
+             << " parentEventId:" << parentEventId
+             << " startSample:" << report.m_startSample
+             << " endSample:" << report.m_endSample;
+    return {parentEventId, QStringLiteral("created")};
 }
 
 void MeteorDemodSink::scheduleNextComponentFlush()
 {
     m_nextComponentFlushSample = std::numeric_limits<quint64>::max();
 
-    for (const PulseReport& report : m_pendingComponentReports)
+    const quint64 maxDurationSamples = (quint64) std::max(
+        1,
+        m_settings.m_maxDurationMS * std::max(1, m_settings.m_channelSampleRate) / 1000);
+
+    for (const ActiveMeteorEvent& event : m_activeMeteorEvents)
     {
+        const bool continuationEligible = event.m_report.m_spectralParentEligible
+            && ((event.m_spectralComponentCount >= 2) || (event.m_report.m_durationS >= 1.0));
+        const double holdS = !continuationEligible
+            ? 0.5
+            : (event.m_strong
+                ? m_detectorTunables.m_continuationStrongHoldS
+                : m_detectorTunables.m_continuationOrdinaryHoldS);
         const quint64 holdSamples = (quint64) std::max(
-            1,
-            report.m_allowComponentMerge
-                ? m_settings.m_channelSampleRate / 4
-                : m_settings.m_channelSampleRate / 2);
+            1.0,
+            holdS * (double) std::max(1, m_settings.m_channelSampleRate));
         m_nextComponentFlushSample = std::min(
             m_nextComponentFlushSample,
-            report.m_endSample + holdSamples);
+            std::min(
+                event.m_lastEvidenceSample + holdSamples,
+                event.m_report.m_startSample + maxDurationSamples));
     }
 }
 
 void MeteorDemodSink::flushPendingComponentReports(bool force)
 {
-    if (m_pendingComponentReports.empty())
+    if (m_activeMeteorEvents.empty())
     {
         m_nextComponentFlushSample = std::numeric_limits<quint64>::max();
         return;
@@ -2359,39 +2755,208 @@ void MeteorDemodSink::flushPendingComponentReports(bool force)
         return;
     }
 
-    std::vector<PulseReport> remainingReports;
-    std::sort(
-        m_pendingComponentReports.begin(),
-        m_pendingComponentReports.end(),
-        [](const PulseReport& left, const PulseReport& right) { return left.m_startSample < right.m_startSample; });
+    std::vector<ActiveMeteorEvent> remainingEvents;
 
     m_nextComponentFlushSample = std::numeric_limits<quint64>::max();
 
-    for (const PulseReport& report : m_pendingComponentReports)
-    {
-        const quint64 holdSamples = (quint64) std::max(
-            1,
-            report.m_allowComponentMerge
-                ? m_settings.m_channelSampleRate / 4
-                : m_settings.m_channelSampleRate / 2);
+    const quint64 maxDurationSamples = (quint64) std::max(
+        1,
+        m_settings.m_maxDurationMS * std::max(1, m_settings.m_channelSampleRate) / 1000);
 
-        if (!force && (m_sampleCounter <= report.m_endSample + holdSamples))
+    for (ActiveMeteorEvent& event : m_activeMeteorEvents)
+    {
+        const bool continuationEligible = event.m_report.m_spectralParentEligible
+            && ((event.m_spectralComponentCount >= 2) || (event.m_report.m_durationS >= 1.0));
+        const double holdS = !continuationEligible
+            ? 0.5
+            : (event.m_strong
+                ? m_detectorTunables.m_continuationStrongHoldS
+                : m_detectorTunables.m_continuationOrdinaryHoldS);
+        const quint64 holdSamples = (quint64) std::max(
+            1.0,
+            holdS * (double) std::max(1, m_settings.m_channelSampleRate));
+        const bool durationLimitReached = event.m_lastEvidenceSample
+            >= event.m_report.m_startSample + maxDurationSamples;
+
+        if (!force
+            && !durationLimitReached
+            && (m_sampleCounter <= event.m_lastEvidenceSample + holdSamples))
         {
-            remainingReports.push_back(report);
+            remainingEvents.push_back(std::move(event));
             continue;
         }
 
-        const double duplicateFrequencySpan = report.m_duplicateFrequencySpan > 0.0
-            ? report.m_duplicateFrequencySpan
-            : report.m_frequencySpan;
+        if (durationLimitReached)
+        {
+            event.m_report.m_endSample = clipDetectionEndSample(
+                event.m_report.m_startSample,
+                event.m_report.m_endSample,
+                maxDurationSamples,
+                event.m_report.m_truncated);
+            event.m_report.m_displayEndSample = event.m_report.m_endSample;
+        }
 
-        if (!isDuplicateDetection(report.m_startSample, report.m_endSample, report.m_centerFrequency, duplicateFrequencySpan)) {
-            emitDetectionReport(report, "spectral-component");
+        finalizeActiveMeteorEvent(event);
+    }
+
+    m_activeMeteorEvents.swap(remainingEvents);
+    scheduleNextComponentFlush();
+}
+
+quint64 MeteorDemodSink::clipDetectionEndSample(
+    quint64 startSample,
+    quint64 endSample,
+    quint64 maximumDurationSamples,
+    bool& truncated)
+{
+    maximumDurationSamples = std::max<quint64>(1, maximumDurationSamples);
+    const quint64 maximumEndSample = startSample + maximumDurationSamples - 1;
+    truncated = endSample > maximumEndSample;
+    return truncated ? maximumEndSample : std::max(startSample, endSample);
+}
+
+void MeteorDemodSink::updateReportFromActiveMeteorEvent(ActiveMeteorEvent& event) const
+{
+    PulseReport& report = event.m_report;
+    report.m_endSample = std::max(report.m_startSample, report.m_endSample);
+    report.m_dateTimeUtc = sampleCounterToDateTimeUtc(report.m_startSample);
+    report.m_durationS = (double) (report.m_endSample - report.m_startSample + 1)
+        / (double) std::max(1, m_settings.m_channelSampleRate);
+    report.m_hasDisplaySamples = true;
+    report.m_displayStartSample = report.m_startSample;
+    report.m_displayEndSample = report.m_endSample;
+
+    if (report.m_spectralParentEligible && (event.m_spectralComponentCount > 1))
+    {
+        const double acceptedCoreSpan = std::max({
+            std::fabs(report.m_frequencySpan),
+            std::fabs(report.m_reportFrequencySpan),
+            std::fabs(report.m_robustFrequencySpan)});
+        std::vector<double> centers;
+        std::vector<double> lows;
+        std::vector<double> highs;
+        std::vector<double> weights;
+        const double maxPersistentBandwidth = m_detectorTunables.m_stableBandwidthRateFraction
+            * (double) std::max(1, m_settings.m_channelSampleRate);
+
+        for (const MeteorEventObservation& observation : event.m_observations)
+        {
+            if (observation.m_broadband
+                || ((observation.m_highFrequency - observation.m_lowFrequency) > maxPersistentBandwidth))
+            {
+                continue;
+            }
+
+            centers.push_back(observation.m_centerFrequency);
+            lows.push_back(observation.m_lowFrequency);
+            highs.push_back(observation.m_highFrequency);
+            weights.push_back(std::max(observation.m_weight, 1e-30));
+        }
+
+        if (!centers.empty())
+        {
+            const double center = weightedQuantile(
+                centers,
+                weights,
+                0.5,
+                report.m_centerFrequency);
+            const double low = weightedQuantile(
+                lows,
+                weights,
+                m_detectorTunables.m_parentFrequencyLowQuantile,
+                center - 0.5 * report.m_frequencySpan);
+            const double high = weightedQuantile(
+                highs,
+                weights,
+                m_detectorTunables.m_parentFrequencyHighQuantile,
+                center + 0.5 * report.m_frequencySpan);
+            const double binWidth = (double) std::max(1, m_settings.m_channelSampleRate)
+                / (double) std::max(1, m_spectralFrameSize);
+            const double span = std::max({binWidth, high - low, acceptedCoreSpan});
+
+            double drift = report.m_frequencyDrift;
+
+            if (centers.size() >= 4)
+            {
+                const int edgeCount = std::max(1, (int) centers.size() / 4);
+                const double firstFrequency = weightedQuantile(
+                    centers,
+                    weights,
+                    0,
+                    edgeCount,
+                    0.5,
+                    centers.front());
+                const double lastFrequency = weightedQuantile(
+                    centers,
+                    weights,
+                    (int) centers.size() - edgeCount,
+                    (int) centers.size(),
+                    0.5,
+                    centers.back());
+                drift = std::clamp(lastFrequency - firstFrequency, -span, span);
+            }
+
+            report.m_centerFrequency = center;
+            report.m_frequencySpan = span;
+            report.m_frequencyDrift = drift;
+            report.m_reportFrequencySpan = span;
+            report.m_duplicateFrequencySpan = span;
+            report.m_hasRobustFrequency = true;
+            report.m_robustCenterFrequency = center;
+            report.m_robustFrequencySpan = span;
+            report.m_robustFrequencyDrift = drift;
         }
     }
 
-    m_pendingComponentReports.swap(remainingReports);
-    scheduleNextComponentFlush();
+}
+
+void MeteorDemodSink::finalizeActiveMeteorEvent(ActiveMeteorEvent& event)
+{
+    updateReportFromActiveMeteorEvent(event);
+    PulseReport& report = event.m_report;
+    const double durationMS = 1000.0 * report.m_durationS;
+
+    qDebug() << "MeteorDemodSink::finalizeActiveMeteorEvent:"
+             << " parentEventId:" << event.m_id
+             << " components:" << event.m_componentCount
+             << " spectralComponents:" << event.m_spectralComponentCount
+             << " observations:" << event.m_observations.size()
+             << " extendedByContinuation:" << event.m_extendedByContinuation
+             << " durationS:" << report.m_durationS
+             << " centerFrequency:" << report.m_centerFrequency
+             << " frequencySpan:" << report.m_frequencySpan
+             << " frequencyDrift:" << report.m_frequencyDrift
+             << " truncated:" << report.m_truncated;
+
+    if ((durationMS < (double) m_settings.m_minDurationMS)
+        || (durationMS > (double) m_settings.m_maxDurationMS + 1.0))
+    {
+        return;
+    }
+
+    const double duplicateFrequencySpan = report.m_duplicateFrequencySpan > 0.0
+        ? report.m_duplicateFrequencySpan
+        : report.m_frequencySpan;
+
+    if (!isDuplicateDetection(
+        report.m_startSample,
+        report.m_endSample,
+        report.m_centerFrequency,
+        duplicateFrequencySpan))
+    {
+        if (m_diagnosticCaptureCallback)
+        {
+            ComplexVector samples;
+
+            if (copyDetectionSamples(report.m_startSample, report.m_endSample, samples)) {
+                m_diagnosticCaptureCallback(event.m_id, report, samples);
+            }
+        }
+
+        emitDetectionReport(
+            report,
+            report.m_spectralParentEligible ? "spectral-parent" : "power-parent");
+    }
 }
 
 MeteorDemodSink::PulseReport MeteorDemodSink::reportWithRobustFrequency(const PulseReport& report) const
@@ -2755,7 +3320,8 @@ void MeteorDemodSink::emitDetectionReport(const PulseReport& report, const char 
         return;
     }
 
-    if (overlapsBroadbandInterference(report.m_startSample, report.m_endSample))
+    if ((QString::fromLatin1(source) != QStringLiteral("spectral-parent"))
+        && overlapsBroadbandInterference(report.m_startSample, report.m_endSample))
     {
         qDebug() << "MeteorDemodSink::emitDetectionReport: broadband-contaminated report suppressed"
                  << " source:" << source
@@ -3067,7 +3633,8 @@ void MeteorDemodSink::configureSpectralDetector()
     m_spectralNoiseFloor.clear();
     m_spectralCalibrationFrames.clear();
     m_spectralEvents.clear();
-    m_pendingComponentReports.clear();
+    m_activeMeteorEvents.clear();
+    m_nextMeteorEventId = 1;
     m_nextComponentFlushSample = std::numeric_limits<quint64>::max();
     m_spectralNoiseFloorInitialized = false;
     configureDetectionHistory();
@@ -3106,7 +3673,8 @@ void MeteorDemodSink::resetDetector()
     m_spectralEvents.clear();
     m_recentDetectionRanges.clear();
     m_recentSpectralInterference.clear();
-    m_pendingComponentReports.clear();
+    m_activeMeteorEvents.clear();
+    m_nextMeteorEventId = 1;
     m_spectralNoiseFloorInitialized = false;
 }
 

@@ -21,6 +21,7 @@
 #include <limits>
 
 #include "settings/serializable.h"
+#include "util/astronomy.h"
 #include "util/simpleserializer.h"
 
 #include "schedulersettings.h"
@@ -40,11 +41,35 @@ bool SchedulerSettings::isAfterDateUntil(const SchedulerSettings::ScheduleRule& 
     return rule.m_dateUntil.isValid() && candidate.isValid() && (candidate.date() > rule.m_dateUntil);
 }
 
-QDateTime SchedulerSettings::monthlyDateTime(const QDate& baseDate, const QTime& time, int monthOffset)
+QDate SchedulerSettings::monthlyDate(const QDate& baseDate, int monthOffset)
 {
     const QDate monthDate = QDate(baseDate.year(), baseDate.month(), 1).addMonths(monthOffset);
     const int day = qMin(baseDate.day(), monthDate.daysInMonth());
-    return QDateTime(QDate(monthDate.year(), monthDate.month(), day), time);
+    return QDate(monthDate.year(), monthDate.month(), day);
+}
+
+QDateTime SchedulerSettings::scheduledDateTime(
+    TriggerType triggerType,
+    const QDate& date,
+    const QTime& time,
+    double latitude,
+    double longitude)
+{
+    if (triggerType == TriggerTime) {
+        return QDateTime(date, time);
+    }
+
+    QDateTime sunrise;
+    QDateTime sunset;
+    Astronomy::sunrise(date, latitude, longitude, sunrise, sunset);
+    const QDateTime result = triggerType == TriggerSunrise ? sunrise : sunset;
+
+    // The astronomy calculation can produce NaN at latitudes with no rise/set.
+    if (!result.isValid() || (qAbs(date.daysTo(result.toLocalTime().date())) > 1)) {
+        return QDateTime();
+    }
+
+    return result;
 }
 
 QDataStream& operator<<(QDataStream& out, const SchedulerSettings::SettingValue& setting)
@@ -522,14 +547,32 @@ QString SchedulerSettings::newRuleId()
     return QUuid::createUuid().toString(QUuid::WithoutBraces);
 }
 
-QDateTime SchedulerSettings::nextDateTime(const ScheduleRule& rule, const QDateTime& after)
+bool SchedulerSettings::isTimeTrigger(TriggerType triggerType)
 {
-    if (!rule.m_time.isValid()) {
+    return (triggerType == TriggerTime) ||
+        (triggerType == TriggerSunrise) ||
+        (triggerType == TriggerSunset);
+}
+
+QDateTime SchedulerSettings::nextDateTime(
+    const ScheduleRule& rule,
+    const QDateTime& after,
+    double latitude,
+    double longitude)
+{
+    if (!rule.m_time.isValid() || !isTimeTrigger(rule.m_triggerType)) {
         return QDateTime();
     }
 
-    if (rule.m_recurrence == RecurrenceOnce) {
-        return (rule.m_time > after) && !isAfterDateUntil(rule, rule.m_time) ? rule.m_time : QDateTime();
+    if (rule.m_recurrence == RecurrenceOnce)
+    {
+        const QDateTime candidate = scheduledDateTime(
+            rule.m_triggerType,
+            rule.m_time.date(),
+            rule.m_time.time(),
+            latitude,
+            longitude);
+        return (candidate > after) && !isAfterDateUntil(rule, candidate) ? candidate : QDateTime();
     }
 
     if (rule.m_recurrence == RecurrenceDaily)
@@ -538,18 +581,31 @@ QDateTime SchedulerSettings::nextDateTime(const ScheduleRule& rule, const QDateT
             return QDateTime();
         }
 
-        qint64 days = rule.m_time.daysTo(after);
-        if (days < 0) {
-            days = 0;
-        }
-        QDateTime candidate = rule.m_time.addDays(days);
-        while ((candidate <= after) || !weekdayMaskMatches(rule.m_weekdayMask, candidate.date())) {
-            candidate = candidate.addDays(1);
-            if (isAfterDateUntil(rule, candidate)) {
+        QDate candidateDate = after.date() < rule.m_time.date() ? rule.m_time.date() : after.date();
+
+        for (int dayOffset = 0; dayOffset < 370; ++dayOffset)
+        {
+            if (rule.m_dateUntil.isValid() && (candidateDate > rule.m_dateUntil)) {
                 return QDateTime();
             }
+
+            if (weekdayMaskMatches(rule.m_weekdayMask, candidateDate))
+            {
+                const QDateTime candidate = scheduledDateTime(
+                    rule.m_triggerType,
+                    candidateDate,
+                    rule.m_time.time(),
+                    latitude,
+                    longitude);
+                if (candidate.isValid() && (candidate > after)) {
+                    return candidate;
+                }
+            }
+
+            candidateDate = candidateDate.addDays(1);
         }
-        return isAfterDateUntil(rule, candidate) ? QDateTime() : candidate;
+
+        return QDateTime();
     }
 
     if (rule.m_recurrence == RecurrenceMonthly)
@@ -563,14 +619,42 @@ QDateTime SchedulerSettings::nextDateTime(const ScheduleRule& rule, const QDateT
 
         for (int offset = qMax(0, months - 1); offset < months + 24; ++offset)
         {
-            QDateTime candidate = monthlyDateTime(baseDate, rule.m_time.time(), offset);
+            const QDate candidateDate = monthlyDate(baseDate, offset);
+            const QDateTime candidate = scheduledDateTime(
+                rule.m_triggerType,
+                candidateDate,
+                rule.m_time.time(),
+                latitude,
+                longitude);
             if (isAfterDateUntil(rule, candidate)) {
                 return QDateTime();
             }
-            if (candidate > after) {
+            if (candidate.isValid() && (candidate > after)) {
                 return candidate;
             }
         }
+    }
+
+    return QDateTime();
+}
+
+QDateTime SchedulerSettings::nextSunset(const QDateTime& after, double latitude, double longitude)
+{
+    QDate date = after.date();
+
+    for (int dayOffset = 0; dayOffset < 370; ++dayOffset)
+    {
+        const QDateTime sunset = scheduledDateTime(
+            TriggerSunset,
+            date,
+            QTime(),
+            latitude,
+            longitude);
+        if (sunset.isValid() && (sunset > after)) {
+            return sunset;
+        }
+
+        date = date.addDays(1);
     }
 
     return QDateTime();
@@ -591,6 +675,10 @@ int SchedulerSettings::delaySeconds(const ScheduleRule& rule)
 
 int SchedulerSettings::durationSeconds(const ScheduleRule& rule)
 {
+    if (rule.m_durationUnit == DelayUntilSunset) {
+        return 0;
+    }
+
     qint64 duration = qMax<qint64>(0, rule.m_duration);
 
     if (rule.m_durationUnit == DelayMinutes) {

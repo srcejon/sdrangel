@@ -19,6 +19,7 @@
 #include <QProcess>
 #include <QRegularExpression>
 #include <limits>
+#include <utility>
 
 #include "SWGDeviceState.h"
 #include "SWGFeatureSettings.h"
@@ -30,6 +31,7 @@
 #include "SWGSchedulerSettings.h"
 
 #include "channel/channelwebapiutils.h"
+#include "device/deviceapi.h"
 #include "device/deviceset.h"
 #include "feature/featureset.h"
 #include "feature/featurewebapiutils.h"
@@ -44,6 +46,9 @@
 MESSAGE_CLASS_DEFINITION(Scheduler::MsgConfigureScheduler, Message)
 
 namespace {
+
+constexpr int deviceStartPollIntervalMs = 100;
+constexpr int deviceStartMaxPollCount = 100;
 
 QDate schedulerDateFromString(const QString *text)
 {
@@ -774,8 +779,9 @@ void Scheduler::executeRuleActions(const SchedulerSettings::ScheduleRule& rule, 
         presetLoaded |= loadPreset(action.m_deviceSetIndex, action.m_presetGroup, action.m_presetFrequency, action.m_presetDescription);
     }
 
-    const auto executeActions = [this, rule, context, deviceActions, channelActions, featureActions]() {
-        executeDeviceActions(deviceActions);
+    const QString ruleId = rule.m_id;
+    const QByteArray state = ruleState(rule);
+    const auto executeRemainingActions = [this, rule, context, channelActions, featureActions]() {
         executeChannelActions(channelActions);
         executeFeatureActions(featureActions);
         executeCommand(rule.m_command, rule, context);
@@ -796,6 +802,9 @@ void Scheduler::executeRuleActions(const SchedulerSettings::ScheduleRule& rule, 
                 executeDurationStopsByRuleId(ruleId, state);
             });
         }
+    };
+    const auto executeActions = [this, deviceActions, ruleId, state, executeRemainingActions]() {
+        executeDeviceActions(deviceActions, ruleId, state, executeRemainingActions);
     };
 
     if (presetLoaded)
@@ -832,7 +841,11 @@ void Scheduler::executeDurationStopsByRuleId(const QString& ruleId, const QByteA
     qDebug() << "Scheduler::executeDurationStopsByRuleId: skipped deleted rule" << ruleId;
 }
 
-void Scheduler::executeDeviceActions(const QList<SchedulerSettings::DeviceSetAction>& actions)
+void Scheduler::executeDeviceActions(
+    const QList<SchedulerSettings::DeviceSetAction>& actions,
+    const QString& ruleId,
+    const QByteArray& state,
+    std::function<void()> completion)
 {
     for (const SchedulerSettings::DeviceSetAction& action : actions)
     {
@@ -864,14 +877,95 @@ void Scheduler::executeDeviceActions(const QList<SchedulerSettings::DeviceSetAct
         }
     }
 
-    for (const SchedulerSettings::DeviceSetAction& action : actions)
+    executeFileSinkActions(actions, 0, 0, ruleId, state, std::move(completion));
+}
+
+void Scheduler::executeFileSinkActions(
+    const QList<SchedulerSettings::DeviceSetAction>& actions,
+    int actionIndex,
+    int waitCount,
+    const QString& ruleId,
+    const QByteArray& state,
+    std::function<void()> completion)
+{
+    if ((waitCount > 0) && !isRuleCurrentAndEnabled(ruleId, state))
     {
-        if (action.m_fileSinkAction == SchedulerSettings::ActionStart) {
-            ChannelWebAPIUtils::startStopFileSinks(action.m_deviceSetIndex, true);
-        } else if (action.m_fileSinkAction == SchedulerSettings::ActionStop) {
-            ChannelWebAPIUtils::startStopFileSinks(action.m_deviceSetIndex, false);
-        }
+        qDebug() << "Scheduler::executeFileSinkActions: skipped stale rule" << ruleId;
+        return;
     }
+
+    if (actionIndex >= actions.size())
+    {
+        completion();
+        return;
+    }
+
+    const SchedulerSettings::DeviceSetAction& action = actions[actionIndex];
+    if (action.m_fileSinkAction == SchedulerSettings::ActionNoChange)
+    {
+        executeFileSinkActions(actions, actionIndex + 1, 0, ruleId, state, std::move(completion));
+        return;
+    }
+
+    if (action.m_fileSinkAction == SchedulerSettings::ActionStop)
+    {
+        ChannelWebAPIUtils::startStopFileSinks(action.m_deviceSetIndex, false);
+        executeFileSinkActions(actions, actionIndex + 1, 0, ruleId, state, std::move(completion));
+        return;
+    }
+
+    MainCore *mainCore = MainCore::instance();
+    const std::vector<DeviceSet*>& deviceSets = mainCore->getDeviceSets();
+    if ((action.m_deviceSetIndex < 0) || (action.m_deviceSetIndex >= (int) deviceSets.size()))
+    {
+        qWarning() << "Scheduler::executeFileSinkActions: no device set" << action.m_deviceSetIndex;
+        executeFileSinkActions(actions, actionIndex + 1, 0, ruleId, state, std::move(completion));
+        return;
+    }
+
+    DeviceAPI *deviceAPI = deviceSets[action.m_deviceSetIndex]->m_deviceAPI;
+    if (!deviceAPI)
+    {
+        qWarning() << "Scheduler::executeFileSinkActions: device set has no device API" << action.m_deviceSetIndex;
+        executeFileSinkActions(actions, actionIndex + 1, 0, ruleId, state, std::move(completion));
+        return;
+    }
+
+    const DeviceAPI::EngineState engineState = deviceAPI->state();
+    if (engineState == DeviceAPI::StRunning)
+    {
+        ChannelWebAPIUtils::startStopFileSinks(action.m_deviceSetIndex, true);
+        executeFileSinkActions(actions, actionIndex + 1, 0, ruleId, state, std::move(completion));
+        return;
+    }
+
+    if (action.m_acquisitionAction != SchedulerSettings::ActionStart)
+    {
+        qWarning() << "Scheduler::executeFileSinkActions: device set is not running" << action.m_deviceSetIndex;
+        executeFileSinkActions(actions, actionIndex + 1, 0, ruleId, state, std::move(completion));
+        return;
+    }
+
+    if ((engineState == DeviceAPI::StError) || (waitCount >= deviceStartMaxPollCount))
+    {
+        qWarning() << "Scheduler::executeFileSinkActions: device set" << action.m_deviceSetIndex
+                   << (engineState == DeviceAPI::StError ? "failed to start" : "did not start before timeout");
+        executeFileSinkActions(actions, actionIndex + 1, 0, ruleId, state, std::move(completion));
+        return;
+    }
+
+    QTimer::singleShot(
+        deviceStartPollIntervalMs,
+        this,
+        [this, actions, actionIndex, waitCount, ruleId, state, completion = std::move(completion)]() mutable {
+            executeFileSinkActions(
+                actions,
+                actionIndex,
+                waitCount + 1,
+                ruleId,
+                state,
+                std::move(completion));
+        });
 }
 
 void Scheduler::executeChannelActions(const QList<SchedulerSettings::ChannelAction>& actions)
@@ -1140,6 +1234,18 @@ QByteArray Scheduler::ruleState(const SchedulerSettings::ScheduleRule& rule)
 
     settings.m_rules.append(rule);
     return settings.serialize();
+}
+
+bool Scheduler::isRuleCurrentAndEnabled(const QString& ruleId, const QByteArray& state) const
+{
+    for (const SchedulerSettings::ScheduleRule& rule : m_settings.m_rules)
+    {
+        if (rule.m_id == ruleId) {
+            return rule.m_enabled && (ruleState(rule) == state);
+        }
+    }
+
+    return false;
 }
 
 bool Scheduler::parseFrequency(const QString& text, double& frequencyInHz)

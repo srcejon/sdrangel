@@ -21,6 +21,7 @@
 #include <QMap>
 #include <QTimer>
 #include <QByteArray>
+#include <functional>
 
 #ifdef QT_TEXTTOSPEECH_FOUND
 #include <QTextToSpeech>
@@ -139,7 +140,18 @@ private:
     void executeRule(SchedulerSettings::ScheduleRule& rule, const ExecutionContext& context);
     void executeRuleActions(const SchedulerSettings::ScheduleRule& rule, const ExecutionContext& context);
     void executeDurationStopsByRuleId(const QString& ruleId, const QByteArray& ruleState);
-    void executeDeviceActions(const QList<SchedulerSettings::DeviceSetAction>& actions);
+    void executeDeviceActions(
+        const QList<SchedulerSettings::DeviceSetAction>& actions,
+        const QString& ruleId,
+        const QByteArray& ruleState,
+        std::function<void()> completion);
+    void executeFileSinkActions(
+        const QList<SchedulerSettings::DeviceSetAction>& actions,
+        int actionIndex,
+        int waitCount,
+        const QString& ruleId,
+        const QByteArray& ruleState,
+        std::function<void()> completion);
     void executeChannelActions(const QList<SchedulerSettings::ChannelAction>& actions);
     void executeFeatureActions(const QList<SchedulerSettings::FeatureAction>& actions);
     void executeDeviceDurationStops(const QList<SchedulerSettings::DeviceSetAction>& actions);
@@ -148,6 +160,7 @@ private:
     static QDateTime schedulerDateTimeFromString(const QString *text);
     static QString schedulerDateTimeToString(const QDateTime& dateTime);
     static QByteArray ruleState(const SchedulerSettings::ScheduleRule& rule);
+    bool isRuleCurrentAndEnabled(const QString& ruleId, const QByteArray& state) const;
     static bool parseFrequency(const QString& text, double& frequencyInHz);
     static QMap<QString, QString> parseEventDataFields(const QString& data);
     static bool patchDeviceSetting(int deviceSetIndex, const SchedulerSettings::SettingValue& setting);

@@ -1069,24 +1069,39 @@ bool ChannelWebAPIUtils::startStopFileSinks(unsigned int deviceIndex, bool start
     int channelIndex = 0;
     while(nullptr != (channel = mainCore->getChannel(deviceIndex, channelIndex)))
     {
+        QStringList channelActionKeys = {"record"};
+        SWGSDRangel::SWGChannelActions channelActions;
+        QString errorResponse;
+        int httpRC;
+
         if (ChannelUtils::compareChannelURIs(channel->getURI(), "sdrangel.channel.filesink"))
         {
-            QStringList channelActionKeys = {"record"};
-            SWGSDRangel::SWGChannelActions channelActions;
             SWGSDRangel::SWGFileSinkActions *fileSinkAction = new SWGSDRangel::SWGFileSinkActions();
-            QString errorResponse;
-            int httpRC;
 
-            fileSinkAction->setRecord(start);
+            fileSinkAction->setRecord(start ? 1 : 0);
             channelActions.setFileSinkActions(fileSinkAction);
-            httpRC = channel->webapiActionsPost(channelActionKeys, channelActions, errorResponse);
-            if (httpRC/100 != 2)
-            {
-                qWarning("ChannelWebAPIUtils::startStopFileSinks: webapiActionsPost error %d: %s",
-                    httpRC, qPrintable(errorResponse));
-                return false;
-            }
         }
+        else if (ChannelUtils::compareChannelURIs(channel->getURI(), "sdrangel.channel.sigmffilesink"))
+        {
+            SWGSDRangel::SWGSigMFFileSinkActions *fileSinkAction = new SWGSDRangel::SWGSigMFFileSinkActions();
+
+            fileSinkAction->setRecord(start ? 1 : 0);
+            channelActions.setSigMfFileSinkActions(fileSinkAction);
+        }
+        else
+        {
+            channelIndex++;
+            continue;
+        }
+
+        httpRC = channel->webapiActionsPost(channelActionKeys, channelActions, errorResponse);
+        if (httpRC/100 != 2)
+        {
+            qWarning("ChannelWebAPIUtils::startStopFileSinks: webapiActionsPost error %d: %s",
+                httpRC, qPrintable(errorResponse));
+            return false;
+        }
+
         channelIndex++;
     }
     return true;

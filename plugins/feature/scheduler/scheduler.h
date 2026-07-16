@@ -139,6 +139,10 @@ private:
     void executeRuleById(const QString& ruleId, const ExecutionContext& context);
     void executeRule(SchedulerSettings::ScheduleRule& rule, const ExecutionContext& context);
     void executeRuleActions(const SchedulerSettings::ScheduleRule& rule, const ExecutionContext& context);
+    void scheduleDurationStopByRuleId(
+        const QString& ruleId,
+        const QByteArray& ruleState,
+        const QDateTime& stopAt);
     void executeDurationStopsByRuleId(const QString& ruleId, const QByteArray& ruleState);
     void executeDeviceActions(
         const QList<SchedulerSettings::DeviceSetAction>& actions,

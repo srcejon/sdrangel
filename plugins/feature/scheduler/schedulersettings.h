@@ -32,7 +32,9 @@ struct SchedulerSettings
     enum TriggerType
     {
         TriggerTime = 0,
-        TriggerEvent = 1
+        TriggerEvent = 1,
+        TriggerSunrise,
+        TriggerSunset
     };
 
     enum Recurrence
@@ -69,7 +71,8 @@ struct SchedulerSettings
     {
         DelaySeconds = 0,
         DelayMinutes,
-        DelayHours
+        DelayHours,
+        DelayUntilSunset
     };
 
     enum SettingValueType
@@ -183,7 +186,13 @@ struct SchedulerSettings
     void setRollupState(Serializable *rollupState) { m_rollupState = rollupState; }
 
     static QString newRuleId();
-    static QDateTime nextDateTime(const ScheduleRule& rule, const QDateTime& after);
+    static bool isTimeTrigger(TriggerType triggerType);
+    static QDateTime nextDateTime(
+        const ScheduleRule& rule,
+        const QDateTime& after,
+        double latitude,
+        double longitude);
+    static QDateTime nextSunset(const QDateTime& after, double latitude, double longitude);
     static int delaySeconds(const ScheduleRule& rule);
     static int durationSeconds(const ScheduleRule& rule);
 
@@ -192,7 +201,13 @@ private:
     static int weekdayBit(const QDate& date);
     static bool weekdayMaskMatches(int weekdayMask, const QDate& date);
     static bool isAfterDateUntil(const ScheduleRule& rule, const QDateTime& candidate);
-    static QDateTime monthlyDateTime(const QDate& baseDate, const QTime& time, int monthOffset);
+    static QDate monthlyDate(const QDate& baseDate, int monthOffset);
+    static QDateTime scheduledDateTime(
+        TriggerType triggerType,
+        const QDate& date,
+        const QTime& time,
+        double latitude,
+        double longitude);
 };
 
 #endif // INCLUDE_FEATURE_SCHEDULERSETTINGS_H_

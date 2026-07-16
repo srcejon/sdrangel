@@ -38,6 +38,7 @@
 #include "maincore.h"
 #include "settings/serializable.h"
 #include "settings/mainsettings.h"
+#include "settings/preferences.h"
 #include "settings/preset.h"
 #include "util/messagequeue.h"
 
@@ -146,6 +147,18 @@ Scheduler::Scheduler(WebAPIAdapterInterface *webAPIAdapterInterface) :
 
     connect(&m_timer, &QTimer::timeout, this, &Scheduler::processDueRules);
     m_timer.start(1000);
+
+    connect(
+        &MainCore::instance()->getSettings(),
+        &MainSettings::preferenceChanged,
+        this,
+        [this](int preference) {
+            if ((preference == Preferences::Latitude) || (preference == Preferences::Longitude))
+            {
+                rebuildNextRuns();
+                notifyGUI(QStringList({QStringLiteral("rules")}));
+            }
+        });
 
     connect(
         &m_eventSourceHandler,
@@ -556,8 +569,14 @@ void Scheduler::rebuildNextRuns()
 
 void Scheduler::updateNextRun(const SchedulerSettings::ScheduleRule& rule, const QDateTime& after)
 {
-    if ((rule.m_triggerType == SchedulerSettings::TriggerTime) && rule.m_enabled) {
-        m_nextRuns[rule.m_id] = SchedulerSettings::nextDateTime(rule, after);
+    if (SchedulerSettings::isTimeTrigger(rule.m_triggerType) && rule.m_enabled)
+    {
+        const MainSettings& settings = MainCore::instance()->getSettings();
+        m_nextRuns[rule.m_id] = SchedulerSettings::nextDateTime(
+            rule,
+            after,
+            settings.getLatitude(),
+            settings.getLongitude());
     } else {
         m_nextRuns.remove(rule.m_id);
     }
@@ -570,7 +589,7 @@ void Scheduler::processDueRules()
 
     for (SchedulerSettings::ScheduleRule& rule : m_settings.m_rules)
     {
-        if (!rule.m_enabled || (rule.m_triggerType != SchedulerSettings::TriggerTime)) {
+        if (!rule.m_enabled || !SchedulerSettings::isTimeTrigger(rule.m_triggerType)) {
             continue;
         }
 
@@ -582,7 +601,13 @@ void Scheduler::processDueRules()
         if (nextRun.isValid() && (nextRun <= now))
         {
             ExecutionContext context;
-            context.m_trigger = QStringLiteral("time");
+            if (rule.m_triggerType == SchedulerSettings::TriggerSunrise) {
+                context.m_trigger = QStringLiteral("sunrise");
+            } else if (rule.m_triggerType == SchedulerSettings::TriggerSunset) {
+                context.m_trigger = QStringLiteral("sunset");
+            } else {
+                context.m_trigger = QStringLiteral("time");
+            }
             context.m_dateTime = nextRun;
             context.m_eventType = -1;
             executeRule(rule, context);
@@ -787,20 +812,35 @@ void Scheduler::executeRuleActions(const SchedulerSettings::ScheduleRule& rule, 
         executeCommand(rule.m_command, rule, context);
         saySpeech(rule.m_speech, rule, context);
 
-        const int durationSeconds = SchedulerSettings::durationSeconds(rule);
-        if (durationSeconds > 0)
-        {
-            const int durationMs = timerDelayMs(
-                rule.m_duration,
-                rule.m_durationUnit,
-                QStringLiteral("duration"),
-                rule.m_name);
-            const QString ruleId = rule.m_id;
-            const QByteArray state = ruleState(rule);
+        const QDateTime durationStart = QDateTime::currentDateTime();
+        QDateTime stopAt;
 
-            QTimer::singleShot(durationMs, this, [this, ruleId, state]() {
-                executeDurationStopsByRuleId(ruleId, state);
-            });
+        if (rule.m_durationUnit == SchedulerSettings::DelayUntilSunset)
+        {
+            const MainSettings& settings = MainCore::instance()->getSettings();
+            stopAt = SchedulerSettings::nextSunset(
+                durationStart,
+                settings.getLatitude(),
+                settings.getLongitude());
+
+            if (!stopAt.isValid()) {
+                qWarning() << "Scheduler::executeRuleActions: unable to determine next sunset for rule" << rule.m_name;
+            }
+        }
+        else
+        {
+            const int durationSeconds = SchedulerSettings::durationSeconds(rule);
+            if (durationSeconds > 0) {
+                stopAt = durationStart.addSecs(durationSeconds);
+            }
+        }
+
+        if (stopAt.isValid())
+        {
+            scheduleDurationStopByRuleId(
+                rule.m_id,
+                ruleState(rule),
+                stopAt);
         }
     };
     const auto executeActions = [this, deviceActions, ruleId, state, executeRemainingActions]() {
@@ -815,6 +855,30 @@ void Scheduler::executeRuleActions(const SchedulerSettings::ScheduleRule& rule, 
     {
         executeActions();
     }
+}
+
+void Scheduler::scheduleDurationStopByRuleId(
+    const QString& ruleId,
+    const QByteArray& state,
+    const QDateTime& stopAt)
+{
+    if (!isRuleCurrentAndEnabled(ruleId, state)) {
+        return;
+    }
+
+    const qint64 remainingMs = QDateTime::currentDateTime().msecsTo(stopAt);
+    if (remainingMs <= 0)
+    {
+        executeDurationStopsByRuleId(ruleId, state);
+        return;
+    }
+
+    const int delayMs = static_cast<int>(qMin(
+        remainingMs,
+        static_cast<qint64>(std::numeric_limits<int>::max())));
+    QTimer::singleShot(delayMs, this, [this, ruleId, state, stopAt]() {
+        scheduleDurationStopByRuleId(ruleId, state, stopAt);
+    });
 }
 
 void Scheduler::executeDurationStopsByRuleId(const QString& ruleId, const QByteArray& state)

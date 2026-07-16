@@ -184,7 +184,9 @@ SchedulerGUI::SchedulerGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Fea
     ui->featureActionsTable->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
     ui->featureActionsTable->horizontalHeader()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
 
-    ui->triggerType->addItem(tr("Time"), SchedulerSettings::TriggerTime);
+    ui->triggerType->addItem(tr("Date/time"), SchedulerSettings::TriggerTime);
+    ui->triggerType->addItem(tr("Sunrise"), SchedulerSettings::TriggerSunrise);
+    ui->triggerType->addItem(tr("Sunset"), SchedulerSettings::TriggerSunset);
     ui->triggerType->addItem(tr("Event"), SchedulerSettings::TriggerEvent);
 
     ui->recurrence->addItem(tr("Once"), SchedulerSettings::RecurrenceOnce);
@@ -201,6 +203,7 @@ SchedulerGUI::SchedulerGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Fea
     ui->durationUnit->addItem(tr("seconds"), SchedulerSettings::DelaySeconds);
     ui->durationUnit->addItem(tr("minutes"), SchedulerSettings::DelayMinutes);
     ui->durationUnit->addItem(tr("hours"), SchedulerSettings::DelayHours);
+    ui->durationUnit->addItem(tr("until sunset"), SchedulerSettings::DelayUntilSunset);
     updateEventDelayLimit();
     updateDurationLimit();
 
@@ -216,6 +219,7 @@ SchedulerGUI::SchedulerGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Fea
     ui->dateUntil->setMinimumDate(noDateUntil());
     ui->dateUntil->setSpecialValueText(tr("None"));
     ui->time->setDisplayFormat(QStringLiteral("HH:mm:ss"));
+    ui->triggerType->setToolTip(tr("Sunrise and sunset use the station position configured in Preferences."));
     ui->command->setToolTip(tr("Detached command. Supports ${rule}, ${trigger}, ${dateTime}, ${event}, ${source}, ${data} and ${data.name}."));
     ui->speech->setToolTip(tr("Text to speak. Supports ${rule}, ${trigger}, ${dateTime}, ${event}, ${source}, ${data} and ${data.name}."));
     ui->eventSource->setToolTip(tr("Optional event source. Leave empty to match all producers on the event pipe."));
@@ -664,6 +668,7 @@ void SchedulerGUI::refreshRulesTable()
 {
     const int selectedRow = m_currentRule;
     const QDateTime now = QDateTime::currentDateTime();
+    const MainSettings& mainSettings = MainCore::instance()->getSettings();
 
     m_populating = true;
     ui->rulesTable->setRowCount(m_settings.m_rules.size());
@@ -681,8 +686,12 @@ void SchedulerGUI::refreshRulesTable()
         ui->rulesTable->setItem(row, 2, new QTableWidgetItem(ruleTriggerText(rule)));
         ui->rulesTable->setItem(row, 3, new QTableWidgetItem(ruleRecurrenceDelayText(rule)));
 
-        const QDateTime nextRun = rule.m_triggerType == SchedulerSettings::TriggerTime
-            ? SchedulerSettings::nextDateTime(rule, now)
+        const QDateTime nextRun = SchedulerSettings::isTimeTrigger(rule.m_triggerType)
+            ? SchedulerSettings::nextDateTime(
+                rule,
+                now,
+                mainSettings.getLatitude(),
+                mainSettings.getLongitude())
             : QDateTime();
         ui->rulesTable->setItem(row, 4, new QTableWidgetItem(nextRun.isValid() ? nextRun.toString(Qt::ISODateWithMs) : QString()));
         ui->rulesTable->setItem(row, 5, new QTableWidgetItem(rule.m_lastRun.isValid() ? rule.m_lastRun.toString(Qt::ISODateWithMs) : QString()));
@@ -1628,16 +1637,21 @@ void SchedulerGUI::updateFeatureActionList(const SchedulerSettings::FeatureActio
 
 void SchedulerGUI::updateTriggerVisibility()
 {
-    const bool isTime = ui->triggerType->currentData().toInt() == SchedulerSettings::TriggerTime;
+    const SchedulerSettings::TriggerType triggerType = static_cast<SchedulerSettings::TriggerType>(
+        ui->triggerType->currentData().toInt());
+    const bool isTime = SchedulerSettings::isTimeTrigger(triggerType);
     ui->timeGroup->setVisible(isTime);
-    ui->eventGroup->setVisible(!isTime);
+    ui->eventGroup->setVisible(triggerType == SchedulerSettings::TriggerEvent);
     updateTimeScheduleVisibility();
     getRollupContents()->arrangeRollups();
 }
 
 void SchedulerGUI::updateTimeScheduleVisibility()
 {
+    const bool hasClockTime = ui->triggerType->currentData().toInt() == SchedulerSettings::TriggerTime;
     const bool isDaily = ui->recurrence->currentData().toInt() == SchedulerSettings::RecurrenceDaily;
+    ui->timeLabel->setVisible(hasClockTime);
+    ui->time->setVisible(hasClockTime);
     ui->weekdaysLabel->setVisible(isDaily);
     ui->weekdaysWidget->setVisible(isDaily);
 }
@@ -1651,9 +1665,12 @@ void SchedulerGUI::updateEventDelayLimit()
 
 void SchedulerGUI::updateDurationLimit()
 {
+    const SchedulerSettings::DelayUnit unit = static_cast<SchedulerSettings::DelayUnit>(
+        ui->durationUnit->currentData().toInt());
     updateTimerLimit(
         ui->duration,
-        static_cast<SchedulerSettings::DelayUnit>(ui->durationUnit->currentData().toInt()));
+        unit);
+    ui->duration->setEnabled(unit != SchedulerSettings::DelayUntilSunset);
 }
 
 void SchedulerGUI::updateRegexState()
@@ -1857,6 +1874,12 @@ QString SchedulerGUI::ruleTriggerText(const SchedulerSettings::ScheduleRule& rul
     if (rule.m_triggerType == SchedulerSettings::TriggerTime) {
         return rule.m_time.toString(Qt::ISODateWithMs);
     }
+    if (rule.m_triggerType == SchedulerSettings::TriggerSunrise) {
+        return tr("Sunrise from %1").arg(rule.m_time.date().toString(Qt::ISODate));
+    }
+    if (rule.m_triggerType == SchedulerSettings::TriggerSunset) {
+        return tr("Sunset from %1").arg(rule.m_time.date().toString(Qt::ISODate));
+    }
 
     QString text = Scheduler::eventTypeName(rule.m_eventType);
     if (!rule.m_eventSourceId.isEmpty()) {
@@ -1872,7 +1895,7 @@ QString SchedulerGUI::ruleRecurrenceDelayText(const SchedulerSettings::ScheduleR
 {
     QString text;
 
-    if (rule.m_triggerType == SchedulerSettings::TriggerTime)
+    if (SchedulerSettings::isTimeTrigger(rule.m_triggerType))
     {
         if ((rule.m_recurrence == SchedulerSettings::RecurrenceDaily) && (rule.m_weekdayMask != DefaultWeekdayMask))
         {
@@ -1929,7 +1952,9 @@ QString SchedulerGUI::ruleRecurrenceDelayText(const SchedulerSettings::ScheduleR
         if (!text.isEmpty()) {
             text += QStringLiteral(", ");
         }
-        text += tr("for %1").arg(duration);
+        text += rule.m_durationUnit == SchedulerSettings::DelayUntilSunset
+            ? duration
+            : tr("for %1").arg(duration);
     }
 
     return text;
@@ -1966,6 +1991,10 @@ QString SchedulerGUI::ruleActionSummary(const SchedulerSettings::ScheduleRule& r
 
 QString SchedulerGUI::durationText(const SchedulerSettings::ScheduleRule& rule) const
 {
+    if (rule.m_durationUnit == SchedulerSettings::DelayUntilSunset) {
+        return tr("until sunset");
+    }
+
     const int duration = SchedulerSettings::durationSeconds(rule);
     if (duration == 0) {
         return QString();

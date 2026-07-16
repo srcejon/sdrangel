@@ -39,6 +39,8 @@
 #include <opencv2/core/cuda.hpp>
 #endif
 
+#include "cameraopticalspectrum.h"
+
 /**
  * \brief A single object detection (bounding box, class label, confidence).
  *
@@ -420,6 +422,7 @@ struct CameraPipelineFrame
     QImage m_postProcessedImage;
     QImage m_rawInputImage;
     CameraHistogramData m_histogramData;
+    CameraOpticalSpectrumData m_opticalSpectrumData;
     QDateTime m_captureDateTime;
     CameraPipelineDirection m_captureDirection;
     quint64 m_captureEpoch = 0;

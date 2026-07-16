@@ -505,6 +505,20 @@
        </widget>
       </item>
       <item>
+       <widget class="QToolButton" name="opticalSpectrumButton">
+        <property name="toolTip">
+         <string>Show optical spectrum extracted from the detection RoI</string>
+        </property>
+        <property name="text">
+         <string/>
+        </property>
+        <property name="icon">
+         <iconset resource="cameraicons.qrc">
+          <normaloff>:/camera/icons/optical_spectrum.png</normaloff>:/camera/icons/optical_spectrum.png</iconset>
+        </property>
+       </widget>
+      </item>
+      <item>
        <widget class="Line" name="line_2">
         <property name="orientation">
          <enum>Qt::Orientation::Vertical</enum>

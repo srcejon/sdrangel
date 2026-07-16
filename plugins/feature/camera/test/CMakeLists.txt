@@ -197,6 +197,26 @@ if(WIN32)
     endif()
 endif()
 
+add_executable(featurecamera_spectrum_tests EXCLUDE_FROM_ALL
+    cameraspectrumtests.cpp
+    ../cameraopticalspectrum.cpp
+    ../cameraopticalspectrum.h
+    ../cameraopticalspectrumlibrary.cpp
+    ../cameraopticalspectrumlibrary.h
+)
+
+target_include_directories(featurecamera_spectrum_tests PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/..
+    ${ZLIB_INCLUDE_DIRS}
+    ${ZLIB_INCLUDE_DIR}
+)
+
+target_link_libraries(featurecamera_spectrum_tests PRIVATE
+    Qt::Core
+    Qt::Gui
+    ${ZLIB_LIBRARIES}
+)
+
 if(OpenCV_cudaarithm_FOUND AND OpenCV_cudaimgproc_FOUND AND OpenCV_cudawarping_FOUND AND OpenCV_cudafilters_FOUND)
     add_executable(featurecamera_hdr_tests EXCLUDE_FROM_ALL
         camerahdrtests.cpp

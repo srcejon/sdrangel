@@ -133,6 +133,7 @@
 #include "cameradetectionhistory.h"
 #include "cameraframestacker.h"
 #include "camerahistogramdialog.h"
+#include "cameraopticalspectrumdialog.h"
 #include "camerafilesequencedialog.h"
 #include "camerarecorder.h"
 #include "camerasettingsdialog.h"
@@ -761,6 +762,7 @@ bool CameraGUI::handleMessage(const Message& message)
         QSize oldSize = m_lastImage.size();
         m_lastImage = report.getImage();
         m_lastHistogramData = report.getHistogramData();
+        m_lastOpticalSpectrumData = report.getOpticalSpectrumData();
         m_lastStarDetections = report.getStarDetections();
         m_lastPreviewTextLabels = report.getPreviewTextLabels();
         m_lastPreviewRectItems = report.getPreviewRectItems();
@@ -849,6 +851,9 @@ bool CameraGUI::handleMessage(const Message& message)
         updateImageWidget();
         if (m_histogramDialog) {
             m_histogramDialog->updateHistogram(m_lastHistogramData);
+        }
+        if (m_opticalSpectrumDialog) {
+            m_opticalSpectrumDialog->updateSpectrum(m_lastOpticalSpectrumData);
         }
         // When the image size changes, refit to view - but only if the user
         // hasn't manually zoomed/panned (matching updateImageWidget()).
@@ -948,6 +953,7 @@ bool CameraGUI::handleMessage(const Message& message)
         QSize oldSize = m_lastImage.size();
         m_lastImage = report.getImage();
         m_lastHistogramData = CameraHistogramData();
+        m_lastOpticalSpectrumData = CameraOpticalSpectrumData();
         m_lastStarDetections.clear();
         m_lastPreviewTextLabels.clear();
         m_lastPreviewRectItems.clear();
@@ -1124,6 +1130,7 @@ CameraGUI::CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *
     m_settingsDialog(nullptr),
     m_detectionHistoryDialog(nullptr),
     m_histogramDialog(nullptr),
+    m_opticalSpectrumDialog(nullptr),
     m_alpacaHasNamedGains(false),
     m_alpacaHasNamedOffsets(false),
     m_alpacaCameraSizeX(0),
@@ -1454,6 +1461,12 @@ CameraGUI::~CameraGUI()
         disconnect(m_histogramDialog, nullptr, this, nullptr);
         delete m_histogramDialog;
         m_histogramDialog = nullptr;
+    }
+    if (m_opticalSpectrumDialog)
+    {
+        disconnect(m_opticalSpectrumDialog, nullptr, this, nullptr);
+        delete m_opticalSpectrumDialog;
+        m_opticalSpectrumDialog = nullptr;
     }
     delete m_tensorRtProgressDialog;
     m_tensorRtProgressDialog = nullptr;
@@ -3157,6 +3170,7 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->diffMaskCloseSizeSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_diffMaskCloseSizeSpin_valueChanged);
     QObject::connect(ui->detectionHistoryButton, &QToolButton::clicked, this, &CameraGUI::on_detectionHistoryButton_clicked);
     QObject::connect(ui->histogramButton, &QToolButton::clicked, this, &CameraGUI::on_histogramButton_clicked);
+    QObject::connect(ui->opticalSpectrumButton, &QToolButton::clicked, this, &CameraGUI::on_opticalSpectrumButton_clicked);
     QObject::connect(settingsUI()->defaultColorSettingsButton, &QToolButton::clicked, this, &CameraGUI::on_defaultColorSettingsButton_clicked);
     QObject::connect(settingsUI()->overlayFontCombo, &QFontComboBox::currentFontChanged, this, &CameraGUI::on_overlayFontCombo_currentFontChanged);
     QObject::connect(settingsUI()->overlayFontScaleSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_overlayFontScaleSpin_valueChanged);
@@ -9632,6 +9646,40 @@ void CameraGUI::on_diffMaskCloseSizeSpin_valueChanged(int value)
 {
     m_settings.m_diffMaskCloseSize = value;
     applySetting("diffMaskCloseSize");
+}
+
+void CameraGUI::on_opticalSpectrumButton_clicked()
+{
+    if (!m_settings.m_opticalSpectrumVisible)
+    {
+        m_settings.m_opticalSpectrumVisible = true;
+        applySetting("opticalSpectrumVisible");
+    }
+
+    if (!m_opticalSpectrumDialog)
+    {
+        m_opticalSpectrumDialog = new CameraOpticalSpectrumDialog(m_settings, m_lastOpticalSpectrumData, this);
+        m_opticalSpectrumDialog->setAttribute(Qt::WA_DeleteOnClose);
+        connect(m_opticalSpectrumDialog, &CameraOpticalSpectrumDialog::settingsChanged, this, [this](const QStringList& settingsKeys) {
+            applySettings(settingsKeys);
+        });
+        connect(m_opticalSpectrumDialog, &QObject::destroyed, this, [this]() {
+            m_opticalSpectrumDialog = nullptr;
+            if (m_settings.m_opticalSpectrumVisible)
+            {
+                m_settings.m_opticalSpectrumVisible = false;
+                applySetting("opticalSpectrumVisible");
+            }
+        });
+    }
+    else
+    {
+        m_opticalSpectrumDialog->updateSpectrum(m_lastOpticalSpectrumData);
+    }
+
+    m_opticalSpectrumDialog->show();
+    m_opticalSpectrumDialog->raise();
+    m_opticalSpectrumDialog->activateWindow();
 }
 
 void CameraGUI::on_histogramButton_clicked()

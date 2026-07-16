@@ -538,6 +538,26 @@ void CameraSettings::resetToDefaults()
     m_plateSolveCatalogSource = PlateSolveCatalogAuto;
     m_plateSolveApplyMode = PlateSolveApplyAzElRollFov;
     m_starCatalogDiskCacheSizeGb = 32;
+    m_opticalSpectrumVisible = false;
+    m_opticalSpectrumDispersion = 0.0;
+    m_opticalSpectrumZeroOrderAuto = true;
+    m_opticalSpectrumZeroOrderX = 0.0;
+    m_opticalSpectrumDirection = OpticalSpectrumDirectionAuto;
+    m_opticalSpectrumApertureRows = 15;
+    m_opticalSpectrumBackgroundSub = true;
+    m_opticalSpectrumSmoothing = 1;
+    m_opticalSpectrumAverageFrames = 1;
+    m_opticalSpectrumNormalize = false;
+    m_opticalSpectrumColourStrip = true;
+    m_opticalSpectrumImageStrip = true;
+    m_opticalSpectrumRefLines = QStringLiteral("balmer,custom");
+    m_opticalSpectrumCustomLines.clear();
+    m_opticalSpectrumRedshift = 0.0;
+    m_opticalSpectrumReferenceTemplate.clear();
+    m_opticalSpectrumApplyResponse = false;
+    m_opticalSpectrumResponseFile.clear();
+    m_opticalSpectrumLogY = false;
+    m_opticalSpectrumAutoIdentify = false;
     m_overlaySpectrum = false;
     m_spectrumDevice.clear();
     m_spectrumOffsetX = 0;
@@ -897,6 +917,25 @@ QByteArray CameraSettings::serialize() const
     s.writeBool(316, m_directionSensorFilterEnabled);
     s.writeDouble(317, m_directionSensorFilterTimeConstant);
     s.writeBool(318, m_directionApplyToCurrentImage);
+    s.writeDouble(319, m_opticalSpectrumDispersion);
+    s.writeBool(320, m_opticalSpectrumZeroOrderAuto);
+    s.writeDouble(321, m_opticalSpectrumZeroOrderX);
+    s.writeS32(322, static_cast<qint32>(m_opticalSpectrumDirection));
+    s.writeS32(323, m_opticalSpectrumApertureRows);
+    s.writeBool(324, m_opticalSpectrumBackgroundSub);
+    s.writeS32(325, m_opticalSpectrumSmoothing);
+    s.writeS32(326, m_opticalSpectrumAverageFrames);
+    s.writeBool(327, m_opticalSpectrumNormalize);
+    s.writeString(328, m_opticalSpectrumRefLines);
+    s.writeString(329, m_opticalSpectrumCustomLines);
+    s.writeBool(330, m_opticalSpectrumColourStrip);
+    s.writeDouble(331, m_opticalSpectrumRedshift);
+    s.writeBool(332, m_opticalSpectrumImageStrip);
+    s.writeString(333, m_opticalSpectrumReferenceTemplate);
+    s.writeBool(334, m_opticalSpectrumApplyResponse);
+    s.writeString(335, m_opticalSpectrumResponseFile);
+    s.writeBool(336, m_opticalSpectrumLogY);
+    s.writeBool(337, m_opticalSpectrumAutoIdentify);
 
     return s.final();
 }
@@ -1492,6 +1531,35 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readDouble(317, &m_directionSensorFilterTimeConstant, 0.5);
         m_directionSensorFilterTimeConstant = qBound(0.05, m_directionSensorFilterTimeConstant, 10.0);
         d.readBool(318, &m_directionApplyToCurrentImage, true);
+        d.readDouble(319, &m_opticalSpectrumDispersion, 0.0);
+        m_opticalSpectrumDispersion = qBound(0.0, m_opticalSpectrumDispersion, 100.0);
+        d.readBool(320, &m_opticalSpectrumZeroOrderAuto, true);
+        d.readDouble(321, &m_opticalSpectrumZeroOrderX, 0.0);
+        qint32 opticalSpectrumDirection = static_cast<qint32>(OpticalSpectrumDirectionAuto);
+        d.readS32(322, &opticalSpectrumDirection, opticalSpectrumDirection);
+        m_opticalSpectrumDirection = static_cast<OpticalSpectrumDirection>(qBound(
+            static_cast<qint32>(OpticalSpectrumDirectionAuto),
+            opticalSpectrumDirection,
+            static_cast<qint32>(OpticalSpectrumDirectionFlipped)));
+        d.readS32(323, &m_opticalSpectrumApertureRows, 15);
+        m_opticalSpectrumApertureRows = qBound(0, m_opticalSpectrumApertureRows, 256);
+        d.readBool(324, &m_opticalSpectrumBackgroundSub, true);
+        d.readS32(325, &m_opticalSpectrumSmoothing, 1);
+        m_opticalSpectrumSmoothing = qBound(1, m_opticalSpectrumSmoothing, 99);
+        d.readS32(326, &m_opticalSpectrumAverageFrames, 1);
+        m_opticalSpectrumAverageFrames = qBound(1, m_opticalSpectrumAverageFrames, 100);
+        d.readBool(327, &m_opticalSpectrumNormalize, false);
+        d.readString(328, &m_opticalSpectrumRefLines, QStringLiteral("balmer,custom"));
+        d.readString(329, &m_opticalSpectrumCustomLines, "");
+        d.readBool(330, &m_opticalSpectrumColourStrip, true);
+        d.readDouble(331, &m_opticalSpectrumRedshift, 0.0);
+        m_opticalSpectrumRedshift = qBound(-0.9, m_opticalSpectrumRedshift, 10.0);
+        d.readBool(332, &m_opticalSpectrumImageStrip, true);
+        d.readString(333, &m_opticalSpectrumReferenceTemplate, "");
+        d.readBool(334, &m_opticalSpectrumApplyResponse, false);
+        d.readString(335, &m_opticalSpectrumResponseFile, "");
+        d.readBool(336, &m_opticalSpectrumLogY, false);
+        d.readBool(337, &m_opticalSpectrumAutoIdentify, false);
         d.readFloat(271, &m_azimuthOffset, 0.0f);
         d.readFloat(272, &m_elevationOffset, 0.0f);
         d.readFloat(273, &m_rollOffset, 0.0f);
@@ -1983,6 +2051,66 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     }
     if (settingsKeys.contains("directionApplyToCurrentImage")) {
         m_directionApplyToCurrentImage = settings.m_directionApplyToCurrentImage;
+    }
+    if (settingsKeys.contains("opticalSpectrumVisible")) {
+        m_opticalSpectrumVisible = settings.m_opticalSpectrumVisible;
+    }
+    if (settingsKeys.contains("opticalSpectrumDispersion")) {
+        m_opticalSpectrumDispersion = qBound(0.0, settings.m_opticalSpectrumDispersion, 100.0);
+    }
+    if (settingsKeys.contains("opticalSpectrumZeroOrderAuto")) {
+        m_opticalSpectrumZeroOrderAuto = settings.m_opticalSpectrumZeroOrderAuto;
+    }
+    if (settingsKeys.contains("opticalSpectrumZeroOrderX")) {
+        m_opticalSpectrumZeroOrderX = settings.m_opticalSpectrumZeroOrderX;
+    }
+    if (settingsKeys.contains("opticalSpectrumDirection")) {
+        m_opticalSpectrumDirection = settings.m_opticalSpectrumDirection;
+    }
+    if (settingsKeys.contains("opticalSpectrumApertureRows")) {
+        m_opticalSpectrumApertureRows = qBound(0, settings.m_opticalSpectrumApertureRows, 256);
+    }
+    if (settingsKeys.contains("opticalSpectrumBackgroundSub")) {
+        m_opticalSpectrumBackgroundSub = settings.m_opticalSpectrumBackgroundSub;
+    }
+    if (settingsKeys.contains("opticalSpectrumSmoothing")) {
+        m_opticalSpectrumSmoothing = qBound(1, settings.m_opticalSpectrumSmoothing, 99);
+    }
+    if (settingsKeys.contains("opticalSpectrumAverageFrames")) {
+        m_opticalSpectrumAverageFrames = qBound(1, settings.m_opticalSpectrumAverageFrames, 100);
+    }
+    if (settingsKeys.contains("opticalSpectrumNormalize")) {
+        m_opticalSpectrumNormalize = settings.m_opticalSpectrumNormalize;
+    }
+    if (settingsKeys.contains("opticalSpectrumColourStrip")) {
+        m_opticalSpectrumColourStrip = settings.m_opticalSpectrumColourStrip;
+    }
+    if (settingsKeys.contains("opticalSpectrumImageStrip")) {
+        m_opticalSpectrumImageStrip = settings.m_opticalSpectrumImageStrip;
+    }
+    if (settingsKeys.contains("opticalSpectrumReferenceTemplate")) {
+        m_opticalSpectrumReferenceTemplate = settings.m_opticalSpectrumReferenceTemplate;
+    }
+    if (settingsKeys.contains("opticalSpectrumApplyResponse")) {
+        m_opticalSpectrumApplyResponse = settings.m_opticalSpectrumApplyResponse;
+    }
+    if (settingsKeys.contains("opticalSpectrumResponseFile")) {
+        m_opticalSpectrumResponseFile = settings.m_opticalSpectrumResponseFile;
+    }
+    if (settingsKeys.contains("opticalSpectrumLogY")) {
+        m_opticalSpectrumLogY = settings.m_opticalSpectrumLogY;
+    }
+    if (settingsKeys.contains("opticalSpectrumAutoIdentify")) {
+        m_opticalSpectrumAutoIdentify = settings.m_opticalSpectrumAutoIdentify;
+    }
+    if (settingsKeys.contains("opticalSpectrumRefLines")) {
+        m_opticalSpectrumRefLines = settings.m_opticalSpectrumRefLines;
+    }
+    if (settingsKeys.contains("opticalSpectrumCustomLines")) {
+        m_opticalSpectrumCustomLines = settings.m_opticalSpectrumCustomLines;
+    }
+    if (settingsKeys.contains("opticalSpectrumRedshift")) {
+        m_opticalSpectrumRedshift = qBound(-0.9, settings.m_opticalSpectrumRedshift, 10.0);
     }
     if (settingsKeys.contains("azimuthOffset")) {
         m_azimuthOffset = normalizeSignedDegrees(settings.m_azimuthOffset);
@@ -2982,6 +3110,66 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("directionApplyToCurrentImage") || force) {
         ostr << " m_directionApplyToCurrentImage: " << m_directionApplyToCurrentImage;
+    }
+    if (settingsKeys.contains("opticalSpectrumVisible") || force) {
+        ostr << " m_opticalSpectrumVisible: " << m_opticalSpectrumVisible;
+    }
+    if (settingsKeys.contains("opticalSpectrumDispersion") || force) {
+        ostr << " m_opticalSpectrumDispersion: " << m_opticalSpectrumDispersion;
+    }
+    if (settingsKeys.contains("opticalSpectrumZeroOrderAuto") || force) {
+        ostr << " m_opticalSpectrumZeroOrderAuto: " << m_opticalSpectrumZeroOrderAuto;
+    }
+    if (settingsKeys.contains("opticalSpectrumZeroOrderX") || force) {
+        ostr << " m_opticalSpectrumZeroOrderX: " << m_opticalSpectrumZeroOrderX;
+    }
+    if (settingsKeys.contains("opticalSpectrumDirection") || force) {
+        ostr << " m_opticalSpectrumDirection: " << m_opticalSpectrumDirection;
+    }
+    if (settingsKeys.contains("opticalSpectrumApertureRows") || force) {
+        ostr << " m_opticalSpectrumApertureRows: " << m_opticalSpectrumApertureRows;
+    }
+    if (settingsKeys.contains("opticalSpectrumBackgroundSub") || force) {
+        ostr << " m_opticalSpectrumBackgroundSub: " << m_opticalSpectrumBackgroundSub;
+    }
+    if (settingsKeys.contains("opticalSpectrumSmoothing") || force) {
+        ostr << " m_opticalSpectrumSmoothing: " << m_opticalSpectrumSmoothing;
+    }
+    if (settingsKeys.contains("opticalSpectrumAverageFrames") || force) {
+        ostr << " m_opticalSpectrumAverageFrames: " << m_opticalSpectrumAverageFrames;
+    }
+    if (settingsKeys.contains("opticalSpectrumNormalize") || force) {
+        ostr << " m_opticalSpectrumNormalize: " << m_opticalSpectrumNormalize;
+    }
+    if (settingsKeys.contains("opticalSpectrumColourStrip") || force) {
+        ostr << " m_opticalSpectrumColourStrip: " << m_opticalSpectrumColourStrip;
+    }
+    if (settingsKeys.contains("opticalSpectrumImageStrip") || force) {
+        ostr << " m_opticalSpectrumImageStrip: " << m_opticalSpectrumImageStrip;
+    }
+    if (settingsKeys.contains("opticalSpectrumReferenceTemplate") || force) {
+        ostr << " m_opticalSpectrumReferenceTemplate: " << m_opticalSpectrumReferenceTemplate.toStdString();
+    }
+    if (settingsKeys.contains("opticalSpectrumApplyResponse") || force) {
+        ostr << " m_opticalSpectrumApplyResponse: " << m_opticalSpectrumApplyResponse;
+    }
+    if (settingsKeys.contains("opticalSpectrumResponseFile") || force) {
+        ostr << " m_opticalSpectrumResponseFile: " << m_opticalSpectrumResponseFile.toStdString();
+    }
+    if (settingsKeys.contains("opticalSpectrumLogY") || force) {
+        ostr << " m_opticalSpectrumLogY: " << m_opticalSpectrumLogY;
+    }
+    if (settingsKeys.contains("opticalSpectrumAutoIdentify") || force) {
+        ostr << " m_opticalSpectrumAutoIdentify: " << m_opticalSpectrumAutoIdentify;
+    }
+    if (settingsKeys.contains("opticalSpectrumRefLines") || force) {
+        ostr << " m_opticalSpectrumRefLines: " << m_opticalSpectrumRefLines.toStdString();
+    }
+    if (settingsKeys.contains("opticalSpectrumCustomLines") || force) {
+        ostr << " m_opticalSpectrumCustomLines: " << m_opticalSpectrumCustomLines.toStdString();
+    }
+    if (settingsKeys.contains("opticalSpectrumRedshift") || force) {
+        ostr << " m_opticalSpectrumRedshift: " << m_opticalSpectrumRedshift;
     }
     if (settingsKeys.contains("azimuthOffset") || force) {
         ostr << " m_azimuthOffset: " << m_azimuthOffset;

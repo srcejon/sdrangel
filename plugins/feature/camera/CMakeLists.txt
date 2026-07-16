@@ -20,6 +20,8 @@ set(camera_SOURCES
     cameraimagepool.cpp
     camerameteorphotometer.cpp
     cameraimageprocessor.cpp
+    cameraopticalspectrum.cpp
+    cameraopticalspectrumlibrary.cpp
     cameramediaplaybackstate.cpp
     cameramediaplaybackcontroller.cpp
     cameraffmpegaudio.cpp
@@ -58,6 +60,8 @@ set(camera_HEADERS
     camerameteorphotometer.h
     cameraaudiobytequeue.h
     cameraimageprocessor.h
+    cameraopticalspectrum.h
+    cameraopticalspectrumlibrary.h
     cameramediaplaybackstate.h
     cameramediaplaybackcontroller.h
     cameraffmpegaudio.h
@@ -97,6 +101,9 @@ if(NOT SERVER_MODE)
         camerasettingsdialog.cpp
         camerasettingsdialog.ui
         camerahistogramdialog.cpp
+        cameraopticalspectrumdialog.cpp
+        cameraopticalspectrumlinesdialog.cpp
+        cameraopticalspectrumreferencedialog.cpp
         cameraclearskyreferencedialog.cpp
         cameraicons.qrc
     )
@@ -108,6 +115,9 @@ if(NOT SERVER_MODE)
         cameradetectionhistoryentry.h
         camerasettingsdialog.h
         camerahistogramdialog.h
+        cameraopticalspectrumdialog.h
+        cameraopticalspectrumlinesdialog.h
+        cameraopticalspectrumreferencedialog.h
         cameraclearskyreferencedialog.h
     )
 

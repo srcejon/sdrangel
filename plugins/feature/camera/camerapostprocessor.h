@@ -127,6 +127,7 @@ public:
     public:
         const QImage& getImage() const { return m_image; }
         const CameraHistogramData& getHistogramData() const { return m_histogramData; }
+        const CameraOpticalSpectrumData& getOpticalSpectrumData() const { return m_opticalSpectrumData; }
         int getStackCount() const { return m_stack.m_count; }
         int getStackQueuedCount() const { return m_stack.m_queuedCount; }
         int getStackDroppedCount() const { return m_stack.m_droppedCount; }
@@ -165,6 +166,7 @@ public:
 
         static MsgReportFrame* create(const QImage& image,
                                       const CameraHistogramData& histogramData,
+                                      const CameraOpticalSpectrumData& opticalSpectrumData,
                                       const CameraPipelineStacking& stack,
                                       const QVector<CameraPipelineStarDetection>& starDetections,
                                       const CameraPipelinePlateSolve& plateSolve,
@@ -183,6 +185,7 @@ public:
             return new MsgReportFrame(
                 image,
                 histogramData,
+                opticalSpectrumData,
                 stack,
                 starDetections,
                 plateSolve,
@@ -202,6 +205,7 @@ public:
     private:
         QImage m_image;
         CameraHistogramData m_histogramData;
+        CameraOpticalSpectrumData m_opticalSpectrumData;
         CameraPipelineStacking m_stack;
         QVector<CameraPipelineStarDetection> m_starDetections;
         CameraPipelinePlateSolve m_plateSolve;
@@ -219,6 +223,7 @@ public:
 
         MsgReportFrame(const QImage& image,
                        const CameraHistogramData& histogramData,
+                       const CameraOpticalSpectrumData& opticalSpectrumData,
                        const CameraPipelineStacking& stack,
                        const QVector<CameraPipelineStarDetection>& starDetections,
                        const CameraPipelinePlateSolve& plateSolve,
@@ -236,6 +241,7 @@ public:
             Message(),
             m_image(image),
             m_histogramData(histogramData),
+            m_opticalSpectrumData(opticalSpectrumData),
             m_stack(stack),
             m_starDetections(starDetections),
             m_plateSolve(plateSolve),

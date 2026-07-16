@@ -197,6 +197,7 @@ private:
     void applyBrightnessContrast(cv::Mat& bgrMat) const;
     void applyInvertColors(cv::Mat& bgrMat) const;
     [[nodiscard]] CameraHistogramData computeHistogramData(const CameraPipelineFrame& frame);
+    [[nodiscard]] CameraOpticalSpectrumData computeOpticalSpectrumData(const CameraPipelineFrame& frame);
 #ifdef CAMERA_OPENCV_CUDA_IMAGE_PROCESSING
     [[nodiscard]] CameraHistogramData computeHistogramDataCuda(const CameraPipelineFrame& frame);
     static void fillHistogramBinsFromCudaMat(const cv::Mat& hist, QVector<float>& bins);

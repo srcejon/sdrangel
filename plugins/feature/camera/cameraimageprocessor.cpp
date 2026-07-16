@@ -35,6 +35,7 @@
 #include "cameradetector.h"
 #include "cameraimageutils.h"
 #include "cameraimageprocessor.h"
+#include "cameraopticalspectrum.h"
 
 namespace {
 
@@ -235,6 +236,14 @@ void CameraImageProcessor::applySettings(const CameraSettings& settings, const Q
     const bool imageProcessingChanged = force || std::any_of(kImageProcessingKeys.cbegin(), kImageProcessingKeys.cend(),
         [&settingsKeys](const QString& k) { return settingsKeys.contains(k); });
     const bool histogramDataRequested = (force || settingsKeys.contains("histogramVisible")) && settings.m_histogramVisible;
+    const bool opticalSpectrumDataRequested = (force
+        || settingsKeys.contains("opticalSpectrumVisible")
+        || settingsKeys.contains("opticalSpectrumApertureRows")
+        || settingsKeys.contains("opticalSpectrumBackgroundSub")
+        || settingsKeys.contains("detectionRoiX")
+        || settingsKeys.contains("detectionRoiY")
+        || settingsKeys.contains("detectionRoiWidth")
+        || settingsKeys.contains("detectionRoiHeight")) && settings.m_opticalSpectrumVisible;
     const bool sourceChanged = force
         || settingsKeys.contains("cameraId")
         || settingsKeys.contains("cameraProtocol")
@@ -311,7 +320,7 @@ void CameraImageProcessor::applySettings(const CameraSettings& settings, const Q
     }
 #endif
 
-    if ((imageProcessingChanged || histogramDataRequested) && m_lastInputFrame.hasImageData()) {
+    if ((imageProcessingChanged || histogramDataRequested || opticalSpectrumDataRequested) && m_lastInputFrame.hasImageData()) {
         CameraPipelineFramePtr frame = createFrameFromLastInput();
         submitFrame(frame);
     }
@@ -395,6 +404,9 @@ void CameraImageProcessor::processNewFrame(const CameraPipelineFramePtr& frame)
     frame->m_histogramData = m_settings.m_histogramVisible
         ? computeHistogramData(*frame)
         : CameraHistogramData();
+    frame->m_opticalSpectrumData = m_settings.m_opticalSpectrumVisible
+        ? computeOpticalSpectrumData(*frame)
+        : CameraOpticalSpectrumData();
 
     if (m_nextStage && Camera::acceptsPipelineFrame(frame, m_captureActive, m_captureEpoch)) {
         m_nextStage->submitFrame(frame);
@@ -481,6 +493,29 @@ CameraHistogramData CameraImageProcessor::computeHistogramData(const CameraPipel
         return computeHistogramDataCpu(mutableFrame.m_image);
     }
     return CameraHistogramData();
+}
+
+CameraOpticalSpectrumData CameraImageProcessor::computeOpticalSpectrumData(const CameraPipelineFrame& frame)
+{
+    PROFILER_START();
+    // The processed image is used (not the unprocessed one) so the profile is in the
+    // same coordinate space as the detection RoI the user draws on the preview; the
+    // readme documents that intensity adjustments should be off for quantitative work.
+    CameraPipelineFrame& mutableFrame = const_cast<CameraPipelineFrame&>(frame);
+    CameraOpticalSpectrumData spectrumData;
+    if (mutableFrame.ensureCpuImageFromCuda())
+    {
+        spectrumData = CameraOpticalSpectrumExtractor::extract(
+            mutableFrame.m_image,
+            m_settings.m_detectionRoiX,
+            m_settings.m_detectionRoiY,
+            m_settings.m_detectionRoiWidth,
+            m_settings.m_detectionRoiHeight,
+            m_settings.m_opticalSpectrumApertureRows,
+            m_settings.m_opticalSpectrumBackgroundSub);
+    }
+    PROFILER_STOP("CameraImageProcessor::computeOpticalSpectrumData");
+    return spectrumData;
 }
 
 CameraHistogramData CameraImageProcessor::computeHistogramDataCpu(const QImage& image)

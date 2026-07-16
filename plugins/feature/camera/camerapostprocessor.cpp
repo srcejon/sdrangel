@@ -1387,6 +1387,7 @@ void CameraPostProcessor::reportFrameToGUI(const QImage& image, const CameraPipe
         m_msgQueueToGUI->push(MsgReportFrame::create(
             image,
             frame.m_histogramData,
+            frame.m_opticalSpectrumData,
             frame.m_stack,
             frame.m_starDetections,
             frame.m_plateSolve,

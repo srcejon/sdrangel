@@ -65,6 +65,7 @@ class Feature;
 class CameraSettingsDialog;
 class CameraDetectionHistory;
 class CameraHistogramDialog;
+class CameraOpticalSpectrumDialog;
 class Message;
 class QLabel;
 class QDialog;
@@ -257,6 +258,7 @@ private:
 
     QImage m_lastImage;     ///< Last processed image received from the worker (displayed in the GUI)
     CameraHistogramData m_lastHistogramData; ///< Last histogram computed after image processing but before detection/overlays
+    CameraOpticalSpectrumData m_lastOpticalSpectrumData; ///< Last optical spectrum extracted from the detection RoI after image processing
     QVector<CameraPipelineStarDetection> m_lastStarDetections;
     QVector<CameraPostProcessor::PreviewTextLabel> m_lastPreviewTextLabels;
     QVector<CameraPostProcessor::PreviewRectItem> m_lastPreviewRectItems;
@@ -271,6 +273,7 @@ private:
     QString m_clearSkyReferenceSummary; // Latest clear-sky reference store status from the cloud detector
     CameraDetectionHistory *m_detectionHistoryDialog;
     CameraHistogramDialog *m_histogramDialog;
+    CameraOpticalSpectrumDialog *m_opticalSpectrumDialog;
     QProgressDialog *m_tensorRtProgressDialog = nullptr;
     QWidget *m_windowOverlaysTab = nullptr;
     QTableWidget *m_spectrumOverlaysTable = nullptr;
@@ -778,6 +781,7 @@ private slots:
     void on_detectionHistoryButton_clicked();
     void on_detectionHistoryEntryActivated(const CameraDetectionHistoryEntry& entry);
     void on_histogramButton_clicked();
+    void on_opticalSpectrumButton_clicked();
     void on_defaultColorSettingsButton_clicked();
     void on_overlayFontCombo_currentFontChanged(const QFont& font);
     void on_overlayFontScaleSpin_valueChanged(double value);

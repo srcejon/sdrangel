@@ -708,6 +708,34 @@ struct CameraSettings
     PlateSolveCatalogSource m_plateSolveCatalogSource; ///< Catalog source used for plate solving
     PlateSolveApplyMode m_plateSolveApplyMode; ///< Which solved values should be copied back into camera settings
     int    m_starCatalogDiskCacheSizeGb; ///< Maximum Siril/Gaia region disk cache size in GB; 0 = unlimited
+
+    // Optical spectrum (diffraction grating spectroscopy) settings; opticalSpectrum keys kept for compatibility
+    enum OpticalSpectrumDirection {
+        OpticalSpectrumDirectionAuto,    ///< Determine the red end from the red/blue channel centroids
+        OpticalSpectrumDirectionNormal,  ///< Wavelength increases with increasing pixel coordinate
+        OpticalSpectrumDirectionFlipped  ///< Wavelength increases with decreasing pixel coordinate
+    };
+    bool   m_opticalSpectrumVisible;       ///< Transient: compute optical spectrum data only while the spectrum dialog is visible
+    double m_opticalSpectrumDispersion;    ///< Wavelength calibration in nm/pixel; 0 = uncalibrated (axis shown in pixels)
+    bool   m_opticalSpectrumZeroOrderAuto; ///< Auto-locate the zero-order star image as the strongest peak in the RoI
+    double m_opticalSpectrumZeroOrderX;    ///< Manual zero-order position along the dispersion axis in image pixels
+    OpticalSpectrumDirection m_opticalSpectrumDirection; ///< Which way wavelength increases along the dispersion axis
+    int    m_opticalSpectrumApertureRows;  ///< Rows summed across the spectrum trace; 0 = full RoI height: 0..256
+    bool   m_opticalSpectrumBackgroundSub; ///< Subtract the per-column sky background estimated outside the aperture
+    int    m_opticalSpectrumSmoothing;     ///< Moving-average width in samples for display; 1 = off: 1..99
+    int    m_opticalSpectrumAverageFrames; ///< Average the displayed profile over this many frames; 1 = off: 1..100
+    bool   m_opticalSpectrumNormalize;     ///< Normalise the displayed profile to a peak of 1.0
+    bool   m_opticalSpectrumColourStrip;   ///< Show a strip below the chart with the colour of each wavelength, brightness following intensity
+    bool   m_opticalSpectrumImageStrip;    ///< Show a strip below the chart with the colours extracted from the image along the dispersion axis
+    QString m_opticalSpectrumRefLines;     ///< Comma-separated reference line sets to overlay: balmer,hei,naca,o2
+    QString m_opticalSpectrumCustomLines;  ///< User reference lines as "label:nm;label:nm"
+    double m_opticalSpectrumRedshift;      ///< Redshift z applied to non-terrestrial reference lines: -0.9..10, 0 = rest
+    QString m_opticalSpectrumReferenceTemplate; ///< Pickles library template key (e.g. "a0v") overlaid on the chart; empty = none
+    bool   m_opticalSpectrumApplyResponse; ///< Divide the displayed luminance by the captured instrument response curve
+    QString m_opticalSpectrumResponseFile; ///< Instrument response CSV path; empty = default (camera/spectrum-response.csv). Separate files suit different cameras/conditions
+    bool   m_opticalSpectrumLogY;          ///< Plot the spectrum on a logarithmic intensity axis
+    bool   m_opticalSpectrumAutoIdentify;  ///< Annotate detected spectral features with matching reference lines
+
     // Spectrum overlay settings
     bool   m_overlaySpectrum;   ///< Legacy single-spectrum enable flag; m_spectrumOverlays is the active model
     QString m_spectrumDevice;   ///< Legacy single-spectrum device; m_spectrumOverlays is the active model

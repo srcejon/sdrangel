@@ -24,6 +24,7 @@ The Camera plugin also supports a variety of post-processing, detection and over
 * YOLO AI object detection (ONNX with OpenCV/TensorRT, or Android LiteRT `.tflite` models with CPU/GPU acceleration)
 * Motion detection
 * Star detection and plate solving
+* Optical spectrum extraction from diffraction grating images, with wavelength calibration and reference line overlays
 * Cloud detection
 * Meteor apparent magnitude calculation, based on measaured flux relative to reference stars
 * Difference detection between images
@@ -164,7 +165,66 @@ Opens the histogram window for the current image.
 
 The histogram shows a count of the number of pixels with a given value, for red, green and blue.
 
-<h3>26: Object detection</h3>
+<h3>26: Optical spectrum</h3>
+
+Opens the optical spectrum window, which plots intensity against wavelength for a spectrum captured with a diffraction grating mounted in front of the lens.
+While typically used for stellar spectra (e.g. with an objective grating such as a Star Analyser), it works for any light source dispersed across the image - meteors, aurora, comets, nebulae or terrestrial lamps.
+Draw the detection RoI (in the Detection tab of the Camera Settings dialog, or with the RoI draw button) around the first-order spectrum trace,
+with its long side along the direction of dispersion. The spectrum is extracted by summing an aperture of rows centred on the trace for each column of the RoI,
+with the sky background estimated from the RoI rows outside the aperture subtracted.
+
+Controls:
+
+* Auto zero order: locates the zero-order (undispersed) source image as the strongest peak in the RoI. Untick to enter its position manually - required when the zero order lies outside the RoI.
+* Dispersion: the wavelength scale in nm/pixel. When 0, the X axis is in pixels. This can be entered directly, or calculated by clicking reference points on the chart with the Calibrate button.
+* Direction: which way wavelength increases along the dispersion axis. Auto compares the red and blue channel centroids of the colour image.
+* Calibrate: calculates the dispersion from reference points clicked on the chart. Click one identified feature (e.g. H-alpha at 656.3 nm in an A-type star) and select or type its wavelength to calibrate against the current zero-order position, or click two identified features to also solve for the zero-order position - useful when the zero order lies outside the RoI. The direction is set automatically from the reference points. Press the button again to finish after a single point.
+* Aperture: the number of rows summed across the trace. 0 sums the full RoI height, but disables background subtraction.
+* Subtract background: subtracts the per-column background estimated from the RoI rows outside the aperture. This suits a star, whose spectrum is a thin trace with sky above and below. The background rows are placed beyond both a guard gap and the measured vertical extent of the trace's glow, so a defocused end of the spectrum (chromatic focus spreads the red end over more rows) is not sampled as sky, and the estimate uses a low-percentile sky statistic smoothed along the wavelength axis, so field stars in the margins - even a dense field of defocused ones - and per-column noise do not imprint on the spectrum. The RoI must therefore be noticeably taller than the trace - draw it with generous sky margins above and below (roughly three times the aperture height works well). If the RoI is too tight for a background estimate, subtraction is skipped and a warning shown. While subtraction is active, the subtracted background is drawn on the chart as a dotted grey series, so an inflated estimate is immediately visible. It is skipped automatically when the source fills the RoI - as with a discharge tube, whose emission lines are images of the tube itself and span the whole frame - because those rows contain the signal rather than a background, and subtracting them would cancel the spectrum out. A warning is shown when this happens, and when a significant part of the aperture is saturated.
+
+For emission sources such as gas discharge tubes, expose so that the brightest lines stay below saturation. An over-exposed source clips to white (losing all colour, as a clipped pixel is white by definition) and scatters a bright haze across the frame that no background subtraction can remove, leaving the extracted colours washed out.
+* Smooth: moving-average width applied to the displayed profile.
+* Average: averages the displayed profile over multiple frames to reduce noise.
+* Normalise: scales the displayed profile to a peak of 1.0.
+* Log: plots intensity on a logarithmic axis, keeping faint features legible alongside bright ones (useful after response correction boosts the blue continuum). The axis range follows the data - a bright continuum spectrum gets a snug range rather than being squashed against the top of empty decades, while an emission spectrum over a dark background keeps its full dynamic range. Blanked or zero samples sit at the bottom of the axis.
+* Identify: detects significant emission and absorption features and labels those matching known reference lines (the redshift setting is applied to source lines, so identification works on redshifted objects). Strong features with no match are labelled with their wavelength and a question mark. Requires wavelength calibration.
+* Image strip: shows a strip below the chart with the colours extracted from the image along the dispersion axis - effectively the observed spectrum as captured, scaled to the brightest sample. Absorption features appear as dark bands, making it easy to line the reference lines up with the real features when calibrating.
+* Wavelength strip: shows a strip below the chart with the approximate colour of each wavelength, with brightness following the plotted luminance. Grey is used outside the visible range (~380-780 nm) or when uncalibrated, so the strip then shows intensity only. With both strips enabled, the image strip (observed) sits directly under the chart and the wavelength strip (reference) below it - when the wavelength calibration is correct, the colours of the two strips line up.
+* Luminance / R / G / B: which channel profiles to plot.
+* Lines: opens a dialog with an expandable tree of reference line series. Ticking a series overlays every line in it; expanding a series allows individual lines to be selected. Selected lines are drawn as labelled dashed lines on the chart when calibrated. The built-in series are:
+  * Balmer series (H): H-alpha to H-zeta
+  * Helium: He I lines and He II 468.6 (hot O/B and Wolf-Rayet stars)
+  * Na / Ca: Na D, Ca II H and K, Ca I 422.7
+  * Metals (Fe, Mg): Fe I lines, the Mg I b triplet and the Fraunhofer E line
+  * Molecular bands (CH, C2, TiO): the CH G band (G/K stars), C2 Swan bands (carbon stars and comets) and TiO band heads (M stars)
+  * Nebular emission: [O II], [O III], [N II] and [S II] forbidden lines
+  * Aurora / airglow / meteor: N2+ first negative bands, the [O I] green and red lines, and O I 777
+  * Telluric O2 / H2O: the atmospheric O2 A and B bands and the H2O absorption band at 719 nm
+  * Custom: your own reference lines. Use the Add and Remove buttons at the bottom of the Lines dialog to manage them - Add opens a dialog to enter a name and wavelength. Custom lines are selected by default.
+* Redshift z: shifts the source reference lines to rest wavelength x (1 + z), to help estimate the redshift of galaxies, quasars or other receding sources - adjust until the reference lines match the observed features, then read off z. Redshifted lines are tinted orange and blueshifted lines blue, and the equivalent relativistic recession velocity is shown next to the control. Terrestrial lines (telluric O2/H2O and aurora/airglow) are never shifted, so they stay anchored as a sanity check on the wavelength calibration. Negative values model blueshift (e.g. approaching stars). Calibrate the wavelength scale using features at rest wavelength (such as the telluric bands, or a foreground reference star) before estimating a redshift.
+* Reference: overlays a reference spectrum for comparison. In the dialog, either enter a star name (e.g. Vega, Betelgeuse, or a catalogue designation such as HD 172167) and press Look up to resolve its spectral type via SIMBAD, or select a template directly: the 131 stellar types of the Pickles (1998) spectral flux library, or the SDSS QSO and galaxy composites for emission objects. Templates are downloaded on demand and cached under the camera data directory, so each is only fetched once. The reference is drawn as a dotted yellow series, scaled by a least-squares fit to the observed luminance, and requires the wavelength scale to be calibrated. Templates are rest-frame spectra shifted by the Redshift z control - so for a quasar, select the QSO composite and adjust z until its emission lines match the observed ones.
+
+Note that the overlaid reference will not match the shape of the observed continuum until the instrument response is corrected (below), because the extracted spectrum includes the response of the sensor, Bayer filters and grating, while the reference is the true spectrum of the star.
+
+* Capture response: measures the instrument response - the product of the sensor quantum efficiency, Bayer filter transmission, grating blaze and optics - by dividing the current spectrum by the selected reference template. These factors cannot be separated from one spectrum, but their product is a single smooth curve of wavelength, and that is all that is needed to correct the continuum. To capture it: image a star of known spectral type (an A or B type is ideal - bright, smooth continuum, only broad hydrogen lines), calibrate the wavelength scale, select the star's type with Reference..., check the continuum is unsaturated, then press Capture response. The Balmer lines, telluric bands and every currently selected reference line are masked out and interpolated across, and the ratio is smoothed heavily (the true response is physically smooth, so this only removes noise). Responses are captured for the luminance and for each colour channel, jointly normalised so the relative channel sensitivities are preserved. Where lines crowd together - the Balmer series converging in the blue - the masks are automatically narrowed so the continuum between the lines still anchors the curve there. The curve is saved to a CSV file (by default spectrum-response.csv in the camera data directory) and persists across sessions. The ... button next to Apply response selects a different response file - keep separate files for different cameras or observing conditions (e.g. vega-asi294.csv, tube-bench.csv), since the response is specific to the camera, its settings and the optics it was captured with. Selecting a file loads it immediately; Capture response saves to the selected file.
+* Apply response: divides the displayed luminance by the captured response, correcting the continuum shape. With this enabled, the corrected spectrum of the reference star should closely match its template - a good check of the capture - and spectra of other objects taken with the same equipment and settings show their true relative continuum. Regions where the response falls below 5% of its peak (the edges of the sensor's band) or that lie outside the captured curve's wavelength range are blanked rather than amplified, as only noise remains there; a warning is shown if a significant part of the spectrum is blanked. The exported CSV gains a luminance_corrected column while the response is applied. When the response file carries per-channel curves (captures made with this version do; older files correct luminance only), the R/G/B traces are corrected too. Corrected channel traces converge onto one another by construction - dividing each channel by its own response removes the colour filter curves, leaving three independent estimates of the same spectrum - so overlapping R/G/B traces are a good check that the captured response is accurate. For the same reason the image strip always shows the observed (uncorrected) colours: corrected channels carry no hue.
+
+The response is only valid for the equipment and camera settings it was captured with - refocusing, changing gain/white balance profiles or swapping the grating warrants a re-capture. Atmospheric extinction is included in the measured response, so for best results capture from a reference star at a similar elevation to the target.
+
+Objects without a stellar spectral type (galaxies, nebulae, planets) have no template in the library, and non-MK types such as white dwarfs, Wolf-Rayet and carbon stars are reported as unmatched.
+
+* Export CSV: saves the raw pixel-domain profiles and the current wavelength mapping to a CSV file.
+
+Dragging a rectangle on the chart zooms in to that region; the Zoom out and Reset zoom buttons below the chart step back out and restore the full view. The zoom persists as new frames arrive.
+
+Clicking on the chart places a readout marker on the luminance trace, labelled with the wavelength (and pixel position) and intensity at that point. When the marker sits on a spectral line, its FWHM and equivalent width are measured automatically against the local continuum and shown in the label (in nm when calibrated). Shift+click snaps the marker to the nearest spectral feature. Ctrl+click places a second marker, whose label also shows the wavelength and intensity differences from the first - useful for measuring line separations. Markers stay at their pixel positions and update as new frames arrive. Right-click removes them. While Calibrate is active, clicks pick calibration reference points instead.
+
+Load overlay reads a previously exported spectrum CSV (which must have been exported calibrated; the corrected luminance column is used when present) and draws it as a comparison series, scaled to the current spectrum by least squares - for example to compare tonight's spectrum of a star against last month's, or a bench reference.
+
+For quantitative spectra, disable intensity-altering adjustments (histogram stretch, gamma, brightness/contrast, saturation, colour inversion and edge modes) while extracting,
+as the spectrum is taken from the displayed (processed) image so that it aligns with the RoI. Relative intensities are uncorrected for the sensor and grating response.
+
+<h3>27: Object detection</h3>
 
 Check to enable object detection. This uses an AI model to detect objects such as people or cars within an image, drawing a bounding box around them.
 
@@ -176,7 +236,7 @@ The YOLO ONNX model to use must be set in the Object Detection sub-tab in the Ca
 
 When an object is detected an event will be emitted that can be used by the Scheduler feature to perform user-defined actions.
 
-<h3>27: Object detection history</h3>
+<h3>28: Object detection history</h3>
 
 Opens the object detection history dialog.
 
@@ -188,7 +248,7 @@ If the source is `video:` or `images:`, the position column will indicate the ti
 Pressing 'Clear history' will clear the detection history.
 Pressing 'Save to CSV' will show a file dialog to select a filename to save the detection history to in CSV format.
 
-<h3>28: Motion detection</h3>
+<h3>29: Motion detection</h3>
 
 Check to enable motion detection, which highlights parts of the image that are moving by drawing a bounding box around them. This can be used to detect aircraft, satellites, meteors, wildlife or people, without needing an AI model.
 
@@ -202,7 +262,7 @@ How sensitive the detection is, and how it deals with noise and small or brief m
 
 When motion is detected, an event is emitted that can be used by the Scheduler feature to perform user-defined actions, such as starting a recording or running a command. A second event is emitted when the motion stops.
 
-<h3>29: Difference mask</h3>
+<h3>30: Difference mask</h3>
 
 Enables display of differences from previous images using the Difference Detection settings.
 There are settings to control how large the difference must be and how many differences there should be in a region for it to be visible, and how much to dilate the region so nearby similar pixels are also visible.
@@ -211,7 +271,7 @@ In this image, difference detection shows a satellite flare, while hiding backgr
 
 ![Difference dection](../../../doc/img/Camera_plugin_difference_detection.png)
 
-<h3>30: Star detection and plate solving</h3>
+<h3>31: Star detection and plate solving</h3>
 
 Enables star detection and plate solving.
 This can be used to display labels showing the names of stars detected within an image, or to work out the direction a camera is pointing.
@@ -249,7 +309,7 @@ Cloud-classified regions can be tinted on the image with a configurable colour, 
 
 When the coverage percentage rises to the configured event threshold, a Camera Cloud Coverage High event is emitted that can be used by the Scheduler feature to perform user-defined actions, such as pausing recordings or sending notifications. A Camera Cloud Coverage Low event is emitted when coverage falls back 10 points below the threshold (the gap prevents coverage hovering around the threshold from repeatedly triggering). When capture starts, an event describing the initial sky state is emitted, so automation immediately knows whether the sky is clear or overcast. These events are emitted by the feature itself, so they also work in server mode.
 
-<h3>31: Item overlay</h3>
+<h3>32: Item overlay</h3>
 
 Overlays ADS-B, AIS, satellite, star tracker and other items sent to the Map feature on the camera image. Options can show recent tracks, a heat map, and the line-of-sight range to each item in km.
 
@@ -257,11 +317,11 @@ Overlays ADS-B, AIS, satellite, star tracker and other items sent to the Map fea
 
 For this to work, the position and direction of the camera must be set in the Camera Settings dialog.
 
-<h3>32: Date/time overlay</h3>
+<h3>33: Date/time overlay</h3>
 
 Overlays the configured date and time string on the image.
 
-<h3>33: HTML overlay</h3>
+<h3>34: HTML overlay</h3>
 
 Overlays the configured HTML on the image.
 
@@ -290,29 +350,29 @@ From OpenWeatherMap API (requires an API key to be set in the Camera Settings di
 * `${windSpeed}`: Weather wind speed, or `N/A` if unavailable.
 * `${windDirection}`: Weather wind direction, or `N/A` if unavailable.
 
-<h3>34: Spectrum overlay</h3>
+<h3>35: Spectrum overlay</h3>
 
 Overlays a spectrum view from a selected SDRangel device set on the image.
 
 ![Spectrum overlay](../../../doc/img/Camera_plugin_spectrum_overlay.png)
 
-<h3>35: Azimuthal grid overlay</h3>
+<h3>36: Azimuthal grid overlay</h3>
 
 Overlays the azimuth/elevation sky grid.
 
 ![Azimuthal grid overlay](../../../doc/img/Camera_plugin_azimuthal_grid.png)
 
-<h3>36: Equatorial grid overlay</h3>
+<h3>37: Equatorial grid overlay</h3>
 
 Overlays the right ascension/declination equatorial sky grid.
 
 ![Equatorial grid overlay](../../../doc/img/Camera_plugin_equatorial_grid.png)
 
-<h3>37: Constellation overlay</h3>
+<h3>38: Constellation overlay</h3>
 
 Overlays the selected constellation stars. This can be used to help determine the camera's pose.
 
-<h3>38: Image display</h3>
+<h3>39: Image display</h3>
 
 Displays the captured image, including enabled post-processing, detection results and overlays.
 

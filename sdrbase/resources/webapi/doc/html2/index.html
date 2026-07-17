@@ -3930,6 +3930,10 @@ margin-bottom: 20px;
       "type" : "string",
       "description" : "File path for recorded video output"
     },
+    "recordingOutputDirectoryUri" : {
+      "type" : "string",
+      "description" : "Android Storage Access Framework document-tree URI used for completed recordings"
+    },
     "videoCodec" : {
       "type" : "integer",
       "description" : "Codec used for saved video recordings\n  * 0 - H.264\n  * 1 - H.265\n"
@@ -4841,11 +4845,11 @@ margin-bottom: 20px;
     },
     "yoloModelPath" : {
       "type" : "string",
-      "description" : "Path to the YOLO .onnx model file used for scaled/full-image inference"
+      "description" : "Path to the YOLO .onnx or Android LiteRT .tflite model used for scaled/full-image inference"
     },
     "yoloTileModelPath" : {
       "type" : "string",
-      "description" : "Optional path to the YOLO .onnx model file used for tiled inference. If empty, yoloModelPath is used"
+      "description" : "Optional path to the YOLO .onnx or Android LiteRT .tflite model used for tiled inference. If empty, yoloModelPath is used"
     },
     "yoloLabelsPath" : {
       "type" : "string",
@@ -4882,7 +4886,7 @@ margin-bottom: 20px;
     },
     "yoloDnnTarget" : {
       "type" : "integer",
-      "description" : "YOLO inference backend/target\n  * 0 - CPU\n  * 1 - CUDA FP32\n  * 2 - CUDA FP16\n  * 3 - TensorRT FP32\n  * 4 - TensorRT FP16\n"
+      "description" : "YOLO inference backend/target\n  * 0 - CPU\n  * 1 - CUDA FP32\n  * 2 - CUDA FP16\n  * 3 - TensorRT FP32\n  * 4 - TensorRT FP16\n  * 5 - OpenCV Vulkan\n  * 6 - LiteRT CPU (Android .tflite models)\n  * 7 - LiteRT GPU delegate (Android .tflite models)\n"
     },
     "audioMute" : {
       "type" : "integer",
@@ -17762,11 +17766,11 @@ margin-bottom: 20px;
     },
     "triggerType" : {
       "type" : "integer",
-      "description" : "Rule trigger type\n  * 0 - Time\n  * 1 - Event\n"
+      "description" : "Rule trigger type\n  * 0 - Time\n  * 1 - Event\n  * 2 - Sunrise\n  * 3 - Sunset\n"
     },
     "time" : {
       "type" : "string",
-      "description" : "Rule time for time-based triggers"
+      "description" : "Rule start date and clock time. The clock time is ignored for sunrise and sunset triggers."
     },
     "dateUntil" : {
       "type" : "string",
@@ -17806,11 +17810,11 @@ margin-bottom: 20px;
     },
     "duration" : {
       "type" : "integer",
-      "description" : "Optional rule duration. 0 leaves started actions running."
+      "description" : "Optional rule duration. 0 leaves started actions running for fixed duration units; ignored for Until sunset."
     },
     "durationUnit" : {
       "type" : "integer",
-      "description" : "Rule duration unit\n  * 0 - Seconds\n  * 1 - Minutes\n"
+      "description" : "Rule duration unit\n  * 0 - Seconds\n  * 1 - Minutes\n  * 2 - Hours\n  * 3 - Until sunset (duration value is ignored)\n"
     },
     "command" : {
       "type" : "string",
@@ -62674,7 +62678,7 @@ except ApiException as e:
           </div>
           <div id="generator">
             <div class="content">
-              Generated 2026-07-11T00:20:46.185+02:00
+              Generated 2026-07-17T17:48:36.015+02:00
             </div>
           </div>
       </div>

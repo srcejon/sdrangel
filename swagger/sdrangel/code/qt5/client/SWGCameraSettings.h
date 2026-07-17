@@ -228,6 +228,9 @@ public:
     QString* getVideoFileName();
     void setVideoFileName(QString* video_file_name);
 
+    QString* getRecordingOutputDirectoryUri();
+    void setRecordingOutputDirectoryUri(QString* recording_output_directory_uri);
+
     qint32 getVideoCodec();
     void setVideoCodec(qint32 video_codec);
 
@@ -1125,6 +1128,9 @@ private:
 
     QString* video_file_name;
     bool m_video_file_name_isSet;
+
+    QString* recording_output_directory_uri;
+    bool m_recording_output_directory_uri_isSet;
 
     qint32 video_codec;
     bool m_video_codec_isSet;

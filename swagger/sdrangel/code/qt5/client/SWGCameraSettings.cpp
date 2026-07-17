@@ -150,6 +150,8 @@ SWGCameraSettings::SWGCameraSettings() {
     m_image_file_camera_paths_isSet = false;
     video_file_name = nullptr;
     m_video_file_name_isSet = false;
+    recording_output_directory_uri = nullptr;
+    m_recording_output_directory_uri_isSet = false;
     video_codec = 0;
     m_video_codec_isSet = false;
     video_record_bitrate_kbps = 0;
@@ -754,6 +756,8 @@ SWGCameraSettings::init() {
     m_image_file_camera_paths_isSet = false;
     video_file_name = new QString("");
     m_video_file_name_isSet = false;
+    recording_output_directory_uri = new QString("");
+    m_recording_output_directory_uri_isSet = false;
     video_codec = 0;
     m_video_codec_isSet = false;
     video_record_bitrate_kbps = 0;
@@ -1327,6 +1331,9 @@ SWGCameraSettings::cleanup() {
     if(video_file_name != nullptr) { 
         delete video_file_name;
     }
+    if(recording_output_directory_uri != nullptr) { 
+        delete recording_output_directory_uri;
+    }
 
 
 
@@ -1752,6 +1759,8 @@ SWGCameraSettings::fromJsonObject(QJsonObject &pJson) {
     
     ::SWGSDRangel::setValue(&image_file_camera_paths, pJson["imageFileCameraPaths"], "QList", "QString");
     ::SWGSDRangel::setValue(&video_file_name, pJson["videoFileName"], "QString", "QString");
+    
+    ::SWGSDRangel::setValue(&recording_output_directory_uri, pJson["recordingOutputDirectoryUri"], "QString", "QString");
     
     ::SWGSDRangel::setValue(&video_codec, pJson["videoCodec"], "qint32", "");
     
@@ -2425,6 +2434,9 @@ SWGCameraSettings::asJsonObject() {
     }
     if(video_file_name != nullptr && *video_file_name != QString("")){
         toJsonValue(QString("videoFileName"), video_file_name, obj, QString("QString"));
+    }
+    if(recording_output_directory_uri != nullptr && *recording_output_directory_uri != QString("")){
+        toJsonValue(QString("recordingOutputDirectoryUri"), recording_output_directory_uri, obj, QString("QString"));
     }
     if(m_video_codec_isSet){
         obj->insert("videoCodec", QJsonValue(video_codec));
@@ -3749,6 +3761,16 @@ void
 SWGCameraSettings::setVideoFileName(QString* video_file_name) {
     this->video_file_name = video_file_name;
     this->m_video_file_name_isSet = true;
+}
+
+QString*
+SWGCameraSettings::getRecordingOutputDirectoryUri() {
+    return recording_output_directory_uri;
+}
+void
+SWGCameraSettings::setRecordingOutputDirectoryUri(QString* recording_output_directory_uri) {
+    this->recording_output_directory_uri = recording_output_directory_uri;
+    this->m_recording_output_directory_uri_isSet = true;
 }
 
 qint32
@@ -6307,6 +6329,9 @@ SWGCameraSettings::isSet(){
             isObjectUpdated = true; break;
         }
         if(video_file_name && *video_file_name != QString("")){
+            isObjectUpdated = true; break;
+        }
+        if(recording_output_directory_uri && *recording_output_directory_uri != QString("")){
             isObjectUpdated = true; break;
         }
         if(m_video_codec_isSet){

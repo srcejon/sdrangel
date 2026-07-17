@@ -209,6 +209,9 @@ CameraSettings:
     videoFileName:
       description: "File path for recorded video output"
       type: string
+    recordingOutputDirectoryUri:
+      description: "Android Storage Access Framework document-tree URI used for completed recordings"
+      type: string
     videoCodec:
       description: >
         Codec used for saved video recordings
@@ -1015,10 +1018,10 @@ CameraSettings:
       description: "Run YOLO ONNX inference and draw bounding boxes (1 for yes, 0 for no)"
       type: integer
     yoloModelPath:
-      description: "Path to the YOLO .onnx model file used for scaled/full-image inference"
+      description: "Path to the YOLO .onnx or Android LiteRT .tflite model used for scaled/full-image inference"
       type: string
     yoloTileModelPath:
-      description: "Optional path to the YOLO .onnx model file used for tiled inference. If empty, yoloModelPath is used"
+      description: "Optional path to the YOLO .onnx or Android LiteRT .tflite model used for tiled inference. If empty, yoloModelPath is used"
       type: string
     yoloLabelsPath:
       description: "Path to a plain-text file with one class name per line"
@@ -1053,6 +1056,9 @@ CameraSettings:
           * 2 - CUDA FP16
           * 3 - TensorRT FP32
           * 4 - TensorRT FP16
+          * 5 - OpenCV Vulkan
+          * 6 - LiteRT CPU (Android .tflite models)
+          * 7 - LiteRT GPU delegate (Android .tflite models)
       type: integer
     audioMute:
       description: "Silence captured camera audio (1 for yes, 0 for no)"

@@ -28,7 +28,6 @@
 #include "SWGFileSourceActions.h"
 #include "SWGFreqScannerActions.h"
 #include "SWGIEEE_802_15_4_ModActions.h"
-#include "SWGMeshcoreModActions.h"
 #include "SWGPSK31ModActions.h"
 #include "SWGPacketModActions.h"
 #include "SWGRTTYModActions.h"
@@ -84,9 +83,6 @@ public:
     SWGIEEE_802_15_4_ModActions* getIeee802154ModActions();
     void setIeee802154ModActions(SWGIEEE_802_15_4_ModActions* ieee_802_15_4_mod_actions);
 
-    SWGMeshcoreModActions* getMeshcoreModActions();
-    void setMeshcoreModActions(SWGMeshcoreModActions* meshcore_mod_actions);
-
     SWGPacketModActions* getPacketModActions();
     void setPacketModActions(SWGPacketModActions* packet_mod_actions);
 
@@ -135,9 +131,6 @@ private:
 
     SWGIEEE_802_15_4_ModActions* ieee_802_15_4_mod_actions;
     bool m_ieee_802_15_4_mod_actions_isSet;
-
-    SWGMeshcoreModActions* meshcore_mod_actions;
-    bool m_meshcore_mod_actions_isSet;
 
     SWGPacketModActions* packet_mod_actions;
     bool m_packet_mod_actions_isSet;

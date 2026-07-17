@@ -347,16 +347,6 @@ SWGChannelActions::setIeee802154ModActions(SWGIEEE_802_15_4_ModActions* ieee_802
     this->m_ieee_802_15_4_mod_actions_isSet = true;
 }
 
-SWGMeshcoreModActions*
-SWGChannelActions::getMeshcoreModActions() {
-    return meshcore_mod_actions;
-}
-void
-SWGChannelActions::setMeshcoreModActions(SWGMeshcoreModActions* meshcore_mod_actions) {
-    this->meshcore_mod_actions = meshcore_mod_actions;
-    this->m_meshcore_mod_actions_isSet = true;
-}
-
 SWGPacketModActions*
 SWGChannelActions::getPacketModActions() {
     return packet_mod_actions;
@@ -440,9 +430,6 @@ SWGChannelActions::isSet(){
             isObjectUpdated = true; break;
         }
         if(ieee_802_15_4_mod_actions && ieee_802_15_4_mod_actions->isSet()){
-            isObjectUpdated = true; break;
-        }
-        if (meshcore_mod_actions && meshcore_mod_actions->isSet()) {
             isObjectUpdated = true; break;
         }
         if(packet_mod_actions && packet_mod_actions->isSet()){

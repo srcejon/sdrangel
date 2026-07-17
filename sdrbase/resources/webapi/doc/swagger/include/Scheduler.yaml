@@ -31,9 +31,11 @@ SchedulerRule:
         Rule trigger type
           * 0 - Time
           * 1 - Event
+          * 2 - Sunrise
+          * 3 - Sunset
       type: integer
     time:
-      description: "Rule time for time-based triggers"
+      description: "Rule start date and clock time. The clock time is ignored for sunrise and sunset triggers."
       type: string
     dateUntil:
       description: "Optional end date for recurring time-based triggers"
@@ -70,13 +72,15 @@ SchedulerRule:
           * 1 - Minutes
       type: integer
     duration:
-      description: "Optional rule duration. 0 leaves started actions running."
+      description: "Optional rule duration. 0 leaves started actions running for fixed duration units; ignored for Until sunset."
       type: integer
     durationUnit:
       description: >
         Rule duration unit
           * 0 - Seconds
           * 1 - Minutes
+          * 2 - Hours
+          * 3 - Until sunset (duration value is ignored)
       type: integer
     command:
       description: "Detached command to run when the rule fires"

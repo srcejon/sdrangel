@@ -23,6 +23,7 @@
 #include <QComboBox>
 #include <QDoubleSpinBox>
 #include <QFile>
+#include <QSaveFile>
 #include <QFileDialog>
 #include <QGraphicsSimpleTextItem>
 #include <QGridLayout>
@@ -652,10 +653,14 @@ void CameraOpticalSpectrumDialog::captureInstrumentResponse()
         rescale(responseB, peakB);
     }
 
+    // Persist before activating: if the file cannot be written the capture would appear
+    // to work but vanish on reopen, and (worse) an unsaved response would be applied.
+    // QSaveFile writes atomically, so a failure never truncates a previously good file.
     const QString filePath = responseFilePath();
     QDir().mkpath(QFileInfo(filePath).absolutePath());
-    QFile file(filePath);
-    if (file.open(QIODevice::WriteOnly | QIODevice::Text))
+    QSaveFile file(filePath);
+    bool written = file.open(QIODevice::WriteOnly | QIODevice::Text);
+    if (written)
     {
         // Channel curves are written on the luminance curve's wavelength grid
         QTextStream out(&file);
@@ -668,6 +673,14 @@ void CameraOpticalSpectrumDialog::captureInstrumentResponse()
                 << ',' << QString::number(CameraOpticalSpectrumLibrary::responseAt(responseB, point.x()), 'f', 5)
                 << '\n';
         }
+        out.flush();
+        written = (out.status() == QTextStream::Ok) && file.commit();
+    }
+    if (!written)
+    {
+        QMessageBox::warning(this, tr("Capture response"),
+            tr("Could not save the response to %1.\nThe response has not been applied.").arg(filePath));
+        return;
     }
 
     m_responsePoints = response;
@@ -760,7 +773,6 @@ void CameraOpticalSpectrumDialog::loadReferenceTemplate(const QString& key)
         });
     }
 
-    m_referenceDownloadKey = key;
     updateReferenceLabel(tr("Downloading %1...").arg(key));
     const QString url = CameraOpticalSpectrumLibrary::isEmissionTemplate(key)
         ? CameraOpticalSpectrumLibrary::emissionTemplateUrl(key)
@@ -768,18 +780,26 @@ void CameraOpticalSpectrumDialog::loadReferenceTemplate(const QString& key)
     QNetworkRequest request{QUrl(url)};
     request.setHeader(QNetworkRequest::UserAgentHeader, kUserAgent);
     request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
-    m_referenceNetworkManager->get(request);
+    // Bind the template key to the reply itself: with concurrent downloads a shared
+    // member would let one reply's bytes be parsed and cached under another's key.
+    QNetworkReply* reply = m_referenceNetworkManager->get(request);
+    reply->setProperty("opticalTemplateKey", key);
 }
 
 void CameraOpticalSpectrumDialog::handleReferenceDownload(QNetworkReply* reply)
 {
     reply->deleteLater();
-    const QString key = m_referenceDownloadKey;
-    m_referenceDownloadKey.clear();
+    const QString key = reply->property("opticalTemplateKey").toString();
+    if (key.isEmpty()) {
+        return;
+    }
 
     if (reply->error() != QNetworkReply::NoError)
     {
-        updateReferenceLabel(tr("Download failed: %1").arg(reply->errorString()));
+        // Only report a failure for the template still selected; a stale reply is silent
+        if (key == m_settings.m_opticalSpectrumReferenceTemplate) {
+            updateReferenceLabel(tr("Download failed: %1").arg(reply->errorString()));
+        }
         return;
     }
 
@@ -787,10 +807,13 @@ void CameraOpticalSpectrumDialog::handleReferenceDownload(QNetworkReply* reply)
     const QVector<QPointF> points = parseTemplateBytes(key, bytes);
     if (points.isEmpty())
     {
-        updateReferenceLabel(tr("Could not read the downloaded reference spectrum"));
+        if (key == m_settings.m_opticalSpectrumReferenceTemplate) {
+            updateReferenceLabel(tr("Could not read the downloaded reference spectrum"));
+        }
         return;
     }
 
+    // Cache under this reply's own key (always correct, even if no longer selected)
     const QString cachePath = referenceCachePath(key);
     QDir().mkpath(QFileInfo(cachePath).absolutePath());
     QFile cacheFile(cachePath);
@@ -800,6 +823,10 @@ void CameraOpticalSpectrumDialog::handleReferenceDownload(QNetworkReply* reply)
         cacheFile.close();
     }
 
+    // Only display it if it is still the selected template (a later selection wins)
+    if (key != m_settings.m_opticalSpectrumReferenceTemplate) {
+        return;
+    }
     m_referencePoints = points;
     m_referenceLoadedKey = key;
     updateReferenceLabel();
@@ -824,13 +851,17 @@ void CameraOpticalSpectrumDialog::updateSpectrum(const CameraOpticalSpectrumData
                 .arg(spectrumData.m_saturatedFraction * 100.0f, 0, 'f', 0));
         }
 
-        // Frame-averaging history: restart whenever profiles would no longer be
-        // sample-aligned - a length change (RoI resize), a moved RoI origin, or an axis
-        // flip. Averaging misaligned profiles smears two sky positions together.
+        // Frame-averaging history: restart whenever the frames would no longer be
+        // comparable - a length change (RoI resize), a moved RoI origin, an axis flip,
+        // or any other extraction-input change (RoI move in the across-axis direction,
+        // aperture, background flag, or image processing such as flip/gamma), which the
+        // pipeline signals through m_extractionRevision. Blending across any of these
+        // smears incompatible spectra together and can contaminate a response capture.
         if (!m_averageHistory.empty()
             && ((m_averageHistory.back().m_luminance.size() != spectrumData.m_luminance.size())
                 || (m_averageHistory.back().m_axisOrigin != spectrumData.m_axisOrigin)
-                || (m_averageHistory.back().m_verticalAxis != spectrumData.m_verticalAxis))) {
+                || (m_averageHistory.back().m_verticalAxis != spectrumData.m_verticalAxis)
+                || (m_averageHistory.back().m_extractionRevision != spectrumData.m_extractionRevision))) {
             m_averageHistory.clear();
         }
         m_averageHistory.push_back(spectrumData);
@@ -2172,7 +2203,7 @@ void CameraOpticalSpectrumDialog::updateReferenceLines(double minY, double maxY)
         series->append(nm, maxY);
         m_chart->addSeries(series);
         series->attachAxis(m_axisX);
-        series->attachAxis(m_axisY);
+        series->attachAxis(activeAxisY()); // m_axisY is removed from the chart in log mode
         const auto markers = m_chart->legend()->markers(series);
         for (QLegendMarker* marker : markers) {
             marker->setVisible(false);

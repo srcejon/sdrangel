@@ -272,6 +272,20 @@ void CameraImageProcessor::applySettings(const CameraSettings& settings, const Q
         m_settings.applySettings(settingsKeys, settings);
     }
 
+    // Any change that alters the extracted optical spectrum - the processed image, the
+    // source, the RoI, aperture or background flag - bumps a revision stamped onto each
+    // spectrum so the GUI can discard frame-averaging history that would otherwise blend
+    // incompatible extraction configurations.
+    if (imageProcessingChanged || sourceChanged
+        || settingsKeys.contains("detectionRoiX")
+        || settingsKeys.contains("detectionRoiY")
+        || settingsKeys.contains("detectionRoiWidth")
+        || settingsKeys.contains("detectionRoiHeight")
+        || settingsKeys.contains("opticalSpectrumApertureRows")
+        || settingsKeys.contains("opticalSpectrumBackgroundSub")) {
+        m_opticalSpectrumExtractionRevision++;
+    }
+
     if (sourceChanged) {
         m_lastInputFrame.clear();
         invalidateUnwarpMaps();
@@ -514,6 +528,7 @@ CameraOpticalSpectrumData CameraImageProcessor::computeOpticalSpectrumData(const
             m_settings.m_opticalSpectrumApertureRows,
             m_settings.m_opticalSpectrumBackgroundSub);
     }
+    spectrumData.m_extractionRevision = m_opticalSpectrumExtractionRevision;
     PROFILER_STOP("CameraImageProcessor::computeOpticalSpectrumData");
     return spectrumData;
 }

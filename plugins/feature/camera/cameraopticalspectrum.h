@@ -54,6 +54,12 @@ struct CameraOpticalSpectrumData
     /// sky margins above/below the trace.
     bool m_backgroundInsufficientRows = false;
     float m_saturatedFraction = 0.0f; ///< Fraction of aperture pixels with a clipped channel
+    /// Bumped by the pipeline whenever an extraction input changes (RoI, aperture,
+    /// background flag, or any image-processing setting). Consumers that accumulate
+    /// frames (frame averaging) must discard history when this changes, since profiles
+    /// from different extraction configurations are not comparable even when their
+    /// geometry (length/origin/orientation) happens to match.
+    quint32 m_extractionRevision = 0;
 
     bool isValid() const { return !m_luminance.isEmpty(); }
 };

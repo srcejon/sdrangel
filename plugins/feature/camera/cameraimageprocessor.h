@@ -112,6 +112,9 @@ private:
     CameraSettings m_settings;
     bool m_captureActive;
     quint64 m_captureEpoch = 0;
+    // Bumped on any change that alters the extracted optical spectrum; stamped onto each
+    // spectrum so the GUI can invalidate frame-averaging history across config changes.
+    quint32 m_opticalSpectrumExtractionRevision = 0;
     LastInputFrame m_lastInputFrame;
     cv::Vec3d m_autoWhiteBalanceGains;
     bool m_autoWhiteBalanceInitialized;

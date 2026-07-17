@@ -188,7 +188,6 @@ private:
     QNetworkAccessManager* m_referenceNetworkManager = nullptr;
     QVector<QPointF> m_referencePoints; ///< Loaded template: wavelength nm vs normalised flux
     QString m_referenceLoadedKey;       ///< Template key m_referencePoints was loaded from
-    QString m_referenceDownloadKey;     ///< Template key of the download in flight
     QVector<QPointF> m_responsePoints;  ///< Captured instrument response (luminance): wavelength nm vs relative response
     QVector<QPointF> m_responseRed;     ///< Per-channel responses, normalised jointly so relative sensitivities survive
     QVector<QPointF> m_responseGreen;

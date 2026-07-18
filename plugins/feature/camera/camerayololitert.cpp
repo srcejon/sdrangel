@@ -14,8 +14,8 @@
 #include <cstring>
 
 #ifdef CAMERA_LITERT_YOLO
-#include <tensorflow/lite/c/c_api.h>
-#include <tensorflow/lite/delegates/gpu/delegate.h>
+#include <tflite/c/c_api.h>
+#include <tflite/delegates/gpu/delegate.h>
 #endif
 
 struct CameraYoloLiteRt::Impl

@@ -1,6 +1,8 @@
 project(camera)
 option(ENABLE_CAMERA_TENSORRT "Enable optional TensorRT YOLO inference in the camera feature" OFF)
 option(ENABLE_CAMERA_LITERT "Enable optional Android LiteRT YOLO inference" ${ANDROID})
+set(LITERT_ROOT "" CACHE PATH "Root of the extracted Android LiteRT runtime AAR")
+set(LITERT_GPU_ROOT "" CACHE PATH "Root of the extracted Android LiteRT GPU AAR")
 
 set(camera_SOURCES
     camera.cpp
@@ -287,13 +289,21 @@ if(ENABLE_CAMERA_TENSORRT)
 endif()
 
 if(ANDROID AND ENABLE_CAMERA_LITERT)
-    find_path(LITERT_INCLUDE_DIR tensorflow/lite/c/c_api.h
+    find_path(LITERT_INCLUDE_DIR tflite/c/c_api.h
         HINTS
             "$ENV{LITERT_ROOT}/include"
             "$ENV{LITERT_ROOT}/headers"
             "${LITERT_ROOT}/include"
             "${LITERT_ROOT}/headers"
             "${EXTERNAL_LIBRARY_FOLDER}/${ANDROID_ABI}/litert/include"
+    )
+    find_path(LITERT_GPU_INCLUDE_DIR tflite/delegates/gpu/delegate.h
+        HINTS
+            "$ENV{LITERT_GPU_ROOT}/include"
+            "$ENV{LITERT_GPU_ROOT}/headers"
+            "${LITERT_GPU_ROOT}/include"
+            "${LITERT_GPU_ROOT}/headers"
+            "${EXTERNAL_LIBRARY_FOLDER}/${ANDROID_ABI}/litert-gpu/include"
     )
     find_library(LITERT_LIBRARY
         NAMES tensorflowlite_c tensorflowlite tensorflow-lite tensorflowlite_jni
@@ -309,18 +319,18 @@ if(ANDROID AND ENABLE_CAMERA_LITERT)
     find_library(LITERT_GPU_DELEGATE_LIBRARY
         NAMES tensorflowlite_gpu_delegate tensorflow-lite-gpu-delegate tensorflowlite_gpu_jni
         HINTS
-            "$ENV{LITERT_ROOT}/lib/${ANDROID_ABI}"
-            "$ENV{LITERT_ROOT}/lib"
-            "$ENV{LITERT_ROOT}/jni/${ANDROID_ABI}"
-            "${LITERT_ROOT}/lib/${ANDROID_ABI}"
-            "${LITERT_ROOT}/lib"
-            "${LITERT_ROOT}/jni/${ANDROID_ABI}"
-            "${EXTERNAL_LIBRARY_FOLDER}/${ANDROID_ABI}/litert/lib"
+            "$ENV{LITERT_GPU_ROOT}/lib/${ANDROID_ABI}"
+            "$ENV{LITERT_GPU_ROOT}/lib"
+            "$ENV{LITERT_GPU_ROOT}/jni/${ANDROID_ABI}"
+            "${LITERT_GPU_ROOT}/lib/${ANDROID_ABI}"
+            "${LITERT_GPU_ROOT}/lib"
+            "${LITERT_GPU_ROOT}/jni/${ANDROID_ABI}"
+            "${EXTERNAL_LIBRARY_FOLDER}/${ANDROID_ABI}/litert-gpu/lib"
     )
 
-    if(LITERT_INCLUDE_DIR AND LITERT_LIBRARY AND LITERT_GPU_DELEGATE_LIBRARY)
+    if(LITERT_INCLUDE_DIR AND LITERT_GPU_INCLUDE_DIR AND LITERT_LIBRARY AND LITERT_GPU_DELEGATE_LIBRARY)
         target_compile_definitions(${TARGET_NAME} PRIVATE CAMERA_LITERT_YOLO)
-        target_include_directories(${TARGET_NAME} PRIVATE ${LITERT_INCLUDE_DIR})
+        target_include_directories(${TARGET_NAME} PRIVATE ${LITERT_INCLUDE_DIR} ${LITERT_GPU_INCLUDE_DIR})
         target_link_libraries(${TARGET_NAME} PRIVATE ${LITERT_LIBRARY} ${LITERT_GPU_DELEGATE_LIBRARY})
         foreach(litert_lib IN ITEMS ${LITERT_LIBRARY} ${LITERT_GPU_DELEGATE_LIBRARY})
             if(litert_lib MATCHES "\\.so$")
@@ -329,7 +339,7 @@ if(ANDROID AND ENABLE_CAMERA_LITERT)
         endforeach()
         message(STATUS "Camera Android LiteRT YOLO support enabled")
     else()
-        message(WARNING "ENABLE_CAMERA_LITERT is ON, but the LiteRT C runtime and GPU delegate were not found; camera LiteRT support is disabled. Set LITERT_ROOT or LITERT_INCLUDE_DIR/LITERT_LIBRARY/LITERT_GPU_DELEGATE_LIBRARY.")
+        message(WARNING "ENABLE_CAMERA_LITERT is ON, but the LiteRT C runtime and GPU delegate were not found; camera LiteRT support is disabled. Set LITERT_ROOT and LITERT_GPU_ROOT, or set LITERT_INCLUDE_DIR/LITERT_GPU_INCLUDE_DIR/LITERT_LIBRARY/LITERT_GPU_DELEGATE_LIBRARY explicitly.")
     endif()
 endif()
 

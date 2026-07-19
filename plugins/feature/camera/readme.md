@@ -374,7 +374,7 @@ Overlays the selected constellation stars. This can be used to help determine th
 
 <h3>38a: Image drawings</h3>
 
-Shows or hides the image drawing toolbar. Drawings can be added as lines, arrows, rectangles, ellipses, freehand paths or text. The toolbar controls line width and colour, optional shape fill or text background, and text font, size, bold and italic styles. Select mode allows one or more drawings to be selected for deletion; the toolbar also provides undo, redo and clear-all commands.
+Shows or hides the image drawing toolbar. Drawings can be added as lines, arrows, rectangles, ellipses, freehand paths or text. Hold Shift while drawing a rectangle or ellipse to constrain it to a square or circle. The toolbar controls line width and colour, optional shape fill or text background, and text font, size, bold and italic styles. Select mode allows one or more drawings to be selected for deletion; the toolbar also provides undo, redo and clear-all commands.
 
 Drawing positions are stored relative to the image dimensions, so they remain aligned when the image resolution changes. They are drawn as scalable scene items in the live preview and are baked into post-processed saved images and video.
 

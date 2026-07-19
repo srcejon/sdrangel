@@ -150,7 +150,9 @@ void CameraDrawingRenderer::draw(QPainter& painter, const CameraDrawing& drawing
     painter.setRenderHint(QPainter::Antialiasing, true);
     painter.setRenderHint(QPainter::TextAntialiasing, true);
     painter.setPen(QPen(drawing.m_strokeColor, std::max(0.5, drawing.m_lineWidth), Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
-    painter.setBrush(drawing.m_fillEnabled ? QBrush(drawing.m_fillColor) : Qt::NoBrush);
+    const bool fillShape = drawing.m_fillEnabled
+        && ((drawing.m_type == CameraDrawing::Rectangle) || (drawing.m_type == CameraDrawing::Ellipse));
+    painter.setBrush(fillShape ? QBrush(drawing.m_fillColor) : Qt::NoBrush);
 
     if (drawing.m_type == CameraDrawing::Text)
     {

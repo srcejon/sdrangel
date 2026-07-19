@@ -1471,9 +1471,65 @@ void CameraGUI::createDrawingControls()
 
     m_drawingToolGroup = new QButtonGroup(this);
     m_drawingToolGroup->setExclusive(true);
-    const auto addTool = [this, layout](const QString& text, const QString& toolTip, DrawingTool tool) {
+    const auto createToolIcon = [this](DrawingTool tool) {
+        QPixmap pixmap(24, 24);
+        pixmap.fill(Qt::transparent);
+        QPainter painter(&pixmap);
+        painter.setRenderHint(QPainter::Antialiasing, true);
+        const QColor color = palette().color(QPalette::ButtonText);
+        painter.setPen(QPen(color, 2.0, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+        painter.setBrush(Qt::NoBrush);
+
+        switch (tool)
+        {
+        case DrawingToolSelect:
+            painter.setBrush(color);
+            painter.drawPolygon(QPolygonF()
+                << QPointF(5, 3) << QPointF(5, 19) << QPointF(9, 15)
+                << QPointF(13, 22) << QPointF(16, 20) << QPointF(12, 14)
+                << QPointF(19, 14));
+            break;
+        case DrawingToolLine:
+            painter.drawLine(QPointF(4, 20), QPointF(20, 4));
+            break;
+        case DrawingToolArrow:
+            painter.drawLine(QPointF(4, 20), QPointF(20, 4));
+            painter.drawLine(QPointF(20, 4), QPointF(13, 5));
+            painter.drawLine(QPointF(20, 4), QPointF(19, 11));
+            break;
+        case DrawingToolRectangle:
+            painter.drawRect(QRectF(4, 5, 16, 14));
+            break;
+        case DrawingToolEllipse:
+            painter.drawEllipse(QRectF(4, 5, 16, 14));
+            break;
+        case DrawingToolFreehand:
+        {
+            QPainterPath path;
+            path.moveTo(3, 17);
+            path.cubicTo(7, 7, 10, 22, 14, 11);
+            path.cubicTo(16, 6, 18, 7, 21, 5);
+            painter.drawPath(path);
+            break;
+        }
+        case DrawingToolText:
+        {
+            QFont font = painter.font();
+            font.setPixelSize(18);
+            font.setBold(true);
+            painter.setFont(font);
+            painter.drawText(pixmap.rect(), Qt::AlignCenter, QStringLiteral("T"));
+            break;
+        }
+        }
+
+        return QIcon(pixmap);
+    };
+    const auto addTool = [this, layout, &createToolIcon](const QString& toolTip, DrawingTool tool) {
         QToolButton *button = new QToolButton(m_drawingToolbar);
-        button->setText(text);
+        button->setIcon(createToolIcon(tool));
+        button->setIconSize(QSize(20, 20));
+        button->setFixedSize(28, 28);
         button->setToolTip(toolTip);
         button->setCheckable(true);
         button->setAutoRaise(true);
@@ -1483,13 +1539,13 @@ void CameraGUI::createDrawingControls()
         return button;
     };
 
-    QToolButton *selectButton = addTool(QStringLiteral("S"), tr("Select a drawing"), DrawingToolSelect);
-    addTool(QStringLiteral("/"), tr("Draw a line"), DrawingToolLine);
-    addTool(QStringLiteral("->"), tr("Draw an arrow"), DrawingToolArrow);
-    addTool(QStringLiteral("R"), tr("Draw a rectangle"), DrawingToolRectangle);
-    addTool(QStringLiteral("O"), tr("Draw an ellipse"), DrawingToolEllipse);
-    addTool(QStringLiteral("~"), tr("Draw freehand"), DrawingToolFreehand);
-    addTool(QStringLiteral("T"), tr("Add text"), DrawingToolText);
+    QToolButton *selectButton = addTool(tr("Select a drawing"), DrawingToolSelect);
+    addTool(tr("Draw a line"), DrawingToolLine);
+    addTool(tr("Draw an arrow"), DrawingToolArrow);
+    addTool(tr("Draw a rectangle (hold Shift for a square)"), DrawingToolRectangle);
+    addTool(tr("Draw an ellipse (hold Shift for a circle)"), DrawingToolEllipse);
+    addTool(tr("Draw freehand"), DrawingToolFreehand);
+    addTool(tr("Add text"), DrawingToolText);
     selectButton->setChecked(true);
 
     m_drawingLineWidthSpin = new QDoubleSpinBox(m_drawingToolbar);
@@ -3114,7 +3170,8 @@ CameraDrawing CameraGUI::drawingWithCurrentStyle(CameraDrawing::Type type) const
     drawing.m_type = type;
     drawing.m_lineWidth = m_settings.m_drawingLineWidth;
     drawing.m_strokeColor = m_settings.m_drawingStrokeColor;
-    drawing.m_fillEnabled = m_settings.m_drawingFillEnabled;
+    drawing.m_fillEnabled = m_settings.m_drawingFillEnabled
+        && ((type == CameraDrawing::Rectangle) || (type == CameraDrawing::Ellipse) || (type == CameraDrawing::Text));
     drawing.m_fillColor = m_settings.m_drawingFillColor;
     drawing.m_fontFamily = m_settings.m_drawingFontFamily;
     drawing.m_fontPixelSize = m_settings.m_drawingFontPixelSize;
@@ -3131,6 +3188,35 @@ QPointF CameraGUI::normalizedDrawingPoint(const QPoint& imagePoint) const
     return QPointF(
         qBound(0.0, static_cast<double>(imagePoint.x()) / std::max(1, m_lastImage.width()), 1.0),
         qBound(0.0, static_cast<double>(imagePoint.y()) / std::max(1, m_lastImage.height()), 1.0));
+}
+
+QPointF CameraGUI::drawingEndPoint(const QPoint& imagePoint, Qt::KeyboardModifiers modifiers) const
+{
+    const QPointF current = normalizedDrawingPoint(imagePoint);
+    if ((modifiers & Qt::ShiftModifier) == 0
+        || (m_pendingDrawing.m_points.isEmpty())
+        || ((m_pendingDrawing.m_type != CameraDrawing::Rectangle) && (m_pendingDrawing.m_type != CameraDrawing::Ellipse)))
+    {
+        return current;
+    }
+
+    const double width = std::max(1, m_lastImage.width());
+    const double height = std::max(1, m_lastImage.height());
+    const QPointF start(
+        m_pendingDrawing.m_points.first().x() * width,
+        m_pendingDrawing.m_points.first().y() * height);
+    const QPointF end(current.x() * width, current.y() * height);
+    const double dx = end.x() - start.x();
+    const double dy = end.y() - start.y();
+    const double directionX = dx < 0.0 ? -1.0 : 1.0;
+    const double directionY = dy < 0.0 ? -1.0 : 1.0;
+    const double availableX = directionX > 0.0 ? width - start.x() : start.x();
+    const double availableY = directionY > 0.0 ? height - start.y() : start.y();
+    const double side = std::min({std::max(std::abs(dx), std::abs(dy)), availableX, availableY});
+
+    return QPointF(
+        qBound(0.0, (start.x() + directionX * side) / width, 1.0),
+        qBound(0.0, (start.y() + directionY * side) / height, 1.0));
 }
 
 void CameraGUI::setDrawingTool(DrawingTool tool)
@@ -3279,7 +3365,7 @@ bool CameraGUI::handleDrawingEvent(QEvent *event)
             }
         }
         else {
-            m_pendingDrawing.m_points[1] = point;
+            m_pendingDrawing.m_points[1] = drawingEndPoint(imagePoint, mouseEvent->modifiers());
         }
         updatePendingDrawingItem();
         return true;
@@ -3290,6 +3376,11 @@ bool CameraGUI::handleDrawingEvent(QEvent *event)
         const QMouseEvent *mouseEvent = static_cast<QMouseEvent*>(event);
         if (mouseEvent->button() == Qt::LeftButton)
         {
+            const QPoint imagePoint = mapViewportPointToImage(mouseEvent->pos());
+            if ((imagePoint.x() >= 0) && (m_pendingDrawing.m_type != CameraDrawing::Freehand)) {
+                m_pendingDrawing.m_points[1] = drawingEndPoint(imagePoint, mouseEvent->modifiers());
+                updatePendingDrawingItem();
+            }
             m_drawingDragging = false;
             commitPendingDrawing();
             return true;

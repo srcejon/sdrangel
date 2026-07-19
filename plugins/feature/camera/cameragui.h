@@ -432,6 +432,7 @@ private:
     void applyDrawings();
     CameraDrawing drawingWithCurrentStyle(CameraDrawing::Type type) const;
     QPointF normalizedDrawingPoint(const QPoint& imagePoint) const;
+    QPointF drawingEndPoint(const QPoint& imagePoint, Qt::KeyboardModifiers modifiers) const;
     void updateCameraSettingsVisibility();
     void updateHistogramStretchControls();
     void updateMotionExclusionRectsTable();

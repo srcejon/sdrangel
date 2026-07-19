@@ -74,7 +74,14 @@ public:
     void setBasebandSampleRate(int sampleRate);
     int getChannelSampleRate() const;
     void setChannel(ChannelAPI *channel);
-    void setSpectrumSink(SpectrumVis* spectrumSink) { m_spectrumVis = spectrumSink; m_sink.setSpectrumSink(spectrumSink); }
+    void setSpectrumSink(SpectrumVis* spectrumSink) { setSpectrumSinks(spectrumSink, nullptr); }
+    void setSpectrumSinks(SpectrumVis* spectrumSink, SpectrumVis* secondarySpectrumSink)
+    {
+        m_spectrumVis = spectrumSink;
+        m_secondarySpectrumVis = secondarySpectrumSink;
+        m_sink.setSpectrumSink(spectrumSink);
+        m_sink.setSecondarySpectrumSink(secondarySpectrumSink);
+    }
     void setMessageQueueToGUI(MessageQueue *messageQueue) { m_sink.setMessageQueueToGUI(messageQueue); }
     void setCandidateAuditCallback(const MeteorDemodSink::CandidateAuditCallback& callback) { m_sink.setCandidateAuditCallback(callback); }
     void setDiagnosticCaptureCallback(const MeteorDemodSink::DiagnosticCaptureCallback& callback) { m_sink.setDiagnosticCaptureCallback(callback); }
@@ -91,6 +98,7 @@ private:
     MessageQueue m_inputMessageQueue;
     MeteorSettings m_settings;
     SpectrumVis *m_spectrumVis;
+    SpectrumVis *m_secondarySpectrumVis;
     bool m_running;
     bool m_inactivityFlushEnabled;
     QTimer *m_inactivityTimer;

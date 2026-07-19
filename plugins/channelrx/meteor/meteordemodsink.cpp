@@ -84,6 +84,7 @@ namespace {
 
 MeteorDemodSink::MeteorDemodSink() :
     m_spectrumSink(nullptr),
+    m_secondarySpectrumSink(nullptr),
     m_messageQueueToGUI(nullptr),
     m_channelSampleRate(48000),
     m_channelFrequencyOffset(0),
@@ -3680,7 +3681,7 @@ void MeteorDemodSink::resetDetector()
 
 void MeteorDemodSink::feedSpectrum(const Complex& sample)
 {
-    if (!m_spectrumSink) {
+    if (!m_spectrumSink && !m_secondarySpectrumSink) {
         return;
     }
 
@@ -3688,7 +3689,14 @@ void MeteorDemodSink::feedSpectrum(const Complex& sample)
 
     if ((int) m_spectrumBuffer.size() >= m_spectrumBufferSize)
     {
-        m_spectrumSink->feed(m_spectrumBuffer.begin(), m_spectrumBuffer.end(), false);
+        if (m_spectrumSink) {
+            m_spectrumSink->feed(m_spectrumBuffer.begin(), m_spectrumBuffer.end(), false);
+        }
+
+        if (m_secondarySpectrumSink) {
+            m_secondarySpectrumSink->feed(m_spectrumBuffer.begin(), m_spectrumBuffer.end(), false);
+        }
+
         m_spectrumBuffer.clear();
     }
 }

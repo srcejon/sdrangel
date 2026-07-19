@@ -63,7 +63,10 @@ namespace {
     constexpr int DetectionOverlayIdRole = Qt::UserRole + 2;
     constexpr int DetectionDisplayUtcMSecsRole = Qt::UserRole + 3;
     constexpr int DetectionRadioRole = Qt::UserRole + 4;
-    constexpr int MeteorDefaultFFTOverlap = 512;
+    constexpr int MeteorTrailFFTSize = 1024;
+    constexpr int MeteorTrailFFTOverlap = 512;
+    constexpr int MeteorHeadFFTSize = 128;
+    constexpr int MeteorHeadFFTOverlap = 96;
     constexpr qint64 AutomaticRMOBSaveIntervalS = 60;
 
     class NumericTableWidgetItem : public QTableWidgetItem
@@ -136,11 +139,13 @@ MeteorGUI::MeteorGUI(PluginAPI* pluginAPI, DeviceUISet *deviceUISet, BasebandSam
     m_tickCount(0),
     m_meteor(reinterpret_cast<Meteor*>(rxChannel)),
     m_spectrumVis(nullptr),
+    m_headSpectrumVis(nullptr),
     m_hourlyChart(nullptr),
     m_totalCount(0),
     m_highlightAllDetectionOverlays(true),
     m_nextDetectionOverlayId(1),
-    m_detectionOverlayWindowValid(false)
+    m_detectionOverlayWindowValid(false),
+    m_headDetectionOverlayWindowValid(false)
 {
     setAttribute(Qt::WA_DeleteOnClose, true);
     m_helpURL = "plugins/channelrx/meteor/readme.md";
@@ -154,6 +159,7 @@ MeteorGUI::MeteorGUI(PluginAPI* pluginAPI, DeviceUISet *deviceUISet, BasebandSam
 
     m_meteor->setMessageQueueToGUI(getInputMessageQueue());
     m_spectrumVis = m_meteor->getSpectrumVis();
+    m_headSpectrumVis = m_meteor->getHeadSpectrumVis();
 
     setupSpectrum();
 
@@ -170,6 +176,7 @@ MeteorGUI::MeteorGUI(PluginAPI* pluginAPI, DeviceUISet *deviceUISet, BasebandSam
     setTitleColor(m_channelMarker.getColor());
     m_settings.setChannelMarker(&m_channelMarker);
     m_settings.setSpectrumGUI(m_spectrumGUI);
+    m_settings.setHeadSpectrumGUI(m_headSpectrumGUI);
     m_settings.setRollupState(&m_rollupState);
 
     m_deviceUISet->addChannelMarker(&m_channelMarker);
@@ -193,10 +200,15 @@ MeteorGUI::~MeteorGUI()
     saveAutomaticRMOBReports();
     disconnect(&MainCore::instance()->getMasterTimer(), SIGNAL(timeout()), this, SLOT(tick()));
     m_glSpectrum->setPaintGLCallback(nullptr);
+    m_headGLSpectrum->setPaintGLCallback(nullptr);
     for (QLabel *label : m_detectionOverlayLabels) {
         delete label;
     }
     m_detectionOverlayLabels.clear();
+    for (QLabel *label : m_headDetectionOverlayLabels) {
+        delete label;
+    }
+    m_headDetectionOverlayLabels.clear();
     delete ui;
 }
 
@@ -226,6 +238,8 @@ void MeteorGUI::setupUi(RollupContents *rollupContents)
     m_hourlyChartView = ui->hourlyChartView;
     m_glSpectrum = ui->glSpectrum;
     m_spectrumGUI = ui->spectrumGUI;
+    m_headGLSpectrum = ui->headGLSpectrum;
+    m_headSpectrumGUI = ui->headSpectrumGUI;
 
     m_frequencyMode->addItem("df");
     m_frequencyMode->addItem("f");
@@ -350,44 +364,111 @@ void MeteorGUI::setupUi(RollupContents *rollupContents)
 
     m_hourlyChartView->setMinimumHeight(180);
     m_glSpectrum->setMinimumHeight(180);
+    m_headGLSpectrum->setMinimumHeight(180);
 }
 
 void MeteorGUI::setupSpectrum()
 {
-    m_spectrumVis->setGLSpectrum(m_glSpectrum);
-    m_spectrumGUI->setBuddies(m_spectrumVis, m_glSpectrum);
-
-    if (QSpinBox *fftOverlap = m_spectrumGUI->findChild<QSpinBox *>("fftOverlap")) {
-        fftOverlap->setValue(MeteorDefaultFFTOverlap);
-    }
-
-    m_glSpectrum->setCenterFrequency(0);
-    m_glSpectrum->setSampleRate(m_settings.m_channelSampleRate);
-    m_glSpectrum->setLsbDisplay(false);
-
-    SpectrumSettings spectrumSettings = m_spectrumVis->getSettings();
-    spectrumSettings.m_fftOverlap = MeteorDefaultFFTOverlap;
-    spectrumSettings.m_displayWaterfall = true;
-    spectrumSettings.m_displayMaxHold = false;
-    spectrumSettings.m_scrollBar = true;
-    SpectrumVis::MsgConfigureSpectrumVis *msg = SpectrumVis::MsgConfigureSpectrumVis::create(spectrumSettings, false);
-    m_spectrumVis->getInputMessageQueue()->push(msg);
-    m_glSpectrum->setPaintGLCallback([this](GLSpectrumView *spectrumView) {
-        drawDetectionOverlays(spectrumView);
-    });
-
-    GLSpectrumView *spectrumView = m_glSpectrum->getSpectrumView();
-    QScrollBar *scrollBar = spectrumView->parentWidget()
-        ? spectrumView->parentWidget()->findChild<QScrollBar *>(QString(), Qt::FindDirectChildrenOnly)
-        : nullptr;
-
-    if (scrollBar)
+    auto setupDisplay = [this](
+        SpectrumVis *spectrumVis,
+        GLSpectrum *glSpectrum,
+        GLSpectrumGUI *spectrumGUI,
+        int fftSize,
+        int fftOverlap,
+        int fpsIndex,
+        QVector<QLabel *>& overlayLabels,
+        bool& overlayWindowValid,
+        QDateTime& overlayWindowStartUtc,
+        QDateTime& overlayWindowEndUtc)
     {
-        connect(scrollBar, &QScrollBar::valueChanged, this, [this, spectrumView]() {
-            m_detectionOverlayWindowValid = false;
-            spectrumView->update();
+        spectrumVis->setGLSpectrum(glSpectrum);
+        spectrumGUI->setBuddies(spectrumVis, glSpectrum);
+        spectrumGUI->setFFTSize((int) std::round(std::log2((double) fftSize)));
+
+        if (QSpinBox *overlapControl = spectrumGUI->findChild<QSpinBox *>("fftOverlap")) {
+            overlapControl->setValue(fftOverlap);
+        }
+
+        if ((fpsIndex >= 0) && spectrumGUI->findChild<QComboBox *>("fps")) {
+            spectrumGUI->findChild<QComboBox *>("fps")->setCurrentIndex(fpsIndex);
+        }
+
+        glSpectrum->setCenterFrequency(0);
+        glSpectrum->setSampleRate(m_settings.m_channelSampleRate);
+        glSpectrum->setLsbDisplay(false);
+
+        SpectrumSettings spectrumSettings = spectrumVis->getSettings();
+        spectrumSettings.m_fftSize = fftSize;
+        spectrumSettings.m_fftOverlap = fftOverlap;
+        spectrumSettings.m_displayWaterfall = true;
+        spectrumSettings.m_displayMaxHold = false;
+        spectrumSettings.m_averagingMode = SpectrumSettings::AvgModeNone;
+        spectrumSettings.m_averagingIndex = 0;
+        spectrumSettings.m_scrollBar = true;
+
+        if (fpsIndex == 4) {
+            spectrumSettings.m_fpsPeriodMs = 20;
+        }
+
+        SpectrumVis::MsgConfigureSpectrumVis *msg = SpectrumVis::MsgConfigureSpectrumVis::create(spectrumSettings, false);
+        spectrumVis->getInputMessageQueue()->push(msg);
+        QVector<QLabel *> *overlayLabelsPtr = &overlayLabels;
+        bool *overlayWindowValidPtr = &overlayWindowValid;
+        QDateTime *overlayWindowStartUtcPtr = &overlayWindowStartUtc;
+        QDateTime *overlayWindowEndUtcPtr = &overlayWindowEndUtc;
+        glSpectrum->setPaintGLCallback([
+            this,
+            spectrumVis,
+            overlayLabelsPtr,
+            overlayWindowValidPtr,
+            overlayWindowStartUtcPtr,
+            overlayWindowEndUtcPtr](GLSpectrumView *spectrumView)
+        {
+            drawDetectionOverlays(
+                spectrumView,
+                spectrumVis,
+                *overlayLabelsPtr,
+                *overlayWindowValidPtr,
+                *overlayWindowStartUtcPtr,
+                *overlayWindowEndUtcPtr);
         });
-    }
+
+        GLSpectrumView *spectrumView = glSpectrum->getSpectrumView();
+        QScrollBar *scrollBar = spectrumView->parentWidget()
+            ? spectrumView->parentWidget()->findChild<QScrollBar *>(QString(), Qt::FindDirectChildrenOnly)
+            : nullptr;
+
+        if (scrollBar)
+        {
+            connect(scrollBar, &QScrollBar::valueChanged, this, [spectrumView, overlayWindowValidPtr]() {
+                *overlayWindowValidPtr = false;
+                spectrumView->update();
+            });
+        }
+    };
+
+    setupDisplay(
+        m_spectrumVis,
+        m_glSpectrum,
+        m_spectrumGUI,
+        MeteorTrailFFTSize,
+        MeteorTrailFFTOverlap,
+        -1,
+        m_detectionOverlayLabels,
+        m_detectionOverlayWindowValid,
+        m_detectionOverlayWindowStartUtc,
+        m_detectionOverlayWindowEndUtc);
+    setupDisplay(
+        m_headSpectrumVis,
+        m_headGLSpectrum,
+        m_headSpectrumGUI,
+        MeteorHeadFFTSize,
+        MeteorHeadFFTOverlap,
+        4,
+        m_headDetectionOverlayLabels,
+        m_headDetectionOverlayWindowValid,
+        m_headDetectionOverlayWindowStartUtc,
+        m_headDetectionOverlayWindowEndUtc);
 }
 
 bool MeteorGUI::handleMessage(const Message& message)
@@ -600,15 +681,15 @@ void MeteorGUI::on_maxFrequencyDrift_valueChanged(double value)
 void MeteorGUI::on_highlightAllDetections_toggled(bool checked)
 {
     m_highlightAllDetectionOverlays = checked;
-    m_detectionOverlayWindowValid = false;
-    m_glSpectrum->getSpectrumView()->update();
+    invalidateDetectionOverlayWindows();
+    updateSpectrumViews();
 }
 
 void MeteorGUI::on_detectionBoxPadding_valueChanged(int value)
 {
     m_settings.m_detectionBoxPaddingPixels = value;
     applySetting("detectionBoxPaddingPixels");
-    m_glSpectrum->getSpectrumView()->update();
+    updateSpectrumViews();
 }
 
 void MeteorGUI::on_detectionLabels_currentIndexChanged(int index)
@@ -618,7 +699,7 @@ void MeteorGUI::on_detectionLabels_currentIndexChanged(int index)
         (int) MeteorSettings::DetectionLabelNone,
         (int) MeteorSettings::DetectionLabelRight);
     applySetting("detectionLabelMode");
-    m_glSpectrum->getSpectrumView()->update();
+    updateSpectrumViews();
 }
 
 void MeteorGUI::on_saveDetections_clicked()
@@ -768,13 +849,13 @@ void MeteorGUI::on_clearDetections_clicked()
     m_hourlyData.clear();
     m_detectionOverlays.clear();
     m_nextDetectionOverlayId = 1;
-    m_detectionOverlayWindowValid = false;
+    invalidateDetectionOverlayWindows();
     m_detectionsTable->setRowCount(0);
     hideDetectionOverlayLabels();
     updateCounters();
     updateHistogram();
     updateColorgramme();
-    m_glSpectrum->getSpectrumView()->update();
+    updateSpectrumViews();
 }
 
 void MeteorGUI::on_detectionsTable_itemSelectionChanged()
@@ -783,7 +864,7 @@ void MeteorGUI::on_detectionsTable_itemSelectionChanged()
 
     if (selectedItems.isEmpty())
     {
-        m_glSpectrum->getSpectrumView()->update();
+        updateSpectrumViews();
         return;
     }
 
@@ -804,8 +885,8 @@ void MeteorGUI::on_detectionsTable_itemSelectionChanged()
         return;
     }
 
-    m_glSpectrum->scrollWaterfallToUTC(QDateTime::fromMSecsSinceEpoch(utcMSecs, Qt::UTC));
-    m_glSpectrum->getSpectrumView()->update();
+    scrollSpectrumViewsToUTC(QDateTime::fromMSecsSinceEpoch(utcMSecs, Qt::UTC));
+    updateSpectrumViews();
 }
 
 void MeteorGUI::on_detectionsTable_customContextMenuRequested(const QPoint& pos)
@@ -1050,9 +1131,12 @@ void MeteorGUI::updateAbsoluteCenterFrequency()
 void MeteorGUI::updateVisualSampleRate()
 {
     m_glSpectrum->setSampleRate(m_settings.m_channelSampleRate);
+    m_headGLSpectrum->setSampleRate(m_settings.m_channelSampleRate);
 
     DSPSignalNotification *msg = new DSPSignalNotification(m_settings.m_channelSampleRate, 0);
     m_spectrumVis->getInputMessageQueue()->push(msg);
+    msg = new DSPSignalNotification(m_settings.m_channelSampleRate, 0);
+    m_headSpectrumVis->getInputMessageQueue()->push(msg);
 }
 
 void MeteorGUI::addDetection(const MeteorDemodSink::MsgMeteorDetected& detection)
@@ -1097,7 +1181,7 @@ void MeteorGUI::addDetection(const MeteorDemodSink::MsgMeteorDetected& detection
     while (m_detectionOverlays.size() > 200) {
         m_detectionOverlays.removeFirst();
     }
-    m_detectionOverlayWindowValid = false;
+    invalidateDetectionOverlayWindows();
 
     const bool sortingEnabled = m_detectionsTable->isSortingEnabled();
     m_detectionsTable->setSortingEnabled(false);
@@ -1132,7 +1216,7 @@ void MeteorGUI::addDetection(const MeteorDemodSink::MsgMeteorDetected& detection
     updateCounters();
     updateHistogram();
     updateColorgramme();
-    m_glSpectrum->getSpectrumView()->update();
+    updateSpectrumViews();
 }
 
 void MeteorGUI::addCameraDetection(const Meteor::MsgCameraMeteorDetected& detection)
@@ -1171,7 +1255,7 @@ void MeteorGUI::addCameraDetection(const Meteor::MsgCameraMeteorDetected& detect
     updateCounters();
     updateHistogram();
     updateColorgramme();
-    m_glSpectrum->getSpectrumView()->update();
+    updateSpectrumViews();
 }
 
 void MeteorGUI::updateCounters()
@@ -1640,21 +1724,27 @@ void MeteorGUI::deleteSelectedDetections()
                 m_detectionOverlays.removeAt(i);
             }
         }
-        m_detectionOverlayWindowValid = false;
+        invalidateDetectionOverlayWindows();
     }
 
     updateCounters();
     updateHistogram();
     updateColorgramme();
-    m_glSpectrum->getSpectrumView()->update();
+    updateSpectrumViews();
 }
 
-void MeteorGUI::drawDetectionOverlays(GLSpectrumView *spectrumView)
+void MeteorGUI::drawDetectionOverlays(
+    GLSpectrumView *spectrumView,
+    SpectrumVis *spectrumVis,
+    QVector<QLabel *>& overlayLabels,
+    bool& overlayWindowValid,
+    QDateTime& overlayWindowStartUtc,
+    QDateTime& overlayWindowEndUtc)
 {
     const QColor color(255, 190, 0);
     const QColor selectedColor(255, 225, 96);
     const QSet<quint64> selectedIds = selectedDetectionOverlayIds();
-    const SpectrumSettings spectrumSettings = m_spectrumVis->getSettings();
+    const SpectrumSettings spectrumSettings = spectrumVis->getSettings();
     const double timePerPixel = spectrumView->waterfallTimePerPixel();
     const int fftSize = std::max(1, spectrumSettings.m_fftSize);
     const int fftOverlap = std::clamp(spectrumSettings.m_fftOverlap, 0, fftSize - 1);
@@ -1693,8 +1783,8 @@ void MeteorGUI::drawDetectionOverlays(GLSpectrumView *spectrumView)
 
     if (!m_highlightAllDetectionOverlays && selectedIds.isEmpty())
     {
-        hideDetectionOverlayLabels();
-        m_detectionOverlayWindowValid = false;
+        hideDetectionOverlayLabels(overlayLabels);
+        overlayWindowValid = false;
         return;
     }
 
@@ -1789,11 +1879,11 @@ void MeteorGUI::drawDetectionOverlays(GLSpectrumView *spectrumView)
 
     int visibleCount = 0;
 
-    if (m_detectionOverlayWindowValid && !m_detectionOverlays.isEmpty())
+    if (overlayWindowValid && !m_detectionOverlays.isEmpty())
     {
         const qint64 windowPaddingMSecs = std::max(1000, m_settings.m_maxDurationMS + 1000);
-        const qint64 windowStartMSecs = m_detectionOverlayWindowStartUtc.addMSecs(-windowPaddingMSecs).toMSecsSinceEpoch();
-        const qint64 windowEndMSecs = m_detectionOverlayWindowEndUtc.addMSecs(windowPaddingMSecs).toMSecsSinceEpoch();
+        const qint64 windowStartMSecs = overlayWindowStartUtc.addMSecs(-windowPaddingMSecs).toMSecsSinceEpoch();
+        const qint64 windowEndMSecs = overlayWindowEndUtc.addMSecs(windowPaddingMSecs).toMSecsSinceEpoch();
         const auto beginIt = std::lower_bound(
             m_detectionOverlays.cbegin(),
             m_detectionOverlays.cend(),
@@ -1818,24 +1908,24 @@ void MeteorGUI::drawDetectionOverlays(GLSpectrumView *spectrumView)
     if ((visibleCount > 0) && visibleStartUtc.isValid() && visibleEndUtc.isValid())
     {
         const qint64 windowPaddingMSecs = std::max(1000, m_settings.m_maxDurationMS + 1000);
-        m_detectionOverlayWindowStartUtc = visibleStartUtc.addMSecs(-windowPaddingMSecs);
-        m_detectionOverlayWindowEndUtc = visibleEndUtc.addMSecs(windowPaddingMSecs);
-        m_detectionOverlayWindowValid = true;
+        overlayWindowStartUtc = visibleStartUtc.addMSecs(-windowPaddingMSecs);
+        overlayWindowEndUtc = visibleEndUtc.addMSecs(windowPaddingMSecs);
+        overlayWindowValid = true;
     }
     else
     {
-        m_detectionOverlayWindowValid = false;
+        overlayWindowValid = false;
     }
 
     if (labelOverlays.isEmpty()) {
-        hideDetectionOverlayLabels();
+        hideDetectionOverlayLabels(overlayLabels);
         return;
     }
 
     const double frequencyPerPixel = spectrumView->waterfallFrequencyPerPixel();
     if ((frequencyPerPixel <= 0.0) || (timePerPixel <= 0.0))
     {
-        hideDetectionOverlayLabels();
+        hideDetectionOverlayLabels(overlayLabels);
         return;
     }
 
@@ -1867,7 +1957,7 @@ void MeteorGUI::drawDetectionOverlays(GLSpectrumView *spectrumView)
 
     if (onePixelFraction <= 0.0f)
     {
-        hideDetectionOverlayLabels();
+        hideDetectionOverlayLabels(overlayLabels);
         return;
     }
 
@@ -1892,7 +1982,7 @@ void MeteorGUI::drawDetectionOverlays(GLSpectrumView *spectrumView)
     }
     else if (!(spectrumSettings.m_displayWaterfall || spectrumSettings.m_display3DSpectrogram))
     {
-        hideDetectionOverlayLabels();
+        hideDetectionOverlayLabels(overlayLabels);
         return;
     }
 
@@ -1936,15 +2026,15 @@ void MeteorGUI::drawDetectionOverlays(GLSpectrumView *spectrumView)
         labelY = std::clamp(labelY, 0, std::max(0, spectrumView->height() - labelHeight));
         const QRect labelRect(labelX, labelY, labelWidth, labelHeight);
 
-        if (labelIndex >= m_detectionOverlayLabels.size())
+        if (labelIndex >= overlayLabels.size())
         {
             QLabel *labelWidget = new QLabel(spectrumView);
             labelWidget->setAttribute(Qt::WA_TransparentForMouseEvents, true);
             labelWidget->setAlignment(Qt::AlignCenter);
-            m_detectionOverlayLabels.push_back(labelWidget);
+            overlayLabels.push_back(labelWidget);
         }
 
-        QLabel *labelWidget = m_detectionOverlayLabels[labelIndex++];
+        QLabel *labelWidget = overlayLabels[labelIndex++];
         const QVariant selectedProperty = labelWidget->property("meteorSelected");
 
         if (!selectedProperty.isValid() || (selectedProperty.toBool() != overlay.m_selected))
@@ -1961,16 +2051,41 @@ void MeteorGUI::drawDetectionOverlays(GLSpectrumView *spectrumView)
         labelWidget->raise();
     }
 
-    for (int i = labelIndex; i < m_detectionOverlayLabels.size(); i++) {
-        m_detectionOverlayLabels[i]->hide();
+    for (int i = labelIndex; i < overlayLabels.size(); i++) {
+        overlayLabels[i]->hide();
     }
 }
 
 void MeteorGUI::hideDetectionOverlayLabels()
 {
-    for (QLabel *label : m_detectionOverlayLabels) {
+    hideDetectionOverlayLabels(m_detectionOverlayLabels);
+    hideDetectionOverlayLabels(m_headDetectionOverlayLabels);
+}
+
+void MeteorGUI::hideDetectionOverlayLabels(QVector<QLabel *>& overlayLabels)
+{
+    for (QLabel *label : overlayLabels) {
         label->hide();
     }
+}
+
+void MeteorGUI::invalidateDetectionOverlayWindows()
+{
+    m_detectionOverlayWindowValid = false;
+    m_headDetectionOverlayWindowValid = false;
+}
+
+void MeteorGUI::updateSpectrumViews()
+{
+    m_glSpectrum->getSpectrumView()->update();
+    m_headGLSpectrum->getSpectrumView()->update();
+}
+
+void MeteorGUI::scrollSpectrumViewsToUTC(const QDateTime& dateTimeUtc)
+{
+    m_glSpectrum->scrollWaterfallToUTC(dateTimeUtc);
+    m_headGLSpectrum->scrollWaterfallToUTC(dateTimeUtc);
+    invalidateDetectionOverlayWindows();
 }
 
 QString MeteorGUI::detectionOverlayLabel(const DetectionOverlay& detection) const

@@ -43,6 +43,7 @@ Meteor::Meteor(DeviceAPI *deviceAPI) :
     ChannelAPI(m_channelIdURI, ChannelAPI::StreamSingleSink),
     m_deviceAPI(deviceAPI),
     m_spectrumVis(SDR_RX_SCALEF),
+    m_headSpectrumVis(SDR_RX_SCALEF),
     m_basebandSampleRate(0),
     m_centerFrequency(0),
     m_eventSourceHandler(
@@ -112,6 +113,7 @@ void Meteor::setMessageQueueToGUI(MessageQueue *queue)
 {
     ChannelAPI::setMessageQueueToGUI(queue);
     m_basebandSink->setMessageQueueToGUI(queue);
+    m_basebandSink->setSpectrumSinks(&m_spectrumVis, queue ? &m_headSpectrumVis : nullptr);
 }
 
 uint32_t Meteor::getNumberOfDeviceStreams() const

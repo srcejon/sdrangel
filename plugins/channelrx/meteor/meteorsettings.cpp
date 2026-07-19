@@ -27,6 +27,7 @@
 MeteorSettings::MeteorSettings() :
     m_channelMarker(nullptr),
     m_spectrumGUI(nullptr),
+    m_headSpectrumGUI(nullptr),
     m_rollupState(nullptr)
 {
     resetToDefaults();
@@ -81,6 +82,10 @@ QByteArray MeteorSettings::serialize() const
 
     if (m_spectrumGUI) {
         s.writeBlob(25, m_spectrumGUI->serialize());
+    }
+
+    if (m_headSpectrumGUI) {
+        s.writeBlob(26, m_headSpectrumGUI->serialize());
     }
 
     if (m_rollupState) {
@@ -141,6 +146,10 @@ bool MeteorSettings::deserialize(const QByteArray& data)
         {
             d.readBlob(25, &bytetmp);
             m_spectrumGUI->deserialize(bytetmp);
+        }
+
+        if (m_headSpectrumGUI && d.readBlob(26, &bytetmp)) {
+            m_headSpectrumGUI->deserialize(bytetmp);
         }
 
         if (m_rollupState)

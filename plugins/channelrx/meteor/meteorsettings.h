@@ -72,6 +72,7 @@ struct MeteorSettings
     QString m_title;
     Serializable *m_channelMarker;
     Serializable *m_spectrumGUI;
+    Serializable *m_headSpectrumGUI;
     Serializable *m_rollupState;
     int m_streamIndex;
     int m_workspaceIndex;
@@ -82,6 +83,7 @@ struct MeteorSettings
     void resetToDefaults();
     void setChannelMarker(Serializable *channelMarker) { m_channelMarker = channelMarker; }
     void setSpectrumGUI(Serializable *spectrumGUI) { m_spectrumGUI = spectrumGUI; }
+    void setHeadSpectrumGUI(Serializable *spectrumGUI) { m_headSpectrumGUI = spectrumGUI; }
     void setRollupState(Serializable *rollupState) { m_rollupState = rollupState; }
     QByteArray serialize() const;
     bool deserialize(const QByteArray& data);

@@ -104,6 +104,7 @@ private:
 
     Meteor* m_meteor;
     SpectrumVis* m_spectrumVis;
+    SpectrumVis* m_headSpectrumVis;
     MessageQueue m_inputMessageQueue;
 
     QComboBox *m_frequencyMode;
@@ -129,7 +130,10 @@ private:
     QChart *m_hourlyChart;
     GLSpectrum *m_glSpectrum;
     GLSpectrumGUI *m_spectrumGUI;
+    GLSpectrum *m_headGLSpectrum;
+    GLSpectrumGUI *m_headSpectrumGUI;
     QVector<QLabel *> m_detectionOverlayLabels;
+    QVector<QLabel *> m_headDetectionOverlayLabels;
 
     int m_totalCount;
     bool m_highlightAllDetectionOverlays;
@@ -137,6 +141,9 @@ private:
     bool m_detectionOverlayWindowValid;
     QDateTime m_detectionOverlayWindowStartUtc;
     QDateTime m_detectionOverlayWindowEndUtc;
+    bool m_headDetectionOverlayWindowValid;
+    QDateTime m_headDetectionOverlayWindowStartUtc;
+    QDateTime m_headDetectionOverlayWindowEndUtc;
     QMap<QDate, QVector<int> > m_hourlyCounts;
     QMap<QDate, QVector<bool> > m_hourlyData;
     QSet<QDate> m_dirtyRMOBMonths;
@@ -188,8 +195,18 @@ private:
     QList<QDate> colorgrammeMonthDates() const;
     qint64 rmobReportFrequency() const;
     QString rmobReceiverName() const;
-    void drawDetectionOverlays(GLSpectrumView *spectrumView);
+    void drawDetectionOverlays(
+        GLSpectrumView *spectrumView,
+        SpectrumVis *spectrumVis,
+        QVector<QLabel *>& overlayLabels,
+        bool& overlayWindowValid,
+        QDateTime& overlayWindowStartUtc,
+        QDateTime& overlayWindowEndUtc);
     void hideDetectionOverlayLabels();
+    static void hideDetectionOverlayLabels(QVector<QLabel *>& overlayLabels);
+    void invalidateDetectionOverlayWindows();
+    void updateSpectrumViews();
+    void scrollSpectrumViewsToUTC(const QDateTime& dateTimeUtc);
     QString detectionOverlayLabel(const DetectionOverlay& detection) const;
     void applyDetectionsColumnVisibility();
     void saveDetectionsColumnVisibility();

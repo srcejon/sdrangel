@@ -31,6 +31,7 @@ MESSAGE_CLASS_DEFINITION(MeteorBaseband::MsgConfigureMeteorBaseband, Message)
 
 MeteorBaseband::MeteorBaseband() :
     m_spectrumVis(nullptr),
+    m_secondarySpectrumVis(nullptr),
     m_running(false),
     m_inactivityFlushEnabled(true),
     m_inactivityTimer(new QTimer(this))
@@ -249,5 +250,11 @@ void MeteorBaseband::notifyVisualSampleRate()
     {
         DSPSignalNotification *msg = new DSPSignalNotification(m_settings.m_channelSampleRate, 0);
         m_spectrumVis->getInputMessageQueue()->push(msg);
+    }
+
+    if (m_secondarySpectrumVis)
+    {
+        DSPSignalNotification *msg = new DSPSignalNotification(m_settings.m_channelSampleRate, 0);
+        m_secondarySpectrumVis->getInputMessageQueue()->push(msg);
     }
 }

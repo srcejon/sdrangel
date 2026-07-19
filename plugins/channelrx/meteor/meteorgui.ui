@@ -471,7 +471,7 @@
     </sizepolicy>
    </property>
    <property name="windowTitle">
-    <string>Spectrum</string>
+    <string>Spectra</string>
    </property>
    <layout class="QVBoxLayout" name="spectrumLayout">
     <property name="spacing">
@@ -490,6 +490,18 @@
      <number>2</number>
     </property>
     <item>
+     <widget class="QLabel" name="trailSpectrumTitle">
+      <property name="font">
+       <font>
+        <bold>true</bold>
+       </font>
+      </property>
+      <property name="text">
+       <string>Trail echoes</string>
+      </property>
+     </widget>
+    </item>
+    <item>
      <widget class="GLSpectrum" name="glSpectrum" native="true">
       <property name="minimumSize">
        <size>
@@ -501,6 +513,31 @@
     </item>
     <item>
      <widget class="GLSpectrumGUI" name="spectrumGUI" native="true"/>
+    </item>
+    <item>
+     <widget class="QLabel" name="headSpectrumTitle">
+      <property name="font">
+       <font>
+        <bold>true</bold>
+       </font>
+      </property>
+      <property name="text">
+       <string>Head echoes</string>
+      </property>
+     </widget>
+    </item>
+    <item>
+     <widget class="GLSpectrum" name="headGLSpectrum" native="true">
+      <property name="minimumSize">
+       <size>
+        <width>0</width>
+        <height>180</height>
+       </size>
+      </property>
+     </widget>
+    </item>
+    <item>
+     <widget class="GLSpectrumGUI" name="headSpectrumGUI" native="true"/>
     </item>
    </layout>
   </widget>

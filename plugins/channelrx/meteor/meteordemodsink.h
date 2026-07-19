@@ -242,6 +242,7 @@ public:
     bool flushPendingPulse();
 
     void setSpectrumSink(SpectrumVis* spectrumSink) { m_spectrumSink = spectrumSink; }
+    void setSecondarySpectrumSink(SpectrumVis* spectrumSink) { m_secondarySpectrumSink = spectrumSink; }
     void setMessageQueueToGUI(MessageQueue *messageQueue) { m_messageQueueToGUI = messageQueue; }
     void setCandidateAuditCallback(const CandidateAuditCallback& callback) { m_candidateAuditCallback = callback; }
     void setDiagnosticCaptureCallback(const DiagnosticCaptureCallback& callback) { m_diagnosticCaptureCallback = callback; }
@@ -423,6 +424,7 @@ private:
     };
 
     SpectrumVis* m_spectrumSink;
+    SpectrumVis* m_secondarySpectrumSink;
     MessageQueue *m_messageQueueToGUI;
     CandidateAuditCallback m_candidateAuditCallback;
     DiagnosticCaptureCallback m_diagnosticCaptureCallback;

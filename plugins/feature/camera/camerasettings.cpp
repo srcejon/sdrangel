@@ -233,6 +233,106 @@ QList<CameraSettings::WindowOverlay> deserializeWindowOverlays(const QString& js
 
     return overlays;
 }
+
+QString serializeDrawings(const QList<CameraDrawing>& drawings)
+{
+    QJsonArray array;
+
+    for (const CameraDrawing& drawing : drawings)
+    {
+        if (array.size() >= CameraDrawing::MaxDrawingCount) {
+            break;
+        }
+
+        QJsonObject object;
+        object.insert(QStringLiteral("type"), static_cast<int>(drawing.m_type));
+        object.insert(QStringLiteral("lineWidth"), drawing.m_lineWidth);
+        object.insert(QStringLiteral("strokeColor"), static_cast<qint64>(drawing.m_strokeColor.rgba()));
+        object.insert(QStringLiteral("fillEnabled"), drawing.m_fillEnabled);
+        object.insert(QStringLiteral("fillColor"), static_cast<qint64>(drawing.m_fillColor.rgba()));
+        object.insert(QStringLiteral("text"), drawing.m_text);
+        object.insert(QStringLiteral("fontFamily"), drawing.m_fontFamily);
+        object.insert(QStringLiteral("fontPixelSize"), drawing.m_fontPixelSize);
+        object.insert(QStringLiteral("fontBold"), drawing.m_fontBold);
+        object.insert(QStringLiteral("fontItalic"), drawing.m_fontItalic);
+
+        QJsonArray points;
+        const int pointCount = std::min(static_cast<int>(drawing.m_points.size()), CameraDrawing::MaxPointsPerDrawing);
+        for (int i = 0; i < pointCount; ++i)
+        {
+            const QPointF& point = drawing.m_points.at(i);
+            QJsonArray coordinates;
+            coordinates.append(point.x());
+            coordinates.append(point.y());
+            points.append(coordinates);
+        }
+        object.insert(QStringLiteral("points"), points);
+        array.append(object);
+    }
+
+    return QString::fromUtf8(QJsonDocument(array).toJson(QJsonDocument::Compact));
+}
+
+QList<CameraDrawing> deserializeDrawings(const QString& json)
+{
+    QList<CameraDrawing> drawings;
+    const QJsonDocument document = QJsonDocument::fromJson(json.toUtf8());
+    if (!document.isArray()) {
+        return drawings;
+    }
+
+    for (const QJsonValue& value : document.array())
+    {
+        if (!value.isObject() || (drawings.size() >= CameraDrawing::MaxDrawingCount)) {
+            continue;
+        }
+
+        const QJsonObject object = value.toObject();
+        CameraDrawing drawing;
+        drawing.m_type = static_cast<CameraDrawing::Type>(qBound(
+            static_cast<int>(CameraDrawing::Line),
+            object.value(QStringLiteral("type")).toInt(static_cast<int>(CameraDrawing::Line)),
+            static_cast<int>(CameraDrawing::Text)));
+        drawing.m_lineWidth = qBound(0.5, object.value(QStringLiteral("lineWidth")).toDouble(3.0), 100.0);
+        drawing.m_strokeColor = object.contains(QStringLiteral("strokeColor"))
+            ? QColor::fromRgba(static_cast<QRgb>(object.value(QStringLiteral("strokeColor")).toVariant().toULongLong()))
+            : QColor(255, 255, 0);
+        drawing.m_fillEnabled = object.value(QStringLiteral("fillEnabled")).toBool(false);
+        drawing.m_fillColor = object.contains(QStringLiteral("fillColor"))
+            ? QColor::fromRgba(static_cast<QRgb>(object.value(QStringLiteral("fillColor")).toVariant().toULongLong()))
+            : QColor(255, 255, 0, 64);
+        drawing.m_text = object.value(QStringLiteral("text")).toString().left(4096);
+        drawing.m_fontFamily = object.value(QStringLiteral("fontFamily")).toString().left(256);
+        drawing.m_fontPixelSize = qBound(1, object.value(QStringLiteral("fontPixelSize")).toInt(24), 512);
+        drawing.m_fontBold = object.value(QStringLiteral("fontBold")).toBool(false);
+        drawing.m_fontItalic = object.value(QStringLiteral("fontItalic")).toBool(false);
+
+        const QJsonArray points = object.value(QStringLiteral("points")).toArray();
+        drawing.m_points.reserve(std::min(static_cast<int>(points.size()), CameraDrawing::MaxPointsPerDrawing));
+        for (const QJsonValue& pointValue : points)
+        {
+            if (!pointValue.isArray() || (drawing.m_points.size() >= CameraDrawing::MaxPointsPerDrawing)) {
+                continue;
+            }
+            const QJsonArray coordinates = pointValue.toArray();
+            if (coordinates.size() < 2) {
+                continue;
+            }
+            const double x = coordinates.at(0).toDouble(std::numeric_limits<double>::quiet_NaN());
+            const double y = coordinates.at(1).toDouble(std::numeric_limits<double>::quiet_NaN());
+            if (std::isfinite(x) && std::isfinite(y)) {
+                drawing.m_points.append(QPointF(qBound(0.0, x, 1.0), qBound(0.0, y, 1.0)));
+            }
+        }
+
+        const int minimumPoints = drawing.m_type == CameraDrawing::Text ? 1 : 2;
+        if (drawing.m_points.size() >= minimumPoints) {
+            drawings.append(drawing);
+        }
+    }
+
+    return drawings;
+}
 }
 
 CameraSettings::CameraSettings() :
@@ -565,6 +665,16 @@ void CameraSettings::resetToDefaults()
     m_spectrumScale = 1.0;
     m_spectrumOverlays.clear();
     m_windowOverlays.clear();
+    m_drawingsEnabled = false;
+    m_drawingLineWidth = 3.0;
+    m_drawingStrokeColor = QColor(255, 255, 0);
+    m_drawingFillEnabled = false;
+    m_drawingFillColor = QColor(255, 255, 0, 64);
+    m_drawingFontFamily.clear();
+    m_drawingFontPixelSize = 24;
+    m_drawingFontBold = false;
+    m_drawingFontItalic = false;
+    m_drawings.clear();
     m_yoloEnabled = false;
     m_yoloModelPath.clear();
     m_yoloTileModelPath.clear();
@@ -936,6 +1046,16 @@ QByteArray CameraSettings::serialize() const
     s.writeString(335, m_opticalSpectrumResponseFile);
     s.writeBool(336, m_opticalSpectrumLogY);
     s.writeBool(337, m_opticalSpectrumAutoIdentify);
+    s.writeBool(338, m_drawingsEnabled);
+    s.writeDouble(339, m_drawingLineWidth);
+    s.writeU32(340, m_drawingStrokeColor.rgba());
+    s.writeBool(341, m_drawingFillEnabled);
+    s.writeU32(342, m_drawingFillColor.rgba());
+    s.writeString(343, m_drawingFontFamily);
+    s.writeS32(344, m_drawingFontPixelSize);
+    s.writeBool(345, m_drawingFontBold);
+    s.writeBool(346, m_drawingFontItalic);
+    s.writeString(347, serializeDrawings(m_drawings));
 
     return s.final();
 }
@@ -1560,6 +1680,22 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readString(335, &m_opticalSpectrumResponseFile, "");
         d.readBool(336, &m_opticalSpectrumLogY, false);
         d.readBool(337, &m_opticalSpectrumAutoIdentify, false);
+        d.readBool(338, &m_drawingsEnabled, false);
+        d.readDouble(339, &m_drawingLineWidth, 3.0);
+        m_drawingLineWidth = qBound(0.5, m_drawingLineWidth, 100.0);
+        d.readU32(340, &utmp, QColor(255, 255, 0).rgba());
+        m_drawingStrokeColor = QColor::fromRgba(utmp);
+        d.readBool(341, &m_drawingFillEnabled, false);
+        d.readU32(342, &utmp, QColor(255, 255, 0, 64).rgba());
+        m_drawingFillColor = QColor::fromRgba(utmp);
+        d.readString(343, &m_drawingFontFamily, "");
+        d.readS32(344, &m_drawingFontPixelSize, 24);
+        m_drawingFontPixelSize = qBound(1, m_drawingFontPixelSize, 512);
+        d.readBool(345, &m_drawingFontBold, false);
+        d.readBool(346, &m_drawingFontItalic, false);
+        QString drawingsJson;
+        d.readString(347, &drawingsJson, QStringLiteral("[]"));
+        m_drawings = deserializeDrawings(drawingsJson);
         d.readFloat(271, &m_azimuthOffset, 0.0f);
         d.readFloat(272, &m_elevationOffset, 0.0f);
         d.readFloat(273, &m_rollOffset, 0.0f);
@@ -2596,6 +2732,36 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
             overlay.m_captureFps = qBound(m_minWindowOverlayFps, overlay.m_captureFps, m_maxWindowOverlayFps);
         }
     }
+    if (settingsKeys.contains("drawingsEnabled")) {
+        m_drawingsEnabled = settings.m_drawingsEnabled;
+    }
+    if (settingsKeys.contains("drawingLineWidth")) {
+        m_drawingLineWidth = qBound(0.5, settings.m_drawingLineWidth, 100.0);
+    }
+    if (settingsKeys.contains("drawingStrokeColor")) {
+        m_drawingStrokeColor = settings.m_drawingStrokeColor;
+    }
+    if (settingsKeys.contains("drawingFillEnabled")) {
+        m_drawingFillEnabled = settings.m_drawingFillEnabled;
+    }
+    if (settingsKeys.contains("drawingFillColor")) {
+        m_drawingFillColor = settings.m_drawingFillColor;
+    }
+    if (settingsKeys.contains("drawingFontFamily")) {
+        m_drawingFontFamily = settings.m_drawingFontFamily;
+    }
+    if (settingsKeys.contains("drawingFontPixelSize")) {
+        m_drawingFontPixelSize = qBound(1, settings.m_drawingFontPixelSize, 512);
+    }
+    if (settingsKeys.contains("drawingFontBold")) {
+        m_drawingFontBold = settings.m_drawingFontBold;
+    }
+    if (settingsKeys.contains("drawingFontItalic")) {
+        m_drawingFontItalic = settings.m_drawingFontItalic;
+    }
+    if (settingsKeys.contains("drawings")) {
+        m_drawings = settings.m_drawings;
+    }
     if (settingsKeys.contains("dateTimeFormat")) {
         m_dateTimeFormat = settings.m_dateTimeFormat;
     }
@@ -3581,6 +3747,36 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("windowOverlays") || force) {
         ostr << " m_windowOverlays: " << m_windowOverlays.size();
+    }
+    if (settingsKeys.contains("drawingsEnabled") || force) {
+        ostr << " m_drawingsEnabled: " << m_drawingsEnabled;
+    }
+    if (settingsKeys.contains("drawingLineWidth") || force) {
+        ostr << " m_drawingLineWidth: " << m_drawingLineWidth;
+    }
+    if (settingsKeys.contains("drawingStrokeColor") || force) {
+        ostr << " m_drawingStrokeColor: " << m_drawingStrokeColor.name(QColor::HexArgb).toStdString();
+    }
+    if (settingsKeys.contains("drawingFillEnabled") || force) {
+        ostr << " m_drawingFillEnabled: " << m_drawingFillEnabled;
+    }
+    if (settingsKeys.contains("drawingFillColor") || force) {
+        ostr << " m_drawingFillColor: " << m_drawingFillColor.name(QColor::HexArgb).toStdString();
+    }
+    if (settingsKeys.contains("drawingFontFamily") || force) {
+        ostr << " m_drawingFontFamily: " << m_drawingFontFamily.toStdString();
+    }
+    if (settingsKeys.contains("drawingFontPixelSize") || force) {
+        ostr << " m_drawingFontPixelSize: " << m_drawingFontPixelSize;
+    }
+    if (settingsKeys.contains("drawingFontBold") || force) {
+        ostr << " m_drawingFontBold: " << m_drawingFontBold;
+    }
+    if (settingsKeys.contains("drawingFontItalic") || force) {
+        ostr << " m_drawingFontItalic: " << m_drawingFontItalic;
+    }
+    if (settingsKeys.contains("drawings") || force) {
+        ostr << " m_drawings: " << m_drawings.size();
     }
     if (settingsKeys.contains("dateTimeFormat") || force) {
         ostr << " m_dateTimeFormat: " << m_dateTimeFormat.toStdString();

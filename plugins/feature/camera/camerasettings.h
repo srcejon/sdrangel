@@ -30,6 +30,8 @@
 #include <QString>
 #include <QStringList>
 
+#include "cameradrawing.h"
+
 class Serializable;
 
 /**
@@ -744,6 +746,18 @@ struct CameraSettings
     double m_spectrumScale;     ///< Legacy single-spectrum scale; m_spectrumOverlays is the active model
     QList<SpectrumOverlay> m_spectrumOverlays; ///< Spectrum view captures to composite over the post-processed frame
     QList<WindowOverlay> m_windowOverlays; ///< GUI window or rollup captures to composite over the post-processed frame
+
+    // Persistent image annotations. Coordinates are normalized to the image dimensions.
+    bool m_drawingsEnabled;
+    double m_drawingLineWidth;
+    QColor m_drawingStrokeColor;
+    bool m_drawingFillEnabled;
+    QColor m_drawingFillColor;
+    QString m_drawingFontFamily;
+    int m_drawingFontPixelSize;
+    bool m_drawingFontBold;
+    bool m_drawingFontItalic;
+    QList<CameraDrawing> m_drawings;
 
     // YOLO object-detection settings
     enum YoloInferenceMode {

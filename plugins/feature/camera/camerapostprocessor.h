@@ -484,6 +484,7 @@ private:
     void applyPreviewTextLabels(QImage& image, const QVector<PreviewTextLabel>& labels) const;
     void applySpectrumOverlay(QImage& image) const;
     void applyWindowOverlays(QImage& image) const;
+    void applyDrawingOverlay(QImage& image) const;
     [[nodiscard]] QVector<WindowOverlayFrame> currentImageOverlays() const;
     [[nodiscard]] static QSize overlayCompositionSize(const QImage& image, double scale);
     [[nodiscard]] static QImage normaliseOverlayImageForComposition(const QImage& image, double scale);

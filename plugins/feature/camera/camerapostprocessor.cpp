@@ -953,6 +953,7 @@ void CameraPostProcessor::saveCurrentImage()
     CameraPipelineFramePtr frame(new CameraPipelineFrame(m_lastFrame));
     frame->m_manualPreviewFrame = true;
     frame->m_saveCurrentImage = true;
+    frame->m_postProcessedImage = applyPostProcessing(*frame, true, nullptr, nullptr, nullptr, true);
     m_nextStageQueue->push(Camera::MsgProcessFrame::create(frame));
 }
 
@@ -974,6 +975,8 @@ void CameraPostProcessor::applySettings(const CameraSettings& settings, const QL
         "motionBoxColor", "starColor", "showStarDetectionBoxes",
         "plateSolveLabelMode", "plateSolveLabelHideSyntheticNames", "yoloEnabled",
         "overlaySpectrum", "spectrumDevice", "spectrumOffsetX", "spectrumOffsetY", "spectrumScale", "spectrumOverlays", "windowOverlays",
+        "drawingsEnabled", "drawingLineWidth", "drawingStrokeColor", "drawingFillEnabled", "drawingFillColor",
+        "drawingFontFamily", "drawingFontPixelSize", "drawingFontBold", "drawingFontItalic", "drawings",
         "latitude", "longitude", "altitude", "azimuth", "elevation", "roll", "directionApplyToCurrentImage", "fov",
         "lensProjection", "lensCenterOffsetX", "lensCenterOffsetY", "lensDistortionK1",
         "playbackProjectionEnabled", "playbackProjectionX", "playbackProjectionY", "playbackProjectionWidth", "playbackProjectionHeight",
@@ -1319,7 +1322,8 @@ void CameraPostProcessor::processNewFrame(const CameraPipelineFramePtr& frame)
     QVector<CameraPipelineTrackedObject> trackedObjects;
     const QImage preview = applyPostProcessing(*frame, false, &previewTextLabels, &previewRectItems, &trackedObjects, false);
     const QVector<WindowOverlayFrame> previewImageOverlays = currentImageOverlays();
-    if (!previewTextLabels.isEmpty() || !previewRectItems.isEmpty() || !previewImageOverlays.isEmpty())
+    const bool hasDrawings = m_settings.m_drawingsEnabled && !m_settings.m_drawings.isEmpty();
+    if (!previewTextLabels.isEmpty() || !previewRectItems.isEmpty() || !previewImageOverlays.isEmpty() || hasDrawings)
     {
         // Pooled deep copy of the preview so the rect/text items are drawn onto a
         // separate buffer from the one sent to the GUI (recycled, not malloc'd
@@ -1343,6 +1347,9 @@ void CameraPostProcessor::processNewFrame(const CameraPipelineFramePtr& frame)
         }
         applyPreviewRectItems(processed, previewRectItems);
         applyPreviewTextLabels(processed, previewTextLabels);
+        if (hasDrawings) {
+            applyDrawingOverlay(processed);
+        }
         frame->m_postProcessedImage = processed;
     }
     else
@@ -1770,6 +1777,16 @@ void CameraPostProcessor::applyWindowOverlays(QImage& image) const
     }
 
     PROFILER_STOP(__FUNCTION__);
+}
+
+void CameraPostProcessor::applyDrawingOverlay(QImage& image) const
+{
+    if (!m_settings.m_drawingsEnabled || m_settings.m_drawings.isEmpty() || image.isNull()) {
+        return;
+    }
+
+    QPainter painter(&image);
+    CameraDrawingRenderer::drawAll(painter, m_settings.m_drawings, image.size());
 }
 
 QVector<CameraPostProcessor::WindowOverlayFrame> CameraPostProcessor::currentImageOverlays() const
@@ -2594,7 +2611,8 @@ QImage CameraPostProcessor::applyPostProcessing(
         || (m_settings.m_yoloEnabled && !frame.m_detections.isEmpty())
         || !frame.m_starDetections.isEmpty()
         || (drawImageOverlays && needsSpectrumOverlay)
-        || (drawImageOverlays && needsWindowOverlays);
+        || (drawImageOverlays && needsWindowOverlays)
+        || (drawImageOverlays && m_settings.m_drawingsEnabled && !m_settings.m_drawings.isEmpty());
 
     if (!needsAny) {
         return input;
@@ -2649,6 +2667,9 @@ QImage CameraPostProcessor::applyPostProcessing(
     }
     if (needsTextOverlay) { 
         applyTextOverlay(result, overlayTextDocument); 
+    }
+    if (drawImageOverlays && m_settings.m_drawingsEnabled) {
+        applyDrawingOverlay(result);
     }
 
     PROFILER_STOP("CameraPostProcessor::applyPostProcessing");

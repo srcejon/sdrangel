@@ -66,14 +66,20 @@ class CameraSettingsDialog;
 class CameraDetectionHistory;
 class CameraHistogramDialog;
 class CameraOpticalSpectrumDialog;
+class ButtonSwitch;
 class Message;
 class QLabel;
+class QButtonGroup;
+class QCheckBox;
 class QDialog;
 class QDoubleSpinBox;
+class QFontComboBox;
+class QGraphicsItem;
 class QGraphicsRectItem;
 class QMdiSubWindow;
 class QProgressDialog;
 class QPushButton;
+class QSpinBox;
 class QTableWidget;
 class QTableWidgetItem;
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
@@ -176,6 +182,17 @@ private:
         PreviewDrawModeNone = 0,
         PreviewDrawModeMotionExclusion,
         PreviewDrawModeDetectionRoi
+    };
+
+    enum DrawingTool
+    {
+        DrawingToolSelect = 0,
+        DrawingToolLine,
+        DrawingToolArrow,
+        DrawingToolRectangle,
+        DrawingToolEllipse,
+        DrawingToolFreehand,
+        DrawingToolText
     };
 
     enum CameraComboRole
@@ -317,6 +334,30 @@ private:
     QGraphicsScene *m_imageScene;         ///< Scene used by the QGraphicsView image display
     CameraImageGraphicsItem *m_imagePixmapItem; ///< Scene item holding the camera frame
     QList<QGraphicsItem *> m_previewOverlayItems;
+    QList<QGraphicsItem *> m_drawingOverlayItems;
+    QGraphicsItem *m_activeDrawingItem = nullptr;
+    CameraDrawing m_pendingDrawing;
+    DrawingTool m_drawingTool = DrawingToolSelect;
+    bool m_drawingDragging = false;
+    bool m_drawingOverlayDirty = true;
+    QSize m_drawingOverlayImageSize;
+    QList<QList<CameraDrawing>> m_drawingUndoStack;
+    QList<QList<CameraDrawing>> m_drawingRedoStack;
+    ButtonSwitch *m_drawingsButton = nullptr;
+    QWidget *m_drawingToolbar = nullptr;
+    QButtonGroup *m_drawingToolGroup = nullptr;
+    QDoubleSpinBox *m_drawingLineWidthSpin = nullptr;
+    QToolButton *m_drawingStrokeColorButton = nullptr;
+    QCheckBox *m_drawingFillCheck = nullptr;
+    QToolButton *m_drawingFillColorButton = nullptr;
+    QFontComboBox *m_drawingFontCombo = nullptr;
+    QSpinBox *m_drawingFontSizeSpin = nullptr;
+    QToolButton *m_drawingBoldButton = nullptr;
+    QToolButton *m_drawingItalicButton = nullptr;
+    QToolButton *m_drawingUndoButton = nullptr;
+    QToolButton *m_drawingRedoButton = nullptr;
+    QToolButton *m_drawingDeleteButton = nullptr;
+    QToolButton *m_drawingClearButton = nullptr;
     QList<QGraphicsRectItem *> m_motionExclusionRectItems;
     QGraphicsRectItem *m_detectionRoiRectItem = nullptr;
     QGraphicsRectItem *m_previewDrawRectItem = nullptr;
@@ -377,7 +418,20 @@ private:
     Ui::CameraSettingsDialog *settingsUI() const;
     bool handleMessage(const Message& message);
     void makeUIConnections();
+    void createDrawingControls();
     void createToolbarFlowLayout();
+    void updateDrawingControls();
+    void updateDrawingOverlayItems();
+    void clearDrawingOverlayItems();
+    void setDrawingTool(DrawingTool tool);
+    bool handleDrawingEvent(QEvent *event);
+    void updatePendingDrawingItem();
+    void cancelPendingDrawing();
+    void commitPendingDrawing();
+    void pushDrawingUndoState();
+    void applyDrawings();
+    CameraDrawing drawingWithCurrentStyle(CameraDrawing::Type type) const;
+    QPointF normalizedDrawingPoint(const QPoint& imagePoint) const;
     void updateCameraSettingsVisibility();
     void updateHistogramStretchControls();
     void updateMotionExclusionRectsTable();

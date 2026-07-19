@@ -6,6 +6,7 @@ set(LITERT_GPU_ROOT "" CACHE PATH "Root of the extracted Android LiteRT GPU AAR"
 
 set(camera_SOURCES
     camera.cpp
+    cameradrawing.cpp
     cameradetector.cpp
     cameraclearskyreference.cpp
     cameraclouddetector.cpp
@@ -44,6 +45,7 @@ set(camera_SOURCES
 
 set(camera_HEADERS
     camera.h
+    cameradrawing.h
     cameradetector.h
     cameraclearskyreference.h
     cameraclouddetector.h

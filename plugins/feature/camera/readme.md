@@ -372,6 +372,12 @@ Overlays the right ascension/declination equatorial sky grid.
 
 Overlays the selected constellation stars. This can be used to help determine the camera's pose.
 
+<h3>38a: Image drawings</h3>
+
+Shows or hides the image drawing toolbar. Drawings can be added as lines, arrows, rectangles, ellipses, freehand paths or text. The toolbar controls line width and colour, optional shape fill or text background, and text font, size, bold and italic styles. Select mode allows one or more drawings to be selected for deletion; the toolbar also provides undo, redo and clear-all commands.
+
+Drawing positions are stored relative to the image dimensions, so they remain aligned when the image resolution changes. They are drawn as scalable scene items in the live preview and are baked into post-processed saved images and video.
+
 <h3>39: Image display</h3>
 
 Displays the captured image, including enabled post-processing, detection results and overlays.

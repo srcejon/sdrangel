@@ -34,7 +34,7 @@
 #include "cameraopticalspectrum.h"
 #include "camerasettings.h"
 
-class QCheckBox;
+class ButtonSwitch;
 class QComboBox;
 class QDoubleSpinBox;
 class QGraphicsSimpleTextItem;
@@ -74,6 +74,8 @@ signals:
 protected:
     void resizeEvent(QResizeEvent* event) override;
     bool eventFilter(QObject* watched, QEvent* event) override;
+    void keyPressEvent(QKeyEvent* event) override;
+    bool event(QEvent* event) override;
 
 private:
     void applySettingChanged(const QString& settingsKey);
@@ -99,6 +101,7 @@ private:
     void clearReferenceLines();
     [[nodiscard]] QPointF chartValueAt(const QPointF& viewportPos) const;
     void applyZoomRect(const QRect& viewportRect);
+    void cancelDrag();
     void zoomOut();
     void resetZoom();
     void updateMarker();
@@ -180,6 +183,11 @@ private:
     QVector<float> m_displayGreen;
     QVector<float> m_displayBlue;
     QVector<double> m_displayXValues;  ///< X axis value per profile index as displayed
+    // Response correction blanks (zeroes) samples outside the captured response's
+    // coverage; feature detection and line measurement must stay inside the covered
+    // range or the hard blank->signal step at its edges reads as a strong feature.
+    int m_displayValidFirst = 0;       ///< First profile index with response coverage
+    int m_displayValidLast = -1;       ///< Last profile index with response coverage; full range when no correction
 
     QPushButton* m_referenceButton;
     QLabel* m_referenceLabel;
@@ -197,33 +205,33 @@ private:
     QVector<float> m_displayGreenRaw;
     QVector<float> m_displayBlueRaw;
     QPushButton* m_captureResponseButton;
-    QCheckBox* m_applyResponseCheck;
+    ButtonSwitch* m_applyResponseCheck;
     QPushButton* m_responseFileButton;
     QPushButton* m_calibrateButton;
     QVector<QPointF> m_calibrationClicks; ///< x = along-axis image pixel, y = wavelength in nm
-    QCheckBox* m_zeroOrderAutoCheck;
+    ButtonSwitch* m_zeroOrderAutoCheck;
     QDoubleSpinBox* m_zeroOrderSpin;
     QDoubleSpinBox* m_dispersionSpin;
     QComboBox* m_directionCombo;
     QSpinBox* m_apertureSpin;
-    QCheckBox* m_backgroundSubCheck;
+    ButtonSwitch* m_backgroundSubCheck;
     QSpinBox* m_smoothingSpin;
     QSpinBox* m_averageFramesSpin;
-    QCheckBox* m_normalizeCheck;
-    QCheckBox* m_logCheck;
-    QCheckBox* m_identifyCheck;
-    QCheckBox* m_colourStripCheck;
-    QCheckBox* m_imageStripCheck;
+    ButtonSwitch* m_normalizeCheck;
+    ButtonSwitch* m_logCheck;
+    ButtonSwitch* m_identifyCheck;
+    ButtonSwitch* m_colourStripCheck;
+    ButtonSwitch* m_imageStripCheck;
     QLabel* m_overlayLabel;
     QPushButton* m_overlayClearButton;
     QPushButton* m_zoomOutButton = nullptr;
     QPushButton* m_zoomResetButton = nullptr;
     QDoubleSpinBox* m_redshiftSpin;
     QLabel* m_redshiftVelocityLabel;
-    QCheckBox* m_luminanceCheck;
-    QCheckBox* m_redCheck;
-    QCheckBox* m_greenCheck;
-    QCheckBox* m_blueCheck;
+    ButtonSwitch* m_luminanceCheck;
+    ButtonSwitch* m_redCheck;
+    ButtonSwitch* m_greenCheck;
+    ButtonSwitch* m_blueCheck;
 
     bool m_updatingControls = false;
 };

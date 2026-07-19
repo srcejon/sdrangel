@@ -19,7 +19,6 @@
 #include <algorithm>
 #include <cmath>
 
-#include <QCheckBox>
 #include <QComboBox>
 #include <QDoubleSpinBox>
 #include <QFile>
@@ -49,6 +48,7 @@
 #include <QVBoxLayout>
 #include <QtCharts/QLegendMarker>
 
+#include "gui/buttonswitch.h"
 #include "gui/dialogpositioner.h"
 
 #include "cameraopticalspectrumdialog.h"
@@ -140,9 +140,11 @@ CameraOpticalSpectrumDialog::CameraOpticalSpectrumDialog(CameraSettings& setting
     m_colourStrip->setFixedHeight(kColourStripHeight);
     m_colourStrip->setToolTip(tr("Approximate colour of each wavelength, with brightness following the plotted luminance.\nGrey outside the visible range or when uncalibrated."));
 
-    // Calibration controls
-    m_zeroOrderAutoCheck = new QCheckBox(tr("Auto zero order"), this);
-    m_zeroOrderAutoCheck->setToolTip(tr("Locate the zero-order (undispersed) source image as the strongest peak in the RoI.\nUntick to enter its pixel position manually (it may lie outside the RoI)."));
+    // Calibration controls. Toggles are compact icon/text ButtonSwitches; the tooltips
+    // carry the full meaning the checkbox labels used to.
+    m_zeroOrderAutoCheck = new ButtonSwitch(this);
+    m_zeroOrderAutoCheck->setText(tr("Auto"));
+    m_zeroOrderAutoCheck->setToolTip(tr("Auto zero order: locate the zero-order (undispersed) source image as the strongest peak in the RoI.\nRelease to enter its pixel position manually (it may lie outside the RoI)."));
     m_zeroOrderSpin = new QDoubleSpinBox(this);
     m_zeroOrderSpin->setRange(-100000.0, 100000.0);
     m_zeroOrderSpin->setDecimals(1);
@@ -180,7 +182,8 @@ CameraOpticalSpectrumDialog::CameraOpticalSpectrumDialog(CameraSettings& setting
     m_apertureSpin->setRange(0, 256);
     m_apertureSpin->setSpecialValueText(tr("All"));
     m_apertureSpin->setToolTip(tr("Rows summed across the spectrum trace (centred on it automatically).\n0 sums the whole RoI height (background subtraction is then unavailable)."));
-    m_backgroundSubCheck = new QCheckBox(tr("Subtract background"), this);
+    m_backgroundSubCheck = new ButtonSwitch(this);
+    m_backgroundSubCheck->setIcon(QIcon(QStringLiteral(":/camera/icons/background_subtract.png")));
     m_backgroundSubCheck->setToolTip(tr("Subtract the per-column sky background estimated from the RoI rows outside the aperture.\n"
         "Skipped automatically when the source fills the RoI (such as a discharge tube whose lines span the frame),\n"
         "as those rows carry the signal rather than a background."));
@@ -195,16 +198,21 @@ CameraOpticalSpectrumDialog::CameraOpticalSpectrumDialog(CameraSettings& setting
     m_averageFramesSpin->setRange(1, 100);
     m_averageFramesSpin->setSpecialValueText(tr("Off"));
     m_averageFramesSpin->setToolTip(tr("Average the displayed profile over this many frames to reduce noise"));
-    m_normalizeCheck = new QCheckBox(tr("Normalise"), this);
-    m_normalizeCheck->setToolTip(tr("Scale the displayed profile to a peak of 1.0"));
-    m_logCheck = new QCheckBox(tr("Log"), this);
+    m_normalizeCheck = new ButtonSwitch(this);
+    m_normalizeCheck->setIcon(QIcon(QStringLiteral(":/camera/icons/normalise.png")));
+    m_normalizeCheck->setToolTip(tr("Normalise: scale the displayed profile to a peak of 1.0"));
+    m_logCheck = new ButtonSwitch(this);
+    m_logCheck->setIcon(QIcon(QStringLiteral(":/logarithmic.png")));
     m_logCheck->setToolTip(tr("Plot intensity on a logarithmic axis, keeping faint features legible next to bright ones"));
-    m_identifyCheck = new QCheckBox(tr("Identify"), this);
-    m_identifyCheck->setToolTip(tr("Detect significant emission/absorption features and label those matching known reference lines\n(redshift is applied to source lines). Strong unmatched features are labelled with their wavelength.\nRequires wavelength calibration."));
-    m_imageStripCheck = new QCheckBox(tr("Image strip"), this);
-    m_imageStripCheck->setToolTip(tr("Show a strip below the chart with the colours extracted from the image (the observed spectrum)"));
-    m_colourStripCheck = new QCheckBox(tr("Wavelength strip"), this);
-    m_colourStripCheck->setToolTip(tr("Show a strip below the chart with the colour of each wavelength, brightness following the plotted luminance"));
+    m_identifyCheck = new ButtonSwitch(this);
+    m_identifyCheck->setIcon(QIcon(QStringLiteral(":/camera/icons/identify_lines.png")));
+    m_identifyCheck->setToolTip(tr("Identify: detect significant emission/absorption features and label those matching known reference lines\n(redshift is applied to source lines). Strong unmatched features are labelled with their wavelength.\nRequires wavelength calibration."));
+    m_imageStripCheck = new ButtonSwitch(this);
+    m_imageStripCheck->setIcon(QIcon(QStringLiteral(":/camera/icons/image_strip.png")));
+    m_imageStripCheck->setToolTip(tr("Image strip: show a strip below the chart with the colours extracted from the image (the observed spectrum)"));
+    m_colourStripCheck = new ButtonSwitch(this);
+    m_colourStripCheck->setIcon(QIcon(QStringLiteral(":/camera/icons/wavelength_strip.png")));
+    m_colourStripCheck->setToolTip(tr("Wavelength strip: show a strip below the chart with the colour of each wavelength, brightness following the plotted luminance"));
 
     // Redshift applied to the source reference lines
     m_redshiftSpin = new QDoubleSpinBox(this);
@@ -220,10 +228,18 @@ CameraOpticalSpectrumDialog::CameraOpticalSpectrumDialog(CameraSettings& setting
     m_redshiftVelocityLabel->setToolTip(tr("Relativistic recession velocity equivalent to the entered redshift"));
 
     // Channel selection
-    m_luminanceCheck = new QCheckBox(tr("Luminance"), this);
-    m_redCheck = new QCheckBox(tr("R"), this);
-    m_greenCheck = new QCheckBox(tr("G"), this);
-    m_blueCheck = new QCheckBox(tr("B"), this);
+    m_luminanceCheck = new ButtonSwitch(this);
+    m_luminanceCheck->setText(tr("L"));
+    m_luminanceCheck->setToolTip(tr("Show the luminance profile"));
+    m_redCheck = new ButtonSwitch(this);
+    m_redCheck->setText(tr("R"));
+    m_redCheck->setToolTip(tr("Show the red channel profile"));
+    m_greenCheck = new ButtonSwitch(this);
+    m_greenCheck->setText(tr("G"));
+    m_greenCheck->setToolTip(tr("Show the green channel profile"));
+    m_blueCheck = new ButtonSwitch(this);
+    m_blueCheck->setText(tr("B"));
+    m_blueCheck->setToolTip(tr("Show the blue channel profile"));
     m_luminanceCheck->setChecked(true);
 
     m_updatingControls = true;
@@ -247,7 +263,7 @@ CameraOpticalSpectrumDialog::CameraOpticalSpectrumDialog(CameraSettings& setting
     m_updatingControls = false;
     updateRedshiftVelocityLabel();
 
-    connect(m_zeroOrderAutoCheck, &QCheckBox::toggled, this, [this](bool checked) {
+    connect(m_zeroOrderAutoCheck, &ButtonSwitch::toggled, this, [this](bool checked) {
         m_settings.m_opticalSpectrumZeroOrderAuto = checked;
         m_zeroOrderSpin->setEnabled(!checked);
         applySettingChanged(QStringLiteral("opticalSpectrumZeroOrderAuto"));
@@ -264,16 +280,15 @@ CameraOpticalSpectrumDialog::CameraOpticalSpectrumDialog(CameraSettings& setting
         m_settings.m_opticalSpectrumDirection = static_cast<CameraSettings::OpticalSpectrumDirection>(index);
         applySettingChanged(QStringLiteral("opticalSpectrumDirection"));
     });
+    // Aperture and background changes alter the extraction configuration; the pipeline
+    // bumps the extraction revision for these keys, which invalidates the averaging
+    // history in updateSpectrum() when the first newly-extracted frame arrives
     connect(m_apertureSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, [this](int value) {
         m_settings.m_opticalSpectrumApertureRows = value;
-        // Frames already in the averaging history were extracted with the old
-        // aperture; do not blend the two extraction configurations together
-        m_averageHistory.clear();
         applySettingChanged(QStringLiteral("opticalSpectrumApertureRows"));
     });
-    connect(m_backgroundSubCheck, &QCheckBox::toggled, this, [this](bool checked) {
+    connect(m_backgroundSubCheck, &ButtonSwitch::toggled, this, [this](bool checked) {
         m_settings.m_opticalSpectrumBackgroundSub = checked;
-        m_averageHistory.clear();
         applySettingChanged(QStringLiteral("opticalSpectrumBackgroundSub"));
     });
     connect(m_smoothingSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, [this](int value) {
@@ -284,24 +299,24 @@ CameraOpticalSpectrumDialog::CameraOpticalSpectrumDialog(CameraSettings& setting
         m_settings.m_opticalSpectrumAverageFrames = value;
         applySettingChanged(QStringLiteral("opticalSpectrumAverageFrames"));
     });
-    connect(m_normalizeCheck, &QCheckBox::toggled, this, [this](bool checked) {
+    connect(m_normalizeCheck, &ButtonSwitch::toggled, this, [this](bool checked) {
         m_settings.m_opticalSpectrumNormalize = checked;
         applySettingChanged(QStringLiteral("opticalSpectrumNormalize"));
     });
-    connect(m_logCheck, &QCheckBox::toggled, this, [this](bool checked) {
+    connect(m_logCheck, &ButtonSwitch::toggled, this, [this](bool checked) {
         m_settings.m_opticalSpectrumLogY = checked;
         applySettingChanged(QStringLiteral("opticalSpectrumLogY"));
     });
-    connect(m_identifyCheck, &QCheckBox::toggled, this, [this](bool checked) {
+    connect(m_identifyCheck, &ButtonSwitch::toggled, this, [this](bool checked) {
         m_settings.m_opticalSpectrumAutoIdentify = checked;
         applySettingChanged(QStringLiteral("opticalSpectrumAutoIdentify"));
     });
-    connect(m_colourStripCheck, &QCheckBox::toggled, this, [this](bool checked) {
+    connect(m_colourStripCheck, &ButtonSwitch::toggled, this, [this](bool checked) {
         m_settings.m_opticalSpectrumColourStrip = checked;
         m_colourStrip->setVisible(checked);
         applySettingChanged(QStringLiteral("opticalSpectrumColourStrip"));
     });
-    connect(m_imageStripCheck, &QCheckBox::toggled, this, [this](bool checked) {
+    connect(m_imageStripCheck, &ButtonSwitch::toggled, this, [this](bool checked) {
         m_settings.m_opticalSpectrumImageStrip = checked;
         m_imageStrip->setVisible(checked);
         applySettingChanged(QStringLiteral("opticalSpectrumImageStrip"));
@@ -312,10 +327,10 @@ CameraOpticalSpectrumDialog::CameraOpticalSpectrumDialog(CameraSettings& setting
         applySettingChanged(QStringLiteral("opticalSpectrumRedshift"));
     });
     const auto displayOnlyChanged = [this]() { updateChart(); };
-    connect(m_luminanceCheck, &QCheckBox::toggled, this, displayOnlyChanged);
-    connect(m_redCheck, &QCheckBox::toggled, this, displayOnlyChanged);
-    connect(m_greenCheck, &QCheckBox::toggled, this, displayOnlyChanged);
-    connect(m_blueCheck, &QCheckBox::toggled, this, displayOnlyChanged);
+    connect(m_luminanceCheck, &ButtonSwitch::toggled, this, displayOnlyChanged);
+    connect(m_redCheck, &ButtonSwitch::toggled, this, displayOnlyChanged);
+    connect(m_greenCheck, &ButtonSwitch::toggled, this, displayOnlyChanged);
+    connect(m_blueCheck, &ButtonSwitch::toggled, this, displayOnlyChanged);
 
     auto* calibrationLayout = new QHBoxLayout();
     calibrationLayout->addWidget(m_zeroOrderAutoCheck);
@@ -369,7 +384,7 @@ CameraOpticalSpectrumDialog::CameraOpticalSpectrumDialog(CameraSettings& setting
     displayLayout->addWidget(linesButton);
 
     m_referenceButton = new QPushButton(tr("Reference..."), this);
-    m_referenceButton->setToolTip(tr("Overlay a reference spectrum for a star or spectral type, downloaded from the Pickles library"));
+    m_referenceButton->setToolTip(tr("Overlay a reference spectrum, downloaded from the Pickles stellar library or the SDSS QSO/galaxy composite templates"));
     connect(m_referenceButton, &QPushButton::clicked, this, [this]() { openReferenceDialog(); });
     m_referenceLabel = new QLabel(this);
     displayLayout->addWidget(m_referenceButton);
@@ -379,8 +394,9 @@ CameraOpticalSpectrumDialog::CameraOpticalSpectrumDialog(CameraSettings& setting
     // tooltips (set in updateResponseControls) name the active response file.
     m_captureResponseButton = new QPushButton(tr("Capture response"), this);
     connect(m_captureResponseButton, &QPushButton::clicked, this, [this]() { captureInstrumentResponse(); });
-    m_applyResponseCheck = new QCheckBox(tr("Apply response"), this);
-    connect(m_applyResponseCheck, &QCheckBox::toggled, this, [this](bool checked) {
+    m_applyResponseCheck = new ButtonSwitch(this);
+    m_applyResponseCheck->setIcon(QIcon(QStringLiteral(":/camera/icons/response.png")));
+    connect(m_applyResponseCheck, &ButtonSwitch::toggled, this, [this](bool checked) {
         m_settings.m_opticalSpectrumApplyResponse = checked;
         applySettingChanged(QStringLiteral("opticalSpectrumApplyResponse"));
     });
@@ -513,7 +529,7 @@ void CameraOpticalSpectrumDialog::updateResponseControls()
     m_responseFileButton->setToolTip(tr("Select the instrument response file. Keep separate files for different\n"
         "cameras or conditions (e.g. vega-asi294.csv, tube-bench.csv).\n"
         "Current: %1%2").arg(filePath, m_responsePoints.isEmpty() ? tr(" (no response captured yet)") : QString()));
-    m_applyResponseCheck->setToolTip(tr("Divide the displayed luminance by the captured instrument response,\n"
+    m_applyResponseCheck->setToolTip(tr("Apply response: divide the displayed luminance by the captured instrument response,\n"
         "correcting the continuum shape for the sensor, Bayer filters and grating.\nUsing %1").arg(fileName));
     m_captureResponseButton->setToolTip(tr("Measure the instrument response (sensor QE x Bayer filters x grating blaze) by dividing the\n"
         "current spectrum by the selected reference template. Point the camera at the reference star,\n"
@@ -1065,6 +1081,8 @@ void CameraOpticalSpectrumDialog::updateChart()
     m_displayRedRaw = m_displayRed;
     m_displayGreenRaw = m_displayGreen;
     m_displayBlueRaw = m_displayBlue;
+    m_displayValidFirst = 0;
+    m_displayValidLast = length - 1;
 
     // Instrument response correction: divide the luminance by the captured response.
     // Where the response is very weak (the band edges) or the curve does not reach,
@@ -1075,12 +1093,18 @@ void CameraOpticalSpectrumDialog::updateChart()
     if (m_settings.m_opticalSpectrumApplyResponse && calibrated && !m_responsePoints.isEmpty())
     {
         int blanked = 0;
+        int firstCovered = -1;
+        int lastCovered = -1;
         for (int i = 0; i < m_displayLuminance.size(); i++)
         {
             const double response = CameraOpticalSpectrumLibrary::responseAt(m_responsePoints, xValues[i]);
             if (response > 0.05)
             {
                 m_displayLuminance[i] = static_cast<float>(m_displayLuminance[i] / response);
+                if (firstCovered < 0) {
+                    firstCovered = i;
+                }
+                lastCovered = i;
             }
             else
             {
@@ -1088,6 +1112,8 @@ void CameraOpticalSpectrumDialog::updateChart()
                 blanked++;
             }
         }
+        m_displayValidFirst = qMax(0, firstCovered);
+        m_displayValidLast = lastCovered;
         if (blanked > length / 10)
         {
             displayWarnings.append(tr("response covers %1-%2 nm; %3% of this spectrum is outside it and blanked")
@@ -1424,8 +1450,13 @@ void CameraOpticalSpectrumDialog::addFittedSeries(const QVector<QPointF>& points
 
 void CameraOpticalSpectrumDialog::updateFeatureAnnotations(const QVector<double>& xValues, double plotFloor)
 {
-    const QVector<CameraOpticalSpectrumFeature> features =
-        CameraOpticalSpectrumExtractor::detectFeatures(m_displayLuminance);
+    const int coveredFirst = m_displayValidFirst;
+    const int coveredLast = qMin(m_displayValidLast, static_cast<int>(m_displayLuminance.size()) - 1);
+    if (coveredLast < coveredFirst) {
+        return;
+    }
+    const QVector<CameraOpticalSpectrumFeature> features = CameraOpticalSpectrumExtractor::detectFeatures(
+        m_displayLuminance.mid(coveredFirst, coveredLast - coveredFirst + 1));
     if (features.isEmpty()) {
         return;
     }
@@ -1455,7 +1486,8 @@ void CameraOpticalSpectrumDialog::updateFeatureAnnotations(const QVector<double>
     const bool logY = m_settings.m_opticalSpectrumLogY;
     for (const CameraOpticalSpectrumFeature& feature : features)
     {
-        const double nm = xValues[feature.m_index];
+        const int featureIndex = coveredFirst + feature.m_index;
+        const double nm = xValues[featureIndex];
         QString text;
         double bestDistance = kMatchToleranceNm;
         for (const Candidate& candidate : candidates)
@@ -1471,7 +1503,7 @@ void CameraOpticalSpectrumDialog::updateFeatureAnnotations(const QVector<double>
             text = QStringLiteral("%1?").arg(nm, 0, 'f', 1);
         }
 
-        double value = m_displayLuminance[feature.m_index] * m_displayNormFactor;
+        double value = m_displayLuminance[featureIndex] * m_displayNormFactor;
         if (logY) {
             value = qMax(value, plotFloor);
         }
@@ -1628,9 +1660,18 @@ void CameraOpticalSpectrumDialog::renderOneMarker(double& markerPixel, bool seco
     else
     {
         // Line measurement at the marker: FWHM and equivalent width, when a feature
-        // is present. Samples convert to nm through the (linear) dispersion.
-        const CameraOpticalSpectrumLineMeasurement measurement =
-            CameraOpticalSpectrumExtractor::measureLine(m_displayLuminance, static_cast<int>(std::lround(index)));
+        // is present. Samples convert to nm through the (linear) dispersion. The
+        // measurement only sees the response-covered part of the profile, so blanked
+        // samples at a coverage edge cannot skew the continuum estimate.
+        const int coveredFirst = m_displayValidFirst;
+        const int coveredLast = qMin(m_displayValidLast, static_cast<int>(m_displayLuminance.size()) - 1);
+        const int measureIndex = static_cast<int>(std::lround(index));
+        CameraOpticalSpectrumLineMeasurement measurement;
+        if ((measureIndex >= coveredFirst) && (measureIndex <= coveredLast))
+        {
+            measurement = CameraOpticalSpectrumExtractor::measureLine(
+                m_displayLuminance.mid(coveredFirst, coveredLast - coveredFirst + 1), measureIndex - coveredFirst);
+        }
         if (measurement.m_valid)
         {
             const QString kind = measurement.m_emission ? tr("emission") : tr("absorption");
@@ -1864,8 +1905,9 @@ bool CameraOpticalSpectrumDialog::eventFilter(QObject* watched, QEvent* event)
             if (!m_rubberBand) {
                 m_rubberBand = new QRubberBand(QRubberBand::Rectangle, m_chartView->viewport());
             }
+            // Not shown yet: a plain click stays below the drag threshold and should
+            // not flash a zero-size band
             m_rubberBand->setGeometry(QRect(m_dragStartVp, QSize()));
-            m_rubberBand->show();
             return true;
         }
     }
@@ -1874,7 +1916,11 @@ bool CameraOpticalSpectrumDialog::eventFilter(QObject* watched, QEvent* event)
         if (m_dragging && m_rubberBand)
         {
             const QPoint pos = positionOf(static_cast<QMouseEvent*>(event)).toPoint();
-            m_rubberBand->setGeometry(QRect(m_dragStartVp, pos).normalized());
+            const QRect rect = QRect(m_dragStartVp, pos).normalized();
+            m_rubberBand->setGeometry(rect);
+            if ((rect.width() >= kDragThreshold) || (rect.height() >= kDragThreshold)) {
+                m_rubberBand->show();
+            }
             return true;
         }
     }
@@ -1900,12 +1946,21 @@ bool CameraOpticalSpectrumDialog::eventFilter(QObject* watched, QEvent* event)
             double pixel = pixelFromViewportX(clickPos.x());
             if (!std::isnan(pixel))
             {
-                // Shift snaps to the nearest spectral feature; Ctrl places marker B
+                // Shift snaps to the nearest spectral feature; Ctrl places marker B.
+                // Snapping stays inside the response-covered range so a blanked
+                // coverage edge cannot attract the marker.
                 if (mouseEvent->modifiers() & Qt::ShiftModifier)
                 {
-                    const int index = static_cast<int>(std::lround(pixel - m_spectrumData.m_axisOrigin));
-                    const int snapped = CameraOpticalSpectrumExtractor::snapToFeature(m_displayLuminance, index);
-                    pixel = m_spectrumData.m_axisOrigin + snapped;
+                    const int coveredFirst = m_displayValidFirst;
+                    const int coveredLast = qMin(m_displayValidLast, static_cast<int>(m_displayLuminance.size()) - 1);
+                    if (coveredLast >= coveredFirst)
+                    {
+                        const int index = qBound(coveredFirst,
+                            static_cast<int>(std::lround(pixel - m_spectrumData.m_axisOrigin)), coveredLast);
+                        const int snapped = coveredFirst + CameraOpticalSpectrumExtractor::snapToFeature(
+                            m_displayLuminance.mid(coveredFirst, coveredLast - coveredFirst + 1), index - coveredFirst);
+                        pixel = m_spectrumData.m_axisOrigin + snapped;
+                    }
                 }
                 if (mouseEvent->modifiers() & Qt::ControlModifier) {
                     m_markerPixelB = pixel;
@@ -1931,6 +1986,35 @@ bool CameraOpticalSpectrumDialog::eventFilter(QObject* watched, QEvent* event)
         }
     }
     return QDialog::eventFilter(watched, event);
+}
+
+void CameraOpticalSpectrumDialog::cancelDrag()
+{
+    m_dragging = false;
+    if (m_rubberBand) {
+        m_rubberBand->hide();
+    }
+}
+
+void CameraOpticalSpectrumDialog::keyPressEvent(QKeyEvent* event)
+{
+    // Escape cancels an in-progress zoom drag rather than closing the dialog
+    if ((event->key() == Qt::Key_Escape) && m_dragging)
+    {
+        cancelDrag();
+        return;
+    }
+    QDialog::keyPressEvent(event);
+}
+
+bool CameraOpticalSpectrumDialog::event(QEvent* event)
+{
+    // Losing activation mid-drag (alt-tab) would otherwise leave the drag state
+    // armed and the band visible until the next click
+    if ((event->type() == QEvent::WindowDeactivate) && m_dragging) {
+        cancelDrag();
+    }
+    return QDialog::event(event);
 }
 
 QPointF CameraOpticalSpectrumDialog::chartValueAt(const QPointF& viewportPos) const
@@ -2270,9 +2354,10 @@ void CameraOpticalSpectrumDialog::exportCsv()
     out << '\n';
     for (int i = 0; i < m_spectrumData.m_luminance.size(); i++)
     {
+        const double nm = calibrated ? wavelengthAt(i) : 0.0;
         out << (m_spectrumData.m_axisOrigin + i) << ',';
         if (calibrated) {
-            out << QString::number(wavelengthAt(i), 'f', 2);
+            out << QString::number(nm, 'f', 2);
         }
         out << ','
             << m_spectrumData.m_luminance[i] << ','
@@ -2281,7 +2366,7 @@ void CameraOpticalSpectrumDialog::exportCsv()
             << m_spectrumData.m_blue[i];
         if (corrected)
         {
-            const double response = CameraOpticalSpectrumLibrary::responseAt(m_responsePoints, wavelengthAt(i));
+            const double response = CameraOpticalSpectrumLibrary::responseAt(m_responsePoints, nm);
             out << ',';
             if (response > 0.05) {
                 out << QString::number(m_spectrumData.m_luminance[i] / response, 'f', 2);

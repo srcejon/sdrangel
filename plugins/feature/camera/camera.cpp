@@ -1068,6 +1068,7 @@ void Camera::webapiFormatFeatureSettings(
     }
     swg->setImageFileCameraPaths(imageFileCameraPaths);
     swg->setVideoFileName(new QString(settings.m_videoFileName));
+    swg->setRecordingOutputDirectoryUri(new QString(settings.m_recordingOutputDirectoryUri));
     swg->setVideoCodec((int) settings.m_videoCodec);
     swg->setVideoRecordBitrateKbps(settings.m_videoRecordBitrateKbps);
     swg->setRecordRawFits(settings.m_recordRawFits ? 1 : 0);
@@ -1574,6 +1575,9 @@ void Camera::webapiUpdateFeatureSettings(
     }
     if (featureSettingsKeys.contains("videoFileName")) {
         settings.m_videoFileName = *swg->getVideoFileName();
+    }
+    if (featureSettingsKeys.contains("recordingOutputDirectoryUri")) {
+        settings.m_recordingOutputDirectoryUri = *swg->getRecordingOutputDirectoryUri();
     }
     if (featureSettingsKeys.contains("videoCodec")) {
         settings.m_videoCodec = (CameraSettings::VideoCodec) swg->getVideoCodec();

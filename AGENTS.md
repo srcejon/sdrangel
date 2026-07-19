@@ -56,6 +56,12 @@ If Qt autogen fails with `libuv process spawn failed: operation not permitted`, 
 - Validate by building the relevant target or plugin for the area you changed
 - If CMake or dependency configuration changes, rerun the configure step before building
 
+### Camera Star Spectrum Tests
+Build and run the standalone optical spectrum extractor tests on Windows with:
+`cmd /c "C:\PROGRA~1\MICROS~3\2022\COMMUN~1\VC\AUXILI~1\Build\vcvars64.bat && cmake --build --preset default-qt6-windows --target featurecamera_spectrum_tests --parallel"`
+`cmd /c "set PATH=C:\Qt\6.11.0\msvc2022_64\bin;%PATH% && build-qt6\bin\plugins\featurecamera_spectrum_tests.exe"`
+The tests are self-contained (synthetic images, no CSV or catalog data) and exit non-zero on failure.
+
 ### Camera Star/Plate Solver Tests
 Build the standalone camera star test target on Windows with:
 `cmd /c "C:\PROGRA~1\MICROS~3\2022\COMMUN~1\VC\AUXILI~1\Build\vcvars64.bat && cmake --build --preset default-qt6-windows --target featurecamera_star_tests --parallel"`

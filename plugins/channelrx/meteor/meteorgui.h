@@ -158,6 +158,7 @@ private:
         double m_frequencySpan;
         double m_frequencyDrift;
         double m_peakPowerDB;
+        QTableWidgetItem *m_tableItem;
     };
 
     QVector<DetectionOverlay> m_detectionOverlays;

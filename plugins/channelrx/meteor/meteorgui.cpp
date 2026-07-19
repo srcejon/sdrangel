@@ -1097,6 +1097,9 @@ void MeteorGUI::makeUIConnections()
     QObject::connect(m_detectionsTable, &QTableWidget::itemSelectionChanged, this, &MeteorGUI::on_detectionsTable_itemSelectionChanged);
     QObject::connect(m_detectionsTable, &QTableWidget::customContextMenuRequested, this, &MeteorGUI::on_detectionsTable_customContextMenuRequested);
     QObject::connect(m_detectionsTable->horizontalHeader(), &QHeaderView::customContextMenuRequested, this, &MeteorGUI::on_detectionsTableHeader_customContextMenuRequested);
+    QObject::connect(m_detectionsTable->horizontalHeader(), &QHeaderView::sortIndicatorChanged, this, [this](int, Qt::SortOrder) {
+        updateSpectrumViews();
+    });
 }
 
 void MeteorGUI::calcOffset()
@@ -1166,7 +1169,8 @@ void MeteorGUI::addDetection(const MeteorDemodSink::MsgMeteorDetected& detection
         detection.getCenterFrequency(),
         detection.getFrequencySpan(),
         detection.getFrequencyDrift(),
-        detection.getPeakPowerDB()
+        detection.getPeakPowerDB(),
+        nullptr
     };
     const qint64 overlayStartMSecs = overlay.m_startTimeUtc.toMSecsSinceEpoch();
     const auto insertIt = std::upper_bound(
@@ -1196,6 +1200,14 @@ void MeteorGUI::addDetection(const MeteorDemodSink::MsgMeteorDetected& detection
         timeItem->setToolTip(tr("Detection duration was clipped to the configured maximum."));
     }
     m_detectionsTable->setItem(row, 0, timeItem);
+    for (DetectionOverlay& detectionOverlay : m_detectionOverlays)
+    {
+        if (detectionOverlay.m_id == overlayId)
+        {
+            detectionOverlay.m_tableItem = timeItem;
+            break;
+        }
+    }
     m_detectionsTable->setItem(row, 1, makeTableItem(QString::number(detection.getPeakPowerDB(), 'f', 1), detection.getPeakPowerDB()));
     m_detectionsTable->setItem(row, 2, makeTableItem(QString::number(detection.getBackgroundPowerDB(), 'f', 1), detection.getBackgroundPowerDB()));
     m_detectionsTable->setItem(row, 3, makeTableItem(QString::number(detection.getTotalPowerDB(), 'f', 1), detection.getTotalPowerDB()));
@@ -1710,12 +1722,6 @@ void MeteorGUI::deleteSelectedDetections()
         rowsToDelete.push_back(rowIndex.row());
     }
 
-    std::sort(rowsToDelete.begin(), rowsToDelete.end(), std::greater<int>());
-
-    for (int row : rowsToDelete) {
-        m_detectionsTable->removeRow(row);
-    }
-
     if (!idsToDelete.isEmpty())
     {
         for (int i = m_detectionOverlays.size() - 1; i >= 0; i--)
@@ -1725,6 +1731,12 @@ void MeteorGUI::deleteSelectedDetections()
             }
         }
         invalidateDetectionOverlayWindows();
+    }
+
+    std::sort(rowsToDelete.begin(), rowsToDelete.end(), std::greater<int>());
+
+    for (int row : rowsToDelete) {
+        m_detectionsTable->removeRow(row);
     }
 
     updateCounters();
@@ -2091,12 +2103,14 @@ void MeteorGUI::scrollSpectrumViewsToUTC(const QDateTime& dateTimeUtc)
 QString MeteorGUI::detectionOverlayLabel(const DetectionOverlay& detection) const
 {
     const QString duration = QString("%1 ms").arg(detection.m_durationS * 1000.0, 0, 'f', 0);
+    const int tableRow = detection.m_tableItem ? m_detectionsTable->row(detection.m_tableItem) : -1;
+    const QString prefix = tableRow >= 0 ? QString("#%1 ").arg(tableRow + 1) : QString();
 
     if (std::isfinite(detection.m_peakPowerDB)) {
-        return QString("%1 dB  %2").arg(detection.m_peakPowerDB, 0, 'f', 1).arg(duration);
+        return prefix + QString("%1 dB  %2").arg(detection.m_peakPowerDB, 0, 'f', 1).arg(duration);
     }
 
-    return duration;
+    return prefix + duration;
 }
 
 int MeteorGUI::sampleRateIndex(int sampleRate) const

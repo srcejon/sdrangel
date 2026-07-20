@@ -3072,6 +3072,7 @@ MeteorDemodSink::AssociationResult MeteorDemodSink::queueSpectralComponentReport
         observation.m_weight = std::max(report.m_peakPower - report.m_backgroundPower, 1e-20);
         observation.m_peakPower = report.m_peakPower;
         observation.m_backgroundPower = report.m_backgroundPower;
+        observation.m_component = true;
         addMeteorEventObservation(event, observation);
 
         if (pending.m_hasDisplaySamples || report.m_hasDisplaySamples)
@@ -3127,6 +3128,7 @@ MeteorDemodSink::AssociationResult MeteorDemodSink::queueSpectralComponentReport
     observation.m_weight = std::max(report.m_peakPower - report.m_backgroundPower, 1e-20);
     observation.m_peakPower = report.m_peakPower;
     observation.m_backgroundPower = report.m_backgroundPower;
+    observation.m_component = true;
     addMeteorEventObservation(event, observation);
     const quint64 parentEventId = event.m_id;
     m_activeMeteorEvents.push_back(std::move(event));
@@ -3261,11 +3263,16 @@ void MeteorDemodSink::updateReportFromActiveMeteorEvent(ActiveMeteorEvent& event
         std::vector<double> highs;
         std::vector<double> weights;
         const double maxPersistentBandwidth = m_resolvedDetectorTunables.m_stableBandwidthHz;
+        const bool preserveAcceptedComponentRange = (event.m_spectralComponentCount >= 3)
+            && (report.m_durationS < m_detectorTunables.m_parentReanalysisMinimumDurationS);
+        double componentLow = std::numeric_limits<double>::infinity();
+        double componentHigh = -std::numeric_limits<double>::infinity();
 
         for (const MeteorEventObservation& observation : event.m_observations)
         {
             if (observation.m_broadband
-                || ((observation.m_highFrequency - observation.m_lowFrequency) > maxPersistentBandwidth))
+                || ((!observation.m_component || !preserveAcceptedComponentRange)
+                    && ((observation.m_highFrequency - observation.m_lowFrequency) > maxPersistentBandwidth)))
             {
                 continue;
             }
@@ -3274,28 +3281,47 @@ void MeteorDemodSink::updateReportFromActiveMeteorEvent(ActiveMeteorEvent& event
             lows.push_back(observation.m_lowFrequency);
             highs.push_back(observation.m_highFrequency);
             weights.push_back(std::max(observation.m_weight, 1e-30));
+
+            if (observation.m_component)
+            {
+                componentLow = std::min(componentLow, observation.m_lowFrequency);
+                componentHigh = std::max(componentHigh, observation.m_highFrequency);
+            }
         }
 
         if (!centers.empty())
         {
-            const double center = weightedQuantile(
+            const double robustCenter = weightedQuantile(
                 centers,
                 weights,
                 0.5,
                 report.m_centerFrequency);
-            const double low = weightedQuantile(
+            double low = weightedQuantile(
                 lows,
                 weights,
                 m_detectorTunables.m_parentFrequencyLowQuantile,
-                center - 0.5 * report.m_frequencySpan);
-            const double high = weightedQuantile(
+                robustCenter - 0.5 * report.m_frequencySpan);
+            double high = weightedQuantile(
                 highs,
                 weights,
                 m_detectorTunables.m_parentFrequencyHighQuantile,
-                center + 0.5 * report.m_frequencySpan);
+                robustCenter + 0.5 * report.m_frequencySpan);
             const double binWidth = (double) std::max(1, m_settings.m_channelSampleRate)
                 / (double) std::max(1, m_spectralFrameSize);
-            const double span = std::max({binWidth, high - low, acceptedCoreSpan});
+            double center = robustCenter;
+            double span = std::max({binWidth, high - low, acceptedCoreSpan});
+
+            if (preserveAcceptedComponentRange
+                && std::isfinite(componentLow)
+                && std::isfinite(componentHigh))
+            {
+                low = std::min(low, report.m_centerFrequency - 0.5 * acceptedCoreSpan);
+                high = std::max(high, report.m_centerFrequency + 0.5 * acceptedCoreSpan);
+                low = std::min(low, componentLow);
+                high = std::max(high, componentHigh);
+                span = std::max(binWidth, high - low);
+                center = 0.5 * (low + high);
+            }
 
             double drift = report.m_frequencyDrift;
 
@@ -3340,11 +3366,13 @@ void MeteorDemodSink::finalizeActiveMeteorEvent(ActiveMeteorEvent& event)
     const quint64 settledStartSample = report.m_startSample;
     const quint64 settledEndSample = report.m_endSample;
 
-    const bool longSettledSpectralEvent = report.m_spectralParentEligible
-        && (report.m_durationS >= m_detectorTunables.m_parentReanalysisMinimumDurationS);
+    const bool settledSpectralEvent = report.m_spectralParentEligible
+        && ((report.m_durationS >= m_detectorTunables.m_parentReanalysisMinimumDurationS)
+            || ((event.m_spectralComponentCount >= 3)
+                && (report.m_durationS < m_detectorTunables.m_parentReanalysisMinimumDurationS)));
 
     if (m_detectorTunables.m_enableSettledParentReanalysis
-        && longSettledSpectralEvent)
+        && settledSpectralEvent)
     {
         if (estimatePulseBandEnvelope(report, true))
         {
@@ -3609,7 +3637,10 @@ bool MeteorDemodSink::refineBandEnvelope(
             floorStrength + m_detectorTunables.m_parentEnvelopeEnterFraction
                 * (peakStrength - floorStrength))
         : (allowShrink
-            ? std::max(1.6 * floorStrength, floorStrength + 0.003 * (peakStrength - floorStrength))
+            ? std::max(
+                1.6 * floorStrength,
+                floorStrength + m_detectorTunables.m_componentEnvelopeSupportFraction
+                    * (peakStrength - floorStrength))
             : floorStrength + 0.03 * (peakStrength - floorStrength));
     const double exitThreshold = boundedExpansion
         ? std::max(
@@ -3663,6 +3694,22 @@ bool MeteorDemodSink::refineBandEnvelope(
         ? centerSamples[firstIndex] - (quint64) (frameSize / 2)
         : 0;
     quint64 endSample = centerSamples[lastIndex] + (quint64) (frameSize / 2);
+
+    if (allowShrink
+        && (report.m_durationS >= m_detectorTunables.m_componentEnvelopeSustainedDurationS))
+    {
+        const double maximumExpansionS = std::max(
+            m_detectorTunables.m_componentEnvelopeMinimumSustainedExpansionS,
+            m_detectorTunables.m_componentEnvelopeSustainedExpansionFraction * report.m_durationS);
+        const quint64 maximumExpansionSamples = (quint64) std::ceil(maximumExpansionS * sampleRate);
+        const quint64 minimumStartSample = report.m_startSample > maximumExpansionSamples
+            ? report.m_startSample - maximumExpansionSamples
+            : 0;
+        const quint64 maximumEndSample = report.m_endSample + maximumExpansionSamples;
+
+        startSample = std::max(startSample, minimumStartSample);
+        endSample = std::min(endSample, maximumEndSample);
+    }
 
     if (boundedExpansion)
     {

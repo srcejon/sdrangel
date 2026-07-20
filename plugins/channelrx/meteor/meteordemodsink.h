@@ -153,6 +153,10 @@ public:
         double m_parentReanalysisMinimumDurationS = 2.0;
         double m_parentFrequencyLowQuantile = 0.10;
         double m_parentFrequencyHighQuantile = 0.90;
+        double m_componentEnvelopeSupportFraction = 0.003;
+        double m_componentEnvelopeSustainedDurationS = 0.75;
+        double m_componentEnvelopeSustainedExpansionFraction = 0.35;
+        double m_componentEnvelopeMinimumSustainedExpansionS = 0.32;
         double m_parentEnvelopeSearchPaddingS = 0.25;
         double m_parentEnvelopeNoiseContextS = 3.0;
         double m_parentEnvelopeMaximumLeadS = 0.75;
@@ -397,6 +401,7 @@ private:
         double m_peakPower = 0.0;
         double m_backgroundPower = 1e-20;
         bool m_broadband = false;
+        bool m_component = false;
     };
 
     struct ActiveMeteorEvent {

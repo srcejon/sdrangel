@@ -4471,6 +4471,71 @@ Use src=file:///path/to/images/logo.png for img tags. http is not supported.</st
        </item>
       </layout>
      </widget>
+     <widget class="QWidget" name="thermalTab">
+      <property name="toolTip">
+       <string>Radiometric thermal-camera decoding, palette, marker, and chart settings.</string>
+      </property>
+      <attribute name="title">
+       <string>Thermal</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="thermalTabLayout">
+       <item alignment="Qt::AlignmentFlag::AlignTop">
+        <widget class="QGroupBox" name="thermalImageGroup">
+         <property name="title"><string>Thermal image</string></property>
+         <property name="toolTip"><string>Decode a radiometric UVC payload and render it using the selected temperature palette.</string></property>
+         <layout class="QGridLayout" name="thermalImageLayout">
+          <item row="0" column="0"><widget class="QLabel" name="thermalDecoderLabel"><property name="text"><string>Decoder</string></property></widget></item>
+          <item row="0" column="1"><widget class="QComboBox" name="thermalDecoderCombo"><property name="toolTip"><string>Select automatic detection or a specific radiometric UVC camera decoder.</string></property></widget></item>
+          <item row="0" column="2"><widget class="QLabel" name="thermalPaletteLabel"><property name="text"><string>Palette</string></property></widget></item>
+          <item row="0" column="3"><widget class="QComboBox" name="thermalPaletteCombo"><property name="toolTip"><string>Colour palette used to render temperatures; this does not alter measured values.</string></property></widget></item>
+          <item row="1" column="0"><widget class="QLabel" name="thermalUnitsLabel"><property name="text"><string>Units</string></property></widget></item>
+          <item row="1" column="1"><widget class="QComboBox" name="thermalUnitsCombo"><property name="toolTip"><string>Temperature units used for marker labels and the chart.</string></property></widget></item>
+          <item row="1" column="2"><widget class="QCheckBox" name="thermalAutoRangeCheck"><property name="toolTip"><string>Automatically choose display limits from robust temperature percentiles.</string></property><property name="text"><string>Auto range</string></property></widget></item>
+          <item row="2" column="0"><widget class="QLabel" name="thermalMinimumLabel"><property name="text"><string>Minimum</string></property></widget></item>
+          <item row="2" column="1"><widget class="QDoubleSpinBox" name="thermalMinimumSpin"><property name="toolTip"><string>Manual palette minimum temperature in Celsius.</string></property><property name="decimals"><number>2</number></property><property name="minimum"><double>-100.000000000000000</double></property><property name="maximum"><double>999.000000000000000</double></property><property name="suffix"><string> C</string></property></widget></item>
+          <item row="2" column="2"><widget class="QLabel" name="thermalMaximumLabel"><property name="text"><string>Maximum</string></property></widget></item>
+          <item row="2" column="3"><widget class="QDoubleSpinBox" name="thermalMaximumSpin"><property name="toolTip"><string>Manual palette maximum temperature in Celsius.</string></property><property name="decimals"><number>2</number></property><property name="minimum"><double>-99.000000000000000</double></property><property name="maximum"><double>1000.000000000000000</double></property><property name="value"><double>100.000000000000000</double></property><property name="suffix"><string> C</string></property></widget></item>
+          <item row="3" column="0"><widget class="QLabel" name="thermalLowPercentileLabel"><property name="text"><string>Low percentile</string></property></widget></item>
+          <item row="3" column="1"><widget class="QDoubleSpinBox" name="thermalLowPercentileSpin"><property name="toolTip"><string>Lower percentile used by automatic display ranging.</string></property><property name="decimals"><number>1</number></property><property name="minimum"><double>0.000000000000000</double></property><property name="maximum"><double>49.000000000000000</double></property><property name="value"><double>1.000000000000000</double></property><property name="suffix"><string> %</string></property></widget></item>
+          <item row="3" column="2"><widget class="QLabel" name="thermalHighPercentileLabel"><property name="text"><string>High percentile</string></property></widget></item>
+          <item row="3" column="3"><widget class="QDoubleSpinBox" name="thermalHighPercentileSpin"><property name="toolTip"><string>Upper percentile used by automatic display ranging.</string></property><property name="decimals"><number>1</number></property><property name="minimum"><double>1.000000000000000</double></property><property name="maximum"><double>100.000000000000000</double></property><property name="value"><double>99.000000000000000</double></property><property name="suffix"><string> %</string></property></widget></item>
+          <item row="4" column="0"><widget class="QLabel" name="thermalSmoothingLabel"><property name="text"><string>Range smoothing</string></property></widget></item>
+          <item row="4" column="1"><widget class="QDoubleSpinBox" name="thermalSmoothingSpin"><property name="toolTip"><string>Automatic range response factor; lower values reduce palette flicker.</string></property><property name="decimals"><number>2</number></property><property name="minimum"><double>0.010000000000000</double></property><property name="maximum"><double>1.000000000000000</double></property><property name="singleStep"><double>0.050000000000000</double></property><property name="value"><double>0.200000000000000</double></property></widget></item>
+          <item row="5" column="0"><widget class="QLabel" name="thermalStatusTitleLabel"><property name="text"><string>Status</string></property></widget></item>
+          <item row="5" column="1" colspan="3"><widget class="QLabel" name="thermalStatusLabel"><property name="toolTip"><string>Current thermal decoder and radiometric frame status.</string></property><property name="text"><string>-</string></property><property name="wordWrap"><bool>true</bool></property></widget></item>
+         </layout>
+        </widget>
+       </item>
+       <item alignment="Qt::AlignmentFlag::AlignTop">
+        <widget class="QGroupBox" name="thermalMarkerGroup">
+         <property name="title"><string>Temperature marker</string></property>
+         <property name="toolTip"><string>Measure one location in sensor coordinates and optionally plot it over time.</string></property>
+         <layout class="QGridLayout" name="thermalMarkerLayout">
+          <item row="0" column="0"><widget class="QCheckBox" name="thermalMarkerEnabledCheck"><property name="toolTip"><string>Display and report the temperature marker.</string></property><property name="text"><string>Show marker</string></property></widget></item>
+          <item row="0" column="1"><widget class="QCheckBox" name="thermalShowMinMaxCheck"><property name="toolTip"><string>Also mark the coldest and hottest pixels in the frame.</string></property><property name="text"><string>Show min/max</string></property></widget></item>
+          <item row="1" column="0"><widget class="QLabel" name="thermalMarkerXLabel"><property name="text"><string>Marker X</string></property></widget></item>
+          <item row="1" column="1"><widget class="QDoubleSpinBox" name="thermalMarkerXSpin"><property name="toolTip"><string>Horizontal marker position as a percentage of the thermal sensor width.</string></property><property name="decimals"><number>1</number></property><property name="maximum"><double>100.000000000000000</double></property><property name="value"><double>50.000000000000000</double></property><property name="suffix"><string> %</string></property></widget></item>
+          <item row="1" column="2"><widget class="QLabel" name="thermalMarkerYLabel"><property name="text"><string>Marker Y</string></property></widget></item>
+          <item row="1" column="3"><widget class="QDoubleSpinBox" name="thermalMarkerYSpin"><property name="toolTip"><string>Vertical marker position as a percentage of the thermal sensor height.</string></property><property name="decimals"><number>1</number></property><property name="maximum"><double>100.000000000000000</double></property><property name="value"><double>50.000000000000000</double></property><property name="suffix"><string> %</string></property></widget></item>
+          <item row="2" column="0"><widget class="QCheckBox" name="thermalChartEnabledCheck"><property name="toolTip"><string>Add valid marker measurements to the temperature chart.</string></property><property name="text"><string>Chart</string></property></widget></item>
+          <item row="2" column="1"><widget class="QSpinBox" name="thermalChartHistorySpin"><property name="toolTip"><string>Amount of marker temperature history retained by the chart.</string></property><property name="minimum"><number>10</number></property><property name="maximum"><number>86400</number></property><property name="value"><number>600</number></property><property name="suffix"><string> s</string></property></widget></item>
+          <item row="2" column="2"><widget class="QLabel" name="thermalChartIntervalLabel"><property name="text"><string>Sample interval</string></property></widget></item>
+          <item row="2" column="3"><widget class="QSpinBox" name="thermalChartIntervalSpin"><property name="toolTip"><string>Minimum interval between chart samples.</string></property><property name="minimum"><number>40</number></property><property name="maximum"><number>60000</number></property><property name="value"><number>200</number></property><property name="suffix"><string> ms</string></property></widget></item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <widget class="QGroupBox" name="thermalChartGroup">
+         <property name="title"><string>Marker temperature</string></property>
+         <property name="toolTip"><string>Bounded marker-temperature history using frame capture timestamps.</string></property>
+         <layout class="QVBoxLayout" name="thermalChartLayout">
+          <item><widget class="QWidget" name="thermalChartContainer" native="true"><property name="minimumSize"><size><width>0</width><height>180</height></size></property><property name="toolTip"><string>Marker temperature plotted against capture time.</string></property></widget></item>
+          <item><widget class="QPushButton" name="thermalClearChartButton"><property name="toolTip"><string>Clear the thermal marker history chart.</string></property><property name="text"><string>Clear</string></property></widget></item>
+         </layout>
+        </widget>
+       </item>
+      </layout>
+     </widget>
      <widget class="QWidget" name="recordingTab">
       <property name="toolTip">
        <string>Recording, playback, keogram, and YouTube streaming settings.</string>

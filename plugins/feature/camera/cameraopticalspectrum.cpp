@@ -551,9 +551,9 @@ QRgb CameraOpticalSpectrumExtractor::wavelengthToColour(double nm, double intens
     }
 
     const double scale = falloff * qBound(0.0, intensity, 1.0);
-    constexpr double gamma = 0.8;
     const auto component = [scale](double c) {
-        return static_cast<int>(std::lround(255.0 * std::pow(c * scale, gamma)));
+        constexpr double gammaExponent = 0.8;
+        return static_cast<int>(std::lround(255.0 * std::pow(c * scale, gammaExponent)));
     };
     return qRgb(component(r), component(g), component(b));
 }

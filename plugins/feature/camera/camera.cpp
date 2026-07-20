@@ -107,6 +107,8 @@ Camera::Camera(WebAPIAdapterInterface *webAPIAdapterInterface) :
     Feature(m_featureIdURI, webAPIAdapterInterface),
     m_workerThread(new QThread()),
     m_worker(new CameraWorker()),
+    m_thermalProcessorThread(new QThread()),
+    m_thermalProcessor(new CameraThermalProcessor()),
     m_framePreprocessorThread(new QThread()),
     m_framePreprocessor(new CameraFramePreprocessor()),
     m_frameAlignerThread(new QThread()),
@@ -147,6 +149,14 @@ Camera::Camera(WebAPIAdapterInterface *webAPIAdapterInterface) :
     m_worker->setRecorderInputMessageQueue(getRecorderInputMessageQueue());
     m_workerThread->start();
     m_worker->getInputMessageQueue()->push(Camera::MsgConfigureCamera::create(m_settings, QList<QString>(), true));
+
+    m_thermalProcessor->moveToThread(m_thermalProcessorThread);
+    QObject::connect(m_thermalProcessorThread, &QThread::started, m_thermalProcessor, &CameraThermalProcessor::startWork);
+    QObject::connect(m_thermalProcessorThread, &QThread::finished, m_thermalProcessor, &QObject::deleteLater);
+    QObject::connect(m_thermalProcessorThread, &QThread::finished, m_thermalProcessorThread, &QThread::deleteLater);
+    m_thermalProcessor->setNextStage(m_frameAligner);
+    m_thermalProcessorThread->start();
+    m_thermalProcessor->getInputMessageQueue()->push(Camera::MsgConfigureCamera::create(m_settings, QList<QString>(), true));
 
     m_framePreprocessor->moveToThread(m_framePreprocessorThread);
     QObject::connect(m_framePreprocessorThread, &QThread::started, m_framePreprocessor, &CameraFramePreprocessor::startWork);
@@ -259,6 +269,14 @@ Camera::~Camera()
         m_worker = nullptr;
     }
 
+    if (m_thermalProcessorThread)
+    {
+        m_thermalProcessorThread->quit();
+        m_thermalProcessorThread->wait();
+        m_thermalProcessorThread = nullptr;
+        m_thermalProcessor = nullptr;
+    }
+
     if (m_framePreprocessorThread)
     {
         m_framePreprocessorThread->quit();
@@ -368,6 +386,9 @@ void Camera::start()
     if (m_worker) {
         m_worker->getInputMessageQueue()->push(CameraWorker::MsgStartStop::create(true, captureEpoch));
     }
+    if (m_thermalProcessor) {
+        m_thermalProcessor->getInputMessageQueue()->push(Camera::MsgCaptureActive::create(true, captureEpoch));
+    }
     if (m_framePreprocessor) {
         m_framePreprocessor->getInputMessageQueue()->push(Camera::MsgCaptureActive::create(true, captureEpoch));
     }
@@ -451,6 +472,9 @@ void Camera::stop()
     }
     if (m_framePreprocessor) {
         m_framePreprocessor->getInputMessageQueue()->push(Camera::MsgCaptureActive::create(false, captureEpoch));
+    }
+    if (m_thermalProcessor) {
+        m_thermalProcessor->getInputMessageQueue()->push(Camera::MsgCaptureActive::create(false, captureEpoch));
     }
     if (m_worker) {
         m_worker->getInputMessageQueue()->push(CameraWorker::MsgStartStop::create(false, captureEpoch));
@@ -650,6 +674,7 @@ bool Camera::handleMessage(const Message& cmd)
         m_reportCaptureDateTime = report.getCaptureDateTime();
         m_reportDetectedObjectClasses = report.getDetectedObjectClasses();
         m_reportMotionDetected = report.getMotionDetected();
+        m_reportThermal = report.getThermal();
         return true;
     }
 
@@ -693,6 +718,9 @@ void Camera::applySettings(const CameraSettings& settings, const QList<QString>&
 
     if (m_worker) {
         m_worker->getInputMessageQueue()->push(Camera::MsgConfigureCamera::create(settings, settingsKeys, force));
+    }
+    if (m_thermalProcessor) {
+        m_thermalProcessor->getInputMessageQueue()->push(Camera::MsgConfigureCamera::create(settings, settingsKeys, force));
     }
     if (m_framePreprocessor) {
         m_framePreprocessor->getInputMessageQueue()->push(Camera::MsgConfigureCamera::create(settings, settingsKeys, force));

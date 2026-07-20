@@ -153,7 +153,13 @@ CameraSettingsDialog::CameraSettingsDialog(QWidget *parent) :
     m_cloudSeries(nullptr),
     m_cloudAxisX(nullptr),
     m_cloudAxisY(nullptr),
-    m_lastCloudSampleMs(0)
+    m_lastCloudSampleMs(0),
+    m_thermalChart(nullptr),
+    m_thermalSeries(nullptr),
+    m_thermalAxisX(nullptr),
+    m_thermalAxisY(nullptr),
+    m_lastThermalSampleMs(0),
+    m_thermalValuesFahrenheit(false)
 {
     ui->setupUi(this);
 
@@ -227,6 +233,29 @@ CameraSettingsDialog::CameraSettingsDialog(QWidget *parent) :
 
     updateCloudAxes();
 
+    m_thermalChart = new QChart();
+    m_thermalChart->setTheme(QChart::ChartThemeDark);
+    m_thermalChart->setTitle(tr("Marker temperature vs time"));
+    m_thermalChart->legend()->hide();
+    m_thermalChart->layout()->setContentsMargins(0, 0, 0, 0);
+    m_thermalSeries = new QLineSeries(m_thermalChart);
+    m_thermalChart->addSeries(m_thermalSeries);
+    m_thermalAxisX = new QDateTimeAxis(m_thermalChart);
+    m_thermalAxisX->setFormat("HH:mm:ss");
+    m_thermalAxisY = new QValueAxis(m_thermalChart);
+    m_thermalAxisY->setTitleText(tr("Temperature (C)"));
+    m_thermalAxisY->setLabelFormat("%.1f");
+    m_thermalChart->addAxis(m_thermalAxisX, Qt::AlignBottom);
+    m_thermalChart->addAxis(m_thermalAxisY, Qt::AlignLeft);
+    m_thermalSeries->attachAxis(m_thermalAxisX);
+    m_thermalSeries->attachAxis(m_thermalAxisY);
+    auto *thermalChartView = new QChartView(m_thermalChart, ui->thermalChartContainer);
+    thermalChartView->setRenderHint(QPainter::Antialiasing);
+    auto *thermalChartLayout = new QVBoxLayout(ui->thermalChartContainer);
+    thermalChartLayout->setContentsMargins(0, 0, 0, 0);
+    thermalChartLayout->addWidget(thermalChartView);
+    updateTemperatureAxes(m_thermalSeries, m_thermalAxisX, m_thermalAxisY);
+
     clearCameraStatus();
 }
 
@@ -283,6 +312,48 @@ void CameraSettingsDialog::appendTemperatureSample(const QDateTime& timestamp, d
     updateTemperatureAxes(m_tempSeries, m_tempAxisX, m_tempAxisY);
 }
 
+void CameraSettingsDialog::appendThermalSample(const QDateTime& timestamp, double temperatureC,
+    int historySeconds, int sampleIntervalMs, bool fahrenheit)
+{
+    if (!m_thermalSeries || !timestamp.isValid()) {
+        return;
+    }
+    setThermalUnits(fahrenheit);
+    const qint64 timestampMs = timestamp.toMSecsSinceEpoch();
+    if ((m_lastThermalSampleMs > 0) && (timestampMs - m_lastThermalSampleMs < sampleIntervalMs)) {
+        return;
+    }
+    m_lastThermalSampleMs = timestampMs;
+    const double displayValue = fahrenheit ? temperatureC * 9.0 / 5.0 + 32.0 : temperatureC;
+    m_thermalSeries->append(timestampMs, displayValue);
+    const qint64 oldestMs = timestampMs - static_cast<qint64>(historySeconds) * 1000;
+    QList<QPointF> points = m_thermalSeries->points();
+    int removeCount = 0;
+    while ((removeCount < points.size()) && (points.at(removeCount).x() < oldestMs)) {
+        ++removeCount;
+    }
+    if (removeCount > 0) {
+        m_thermalSeries->removePoints(0, removeCount);
+    }
+    updateTemperatureAxes(m_thermalSeries, m_thermalAxisX, m_thermalAxisY);
+}
+
+void CameraSettingsDialog::setThermalUnits(bool fahrenheit)
+{
+    if (!m_thermalSeries || (fahrenheit == m_thermalValuesFahrenheit)) {
+        return;
+    }
+
+    QList<QPointF> points = m_thermalSeries->points();
+    for (QPointF& point : points) {
+        point.setY(fahrenheit ? point.y() * 9.0 / 5.0 + 32.0 : (point.y() - 32.0) * 5.0 / 9.0);
+    }
+    m_thermalSeries->replace(points);
+    m_thermalValuesFahrenheit = fahrenheit;
+    m_thermalAxisY->setTitleText(fahrenheit ? tr("Temperature (F)") : tr("Temperature (C)"));
+    updateTemperatureAxes(m_thermalSeries, m_thermalAxisX, m_thermalAxisY);
+}
+
 void CameraSettingsDialog::clearCameraStatus()
 {
     ui->cameraStateLabel->setText("-");
@@ -301,8 +372,22 @@ void CameraSettingsDialog::clearCameraStatus()
     if (m_tempSeries) {
         m_tempSeries->clear();
     }
+    if (m_thermalSeries) {
+        m_thermalSeries->clear();
+    }
+    m_lastThermalSampleMs = 0;
 
     updateTemperatureAxes(m_tempSeries, m_tempAxisX, m_tempAxisY);
+    updateTemperatureAxes(m_thermalSeries, m_thermalAxisX, m_thermalAxisY);
+}
+
+void CameraSettingsDialog::on_thermalClearChartButton_clicked()
+{
+    if (m_thermalSeries) {
+        m_thermalSeries->clear();
+    }
+    m_lastThermalSampleMs = 0;
+    updateTemperatureAxes(m_thermalSeries, m_thermalAxisX, m_thermalAxisY);
 }
 
 void CameraSettingsDialog::shrinkToVisibleContent()

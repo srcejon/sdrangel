@@ -163,6 +163,30 @@ struct CameraSettings
         SensorOpticalAxisFront
     };
 
+    enum ThermalDecoder
+    {
+        ThermalDecoderOff = 0,
+        ThermalDecoderAuto,
+        ThermalDecoderThermalMasterP2,
+        ThermalDecoderTopdonTc001
+    };
+
+    enum ThermalPalette
+    {
+        ThermalPaletteWhiteHot = 0,
+        ThermalPaletteBlackHot,
+        ThermalPaletteIron,
+        ThermalPaletteInferno,
+        ThermalPaletteTurbo,
+        ThermalPaletteViridis
+    };
+
+    enum ThermalUnits
+    {
+        ThermalUnitsCelsius = 0,
+        ThermalUnitsFahrenheit
+    };
+
     enum HistogramStretch
     {
         HistogramStretchOff = 0,
@@ -710,6 +734,24 @@ struct CameraSettings
     PlateSolveCatalogSource m_plateSolveCatalogSource; ///< Catalog source used for plate solving
     PlateSolveApplyMode m_plateSolveApplyMode; ///< Which solved values should be copied back into camera settings
     int    m_starCatalogDiskCacheSizeGb; ///< Maximum Siril/Gaia region disk cache size in GB; 0 = unlimited
+
+    // Radiometric UVC thermal-camera settings
+    ThermalDecoder m_thermalDecoder;
+    ThermalPalette m_thermalPalette;
+    ThermalUnits m_thermalUnits;
+    bool m_thermalAutoRange;
+    double m_thermalMinimumC;
+    double m_thermalMaximumC;
+    double m_thermalAutoLowPercentile;
+    double m_thermalAutoHighPercentile;
+    double m_thermalAutoRangeSmoothing;
+    bool m_thermalMarkerEnabled;
+    double m_thermalMarkerX;
+    double m_thermalMarkerY;
+    bool m_thermalShowMinMax;
+    bool m_thermalChartEnabled;
+    int m_thermalChartHistorySeconds;
+    int m_thermalChartSampleIntervalMs;
 
     // Optical spectrum (diffraction grating spectroscopy) settings; opticalSpectrum keys kept for compatibility
     enum OpticalSpectrumDirection {

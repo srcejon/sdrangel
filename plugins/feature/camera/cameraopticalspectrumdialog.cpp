@@ -1812,7 +1812,10 @@ void CameraOpticalSpectrumDialog::updateColourStrip()
 
     const bool calibrated = isCalibrated();
     renderStrip(m_colourStrip, [this, maxLuminance, calibrated](double axisValue, double index) {
-        const double intensity = qBound(0.0, interpolate(m_displayLuminance, index) / maxLuminance, 1.0);
+        const double intensity = qBound(
+            0.0,
+            static_cast<double>(interpolate(m_displayLuminance, index)) / static_cast<double>(maxLuminance),
+            1.0);
         if (calibrated && (axisValue >= kVisibleMinNm) && (axisValue <= kVisibleMaxNm)) {
             return CameraOpticalSpectrumExtractor::wavelengthToColour(axisValue, intensity);
         }

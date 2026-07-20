@@ -15,6 +15,8 @@ set(camera_SOURCES
     cameraobjectdetector.cpp
     camerayololitert.cpp
     cameradiffdetector.cpp
+    camerathermaldecoder.cpp
+    camerathermalprocessor.cpp
     cameraframepreprocessor.cpp
     cameraframealigner.cpp
     camerahdrfusion.cpp
@@ -55,6 +57,8 @@ set(camera_HEADERS
     camerayololitert.h
     camerayolotensorrt.h
     cameradiffdetector.h
+    camerathermaldecoder.h
+    camerathermalprocessor.h
     cameraframepreprocessor.h
     cameraframealigner.h
     camerahdrfusion.h

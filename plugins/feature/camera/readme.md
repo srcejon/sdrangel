@@ -792,6 +792,18 @@ The font combo, font scale spin box and colour button set the HTML text appearan
 
 The X and Y sliders set the HTML text overlay position in pixels, with readouts showing the current values. A Y value of 0 auto-positions the text at the bottom.
 
+<h3>Thermal tab</h3>
+
+The Thermal tab enables radiometric UVC decoding for Thermal Master P2 and TOPDON TC001 cameras. These cameras expose a visible UVC plane together with a packed 16-bit temperature plane. Select Auto to recognize the supported 256-pixel stacked format, select a named decoder to force it, or select Off for an ordinary Qt camera.
+
+Radiometric capture uses the continuous Qt video path because still-image capture discards the packed temperature plane. The decoded temperature map is converted from 1/64 Kelvin to Celsius before display. Camera shutter-calibration (NUC) frames are suppressed and are not charted or recorded.
+
+The palette controls only the rendered image; measurements remain in Celsius internally. Auto range uses configurable low/high percentiles and temporal smoothing, while manual range uses the entered Celsius limits. White hot, black hot, iron, inferno, turbo and viridis palettes are available.
+
+The marker position can be entered as a percentage or moved by double-clicking the preview. Its temperature can be displayed in Celsius or Fahrenheit and plotted over the configured bounded history. Optional markers identify the minimum and maximum temperatures in each frame. Calibrated recording stores the palette-rendered frame, and post-processed recording also includes the marker labels. Radiometric FITS export is not currently provided.
+
+For decoder diagnostics, setting the `SDRANGEL_CAMERA_THERMAL_RAW_DUMP` environment variable to a filename writes the first mapped UVC frame as packed raw bytes and logs its dimensions, stride and pixel format.
+
 <h3>Recording tab</h3>
 
 The Recording tab configures image and video file output, video file playback, keograms and YouTube Live streaming.

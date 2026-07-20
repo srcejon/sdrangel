@@ -822,6 +822,16 @@ bool CameraGUI::handleMessage(const Message& message)
         m_lastHistogramData = report.getHistogramData();
         m_lastOpticalSpectrumData = report.getOpticalSpectrumData();
         m_lastStarDetections = report.getStarDetections();
+        m_lastThermal = report.getThermal();
+        settingsUI()->thermalStatusLabel->setText(m_lastThermal.m_status.isEmpty() ? QStringLiteral("-") : m_lastThermal.m_status);
+        if (m_lastThermal.m_valid && m_settings.m_thermalChartEnabled && m_settingsDialog) {
+            m_settingsDialog->appendThermalSample(
+                report.getCaptureDateTime().isValid() ? report.getCaptureDateTime() : QDateTime::currentDateTime(),
+                m_lastThermal.m_markerTemperatureC,
+                m_settings.m_thermalChartHistorySeconds,
+                m_settings.m_thermalChartSampleIntervalMs,
+                m_settings.m_thermalUnits == CameraSettings::ThermalUnitsFahrenheit);
+        }
         m_lastPreviewTextLabels = report.getPreviewTextLabels();
         m_lastPreviewRectItems = report.getPreviewRectItems();
         m_lastPreviewImageOverlays = report.getPreviewImageOverlays();
@@ -1416,6 +1426,18 @@ CameraGUI::CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *
     settingsUI()->autoExposureGainModeCombo->addItem(tr("Gain first"), CameraSettings::AutoExposureGainGainFirst);
     settingsUI()->autoExposureGainModeCombo->addItem(tr("Exposure only"), CameraSettings::AutoExposureGainExposureOnly);
     settingsUI()->autoExposureGainModeCombo->addItem(tr("Gain only"), CameraSettings::AutoExposureGainGainOnly);
+    settingsUI()->thermalDecoderCombo->addItem(tr("Off"), CameraSettings::ThermalDecoderOff);
+    settingsUI()->thermalDecoderCombo->addItem(tr("Auto"), CameraSettings::ThermalDecoderAuto);
+    settingsUI()->thermalDecoderCombo->addItem(tr("Thermal Master P2"), CameraSettings::ThermalDecoderThermalMasterP2);
+    settingsUI()->thermalDecoderCombo->addItem(tr("TOPDON TC001"), CameraSettings::ThermalDecoderTopdonTc001);
+    settingsUI()->thermalPaletteCombo->addItem(tr("White hot"), CameraSettings::ThermalPaletteWhiteHot);
+    settingsUI()->thermalPaletteCombo->addItem(tr("Black hot"), CameraSettings::ThermalPaletteBlackHot);
+    settingsUI()->thermalPaletteCombo->addItem(tr("Iron"), CameraSettings::ThermalPaletteIron);
+    settingsUI()->thermalPaletteCombo->addItem(tr("Inferno"), CameraSettings::ThermalPaletteInferno);
+    settingsUI()->thermalPaletteCombo->addItem(tr("Turbo"), CameraSettings::ThermalPaletteTurbo);
+    settingsUI()->thermalPaletteCombo->addItem(tr("Viridis"), CameraSettings::ThermalPaletteViridis);
+    settingsUI()->thermalUnitsCombo->addItem(tr("Celsius"), CameraSettings::ThermalUnitsCelsius);
+    settingsUI()->thermalUnitsCombo->addItem(tr("Fahrenheit"), CameraSettings::ThermalUnitsFahrenheit);
     m_statusTimer.start(250);
 
     connect(&m_updateTimer, &QTimer::timeout, this, &CameraGUI::updateHardware);
@@ -2531,6 +2553,26 @@ void CameraGUI::displaySettings()
     updatePlateSolveDateTimeEdit();
     settingsUI()->plateSolveCatalogSourceCombo->setCurrentIndex(static_cast<int>(m_settings.m_plateSolveCatalogSource));
     settingsUI()->starCatalogDiskCacheSizeSpin->setValue(m_settings.m_starCatalogDiskCacheSizeGb);
+    settingsUI()->thermalDecoderCombo->setCurrentIndex(static_cast<int>(m_settings.m_thermalDecoder));
+    settingsUI()->thermalPaletteCombo->setCurrentIndex(static_cast<int>(m_settings.m_thermalPalette));
+    settingsUI()->thermalUnitsCombo->setCurrentIndex(static_cast<int>(m_settings.m_thermalUnits));
+    settingsUI()->thermalAutoRangeCheck->setChecked(m_settings.m_thermalAutoRange);
+    settingsUI()->thermalMinimumSpin->setValue(m_settings.m_thermalMinimumC);
+    settingsUI()->thermalMaximumSpin->setValue(m_settings.m_thermalMaximumC);
+    settingsUI()->thermalLowPercentileSpin->setValue(m_settings.m_thermalAutoLowPercentile);
+    settingsUI()->thermalHighPercentileSpin->setValue(m_settings.m_thermalAutoHighPercentile);
+    settingsUI()->thermalSmoothingSpin->setValue(m_settings.m_thermalAutoRangeSmoothing);
+    settingsUI()->thermalMarkerEnabledCheck->setChecked(m_settings.m_thermalMarkerEnabled);
+    settingsUI()->thermalMarkerXSpin->setValue(m_settings.m_thermalMarkerX * 100.0);
+    settingsUI()->thermalMarkerYSpin->setValue(m_settings.m_thermalMarkerY * 100.0);
+    settingsUI()->thermalShowMinMaxCheck->setChecked(m_settings.m_thermalShowMinMax);
+    settingsUI()->thermalChartEnabledCheck->setChecked(m_settings.m_thermalChartEnabled);
+    settingsUI()->thermalChartHistorySpin->setValue(m_settings.m_thermalChartHistorySeconds);
+    settingsUI()->thermalChartIntervalSpin->setValue(m_settings.m_thermalChartSampleIntervalMs);
+    if (m_settingsDialog) {
+        m_settingsDialog->setThermalUnits(m_settings.m_thermalUnits == CameraSettings::ThermalUnitsFahrenheit);
+    }
+    updateThermalControls();
     settingsUI()->plateSolveApplyModeCombo->setCurrentIndex(static_cast<int>(m_settings.m_plateSolveApplyMode));
     settingsUI()->plateSolveApplyButton->setEnabled(m_lastPlateSolved);
     ui->loopVideo->setChecked(m_settings.m_videoLoop);
@@ -3439,9 +3481,11 @@ void CameraGUI::updatePreviewOverlayItems()
 
         QPen pen(previewRect.m_color);
         pen.setWidthF(std::max(1.0, previewRect.m_lineWidth));
-        QGraphicsRectItem *rectItem = m_imageScene->addRect(clipped, pen, QBrush(Qt::NoBrush));
-        rectItem->setZValue(1.4);
-        m_previewOverlayItems.append(rectItem);
+        QGraphicsItem *shapeItem = previewRect.m_ellipse
+            ? static_cast<QGraphicsItem*>(m_imageScene->addEllipse(clipped, pen, QBrush(Qt::NoBrush)))
+            : static_cast<QGraphicsItem*>(m_imageScene->addRect(clipped, pen, QBrush(Qt::NoBrush)));
+        shapeItem->setZValue(1.4);
+        m_previewOverlayItems.append(shapeItem);
     }
 
     for (const CameraPostProcessor::PreviewTextLabel& previewLabel : m_lastPreviewTextLabels)
@@ -3541,6 +3585,80 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->fpsCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_fpsCombo_currentIndexChanged);
     QObject::connect(settingsUI()->intervalSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_intervalSpin_valueChanged);
     QObject::connect(settingsUI()->intervalUnitsCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_intervalUnitsCombo_currentIndexChanged);
+    QObject::connect(settingsUI()->thermalDecoderCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int index) {
+        m_settings.m_thermalDecoder = static_cast<CameraSettings::ThermalDecoder>(settingsUI()->thermalDecoderCombo->itemData(index).toInt());
+        updateThermalControls();
+        applySetting(QStringLiteral("thermalDecoder"));
+        if (m_settings.isQtCamera() && m_captureActive) {
+            setupQtCapture();
+        }
+    });
+    QObject::connect(settingsUI()->thermalPaletteCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int index) {
+        m_settings.m_thermalPalette = static_cast<CameraSettings::ThermalPalette>(settingsUI()->thermalPaletteCombo->itemData(index).toInt());
+        applySetting(QStringLiteral("thermalPalette"));
+    });
+    QObject::connect(settingsUI()->thermalUnitsCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int index) {
+        m_settings.m_thermalUnits = static_cast<CameraSettings::ThermalUnits>(settingsUI()->thermalUnitsCombo->itemData(index).toInt());
+        if (m_settingsDialog) {
+            m_settingsDialog->setThermalUnits(m_settings.m_thermalUnits == CameraSettings::ThermalUnitsFahrenheit);
+        }
+        applySetting(QStringLiteral("thermalUnits"));
+    });
+    QObject::connect(settingsUI()->thermalAutoRangeCheck, &QCheckBox::toggled, this, [this](bool checked) {
+        m_settings.m_thermalAutoRange = checked;
+        updateThermalControls();
+        applySetting(QStringLiteral("thermalAutoRange"));
+    });
+    QObject::connect(settingsUI()->thermalMinimumSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this](double value) {
+        m_settings.m_thermalMinimumC = value;
+        applySetting(QStringLiteral("thermalMinimumC"));
+    });
+    QObject::connect(settingsUI()->thermalMaximumSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this](double value) {
+        m_settings.m_thermalMaximumC = value;
+        applySetting(QStringLiteral("thermalMaximumC"));
+    });
+    QObject::connect(settingsUI()->thermalLowPercentileSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this](double value) {
+        m_settings.m_thermalAutoLowPercentile = value;
+        applySetting(QStringLiteral("thermalAutoLowPercentile"));
+    });
+    QObject::connect(settingsUI()->thermalHighPercentileSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this](double value) {
+        m_settings.m_thermalAutoHighPercentile = value;
+        applySetting(QStringLiteral("thermalAutoHighPercentile"));
+    });
+    QObject::connect(settingsUI()->thermalSmoothingSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this](double value) {
+        m_settings.m_thermalAutoRangeSmoothing = value;
+        applySetting(QStringLiteral("thermalAutoRangeSmoothing"));
+    });
+    QObject::connect(settingsUI()->thermalMarkerEnabledCheck, &QCheckBox::toggled, this, [this](bool checked) {
+        m_settings.m_thermalMarkerEnabled = checked;
+        updateThermalControls();
+        applySetting(QStringLiteral("thermalMarkerEnabled"));
+    });
+    QObject::connect(settingsUI()->thermalMarkerXSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this](double value) {
+        m_settings.m_thermalMarkerX = value / 100.0;
+        applySetting(QStringLiteral("thermalMarkerX"));
+    });
+    QObject::connect(settingsUI()->thermalMarkerYSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this](double value) {
+        m_settings.m_thermalMarkerY = value / 100.0;
+        applySetting(QStringLiteral("thermalMarkerY"));
+    });
+    QObject::connect(settingsUI()->thermalShowMinMaxCheck, &QCheckBox::toggled, this, [this](bool checked) {
+        m_settings.m_thermalShowMinMax = checked;
+        applySetting(QStringLiteral("thermalShowMinMax"));
+    });
+    QObject::connect(settingsUI()->thermalChartEnabledCheck, &QCheckBox::toggled, this, [this](bool checked) {
+        m_settings.m_thermalChartEnabled = checked;
+        updateThermalControls();
+        applySetting(QStringLiteral("thermalChartEnabled"));
+    });
+    QObject::connect(settingsUI()->thermalChartHistorySpin, QOverload<int>::of(&QSpinBox::valueChanged), this, [this](int value) {
+        m_settings.m_thermalChartHistorySeconds = value;
+        applySetting(QStringLiteral("thermalChartHistorySeconds"));
+    });
+    QObject::connect(settingsUI()->thermalChartIntervalSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, [this](int value) {
+        m_settings.m_thermalChartSampleIntervalMs = value;
+        applySetting(QStringLiteral("thermalChartSampleIntervalMs"));
+    });
     QObject::connect(settingsUI()->exposureSlider, &QSlider::valueChanged, this, &CameraGUI::on_exposureSlider_valueChanged);
     QObject::connect(settingsUI()->exposureSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_exposureSpin_valueChanged);
     QObject::connect(settingsUI()->exposureUnitsCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_exposureUnitsCombo_currentIndexChanged);
@@ -6181,6 +6299,8 @@ QList<QVideoFrame::PixelFormat> CameraVideoSurface::supportedPixelFormats(
         QVideoFrame::Format_BGRA32,
         QVideoFrame::Format_BGR32,
         QVideoFrame::Format_BGR24,
+        QVideoFrame::Format_YUYV,
+        QVideoFrame::Format_UYVY,
     };
 }
 
@@ -6197,6 +6317,19 @@ bool CameraVideoSurface::present(const QVideoFrame& frame)
 
     const QImage::Format imageFormat = QVideoFrame::imageFormatFromPixelFormat(mutableFrame.pixelFormat());
     QImage image;
+    CameraPipelineThermalRawFrame rawFrame;
+    if (m_captureRawFrames)
+    {
+        rawFrame.m_width = mutableFrame.width();
+        rawFrame.m_height = mutableFrame.height();
+        rawFrame.m_bytesPerLine = mutableFrame.bytesPerLine();
+        rawFrame.m_pixelFormat = static_cast<int>(mutableFrame.pixelFormat());
+        rawFrame.m_pixelFormatName = QString::number(rawFrame.m_pixelFormat);
+        const qsizetype byteCount = static_cast<qsizetype>(rawFrame.m_bytesPerLine) * rawFrame.m_height;
+        if ((byteCount > 0) && mutableFrame.bits()) {
+            rawFrame.m_bytes = QByteArray(reinterpret_cast<const char*>(mutableFrame.bits()), byteCount);
+        }
+    }
 
     if (imageFormat != QImage::Format_Invalid)
     {
@@ -6224,8 +6357,8 @@ bool CameraVideoSurface::present(const QVideoFrame& frame)
 
     mutableFrame.unmap();
 
-    if (!image.isNull()) {
-        emit frameAvailable(image);
+    if (!image.isNull() || !rawFrame.m_bytes.isEmpty()) {
+        emit frameAvailable(image, rawFrame);
     }
 
     return true;
@@ -6294,6 +6427,14 @@ void CameraGUI::setupQtCapture()
         return;
     }
 
+    // Radiometric UVC data is only available on the continuous raw video path;
+    // QImageCapture converts the frame and discards the packed temperature plane.
+    const bool useQtStillCapture = m_settings.isIntervalCaptureMode()
+        && (m_settings.m_thermalDecoder == CameraSettings::ThermalDecoderOff);
+    if (m_settings.isIntervalCaptureMode() && !useQtStillCapture) {
+        qDebug() << "CameraGUI::setupQtCapture: using continuous UVC frames for radiometric thermal decoding";
+    }
+
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     const QList<QCameraDevice> cameras = QMediaDevices::videoInputs();
     if (cameras.isEmpty()) {
@@ -6324,6 +6465,11 @@ void CameraGUI::setupQtCapture()
     QCameraFormat chosenFormat;
     bool exactFormat = false;
     bool sameResolutionFallback = false;
+    const bool thermalCapture = m_settings.m_thermalDecoder != CameraSettings::ThermalDecoderOff;
+    const auto isPackedThermalFormat = [](const QCameraFormat& format) {
+        return (format.pixelFormat() == QVideoFrameFormat::Format_YUYV)
+            || (format.pixelFormat() == QVideoFrameFormat::Format_UYVY);
+    };
     for (const QCameraFormat& fmt : selectedDevice.videoFormats())
     {
         if ((fmt.resolution().width()  == m_settings.m_resolutionWidth)
@@ -6332,9 +6478,15 @@ void CameraGUI::setupQtCapture()
             && (fmt.minFrameRate()     <= m_settings.m_framesPerSecond)
             )
         {
-            chosenFormat = fmt;
+            if (chosenFormat.isNull()
+                || (thermalCapture && isPackedThermalFormat(fmt) && !isPackedThermalFormat(chosenFormat)))
+            {
+                chosenFormat = fmt;
+            }
             exactFormat = true;
-            break;
+            if (!thermalCapture || isPackedThermalFormat(chosenFormat)) {
+                break;
+            }
         }
     }
 
@@ -6348,9 +6500,13 @@ void CameraGUI::setupQtCapture()
                 continue;
             }
 
-            if (chosenFormat.isNull()
-                || (cameraFormatFpsDistance(fmt, m_settings.m_framesPerSecond)
-                    < cameraFormatFpsDistance(chosenFormat, m_settings.m_framesPerSecond)))
+            const bool preferPacked = thermalCapture && isPackedThermalFormat(fmt)
+                && (chosenFormat.isNull() || !isPackedThermalFormat(chosenFormat));
+            const bool samePacking = chosenFormat.isNull()
+                || (isPackedThermalFormat(fmt) == isPackedThermalFormat(chosenFormat));
+            if (chosenFormat.isNull() || preferPacked
+                || (samePacking && (cameraFormatFpsDistance(fmt, m_settings.m_framesPerSecond)
+                    < cameraFormatFpsDistance(chosenFormat, m_settings.m_framesPerSecond))))
             {
                 chosenFormat = fmt;
                 sameResolutionFallback = true;
@@ -6404,7 +6560,7 @@ void CameraGUI::setupQtCapture()
 
     m_captureSession->setCamera(m_qtCamera);
 
-    if (m_settings.isIntervalCaptureMode())
+    if (useQtStillCapture)
     {
         m_imageCapture = new QImageCapture(this);
         m_captureSession->setImageCapture(m_imageCapture);
@@ -6431,7 +6587,7 @@ void CameraGUI::setupQtCapture()
     }
 
     m_qtCamera->start();
-    if (m_settings.isIntervalCaptureMode()) {
+    if (useQtStillCapture) {
         m_qtStillCaptureTimer.start(m_settings.getCaptureIntervalMs());
     }
 
@@ -6542,7 +6698,7 @@ void CameraGUI::setupQtCapture()
     m_imageCapture = nullptr;
     m_videoSurface = nullptr;
 
-    if (m_settings.isIntervalCaptureMode())
+    if (useQtStillCapture)
     {
         m_imageCapture = new QCameraImageCapture(m_qtCamera, this);
         m_imageCapture->setCaptureDestination(QCameraImageCapture::CaptureToBuffer);
@@ -6573,6 +6729,9 @@ void CameraGUI::setupQtCapture()
         QCameraViewfinderSettings vfSettings;
         vfSettings.setResolution(m_settings.m_resolutionWidth, m_settings.m_resolutionHeight);
         vfSettings.setMaximumFrameRate(m_settings.m_framesPerSecond);
+        if (m_settings.m_thermalDecoder != CameraSettings::ThermalDecoderOff) {
+            vfSettings.setPixelFormat(QVideoFrame::Format_YUYV);
+        }
         m_qtCamera->setViewfinderSettings(vfSettings);
     }
 
@@ -6591,13 +6750,14 @@ void CameraGUI::setupQtCapture()
 
     if (m_videoSurface)
     {
+        m_videoSurface->setCaptureRawFrames(m_settings.m_thermalDecoder != CameraSettings::ThermalDecoderOff);
         // Queued connection: present() may be called from the camera's internal thread
         connect(m_videoSurface, &CameraVideoSurface::frameAvailable,
                 this, &CameraGUI::onQt5VideoFrame, Qt::QueuedConnection);
     }
 
     m_qtCamera->start();
-    if (m_settings.isIntervalCaptureMode()) {
+    if (useQtStillCapture) {
         m_qtStillCaptureTimer.start(m_settings.getCaptureIntervalMs());
     }
 
@@ -6879,10 +7039,23 @@ void CameraGUI::processPendingQtVideoFrame()
     // needing conversion (YUV/planar) fall back to toImage(), which we can't pool
     // without reimplementing Qt's colour conversion.
     QImage image;
+    CameraPipelineThermalRawFrame rawFrame;
     {
         QVideoFrame mapped(frame);
         if (mapped.map(QVideoFrame::ReadOnly))
         {
+            if (m_settings.m_thermalDecoder != CameraSettings::ThermalDecoderOff)
+            {
+                rawFrame.m_width = mapped.width();
+                rawFrame.m_height = mapped.height();
+                rawFrame.m_bytesPerLine = mapped.bytesPerLine(0);
+                rawFrame.m_pixelFormat = static_cast<int>(mapped.pixelFormat());
+                rawFrame.m_pixelFormatName = QVideoFrameFormat::pixelFormatToString(mapped.pixelFormat());
+                const qsizetype byteCount = static_cast<qsizetype>(rawFrame.m_bytesPerLine) * rawFrame.m_height;
+                if ((byteCount > 0) && mapped.bits(0)) {
+                    rawFrame.m_bytes = QByteArray(reinterpret_cast<const char*>(mapped.bits(0)), byteCount);
+                }
+            }
             const QImage::Format fmt = QVideoFrameFormat::imageFormatFromPixelFormat(mapped.pixelFormat());
             if ((fmt != QImage::Format_Invalid) && (mapped.planeCount() == 1))
             {
@@ -6903,7 +7076,7 @@ void CameraGUI::processPendingQtVideoFrame()
     if (image.isNull()) {
         image = frame.toImage();
     }
-    submitQtImageFrame(image);
+    submitQtImageFrame(image, -1, -1, rawFrame);
 
     if (m_pendingQtVideoFrame.isValid()) {
         QMetaObject::invokeMethod(this, &CameraGUI::processPendingQtVideoFrame, Qt::QueuedConnection);
@@ -6912,9 +7085,9 @@ void CameraGUI::processPendingQtVideoFrame()
     }
 }
 #else
-void CameraGUI::onQt5VideoFrame(const QImage& image)
+void CameraGUI::onQt5VideoFrame(const QImage& image, const CameraPipelineThermalRawFrame& rawFrame)
 {
-    submitQtImageFrame(image);
+    submitQtImageFrame(image, -1, -1, rawFrame);
 }
 #endif
 
@@ -6925,9 +7098,10 @@ void CameraGUI::onQtImageCaptured(int id, const QImage& image)
     submitQtImageFrame(image);
 }
 
-void CameraGUI::submitQtImageFrame(const QImage& image, qint64 playbackPositionMs, int playbackFrameNumber)
+void CameraGUI::submitQtImageFrame(const QImage& image, qint64 playbackPositionMs, int playbackFrameNumber,
+    const CameraPipelineThermalRawFrame& rawFrame)
 {
-    if (image.isNull()) {
+    if (image.isNull() && rawFrame.m_bytes.isEmpty()) {
         return;
     }
 
@@ -6936,6 +7110,7 @@ void CameraGUI::submitQtImageFrame(const QImage& image, qint64 playbackPositionM
     const int hdrExposureCount = currentQtHdrExposureCount();
 
     CameraFrameAligner *frameAligner = m_camera->getFrameAligner();
+    CameraThermalProcessor *thermalProcessor = m_camera->getThermalProcessor();
     if (frameAligner) {
         CameraPipelineFramePtr frame(new CameraPipelineFrame);
         frame->m_image = image;
@@ -6949,7 +7124,12 @@ void CameraGUI::submitQtImageFrame(const QImage& image, qint64 playbackPositionM
         populateFrameExposureMetadata(*frame, exposureTimeMs, hdrExposureIndex, hdrExposureCount, captureDateTime);
         frame->m_captureEpoch = m_captureEpoch;
         frame->m_manualPreviewFrame = !m_captureActive;
-        frameAligner->submitFrame(frame);
+        frame->m_thermal.m_rawFrame = rawFrame;
+        if ((m_settings.m_thermalDecoder != CameraSettings::ThermalDecoderOff) && thermalProcessor) {
+            thermalProcessor->submitFrame(frame);
+        } else {
+            frameAligner->submitFrame(frame);
+        }
     }
 
     if (isHdrStackingActiveForQt()) {
@@ -6970,6 +7150,27 @@ void CameraGUI::triggerQtStillCapture()
     if (m_imageCapture->isReadyForCapture()) {
         m_imageCapture->capture();
     }
+}
+
+void CameraGUI::updateThermalControls()
+{
+    const bool enabled = m_settings.m_thermalDecoder != CameraSettings::ThermalDecoderOff;
+    settingsUI()->thermalPaletteCombo->setEnabled(enabled);
+    settingsUI()->thermalUnitsCombo->setEnabled(enabled);
+    settingsUI()->thermalAutoRangeCheck->setEnabled(enabled);
+    settingsUI()->thermalMinimumSpin->setEnabled(enabled && !m_settings.m_thermalAutoRange);
+    settingsUI()->thermalMaximumSpin->setEnabled(enabled && !m_settings.m_thermalAutoRange);
+    settingsUI()->thermalLowPercentileSpin->setEnabled(enabled && m_settings.m_thermalAutoRange);
+    settingsUI()->thermalHighPercentileSpin->setEnabled(enabled && m_settings.m_thermalAutoRange);
+    settingsUI()->thermalSmoothingSpin->setEnabled(enabled && m_settings.m_thermalAutoRange);
+    settingsUI()->thermalMarkerEnabledCheck->setEnabled(enabled);
+    settingsUI()->thermalMarkerXSpin->setEnabled(enabled && m_settings.m_thermalMarkerEnabled);
+    settingsUI()->thermalMarkerYSpin->setEnabled(enabled && m_settings.m_thermalMarkerEnabled);
+    settingsUI()->thermalShowMinMaxCheck->setEnabled(enabled);
+    settingsUI()->thermalChartEnabledCheck->setEnabled(enabled);
+    settingsUI()->thermalChartHistorySpin->setEnabled(enabled && m_settings.m_thermalChartEnabled);
+    settingsUI()->thermalChartIntervalSpin->setEnabled(enabled && m_settings.m_thermalChartEnabled);
+    settingsUI()->thermalChartGroup->setVisible(enabled && m_settings.m_thermalChartEnabled);
 }
 
 void CameraGUI::updateCameraSettingsVisibility()
@@ -11740,6 +11941,32 @@ bool CameraGUI::eventFilter(QObject *watched, QEvent *event)
             ui->imageView->scale(factor, factor);
             updateImageViewSmoothing();
             return true;
+        }
+
+        if ((event->type() == QEvent::MouseButtonDblClick)
+            && m_settings.m_thermalMarkerEnabled && m_lastThermal.m_valid)
+        {
+            const QMouseEvent *mouseEvent = static_cast<QMouseEvent*>(event);
+            if (mouseEvent->button() == Qt::LeftButton)
+            {
+                const QPointF imagePoint = ui->imageView->mapToScene(mouseEvent->pos());
+                bool invertible = false;
+                const QTransform imageToSensor = m_lastThermal.m_sensorToImage.inverted(&invertible);
+                const QPointF sensorPoint = invertible ? imageToSensor.map(imagePoint) : imagePoint;
+                const int width = m_lastThermal.m_temperatureC.cols;
+                const int height = m_lastThermal.m_temperatureC.rows;
+                if ((width > 1) && (height > 1))
+                {
+                    m_settings.m_thermalMarkerX = qBound(0.0, sensorPoint.x() / (width - 1), 1.0);
+                    m_settings.m_thermalMarkerY = qBound(0.0, sensorPoint.y() / (height - 1), 1.0);
+                    const QSignalBlocker xBlocker(settingsUI()->thermalMarkerXSpin);
+                    const QSignalBlocker yBlocker(settingsUI()->thermalMarkerYSpin);
+                    settingsUI()->thermalMarkerXSpin->setValue(m_settings.m_thermalMarkerX * 100.0);
+                    settingsUI()->thermalMarkerYSpin->setValue(m_settings.m_thermalMarkerY * 100.0);
+                    applySettings({QStringLiteral("thermalMarkerX"), QStringLiteral("thermalMarkerY")});
+                }
+                return true;
+            }
         }
 
         if (handleDrawingEvent(event)) {

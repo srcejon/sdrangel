@@ -36,6 +36,7 @@
 #include "camerastardetector.h"
 #include "cameraobjectdetector.h"
 #include "cameradiffdetector.h"
+#include "camerathermalprocessor.h"
 #include "cameraframepreprocessor.h"
 #include "cameraframealigner.h"
 #include "cameraframestacker.h"
@@ -59,7 +60,7 @@ namespace SWGSDRangel {
  *
  * Camera is the top-level Feature object for the camera plugin. It owns the whole
  * processing chain and the capture orchestrator: a CameraWorker plus a sequence of
- * QObject stages (frame preprocessor -> frame aligner -> frame stacker -> image
+ * QObject stages (thermal processor -> frame preprocessor -> frame aligner -> frame stacker -> image
  * processor -> cloud/motion/star/object/diff detectors -> recorder, with a continuously
  * running post-processor). Each stage lives on its own dedicated QThread and frames
  * flow down the chain as CameraPipelineFramePtr passed via per-stage message queues.
@@ -368,6 +369,7 @@ public:
 
     MessageQueue* getWorkerInputMessageQueue() { return m_worker ? m_worker->getInputMessageQueue() : nullptr; }
     CameraFrameAligner* getFrameAligner() { return m_frameAligner; }
+    CameraThermalProcessor* getThermalProcessor() { return m_thermalProcessor; }
     MessageQueue* getDetectorInputMessageQueue() { return m_objectDetector ? m_objectDetector->getInputMessageQueue() : nullptr; }
     void submitRecorderAudioSamples(const QByteArray& pcmS16Stereo, int sampleRate);
     void requestPreRecordPreview(qint64 offsetMs);
@@ -377,6 +379,8 @@ public:
 private:
     QThread *m_workerThread;
     CameraWorker *m_worker;
+    QThread *m_thermalProcessorThread;
+    CameraThermalProcessor *m_thermalProcessor;
     QThread *m_framePreprocessorThread;
     CameraFramePreprocessor *m_framePreprocessor;
     QThread *m_frameAlignerThread;
@@ -409,6 +413,7 @@ private:
     QDateTime m_reportCaptureDateTime;
     QStringList m_reportDetectedObjectClasses;
     bool m_reportMotionDetected = false;
+    CameraPipelineThermal m_reportThermal;
     CameraCloudEventTracker m_cloudEventTracker;
 
     void start();

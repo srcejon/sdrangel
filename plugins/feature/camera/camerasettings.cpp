@@ -638,6 +638,22 @@ void CameraSettings::resetToDefaults()
     m_plateSolveCatalogSource = PlateSolveCatalogAuto;
     m_plateSolveApplyMode = PlateSolveApplyAzElRollFov;
     m_starCatalogDiskCacheSizeGb = 32;
+    m_thermalDecoder = ThermalDecoderOff;
+    m_thermalPalette = ThermalPaletteWhiteHot;
+    m_thermalUnits = ThermalUnitsCelsius;
+    m_thermalAutoRange = true;
+    m_thermalMinimumC = 0.0;
+    m_thermalMaximumC = 100.0;
+    m_thermalAutoLowPercentile = 1.0;
+    m_thermalAutoHighPercentile = 99.0;
+    m_thermalAutoRangeSmoothing = 0.2;
+    m_thermalMarkerEnabled = true;
+    m_thermalMarkerX = 0.5;
+    m_thermalMarkerY = 0.5;
+    m_thermalShowMinMax = false;
+    m_thermalChartEnabled = true;
+    m_thermalChartHistorySeconds = 600;
+    m_thermalChartSampleIntervalMs = 200;
     m_opticalSpectrumVisible = false;
     m_opticalSpectrumDispersion = 0.0;
     m_opticalSpectrumZeroOrderAuto = true;
@@ -1056,6 +1072,22 @@ QByteArray CameraSettings::serialize() const
     s.writeBool(345, m_drawingFontBold);
     s.writeBool(346, m_drawingFontItalic);
     s.writeString(347, serializeDrawings(m_drawings));
+    s.writeS32(348, static_cast<qint32>(m_thermalDecoder));
+    s.writeS32(349, static_cast<qint32>(m_thermalPalette));
+    s.writeS32(350, static_cast<qint32>(m_thermalUnits));
+    s.writeBool(351, m_thermalAutoRange);
+    s.writeDouble(352, m_thermalMinimumC);
+    s.writeDouble(353, m_thermalMaximumC);
+    s.writeDouble(354, m_thermalAutoLowPercentile);
+    s.writeDouble(355, m_thermalAutoHighPercentile);
+    s.writeDouble(356, m_thermalAutoRangeSmoothing);
+    s.writeBool(357, m_thermalMarkerEnabled);
+    s.writeDouble(358, m_thermalMarkerX);
+    s.writeDouble(359, m_thermalMarkerY);
+    s.writeBool(360, m_thermalShowMinMax);
+    s.writeBool(361, m_thermalChartEnabled);
+    s.writeS32(362, m_thermalChartHistorySeconds);
+    s.writeS32(363, m_thermalChartSampleIntervalMs);
 
     return s.final();
 }
@@ -1696,6 +1728,43 @@ bool CameraSettings::deserialize(const QByteArray& data)
         QString drawingsJson;
         d.readString(347, &drawingsJson, QStringLiteral("[]"));
         m_drawings = deserializeDrawings(drawingsJson);
+        qint32 thermalDecoder = static_cast<qint32>(ThermalDecoderOff);
+        qint32 thermalPalette = static_cast<qint32>(ThermalPaletteWhiteHot);
+        qint32 thermalUnits = static_cast<qint32>(ThermalUnitsCelsius);
+        d.readS32(348, &thermalDecoder, thermalDecoder);
+        d.readS32(349, &thermalPalette, thermalPalette);
+        d.readS32(350, &thermalUnits, thermalUnits);
+        m_thermalDecoder = static_cast<ThermalDecoder>(qBound(
+            static_cast<qint32>(ThermalDecoderOff), thermalDecoder,
+            static_cast<qint32>(ThermalDecoderTopdonTc001)));
+        m_thermalPalette = static_cast<ThermalPalette>(qBound(
+            static_cast<qint32>(ThermalPaletteWhiteHot), thermalPalette,
+            static_cast<qint32>(ThermalPaletteViridis)));
+        m_thermalUnits = static_cast<ThermalUnits>(qBound(
+            static_cast<qint32>(ThermalUnitsCelsius), thermalUnits,
+            static_cast<qint32>(ThermalUnitsFahrenheit)));
+        d.readBool(351, &m_thermalAutoRange, true);
+        d.readDouble(352, &m_thermalMinimumC, 0.0);
+        d.readDouble(353, &m_thermalMaximumC, 100.0);
+        d.readDouble(354, &m_thermalAutoLowPercentile, 1.0);
+        d.readDouble(355, &m_thermalAutoHighPercentile, 99.0);
+        d.readDouble(356, &m_thermalAutoRangeSmoothing, 0.2);
+        d.readBool(357, &m_thermalMarkerEnabled, true);
+        d.readDouble(358, &m_thermalMarkerX, 0.5);
+        d.readDouble(359, &m_thermalMarkerY, 0.5);
+        d.readBool(360, &m_thermalShowMinMax, false);
+        d.readBool(361, &m_thermalChartEnabled, true);
+        d.readS32(362, &m_thermalChartHistorySeconds, 600);
+        d.readS32(363, &m_thermalChartSampleIntervalMs, 200);
+        m_thermalMinimumC = qBound(-100.0, m_thermalMinimumC, 1000.0);
+        m_thermalMaximumC = qBound(m_thermalMinimumC + 0.01, m_thermalMaximumC, 1000.0);
+        m_thermalAutoLowPercentile = qBound(0.0, m_thermalAutoLowPercentile, 49.0);
+        m_thermalAutoHighPercentile = qBound(m_thermalAutoLowPercentile + 0.1, m_thermalAutoHighPercentile, 100.0);
+        m_thermalAutoRangeSmoothing = qBound(0.01, m_thermalAutoRangeSmoothing, 1.0);
+        m_thermalMarkerX = qBound(0.0, m_thermalMarkerX, 1.0);
+        m_thermalMarkerY = qBound(0.0, m_thermalMarkerY, 1.0);
+        m_thermalChartHistorySeconds = qBound(10, m_thermalChartHistorySeconds, 86400);
+        m_thermalChartSampleIntervalMs = qBound(40, m_thermalChartSampleIntervalMs, 60000);
         d.readFloat(271, &m_azimuthOffset, 0.0f);
         d.readFloat(272, &m_elevationOffset, 0.0f);
         d.readFloat(273, &m_rollOffset, 0.0f);
@@ -2657,6 +2726,62 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
             m_minStarCatalogDiskCacheSizeGb,
             settings.m_starCatalogDiskCacheSizeGb,
             m_maxStarCatalogDiskCacheSizeGb);
+    }
+    if (settingsKeys.contains("thermalDecoder")) {
+        m_thermalDecoder = static_cast<ThermalDecoder>(qBound(
+            static_cast<int>(ThermalDecoderOff), static_cast<int>(settings.m_thermalDecoder),
+            static_cast<int>(ThermalDecoderTopdonTc001)));
+    }
+    if (settingsKeys.contains("thermalPalette")) {
+        m_thermalPalette = static_cast<ThermalPalette>(qBound(
+            static_cast<int>(ThermalPaletteWhiteHot), static_cast<int>(settings.m_thermalPalette),
+            static_cast<int>(ThermalPaletteViridis)));
+    }
+    if (settingsKeys.contains("thermalUnits")) {
+        m_thermalUnits = static_cast<ThermalUnits>(qBound(
+            static_cast<int>(ThermalUnitsCelsius), static_cast<int>(settings.m_thermalUnits),
+            static_cast<int>(ThermalUnitsFahrenheit)));
+    }
+    if (settingsKeys.contains("thermalAutoRange")) {
+        m_thermalAutoRange = settings.m_thermalAutoRange;
+    }
+    if (settingsKeys.contains("thermalMinimumC")) {
+        m_thermalMinimumC = qBound(-100.0, settings.m_thermalMinimumC, 999.99);
+        m_thermalMaximumC = std::max(m_thermalMinimumC + 0.01, m_thermalMaximumC);
+    }
+    if (settingsKeys.contains("thermalMaximumC")) {
+        m_thermalMaximumC = qBound(m_thermalMinimumC + 0.01, settings.m_thermalMaximumC, 1000.0);
+    }
+    if (settingsKeys.contains("thermalAutoLowPercentile")) {
+        m_thermalAutoLowPercentile = qBound(0.0, settings.m_thermalAutoLowPercentile, 49.0);
+        m_thermalAutoHighPercentile = std::max(m_thermalAutoLowPercentile + 0.1, m_thermalAutoHighPercentile);
+    }
+    if (settingsKeys.contains("thermalAutoHighPercentile")) {
+        m_thermalAutoHighPercentile = qBound(m_thermalAutoLowPercentile + 0.1, settings.m_thermalAutoHighPercentile, 100.0);
+    }
+    if (settingsKeys.contains("thermalAutoRangeSmoothing")) {
+        m_thermalAutoRangeSmoothing = qBound(0.01, settings.m_thermalAutoRangeSmoothing, 1.0);
+    }
+    if (settingsKeys.contains("thermalMarkerEnabled")) {
+        m_thermalMarkerEnabled = settings.m_thermalMarkerEnabled;
+    }
+    if (settingsKeys.contains("thermalMarkerX")) {
+        m_thermalMarkerX = qBound(0.0, settings.m_thermalMarkerX, 1.0);
+    }
+    if (settingsKeys.contains("thermalMarkerY")) {
+        m_thermalMarkerY = qBound(0.0, settings.m_thermalMarkerY, 1.0);
+    }
+    if (settingsKeys.contains("thermalShowMinMax")) {
+        m_thermalShowMinMax = settings.m_thermalShowMinMax;
+    }
+    if (settingsKeys.contains("thermalChartEnabled")) {
+        m_thermalChartEnabled = settings.m_thermalChartEnabled;
+    }
+    if (settingsKeys.contains("thermalChartHistorySeconds")) {
+        m_thermalChartHistorySeconds = qBound(10, settings.m_thermalChartHistorySeconds, 86400);
+    }
+    if (settingsKeys.contains("thermalChartSampleIntervalMs")) {
+        m_thermalChartSampleIntervalMs = qBound(40, settings.m_thermalChartSampleIntervalMs, 60000);
     }
     if (settingsKeys.contains("recordRawFits")) {
         m_recordRawFits = settings.m_recordRawFits;
@@ -3714,6 +3839,54 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("starCatalogDiskCacheSizeGb") || force) {
         ostr << " m_starCatalogDiskCacheSizeGb: " << m_starCatalogDiskCacheSizeGb;
+    }
+    if (settingsKeys.contains("thermalDecoder") || force) {
+        ostr << " m_thermalDecoder: " << static_cast<int>(m_thermalDecoder);
+    }
+    if (settingsKeys.contains("thermalPalette") || force) {
+        ostr << " m_thermalPalette: " << static_cast<int>(m_thermalPalette);
+    }
+    if (settingsKeys.contains("thermalUnits") || force) {
+        ostr << " m_thermalUnits: " << static_cast<int>(m_thermalUnits);
+    }
+    if (settingsKeys.contains("thermalAutoRange") || force) {
+        ostr << " m_thermalAutoRange: " << m_thermalAutoRange;
+    }
+    if (settingsKeys.contains("thermalMinimumC") || force) {
+        ostr << " m_thermalMinimumC: " << m_thermalMinimumC;
+    }
+    if (settingsKeys.contains("thermalMaximumC") || force) {
+        ostr << " m_thermalMaximumC: " << m_thermalMaximumC;
+    }
+    if (settingsKeys.contains("thermalAutoLowPercentile") || force) {
+        ostr << " m_thermalAutoLowPercentile: " << m_thermalAutoLowPercentile;
+    }
+    if (settingsKeys.contains("thermalAutoHighPercentile") || force) {
+        ostr << " m_thermalAutoHighPercentile: " << m_thermalAutoHighPercentile;
+    }
+    if (settingsKeys.contains("thermalAutoRangeSmoothing") || force) {
+        ostr << " m_thermalAutoRangeSmoothing: " << m_thermalAutoRangeSmoothing;
+    }
+    if (settingsKeys.contains("thermalMarkerEnabled") || force) {
+        ostr << " m_thermalMarkerEnabled: " << m_thermalMarkerEnabled;
+    }
+    if (settingsKeys.contains("thermalMarkerX") || force) {
+        ostr << " m_thermalMarkerX: " << m_thermalMarkerX;
+    }
+    if (settingsKeys.contains("thermalMarkerY") || force) {
+        ostr << " m_thermalMarkerY: " << m_thermalMarkerY;
+    }
+    if (settingsKeys.contains("thermalShowMinMax") || force) {
+        ostr << " m_thermalShowMinMax: " << m_thermalShowMinMax;
+    }
+    if (settingsKeys.contains("thermalChartEnabled") || force) {
+        ostr << " m_thermalChartEnabled: " << m_thermalChartEnabled;
+    }
+    if (settingsKeys.contains("thermalChartHistorySeconds") || force) {
+        ostr << " m_thermalChartHistorySeconds: " << m_thermalChartHistorySeconds;
+    }
+    if (settingsKeys.contains("thermalChartSampleIntervalMs") || force) {
+        ostr << " m_thermalChartSampleIntervalMs: " << m_thermalChartSampleIntervalMs;
     }
     if (settingsKeys.contains("recordRawFits") || force) {
         ostr << " m_recordRawFits: " << m_recordRawFits;

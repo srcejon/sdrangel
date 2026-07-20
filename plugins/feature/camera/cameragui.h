@@ -110,14 +110,16 @@ public:
         QAbstractVideoBuffer::HandleType handleType = QAbstractVideoBuffer::NoHandle) const override;
 
     bool present(const QVideoFrame& frame) override;
+    void setCaptureRawFrames(bool capture) { m_captureRawFrames = capture; }
 
 signals:
-    void frameAvailable(const QImage& image);
+    void frameAvailable(const QImage& image, const CameraPipelineThermalRawFrame& rawFrame);
 
 private:
     // Recycles the per-frame QImage backing buffer, instead of .copy() allocating
     // one for every presented frame.
     CameraImagePool m_imagePool;
+    bool m_captureRawFrames = false;
 };
 #endif
 
@@ -277,6 +279,7 @@ private:
     CameraHistogramData m_lastHistogramData; ///< Last histogram computed after image processing but before detection/overlays
     CameraOpticalSpectrumData m_lastOpticalSpectrumData; ///< Last optical spectrum extracted from the detection RoI after image processing
     QVector<CameraPipelineStarDetection> m_lastStarDetections;
+    CameraPipelineThermal m_lastThermal;
     QVector<CameraPostProcessor::PreviewTextLabel> m_lastPreviewTextLabels;
     QVector<CameraPostProcessor::PreviewRectItem> m_lastPreviewRectItems;
     QVector<CameraPostProcessor::WindowOverlayFrame> m_lastPreviewImageOverlays;
@@ -510,7 +513,8 @@ private:
     void updateVideoFileControls();
     void updateVideoPreRecordBufferMemoryLabel();
     void initialiseYoloPathCombos();
-    void submitQtImageFrame(const QImage& image, qint64 playbackPositionMs = -1, int playbackFrameNumber = -1);
+    void submitQtImageFrame(const QImage& image, qint64 playbackPositionMs = -1, int playbackFrameNumber = -1,
+        const CameraPipelineThermalRawFrame& rawFrame = CameraPipelineThermalRawFrame());
     bool isHdrStackingSupported() const;
     bool isHdrStackingActiveForQt() const;
     void resetQtHdrBracketState();
@@ -544,6 +548,7 @@ private:
     void applyImageToolTip();
     void applyVideoToolTip();
     void updatePostProcessWhiteBalanceControls();
+    void updateThermalControls();
     void setSelectedCamera(const QString& protocol, const QString& cameraId, const QString& description,
                            const QString& alpacaHost = QString(), quint16 alpacaPort = 0);
     CameraInfo comboCameraInfo(int index) const;
@@ -963,7 +968,7 @@ private slots:
     void onQtVideoFrame(const QVideoFrame& frame);
     void processPendingQtVideoFrame();
 #else
-    void onQt5VideoFrame(const QImage& image);
+    void onQt5VideoFrame(const QImage& image, const CameraPipelineThermalRawFrame& rawFrame);
 #endif
     void onQtImageCaptured(int id, const QImage& image);
     void triggerQtStillCapture();

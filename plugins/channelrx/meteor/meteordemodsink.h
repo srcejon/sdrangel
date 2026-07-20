@@ -122,6 +122,7 @@ public:
         double m_continuationMaxEvidenceGapS = 0.75;
         double m_continuationStrongPeakDB = 12.0;
         double m_singleComponentContinuationMinimumConfidence = 9.0;
+        double m_singleComponentContinuationTailPaddingS = 0.20;
         double m_continuationFrequencyPaddingHz = 20.0;
         double m_trackingFrequencyPaddingHz = 12.0;
         double m_maxTrackingJumpHz = 80.0;

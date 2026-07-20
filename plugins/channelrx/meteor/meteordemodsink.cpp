@@ -3392,6 +3392,28 @@ void MeteorDemodSink::finalizeActiveMeteorEvent(ActiveMeteorEvent& event)
 {
     updateReportFromActiveMeteorEvent(event);
     PulseReport& report = event.m_report;
+    const bool strongSingleComponentContinuation = event.m_extendedByContinuation
+        && event.m_strong
+        && (event.m_spectralComponentCount == 1)
+        && (report.m_confidence
+            >= m_detectorTunables.m_singleComponentContinuationMinimumConfidence);
+
+    if (strongSingleComponentContinuation)
+    {
+        const quint64 tailPaddingSamples = (quint64) std::ceil(
+            m_detectorTunables.m_singleComponentContinuationTailPaddingS
+                * (double) std::max(1, m_settings.m_channelSampleRate));
+        const quint64 maxDurationSamples = (quint64) std::max(
+            1,
+            m_settings.m_maxDurationMS * std::max(1, m_settings.m_channelSampleRate) / 1000);
+        const quint64 maximumEndSample = report.m_startSample + maxDurationSamples - 1;
+
+        report.m_endSample = std::min(report.m_endSample + tailPaddingSamples, maximumEndSample);
+        report.m_displayEndSample = report.m_endSample;
+        report.m_durationS = (double) (report.m_endSample - report.m_startSample + 1)
+            / (double) std::max(1, m_settings.m_channelSampleRate);
+    }
+
     const quint64 settledStartSample = report.m_startSample;
     const quint64 settledEndSample = report.m_endSample;
 

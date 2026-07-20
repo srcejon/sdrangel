@@ -7,6 +7,12 @@
       <file>icons/invert.png</file>
       <file>icons/histogram.png</file>
       <file>icons/optical_spectrum.png</file>
+      <file>icons/background_subtract.png</file>
+      <file>icons/normalise.png</file>
+      <file>icons/identify_lines.png</file>
+      <file>icons/wavelength_strip.png</file>
+      <file>icons/image_strip.png</file>
+      <file>icons/response.png</file>
       <file>icons/object_detect.png</file>
       <file>icons/motion_detect.png</file>
       <file>icons/media_back.png</file>

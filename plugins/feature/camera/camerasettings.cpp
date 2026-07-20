@@ -233,6 +233,106 @@ QList<CameraSettings::WindowOverlay> deserializeWindowOverlays(const QString& js
 
     return overlays;
 }
+
+QString serializeDrawings(const QList<CameraDrawing>& drawings)
+{
+    QJsonArray array;
+
+    for (const CameraDrawing& drawing : drawings)
+    {
+        if (array.size() >= CameraDrawing::MaxDrawingCount) {
+            break;
+        }
+
+        QJsonObject object;
+        object.insert(QStringLiteral("type"), static_cast<int>(drawing.m_type));
+        object.insert(QStringLiteral("lineWidth"), drawing.m_lineWidth);
+        object.insert(QStringLiteral("strokeColor"), static_cast<qint64>(drawing.m_strokeColor.rgba()));
+        object.insert(QStringLiteral("fillEnabled"), drawing.m_fillEnabled);
+        object.insert(QStringLiteral("fillColor"), static_cast<qint64>(drawing.m_fillColor.rgba()));
+        object.insert(QStringLiteral("text"), drawing.m_text);
+        object.insert(QStringLiteral("fontFamily"), drawing.m_fontFamily);
+        object.insert(QStringLiteral("fontPixelSize"), drawing.m_fontPixelSize);
+        object.insert(QStringLiteral("fontBold"), drawing.m_fontBold);
+        object.insert(QStringLiteral("fontItalic"), drawing.m_fontItalic);
+
+        QJsonArray points;
+        const int pointCount = std::min(static_cast<int>(drawing.m_points.size()), CameraDrawing::MaxPointsPerDrawing);
+        for (int i = 0; i < pointCount; ++i)
+        {
+            const QPointF& point = drawing.m_points.at(i);
+            QJsonArray coordinates;
+            coordinates.append(point.x());
+            coordinates.append(point.y());
+            points.append(coordinates);
+        }
+        object.insert(QStringLiteral("points"), points);
+        array.append(object);
+    }
+
+    return QString::fromUtf8(QJsonDocument(array).toJson(QJsonDocument::Compact));
+}
+
+QList<CameraDrawing> deserializeDrawings(const QString& json)
+{
+    QList<CameraDrawing> drawings;
+    const QJsonDocument document = QJsonDocument::fromJson(json.toUtf8());
+    if (!document.isArray()) {
+        return drawings;
+    }
+
+    for (const QJsonValue& value : document.array())
+    {
+        if (!value.isObject() || (drawings.size() >= CameraDrawing::MaxDrawingCount)) {
+            continue;
+        }
+
+        const QJsonObject object = value.toObject();
+        CameraDrawing drawing;
+        drawing.m_type = static_cast<CameraDrawing::Type>(qBound(
+            static_cast<int>(CameraDrawing::Line),
+            object.value(QStringLiteral("type")).toInt(static_cast<int>(CameraDrawing::Line)),
+            static_cast<int>(CameraDrawing::Text)));
+        drawing.m_lineWidth = qBound(0.5, object.value(QStringLiteral("lineWidth")).toDouble(3.0), 100.0);
+        drawing.m_strokeColor = object.contains(QStringLiteral("strokeColor"))
+            ? QColor::fromRgba(static_cast<QRgb>(object.value(QStringLiteral("strokeColor")).toVariant().toULongLong()))
+            : QColor(255, 255, 0);
+        drawing.m_fillEnabled = object.value(QStringLiteral("fillEnabled")).toBool(false);
+        drawing.m_fillColor = object.contains(QStringLiteral("fillColor"))
+            ? QColor::fromRgba(static_cast<QRgb>(object.value(QStringLiteral("fillColor")).toVariant().toULongLong()))
+            : QColor(255, 255, 0, 64);
+        drawing.m_text = object.value(QStringLiteral("text")).toString().left(4096);
+        drawing.m_fontFamily = object.value(QStringLiteral("fontFamily")).toString().left(256);
+        drawing.m_fontPixelSize = qBound(1, object.value(QStringLiteral("fontPixelSize")).toInt(24), 512);
+        drawing.m_fontBold = object.value(QStringLiteral("fontBold")).toBool(false);
+        drawing.m_fontItalic = object.value(QStringLiteral("fontItalic")).toBool(false);
+
+        const QJsonArray points = object.value(QStringLiteral("points")).toArray();
+        drawing.m_points.reserve(std::min(static_cast<int>(points.size()), CameraDrawing::MaxPointsPerDrawing));
+        for (const QJsonValue& pointValue : points)
+        {
+            if (!pointValue.isArray() || (drawing.m_points.size() >= CameraDrawing::MaxPointsPerDrawing)) {
+                continue;
+            }
+            const QJsonArray coordinates = pointValue.toArray();
+            if (coordinates.size() < 2) {
+                continue;
+            }
+            const double x = coordinates.at(0).toDouble(std::numeric_limits<double>::quiet_NaN());
+            const double y = coordinates.at(1).toDouble(std::numeric_limits<double>::quiet_NaN());
+            if (std::isfinite(x) && std::isfinite(y)) {
+                drawing.m_points.append(QPointF(qBound(0.0, x, 1.0), qBound(0.0, y, 1.0)));
+            }
+        }
+
+        const int minimumPoints = drawing.m_type == CameraDrawing::Text ? 1 : 2;
+        if (drawing.m_points.size() >= minimumPoints) {
+            drawings.append(drawing);
+        }
+    }
+
+    return drawings;
+}
 }
 
 CameraSettings::CameraSettings() :
@@ -538,6 +638,22 @@ void CameraSettings::resetToDefaults()
     m_plateSolveCatalogSource = PlateSolveCatalogAuto;
     m_plateSolveApplyMode = PlateSolveApplyAzElRollFov;
     m_starCatalogDiskCacheSizeGb = 32;
+    m_thermalDecoder = ThermalDecoderOff;
+    m_thermalPalette = ThermalPaletteWhiteHot;
+    m_thermalUnits = ThermalUnitsCelsius;
+    m_thermalAutoRange = true;
+    m_thermalMinimumC = 0.0;
+    m_thermalMaximumC = 100.0;
+    m_thermalAutoLowPercentile = 1.0;
+    m_thermalAutoHighPercentile = 99.0;
+    m_thermalAutoRangeSmoothing = 0.2;
+    m_thermalMarkerEnabled = true;
+    m_thermalMarkerX = 0.5;
+    m_thermalMarkerY = 0.5;
+    m_thermalShowMinMax = false;
+    m_thermalChartEnabled = true;
+    m_thermalChartHistorySeconds = 600;
+    m_thermalChartSampleIntervalMs = 200;
     m_opticalSpectrumVisible = false;
     m_opticalSpectrumDispersion = 0.0;
     m_opticalSpectrumZeroOrderAuto = true;
@@ -565,6 +681,16 @@ void CameraSettings::resetToDefaults()
     m_spectrumScale = 1.0;
     m_spectrumOverlays.clear();
     m_windowOverlays.clear();
+    m_drawingsEnabled = false;
+    m_drawingLineWidth = 3.0;
+    m_drawingStrokeColor = QColor(255, 255, 0);
+    m_drawingFillEnabled = false;
+    m_drawingFillColor = QColor(255, 255, 0, 64);
+    m_drawingFontFamily.clear();
+    m_drawingFontPixelSize = 24;
+    m_drawingFontBold = false;
+    m_drawingFontItalic = false;
+    m_drawings.clear();
     m_yoloEnabled = false;
     m_yoloModelPath.clear();
     m_yoloTileModelPath.clear();
@@ -936,6 +1062,32 @@ QByteArray CameraSettings::serialize() const
     s.writeString(335, m_opticalSpectrumResponseFile);
     s.writeBool(336, m_opticalSpectrumLogY);
     s.writeBool(337, m_opticalSpectrumAutoIdentify);
+    s.writeBool(338, m_drawingsEnabled);
+    s.writeDouble(339, m_drawingLineWidth);
+    s.writeU32(340, m_drawingStrokeColor.rgba());
+    s.writeBool(341, m_drawingFillEnabled);
+    s.writeU32(342, m_drawingFillColor.rgba());
+    s.writeString(343, m_drawingFontFamily);
+    s.writeS32(344, m_drawingFontPixelSize);
+    s.writeBool(345, m_drawingFontBold);
+    s.writeBool(346, m_drawingFontItalic);
+    s.writeString(347, serializeDrawings(m_drawings));
+    s.writeS32(348, static_cast<qint32>(m_thermalDecoder));
+    s.writeS32(349, static_cast<qint32>(m_thermalPalette));
+    s.writeS32(350, static_cast<qint32>(m_thermalUnits));
+    s.writeBool(351, m_thermalAutoRange);
+    s.writeDouble(352, m_thermalMinimumC);
+    s.writeDouble(353, m_thermalMaximumC);
+    s.writeDouble(354, m_thermalAutoLowPercentile);
+    s.writeDouble(355, m_thermalAutoHighPercentile);
+    s.writeDouble(356, m_thermalAutoRangeSmoothing);
+    s.writeBool(357, m_thermalMarkerEnabled);
+    s.writeDouble(358, m_thermalMarkerX);
+    s.writeDouble(359, m_thermalMarkerY);
+    s.writeBool(360, m_thermalShowMinMax);
+    s.writeBool(361, m_thermalChartEnabled);
+    s.writeS32(362, m_thermalChartHistorySeconds);
+    s.writeS32(363, m_thermalChartSampleIntervalMs);
 
     return s.final();
 }
@@ -1560,6 +1712,59 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readString(335, &m_opticalSpectrumResponseFile, "");
         d.readBool(336, &m_opticalSpectrumLogY, false);
         d.readBool(337, &m_opticalSpectrumAutoIdentify, false);
+        d.readBool(338, &m_drawingsEnabled, false);
+        d.readDouble(339, &m_drawingLineWidth, 3.0);
+        m_drawingLineWidth = qBound(0.5, m_drawingLineWidth, 100.0);
+        d.readU32(340, &utmp, QColor(255, 255, 0).rgba());
+        m_drawingStrokeColor = QColor::fromRgba(utmp);
+        d.readBool(341, &m_drawingFillEnabled, false);
+        d.readU32(342, &utmp, QColor(255, 255, 0, 64).rgba());
+        m_drawingFillColor = QColor::fromRgba(utmp);
+        d.readString(343, &m_drawingFontFamily, "");
+        d.readS32(344, &m_drawingFontPixelSize, 24);
+        m_drawingFontPixelSize = qBound(1, m_drawingFontPixelSize, 512);
+        d.readBool(345, &m_drawingFontBold, false);
+        d.readBool(346, &m_drawingFontItalic, false);
+        QString drawingsJson;
+        d.readString(347, &drawingsJson, QStringLiteral("[]"));
+        m_drawings = deserializeDrawings(drawingsJson);
+        qint32 thermalDecoder = static_cast<qint32>(ThermalDecoderOff);
+        qint32 thermalPalette = static_cast<qint32>(ThermalPaletteWhiteHot);
+        qint32 thermalUnits = static_cast<qint32>(ThermalUnitsCelsius);
+        d.readS32(348, &thermalDecoder, thermalDecoder);
+        d.readS32(349, &thermalPalette, thermalPalette);
+        d.readS32(350, &thermalUnits, thermalUnits);
+        m_thermalDecoder = static_cast<ThermalDecoder>(qBound(
+            static_cast<qint32>(ThermalDecoderOff), thermalDecoder,
+            static_cast<qint32>(ThermalDecoderTopdonTc001)));
+        m_thermalPalette = static_cast<ThermalPalette>(qBound(
+            static_cast<qint32>(ThermalPaletteWhiteHot), thermalPalette,
+            static_cast<qint32>(ThermalPaletteViridis)));
+        m_thermalUnits = static_cast<ThermalUnits>(qBound(
+            static_cast<qint32>(ThermalUnitsCelsius), thermalUnits,
+            static_cast<qint32>(ThermalUnitsFahrenheit)));
+        d.readBool(351, &m_thermalAutoRange, true);
+        d.readDouble(352, &m_thermalMinimumC, 0.0);
+        d.readDouble(353, &m_thermalMaximumC, 100.0);
+        d.readDouble(354, &m_thermalAutoLowPercentile, 1.0);
+        d.readDouble(355, &m_thermalAutoHighPercentile, 99.0);
+        d.readDouble(356, &m_thermalAutoRangeSmoothing, 0.2);
+        d.readBool(357, &m_thermalMarkerEnabled, true);
+        d.readDouble(358, &m_thermalMarkerX, 0.5);
+        d.readDouble(359, &m_thermalMarkerY, 0.5);
+        d.readBool(360, &m_thermalShowMinMax, false);
+        d.readBool(361, &m_thermalChartEnabled, true);
+        d.readS32(362, &m_thermalChartHistorySeconds, 600);
+        d.readS32(363, &m_thermalChartSampleIntervalMs, 200);
+        m_thermalMinimumC = qBound(-100.0, m_thermalMinimumC, 1000.0);
+        m_thermalMaximumC = qBound(m_thermalMinimumC + 0.01, m_thermalMaximumC, 1000.0);
+        m_thermalAutoLowPercentile = qBound(0.0, m_thermalAutoLowPercentile, 49.0);
+        m_thermalAutoHighPercentile = qBound(m_thermalAutoLowPercentile + 0.1, m_thermalAutoHighPercentile, 100.0);
+        m_thermalAutoRangeSmoothing = qBound(0.01, m_thermalAutoRangeSmoothing, 1.0);
+        m_thermalMarkerX = qBound(0.0, m_thermalMarkerX, 1.0);
+        m_thermalMarkerY = qBound(0.0, m_thermalMarkerY, 1.0);
+        m_thermalChartHistorySeconds = qBound(10, m_thermalChartHistorySeconds, 86400);
+        m_thermalChartSampleIntervalMs = qBound(40, m_thermalChartSampleIntervalMs, 60000);
         d.readFloat(271, &m_azimuthOffset, 0.0f);
         d.readFloat(272, &m_elevationOffset, 0.0f);
         d.readFloat(273, &m_rollOffset, 0.0f);
@@ -2522,6 +2727,62 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
             settings.m_starCatalogDiskCacheSizeGb,
             m_maxStarCatalogDiskCacheSizeGb);
     }
+    if (settingsKeys.contains("thermalDecoder")) {
+        m_thermalDecoder = static_cast<ThermalDecoder>(qBound(
+            static_cast<int>(ThermalDecoderOff), static_cast<int>(settings.m_thermalDecoder),
+            static_cast<int>(ThermalDecoderTopdonTc001)));
+    }
+    if (settingsKeys.contains("thermalPalette")) {
+        m_thermalPalette = static_cast<ThermalPalette>(qBound(
+            static_cast<int>(ThermalPaletteWhiteHot), static_cast<int>(settings.m_thermalPalette),
+            static_cast<int>(ThermalPaletteViridis)));
+    }
+    if (settingsKeys.contains("thermalUnits")) {
+        m_thermalUnits = static_cast<ThermalUnits>(qBound(
+            static_cast<int>(ThermalUnitsCelsius), static_cast<int>(settings.m_thermalUnits),
+            static_cast<int>(ThermalUnitsFahrenheit)));
+    }
+    if (settingsKeys.contains("thermalAutoRange")) {
+        m_thermalAutoRange = settings.m_thermalAutoRange;
+    }
+    if (settingsKeys.contains("thermalMinimumC")) {
+        m_thermalMinimumC = qBound(-100.0, settings.m_thermalMinimumC, 999.99);
+        m_thermalMaximumC = std::max(m_thermalMinimumC + 0.01, m_thermalMaximumC);
+    }
+    if (settingsKeys.contains("thermalMaximumC")) {
+        m_thermalMaximumC = qBound(m_thermalMinimumC + 0.01, settings.m_thermalMaximumC, 1000.0);
+    }
+    if (settingsKeys.contains("thermalAutoLowPercentile")) {
+        m_thermalAutoLowPercentile = qBound(0.0, settings.m_thermalAutoLowPercentile, 49.0);
+        m_thermalAutoHighPercentile = std::max(m_thermalAutoLowPercentile + 0.1, m_thermalAutoHighPercentile);
+    }
+    if (settingsKeys.contains("thermalAutoHighPercentile")) {
+        m_thermalAutoHighPercentile = qBound(m_thermalAutoLowPercentile + 0.1, settings.m_thermalAutoHighPercentile, 100.0);
+    }
+    if (settingsKeys.contains("thermalAutoRangeSmoothing")) {
+        m_thermalAutoRangeSmoothing = qBound(0.01, settings.m_thermalAutoRangeSmoothing, 1.0);
+    }
+    if (settingsKeys.contains("thermalMarkerEnabled")) {
+        m_thermalMarkerEnabled = settings.m_thermalMarkerEnabled;
+    }
+    if (settingsKeys.contains("thermalMarkerX")) {
+        m_thermalMarkerX = qBound(0.0, settings.m_thermalMarkerX, 1.0);
+    }
+    if (settingsKeys.contains("thermalMarkerY")) {
+        m_thermalMarkerY = qBound(0.0, settings.m_thermalMarkerY, 1.0);
+    }
+    if (settingsKeys.contains("thermalShowMinMax")) {
+        m_thermalShowMinMax = settings.m_thermalShowMinMax;
+    }
+    if (settingsKeys.contains("thermalChartEnabled")) {
+        m_thermalChartEnabled = settings.m_thermalChartEnabled;
+    }
+    if (settingsKeys.contains("thermalChartHistorySeconds")) {
+        m_thermalChartHistorySeconds = qBound(10, settings.m_thermalChartHistorySeconds, 86400);
+    }
+    if (settingsKeys.contains("thermalChartSampleIntervalMs")) {
+        m_thermalChartSampleIntervalMs = qBound(40, settings.m_thermalChartSampleIntervalMs, 60000);
+    }
     if (settingsKeys.contains("recordRawFits")) {
         m_recordRawFits = settings.m_recordRawFits;
     }
@@ -2595,6 +2856,36 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
             overlay.m_scale = qBound(m_minWindowOverlayScale, overlay.m_scale, m_maxWindowOverlayScale);
             overlay.m_captureFps = qBound(m_minWindowOverlayFps, overlay.m_captureFps, m_maxWindowOverlayFps);
         }
+    }
+    if (settingsKeys.contains("drawingsEnabled")) {
+        m_drawingsEnabled = settings.m_drawingsEnabled;
+    }
+    if (settingsKeys.contains("drawingLineWidth")) {
+        m_drawingLineWidth = qBound(0.5, settings.m_drawingLineWidth, 100.0);
+    }
+    if (settingsKeys.contains("drawingStrokeColor")) {
+        m_drawingStrokeColor = settings.m_drawingStrokeColor;
+    }
+    if (settingsKeys.contains("drawingFillEnabled")) {
+        m_drawingFillEnabled = settings.m_drawingFillEnabled;
+    }
+    if (settingsKeys.contains("drawingFillColor")) {
+        m_drawingFillColor = settings.m_drawingFillColor;
+    }
+    if (settingsKeys.contains("drawingFontFamily")) {
+        m_drawingFontFamily = settings.m_drawingFontFamily;
+    }
+    if (settingsKeys.contains("drawingFontPixelSize")) {
+        m_drawingFontPixelSize = qBound(1, settings.m_drawingFontPixelSize, 512);
+    }
+    if (settingsKeys.contains("drawingFontBold")) {
+        m_drawingFontBold = settings.m_drawingFontBold;
+    }
+    if (settingsKeys.contains("drawingFontItalic")) {
+        m_drawingFontItalic = settings.m_drawingFontItalic;
+    }
+    if (settingsKeys.contains("drawings")) {
+        m_drawings = settings.m_drawings;
     }
     if (settingsKeys.contains("dateTimeFormat")) {
         m_dateTimeFormat = settings.m_dateTimeFormat;
@@ -3549,6 +3840,54 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     if (settingsKeys.contains("starCatalogDiskCacheSizeGb") || force) {
         ostr << " m_starCatalogDiskCacheSizeGb: " << m_starCatalogDiskCacheSizeGb;
     }
+    if (settingsKeys.contains("thermalDecoder") || force) {
+        ostr << " m_thermalDecoder: " << static_cast<int>(m_thermalDecoder);
+    }
+    if (settingsKeys.contains("thermalPalette") || force) {
+        ostr << " m_thermalPalette: " << static_cast<int>(m_thermalPalette);
+    }
+    if (settingsKeys.contains("thermalUnits") || force) {
+        ostr << " m_thermalUnits: " << static_cast<int>(m_thermalUnits);
+    }
+    if (settingsKeys.contains("thermalAutoRange") || force) {
+        ostr << " m_thermalAutoRange: " << m_thermalAutoRange;
+    }
+    if (settingsKeys.contains("thermalMinimumC") || force) {
+        ostr << " m_thermalMinimumC: " << m_thermalMinimumC;
+    }
+    if (settingsKeys.contains("thermalMaximumC") || force) {
+        ostr << " m_thermalMaximumC: " << m_thermalMaximumC;
+    }
+    if (settingsKeys.contains("thermalAutoLowPercentile") || force) {
+        ostr << " m_thermalAutoLowPercentile: " << m_thermalAutoLowPercentile;
+    }
+    if (settingsKeys.contains("thermalAutoHighPercentile") || force) {
+        ostr << " m_thermalAutoHighPercentile: " << m_thermalAutoHighPercentile;
+    }
+    if (settingsKeys.contains("thermalAutoRangeSmoothing") || force) {
+        ostr << " m_thermalAutoRangeSmoothing: " << m_thermalAutoRangeSmoothing;
+    }
+    if (settingsKeys.contains("thermalMarkerEnabled") || force) {
+        ostr << " m_thermalMarkerEnabled: " << m_thermalMarkerEnabled;
+    }
+    if (settingsKeys.contains("thermalMarkerX") || force) {
+        ostr << " m_thermalMarkerX: " << m_thermalMarkerX;
+    }
+    if (settingsKeys.contains("thermalMarkerY") || force) {
+        ostr << " m_thermalMarkerY: " << m_thermalMarkerY;
+    }
+    if (settingsKeys.contains("thermalShowMinMax") || force) {
+        ostr << " m_thermalShowMinMax: " << m_thermalShowMinMax;
+    }
+    if (settingsKeys.contains("thermalChartEnabled") || force) {
+        ostr << " m_thermalChartEnabled: " << m_thermalChartEnabled;
+    }
+    if (settingsKeys.contains("thermalChartHistorySeconds") || force) {
+        ostr << " m_thermalChartHistorySeconds: " << m_thermalChartHistorySeconds;
+    }
+    if (settingsKeys.contains("thermalChartSampleIntervalMs") || force) {
+        ostr << " m_thermalChartSampleIntervalMs: " << m_thermalChartSampleIntervalMs;
+    }
     if (settingsKeys.contains("recordRawFits") || force) {
         ostr << " m_recordRawFits: " << m_recordRawFits;
     }
@@ -3581,6 +3920,36 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("windowOverlays") || force) {
         ostr << " m_windowOverlays: " << m_windowOverlays.size();
+    }
+    if (settingsKeys.contains("drawingsEnabled") || force) {
+        ostr << " m_drawingsEnabled: " << m_drawingsEnabled;
+    }
+    if (settingsKeys.contains("drawingLineWidth") || force) {
+        ostr << " m_drawingLineWidth: " << m_drawingLineWidth;
+    }
+    if (settingsKeys.contains("drawingStrokeColor") || force) {
+        ostr << " m_drawingStrokeColor: " << m_drawingStrokeColor.name(QColor::HexArgb).toStdString();
+    }
+    if (settingsKeys.contains("drawingFillEnabled") || force) {
+        ostr << " m_drawingFillEnabled: " << m_drawingFillEnabled;
+    }
+    if (settingsKeys.contains("drawingFillColor") || force) {
+        ostr << " m_drawingFillColor: " << m_drawingFillColor.name(QColor::HexArgb).toStdString();
+    }
+    if (settingsKeys.contains("drawingFontFamily") || force) {
+        ostr << " m_drawingFontFamily: " << m_drawingFontFamily.toStdString();
+    }
+    if (settingsKeys.contains("drawingFontPixelSize") || force) {
+        ostr << " m_drawingFontPixelSize: " << m_drawingFontPixelSize;
+    }
+    if (settingsKeys.contains("drawingFontBold") || force) {
+        ostr << " m_drawingFontBold: " << m_drawingFontBold;
+    }
+    if (settingsKeys.contains("drawingFontItalic") || force) {
+        ostr << " m_drawingFontItalic: " << m_drawingFontItalic;
+    }
+    if (settingsKeys.contains("drawings") || force) {
+        ostr << " m_drawings: " << m_drawings.size();
     }
     if (settingsKeys.contains("dateTimeFormat") || force) {
         ostr << " m_dateTimeFormat: " << m_dateTimeFormat.toStdString();

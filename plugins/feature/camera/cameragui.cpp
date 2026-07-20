@@ -25,6 +25,7 @@
 #include <QAction>
 #include <QApplication>
 #include <QAbstractItemView>
+#include <QButtonGroup>
 #include <QCheckBox>
 #include <QClipboard>
 #include <QColorDialog>
@@ -41,11 +42,13 @@
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QFontDatabase>
+#include <QFontComboBox>
 #include <QFrame>
 #include <QGraphicsSimpleTextItem>
 #include <QGraphicsPixmapItem>
 #include <QGraphicsView>
 #include <QGraphicsRectItem>
+#include <QPainterPathStroker>
 #include <QGroupBox>
 #include <QHeaderView>
 #include <QHBoxLayout>
@@ -70,6 +73,7 @@
 #include <QSpinBox>
 #include <QStandardPaths>
 #include <QStandardItemModel>
+#include <QStyleOptionGraphicsItem>
 #include <QTableWidget>
 #include <QTableWidgetItem>
 #include <QTabWidget>
@@ -116,6 +120,7 @@
 #include "gui/crightclickenabler.h"
 #include "gui/audioselectdialog.h"
 #include "gui/basicfeaturesettingsdialog.h"
+#include "gui/buttonswitch.h"
 #include "gui/dialogpositioner.h"
 #include "gui/flowlayout.h"
 #include "dsp/dspengine.h"
@@ -147,6 +152,59 @@
 #endif
 
 namespace {
+
+class CameraDrawingGraphicsItem : public QGraphicsItem
+{
+public:
+    CameraDrawingGraphicsItem(const CameraDrawing& drawing, const QSize& imageSize, int drawingIndex) :
+        m_drawing(drawing),
+        m_imageSize(imageSize),
+        m_drawingIndex(drawingIndex)
+    {
+        setFlag(QGraphicsItem::ItemIsSelectable, drawingIndex >= 0);
+        setData(0, drawingIndex);
+        setZValue(2.2);
+    }
+
+    QRectF boundingRect() const override
+    {
+        return CameraDrawingRenderer::bounds(m_drawing, m_imageSize);
+    }
+
+    QPainterPath shape() const override
+    {
+        if (m_drawing.m_type == CameraDrawing::Text)
+        {
+            QPainterPath result;
+            result.addRect(boundingRect());
+            return result;
+        }
+
+        QPainterPathStroker stroker;
+        stroker.setWidth(std::max(8.0, m_drawing.m_lineWidth + 4.0));
+        const QPainterPath path = CameraDrawingRenderer::path(m_drawing, m_imageSize);
+        return m_drawing.m_fillEnabled ? path.united(stroker.createStroke(path)) : stroker.createStroke(path);
+    }
+
+    void paint(QPainter *painter, const QStyleOptionGraphicsItem *option, QWidget *widget) override
+    {
+        Q_UNUSED(widget)
+        CameraDrawingRenderer::draw(*painter, m_drawing, m_imageSize);
+        if ((option->state & QStyle::State_Selected) && (m_drawingIndex >= 0))
+        {
+            painter->save();
+            painter->setPen(QPen(QColor(255, 255, 255, 210), 1.0, Qt::DashLine));
+            painter->setBrush(Qt::NoBrush);
+            painter->drawRect(boundingRect());
+            painter->restore();
+        }
+    }
+
+private:
+    CameraDrawing m_drawing;
+    QSize m_imageSize;
+    int m_drawingIndex;
+};
 
 enum AutoExposureGainControl
 {
@@ -764,6 +822,16 @@ bool CameraGUI::handleMessage(const Message& message)
         m_lastHistogramData = report.getHistogramData();
         m_lastOpticalSpectrumData = report.getOpticalSpectrumData();
         m_lastStarDetections = report.getStarDetections();
+        m_lastThermal = report.getThermal();
+        settingsUI()->thermalStatusLabel->setText(m_lastThermal.m_status.isEmpty() ? QStringLiteral("-") : m_lastThermal.m_status);
+        if (m_lastThermal.m_valid && m_settings.m_thermalChartEnabled && m_settingsDialog) {
+            m_settingsDialog->appendThermalSample(
+                report.getCaptureDateTime().isValid() ? report.getCaptureDateTime() : QDateTime::currentDateTime(),
+                m_lastThermal.m_markerTemperatureC,
+                m_settings.m_thermalChartHistorySeconds,
+                m_settings.m_thermalChartSampleIntervalMs,
+                m_settings.m_thermalUnits == CameraSettings::ThermalUnitsFahrenheit);
+        }
         m_lastPreviewTextLabels = report.getPreviewTextLabels();
         m_lastPreviewRectItems = report.getPreviewRectItems();
         m_lastPreviewImageOverlays = report.getPreviewImageOverlays();
@@ -1171,6 +1239,7 @@ CameraGUI::CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *
 
     RollupContents *rollupContents = getRollupContents();
     ui->setupUi(rollupContents);
+    createDrawingControls();
     createToolbarFlowLayout();
     rollupContents->arrangeRollups();
     connect(this, SIGNAL(customContextMenuRequested(const QPoint &)), this, SLOT(onMenuDialogCalled(const QPoint &)));
@@ -1357,6 +1426,18 @@ CameraGUI::CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *
     settingsUI()->autoExposureGainModeCombo->addItem(tr("Gain first"), CameraSettings::AutoExposureGainGainFirst);
     settingsUI()->autoExposureGainModeCombo->addItem(tr("Exposure only"), CameraSettings::AutoExposureGainExposureOnly);
     settingsUI()->autoExposureGainModeCombo->addItem(tr("Gain only"), CameraSettings::AutoExposureGainGainOnly);
+    settingsUI()->thermalDecoderCombo->addItem(tr("Off"), CameraSettings::ThermalDecoderOff);
+    settingsUI()->thermalDecoderCombo->addItem(tr("Auto"), CameraSettings::ThermalDecoderAuto);
+    settingsUI()->thermalDecoderCombo->addItem(tr("Thermal Master P2"), CameraSettings::ThermalDecoderThermalMasterP2);
+    settingsUI()->thermalDecoderCombo->addItem(tr("TOPDON TC001"), CameraSettings::ThermalDecoderTopdonTc001);
+    settingsUI()->thermalPaletteCombo->addItem(tr("White hot"), CameraSettings::ThermalPaletteWhiteHot);
+    settingsUI()->thermalPaletteCombo->addItem(tr("Black hot"), CameraSettings::ThermalPaletteBlackHot);
+    settingsUI()->thermalPaletteCombo->addItem(tr("Iron"), CameraSettings::ThermalPaletteIron);
+    settingsUI()->thermalPaletteCombo->addItem(tr("Inferno"), CameraSettings::ThermalPaletteInferno);
+    settingsUI()->thermalPaletteCombo->addItem(tr("Turbo"), CameraSettings::ThermalPaletteTurbo);
+    settingsUI()->thermalPaletteCombo->addItem(tr("Viridis"), CameraSettings::ThermalPaletteViridis);
+    settingsUI()->thermalUnitsCombo->addItem(tr("Celsius"), CameraSettings::ThermalUnitsCelsius);
+    settingsUI()->thermalUnitsCombo->addItem(tr("Fahrenheit"), CameraSettings::ThermalUnitsFahrenheit);
     m_statusTimer.start(250);
 
     connect(&m_updateTimer, &QTimer::timeout, this, &CameraGUI::updateHardware);
@@ -1397,6 +1478,256 @@ void CameraGUI::initialiseYoloPathCombos()
         combo->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
         combo->setMinimumContentsLength(0);
     }
+}
+
+void CameraGUI::createDrawingControls()
+{
+    m_drawingsButton = new ButtonSwitch(this);
+    m_drawingsButton->setCheckable(true);
+    m_drawingsButton->setIcon(QIcon(QStringLiteral(":/edit.png")));
+    m_drawingsButton->setToolTip(tr("Show image drawing tools"));
+    ui->horizontalLayout_2->insertWidget(std::max(0, ui->horizontalLayout_2->count() - 1), m_drawingsButton);
+
+    m_drawingToolbar = new QWidget(this);
+    auto *layout = new FlowLayout(m_drawingToolbar, 0, 2, 2);
+
+    m_drawingToolGroup = new QButtonGroup(this);
+    m_drawingToolGroup->setExclusive(true);
+    const auto createToolIcon = [this](DrawingTool tool) {
+        QPixmap pixmap(24, 24);
+        pixmap.fill(Qt::transparent);
+        QPainter painter(&pixmap);
+        painter.setRenderHint(QPainter::Antialiasing, true);
+        const QColor color = palette().color(QPalette::ButtonText);
+        painter.setPen(QPen(color, 2.0, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+        painter.setBrush(Qt::NoBrush);
+
+        switch (tool)
+        {
+        case DrawingToolSelect:
+            painter.setBrush(color);
+            painter.drawPolygon(QPolygonF()
+                << QPointF(5, 3) << QPointF(5, 19) << QPointF(9, 15)
+                << QPointF(13, 22) << QPointF(16, 20) << QPointF(12, 14)
+                << QPointF(19, 14));
+            break;
+        case DrawingToolLine:
+            painter.drawLine(QPointF(4, 20), QPointF(20, 4));
+            break;
+        case DrawingToolArrow:
+            painter.drawLine(QPointF(4, 20), QPointF(20, 4));
+            painter.drawLine(QPointF(20, 4), QPointF(13, 5));
+            painter.drawLine(QPointF(20, 4), QPointF(19, 11));
+            break;
+        case DrawingToolRectangle:
+            painter.drawRect(QRectF(4, 5, 16, 14));
+            break;
+        case DrawingToolEllipse:
+            painter.drawEllipse(QRectF(4, 5, 16, 14));
+            break;
+        case DrawingToolFreehand:
+        {
+            QPainterPath path;
+            path.moveTo(3, 17);
+            path.cubicTo(7, 7, 10, 22, 14, 11);
+            path.cubicTo(16, 6, 18, 7, 21, 5);
+            painter.drawPath(path);
+            break;
+        }
+        case DrawingToolText:
+        {
+            QFont font = painter.font();
+            font.setPixelSize(18);
+            font.setBold(true);
+            painter.setFont(font);
+            painter.drawText(pixmap.rect(), Qt::AlignCenter, QStringLiteral("T"));
+            break;
+        }
+        }
+
+        return QIcon(pixmap);
+    };
+    const auto addTool = [this, layout, &createToolIcon](const QString& toolTip, DrawingTool tool) {
+        QToolButton *button = new QToolButton(m_drawingToolbar);
+        button->setIcon(createToolIcon(tool));
+        button->setIconSize(QSize(20, 20));
+        button->setFixedSize(28, 28);
+        button->setToolTip(toolTip);
+        button->setCheckable(true);
+        button->setAutoRaise(true);
+        m_drawingToolGroup->addButton(button, static_cast<int>(tool));
+        layout->addWidget(button);
+        connect(button, &QToolButton::clicked, this, [this, tool]() { setDrawingTool(tool); });
+        return button;
+    };
+
+    QToolButton *selectButton = addTool(tr("Select a drawing"), DrawingToolSelect);
+    addTool(tr("Draw a line"), DrawingToolLine);
+    addTool(tr("Draw an arrow"), DrawingToolArrow);
+    addTool(tr("Draw a rectangle (hold Shift for a square)"), DrawingToolRectangle);
+    addTool(tr("Draw an ellipse (hold Shift for a circle)"), DrawingToolEllipse);
+    addTool(tr("Draw freehand"), DrawingToolFreehand);
+    addTool(tr("Add text"), DrawingToolText);
+    selectButton->setChecked(true);
+
+    m_drawingLineWidthSpin = new QDoubleSpinBox(m_drawingToolbar);
+    m_drawingLineWidthSpin->setRange(0.5, 100.0);
+    m_drawingLineWidthSpin->setDecimals(1);
+    m_drawingLineWidthSpin->setSingleStep(0.5);
+    m_drawingLineWidthSpin->setSuffix(tr(" px"));
+    m_drawingLineWidthSpin->setToolTip(tr("Drawing line width"));
+    m_drawingLineWidthSpin->setMaximumWidth(82);
+    layout->addWidget(m_drawingLineWidthSpin);
+
+    m_drawingStrokeColorButton = new QToolButton(m_drawingToolbar);
+    m_drawingStrokeColorButton->setToolTip(tr("Select line or text colour"));
+    layout->addWidget(m_drawingStrokeColorButton);
+
+    m_drawingFillCheck = new QCheckBox(tr("Fill"), m_drawingToolbar);
+    m_drawingFillCheck->setToolTip(tr("Fill closed shapes or draw a background behind text"));
+    layout->addWidget(m_drawingFillCheck);
+
+    m_drawingFillColorButton = new QToolButton(m_drawingToolbar);
+    m_drawingFillColorButton->setToolTip(tr("Select fill colour and opacity"));
+    layout->addWidget(m_drawingFillColorButton);
+
+    m_drawingFontCombo = new QFontComboBox(m_drawingToolbar);
+    m_drawingFontCombo->setToolTip(tr("Text font"));
+    m_drawingFontCombo->setMinimumContentsLength(6);
+    m_drawingFontCombo->setMaximumWidth(130);
+    layout->addWidget(m_drawingFontCombo);
+
+    m_drawingFontSizeSpin = new QSpinBox(m_drawingToolbar);
+    m_drawingFontSizeSpin->setRange(1, 512);
+    m_drawingFontSizeSpin->setSuffix(tr(" px"));
+    m_drawingFontSizeSpin->setToolTip(tr("Text size in image pixels"));
+    m_drawingFontSizeSpin->setMaximumWidth(78);
+    layout->addWidget(m_drawingFontSizeSpin);
+
+    m_drawingBoldButton = new QToolButton(m_drawingToolbar);
+    m_drawingBoldButton->setText(QStringLiteral("B"));
+    m_drawingBoldButton->setToolTip(tr("Bold text"));
+    m_drawingBoldButton->setCheckable(true);
+    layout->addWidget(m_drawingBoldButton);
+
+    m_drawingItalicButton = new QToolButton(m_drawingToolbar);
+    m_drawingItalicButton->setText(QStringLiteral("I"));
+    m_drawingItalicButton->setToolTip(tr("Italic text"));
+    m_drawingItalicButton->setCheckable(true);
+    layout->addWidget(m_drawingItalicButton);
+
+    m_drawingUndoButton = new QToolButton(m_drawingToolbar);
+    m_drawingUndoButton->setIcon(style()->standardIcon(QStyle::SP_ArrowBack));
+    m_drawingUndoButton->setToolTip(tr("Undo drawing change"));
+    layout->addWidget(m_drawingUndoButton);
+
+    m_drawingRedoButton = new QToolButton(m_drawingToolbar);
+    m_drawingRedoButton->setIcon(style()->standardIcon(QStyle::SP_ArrowForward));
+    m_drawingRedoButton->setToolTip(tr("Redo drawing change"));
+    layout->addWidget(m_drawingRedoButton);
+
+    m_drawingDeleteButton = new QToolButton(m_drawingToolbar);
+    m_drawingDeleteButton->setIcon(QIcon(QStringLiteral(":/preset-delete.png")));
+    m_drawingDeleteButton->setToolTip(tr("Delete selected drawings"));
+    layout->addWidget(m_drawingDeleteButton);
+
+    m_drawingClearButton = new QToolButton(m_drawingToolbar);
+    m_drawingClearButton->setIcon(QIcon(QStringLiteral(":/clear.png")));
+    m_drawingClearButton->setToolTip(tr("Clear all drawings"));
+    layout->addWidget(m_drawingClearButton);
+
+    connect(m_drawingsButton, &QToolButton::toggled, this, [this](bool checked) {
+        m_settings.m_drawingsEnabled = checked;
+        m_drawingOverlayDirty = true;
+        updateDrawingControls();
+        updateDrawingOverlayItems();
+        applySetting(QStringLiteral("drawingsEnabled"));
+    });
+    connect(m_drawingLineWidthSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this](double value) {
+        m_settings.m_drawingLineWidth = value;
+        applySetting(QStringLiteral("drawingLineWidth"));
+    });
+    connect(m_drawingStrokeColorButton, &QToolButton::clicked, this, [this]() {
+        const QColor color = QColorDialog::getColor(m_settings.m_drawingStrokeColor, this, tr("Select drawing colour"), QColorDialog::ShowAlphaChannel);
+        if (color.isValid()) {
+            m_settings.m_drawingStrokeColor = color;
+            updateColorButton(m_drawingStrokeColorButton, color);
+            applySetting(QStringLiteral("drawingStrokeColor"));
+        }
+    });
+    connect(m_drawingFillCheck, &QCheckBox::toggled, this, [this](bool checked) {
+        m_settings.m_drawingFillEnabled = checked;
+        applySetting(QStringLiteral("drawingFillEnabled"));
+    });
+    connect(m_drawingFillColorButton, &QToolButton::clicked, this, [this]() {
+        const QColor color = QColorDialog::getColor(m_settings.m_drawingFillColor, this, tr("Select drawing fill colour"), QColorDialog::ShowAlphaChannel);
+        if (color.isValid()) {
+            m_settings.m_drawingFillColor = color;
+            updateColorButton(m_drawingFillColorButton, color);
+            applySetting(QStringLiteral("drawingFillColor"));
+        }
+    });
+    connect(m_drawingFontCombo, &QFontComboBox::currentFontChanged, this, [this](const QFont& font) {
+        m_settings.m_drawingFontFamily = font.family();
+        applySetting(QStringLiteral("drawingFontFamily"));
+    });
+    connect(m_drawingFontSizeSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, [this](int value) {
+        m_settings.m_drawingFontPixelSize = value;
+        applySetting(QStringLiteral("drawingFontPixelSize"));
+    });
+    connect(m_drawingBoldButton, &QToolButton::toggled, this, [this](bool checked) {
+        m_settings.m_drawingFontBold = checked;
+        applySetting(QStringLiteral("drawingFontBold"));
+    });
+    connect(m_drawingItalicButton, &QToolButton::toggled, this, [this](bool checked) {
+        m_settings.m_drawingFontItalic = checked;
+        applySetting(QStringLiteral("drawingFontItalic"));
+    });
+    connect(m_drawingUndoButton, &QToolButton::clicked, this, [this]() {
+        if (m_drawingUndoStack.isEmpty()) {
+            return;
+        }
+        m_drawingRedoStack.append(m_settings.m_drawings);
+        m_settings.m_drawings = m_drawingUndoStack.takeLast();
+        applyDrawings();
+    });
+    connect(m_drawingRedoButton, &QToolButton::clicked, this, [this]() {
+        if (m_drawingRedoStack.isEmpty()) {
+            return;
+        }
+        m_drawingUndoStack.append(m_settings.m_drawings);
+        m_settings.m_drawings = m_drawingRedoStack.takeLast();
+        applyDrawings();
+    });
+    connect(m_drawingDeleteButton, &QToolButton::clicked, this, [this]() {
+        QList<int> indices;
+        for (QGraphicsItem *item : m_drawingOverlayItems) {
+            if (item && item->isSelected()) {
+                indices.append(item->data(0).toInt());
+            }
+        }
+        if (indices.isEmpty()) {
+            return;
+        }
+        std::sort(indices.begin(), indices.end(), std::greater<int>());
+        pushDrawingUndoState();
+        for (int index : indices) {
+            if ((index >= 0) && (index < m_settings.m_drawings.size())) {
+                m_settings.m_drawings.removeAt(index);
+            }
+        }
+        applyDrawings();
+    });
+    connect(m_drawingClearButton, &QToolButton::clicked, this, [this]() {
+        if (m_settings.m_drawings.isEmpty()) {
+            return;
+        }
+        pushDrawingUndoState();
+        m_settings.m_drawings.clear();
+        applyDrawings();
+    });
+
+    m_drawingToolbar->hide();
 }
 
 void CameraGUI::createToolbarFlowLayout()
@@ -1447,6 +1778,9 @@ void CameraGUI::createToolbarFlowLayout()
     finishGroup();
     delete toolbarLayout;
     ui->verticalLayout->addItem(flowLayout);
+    if (m_drawingToolbar) {
+        ui->verticalLayout->addWidget(m_drawingToolbar);
+    }
 }
 
 CameraGUI::~CameraGUI()
@@ -1851,6 +2185,8 @@ void CameraGUI::displaySettings()
 {
     setWindowTitle(m_settings.m_title);
     setTitle(m_settings.m_title);
+    m_drawingOverlayDirty = true;
+    updateDrawingControls();
 
     const int cameraIndex = findCameraComboIndex(
         m_settings.m_cameraProtocol,
@@ -2217,6 +2553,26 @@ void CameraGUI::displaySettings()
     updatePlateSolveDateTimeEdit();
     settingsUI()->plateSolveCatalogSourceCombo->setCurrentIndex(static_cast<int>(m_settings.m_plateSolveCatalogSource));
     settingsUI()->starCatalogDiskCacheSizeSpin->setValue(m_settings.m_starCatalogDiskCacheSizeGb);
+    settingsUI()->thermalDecoderCombo->setCurrentIndex(static_cast<int>(m_settings.m_thermalDecoder));
+    settingsUI()->thermalPaletteCombo->setCurrentIndex(static_cast<int>(m_settings.m_thermalPalette));
+    settingsUI()->thermalUnitsCombo->setCurrentIndex(static_cast<int>(m_settings.m_thermalUnits));
+    settingsUI()->thermalAutoRangeCheck->setChecked(m_settings.m_thermalAutoRange);
+    settingsUI()->thermalMinimumSpin->setValue(m_settings.m_thermalMinimumC);
+    settingsUI()->thermalMaximumSpin->setValue(m_settings.m_thermalMaximumC);
+    settingsUI()->thermalLowPercentileSpin->setValue(m_settings.m_thermalAutoLowPercentile);
+    settingsUI()->thermalHighPercentileSpin->setValue(m_settings.m_thermalAutoHighPercentile);
+    settingsUI()->thermalSmoothingSpin->setValue(m_settings.m_thermalAutoRangeSmoothing);
+    settingsUI()->thermalMarkerEnabledCheck->setChecked(m_settings.m_thermalMarkerEnabled);
+    settingsUI()->thermalMarkerXSpin->setValue(m_settings.m_thermalMarkerX * 100.0);
+    settingsUI()->thermalMarkerYSpin->setValue(m_settings.m_thermalMarkerY * 100.0);
+    settingsUI()->thermalShowMinMaxCheck->setChecked(m_settings.m_thermalShowMinMax);
+    settingsUI()->thermalChartEnabledCheck->setChecked(m_settings.m_thermalChartEnabled);
+    settingsUI()->thermalChartHistorySpin->setValue(m_settings.m_thermalChartHistorySeconds);
+    settingsUI()->thermalChartIntervalSpin->setValue(m_settings.m_thermalChartSampleIntervalMs);
+    if (m_settingsDialog) {
+        m_settingsDialog->setThermalUnits(m_settings.m_thermalUnits == CameraSettings::ThermalUnitsFahrenheit);
+    }
+    updateThermalControls();
     settingsUI()->plateSolveApplyModeCombo->setCurrentIndex(static_cast<int>(m_settings.m_plateSolveApplyMode));
     settingsUI()->plateSolveApplyButton->setEnabled(m_lastPlateSolved);
     ui->loopVideo->setChecked(m_settings.m_videoLoop);
@@ -2461,6 +2817,7 @@ void CameraGUI::updateImageWidget()
     if (m_lastImage.isNull() || !m_imagePixmapItem)
     {
         clearPreviewOverlayItems();
+        clearDrawingOverlayItems();
         return;
     }
 
@@ -2474,6 +2831,7 @@ void CameraGUI::updateImageWidget()
     }
     updateImageViewSmoothing();
     updatePreviewOverlayItems();
+    updateDrawingOverlayItems();
 
     // Update max overlay positions according to size of image
     const int maxX = m_lastImage.width();
@@ -2765,6 +3123,315 @@ void CameraGUI::clearPreviewOverlayItems()
     m_previewOverlayItems.clear();
 }
 
+void CameraGUI::clearDrawingOverlayItems()
+{
+    if (!m_imageScene)
+    {
+        m_drawingOverlayItems.clear();
+        return;
+    }
+
+    for (QGraphicsItem *item : m_drawingOverlayItems)
+    {
+        m_imageScene->removeItem(item);
+        delete item;
+    }
+    m_drawingOverlayItems.clear();
+}
+
+void CameraGUI::updateDrawingControls()
+{
+    if (!m_drawingsButton) {
+        return;
+    }
+
+    const QSignalBlocker enabledBlocker(m_drawingsButton);
+    const QSignalBlocker widthBlocker(m_drawingLineWidthSpin);
+    const QSignalBlocker fillBlocker(m_drawingFillCheck);
+    const QSignalBlocker fontBlocker(m_drawingFontCombo);
+    const QSignalBlocker fontSizeBlocker(m_drawingFontSizeSpin);
+    const QSignalBlocker boldBlocker(m_drawingBoldButton);
+    const QSignalBlocker italicBlocker(m_drawingItalicButton);
+    m_drawingsButton->setChecked(m_settings.m_drawingsEnabled);
+    m_drawingToolbar->setVisible(m_settings.m_drawingsEnabled);
+    m_drawingLineWidthSpin->setValue(m_settings.m_drawingLineWidth);
+    updateColorButton(m_drawingStrokeColorButton, m_settings.m_drawingStrokeColor);
+    m_drawingFillCheck->setChecked(m_settings.m_drawingFillEnabled);
+    updateColorButton(m_drawingFillColorButton, m_settings.m_drawingFillColor);
+    m_drawingFontCombo->setCurrentFont(QFont(m_settings.m_drawingFontFamily));
+    m_drawingFontSizeSpin->setValue(m_settings.m_drawingFontPixelSize);
+    m_drawingBoldButton->setChecked(m_settings.m_drawingFontBold);
+    m_drawingItalicButton->setChecked(m_settings.m_drawingFontItalic);
+
+    const bool textTool = m_drawingTool == DrawingToolText;
+    const bool fillTool = textTool || (m_drawingTool == DrawingToolRectangle) || (m_drawingTool == DrawingToolEllipse);
+    m_drawingFillCheck->setVisible(fillTool);
+    m_drawingFillColorButton->setVisible(fillTool);
+    m_drawingFontCombo->setVisible(textTool);
+    m_drawingFontSizeSpin->setVisible(textTool);
+    m_drawingBoldButton->setVisible(textTool);
+    m_drawingItalicButton->setVisible(textTool);
+    m_drawingUndoButton->setEnabled(!m_drawingUndoStack.isEmpty());
+    m_drawingRedoButton->setEnabled(!m_drawingRedoStack.isEmpty());
+    m_drawingDeleteButton->setEnabled(!m_settings.m_drawings.isEmpty());
+    m_drawingClearButton->setEnabled(!m_settings.m_drawings.isEmpty());
+
+    if (ui && ui->imageView) {
+        ui->imageView->setDragMode(m_settings.m_drawingsEnabled ? QGraphicsView::NoDrag : QGraphicsView::ScrollHandDrag);
+    }
+}
+
+void CameraGUI::updateDrawingOverlayItems()
+{
+    if (!m_imageScene || m_lastImage.isNull() || !m_settings.m_drawingsEnabled)
+    {
+        clearDrawingOverlayItems();
+        m_drawingOverlayImageSize = QSize();
+        m_drawingOverlayDirty = false;
+        return;
+    }
+
+    if (!m_drawingOverlayDirty && (m_drawingOverlayImageSize == m_lastImage.size())) {
+        return;
+    }
+
+    clearDrawingOverlayItems();
+    for (int i = 0; i < m_settings.m_drawings.size(); ++i)
+    {
+        auto *item = new CameraDrawingGraphicsItem(m_settings.m_drawings.at(i), m_lastImage.size(), i);
+        m_imageScene->addItem(item);
+        m_drawingOverlayItems.append(item);
+    }
+    m_drawingOverlayImageSize = m_lastImage.size();
+    m_drawingOverlayDirty = false;
+}
+
+CameraDrawing CameraGUI::drawingWithCurrentStyle(CameraDrawing::Type type) const
+{
+    CameraDrawing drawing;
+    drawing.m_type = type;
+    drawing.m_lineWidth = m_settings.m_drawingLineWidth;
+    drawing.m_strokeColor = m_settings.m_drawingStrokeColor;
+    drawing.m_fillEnabled = m_settings.m_drawingFillEnabled
+        && ((type == CameraDrawing::Rectangle) || (type == CameraDrawing::Ellipse) || (type == CameraDrawing::Text));
+    drawing.m_fillColor = m_settings.m_drawingFillColor;
+    drawing.m_fontFamily = m_settings.m_drawingFontFamily;
+    drawing.m_fontPixelSize = m_settings.m_drawingFontPixelSize;
+    drawing.m_fontBold = m_settings.m_drawingFontBold;
+    drawing.m_fontItalic = m_settings.m_drawingFontItalic;
+    return drawing;
+}
+
+QPointF CameraGUI::normalizedDrawingPoint(const QPoint& imagePoint) const
+{
+    if (m_lastImage.isNull()) {
+        return QPointF();
+    }
+    return QPointF(
+        qBound(0.0, static_cast<double>(imagePoint.x()) / std::max(1, m_lastImage.width()), 1.0),
+        qBound(0.0, static_cast<double>(imagePoint.y()) / std::max(1, m_lastImage.height()), 1.0));
+}
+
+QPointF CameraGUI::drawingEndPoint(const QPoint& imagePoint, Qt::KeyboardModifiers modifiers) const
+{
+    const QPointF current = normalizedDrawingPoint(imagePoint);
+    if ((modifiers & Qt::ShiftModifier) == 0
+        || (m_pendingDrawing.m_points.isEmpty())
+        || ((m_pendingDrawing.m_type != CameraDrawing::Rectangle) && (m_pendingDrawing.m_type != CameraDrawing::Ellipse)))
+    {
+        return current;
+    }
+
+    const double width = std::max(1, m_lastImage.width());
+    const double height = std::max(1, m_lastImage.height());
+    const QPointF start(
+        m_pendingDrawing.m_points.first().x() * width,
+        m_pendingDrawing.m_points.first().y() * height);
+    const QPointF end(current.x() * width, current.y() * height);
+    const double dx = end.x() - start.x();
+    const double dy = end.y() - start.y();
+    const double directionX = dx < 0.0 ? -1.0 : 1.0;
+    const double directionY = dy < 0.0 ? -1.0 : 1.0;
+    const double availableX = directionX > 0.0 ? width - start.x() : start.x();
+    const double availableY = directionY > 0.0 ? height - start.y() : start.y();
+    const double side = std::min({std::max(std::abs(dx), std::abs(dy)), availableX, availableY});
+
+    return QPointF(
+        qBound(0.0, (start.x() + directionX * side) / width, 1.0),
+        qBound(0.0, (start.y() + directionY * side) / height, 1.0));
+}
+
+void CameraGUI::setDrawingTool(DrawingTool tool)
+{
+    cancelPendingDrawing();
+    m_drawingTool = tool;
+    if (QAbstractButton *button = m_drawingToolGroup->button(static_cast<int>(tool))) {
+        button->setChecked(true);
+    }
+    updateDrawingControls();
+}
+
+void CameraGUI::updatePendingDrawingItem()
+{
+    if (m_activeDrawingItem)
+    {
+        m_imageScene->removeItem(m_activeDrawingItem);
+        delete m_activeDrawingItem;
+        m_activeDrawingItem = nullptr;
+    }
+    if (!m_pendingDrawing.m_points.isEmpty() && !m_lastImage.isNull())
+    {
+        m_activeDrawingItem = new CameraDrawingGraphicsItem(m_pendingDrawing, m_lastImage.size(), -1);
+        m_activeDrawingItem->setZValue(3.0);
+        m_imageScene->addItem(m_activeDrawingItem);
+    }
+}
+
+void CameraGUI::cancelPendingDrawing()
+{
+    m_drawingDragging = false;
+    m_pendingDrawing = CameraDrawing();
+    if (m_activeDrawingItem)
+    {
+        m_imageScene->removeItem(m_activeDrawingItem);
+        delete m_activeDrawingItem;
+        m_activeDrawingItem = nullptr;
+    }
+}
+
+void CameraGUI::pushDrawingUndoState()
+{
+    m_drawingUndoStack.append(m_settings.m_drawings);
+    while (m_drawingUndoStack.size() > 20) {
+        m_drawingUndoStack.removeFirst();
+    }
+    m_drawingRedoStack.clear();
+}
+
+void CameraGUI::applyDrawings()
+{
+    m_drawingOverlayDirty = true;
+    updateDrawingControls();
+    updateDrawingOverlayItems();
+    applySetting(QStringLiteral("drawings"));
+}
+
+void CameraGUI::commitPendingDrawing()
+{
+    const int minimumPoints = m_pendingDrawing.m_type == CameraDrawing::Text ? 1 : 2;
+    if (m_pendingDrawing.m_points.size() >= minimumPoints)
+    {
+        const QRectF bounds = CameraDrawingRenderer::bounds(m_pendingDrawing, m_lastImage.size());
+        if ((m_pendingDrawing.m_type == CameraDrawing::Text) || (bounds.width() >= 1.0) || (bounds.height() >= 1.0))
+        {
+            pushDrawingUndoState();
+            if (m_settings.m_drawings.size() < CameraDrawing::MaxDrawingCount) {
+                m_settings.m_drawings.append(m_pendingDrawing);
+            }
+        }
+    }
+    cancelPendingDrawing();
+    applyDrawings();
+}
+
+bool CameraGUI::handleDrawingEvent(QEvent *event)
+{
+    if (!m_settings.m_drawingsEnabled || m_lastImage.isNull() || (m_previewDrawMode != PreviewDrawModeNone)) {
+        return false;
+    }
+
+    if ((event->type() == QEvent::MouseButtonPress) && (m_drawingTool != DrawingToolSelect))
+    {
+        const QMouseEvent *mouseEvent = static_cast<QMouseEvent*>(event);
+        if (mouseEvent->button() == Qt::RightButton)
+        {
+            cancelPendingDrawing();
+            setDrawingTool(DrawingToolSelect);
+            return true;
+        }
+        if (mouseEvent->button() != Qt::LeftButton) {
+            return false;
+        }
+
+        const QPoint imagePoint = mapViewportPointToImage(mouseEvent->pos());
+        if (imagePoint.x() < 0) {
+            return true;
+        }
+
+        if (m_drawingTool == DrawingToolText)
+        {
+            bool accepted = false;
+            const QString text = QInputDialog::getMultiLineText(this, tr("Add text"), tr("Text:"), QString(), &accepted);
+            if (accepted && !text.isEmpty())
+            {
+                m_pendingDrawing = drawingWithCurrentStyle(CameraDrawing::Text);
+                m_pendingDrawing.m_points.append(normalizedDrawingPoint(imagePoint));
+                m_pendingDrawing.m_text = text;
+                commitPendingDrawing();
+            }
+            return true;
+        }
+
+        CameraDrawing::Type type = CameraDrawing::Line;
+        switch (m_drawingTool)
+        {
+        case DrawingToolArrow: type = CameraDrawing::Arrow; break;
+        case DrawingToolRectangle: type = CameraDrawing::Rectangle; break;
+        case DrawingToolEllipse: type = CameraDrawing::Ellipse; break;
+        case DrawingToolFreehand: type = CameraDrawing::Freehand; break;
+        default: break;
+        }
+        m_pendingDrawing = drawingWithCurrentStyle(type);
+        const QPointF point = normalizedDrawingPoint(imagePoint);
+        m_pendingDrawing.m_points.append(point);
+        m_pendingDrawing.m_points.append(point);
+        m_drawingDragging = true;
+        updatePendingDrawingItem();
+        return true;
+    }
+
+    if ((event->type() == QEvent::MouseMove) && m_drawingDragging)
+    {
+        const QMouseEvent *mouseEvent = static_cast<QMouseEvent*>(event);
+        const QPoint imagePoint = mapViewportPointToImage(mouseEvent->pos());
+        if (imagePoint.x() < 0) {
+            return true;
+        }
+        const QPointF point = normalizedDrawingPoint(imagePoint);
+        if (m_pendingDrawing.m_type == CameraDrawing::Freehand)
+        {
+            const QPointF previous = CameraDrawingRenderer::imagePoint(m_pendingDrawing.m_points.last(), m_lastImage.size());
+            if ((m_pendingDrawing.m_points.size() < CameraDrawing::MaxPointsPerDrawing)
+                && (QLineF(previous, QPointF(imagePoint)).length() >= 2.0)) {
+                m_pendingDrawing.m_points.append(point);
+            }
+        }
+        else {
+            m_pendingDrawing.m_points[1] = drawingEndPoint(imagePoint, mouseEvent->modifiers());
+        }
+        updatePendingDrawingItem();
+        return true;
+    }
+
+    if ((event->type() == QEvent::MouseButtonRelease) && m_drawingDragging)
+    {
+        const QMouseEvent *mouseEvent = static_cast<QMouseEvent*>(event);
+        if (mouseEvent->button() == Qt::LeftButton)
+        {
+            const QPoint imagePoint = mapViewportPointToImage(mouseEvent->pos());
+            if ((imagePoint.x() >= 0) && (m_pendingDrawing.m_type != CameraDrawing::Freehand)) {
+                m_pendingDrawing.m_points[1] = drawingEndPoint(imagePoint, mouseEvent->modifiers());
+                updatePendingDrawingItem();
+            }
+            m_drawingDragging = false;
+            commitPendingDrawing();
+            return true;
+        }
+    }
+
+    return false;
+}
+
 void CameraGUI::updatePreviewOverlayItems()
 {
     clearPreviewOverlayItems();
@@ -2814,9 +3481,11 @@ void CameraGUI::updatePreviewOverlayItems()
 
         QPen pen(previewRect.m_color);
         pen.setWidthF(std::max(1.0, previewRect.m_lineWidth));
-        QGraphicsRectItem *rectItem = m_imageScene->addRect(clipped, pen, QBrush(Qt::NoBrush));
-        rectItem->setZValue(1.4);
-        m_previewOverlayItems.append(rectItem);
+        QGraphicsItem *shapeItem = previewRect.m_ellipse
+            ? static_cast<QGraphicsItem*>(m_imageScene->addEllipse(clipped, pen, QBrush(Qt::NoBrush)))
+            : static_cast<QGraphicsItem*>(m_imageScene->addRect(clipped, pen, QBrush(Qt::NoBrush)));
+        shapeItem->setZValue(1.4);
+        m_previewOverlayItems.append(shapeItem);
     }
 
     for (const CameraPostProcessor::PreviewTextLabel& previewLabel : m_lastPreviewTextLabels)
@@ -2916,6 +3585,80 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->fpsCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_fpsCombo_currentIndexChanged);
     QObject::connect(settingsUI()->intervalSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_intervalSpin_valueChanged);
     QObject::connect(settingsUI()->intervalUnitsCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_intervalUnitsCombo_currentIndexChanged);
+    QObject::connect(settingsUI()->thermalDecoderCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int index) {
+        m_settings.m_thermalDecoder = static_cast<CameraSettings::ThermalDecoder>(settingsUI()->thermalDecoderCombo->itemData(index).toInt());
+        updateThermalControls();
+        applySetting(QStringLiteral("thermalDecoder"));
+        if (m_settings.isQtCamera() && m_captureActive) {
+            setupQtCapture();
+        }
+    });
+    QObject::connect(settingsUI()->thermalPaletteCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int index) {
+        m_settings.m_thermalPalette = static_cast<CameraSettings::ThermalPalette>(settingsUI()->thermalPaletteCombo->itemData(index).toInt());
+        applySetting(QStringLiteral("thermalPalette"));
+    });
+    QObject::connect(settingsUI()->thermalUnitsCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int index) {
+        m_settings.m_thermalUnits = static_cast<CameraSettings::ThermalUnits>(settingsUI()->thermalUnitsCombo->itemData(index).toInt());
+        if (m_settingsDialog) {
+            m_settingsDialog->setThermalUnits(m_settings.m_thermalUnits == CameraSettings::ThermalUnitsFahrenheit);
+        }
+        applySetting(QStringLiteral("thermalUnits"));
+    });
+    QObject::connect(settingsUI()->thermalAutoRangeCheck, &QCheckBox::toggled, this, [this](bool checked) {
+        m_settings.m_thermalAutoRange = checked;
+        updateThermalControls();
+        applySetting(QStringLiteral("thermalAutoRange"));
+    });
+    QObject::connect(settingsUI()->thermalMinimumSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this](double value) {
+        m_settings.m_thermalMinimumC = value;
+        applySetting(QStringLiteral("thermalMinimumC"));
+    });
+    QObject::connect(settingsUI()->thermalMaximumSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this](double value) {
+        m_settings.m_thermalMaximumC = value;
+        applySetting(QStringLiteral("thermalMaximumC"));
+    });
+    QObject::connect(settingsUI()->thermalLowPercentileSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this](double value) {
+        m_settings.m_thermalAutoLowPercentile = value;
+        applySetting(QStringLiteral("thermalAutoLowPercentile"));
+    });
+    QObject::connect(settingsUI()->thermalHighPercentileSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this](double value) {
+        m_settings.m_thermalAutoHighPercentile = value;
+        applySetting(QStringLiteral("thermalAutoHighPercentile"));
+    });
+    QObject::connect(settingsUI()->thermalSmoothingSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this](double value) {
+        m_settings.m_thermalAutoRangeSmoothing = value;
+        applySetting(QStringLiteral("thermalAutoRangeSmoothing"));
+    });
+    QObject::connect(settingsUI()->thermalMarkerEnabledCheck, &QCheckBox::toggled, this, [this](bool checked) {
+        m_settings.m_thermalMarkerEnabled = checked;
+        updateThermalControls();
+        applySetting(QStringLiteral("thermalMarkerEnabled"));
+    });
+    QObject::connect(settingsUI()->thermalMarkerXSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this](double value) {
+        m_settings.m_thermalMarkerX = value / 100.0;
+        applySetting(QStringLiteral("thermalMarkerX"));
+    });
+    QObject::connect(settingsUI()->thermalMarkerYSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this](double value) {
+        m_settings.m_thermalMarkerY = value / 100.0;
+        applySetting(QStringLiteral("thermalMarkerY"));
+    });
+    QObject::connect(settingsUI()->thermalShowMinMaxCheck, &QCheckBox::toggled, this, [this](bool checked) {
+        m_settings.m_thermalShowMinMax = checked;
+        applySetting(QStringLiteral("thermalShowMinMax"));
+    });
+    QObject::connect(settingsUI()->thermalChartEnabledCheck, &QCheckBox::toggled, this, [this](bool checked) {
+        m_settings.m_thermalChartEnabled = checked;
+        updateThermalControls();
+        applySetting(QStringLiteral("thermalChartEnabled"));
+    });
+    QObject::connect(settingsUI()->thermalChartHistorySpin, QOverload<int>::of(&QSpinBox::valueChanged), this, [this](int value) {
+        m_settings.m_thermalChartHistorySeconds = value;
+        applySetting(QStringLiteral("thermalChartHistorySeconds"));
+    });
+    QObject::connect(settingsUI()->thermalChartIntervalSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, [this](int value) {
+        m_settings.m_thermalChartSampleIntervalMs = value;
+        applySetting(QStringLiteral("thermalChartSampleIntervalMs"));
+    });
     QObject::connect(settingsUI()->exposureSlider, &QSlider::valueChanged, this, &CameraGUI::on_exposureSlider_valueChanged);
     QObject::connect(settingsUI()->exposureSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_exposureSpin_valueChanged);
     QObject::connect(settingsUI()->exposureUnitsCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_exposureUnitsCombo_currentIndexChanged);
@@ -5556,6 +6299,8 @@ QList<QVideoFrame::PixelFormat> CameraVideoSurface::supportedPixelFormats(
         QVideoFrame::Format_BGRA32,
         QVideoFrame::Format_BGR32,
         QVideoFrame::Format_BGR24,
+        QVideoFrame::Format_YUYV,
+        QVideoFrame::Format_UYVY,
     };
 }
 
@@ -5572,6 +6317,19 @@ bool CameraVideoSurface::present(const QVideoFrame& frame)
 
     const QImage::Format imageFormat = QVideoFrame::imageFormatFromPixelFormat(mutableFrame.pixelFormat());
     QImage image;
+    CameraPipelineThermalRawFrame rawFrame;
+    if (m_captureRawFrames)
+    {
+        rawFrame.m_width = mutableFrame.width();
+        rawFrame.m_height = mutableFrame.height();
+        rawFrame.m_bytesPerLine = mutableFrame.bytesPerLine();
+        rawFrame.m_pixelFormat = static_cast<int>(mutableFrame.pixelFormat());
+        rawFrame.m_pixelFormatName = QString::number(rawFrame.m_pixelFormat);
+        const qsizetype byteCount = static_cast<qsizetype>(rawFrame.m_bytesPerLine) * rawFrame.m_height;
+        if ((byteCount > 0) && mutableFrame.bits()) {
+            rawFrame.m_bytes = QByteArray(reinterpret_cast<const char*>(mutableFrame.bits()), byteCount);
+        }
+    }
 
     if (imageFormat != QImage::Format_Invalid)
     {
@@ -5599,8 +6357,8 @@ bool CameraVideoSurface::present(const QVideoFrame& frame)
 
     mutableFrame.unmap();
 
-    if (!image.isNull()) {
-        emit frameAvailable(image);
+    if (!image.isNull() || !rawFrame.m_bytes.isEmpty()) {
+        emit frameAvailable(image, rawFrame);
     }
 
     return true;
@@ -5669,6 +6427,14 @@ void CameraGUI::setupQtCapture()
         return;
     }
 
+    // Radiometric UVC data is only available on the continuous raw video path;
+    // QImageCapture converts the frame and discards the packed temperature plane.
+    const bool useQtStillCapture = m_settings.isIntervalCaptureMode()
+        && (m_settings.m_thermalDecoder == CameraSettings::ThermalDecoderOff);
+    if (m_settings.isIntervalCaptureMode() && !useQtStillCapture) {
+        qDebug() << "CameraGUI::setupQtCapture: using continuous UVC frames for radiometric thermal decoding";
+    }
+
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     const QList<QCameraDevice> cameras = QMediaDevices::videoInputs();
     if (cameras.isEmpty()) {
@@ -5699,6 +6465,11 @@ void CameraGUI::setupQtCapture()
     QCameraFormat chosenFormat;
     bool exactFormat = false;
     bool sameResolutionFallback = false;
+    const bool thermalCapture = m_settings.m_thermalDecoder != CameraSettings::ThermalDecoderOff;
+    const auto isPackedThermalFormat = [](const QCameraFormat& format) {
+        return (format.pixelFormat() == QVideoFrameFormat::Format_YUYV)
+            || (format.pixelFormat() == QVideoFrameFormat::Format_UYVY);
+    };
     for (const QCameraFormat& fmt : selectedDevice.videoFormats())
     {
         if ((fmt.resolution().width()  == m_settings.m_resolutionWidth)
@@ -5707,9 +6478,15 @@ void CameraGUI::setupQtCapture()
             && (fmt.minFrameRate()     <= m_settings.m_framesPerSecond)
             )
         {
-            chosenFormat = fmt;
+            if (chosenFormat.isNull()
+                || (thermalCapture && isPackedThermalFormat(fmt) && !isPackedThermalFormat(chosenFormat)))
+            {
+                chosenFormat = fmt;
+            }
             exactFormat = true;
-            break;
+            if (!thermalCapture || isPackedThermalFormat(chosenFormat)) {
+                break;
+            }
         }
     }
 
@@ -5723,9 +6500,13 @@ void CameraGUI::setupQtCapture()
                 continue;
             }
 
-            if (chosenFormat.isNull()
-                || (cameraFormatFpsDistance(fmt, m_settings.m_framesPerSecond)
-                    < cameraFormatFpsDistance(chosenFormat, m_settings.m_framesPerSecond)))
+            const bool preferPacked = thermalCapture && isPackedThermalFormat(fmt)
+                && (chosenFormat.isNull() || !isPackedThermalFormat(chosenFormat));
+            const bool samePacking = chosenFormat.isNull()
+                || (isPackedThermalFormat(fmt) == isPackedThermalFormat(chosenFormat));
+            if (chosenFormat.isNull() || preferPacked
+                || (samePacking && (cameraFormatFpsDistance(fmt, m_settings.m_framesPerSecond)
+                    < cameraFormatFpsDistance(chosenFormat, m_settings.m_framesPerSecond))))
             {
                 chosenFormat = fmt;
                 sameResolutionFallback = true;
@@ -5779,7 +6560,7 @@ void CameraGUI::setupQtCapture()
 
     m_captureSession->setCamera(m_qtCamera);
 
-    if (m_settings.isIntervalCaptureMode())
+    if (useQtStillCapture)
     {
         m_imageCapture = new QImageCapture(this);
         m_captureSession->setImageCapture(m_imageCapture);
@@ -5806,7 +6587,7 @@ void CameraGUI::setupQtCapture()
     }
 
     m_qtCamera->start();
-    if (m_settings.isIntervalCaptureMode()) {
+    if (useQtStillCapture) {
         m_qtStillCaptureTimer.start(m_settings.getCaptureIntervalMs());
     }
 
@@ -5917,7 +6698,7 @@ void CameraGUI::setupQtCapture()
     m_imageCapture = nullptr;
     m_videoSurface = nullptr;
 
-    if (m_settings.isIntervalCaptureMode())
+    if (useQtStillCapture)
     {
         m_imageCapture = new QCameraImageCapture(m_qtCamera, this);
         m_imageCapture->setCaptureDestination(QCameraImageCapture::CaptureToBuffer);
@@ -5948,6 +6729,9 @@ void CameraGUI::setupQtCapture()
         QCameraViewfinderSettings vfSettings;
         vfSettings.setResolution(m_settings.m_resolutionWidth, m_settings.m_resolutionHeight);
         vfSettings.setMaximumFrameRate(m_settings.m_framesPerSecond);
+        if (m_settings.m_thermalDecoder != CameraSettings::ThermalDecoderOff) {
+            vfSettings.setPixelFormat(QVideoFrame::Format_YUYV);
+        }
         m_qtCamera->setViewfinderSettings(vfSettings);
     }
 
@@ -5966,13 +6750,14 @@ void CameraGUI::setupQtCapture()
 
     if (m_videoSurface)
     {
+        m_videoSurface->setCaptureRawFrames(m_settings.m_thermalDecoder != CameraSettings::ThermalDecoderOff);
         // Queued connection: present() may be called from the camera's internal thread
         connect(m_videoSurface, &CameraVideoSurface::frameAvailable,
                 this, &CameraGUI::onQt5VideoFrame, Qt::QueuedConnection);
     }
 
     m_qtCamera->start();
-    if (m_settings.isIntervalCaptureMode()) {
+    if (useQtStillCapture) {
         m_qtStillCaptureTimer.start(m_settings.getCaptureIntervalMs());
     }
 
@@ -6254,10 +7039,23 @@ void CameraGUI::processPendingQtVideoFrame()
     // needing conversion (YUV/planar) fall back to toImage(), which we can't pool
     // without reimplementing Qt's colour conversion.
     QImage image;
+    CameraPipelineThermalRawFrame rawFrame;
     {
         QVideoFrame mapped(frame);
         if (mapped.map(QVideoFrame::ReadOnly))
         {
+            if (m_settings.m_thermalDecoder != CameraSettings::ThermalDecoderOff)
+            {
+                rawFrame.m_width = mapped.width();
+                rawFrame.m_height = mapped.height();
+                rawFrame.m_bytesPerLine = mapped.bytesPerLine(0);
+                rawFrame.m_pixelFormat = static_cast<int>(mapped.pixelFormat());
+                rawFrame.m_pixelFormatName = QVideoFrameFormat::pixelFormatToString(mapped.pixelFormat());
+                const qsizetype byteCount = static_cast<qsizetype>(rawFrame.m_bytesPerLine) * rawFrame.m_height;
+                if ((byteCount > 0) && mapped.bits(0)) {
+                    rawFrame.m_bytes = QByteArray(reinterpret_cast<const char*>(mapped.bits(0)), byteCount);
+                }
+            }
             const QImage::Format fmt = QVideoFrameFormat::imageFormatFromPixelFormat(mapped.pixelFormat());
             if ((fmt != QImage::Format_Invalid) && (mapped.planeCount() == 1))
             {
@@ -6278,7 +7076,7 @@ void CameraGUI::processPendingQtVideoFrame()
     if (image.isNull()) {
         image = frame.toImage();
     }
-    submitQtImageFrame(image);
+    submitQtImageFrame(image, -1, -1, rawFrame);
 
     if (m_pendingQtVideoFrame.isValid()) {
         QMetaObject::invokeMethod(this, &CameraGUI::processPendingQtVideoFrame, Qt::QueuedConnection);
@@ -6287,9 +7085,9 @@ void CameraGUI::processPendingQtVideoFrame()
     }
 }
 #else
-void CameraGUI::onQt5VideoFrame(const QImage& image)
+void CameraGUI::onQt5VideoFrame(const QImage& image, const CameraPipelineThermalRawFrame& rawFrame)
 {
-    submitQtImageFrame(image);
+    submitQtImageFrame(image, -1, -1, rawFrame);
 }
 #endif
 
@@ -6300,9 +7098,10 @@ void CameraGUI::onQtImageCaptured(int id, const QImage& image)
     submitQtImageFrame(image);
 }
 
-void CameraGUI::submitQtImageFrame(const QImage& image, qint64 playbackPositionMs, int playbackFrameNumber)
+void CameraGUI::submitQtImageFrame(const QImage& image, qint64 playbackPositionMs, int playbackFrameNumber,
+    const CameraPipelineThermalRawFrame& rawFrame)
 {
-    if (image.isNull()) {
+    if (image.isNull() && rawFrame.m_bytes.isEmpty()) {
         return;
     }
 
@@ -6311,6 +7110,7 @@ void CameraGUI::submitQtImageFrame(const QImage& image, qint64 playbackPositionM
     const int hdrExposureCount = currentQtHdrExposureCount();
 
     CameraFrameAligner *frameAligner = m_camera->getFrameAligner();
+    CameraThermalProcessor *thermalProcessor = m_camera->getThermalProcessor();
     if (frameAligner) {
         CameraPipelineFramePtr frame(new CameraPipelineFrame);
         frame->m_image = image;
@@ -6324,7 +7124,12 @@ void CameraGUI::submitQtImageFrame(const QImage& image, qint64 playbackPositionM
         populateFrameExposureMetadata(*frame, exposureTimeMs, hdrExposureIndex, hdrExposureCount, captureDateTime);
         frame->m_captureEpoch = m_captureEpoch;
         frame->m_manualPreviewFrame = !m_captureActive;
-        frameAligner->submitFrame(frame);
+        frame->m_thermal.m_rawFrame = rawFrame;
+        if ((m_settings.m_thermalDecoder != CameraSettings::ThermalDecoderOff) && thermalProcessor) {
+            thermalProcessor->submitFrame(frame);
+        } else {
+            frameAligner->submitFrame(frame);
+        }
     }
 
     if (isHdrStackingActiveForQt()) {
@@ -6345,6 +7150,27 @@ void CameraGUI::triggerQtStillCapture()
     if (m_imageCapture->isReadyForCapture()) {
         m_imageCapture->capture();
     }
+}
+
+void CameraGUI::updateThermalControls()
+{
+    const bool enabled = m_settings.m_thermalDecoder != CameraSettings::ThermalDecoderOff;
+    settingsUI()->thermalPaletteCombo->setEnabled(enabled);
+    settingsUI()->thermalUnitsCombo->setEnabled(enabled);
+    settingsUI()->thermalAutoRangeCheck->setEnabled(enabled);
+    settingsUI()->thermalMinimumSpin->setEnabled(enabled && !m_settings.m_thermalAutoRange);
+    settingsUI()->thermalMaximumSpin->setEnabled(enabled && !m_settings.m_thermalAutoRange);
+    settingsUI()->thermalLowPercentileSpin->setEnabled(enabled && m_settings.m_thermalAutoRange);
+    settingsUI()->thermalHighPercentileSpin->setEnabled(enabled && m_settings.m_thermalAutoRange);
+    settingsUI()->thermalSmoothingSpin->setEnabled(enabled && m_settings.m_thermalAutoRange);
+    settingsUI()->thermalMarkerEnabledCheck->setEnabled(enabled);
+    settingsUI()->thermalMarkerXSpin->setEnabled(enabled && m_settings.m_thermalMarkerEnabled);
+    settingsUI()->thermalMarkerYSpin->setEnabled(enabled && m_settings.m_thermalMarkerEnabled);
+    settingsUI()->thermalShowMinMaxCheck->setEnabled(enabled);
+    settingsUI()->thermalChartEnabledCheck->setEnabled(enabled);
+    settingsUI()->thermalChartHistorySpin->setEnabled(enabled && m_settings.m_thermalChartEnabled);
+    settingsUI()->thermalChartIntervalSpin->setEnabled(enabled && m_settings.m_thermalChartEnabled);
+    settingsUI()->thermalChartGroup->setVisible(enabled && m_settings.m_thermalChartEnabled);
 }
 
 void CameraGUI::updateCameraSettingsVisibility()
@@ -11114,6 +11940,36 @@ bool CameraGUI::eventFilter(QObject *watched, QEvent *event)
             const double factor = (wheelEvent->angleDelta().y() > 0) ? 1.25 : 1.0 / 1.25;
             ui->imageView->scale(factor, factor);
             updateImageViewSmoothing();
+            return true;
+        }
+
+        if ((event->type() == QEvent::MouseButtonDblClick)
+            && m_settings.m_thermalMarkerEnabled && m_lastThermal.m_valid)
+        {
+            const QMouseEvent *mouseEvent = static_cast<QMouseEvent*>(event);
+            if (mouseEvent->button() == Qt::LeftButton)
+            {
+                const QPointF imagePoint = ui->imageView->mapToScene(mouseEvent->pos());
+                bool invertible = false;
+                const QTransform imageToSensor = m_lastThermal.m_sensorToImage.inverted(&invertible);
+                const QPointF sensorPoint = invertible ? imageToSensor.map(imagePoint) : imagePoint;
+                const int width = m_lastThermal.m_temperatureC.cols;
+                const int height = m_lastThermal.m_temperatureC.rows;
+                if ((width > 1) && (height > 1))
+                {
+                    m_settings.m_thermalMarkerX = qBound(0.0, sensorPoint.x() / (width - 1), 1.0);
+                    m_settings.m_thermalMarkerY = qBound(0.0, sensorPoint.y() / (height - 1), 1.0);
+                    const QSignalBlocker xBlocker(settingsUI()->thermalMarkerXSpin);
+                    const QSignalBlocker yBlocker(settingsUI()->thermalMarkerYSpin);
+                    settingsUI()->thermalMarkerXSpin->setValue(m_settings.m_thermalMarkerX * 100.0);
+                    settingsUI()->thermalMarkerYSpin->setValue(m_settings.m_thermalMarkerY * 100.0);
+                    applySettings({QStringLiteral("thermalMarkerX"), QStringLiteral("thermalMarkerY")});
+                }
+                return true;
+            }
+        }
+
+        if (handleDrawingEvent(event)) {
             return true;
         }
 

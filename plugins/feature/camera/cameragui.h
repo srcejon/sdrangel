@@ -66,14 +66,20 @@ class CameraSettingsDialog;
 class CameraDetectionHistory;
 class CameraHistogramDialog;
 class CameraOpticalSpectrumDialog;
+class ButtonSwitch;
 class Message;
 class QLabel;
+class QButtonGroup;
+class QCheckBox;
 class QDialog;
 class QDoubleSpinBox;
+class QFontComboBox;
+class QGraphicsItem;
 class QGraphicsRectItem;
 class QMdiSubWindow;
 class QProgressDialog;
 class QPushButton;
+class QSpinBox;
 class QTableWidget;
 class QTableWidgetItem;
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
@@ -104,14 +110,16 @@ public:
         QAbstractVideoBuffer::HandleType handleType = QAbstractVideoBuffer::NoHandle) const override;
 
     bool present(const QVideoFrame& frame) override;
+    void setCaptureRawFrames(bool capture) { m_captureRawFrames = capture; }
 
 signals:
-    void frameAvailable(const QImage& image);
+    void frameAvailable(const QImage& image, const CameraPipelineThermalRawFrame& rawFrame);
 
 private:
     // Recycles the per-frame QImage backing buffer, instead of .copy() allocating
     // one for every presented frame.
     CameraImagePool m_imagePool;
+    bool m_captureRawFrames = false;
 };
 #endif
 
@@ -176,6 +184,17 @@ private:
         PreviewDrawModeNone = 0,
         PreviewDrawModeMotionExclusion,
         PreviewDrawModeDetectionRoi
+    };
+
+    enum DrawingTool
+    {
+        DrawingToolSelect = 0,
+        DrawingToolLine,
+        DrawingToolArrow,
+        DrawingToolRectangle,
+        DrawingToolEllipse,
+        DrawingToolFreehand,
+        DrawingToolText
     };
 
     enum CameraComboRole
@@ -260,6 +279,7 @@ private:
     CameraHistogramData m_lastHistogramData; ///< Last histogram computed after image processing but before detection/overlays
     CameraOpticalSpectrumData m_lastOpticalSpectrumData; ///< Last optical spectrum extracted from the detection RoI after image processing
     QVector<CameraPipelineStarDetection> m_lastStarDetections;
+    CameraPipelineThermal m_lastThermal;
     QVector<CameraPostProcessor::PreviewTextLabel> m_lastPreviewTextLabels;
     QVector<CameraPostProcessor::PreviewRectItem> m_lastPreviewRectItems;
     QVector<CameraPostProcessor::WindowOverlayFrame> m_lastPreviewImageOverlays;
@@ -317,6 +337,30 @@ private:
     QGraphicsScene *m_imageScene;         ///< Scene used by the QGraphicsView image display
     CameraImageGraphicsItem *m_imagePixmapItem; ///< Scene item holding the camera frame
     QList<QGraphicsItem *> m_previewOverlayItems;
+    QList<QGraphicsItem *> m_drawingOverlayItems;
+    QGraphicsItem *m_activeDrawingItem = nullptr;
+    CameraDrawing m_pendingDrawing;
+    DrawingTool m_drawingTool = DrawingToolSelect;
+    bool m_drawingDragging = false;
+    bool m_drawingOverlayDirty = true;
+    QSize m_drawingOverlayImageSize;
+    QList<QList<CameraDrawing>> m_drawingUndoStack;
+    QList<QList<CameraDrawing>> m_drawingRedoStack;
+    ButtonSwitch *m_drawingsButton = nullptr;
+    QWidget *m_drawingToolbar = nullptr;
+    QButtonGroup *m_drawingToolGroup = nullptr;
+    QDoubleSpinBox *m_drawingLineWidthSpin = nullptr;
+    QToolButton *m_drawingStrokeColorButton = nullptr;
+    QCheckBox *m_drawingFillCheck = nullptr;
+    QToolButton *m_drawingFillColorButton = nullptr;
+    QFontComboBox *m_drawingFontCombo = nullptr;
+    QSpinBox *m_drawingFontSizeSpin = nullptr;
+    QToolButton *m_drawingBoldButton = nullptr;
+    QToolButton *m_drawingItalicButton = nullptr;
+    QToolButton *m_drawingUndoButton = nullptr;
+    QToolButton *m_drawingRedoButton = nullptr;
+    QToolButton *m_drawingDeleteButton = nullptr;
+    QToolButton *m_drawingClearButton = nullptr;
     QList<QGraphicsRectItem *> m_motionExclusionRectItems;
     QGraphicsRectItem *m_detectionRoiRectItem = nullptr;
     QGraphicsRectItem *m_previewDrawRectItem = nullptr;
@@ -377,7 +421,21 @@ private:
     Ui::CameraSettingsDialog *settingsUI() const;
     bool handleMessage(const Message& message);
     void makeUIConnections();
+    void createDrawingControls();
     void createToolbarFlowLayout();
+    void updateDrawingControls();
+    void updateDrawingOverlayItems();
+    void clearDrawingOverlayItems();
+    void setDrawingTool(DrawingTool tool);
+    bool handleDrawingEvent(QEvent *event);
+    void updatePendingDrawingItem();
+    void cancelPendingDrawing();
+    void commitPendingDrawing();
+    void pushDrawingUndoState();
+    void applyDrawings();
+    CameraDrawing drawingWithCurrentStyle(CameraDrawing::Type type) const;
+    QPointF normalizedDrawingPoint(const QPoint& imagePoint) const;
+    QPointF drawingEndPoint(const QPoint& imagePoint, Qt::KeyboardModifiers modifiers) const;
     void updateCameraSettingsVisibility();
     void updateHistogramStretchControls();
     void updateMotionExclusionRectsTable();
@@ -455,7 +513,8 @@ private:
     void updateVideoFileControls();
     void updateVideoPreRecordBufferMemoryLabel();
     void initialiseYoloPathCombos();
-    void submitQtImageFrame(const QImage& image, qint64 playbackPositionMs = -1, int playbackFrameNumber = -1);
+    void submitQtImageFrame(const QImage& image, qint64 playbackPositionMs = -1, int playbackFrameNumber = -1,
+        const CameraPipelineThermalRawFrame& rawFrame = CameraPipelineThermalRawFrame());
     bool isHdrStackingSupported() const;
     bool isHdrStackingActiveForQt() const;
     void resetQtHdrBracketState();
@@ -489,6 +548,7 @@ private:
     void applyImageToolTip();
     void applyVideoToolTip();
     void updatePostProcessWhiteBalanceControls();
+    void updateThermalControls();
     void setSelectedCamera(const QString& protocol, const QString& cameraId, const QString& description,
                            const QString& alpacaHost = QString(), quint16 alpacaPort = 0);
     CameraInfo comboCameraInfo(int index) const;
@@ -908,7 +968,7 @@ private slots:
     void onQtVideoFrame(const QVideoFrame& frame);
     void processPendingQtVideoFrame();
 #else
-    void onQt5VideoFrame(const QImage& image);
+    void onQt5VideoFrame(const QImage& image, const CameraPipelineThermalRawFrame& rawFrame);
 #endif
     void onQtImageCaptured(int id, const QImage& image);
     void triggerQtStillCapture();

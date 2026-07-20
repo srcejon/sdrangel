@@ -981,6 +981,12 @@ void CameraFrameStacker::processNewFrame(const CameraPipelineFramePtr& frame)
 
 bool CameraFrameStacker::canPassThroughFrame(const CameraPipelineFrame& inputFrame) const
 {
+    // Keep each radiometric map tied to one physical exposure. Temperature-map
+    // stacking can be added later with explicitly defined measurement semantics.
+    if (inputFrame.m_thermal.m_valid) {
+        return inputFrame.hasImageData();
+    }
+
     const bool hdrStackingEnabled = m_settings.isHdrStackingEnabled() && (m_settings.getHdrExposureCount() > 1);
     const bool stackEnabled = hdrStackingEnabled
         || (m_settings.m_stackEnabled && (m_settings.m_stackFrameCount > 1));

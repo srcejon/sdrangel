@@ -162,6 +162,23 @@ if(OpenCV_cudaarithm_FOUND AND OpenCV_cudaimgproc_FOUND AND OpenCV_cudawarping_F
     target_compile_definitions(featurecamera_cloud_tests PRIVATE CAMERA_OPENCV_CUDA_CLOUD_DETECTION)
 endif()
 
+add_executable(featurecamera_thermal_tests EXCLUDE_FROM_ALL
+    camerathermaltests.cpp
+    ../camerathermaldecoder.cpp
+    ../camerathermaldecoder.h
+    ../camerapipelineframe.h
+    ../camerasettings.h
+)
+target_include_directories(featurecamera_thermal_tests PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/..
+    ${OpenCV_INCLUDE_DIRS}
+)
+target_link_libraries(featurecamera_thermal_tests PRIVATE
+    Qt::Core
+    Qt::Gui
+    ${camera_OpenCV_LIBS}
+)
+
 target_include_directories(featurecamera_cloud_tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/..
     ${CMAKE_SOURCE_DIR}/sdrbase

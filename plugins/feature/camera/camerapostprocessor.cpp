@@ -953,6 +953,7 @@ void CameraPostProcessor::saveCurrentImage()
     CameraPipelineFramePtr frame(new CameraPipelineFrame(m_lastFrame));
     frame->m_manualPreviewFrame = true;
     frame->m_saveCurrentImage = true;
+    frame->m_postProcessedImage = applyPostProcessing(*frame, true, nullptr, nullptr, nullptr, true);
     m_nextStageQueue->push(Camera::MsgProcessFrame::create(frame));
 }
 
@@ -974,6 +975,8 @@ void CameraPostProcessor::applySettings(const CameraSettings& settings, const QL
         "motionBoxColor", "starColor", "showStarDetectionBoxes",
         "plateSolveLabelMode", "plateSolveLabelHideSyntheticNames", "yoloEnabled",
         "overlaySpectrum", "spectrumDevice", "spectrumOffsetX", "spectrumOffsetY", "spectrumScale", "spectrumOverlays", "windowOverlays",
+        "drawingsEnabled", "drawingLineWidth", "drawingStrokeColor", "drawingFillEnabled", "drawingFillColor",
+        "drawingFontFamily", "drawingFontPixelSize", "drawingFontBold", "drawingFontItalic", "drawings",
         "latitude", "longitude", "altitude", "azimuth", "elevation", "roll", "directionApplyToCurrentImage", "fov",
         "lensProjection", "lensCenterOffsetX", "lensCenterOffsetY", "lensDistortionK1",
         "playbackProjectionEnabled", "playbackProjectionX", "playbackProjectionY", "playbackProjectionWidth", "playbackProjectionHeight",
@@ -1319,7 +1322,8 @@ void CameraPostProcessor::processNewFrame(const CameraPipelineFramePtr& frame)
     QVector<CameraPipelineTrackedObject> trackedObjects;
     const QImage preview = applyPostProcessing(*frame, false, &previewTextLabels, &previewRectItems, &trackedObjects, false);
     const QVector<WindowOverlayFrame> previewImageOverlays = currentImageOverlays();
-    if (!previewTextLabels.isEmpty() || !previewRectItems.isEmpty() || !previewImageOverlays.isEmpty())
+    const bool hasDrawings = m_settings.m_drawingsEnabled && !m_settings.m_drawings.isEmpty();
+    if (!previewTextLabels.isEmpty() || !previewRectItems.isEmpty() || !previewImageOverlays.isEmpty() || hasDrawings)
     {
         // Pooled deep copy of the preview so the rect/text items are drawn onto a
         // separate buffer from the one sent to the GUI (recycled, not malloc'd
@@ -1343,6 +1347,9 @@ void CameraPostProcessor::processNewFrame(const CameraPipelineFramePtr& frame)
         }
         applyPreviewRectItems(processed, previewRectItems);
         applyPreviewTextLabels(processed, previewTextLabels);
+        if (hasDrawings) {
+            applyDrawingOverlay(processed);
+        }
         frame->m_postProcessedImage = processed;
     }
     else
@@ -1378,12 +1385,20 @@ void CameraPostProcessor::reportFrameToGUI(const QImage& image, const CameraPipe
         }
     }
     if (m_msgQueueToFeature) {
+        CameraPipelineThermal thermalSummary = frame.m_thermal;
+        thermalSummary.m_rawFrame = CameraPipelineThermalRawFrame();
+        thermalSummary.m_temperatureC.release();
         m_msgQueueToFeature->push(MsgReportFrameSummary::create(
             frame.m_captureDateTime,
             detectedObjectClassesForReport(frame.m_detections),
-            !frame.m_motionBoxes.isEmpty()));
+            !frame.m_motionBoxes.isEmpty(),
+            thermalSummary));
     }
     if (m_msgQueueToGUI) {
+        CameraPipelineThermal thermal = frame.m_thermal;
+        thermal.m_sensorToImage = frame.m_imageTransform.isValid()
+            ? frame.m_imageTransform.m_opticalToImage
+            : QTransform();
         m_msgQueueToGUI->push(MsgReportFrame::create(
             image,
             frame.m_histogramData,
@@ -1396,6 +1411,7 @@ void CameraPostProcessor::reportFrameToGUI(const QImage& image, const CameraPipe
             frame.m_detections,
             frame.m_meteorPhotometry,
             trackedObjects,
+            thermal,
             frame.m_captureDateTime,
             frame.m_captureEpoch,
             frame.m_manualPreviewFrame,
@@ -1644,7 +1660,11 @@ void CameraPostProcessor::applyPreviewRectItems(QImage& image, const QVector<Pre
         QPen pen(item.m_color);
         pen.setWidthF(std::max(1.0, item.m_lineWidth));
         painter.setPen(pen);
-        painter.drawRect(item.m_rect);
+        if (item.m_ellipse) {
+            painter.drawEllipse(item.m_rect);
+        } else {
+            painter.drawRect(item.m_rect);
+        }
     }
 
     PROFILER_STOP(__FUNCTION__);
@@ -1770,6 +1790,74 @@ void CameraPostProcessor::applyWindowOverlays(QImage& image) const
     }
 
     PROFILER_STOP(__FUNCTION__);
+}
+
+void CameraPostProcessor::applyDrawingOverlay(QImage& image) const
+{
+    if (!m_settings.m_drawingsEnabled || m_settings.m_drawings.isEmpty() || image.isNull()) {
+        return;
+    }
+
+    QPainter painter(&image);
+    CameraDrawingRenderer::drawAll(painter, m_settings.m_drawings, image.size());
+}
+
+void CameraPostProcessor::applyThermalOverlay(
+    const CameraPipelineFrame& frame,
+    QImage& image,
+    bool drawLabels,
+    QVector<PreviewTextLabel> *previewTextLabels,
+    QVector<PreviewRectItem> *previewRectItems) const
+{
+    if (!frame.m_thermal.m_valid || !m_settings.m_thermalMarkerEnabled) {
+        return;
+    }
+
+    auto displayTemperature = [this](double celsius) {
+        if (m_settings.m_thermalUnits == CameraSettings::ThermalUnitsFahrenheit) {
+            return QStringLiteral("%1 F").arg(celsius * 9.0 / 5.0 + 32.0, 0, 'f', 1);
+        }
+        return QStringLiteral("%1 C").arg(celsius, 0, 'f', 1);
+    };
+    auto appendMarker = [&](const QPoint& thermalPoint, double temperature, const QColor& color, const QString& prefix) {
+        const QPointF imagePoint = frame.mapOpticalToImage(thermalPoint);
+        PreviewRectItem marker;
+        marker.m_rect = QRectF(imagePoint.x() - 6.0, imagePoint.y() - 6.0, 12.0, 12.0);
+        marker.m_color = color;
+        marker.m_lineWidth = 2.0;
+        marker.m_ellipse = true;
+
+        PreviewTextLabel label;
+        label.m_text = prefix + displayTemperature(temperature);
+        label.m_position = imagePoint + QPointF(5.0, -8.0);
+        label.m_color = color;
+        label.m_fontPointSize = 9.0;
+
+        if (drawLabels)
+        {
+            if (previewRectItems) {
+                previewRectItems->append(marker);
+            }
+            if (previewTextLabels) {
+                previewTextLabels->append(label);
+            }
+        }
+        else
+        {
+            applyPreviewRectItems(image, {marker});
+            applyPreviewTextLabels(image, {label});
+        }
+    };
+
+    appendMarker(frame.m_thermal.m_markerPosition, frame.m_thermal.m_markerTemperatureC,
+        QColor(255, 255, 255), QString());
+    if (m_settings.m_thermalShowMinMax)
+    {
+        appendMarker(frame.m_thermal.m_minimumPosition, frame.m_thermal.m_minimumC,
+            QColor(80, 160, 255), QStringLiteral("Min "));
+        appendMarker(frame.m_thermal.m_maximumPosition, frame.m_thermal.m_maximumC,
+            QColor(255, 80, 80), QStringLiteral("Max "));
+    }
 }
 
 QVector<CameraPostProcessor::WindowOverlayFrame> CameraPostProcessor::currentImageOverlays() const
@@ -2593,8 +2681,10 @@ QImage CameraPostProcessor::applyPostProcessing(
         || (m_settings.m_cloudDetect && m_settings.m_cloudShowOverlay && frame.m_cloud.m_valid)
         || (m_settings.m_yoloEnabled && !frame.m_detections.isEmpty())
         || !frame.m_starDetections.isEmpty()
+        || (frame.m_thermal.m_valid && m_settings.m_thermalMarkerEnabled)
         || (drawImageOverlays && needsSpectrumOverlay)
-        || (drawImageOverlays && needsWindowOverlays);
+        || (drawImageOverlays && needsWindowOverlays)
+        || (drawImageOverlays && m_settings.m_drawingsEnabled && !m_settings.m_drawings.isEmpty());
 
     if (!needsAny) {
         return input;
@@ -2629,6 +2719,9 @@ QImage CameraPostProcessor::applyPostProcessing(
     if (!frame.m_starDetections.isEmpty()) { 
         applyStarOverlay(result, frame.m_starDetections, drawPreviewText, previewTextLabels); 
     }
+    if (frame.m_thermal.m_valid && m_settings.m_thermalMarkerEnabled) {
+        applyThermalOverlay(frame, result, drawPreviewText, previewTextLabels, previewRectItems);
+    }
     if (m_settings.m_equatorialGrid || m_settings.m_altAzGrid) {
         applySkyGridOverlay(frame, result, drawPreviewText, previewTextLabels);
     }
@@ -2649,6 +2742,9 @@ QImage CameraPostProcessor::applyPostProcessing(
     }
     if (needsTextOverlay) { 
         applyTextOverlay(result, overlayTextDocument); 
+    }
+    if (drawImageOverlays && m_settings.m_drawingsEnabled) {
+        applyDrawingOverlay(result);
     }
 
     PROFILER_STOP("CameraPostProcessor::applyPostProcessing");

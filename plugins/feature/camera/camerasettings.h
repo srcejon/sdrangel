@@ -30,6 +30,8 @@
 #include <QString>
 #include <QStringList>
 
+#include "cameradrawing.h"
+
 class Serializable;
 
 /**
@@ -159,6 +161,30 @@ struct CameraSettings
         SensorOpticalAxisAuto = 0,
         SensorOpticalAxisRear,
         SensorOpticalAxisFront
+    };
+
+    enum ThermalDecoder
+    {
+        ThermalDecoderOff = 0,
+        ThermalDecoderAuto,
+        ThermalDecoderThermalMasterP2,
+        ThermalDecoderTopdonTc001
+    };
+
+    enum ThermalPalette
+    {
+        ThermalPaletteWhiteHot = 0,
+        ThermalPaletteBlackHot,
+        ThermalPaletteIron,
+        ThermalPaletteInferno,
+        ThermalPaletteTurbo,
+        ThermalPaletteViridis
+    };
+
+    enum ThermalUnits
+    {
+        ThermalUnitsCelsius = 0,
+        ThermalUnitsFahrenheit
     };
 
     enum HistogramStretch
@@ -709,6 +735,24 @@ struct CameraSettings
     PlateSolveApplyMode m_plateSolveApplyMode; ///< Which solved values should be copied back into camera settings
     int    m_starCatalogDiskCacheSizeGb; ///< Maximum Siril/Gaia region disk cache size in GB; 0 = unlimited
 
+    // Radiometric UVC thermal-camera settings
+    ThermalDecoder m_thermalDecoder;
+    ThermalPalette m_thermalPalette;
+    ThermalUnits m_thermalUnits;
+    bool m_thermalAutoRange;
+    double m_thermalMinimumC;
+    double m_thermalMaximumC;
+    double m_thermalAutoLowPercentile;
+    double m_thermalAutoHighPercentile;
+    double m_thermalAutoRangeSmoothing;
+    bool m_thermalMarkerEnabled;
+    double m_thermalMarkerX;
+    double m_thermalMarkerY;
+    bool m_thermalShowMinMax;
+    bool m_thermalChartEnabled;
+    int m_thermalChartHistorySeconds;
+    int m_thermalChartSampleIntervalMs;
+
     // Optical spectrum (diffraction grating spectroscopy) settings; opticalSpectrum keys kept for compatibility
     enum OpticalSpectrumDirection {
         OpticalSpectrumDirectionAuto,    ///< Determine the red end from the red/blue channel centroids
@@ -744,6 +788,18 @@ struct CameraSettings
     double m_spectrumScale;     ///< Legacy single-spectrum scale; m_spectrumOverlays is the active model
     QList<SpectrumOverlay> m_spectrumOverlays; ///< Spectrum view captures to composite over the post-processed frame
     QList<WindowOverlay> m_windowOverlays; ///< GUI window or rollup captures to composite over the post-processed frame
+
+    // Persistent image annotations. Coordinates are normalized to the image dimensions.
+    bool m_drawingsEnabled;
+    double m_drawingLineWidth;
+    QColor m_drawingStrokeColor;
+    bool m_drawingFillEnabled;
+    QColor m_drawingFillColor;
+    QString m_drawingFontFamily;
+    int m_drawingFontPixelSize;
+    bool m_drawingFontBold;
+    bool m_drawingFontItalic;
+    QList<CameraDrawing> m_drawings;
 
     // YOLO object-detection settings
     enum YoloInferenceMode {

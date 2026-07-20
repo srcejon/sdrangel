@@ -81,6 +81,52 @@ struct CameraPipelineDirection
     bool m_valid = false;
 };
 
+/** Raw mapped bytes and decoded measurements for a radiometric UVC frame. */
+struct CameraPipelineThermalRawFrame
+{
+    QByteArray m_bytes;
+    int m_width = 0;
+    int m_height = 0;
+    int m_bytesPerLine = 0;
+    int m_pixelFormat = -1;
+    QString m_pixelFormatName;
+};
+
+struct CameraPipelineThermal
+{
+    CameraPipelineThermalRawFrame m_rawFrame;
+    cv::Mat m_temperatureC; // CV_32FC1, sensor coordinates
+    QString m_decoderName;
+    QString m_status;
+    QPoint m_markerPosition;
+    QPoint m_minimumPosition;
+    QPoint m_maximumPosition;
+    float m_markerTemperatureC = 0.0f;
+    float m_minimumC = 0.0f;
+    float m_maximumC = 0.0f;
+    float m_meanC = 0.0f;
+    bool m_valid = false;
+    bool m_calibrationFrame = false;
+    QTransform m_sensorToImage;
+
+    void clearDecoded()
+    {
+        m_temperatureC.release();
+        m_decoderName.clear();
+        m_status.clear();
+        m_markerPosition = QPoint();
+        m_minimumPosition = QPoint();
+        m_maximumPosition = QPoint();
+        m_markerTemperatureC = 0.0f;
+        m_minimumC = 0.0f;
+        m_maximumC = 0.0f;
+        m_meanC = 0.0f;
+        m_valid = false;
+        m_calibrationFrame = false;
+        m_sensorToImage.reset();
+    }
+};
+
 /**
  * \brief Photometry result for one detected meteor object.
  *
@@ -425,6 +471,7 @@ struct CameraPipelineFrame
     CameraOpticalSpectrumData m_opticalSpectrumData;
     QDateTime m_captureDateTime;
     CameraPipelineDirection m_captureDirection;
+    CameraPipelineThermal m_thermal;
     quint64 m_captureEpoch = 0;
     qint64 m_pipelineInputWallClockMs = 0;
     bool m_manualPreviewFrame = false;

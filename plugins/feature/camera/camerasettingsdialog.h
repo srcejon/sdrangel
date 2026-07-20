@@ -71,6 +71,9 @@ public:
     Ui::CameraSettingsDialog *getUI() const { return ui; }
     void appendTemperatureSample(const QDateTime& timestamp, double temperatureC);
     void appendCloudCoverageSample(const QDateTime& timestamp, double coveragePercent);
+    void appendThermalSample(const QDateTime& timestamp, double temperatureC, int historySeconds,
+        int sampleIntervalMs, bool fahrenheit);
+    void setThermalUnits(bool fahrenheit);
     void clearCameraStatus();
     void shrinkToVisibleContent();
 
@@ -88,6 +91,12 @@ private:
     CameraSettingsDateTimeAxis *m_cloudAxisX;
     CameraSettingsValueAxis *m_cloudAxisY;
     qint64 m_lastCloudSampleMs;
+    CameraSettingsChart *m_thermalChart;
+    CameraSettingsLineSeries *m_thermalSeries;
+    CameraSettingsDateTimeAxis *m_thermalAxisX;
+    CameraSettingsValueAxis *m_thermalAxisY;
+    qint64 m_lastThermalSampleMs;
+    bool m_thermalValuesFahrenheit;
 
     void updateCloudAxes();
 
@@ -98,6 +107,7 @@ private:
 private slots:
     void on_clearChart_clicked();
     void on_clearCloudChart_clicked();
+    void on_thermalClearChartButton_clicked();
 };
 
 #endif // INCLUDE_FEATURE_CAMERASETTINGSDIALOG_H_

@@ -68,6 +68,7 @@ public:
         QRectF m_rect;
         QColor m_color;
         double m_lineWidth = 2.0;
+        bool m_ellipse = false;
     };
 
     struct WindowOverlayFrame
@@ -160,6 +161,7 @@ public:
         const QVector<CameraPipelineDetection>& getDetections() const { return m_detections; }
         const QVector<CameraPipelineMeteorPhotometry>& getMeteorPhotometry() const { return m_meteorPhotometry; }
         const QVector<CameraPipelineTrackedObject>& getTrackedObjects() const { return m_trackedObjects; }
+        const CameraPipelineThermal& getThermal() const { return m_thermal; }
         const QDateTime& getCaptureDateTime() const { return m_captureDateTime; }
         quint64 getCaptureEpoch() const { return m_captureEpoch; }
         bool isManualPreviewFrame() const { return m_manualPreviewFrame; }
@@ -175,6 +177,7 @@ public:
                                       const QVector<CameraPipelineDetection>& detections,
                                       const QVector<CameraPipelineMeteorPhotometry>& meteorPhotometry,
                                       const QVector<CameraPipelineTrackedObject>& trackedObjects,
+                                      const CameraPipelineThermal& thermal,
                                       const QDateTime& captureDateTime,
                                       quint64 captureEpoch,
                                       bool manualPreviewFrame,
@@ -194,6 +197,7 @@ public:
                 detections,
                 meteorPhotometry,
                 trackedObjects,
+                thermal,
                 captureDateTime,
                 captureEpoch,
                 manualPreviewFrame,
@@ -214,6 +218,7 @@ public:
         QVector<CameraPipelineDetection> m_detections;
         QVector<CameraPipelineMeteorPhotometry> m_meteorPhotometry;
         QVector<CameraPipelineTrackedObject> m_trackedObjects;
+        CameraPipelineThermal m_thermal;
         QDateTime m_captureDateTime;
         quint64 m_captureEpoch;
         bool m_manualPreviewFrame;
@@ -232,6 +237,7 @@ public:
                        const QVector<CameraPipelineDetection>& detections,
                        const QVector<CameraPipelineMeteorPhotometry>& meteorPhotometry,
                        const QVector<CameraPipelineTrackedObject>& trackedObjects,
+                       const CameraPipelineThermal& thermal,
                        const QDateTime& captureDateTime,
                        quint64 captureEpoch,
                        bool manualPreviewFrame,
@@ -250,6 +256,7 @@ public:
             m_detections(detections),
             m_meteorPhotometry(meteorPhotometry),
             m_trackedObjects(trackedObjects),
+            m_thermal(thermal),
             m_captureDateTime(captureDateTime),
             m_captureEpoch(captureEpoch),
             m_manualPreviewFrame(manualPreviewFrame),
@@ -266,22 +273,27 @@ public:
         const QDateTime& getCaptureDateTime() const { return m_captureDateTime; }
         const QStringList& getDetectedObjectClasses() const { return m_detectedObjectClasses; }
         bool getMotionDetected() const { return m_motionDetected; }
+        const CameraPipelineThermal& getThermal() const { return m_thermal; }
 
-        static MsgReportFrameSummary* create(const QDateTime& captureDateTime, const QStringList& detectedObjectClasses, bool motionDetected)
+        static MsgReportFrameSummary* create(const QDateTime& captureDateTime, const QStringList& detectedObjectClasses,
+            bool motionDetected, const CameraPipelineThermal& thermal)
         {
-            return new MsgReportFrameSummary(captureDateTime, detectedObjectClasses, motionDetected);
+            return new MsgReportFrameSummary(captureDateTime, detectedObjectClasses, motionDetected, thermal);
         }
 
     private:
         QDateTime m_captureDateTime;
         QStringList m_detectedObjectClasses;
         bool m_motionDetected;
+        CameraPipelineThermal m_thermal;
 
-        MsgReportFrameSummary(const QDateTime& captureDateTime, const QStringList& detectedObjectClasses, bool motionDetected) :
+        MsgReportFrameSummary(const QDateTime& captureDateTime, const QStringList& detectedObjectClasses,
+            bool motionDetected, const CameraPipelineThermal& thermal) :
             Message(),
             m_captureDateTime(captureDateTime),
             m_detectedObjectClasses(detectedObjectClasses),
-            m_motionDetected(motionDetected)
+            m_motionDetected(motionDetected),
+            m_thermal(thermal)
         { }
     };
 
@@ -484,6 +496,9 @@ private:
     void applyPreviewTextLabels(QImage& image, const QVector<PreviewTextLabel>& labels) const;
     void applySpectrumOverlay(QImage& image) const;
     void applyWindowOverlays(QImage& image) const;
+    void applyDrawingOverlay(QImage& image) const;
+    void applyThermalOverlay(const CameraPipelineFrame& frame, QImage& image, bool drawLabels,
+        QVector<PreviewTextLabel> *previewTextLabels, QVector<PreviewRectItem> *previewRectItems) const;
     [[nodiscard]] QVector<WindowOverlayFrame> currentImageOverlays() const;
     [[nodiscard]] static QSize overlayCompositionSize(const QImage& image, double scale);
     [[nodiscard]] static QImage normaliseOverlayImageForComposition(const QImage& image, double scale);

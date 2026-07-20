@@ -8,6 +8,33 @@ Accepted spectral components are associated with a parent meteor event before re
 
 The regression harness can write a candidate audit CSV containing the parent event ID and association decision for each spectral candidate. A diagnostic callback is also available to capture the channelized IQ samples belonging to a finalized parent event without adding file I/O to the detector's sample-processing path.
 
+Detector thresholds that represent time or frequency are expressed in seconds and Hz, then resolved and clamped when the channel sample rate changes. The audit also records rate-normalized frequency features so candidate data collected at different supported sample rates can be compared directly.
+
+The detector computes several experimental features without changing the default acceptance decision:
+
+- A block minimum-statistics spectral floor is compared with the active adaptive floor. The audit records their contrast and floor delta.
+- An exponential decay template bank records the best underdense-trail envelope score and decay time constant.
+- A weighted quadratic frequency fit records curvature and its improvement over the linear fit.
+- A frozen standardized logistic model can be evaluated as a dot product when coefficients have been trained and enabled.
+
+Curvature rejection, calibrated rescue, and settled-parent envelope re-analysis are disabled by default. They remain behind detector tunables until labeled recordings show that they improve recall without adding interference detections.
+
+The standalone regression harness can build such a corpus:
+
+```text
+meteor_demod_sink_test --wav recording.wav --candidate-csv candidates.csv --candidate-capture-dir candidate-iq
+```
+
+Rejected candidates close to the score boundary are written as stereo signed 16-bit little-endian IQ (`.ci16`) only when a capture directory is requested. Recording-level labels can be supplied separately:
+
+```text
+startSample,endSample,label
+120000,123000,meteor
+240000,245000,interference
+```
+
+Pass this file with `--candidate-labels labels.csv`. Overlapping candidates inherit the label in the audit CSV. `test/train_candidate_model.py` fits a balanced L2 logistic model, reports leave-one-recording-out metrics, writes boundary cases for review, and prints C++ initializers for a frozen model. Hard duration, usable-bandwidth, duplicate, broadband-impulse, and sweep gates remain in force even when learned rescue is enabled.
+
 Smooth, sustained Doppler sweeps and tracks beyond the configured drift limit are rejected to suppress satellite and other moving-carrier interference. Consequently, fast meteor head echoes that sweep by kilohertz per second are outside the detector's intended scope and may be rejected. The detector is designed primarily as a trail-echo counter.
 
 The maximum duration is a reporting and counting limit. A longer coherent echo that otherwise passes the meteor checks is reported once with its duration clipped to the configured maximum; the detection is marked as truncated in the GUI tooltip. The detector then rearms only after the signal falls below the release threshold, avoiding repeated counts of the same long trail.

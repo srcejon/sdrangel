@@ -26,6 +26,8 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QList>
+#include <QRegularExpression>
+#include <QSet>
 #include <QStringList>
 #include <QTextStream>
 #include <QTemporaryDir>
@@ -154,11 +156,20 @@ namespace {
         double totalPowerDB;
     };
 
+    struct CandidateLabel
+    {
+        quint64 startSample = 0;
+        quint64 endSample = 0;
+        QString label;
+    };
+
     struct Options
     {
         QString wavPath;
         QString testDir;
         QString candidateCsvPath;
+        QString candidateLabelsPath;
+        QString candidateCaptureDir;
         MeteorSettings settings;
         int chunkSamples = 4096;
         int tailMS = 2000;
@@ -326,6 +337,14 @@ namespace {
             {
                 options.candidateCsvPath = value;
             }
+            else if (readOptionValue(args, i, "candidate-labels", value, error))
+            {
+                options.candidateLabelsPath = value;
+            }
+            else if (readOptionValue(args, i, "candidate-capture-dir", value, error))
+            {
+                options.candidateCaptureDir = value;
+            }
             else if (readOptionValue(args, i, "channel-sample-rate", value, error))
             {
                 if (!parseIntValue("channel-sample-rate", value, options.settings.m_channelSampleRate, error)) {
@@ -418,6 +437,8 @@ namespace {
         out << "      --wav <file.wav>               Input SDRangel stereo 16-bit I/Q WAV file.\n";
         out << "      --test-dir <directory>         Directory of paired .wav and .csv regression fixtures.\n";
         out << "      --candidate-csv <file.csv>     Write every spectral candidate and rejection decision.\n";
+        out << "      --candidate-labels <file.csv>  Apply startSample,endSample,label ranges to candidate rows.\n";
+        out << "      --candidate-capture-dir <dir>  Save plausible rejected candidates as stereo signed 16-bit IQ.\n";
         out << "      --channel-sample-rate <rate>   Detector sample rate: 100, 300, 1000, or 3000 Hz.\n";
         out << "      --input-frequency-offset <hz>  Channel input frequency offset in Hz.\n";
         out << "      --power-lpf-cutoff <hz>        Power low-pass filter cutoff in Hz.\n";
@@ -532,6 +553,7 @@ namespace {
         MeteorBaseband baseband;
         MeteorSettings settings;
         QVector<Detection> detections;
+        QVector<MeteorDemodSink::CandidateAudit> candidateAudits;
         SampleVector chunk;
         int diagnosticCaptureCount = 0;
 
@@ -541,6 +563,10 @@ namespace {
         baseband.setInactivityFlushEnabled(false);
         baseband.setFifoLabel("meteor_synthetic_test");
         baseband.setMessageQueueToGUI(&outputQueue);
+        baseband.setCandidateAuditCallback(
+            [&candidateAudits](const MeteorDemodSink::CandidateAudit& audit) {
+                candidateAudits.push_back(audit);
+            });
         baseband.setDiagnosticCaptureCallback(
             [&diagnosticCaptureCount](
                 quint64,
@@ -614,6 +640,40 @@ namespace {
                     .arg(detections.first().frequencySpan, 0, 'f', 1);
             }
             ok = false;
+        }
+
+        if (candidateAudits.isEmpty())
+        {
+            errorStream << QString("Synthetic %1: no spectral candidates were audited\n").arg(name);
+            ok = false;
+        }
+
+        for (const MeteorDemodSink::CandidateAudit& audit : candidateAudits)
+        {
+            const bool finite = std::isfinite(audit.m_minimumNoiseContrastDB)
+                && std::isfinite(audit.m_noiseFloorDeltaDB)
+                && std::isfinite(audit.m_matchedEnvelopeScore)
+                && std::isfinite(audit.m_decayTimeConstantS)
+                && std::isfinite(audit.m_quadraticSweepR2)
+                && std::isfinite(audit.m_quadraticSweepImprovement)
+                && std::isfinite(audit.m_quadraticCurvatureHzPerS2)
+                && std::isfinite(audit.m_centerFrequencyRateFraction)
+                && std::isfinite(audit.m_frequencySpanRateFraction)
+                && std::isfinite(audit.m_frequencyDriftRateFraction)
+                && std::isfinite(audit.m_maxBandwidthRateFraction);
+            const bool bounded = (audit.m_matchedEnvelopeScore >= 0.0)
+                && (audit.m_matchedEnvelopeScore <= 1.0)
+                && (audit.m_quadraticSweepR2 >= 0.0)
+                && (audit.m_quadraticSweepR2 <= 1.0)
+                && (audit.m_quadraticSweepImprovement >= 0.0)
+                && (audit.m_quadraticSweepImprovement <= 1.0);
+
+            if (!finite || !bounded)
+            {
+                errorStream << QString("Synthetic %1: candidate shadow features are invalid\n").arg(name);
+                ok = false;
+                break;
+            }
         }
 
         return ok;
@@ -728,9 +788,146 @@ namespace {
         }
     }
 
+    QString csvField(const QString& value)
+    {
+        QString escaped = value;
+        escaped.replace('"', "\"\"");
+        return '"' + escaped + '"';
+    }
+
+    bool loadCandidateLabels(const QString& path, QVector<CandidateLabel>& labels, QString& error)
+    {
+        labels.clear();
+
+        if (path.isEmpty()) {
+            return true;
+        }
+
+        QFile file(path);
+
+        if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
+        {
+            error = QString("Unable to read candidate labels CSV: %1").arg(path);
+            return false;
+        }
+
+        QTextStream in(&file);
+        bool firstLine = true;
+
+        while (!in.atEnd())
+        {
+            const QString line = in.readLine().trimmed();
+
+            if (line.isEmpty() || line.startsWith('#')) {
+                continue;
+            }
+
+            const QStringList fields = line.split(',');
+
+            bool firstValueNumeric = false;
+            fields.value(0).trimmed().toULongLong(&firstValueNumeric);
+
+            if (firstLine && !firstValueNumeric)
+            {
+                firstLine = false;
+                continue;
+            }
+
+            firstLine = false;
+
+            if (fields.size() < 3)
+            {
+                error = QString("Invalid candidate label row: %1").arg(line);
+                return false;
+            }
+
+            bool startOK = false;
+            bool endOK = false;
+            CandidateLabel label;
+            label.startSample = fields[0].trimmed().toULongLong(&startOK);
+            label.endSample = fields[1].trimmed().toULongLong(&endOK);
+            label.label = fields.mid(2).join(',').trimmed();
+
+            if (!startOK || !endOK || (label.endSample < label.startSample) || label.label.isEmpty())
+            {
+                error = QString("Invalid candidate label row: %1").arg(line);
+                return false;
+            }
+
+            labels.push_back(label);
+        }
+
+        return true;
+    }
+
+    QString candidateLabelFor(
+        const MeteorDemodSink::CandidateAudit& audit,
+        const QVector<CandidateLabel>& labels)
+    {
+        QString bestLabel;
+        quint64 bestOverlap = 0;
+
+        for (const CandidateLabel& label : labels)
+        {
+            const quint64 overlapStart = std::max(audit.m_startSample, label.startSample);
+            const quint64 overlapEnd = std::min(audit.m_endSample, label.endSample);
+
+            if (overlapEnd < overlapStart) {
+                continue;
+            }
+
+            const quint64 overlap = overlapEnd - overlapStart + 1;
+
+            if (overlap > bestOverlap)
+            {
+                bestOverlap = overlap;
+                bestLabel = label.label;
+            }
+        }
+
+        return bestLabel;
+    }
+
+    QString candidateCaptureFileName(const MeteorDemodSink::SpectralCandidate& candidate)
+    {
+        QString reason = candidate.m_rejectionReason;
+        reason.replace(QRegularExpression("[^A-Za-z0-9_-]"), "_");
+        return QString("candidate_%1_%2_%3.ci16")
+            .arg(candidate.m_startSample)
+            .arg(candidate.m_endSample)
+            .arg(reason);
+    }
+
+    bool writeCandidateIQ(const QString& path, const ComplexVector& samples)
+    {
+        QFile file(path);
+
+        if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+            return false;
+        }
+
+        QByteArray bytes;
+        bytes.resize((int) samples.size() * 2 * (int) sizeof(qint16));
+        qint16 *output = reinterpret_cast<qint16 *>(bytes.data());
+
+        for (int i = 0; i < (int) samples.size(); i++)
+        {
+            const qint64 real = qRound64((double) samples[i].real() * 32768.0 / (double) SDR_RX_SCALEF);
+            const qint64 imag = qRound64((double) samples[i].imag() * 32768.0 / (double) SDR_RX_SCALEF);
+            output[2 * i] = qToLittleEndian((qint16) std::clamp<qint64>(real, -32768, 32767));
+            output[2 * i + 1] = qToLittleEndian((qint16) std::clamp<qint64>(imag, -32768, 32767));
+        }
+
+        return file.write(bytes) == bytes.size();
+    }
+
     bool writeCandidateAudits(
         const QString& path,
         const QVector<MeteorDemodSink::CandidateAudit>& audits,
+        const QString& recordingId,
+        const QVector<CandidateLabel>& labels,
+        const QString& captureDir,
+        const QSet<QString>& capturedFiles,
         QString& error)
     {
         QFile file(path);
@@ -742,9 +939,13 @@ namespace {
         }
 
         QTextStream out(&file);
-        out << "index,startSample,endSample,peakSample,durationS,centerFrequencyHz,frequencySpanHz,frequencyDriftHz,"
-               "peakAboveBackgroundDB,integratedSupportDB,maxBandwidthHz,maxContrastDB,sweepScore,acceptanceScore,"
+        out << "recording,label,captureFile,index,sampleRate,startSample,endSample,peakSample,durationS,centerFrequencyHz,frequencySpanHz,frequencyDriftHz,"
+               "peakAboveBackgroundDB,integratedSupportDB,maxBandwidthHz,maxContrastDB,logPeakRatio,sweepScore,acceptanceScore,"
                "acceptanceThreshold,scoreMargin,signalScore,supportScore,shapeScore,rejectionPenalty,trackOccupancy,"
+               "minimumNoiseContrastDB,noiseFloorDeltaDB,matchedEnvelopeScore,decayTimeConstantS,quadraticSweepR2,"
+               "quadraticSweepImprovement,quadraticCurvatureHzPerS2,learnedScore,centerFrequencyRateFraction,"
+               "frequencySpanRateFraction,frequencyDriftRateFraction,maxBandwidthRateFraction,calibratedRescue,"
+               "rescuedFramesGate,rescuedSpectralEvidenceGate,curvedSweepRejected,"
                "frequencyCoherence,frameOccupiedFraction,frameCount,durationOK,enoughFrames,sweepRejected,spectralEvidenceOK,"
                "insideUsableBandwidth,duplicate,broadbandImpulse,sweepContinuationRejected,accepted,"
                "parentEventId,associationDecision,classification,rejectionReason\n";
@@ -752,7 +953,12 @@ namespace {
         for (int i = 0; i < audits.size(); i++)
         {
             const MeteorDemodSink::CandidateAudit& audit = audits[i];
-            out << i + 1 << ','
+            const QString captureFile = candidateCaptureFileName(audit);
+            out << csvField(recordingId) << ','
+                << csvField(candidateLabelFor(audit, labels)) << ','
+                << csvField(!captureDir.isEmpty() && capturedFiles.contains(captureFile) ? captureFile : QString()) << ','
+                << i + 1 << ','
+                << audit.m_sampleRate << ','
                 << audit.m_startSample << ','
                 << audit.m_endSample << ','
                 << audit.m_peakSample << ','
@@ -764,6 +970,7 @@ namespace {
                 << QString::number(audit.m_integratedSupportDB, 'f', 3) << ','
                 << QString::number(audit.m_maxBandwidth, 'f', 3) << ','
                 << QString::number(audit.m_maxContrastDB, 'f', 3) << ','
+                << QString::number(std::log10(std::max(audit.m_maxPeakRatio, 1.0)), 'f', 6) << ','
                 << QString::number(audit.m_sweepScore, 'f', 6) << ','
                 << QString::number(audit.m_acceptanceScore, 'f', 3) << ','
                 << QString::number(audit.m_acceptanceThreshold, 'f', 3) << ','
@@ -773,6 +980,22 @@ namespace {
                 << QString::number(audit.m_shapeScore, 'f', 3) << ','
                 << QString::number(audit.m_rejectionPenalty, 'f', 3) << ','
                 << QString::number(audit.m_trackOccupancy, 'f', 3) << ','
+                << QString::number(audit.m_minimumNoiseContrastDB, 'f', 3) << ','
+                << QString::number(audit.m_noiseFloorDeltaDB, 'f', 3) << ','
+                << QString::number(audit.m_matchedEnvelopeScore, 'f', 6) << ','
+                << QString::number(audit.m_decayTimeConstantS, 'f', 6) << ','
+                << QString::number(audit.m_quadraticSweepR2, 'f', 6) << ','
+                << QString::number(audit.m_quadraticSweepImprovement, 'f', 6) << ','
+                << QString::number(audit.m_quadraticCurvatureHzPerS2, 'f', 3) << ','
+                << QString::number(audit.m_learnedScore, 'f', 6) << ','
+                << QString::number(audit.m_centerFrequencyRateFraction, 'f', 9) << ','
+                << QString::number(audit.m_frequencySpanRateFraction, 'f', 9) << ','
+                << QString::number(audit.m_frequencyDriftRateFraction, 'f', 9) << ','
+                << QString::number(audit.m_maxBandwidthRateFraction, 'f', 9) << ','
+                << (audit.m_calibratedRescue ? 1 : 0) << ','
+                << (audit.m_rescuedFramesGate ? 1 : 0) << ','
+                << (audit.m_rescuedSpectralEvidenceGate ? 1 : 0) << ','
+                << (audit.m_curvedSweepRejected ? 1 : 0) << ','
                 << QString::number(audit.m_frequencyCoherence, 'f', 3) << ','
                 << QString::number(audit.m_frameOccupiedFraction, 'f', 3) << ','
                 << audit.m_frameCount << ','
@@ -967,7 +1190,8 @@ namespace {
         const QString& wavPath,
         QVector<Detection>& detections,
         QString& error,
-        QVector<MeteorDemodSink::CandidateAudit> *candidateAudits = nullptr)
+        QVector<MeteorDemodSink::CandidateAudit> *candidateAudits = nullptr,
+        QSet<QString> *capturedFiles = nullptr)
     {
         QFile wavFile(wavPath);
 
@@ -987,7 +1211,9 @@ namespace {
 
         const qint64 dataStart = wavFile.pos();
         const qint64 availableDataBytes = std::max<qint64>(0, wavFile.size() - dataStart);
-        qint64 remainingBytes = std::min<qint64>(header.m_dataHeader.m_size, availableDataBytes);
+        qint64 remainingBytes = header.m_dataHeader.m_size > 0
+            ? std::min<qint64>(header.m_dataHeader.m_size, availableDataBytes)
+            : availableDataBytes;
 
         if ((header.m_sampleRate <= 0) || (remainingBytes < 0))
         {
@@ -1003,6 +1229,7 @@ namespace {
         MessageQueue outputQueue;
         MeteorBaseband baseband;
         SampleVector samples;
+        bool candidateCaptureWriteFailed = false;
 
         baseband.setInactivityFlushEnabled(false);
         baseband.setFifoLabel("meteor_demod_sink_test");
@@ -1013,6 +1240,34 @@ namespace {
             baseband.setCandidateAuditCallback(
                 [candidateAudits](const MeteorDemodSink::CandidateAudit& audit) {
                     candidateAudits->push_back(audit);
+                });
+        }
+
+        if (!options.candidateCaptureDir.isEmpty())
+        {
+            QDir captureDir;
+
+            if (!captureDir.mkpath(options.candidateCaptureDir))
+            {
+                error = QString("Unable to create candidate capture directory: %1")
+                    .arg(options.candidateCaptureDir);
+                return false;
+            }
+
+            baseband.setCandidateDiagnosticCaptureCallback(
+                [&options, &candidateCaptureWriteFailed, capturedFiles](
+                    const MeteorDemodSink::SpectralCandidate& candidate,
+                    const ComplexVector& candidateSamples) {
+                    const QString fileName = candidateCaptureFileName(candidate);
+                    const QString path = QDir(options.candidateCaptureDir).filePath(fileName);
+
+                    if (writeCandidateIQ(path, candidateSamples)) {
+                        if (capturedFiles) {
+                            capturedFiles->insert(fileName);
+                        }
+                    } else {
+                        candidateCaptureWriteFailed = true;
+                    }
                 });
         }
 
@@ -1046,6 +1301,14 @@ namespace {
         processEvents();
         drainDetections(outputQueue, detections);
         baseband.stopWork();
+
+        if (candidateCaptureWriteFailed)
+        {
+            error = QString("Unable to write one or more candidate IQ captures to: %1")
+                .arg(options.candidateCaptureDir);
+            return false;
+        }
+
         return true;
     }
 
@@ -1149,13 +1412,24 @@ int main(int argc, char *argv[])
 
     QVector<Detection> detections;
     QVector<MeteorDemodSink::CandidateAudit> candidateAudits;
+    QVector<CandidateLabel> candidateLabels;
+    QSet<QString> capturedFiles;
+
+    if (!loadCandidateLabels(options.candidateLabelsPath, candidateLabels, error))
+    {
+        err << error << "\n";
+        return 1;
+    }
 
     if (!runWavFile(
         options,
         options.wavPath,
         detections,
         error,
-        options.candidateCsvPath.isEmpty() ? nullptr : &candidateAudits))
+        (options.candidateCsvPath.isEmpty() && options.candidateCaptureDir.isEmpty())
+            ? nullptr
+            : &candidateAudits,
+        &capturedFiles))
     {
         err << error << "\n";
         return 1;
@@ -1168,7 +1442,14 @@ int main(int argc, char *argv[])
     }
 
     if (!options.candidateCsvPath.isEmpty()
-        && !writeCandidateAudits(options.candidateCsvPath, candidateAudits, error))
+        && !writeCandidateAudits(
+            options.candidateCsvPath,
+            candidateAudits,
+            QFileInfo(options.wavPath).fileName(),
+            candidateLabels,
+            options.candidateCaptureDir,
+            capturedFiles,
+            error))
     {
         err << error << "\n";
         return 1;

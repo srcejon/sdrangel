@@ -19,6 +19,7 @@
 #define INCLUDE_METEORDEMODSINK_H
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <functional>
 #include <vector>
@@ -40,24 +41,33 @@ class FFTEngine;
 
 class MeteorDemodSink : public ChannelSampleSink {
 public:
+    static constexpr int m_learnedFeatureCount = 16;
+    using LearnedFeatureVector = std::array<double, m_learnedFeatureCount>;
+
     struct DetectorTunables
     {
+        double m_spectralFrameDurationS = 0.125;
+        double m_spectralHopFraction = 0.25;
         double m_spectralActiveNoiseAlpha = 0.0005;
         double m_spectralRisingNoiseAlpha = 0.05;
         double m_spectralStableNoiseAlpha = 0.02;
+        double m_minimumNoiseBlockDurationS = 1.0;
+        double m_minimumNoiseBlockQuantile = 0.20;
+        int m_minimumNoiseBlockCount = 12;
         double m_scalarNoiseTimeConstantS = 10.0;
         double m_scalarRisingNoiseAlpha = 0.05;
         double m_edgeExclusionFraction = 0.05;
         double m_usableBandwidthRateFraction = 0.45;
-        double m_compactBandwidthRateFraction = 0.05;
-        double m_stableBandwidthRateFraction = 0.22;
-        double m_twoFrameMaxBandwidthRateFraction = 0.065;
+        double m_maxSegmentedBandWidthHz = 250.0;
+        double m_compactBandwidthHz = 50.0;
+        double m_stableBandwidthHz = 220.0;
+        double m_twoFrameMaxBandwidthHz = 65.0;
         double m_twoFrameMinFrequencyCoherence = 0.75;
         double m_twoFrameMinIntegratedSupportDB = -7.0;
         double m_localizedTwoFrameMinPeakDB = 12.0;
         double m_localizedTwoFrameMinContrastDB = 18.0;
-        double m_coherentWideTwoFrameMinBandwidthRateFraction = 0.09;
-        double m_coherentWideTwoFrameMaxBandwidthRateFraction = 0.13;
+        double m_coherentWideTwoFrameMinBandwidthHz = 90.0;
+        double m_coherentWideTwoFrameMaxBandwidthHz = 130.0;
         double m_coherentWideTwoFrameMaxOccupiedFraction = 0.25;
         double m_coherentWideTwoFrameMinPeakDB = 11.5;
         double m_coherentWideTwoFrameMinContrastDB = 14.0;
@@ -68,19 +78,19 @@ public:
         double m_sustainedSweepMinDurationS = 0.5;
         int m_sustainedSweepMinFrames = 8;
         double m_sustainedSweepMinR2 = 0.85;
-        double m_sustainedSweepMinDriftBins = 2.0;
+        double m_sustainedSweepMinDriftHz = 16.0;
         double m_compactSweepMinDurationS = 0.2;
         int m_compactSweepMinFrames = 4;
         double m_compactSweepMaxTrackOccupancy = 0.80;
         double m_compactSweepMaxContrastDB = 18.0;
         double m_compactSweepMinR2 = 0.85;
-        double m_compactSweepMinDriftBins = 4.0;
+        double m_compactSweepMinDriftHz = 32.0;
         double m_driftSweepMinR2 = 0.65;
         double m_broadbandImpulseMaxDurationS = 0.22;
         int m_broadbandImpulseMaxFrames = 3;
         double m_broadbandImpulseMinPeakDB = 12.0;
-        double m_broadbandImpulseMinSpanRateFraction = 0.12;
-        double m_broadbandImpulseMinBandwidthRateFraction = 0.10;
+        double m_broadbandImpulseMinSpanHz = 120.0;
+        double m_broadbandImpulseMinBandwidthHz = 100.0;
         double m_broadbandImpulseMinOccupiedFraction = 0.45;
         double m_shortCandidateAcceptanceScore = 9.5;
         double m_candidateAcceptanceScore = 9.0;
@@ -89,7 +99,7 @@ public:
         double m_scoreDurationFloorS = 0.05;
         double m_scoreDurationRangeS = 0.45;
         double m_powerSweepMinR2 = 0.75;
-        double m_powerStableBandwidthRateFraction = 0.18;
+        double m_powerStableBandwidthHz = 180.0;
         double m_powerBoundedMinProminenceDB = 9.0;
         double m_powerStrongCoherentMinPeakDB = 18.0;
         double m_powerStrongCoherentMinProminenceDB = 18.0;
@@ -101,11 +111,64 @@ public:
         double m_continuationStrongHoldS = 3.0;
         double m_continuationMaxEvidenceGapS = 0.75;
         double m_continuationStrongPeakDB = 12.0;
-        double m_continuationFrequencyPaddingBins = 2.5;
+        double m_continuationFrequencyPaddingHz = 20.0;
+        double m_trackingFrequencyPaddingHz = 12.0;
+        double m_maxTrackingJumpHz = 80.0;
+        double m_candidateDiagnosticMinimumMargin = -2.0;
+        double m_candidateDiagnosticMaximumMargin = 5.0;
+        int m_candidateDiagnosticMinimumFrames = 2;
+        int m_matchedEnvelopeMinimumFrames = 3;
+        std::array<double, 8> m_matchedEnvelopeTimeConstantsS {{0.05, 0.10, 0.20, 0.40, 0.80, 1.60, 3.20, 6.40}};
+        double m_curvatureMinimumDurationS = 0.35;
+        int m_curvatureMinimumFrames = 6;
+        double m_curvatureMinimumR2 = 0.90;
+        double m_curvatureMinimumR2Improvement = 0.08;
+        double m_curvatureMinimumHzPerS2 = 40.0;
+        bool m_enableCurvatureSweepRejection = false;
+        bool m_enableCalibratedRescue = false;
+        double m_rescueMinimumScoreMargin = 1.5;
+        double m_rescueMinimumContrastDB = 12.0;
+        double m_rescueMinimumPeakDB = 11.0;
+        double m_rescueMinimumFrequencyCoherence = 0.90;
+        double m_rescueMinimumMatchedEnvelopeScore = 0.72;
+        double m_rescueTwoFrameMinimumContrastDB = 14.0;
+        double m_rescueTwoFrameMinimumPeakDB = 11.5;
+        double m_rescueTwoFrameMinimumIntegratedSupportDB = -2.0;
+        double m_rescueTwoFrameMinimumFrequencyCoherence = 0.95;
+        double m_rescueThreeFrameMinimumIntegratedSupportDB = 2.0;
+        double m_rescueMaximumOccupiedFraction = 0.30;
+        bool m_learnedModelEnabled = false;
+        double m_learnedModelIntercept = 0.0;
+        LearnedFeatureVector m_learnedModelMeans {};
+        LearnedFeatureVector m_learnedModelScales {};
+        LearnedFeatureVector m_learnedModelWeights {};
+        double m_learnedRescueProbability = 0.80;
+        bool m_enableSettledParentReanalysis = false;
         double m_parentFrequencyLowQuantile = 0.10;
         double m_parentFrequencyHighQuantile = 0.90;
         int m_maxActiveMeteorEvents = 16;
         int m_maxParentObservations = 512;
+    };
+
+    struct ResolvedDetectorTunables
+    {
+        double m_binWidthHz = 1.0;
+        double m_usableBandwidthHz = 1.0;
+        double m_maxSegmentedBandWidthHz = 1.0;
+        double m_compactBandwidthHz = 1.0;
+        double m_stableBandwidthHz = 1.0;
+        double m_twoFrameMaxBandwidthHz = 1.0;
+        double m_coherentWideTwoFrameMinBandwidthHz = 1.0;
+        double m_coherentWideTwoFrameMaxBandwidthHz = 1.0;
+        double m_broadbandImpulseMinSpanHz = 1.0;
+        double m_broadbandImpulseMinBandwidthHz = 1.0;
+        double m_powerStableBandwidthHz = 1.0;
+        double m_trackingFrequencyPaddingHz = 1.0;
+        double m_maxTrackingJumpHz = 1.0;
+        double m_sustainedSweepMinDriftHz = 1.0;
+        double m_compactSweepMinDriftHz = 1.0;
+        double m_continuationFrequencyPaddingHz = 1.0;
+        int m_minimumNoiseFramesPerBlock = 1;
     };
 
     struct DetectionRecord
@@ -153,6 +216,22 @@ public:
         double m_trackOccupancy = 0.0;
         double m_frequencyCoherence = 0.0;
         double m_frameOccupiedFraction = 0.0;
+        double m_minimumNoiseContrastDB = 0.0;
+        double m_noiseFloorDeltaDB = 0.0;
+        double m_matchedEnvelopeScore = 0.0;
+        double m_decayTimeConstantS = 0.0;
+        double m_quadraticSweepR2 = 0.0;
+        double m_quadraticSweepImprovement = 0.0;
+        double m_quadraticCurvatureHzPerS2 = 0.0;
+        double m_learnedScore = 0.0;
+        double m_centerFrequencyRateFraction = 0.0;
+        double m_frequencySpanRateFraction = 0.0;
+        double m_frequencyDriftRateFraction = 0.0;
+        double m_maxBandwidthRateFraction = 0.0;
+        bool m_calibratedRescue = false;
+        bool m_rescuedFramesGate = false;
+        bool m_rescuedSpectralEvidenceGate = false;
+        bool m_curvedSweepRejected = false;
         int m_frameCount = 0;
         bool m_durationOK = false;
         bool m_enoughFrames = false;
@@ -179,6 +258,9 @@ public:
     using DiagnosticCaptureCallback = std::function<void(
         quint64,
         const DetectionRecord&,
+        const ComplexVector&)>;
+    using CandidateDiagnosticCaptureCallback = std::function<void(
+        const SpectralCandidate&,
         const ComplexVector&)>;
 
     class MsgMeteorDetected : public Message {
@@ -246,8 +328,10 @@ public:
     void setMessageQueueToGUI(MessageQueue *messageQueue) { m_messageQueueToGUI = messageQueue; }
     void setCandidateAuditCallback(const CandidateAuditCallback& callback) { m_candidateAuditCallback = callback; }
     void setDiagnosticCaptureCallback(const DiagnosticCaptureCallback& callback) { m_diagnosticCaptureCallback = callback; }
-    void setDetectorTunables(const DetectorTunables& tunables) { m_detectorTunables = tunables; }
+    void setCandidateDiagnosticCaptureCallback(const CandidateDiagnosticCaptureCallback& callback) { m_candidateDiagnosticCaptureCallback = callback; }
+    void setDetectorTunables(const DetectorTunables& tunables);
     const DetectorTunables& getDetectorTunables() const { return m_detectorTunables; }
+    const ResolvedDetectorTunables& getResolvedDetectorTunables() const { return m_resolvedDetectorTunables; }
     void setChannel(ChannelAPI *channel) { m_channel = channel; }
     void applyChannelSettings(int channelSampleRate, int channelFrequencyOffset, bool force = false);
     void applySettings(const MeteorSettings& settings, const QStringList& settingsKeys, bool force = false);
@@ -326,6 +410,8 @@ private:
         double m_framePeakPower;
         double m_frameOccupiedFraction;
         double m_backgroundPower;
+        double m_minimumNoiseContrastDB;
+        double m_noiseFloorDeltaDB;
         int m_lowIndex;
         int m_highIndex;
 
@@ -343,6 +429,8 @@ private:
             m_framePeakPower(0.0),
             m_frameOccupiedFraction(0.0),
             m_backgroundPower(1e-20),
+            m_minimumNoiseContrastDB(0.0),
+            m_noiseFloorDeltaDB(0.0),
             m_lowIndex(0),
             m_highIndex(0)
         {}
@@ -374,6 +462,8 @@ private:
         double m_weightSum;
         double m_maxContrastDB;
         double m_maxPeakRatio;
+        double m_maxMinimumNoiseContrastDB;
+        double m_weightedNoiseFloorDeltaDBSum;
         std::vector<double> m_trackFrequencies;
         std::vector<double> m_trackPeakFrequencies;
         std::vector<double> m_trackLowFrequencies;
@@ -399,7 +489,9 @@ private:
             m_weightedFrequencySum(0.0),
             m_weightSum(0.0),
             m_maxContrastDB(0.0),
-            m_maxPeakRatio(0.0)
+            m_maxPeakRatio(0.0),
+            m_maxMinimumNoiseContrastDB(0.0),
+            m_weightedNoiseFloorDeltaDBSum(0.0)
         {}
     };
 
@@ -428,7 +520,9 @@ private:
     MessageQueue *m_messageQueueToGUI;
     CandidateAuditCallback m_candidateAuditCallback;
     DiagnosticCaptureCallback m_diagnosticCaptureCallback;
+    CandidateDiagnosticCaptureCallback m_candidateDiagnosticCaptureCallback;
     DetectorTunables m_detectorTunables;
+    ResolvedDetectorTunables m_resolvedDetectorTunables;
     MeteorSettings m_settings;
     ChannelAPI *m_channel;
 
@@ -448,6 +542,9 @@ private:
     std::vector<Real> m_spectralWindow;
     std::vector<double> m_spectralBinPower;
     std::vector<double> m_spectralNoiseFloor;
+    std::vector<double> m_spectralMinimumNoiseFloor;
+    std::vector<SpectralFrameSnapshot> m_minimumNoiseCurrentBlock;
+    std::vector<std::vector<double>> m_minimumNoiseBlocks;
     std::vector<SpectralFrameSnapshot> m_spectralCalibrationFrames;
     std::vector<SpectralEvent> m_spectralEvents;
     std::vector<DetectionRange> m_recentDetectionRanges;
@@ -502,12 +599,18 @@ private:
     void updateSpectralEvent(SpectralEvent& event, const SpectralBand& band, quint64 frameCenterSample);
     void finishSpectralEvent(const SpectralEvent& event);
     void auditSpectralCandidate(const SpectralCandidate& candidate) const;
+    void captureCandidateDiagnostic(const SpectralCandidate& candidate) const;
     bool isSweepContinuation(const SpectralCandidate& candidate) const;
     bool overlapsBroadbandInterference(quint64 startSample, quint64 endSample) const;
     void rememberSpectralInterference(const SpectralCandidate& candidate);
     SpectralCandidate buildSpectralCandidate(const SpectralEvent& event) const;
     void classifySpectralCandidate(SpectralCandidate& candidate) const;
     double scoreSpectralCandidate(SpectralCandidate& candidate) const;
+    void calculateShadowCandidateFeatures(SpectralCandidate& candidate, const SpectralEvent& event) const;
+    LearnedFeatureVector candidateLearnedFeatures(const SpectralCandidate& candidate) const;
+    double evaluateLearnedCandidate(const SpectralCandidate& candidate) const;
+    void updateMinimumStatisticsNoiseFloor(const SpectralFrameSnapshot& frame);
+    void resolveDetectorTunables();
     static double weightedQuantile(
         const std::vector<double>& values,
         const std::vector<double>& weights,

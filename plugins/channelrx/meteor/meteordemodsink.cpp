@@ -842,7 +842,14 @@ void MeteorDemodSink::updateActiveMeteorEvents(
             continue;
         }
 
-        if ((event.m_spectralComponentCount < 2) && (event.m_report.m_durationS < 1.0)) {
+        const bool highConfidenceSingleComponent = event.m_strong
+            && (event.m_report.m_confidence
+                >= m_detectorTunables.m_singleComponentContinuationMinimumConfidence);
+
+        if ((event.m_spectralComponentCount < 2)
+            && (event.m_report.m_durationS < 1.0)
+            && !highConfidenceSingleComponent)
+        {
             continue;
         }
 
@@ -1652,8 +1659,20 @@ MeteorDemodSink::SpectralCandidate MeteorDemodSink::buildSpectralCandidate(const
         || compactTwoFrameEcho
         || localizedWideTwoFrameEcho
         || coherentWideTwoFrameEcho;
+    calculateShadowCandidateFeatures(candidate, event);
     const bool exceptionalShortEcho = (candidate.m_peakAboveBackgroundDB >= 25.0)
         && (candidate.m_integratedSupportDB >= 15.0);
+    const bool localizedCompactBurst =
+        (candidate.m_durationS <= m_detectorTunables.m_localizedBurstMaxDurationS)
+        && (candidate.m_frameCount <= m_detectorTunables.m_localizedBurstMaxFrames)
+        && (candidate.m_trackOccupancy >= m_detectorTunables.m_localizedBurstMinTrackOccupancy)
+        && (candidate.m_frameOccupiedFraction <= m_detectorTunables.m_localizedBurstMaxOccupiedFraction)
+        && (candidate.m_peakAboveBackgroundDB >= m_detectorTunables.m_localizedBurstMinPeakDB)
+        && (candidate.m_maxContrastDB >= m_detectorTunables.m_localizedBurstMinContrastDB)
+        && (candidate.m_integratedSupportDB >= m_detectorTunables.m_localizedBurstMinIntegratedSupportDB)
+        && (candidate.m_frequencyCoherence >= m_detectorTunables.m_localizedBurstMinFrequencyCoherence)
+        && (candidate.m_matchedEnvelopeScore >= m_detectorTunables.m_localizedBurstMinMatchedEnvelopeScore)
+        && (candidate.m_envelopeTailFrames >= m_detectorTunables.m_localizedBurstMinEnvelopeTailFrames);
     const bool sustainedSmoothSweep = (candidate.m_durationS >= m_detectorTunables.m_sustainedSweepMinDurationS)
         && (candidate.m_frameCount >= m_detectorTunables.m_sustainedSweepMinFrames)
         && (candidate.m_sweepScore >= m_detectorTunables.m_sustainedSweepMinR2)
@@ -1666,11 +1685,12 @@ MeteorDemodSink::SpectralCandidate MeteorDemodSink::buildSpectralCandidate(const
         && (candidate.m_sweepScore >= m_detectorTunables.m_compactSweepMinR2)
         && (std::fabs(candidate.m_robustFrequencyDrift)
             >= m_resolvedDetectorTunables.m_compactSweepMinDriftHz);
-    candidate.m_smoothSweepRejected = sustainedSmoothSweep || compactSmoothSweep
-        || (driftLimitEnabled
-            && (candidate.m_sweepScore >= m_detectorTunables.m_driftSweepMinR2)
-            && (std::fabs(candidate.m_robustFrequencyDrift) > sweepFrequencyLimit)
-            && ((candidate.m_durationS >= 0.5) || !exceptionalShortEcho));
+    candidate.m_smoothSweepRejected = !localizedCompactBurst
+        && (sustainedSmoothSweep || compactSmoothSweep
+            || (driftLimitEnabled
+                && (candidate.m_sweepScore >= m_detectorTunables.m_driftSweepMinR2)
+                && (std::fabs(candidate.m_robustFrequencyDrift) > sweepFrequencyLimit)
+                && ((candidate.m_durationS >= 0.5) || !exceptionalShortEcho)));
     candidate.m_longDriftRejected = driftLimitEnabled
         && (candidate.m_durationS >= 1.0)
         && (std::fabs(candidate.m_robustFrequencyDrift) > sweepFrequencyLimit)
@@ -1719,7 +1739,6 @@ MeteorDemodSink::SpectralCandidate MeteorDemodSink::buildSpectralCandidate(const
         candidate.m_acceptanceThreshold += m_detectorTunables.m_weakSupportScorePenalty;
     }
 
-    calculateShadowCandidateFeatures(candidate, event);
     classifySpectralCandidate(candidate);
 
     candidate.m_curvedSweepRejected = m_detectorTunables.m_enableCurvatureSweepRejection
@@ -2709,8 +2728,18 @@ void MeteorDemodSink::finishPulse(bool forceRejected)
         && !broadbandContaminatedPulse
         && (std::fabs(centerFrequency) <= m_resolvedDetectorTunables.m_usableBandwidthHz);
 
-    auto emitPowerLineFallback = [this, centerFrequency, reportedFrequencySpan, frequencyDrift]() -> void
+    auto emitPowerLineFallback = [this, centerFrequency, reportedFrequencySpan, frequencyDrift, endSample]() -> void
     {
+        if (isDuplicateDetection(
+            m_pulseStartSample,
+            endSample,
+            centerFrequency,
+            reportedFrequencySpan))
+        {
+            qDebug() << "MeteorDemodSink::finishPulse: containing power-line detection suppressed";
+            return;
+        }
+
         PulseReport report;
         report.m_valid = true;
         report.m_startSample = m_pulsePeakSample;
@@ -3695,20 +3724,29 @@ bool MeteorDemodSink::refineBandEnvelope(
         : 0;
     quint64 endSample = centerSamples[lastIndex] + (quint64) (frameSize / 2);
 
-    if (allowShrink
-        && (report.m_durationS >= m_detectorTunables.m_componentEnvelopeSustainedDurationS))
+    if (allowShrink)
     {
-        const double maximumExpansionS = std::max(
-            m_detectorTunables.m_componentEnvelopeMinimumSustainedExpansionS,
-            m_detectorTunables.m_componentEnvelopeSustainedExpansionFraction * report.m_durationS);
-        const quint64 maximumExpansionSamples = (quint64) std::ceil(maximumExpansionS * sampleRate);
-        const quint64 minimumStartSample = report.m_startSample > maximumExpansionSamples
-            ? report.m_startSample - maximumExpansionSamples
-            : 0;
-        const quint64 maximumEndSample = report.m_endSample + maximumExpansionSamples;
+        double maximumExpansionS = -1.0;
 
-        startSample = std::max(startSample, minimumStartSample);
-        endSample = std::min(endSample, maximumEndSample);
+        if (report.m_durationS <= m_detectorTunables.m_componentEnvelopeCompactDurationS) {
+            maximumExpansionS = m_detectorTunables.m_componentEnvelopeMaximumCompactExpansionS;
+        } else if (report.m_durationS >= m_detectorTunables.m_componentEnvelopeSustainedDurationS) {
+            maximumExpansionS = std::max(
+                m_detectorTunables.m_componentEnvelopeMinimumSustainedExpansionS,
+                m_detectorTunables.m_componentEnvelopeSustainedExpansionFraction * report.m_durationS);
+        }
+
+        if (maximumExpansionS >= 0.0)
+        {
+            const quint64 maximumExpansionSamples = (quint64) std::ceil(maximumExpansionS * sampleRate);
+            const quint64 minimumStartSample = report.m_startSample > maximumExpansionSamples
+                ? report.m_startSample - maximumExpansionSamples
+                : 0;
+            const quint64 maximumEndSample = report.m_endSample + maximumExpansionSamples;
+
+            startSample = std::max(startSample, minimumStartSample);
+            endSample = std::min(endSample, maximumEndSample);
+        }
     }
 
     if (boundedExpansion)

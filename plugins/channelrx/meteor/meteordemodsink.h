@@ -85,6 +85,16 @@ public:
         double m_compactSweepMaxContrastDB = 18.0;
         double m_compactSweepMinR2 = 0.85;
         double m_compactSweepMinDriftHz = 32.0;
+        double m_localizedBurstMaxDurationS = 0.25;
+        int m_localizedBurstMaxFrames = 4;
+        double m_localizedBurstMinTrackOccupancy = 0.95;
+        double m_localizedBurstMaxOccupiedFraction = 0.25;
+        double m_localizedBurstMinPeakDB = 16.0;
+        double m_localizedBurstMinContrastDB = 17.5;
+        double m_localizedBurstMinIntegratedSupportDB = 10.0;
+        double m_localizedBurstMinFrequencyCoherence = 0.95;
+        double m_localizedBurstMinMatchedEnvelopeScore = 0.94;
+        int m_localizedBurstMinEnvelopeTailFrames = 2;
         double m_driftSweepMinR2 = 0.65;
         double m_broadbandImpulseMaxDurationS = 0.22;
         int m_broadbandImpulseMaxFrames = 3;
@@ -111,6 +121,7 @@ public:
         double m_continuationStrongHoldS = 3.0;
         double m_continuationMaxEvidenceGapS = 0.75;
         double m_continuationStrongPeakDB = 12.0;
+        double m_singleComponentContinuationMinimumConfidence = 9.0;
         double m_continuationFrequencyPaddingHz = 20.0;
         double m_trackingFrequencyPaddingHz = 12.0;
         double m_maxTrackingJumpHz = 80.0;
@@ -154,6 +165,8 @@ public:
         double m_parentFrequencyLowQuantile = 0.10;
         double m_parentFrequencyHighQuantile = 0.90;
         double m_componentEnvelopeSupportFraction = 0.003;
+        double m_componentEnvelopeCompactDurationS = 0.25;
+        double m_componentEnvelopeMaximumCompactExpansionS = 0.20;
         double m_componentEnvelopeSustainedDurationS = 0.75;
         double m_componentEnvelopeSustainedExpansionFraction = 0.35;
         double m_componentEnvelopeMinimumSustainedExpansionS = 0.32;

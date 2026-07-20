@@ -3698,17 +3698,46 @@ bool MeteorDemodSink::refineBandEnvelope(
         return false;
     }
 
+    const quint64 originalStartSample = report.m_startSample;
+    const quint64 originalEndSample = report.m_endSample;
+
     report.m_dateTimeUtc = sampleCounterToDateTimeUtc(startSample);
     report.m_startSample = startSample;
     report.m_endSample = endSample;
     if (report.m_hasDisplaySamples)
     {
-        const quint64 durationSamples = endSample - startSample + 1;
-        const quint64 displayCenterSample = report.m_displayStartSample + (report.m_displayEndSample - report.m_displayStartSample) / 2;
-        report.m_displayStartSample = displayCenterSample > (durationSamples / 2)
-            ? displayCenterSample - (durationSamples / 2)
-            : 0;
-        report.m_displayEndSample = report.m_displayStartSample + durationSamples - 1;
+        const auto saturatingAdd = [](quint64 value, quint64 increment) {
+            const quint64 maximum = std::numeric_limits<quint64>::max();
+            return increment > maximum - value ? maximum : value + increment;
+        };
+
+        if (startSample < originalStartSample)
+        {
+            const quint64 leadExpansion = originalStartSample - startSample;
+            report.m_displayStartSample = leadExpansion < report.m_displayStartSample
+                ? report.m_displayStartSample - leadExpansion
+                : 0;
+        }
+        else {
+            report.m_displayStartSample = saturatingAdd(
+                report.m_displayStartSample,
+                startSample - originalStartSample);
+        }
+
+        if (endSample > originalEndSample) {
+            report.m_displayEndSample = saturatingAdd(
+                report.m_displayEndSample,
+                endSample - originalEndSample);
+        } else {
+            const quint64 trailingReduction = originalEndSample - endSample;
+            report.m_displayEndSample = trailingReduction < report.m_displayEndSample
+                ? report.m_displayEndSample - trailingReduction
+                : 0;
+        }
+
+        report.m_displayEndSample = std::max(
+            report.m_displayStartSample,
+            report.m_displayEndSample);
     }
     double envelopePeakPower = report.m_peakPower;
     const int firstSampleIndex = std::max(0, (int) (startSample - scanStartSample));

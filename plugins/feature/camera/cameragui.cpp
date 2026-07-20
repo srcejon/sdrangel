@@ -3498,7 +3498,7 @@ void CameraGUI::updatePreviewOverlayItems()
         if (!previewLabel.m_fontFamily.isEmpty()) {
             font.setFamily(previewLabel.m_fontFamily);
         }
-        font.setPointSizeF(std::max(6.0, previewLabel.m_fontPointSize));
+        font.setPointSizeF(std::max(4.0, previewLabel.m_fontPointSize));
         const QFontMetrics fontMetrics(font);
         const QStringList lines = previewLabel.m_text.split(QChar('\n'));
         int textWidth = 0;
@@ -9639,6 +9639,55 @@ QPoint CameraGUI::mapViewportPointToImage(const QPoint& viewportPos) const
     return QPoint(x, y);
 }
 
+bool CameraGUI::updateThermalMarkerFromViewport(const QPoint& viewportPos)
+{
+    if (!m_settings.m_thermalMarkerEnabled || !m_lastThermal.m_valid || m_lastThermal.m_temperatureC.empty()) {
+        return false;
+    }
+
+    const QPointF imagePoint = ui->imageView->mapToScene(viewportPos);
+    bool invertible = false;
+    const QTransform imageToSensor = m_lastThermal.m_sensorToImage.inverted(&invertible);
+    const QPointF sensorPoint = invertible ? imageToSensor.map(imagePoint) : imagePoint;
+    const int width = m_lastThermal.m_temperatureC.cols;
+    const int height = m_lastThermal.m_temperatureC.rows;
+    if ((width <= 1) || (height <= 1)) {
+        return false;
+    }
+
+    const double markerX = qBound(0.0, sensorPoint.x() / (width - 1), 1.0);
+    const double markerY = qBound(0.0, sensorPoint.y() / (height - 1), 1.0);
+    if ((qAbs(markerX - m_settings.m_thermalMarkerX) * (width - 1) < 0.25)
+        && (qAbs(markerY - m_settings.m_thermalMarkerY) * (height - 1) < 0.25))
+    {
+        return true;
+    }
+
+    m_settings.m_thermalMarkerX = markerX;
+    m_settings.m_thermalMarkerY = markerY;
+    const QSignalBlocker xBlocker(settingsUI()->thermalMarkerXSpin);
+    const QSignalBlocker yBlocker(settingsUI()->thermalMarkerYSpin);
+    settingsUI()->thermalMarkerXSpin->setValue(markerX * 100.0);
+    settingsUI()->thermalMarkerYSpin->setValue(markerY * 100.0);
+    applySettings({QStringLiteral("thermalMarkerX"), QStringLiteral("thermalMarkerY")});
+    return true;
+}
+
+bool CameraGUI::viewportPointHitsThermalMarker(const QPoint& viewportPos) const
+{
+    if (!m_settings.m_thermalMarkerEnabled || !m_lastThermal.m_valid || m_lastThermal.m_temperatureC.empty()) {
+        return false;
+    }
+
+    const int width = m_lastThermal.m_temperatureC.cols;
+    const int height = m_lastThermal.m_temperatureC.rows;
+    const QPointF sensorPoint(
+        m_settings.m_thermalMarkerX * std::max(0, width - 1),
+        m_settings.m_thermalMarkerY * std::max(0, height - 1));
+    const QPoint markerViewportPoint = ui->imageView->mapFromScene(m_lastThermal.m_sensorToImage.map(sensorPoint));
+    return QLineF(QPointF(viewportPos), QPointF(markerViewportPoint)).length() <= 14.0;
+}
+
 int CameraGUI::findStarDetectionAtImagePos(const QPointF& imagePos) const
 {
     int bestIndex = -1;
@@ -11947,24 +11996,44 @@ bool CameraGUI::eventFilter(QObject *watched, QEvent *event)
             && m_settings.m_thermalMarkerEnabled && m_lastThermal.m_valid)
         {
             const QMouseEvent *mouseEvent = static_cast<QMouseEvent*>(event);
+            if ((mouseEvent->button() == Qt::LeftButton) && updateThermalMarkerFromViewport(mouseEvent->pos())) {
+                return true;
+            }
+        }
+
+        const bool thermalMarkerInteractive = m_settings.m_thermalMarkerEnabled
+            && m_lastThermal.m_valid
+            && !m_settings.m_drawingsEnabled
+            && (m_previewDrawMode == PreviewDrawModeNone);
+        if (thermalMarkerInteractive && (event->type() == QEvent::MouseButtonPress))
+        {
+            const QMouseEvent *mouseEvent = static_cast<QMouseEvent*>(event);
+            if ((mouseEvent->button() == Qt::LeftButton) && viewportPointHitsThermalMarker(mouseEvent->pos()))
+            {
+                m_thermalMarkerDragging = true;
+                ui->imageView->viewport()->setCursor(Qt::ClosedHandCursor);
+                return true;
+            }
+        }
+        if (m_thermalMarkerDragging && (event->type() == QEvent::MouseMove))
+        {
+            const QMouseEvent *mouseEvent = static_cast<QMouseEvent*>(event);
+            if (mouseEvent->buttons() & Qt::LeftButton) {
+                updateThermalMarkerFromViewport(mouseEvent->pos());
+            } else {
+                m_thermalMarkerDragging = false;
+                ui->imageView->viewport()->unsetCursor();
+            }
+            return true;
+        }
+        if (m_thermalMarkerDragging && (event->type() == QEvent::MouseButtonRelease))
+        {
+            const QMouseEvent *mouseEvent = static_cast<QMouseEvent*>(event);
             if (mouseEvent->button() == Qt::LeftButton)
             {
-                const QPointF imagePoint = ui->imageView->mapToScene(mouseEvent->pos());
-                bool invertible = false;
-                const QTransform imageToSensor = m_lastThermal.m_sensorToImage.inverted(&invertible);
-                const QPointF sensorPoint = invertible ? imageToSensor.map(imagePoint) : imagePoint;
-                const int width = m_lastThermal.m_temperatureC.cols;
-                const int height = m_lastThermal.m_temperatureC.rows;
-                if ((width > 1) && (height > 1))
-                {
-                    m_settings.m_thermalMarkerX = qBound(0.0, sensorPoint.x() / (width - 1), 1.0);
-                    m_settings.m_thermalMarkerY = qBound(0.0, sensorPoint.y() / (height - 1), 1.0);
-                    const QSignalBlocker xBlocker(settingsUI()->thermalMarkerXSpin);
-                    const QSignalBlocker yBlocker(settingsUI()->thermalMarkerYSpin);
-                    settingsUI()->thermalMarkerXSpin->setValue(m_settings.m_thermalMarkerX * 100.0);
-                    settingsUI()->thermalMarkerYSpin->setValue(m_settings.m_thermalMarkerY * 100.0);
-                    applySettings({QStringLiteral("thermalMarkerX"), QStringLiteral("thermalMarkerY")});
-                }
+                updateThermalMarkerFromViewport(mouseEvent->pos());
+                m_thermalMarkerDragging = false;
+                ui->imageView->viewport()->unsetCursor();
                 return true;
             }
         }

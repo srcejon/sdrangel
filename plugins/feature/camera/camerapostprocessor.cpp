@@ -1690,7 +1690,7 @@ void CameraPostProcessor::applyPreviewTextLabels(QImage& image, const QVector<Pr
         if (!label.m_fontFamily.isEmpty()) {
             font.setFamily(label.m_fontFamily);
         }
-        font.setPointSizeF(std::max(6.0, label.m_fontPointSize));
+        font.setPointSizeF(std::max(4.0, label.m_fontPointSize));
         painter.setFont(font);
         const QFontMetrics fontMetrics(font);
 
@@ -1819,21 +1819,29 @@ void CameraPostProcessor::applyThermalOverlay(
         }
         return QStringLiteral("%1 C").arg(celsius, 0, 'f', 1);
     };
+    const double minimumDimension = std::max(1, std::min(image.width(), image.height()));
+    const double markerScale = qBound(0.5, minimumDimension / 384.0, 1.0);
+    const double markerRadius = 6.0 * markerScale;
+    const double labelPointSize = qBound(4.0, 9.0 * std::sqrt(minimumDimension / 720.0), 9.0);
     auto appendMarker = [&](const QPoint& thermalPoint, double temperature, const QColor& color, const QString& prefix) {
         const QPointF imagePoint = frame.mapOpticalToImage(thermalPoint);
         PreviewRectItem marker;
-        marker.m_rect = QRectF(imagePoint.x() - 6.0, imagePoint.y() - 6.0, 12.0, 12.0);
+        marker.m_rect = QRectF(
+            imagePoint.x() - markerRadius,
+            imagePoint.y() - markerRadius,
+            markerRadius * 2.0,
+            markerRadius * 2.0);
         marker.m_color = color;
-        marker.m_lineWidth = 2.0;
+        marker.m_lineWidth = 2.0 * markerScale;
         marker.m_ellipse = true;
 
         PreviewTextLabel label;
         label.m_text = prefix + displayTemperature(temperature);
-        label.m_position = imagePoint + QPointF(5.0, -8.0);
+        label.m_position = imagePoint + QPointF(5.0 * markerScale, -8.0 * markerScale);
         label.m_color = color;
-        label.m_fontPointSize = 9.0;
+        label.m_fontPointSize = labelPointSize;
 
-        if (drawLabels)
+        if (!drawLabels)
         {
             if (previewRectItems) {
                 previewRectItems->append(marker);

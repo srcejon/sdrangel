@@ -366,6 +366,7 @@ private:
     QGraphicsRectItem *m_previewDrawRectItem = nullptr;
     PreviewDrawMode m_previewDrawMode = PreviewDrawModeNone;
     bool m_previewDragging = false;
+    bool m_thermalMarkerDragging = false;
     QPoint m_previewDragStartImagePos;
     QDialog *m_keogramPreviewDialog = nullptr;
     QLabel *m_keogramPreviewLabel = nullptr;
@@ -449,6 +450,8 @@ private:
     void setMotionExclusionDrawMode(bool enabled);
     void setDetectionRoiDrawMode(bool enabled);
     QPoint mapViewportPointToImage(const QPoint& viewportPos) const;
+    bool updateThermalMarkerFromViewport(const QPoint& viewportPos);
+    bool viewportPointHitsThermalMarker(const QPoint& viewportPos) const;
     int findStarDetectionAtImagePos(const QPointF& imagePos) const;
     bool showStarDetectionContextMenu(const QPoint& viewportPos, const QPoint& globalPos);
     QString starDetectionDisplayName(const CameraPipelineStarDetection& star) const;

@@ -97,33 +97,54 @@ void logTabWidgetSizeDiagnostics(const char *name, const QTabWidget *tabWidget)
 }
 #endif
 
+void updateTemperatureAxes(const QList<QLineSeries*>& seriesList, QDateTimeAxis* axisX, QValueAxis* axisY);
+
 void updateTemperatureAxes(QLineSeries* series, QDateTimeAxis* axisX, QValueAxis* axisY)
 {
-    if (!series || !axisX || !axisY) {
+    updateTemperatureAxes(QList<QLineSeries*>{series}, axisX, axisY);
+}
+
+void updateTemperatureAxes(const QList<QLineSeries*>& seriesList, QDateTimeAxis* axisX, QValueAxis* axisY)
+{
+    if (!axisX || !axisY) {
         return;
     }
 
-    const QList<QPointF> points = series->points();
+    bool havePoint = false;
+    qreal minX = 0.0;
+    qreal maxX = 0.0;
+    qreal minY = 0.0;
+    qreal maxY = 0.0;
+    for (const QLineSeries *series : seriesList)
+    {
+        if (!series || !series->isVisible()) {
+            continue;
+        }
+        const QList<QPointF> points = series->points();
+        for (const QPointF& point : points)
+        {
+            if (!havePoint)
+            {
+                minX = maxX = point.x();
+                minY = maxY = point.y();
+                havePoint = true;
+            }
+            else
+            {
+                minX = std::min(minX, point.x());
+                maxX = std::max(maxX, point.x());
+                minY = std::min(minY, point.y());
+                maxY = std::max(maxY, point.y());
+            }
+        }
+    }
 
-    if (points.isEmpty())
+    if (!havePoint)
     {
         const QDateTime now = QDateTime::currentDateTime();
         axisX->setRange(now.addSecs(-60), now);
         axisY->setRange(0.0, 1.0);
         return;
-    }
-
-    qreal minX = points.first().x();
-    qreal maxX = points.first().x();
-    qreal minY = points.first().y();
-    qreal maxY = points.first().y();
-
-    for (const QPointF& point : points)
-    {
-        minX = std::min(minX, point.x());
-        maxX = std::max(maxX, point.x());
-        minY = std::min(minY, point.y());
-        maxY = std::max(maxY, point.y());
     }
 
     if (maxX <= minX) {
@@ -156,6 +177,8 @@ CameraSettingsDialog::CameraSettingsDialog(QWidget *parent) :
     m_lastCloudSampleMs(0),
     m_thermalChart(nullptr),
     m_thermalSeries(nullptr),
+    m_thermalMinimumSeries(nullptr),
+    m_thermalMaximumSeries(nullptr),
     m_thermalAxisX(nullptr),
     m_thermalAxisY(nullptr),
     m_lastThermalSampleMs(0),
@@ -235,11 +258,23 @@ CameraSettingsDialog::CameraSettingsDialog(QWidget *parent) :
 
     m_thermalChart = new QChart();
     m_thermalChart->setTheme(QChart::ChartThemeDark);
-    m_thermalChart->setTitle(tr("Marker temperature vs time"));
+    m_thermalChart->setTitle(tr("Thermal temperature vs time"));
     m_thermalChart->legend()->hide();
     m_thermalChart->layout()->setContentsMargins(0, 0, 0, 0);
     m_thermalSeries = new QLineSeries(m_thermalChart);
+    m_thermalSeries->setName(tr("Marker"));
+    m_thermalSeries->setColor(Qt::white);
+    m_thermalMinimumSeries = new QLineSeries(m_thermalChart);
+    m_thermalMinimumSeries->setName(tr("Minimum"));
+    m_thermalMinimumSeries->setColor(QColor(80, 160, 255));
+    m_thermalMinimumSeries->setVisible(false);
+    m_thermalMaximumSeries = new QLineSeries(m_thermalChart);
+    m_thermalMaximumSeries->setName(tr("Maximum"));
+    m_thermalMaximumSeries->setColor(QColor(255, 80, 80));
+    m_thermalMaximumSeries->setVisible(false);
     m_thermalChart->addSeries(m_thermalSeries);
+    m_thermalChart->addSeries(m_thermalMinimumSeries);
+    m_thermalChart->addSeries(m_thermalMaximumSeries);
     m_thermalAxisX = new QDateTimeAxis(m_thermalChart);
     m_thermalAxisX->setFormat("HH:mm:ss");
     m_thermalAxisY = new QValueAxis(m_thermalChart);
@@ -249,6 +284,10 @@ CameraSettingsDialog::CameraSettingsDialog(QWidget *parent) :
     m_thermalChart->addAxis(m_thermalAxisY, Qt::AlignLeft);
     m_thermalSeries->attachAxis(m_thermalAxisX);
     m_thermalSeries->attachAxis(m_thermalAxisY);
+    m_thermalMinimumSeries->attachAxis(m_thermalAxisX);
+    m_thermalMinimumSeries->attachAxis(m_thermalAxisY);
+    m_thermalMaximumSeries->attachAxis(m_thermalAxisX);
+    m_thermalMaximumSeries->attachAxis(m_thermalAxisY);
     auto *thermalChartView = new QChartView(m_thermalChart, ui->thermalChartContainer);
     thermalChartView->setRenderHint(QPainter::Antialiasing);
     auto *thermalChartLayout = new QVBoxLayout(ui->thermalChartContainer);
@@ -312,46 +351,76 @@ void CameraSettingsDialog::appendTemperatureSample(const QDateTime& timestamp, d
     updateTemperatureAxes(m_tempSeries, m_tempAxisX, m_tempAxisY);
 }
 
-void CameraSettingsDialog::appendThermalSample(const QDateTime& timestamp, double temperatureC,
+void CameraSettingsDialog::appendThermalSample(const QDateTime& timestamp, double markerTemperatureC,
+    double minimumTemperatureC, double maximumTemperatureC, bool showMinMax,
     int historySeconds, int sampleIntervalMs, bool fahrenheit)
 {
-    if (!m_thermalSeries || !timestamp.isValid()) {
+    if (!m_thermalSeries || !m_thermalMinimumSeries || !m_thermalMaximumSeries || !timestamp.isValid()) {
         return;
     }
     setThermalUnits(fahrenheit);
+    m_thermalMinimumSeries->setVisible(showMinMax);
+    m_thermalMaximumSeries->setVisible(showMinMax);
+    m_thermalChart->legend()->setVisible(showMinMax);
     const qint64 timestampMs = timestamp.toMSecsSinceEpoch();
-    if ((m_lastThermalSampleMs > 0) && (timestampMs - m_lastThermalSampleMs < sampleIntervalMs)) {
+    if ((m_lastThermalSampleMs > 0) && (timestampMs - m_lastThermalSampleMs < sampleIntervalMs))
+    {
+        updateTemperatureAxes(
+            {m_thermalSeries, m_thermalMinimumSeries, m_thermalMaximumSeries},
+            m_thermalAxisX,
+            m_thermalAxisY);
         return;
     }
     m_lastThermalSampleMs = timestampMs;
-    const double displayValue = fahrenheit ? temperatureC * 9.0 / 5.0 + 32.0 : temperatureC;
-    m_thermalSeries->append(timestampMs, displayValue);
+    auto displayValue = [fahrenheit](double temperatureC) {
+        return fahrenheit ? temperatureC * 9.0 / 5.0 + 32.0 : temperatureC;
+    };
+    m_thermalSeries->append(timestampMs, displayValue(markerTemperatureC));
+    if (showMinMax)
+    {
+        m_thermalMinimumSeries->append(timestampMs, displayValue(minimumTemperatureC));
+        m_thermalMaximumSeries->append(timestampMs, displayValue(maximumTemperatureC));
+    }
     const qint64 oldestMs = timestampMs - static_cast<qint64>(historySeconds) * 1000;
-    QList<QPointF> points = m_thermalSeries->points();
-    int removeCount = 0;
-    while ((removeCount < points.size()) && (points.at(removeCount).x() < oldestMs)) {
-        ++removeCount;
+    for (QLineSeries *series : {m_thermalSeries, m_thermalMinimumSeries, m_thermalMaximumSeries})
+    {
+        const QList<QPointF> points = series->points();
+        int removeCount = 0;
+        while ((removeCount < points.size()) && (points.at(removeCount).x() < oldestMs)) {
+            ++removeCount;
+        }
+        if (removeCount > 0) {
+            series->removePoints(0, removeCount);
+        }
     }
-    if (removeCount > 0) {
-        m_thermalSeries->removePoints(0, removeCount);
-    }
-    updateTemperatureAxes(m_thermalSeries, m_thermalAxisX, m_thermalAxisY);
+    updateTemperatureAxes(
+        {m_thermalSeries, m_thermalMinimumSeries, m_thermalMaximumSeries},
+        m_thermalAxisX,
+        m_thermalAxisY);
 }
 
 void CameraSettingsDialog::setThermalUnits(bool fahrenheit)
 {
-    if (!m_thermalSeries || (fahrenheit == m_thermalValuesFahrenheit)) {
+    if (!m_thermalSeries || !m_thermalMinimumSeries || !m_thermalMaximumSeries
+        || (fahrenheit == m_thermalValuesFahrenheit))
+    {
         return;
     }
 
-    QList<QPointF> points = m_thermalSeries->points();
-    for (QPointF& point : points) {
-        point.setY(fahrenheit ? point.y() * 9.0 / 5.0 + 32.0 : (point.y() - 32.0) * 5.0 / 9.0);
+    for (QLineSeries *series : {m_thermalSeries, m_thermalMinimumSeries, m_thermalMaximumSeries})
+    {
+        QList<QPointF> points = series->points();
+        for (QPointF& point : points) {
+            point.setY(fahrenheit ? point.y() * 9.0 / 5.0 + 32.0 : (point.y() - 32.0) * 5.0 / 9.0);
+        }
+        series->replace(points);
     }
-    m_thermalSeries->replace(points);
     m_thermalValuesFahrenheit = fahrenheit;
     m_thermalAxisY->setTitleText(fahrenheit ? tr("Temperature (F)") : tr("Temperature (C)"));
-    updateTemperatureAxes(m_thermalSeries, m_thermalAxisX, m_thermalAxisY);
+    updateTemperatureAxes(
+        {m_thermalSeries, m_thermalMinimumSeries, m_thermalMaximumSeries},
+        m_thermalAxisX,
+        m_thermalAxisY);
 }
 
 void CameraSettingsDialog::clearCameraStatus()
@@ -375,10 +444,19 @@ void CameraSettingsDialog::clearCameraStatus()
     if (m_thermalSeries) {
         m_thermalSeries->clear();
     }
+    if (m_thermalMinimumSeries) {
+        m_thermalMinimumSeries->clear();
+    }
+    if (m_thermalMaximumSeries) {
+        m_thermalMaximumSeries->clear();
+    }
     m_lastThermalSampleMs = 0;
 
     updateTemperatureAxes(m_tempSeries, m_tempAxisX, m_tempAxisY);
-    updateTemperatureAxes(m_thermalSeries, m_thermalAxisX, m_thermalAxisY);
+    updateTemperatureAxes(
+        {m_thermalSeries, m_thermalMinimumSeries, m_thermalMaximumSeries},
+        m_thermalAxisX,
+        m_thermalAxisY);
 }
 
 void CameraSettingsDialog::on_thermalClearChartButton_clicked()
@@ -386,8 +464,17 @@ void CameraSettingsDialog::on_thermalClearChartButton_clicked()
     if (m_thermalSeries) {
         m_thermalSeries->clear();
     }
+    if (m_thermalMinimumSeries) {
+        m_thermalMinimumSeries->clear();
+    }
+    if (m_thermalMaximumSeries) {
+        m_thermalMaximumSeries->clear();
+    }
     m_lastThermalSampleMs = 0;
-    updateTemperatureAxes(m_thermalSeries, m_thermalAxisX, m_thermalAxisY);
+    updateTemperatureAxes(
+        {m_thermalSeries, m_thermalMinimumSeries, m_thermalMaximumSeries},
+        m_thermalAxisX,
+        m_thermalAxisY);
 }
 
 void CameraSettingsDialog::shrinkToVisibleContent()

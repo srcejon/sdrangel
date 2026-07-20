@@ -828,6 +828,9 @@ bool CameraGUI::handleMessage(const Message& message)
             m_settingsDialog->appendThermalSample(
                 report.getCaptureDateTime().isValid() ? report.getCaptureDateTime() : QDateTime::currentDateTime(),
                 m_lastThermal.m_markerTemperatureC,
+                m_lastThermal.m_minimumC,
+                m_lastThermal.m_maximumC,
+                m_settings.m_thermalShowMinMax,
                 m_settings.m_thermalChartHistorySeconds,
                 m_settings.m_thermalChartSampleIntervalMs,
                 m_settings.m_thermalUnits == CameraSettings::ThermalUnitsFahrenheit);

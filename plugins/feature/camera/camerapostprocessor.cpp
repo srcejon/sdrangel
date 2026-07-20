@@ -1821,7 +1821,7 @@ void CameraPostProcessor::applyThermalOverlay(
     };
     const double minimumDimension = std::max(1, std::min(image.width(), image.height()));
     const double markerScale = qBound(0.5, minimumDimension / 384.0, 1.0);
-    const double markerRadius = 6.0 * markerScale;
+    const double markerRadius = 4.0 * markerScale;
     const double labelPointSize = qBound(4.0, 9.0 * std::sqrt(minimumDimension / 720.0), 9.0);
     auto appendMarker = [&](const QPoint& thermalPoint, double temperature, const QColor& color, const QString& prefix) {
         const QPointF imagePoint = frame.mapOpticalToImage(thermalPoint);
@@ -1837,7 +1837,7 @@ void CameraPostProcessor::applyThermalOverlay(
 
         PreviewTextLabel label;
         label.m_text = prefix + displayTemperature(temperature);
-        label.m_position = imagePoint + QPointF(5.0 * markerScale, -8.0 * markerScale);
+        label.m_position = imagePoint;
         label.m_color = color;
         label.m_fontPointSize = labelPointSize;
 

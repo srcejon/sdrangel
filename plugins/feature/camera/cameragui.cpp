@@ -3553,7 +3553,9 @@ void CameraGUI::updatePreviewOverlayItems()
         else
         {
             QGraphicsSimpleTextItem *shadowItem = m_imageScene->addSimpleText(previewLabel.m_text, font);
-            shadowItem->setPos(textPos + QPointF(1.0, 1.0));
+            // Small thermal labels otherwise have an overly prominent one-pixel shadow.
+            const double shadowOffset = qBound(0.4, previewLabel.m_fontPointSize / 9.0, 1.0);
+            shadowItem->setPos(textPos + QPointF(shadowOffset, shadowOffset));
             shadowItem->setBrush(QBrush(Qt::black));
             shadowItem->setZValue(1.5);
             m_previewOverlayItems.append(shadowItem);

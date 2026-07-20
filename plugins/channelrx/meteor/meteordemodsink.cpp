@@ -1132,7 +1132,10 @@ void MeteorDemodSink::finishSpectralEvent(const SpectralEvent& event)
 {
     SpectralCandidate candidate = buildSpectralCandidate(event);
 
-    if (candidate.m_valid && candidate.m_accepted && isSweepContinuation(candidate))
+    if (candidate.m_valid
+        && candidate.m_accepted
+        && !isLocalizedCompactBurst(candidate)
+        && isSweepContinuation(candidate))
     {
         candidate.m_sweepContinuationRejected = true;
         candidate.m_accepted = false;
@@ -1278,6 +1281,20 @@ bool MeteorDemodSink::isSweepContinuation(const SpectralCandidate& candidate) co
     }
 
     return false;
+}
+
+bool MeteorDemodSink::isLocalizedCompactBurst(const SpectralCandidate& candidate) const
+{
+    return (candidate.m_durationS <= m_detectorTunables.m_localizedBurstMaxDurationS)
+        && (candidate.m_frameCount <= m_detectorTunables.m_localizedBurstMaxFrames)
+        && (candidate.m_trackOccupancy >= m_detectorTunables.m_localizedBurstMinTrackOccupancy)
+        && (candidate.m_frameOccupiedFraction <= m_detectorTunables.m_localizedBurstMaxOccupiedFraction)
+        && (candidate.m_peakAboveBackgroundDB >= m_detectorTunables.m_localizedBurstMinPeakDB)
+        && (candidate.m_maxContrastDB >= m_detectorTunables.m_localizedBurstMinContrastDB)
+        && (candidate.m_integratedSupportDB >= m_detectorTunables.m_localizedBurstMinIntegratedSupportDB)
+        && (candidate.m_frequencyCoherence >= m_detectorTunables.m_localizedBurstMinFrequencyCoherence)
+        && (candidate.m_matchedEnvelopeScore >= m_detectorTunables.m_localizedBurstMinMatchedEnvelopeScore)
+        && (candidate.m_envelopeTailFrames >= m_detectorTunables.m_localizedBurstMinEnvelopeTailFrames);
 }
 
 bool MeteorDemodSink::overlapsBroadbandInterference(quint64 startSample, quint64 endSample) const
@@ -1662,17 +1679,7 @@ MeteorDemodSink::SpectralCandidate MeteorDemodSink::buildSpectralCandidate(const
     calculateShadowCandidateFeatures(candidate, event);
     const bool exceptionalShortEcho = (candidate.m_peakAboveBackgroundDB >= 25.0)
         && (candidate.m_integratedSupportDB >= 15.0);
-    const bool localizedCompactBurst =
-        (candidate.m_durationS <= m_detectorTunables.m_localizedBurstMaxDurationS)
-        && (candidate.m_frameCount <= m_detectorTunables.m_localizedBurstMaxFrames)
-        && (candidate.m_trackOccupancy >= m_detectorTunables.m_localizedBurstMinTrackOccupancy)
-        && (candidate.m_frameOccupiedFraction <= m_detectorTunables.m_localizedBurstMaxOccupiedFraction)
-        && (candidate.m_peakAboveBackgroundDB >= m_detectorTunables.m_localizedBurstMinPeakDB)
-        && (candidate.m_maxContrastDB >= m_detectorTunables.m_localizedBurstMinContrastDB)
-        && (candidate.m_integratedSupportDB >= m_detectorTunables.m_localizedBurstMinIntegratedSupportDB)
-        && (candidate.m_frequencyCoherence >= m_detectorTunables.m_localizedBurstMinFrequencyCoherence)
-        && (candidate.m_matchedEnvelopeScore >= m_detectorTunables.m_localizedBurstMinMatchedEnvelopeScore)
-        && (candidate.m_envelopeTailFrames >= m_detectorTunables.m_localizedBurstMinEnvelopeTailFrames);
+    const bool localizedCompactBurst = isLocalizedCompactBurst(candidate);
     const bool sustainedSmoothSweep = (candidate.m_durationS >= m_detectorTunables.m_sustainedSweepMinDurationS)
         && (candidate.m_frameCount >= m_detectorTunables.m_sustainedSweepMinFrames)
         && (candidate.m_sweepScore >= m_detectorTunables.m_sustainedSweepMinR2)
@@ -3183,7 +3190,7 @@ void MeteorDemodSink::scheduleNextComponentFlush()
         const bool continuationEligible = event.m_report.m_spectralParentEligible
             && ((event.m_spectralComponentCount >= 2) || (event.m_report.m_durationS >= 1.0));
         const double holdS = !continuationEligible
-            ? 0.5
+            ? m_detectorTunables.m_initialComponentHoldS
             : (event.m_strong
                 ? m_detectorTunables.m_continuationStrongHoldS
                 : m_detectorTunables.m_continuationOrdinaryHoldS);
@@ -3223,7 +3230,7 @@ void MeteorDemodSink::flushPendingComponentReports(bool force)
         const bool continuationEligible = event.m_report.m_spectralParentEligible
             && ((event.m_spectralComponentCount >= 2) || (event.m_report.m_durationS >= 1.0));
         const double holdS = !continuationEligible
-            ? 0.5
+            ? m_detectorTunables.m_initialComponentHoldS
             : (event.m_strong
                 ? m_detectorTunables.m_continuationStrongHoldS
                 : m_detectorTunables.m_continuationOrdinaryHoldS);

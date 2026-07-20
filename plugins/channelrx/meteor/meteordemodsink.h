@@ -66,7 +66,7 @@ public:
         double m_twoFrameMinIntegratedSupportDB = -7.0;
         double m_localizedTwoFrameMinPeakDB = 12.0;
         double m_localizedTwoFrameMinContrastDB = 18.0;
-        double m_coherentWideTwoFrameMinBandwidthHz = 90.0;
+        double m_coherentWideTwoFrameMinBandwidthHz = 60.0;
         double m_coherentWideTwoFrameMaxBandwidthHz = 130.0;
         double m_coherentWideTwoFrameMaxOccupiedFraction = 0.25;
         double m_coherentWideTwoFrameMinPeakDB = 11.5;
@@ -117,6 +117,7 @@ public:
         double m_duplicateFrequencyOverlapFraction = 0.65;
         double m_duplicateStrongFrequencyOverlapFraction = 0.85;
         double m_continuationThresholdReductionDB = 3.0;
+        double m_initialComponentHoldS = 0.75;
         double m_continuationOrdinaryHoldS = 1.0;
         double m_continuationStrongHoldS = 3.0;
         double m_continuationMaxEvidenceGapS = 0.75;
@@ -639,6 +640,7 @@ private:
     void finishSpectralEvent(const SpectralEvent& event);
     void auditSpectralCandidate(const SpectralCandidate& candidate) const;
     void captureCandidateDiagnostic(const SpectralCandidate& candidate) const;
+    bool isLocalizedCompactBurst(const SpectralCandidate& candidate) const;
     bool isSweepContinuation(const SpectralCandidate& candidate) const;
     bool overlapsBroadbandInterference(quint64 startSample, quint64 endSample) const;
     void rememberSpectralInterference(const SpectralCandidate& candidate);

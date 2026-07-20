@@ -512,6 +512,8 @@ SWGCameraSettings::SWGCameraSettings() {
     m_cloud_star_sense_magnitude_isSet = false;
     cloud_use_reference = 0;
     m_cloud_use_reference_isSet = false;
+    cloud_use_detection_roi = 0;
+    m_cloud_use_detection_roi_isSet = false;
     cloud_auto_reference = 0;
     m_cloud_auto_reference_isSet = false;
     cloud_sun_moon_radius_deg = 0.0;
@@ -1118,6 +1120,8 @@ SWGCameraSettings::init() {
     m_cloud_star_sense_magnitude_isSet = false;
     cloud_use_reference = 0;
     m_cloud_use_reference_isSet = false;
+    cloud_use_detection_roi = 0;
+    m_cloud_use_detection_roi_isSet = false;
     cloud_auto_reference = 0;
     m_cloud_auto_reference_isSet = false;
     cloud_sun_moon_radius_deg = 0.0;
@@ -2121,6 +2125,7 @@ SWGCameraSettings::fromJsonObject(QJsonObject &pJson) {
     ::SWGSDRangel::setValue(&cloud_star_sense_magnitude, pJson["cloudStarSenseMagnitude"], "double", "");
     
     ::SWGSDRangel::setValue(&cloud_use_reference, pJson["cloudUseReference"], "qint32", "");
+    ::SWGSDRangel::setValue(&cloud_use_detection_roi, pJson["cloudUseDetectionRoi"], "qint32", "");
     
     ::SWGSDRangel::setValue(&cloud_auto_reference, pJson["cloudAutoReference"], "qint32", "");
     
@@ -2977,6 +2982,9 @@ SWGCameraSettings::asJsonObject() {
     }
     if(m_cloud_use_reference_isSet){
         obj->insert("cloudUseReference", QJsonValue(cloud_use_reference));
+    }
+    if(m_cloud_use_detection_roi_isSet){
+        obj->insert("cloudUseDetectionRoi", QJsonValue(cloud_use_detection_roi));
     }
     if(m_cloud_auto_reference_isSet){
         obj->insert("cloudAutoReference", QJsonValue(cloud_auto_reference));
@@ -5574,6 +5582,16 @@ SWGCameraSettings::setCloudUseReference(qint32 cloud_use_reference) {
 }
 
 qint32
+SWGCameraSettings::getCloudUseDetectionRoi() {
+    return cloud_use_detection_roi;
+}
+void
+SWGCameraSettings::setCloudUseDetectionRoi(qint32 cloud_use_detection_roi) {
+    this->cloud_use_detection_roi = cloud_use_detection_roi;
+    this->m_cloud_use_detection_roi_isSet = true;
+}
+
+qint32
 SWGCameraSettings::getCloudAutoReference() {
     return cloud_auto_reference;
 }
@@ -6875,6 +6893,9 @@ SWGCameraSettings::isSet(){
             isObjectUpdated = true; break;
         }
         if(m_cloud_use_reference_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_cloud_use_detection_roi_isSet){
             isObjectUpdated = true; break;
         }
         if(m_cloud_auto_reference_isSet){

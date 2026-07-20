@@ -2531,6 +2531,7 @@ void CameraGUI::displaySettings()
     settingsUI()->cloudStarSenseCheck->setChecked(m_settings.m_cloudStarSense);
     settingsUI()->cloudStarSenseMagSpin->setValue(m_settings.m_cloudStarSenseMagnitude);
     settingsUI()->cloudUseReferenceCheck->setChecked(m_settings.m_cloudUseReference);
+    settingsUI()->cloudUseRoiCheck->setChecked(m_settings.m_cloudUseDetectionRoi);
     settingsUI()->cloudAutoReferenceCheck->setChecked(m_settings.m_cloudAutoReference);
     if (!m_clearSkyReferenceSummary.isEmpty()) {
         settingsUI()->cloudReferenceStatusLabel->setText(m_clearSkyReferenceSummary);
@@ -3969,6 +3970,7 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->cloudStarSenseCheck, &QCheckBox::toggled, this, &CameraGUI::on_cloudStarSenseCheck_toggled);
     QObject::connect(settingsUI()->cloudStarSenseMagSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_cloudStarSenseMagSpin_valueChanged);
     QObject::connect(settingsUI()->cloudUseReferenceCheck, &QCheckBox::toggled, this, &CameraGUI::on_cloudUseReferenceCheck_toggled);
+    QObject::connect(settingsUI()->cloudUseRoiCheck, &QCheckBox::toggled, this, &CameraGUI::on_cloudUseRoiCheck_toggled);
     QObject::connect(settingsUI()->cloudAutoReferenceCheck, &QCheckBox::toggled, this, &CameraGUI::on_cloudAutoReferenceCheck_toggled);
     QObject::connect(settingsUI()->cloudSaveReferenceButton, &QPushButton::clicked, this, &CameraGUI::on_cloudSaveReferenceButton_clicked);
     QObject::connect(settingsUI()->cloudViewReferenceButton, &QPushButton::clicked, this, &CameraGUI::on_cloudViewReferenceButton_clicked);
@@ -11131,6 +11133,12 @@ void CameraGUI::on_cloudUseReferenceCheck_toggled(bool checked)
 {
     m_settings.m_cloudUseReference = checked;
     applySetting("cloudUseReference");
+}
+
+void CameraGUI::on_cloudUseRoiCheck_toggled(bool checked)
+{
+    m_settings.m_cloudUseDetectionRoi = checked;
+    applySetting("cloudUseDetectionRoi");
 }
 
 void CameraGUI::on_cloudAutoReferenceCheck_toggled(bool checked)

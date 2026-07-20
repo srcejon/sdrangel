@@ -1106,6 +1106,10 @@ Automatically blends verified-clear frames into the reference: frames whose meas
 
 A fully clear night is not required: when the frame as a whole is not verified clear, the sky around each visible predicted star still accumulates into the reference patchwork-style (star sensing must be enabled - a visible star is physical proof that line of sight is clear). Each pixel joins the comparison once it has been confirmed clear on two separate occasions, so at sites that never get a wholly clear night the reference assembles itself over time from whatever gaps appear; a later verified-clear frame fills the remaining gaps outright. The viewer's Filled column shows how much of each slot has been confirmed. Day slots fill only from whole frames measured nearly cloud-free or a manual Save ref: no day-time colour test can prove a pixel clear (on IR-sensitive cameras dark cloud carries the same red/blue ratio as blue sky), so nothing weaker is trusted. If a reference does end up poisoned - cloud learned as clear sky, visible as cloud structure in the viewer's brightness map and coverage reading far too low - the viewer's Delete all button removes the camera's store so it can rebuild from scratch.
 
+<h4>25. Use RoI</h4>
+
+When checked, cloud detection evaluates only the shared detection region of interest (configured on the Detection tab). When unchecked, the whole image is evaluated regardless of the RoI - typical for an all-sky camera where motion or star detection is restricted to a region but cloud coverage should span the full sky. The clear-sky reference is tied to the evaluated region, so references saved under one setting do not apply until that setting is restored.
+
 On the Star Detection sub-tab:
 
 ![Star Detection tab](../../../doc/img/Camera_plugin_star_detection_tab.png)

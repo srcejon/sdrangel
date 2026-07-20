@@ -896,6 +896,7 @@ private slots:
     void on_cloudStarSenseCheck_toggled(bool checked);
     void on_cloudStarSenseMagSpin_valueChanged(double value);
     void on_cloudUseReferenceCheck_toggled(bool checked);
+    void on_cloudUseRoiCheck_toggled(bool checked);
     void on_cloudAutoReferenceCheck_toggled(bool checked);
     void on_cloudSaveReferenceButton_clicked();
     void on_cloudViewReferenceButton_clicked();

@@ -376,6 +376,7 @@ bool CameraCloudDetector::handleStageMessage(const Message& cmd)
 bool CameraCloudDetector::cloudSettingsChanged(const QList<QString>& settingsKeys)
 {
     return settingsKeys.contains("cloudDetect")
+        || settingsKeys.contains("cloudUseDetectionRoi")
         || settingsKeys.contains("cloudMode")
         || settingsKeys.contains("cloudDebugView")
         || settingsKeys.contains("cloudDayThreshold")
@@ -507,7 +508,11 @@ void CameraCloudDetector::processNewFrame(const CameraPipelineFramePtr& frame)
         return;
     }
     const cv::Size frameCvSize(frameSize.width(), frameSize.height());
-    const cv::Rect detectionRoi = resolveDetectionRoi(frameCvSize);
+    // The shared detection RoI is optional here: an all-sky camera often wants the whole
+    // frame's cloud coverage even while motion/star detection is restricted to a region
+    const cv::Rect detectionRoi = m_settings.m_cloudUseDetectionRoi
+        ? resolveDetectionRoi(frameCvSize)
+        : cv::Rect(0, 0, frameCvSize.width, frameCvSize.height);
 
     // When output scaling pads the image inside a larger canvas, the frame's image transform
     // records where the real content sits; everything outside it is border, not sky

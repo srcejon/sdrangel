@@ -6420,6 +6420,23 @@ car</string>
              </property>
             </widget>
            </item>
+           <item row="8" column="2">
+            <widget class="QLabel" name="cloudUseRoiLabel">
+             <property name="text">
+              <string>Use RoI</string>
+             </property>
+            </widget>
+           </item>
+           <item row="8" column="3">
+            <widget class="QCheckBox" name="cloudUseRoiCheck">
+             <property name="toolTip">
+              <string>When checked, cloud detection evaluates only the shared detection region of interest. When unchecked, the whole image is evaluated regardless of the RoI - typical for an all-sky camera where motion or star detection is restricted but cloud coverage should span the full sky</string>
+             </property>
+             <property name="text">
+              <string/>
+             </property>
+            </widget>
+           </item>
            <item row="9" column="0">
             <widget class="QLabel" name="cloudMaskSunMoonLabel">
              <property name="text">

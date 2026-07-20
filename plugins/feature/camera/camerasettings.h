@@ -702,6 +702,7 @@ struct CameraSettings
     double m_cloudMotionOverlapThreshold; ///< Cloud overlap fraction at which a motion box is suppressed: 0.0..1.0
     double m_cloudEventThreshold; ///< Coverage percentage at which a Scheduler coverage-high event is emitted (low again 10 points below): 0..100
     double m_cloudEdgeMarginPercent; ///< Exclude a margin this % of the frame in from the sky-region edge (fisheye rim / vignette / foreground): 0 disables, 0..25
+    bool   m_cloudUseDetectionRoi; ///< Restrict cloud detection to the shared detection RoI; when false the whole frame is evaluated
     bool   m_cloudMaskSunMoon;  ///< Exclude the projected sun (day) / moon (night) so their bright bloom is not classified as cloud
     double m_cloudSunMoonRadiusDeg; ///< Maximum angular radius in degrees the sun/moon exclusion grows to (dynamic bloom, capped here): 0..45
     bool   m_cloudStarSense;    ///< Veto cloud where predicted catalog stars are visible (needs calibrated pose, position and capture time)

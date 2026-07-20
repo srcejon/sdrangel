@@ -163,6 +163,33 @@ public:
         LearnedFeatureVector m_learnedModelWeights {};
         double m_learnedRescueProbability = 0.80;
         bool m_enableSettledParentReanalysis = true;
+        bool m_enableRejectedCandidateReanalysis = true;
+        double m_rejectedCandidateReanalysisDelayS = 1.0;
+        double m_rejectedCandidateMinimumScoreMargin = 2.0;
+        int m_rejectedCandidateMaximumFrames = 2;
+        double m_rejectedCandidateMinimumFrequencyCoherence = 0.85;
+        double m_rejectedCandidateMaximumOccupiedFraction = 0.30;
+        double m_rejectedTwoFrameMinimumBandwidthHz = 35.0;
+        double m_rejectedTwoFrameStrongNarrowMinimumBandwidthHz = 30.0;
+        double m_rejectedTwoFrameStrongNarrowMinimumPeakDB = 11.8;
+        double m_rejectedTwoFrameStrongNarrowMinimumScoreMargin = 2.8;
+        double m_rejectedCandidateMinimumExpansionS = 0.15;
+        double m_rejectedCandidateMinimumDurationS = 0.30;
+        double m_rejectedCandidateMinimumPersistentLineS = 0.18;
+        double m_rejectedCandidateMinimumPersistentLineProminenceDB = 6.0;
+        double m_rejectedCandidateMaximumPersistentLineJumpHz = 24.0;
+        double m_rejectedCandidateSweepSearchHalfWidthHz = 80.0;
+        double m_rejectedCandidateSweepMinimumProminenceDB = 6.0;
+        double m_rejectedCandidateSweepTemporalSupportFraction = 0.05;
+        double m_rejectedCandidateSweepMinimumDriftHz = 20.0;
+        double m_rejectedCandidateSweepMinimumR2 = 0.65;
+        double m_rejectedCandidateActiveEventOverlapFraction = 0.75;
+        double m_compactMeteorSweepMaximumDurationS = 0.32;
+        int m_compactMeteorSweepMaximumFrames = 5;
+        double m_compactMeteorSweepMinimumFrequencyCoherence = 0.60;
+        double m_compactMeteorSweepMinimumContrastDB = 16.0;
+        double m_compactMeteorSweepMaximumOccupiedFraction = 0.40;
+        int m_maxPendingCandidateReanalyses = 32;
         double m_parentReanalysisMinimumDurationS = 2.0;
         double m_parentFrequencyLowQuantile = 0.10;
         double m_parentFrequencyHighQuantile = 0.90;
@@ -431,6 +458,11 @@ private:
         std::vector<MeteorEventObservation> m_observations;
     };
 
+    struct PendingCandidateReanalysis {
+        SpectralCandidate m_candidate;
+        quint64 m_dueSample = 0;
+    };
+
     struct AssociationResult {
         quint64 m_parentEventId = 0;
         QString m_decision = QStringLiteral("rejected");
@@ -590,8 +622,10 @@ private:
     std::vector<DetectionRange> m_recentDetectionRanges;
     std::vector<SpectralInterferenceRange> m_recentSpectralInterference;
     std::vector<ActiveMeteorEvent> m_activeMeteorEvents;
+    std::vector<PendingCandidateReanalysis> m_pendingCandidateReanalyses;
     quint64 m_nextMeteorEventId;
     quint64 m_nextComponentFlushSample;
+    quint64 m_nextCandidateReanalysisSample;
     std::vector<char> m_spectralActiveBins;
     FFTEngine *m_spectralFFT;
     FFTEngine *m_pulseFFT;
@@ -638,6 +672,15 @@ private:
     void updateSpectralEvents(const std::vector<SpectralBand>& bands, quint64 frameCenterSample);
     void updateSpectralEvent(SpectralEvent& event, const SpectralBand& band, quint64 frameCenterSample);
     void finishSpectralEvent(const SpectralEvent& event);
+    PulseReport reportFromSpectralCandidate(const SpectralCandidate& candidate) const;
+    bool shouldReanalyzeRejectedCandidate(const SpectralCandidate& candidate) const;
+    void queueRejectedCandidateReanalysis(const SpectralCandidate& candidate);
+    void processPendingCandidateReanalyses(bool force);
+    void finishRejectedCandidate(const SpectralCandidate& candidate) const;
+    bool settledCandidateHasPersistentLine(
+        const PulseReport& report,
+        quint64 originalEndSample) const;
+    bool settledCandidateIsSweep(const PulseReport& report, double& driftHz, double& r2) const;
     void auditSpectralCandidate(const SpectralCandidate& candidate) const;
     void captureCandidateDiagnostic(const SpectralCandidate& candidate) const;
     bool isLocalizedCompactBurst(const SpectralCandidate& candidate) const;
@@ -670,7 +713,7 @@ private:
     void rememberDetection(quint64 startSample, quint64 endSample);
     void rememberDetection(quint64 startSample, quint64 endSample, double centerFrequency, double frequencySpan);
     void pruneRecentDetections();
-    AssociationResult emitOrDeferSpectralReport(const PulseReport& report);
+    AssociationResult emitOrDeferSpectralReport(const PulseReport& report, bool refineEnvelope = true);
     AssociationResult queueSpectralComponentReport(const PulseReport& report);
     void scheduleNextComponentFlush();
     void flushPendingComponentReports(bool force);

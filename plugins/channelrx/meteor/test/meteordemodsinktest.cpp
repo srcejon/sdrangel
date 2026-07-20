@@ -154,6 +154,7 @@ namespace {
         double frequencySpan;
         double frequencyDrift;
         double totalPowerDB;
+        bool required = true;
     };
 
     struct CandidateLabel
@@ -1094,7 +1095,12 @@ namespace {
         QTextStream in(&file);
         const QString header = in.readLine().trimmed();
 
-        if (header != "index,timeOffsetS,durationS,centerFrequencyHz,frequencySpanHz,frequencyDriftHz,totalPowerDB")
+        const QString legacyHeader =
+            "index,timeOffsetS,durationS,centerFrequencyHz,frequencySpanHz,frequencyDriftHz,totalPowerDB";
+        const QString optionalHeader = legacyHeader + ",required";
+        const bool hasRequiredColumn = header == optionalHeader;
+
+        if ((header != legacyHeader) && !hasRequiredColumn)
         {
             error = QString("Unexpected CSV header in %1").arg(csvPath);
             return false;
@@ -1113,9 +1119,14 @@ namespace {
 
             const QStringList fields = line.split(',');
 
-            if (fields.size() != 7)
+            const int expectedFieldCount = hasRequiredColumn ? 8 : 7;
+
+            if (fields.size() != expectedFieldCount)
             {
-                error = QString("Expected 7 fields in %1 row %2").arg(csvPath).arg(row);
+                error = QString("Expected %1 fields in %2 row %3")
+                    .arg(expectedFieldCount)
+                    .arg(csvPath)
+                    .arg(row);
                 return false;
             }
 
@@ -1133,6 +1144,20 @@ namespace {
             {
                 error = QString("Invalid numeric value in %1 row %2").arg(csvPath).arg(row);
                 return false;
+            }
+
+            if (hasRequiredColumn)
+            {
+                const QString required = fields[7].trimmed().toLower();
+
+                if ((required == "1") || (required == "true") || (required == "required")) {
+                    detection.required = true;
+                } else if ((required == "0") || (required == "false") || (required == "optional")) {
+                    detection.required = false;
+                } else {
+                    error = QString("Invalid required value in %1 row %2").arg(csvPath).arg(row);
+                    return false;
+                }
             }
 
             detections.push_back(detection);
@@ -1157,32 +1182,35 @@ namespace {
         constexpr double frequencyToleranceHz = 1.0;
         constexpr double totalPowerToleranceDB = 0.5;
         bool ok = true;
+        int requiredCount = 0;
 
-        if (actual.size() != expected.size())
+        for (const ExpectedDetection& expectation : expected) {
+            requiredCount += expectation.required ? 1 : 0;
+        }
+
+        if ((actual.size() < requiredCount) || (actual.size() > expected.size()))
         {
-            err << QString("%1: expected %2 detections, got %3\n")
+            err << QString("%1: expected %2 required and up to %3 optional detections, got %4\n")
                 .arg(name)
-                .arg(expected.size())
+                .arg(requiredCount)
+                .arg(expected.size() - requiredCount)
                 .arg(actual.size());
             ok = false;
         }
 
-        if (actual.isEmpty() || expected.isEmpty()) {
+        if (expected.isEmpty()) {
             return ok;
         }
 
-        const int count = std::min(actual.size(), expected.size());
-        for (int i = 0; i < count; i++)
+        auto compareDetection = [&](const Detection& detection, const ExpectedDetection& expectation)
         {
-            const Detection& detection = actual[i];
-            const ExpectedDetection& expectation = expected[i];
             const double timeOffsetS = (double) detection.startSample / (double) std::max(1, detection.sampleRate);
 
             if (!nearlyEqual(timeOffsetS, expectation.timeOffsetS, timeToleranceS))
             {
                 err << QString("%1 detection %2: expected timeOffsetS %3, got %4\n")
                     .arg(name)
-                    .arg(i + 1)
+                    .arg(expectation.index)
                     .arg(expectation.timeOffsetS, 0, 'f', 3)
                     .arg(timeOffsetS, 0, 'f', 3);
                 ok = false;
@@ -1192,7 +1220,7 @@ namespace {
             {
                 err << QString("%1 detection %2: expected durationS %3, got %4\n")
                     .arg(name)
-                    .arg(i + 1)
+                    .arg(expectation.index)
                     .arg(expectation.durationS, 0, 'f', 6)
                     .arg(detection.durationS, 0, 'f', 6);
                 ok = false;
@@ -1202,7 +1230,7 @@ namespace {
             {
                 err << QString("%1 detection %2: expected centerFrequencyHz %3, got %4\n")
                     .arg(name)
-                    .arg(i + 1)
+                    .arg(expectation.index)
                     .arg(expectation.centerFrequency, 0, 'f', 2)
                     .arg(detection.centerFrequency, 0, 'f', 2);
                 ok = false;
@@ -1212,7 +1240,7 @@ namespace {
             {
                 err << QString("%1 detection %2: expected frequencySpanHz %3, got %4\n")
                     .arg(name)
-                    .arg(i + 1)
+                    .arg(expectation.index)
                     .arg(expectation.frequencySpan, 0, 'f', 2)
                     .arg(detection.frequencySpan, 0, 'f', 2);
                 ok = false;
@@ -1222,7 +1250,7 @@ namespace {
             {
                 err << QString("%1 detection %2: expected frequencyDriftHz %3, got %4\n")
                     .arg(name)
-                    .arg(i + 1)
+                    .arg(expectation.index)
                     .arg(expectation.frequencyDrift, 0, 'f', 2)
                     .arg(detection.frequencyDrift, 0, 'f', 2);
                 ok = false;
@@ -1232,10 +1260,78 @@ namespace {
             {
                 err << QString("%1 detection %2: expected totalPowerDB %3, got %4\n")
                     .arg(name)
-                    .arg(i + 1)
+                    .arg(expectation.index)
                     .arg(expectation.totalPowerDB, 0, 'f', 2)
                     .arg(detection.totalPowerDB, 0, 'f', 2);
                 ok = false;
+            }
+        };
+
+        int actualIndex = 0;
+        int expectedIndex = 0;
+
+        while ((actualIndex < actual.size()) || (expectedIndex < expected.size()))
+        {
+            if (expectedIndex >= expected.size())
+            {
+                const Detection& detection = actual[actualIndex++];
+                const double timeOffsetS = (double) detection.startSample
+                    / (double) std::max(1, detection.sampleRate);
+                err << QString("%1: unexpected detection at %2 s\n")
+                    .arg(name)
+                    .arg(timeOffsetS, 0, 'f', 3);
+                ok = false;
+                continue;
+            }
+
+            const ExpectedDetection& expectation = expected[expectedIndex];
+
+            if (actualIndex >= actual.size())
+            {
+                if (expectation.required)
+                {
+                    err << QString("%1: missing required detection %2 at %3 s\n")
+                        .arg(name)
+                        .arg(expectation.index)
+                        .arg(expectation.timeOffsetS, 0, 'f', 3);
+                    ok = false;
+                }
+
+                expectedIndex++;
+                continue;
+            }
+
+            const Detection& detection = actual[actualIndex];
+            const double actualTimeOffsetS = (double) detection.startSample
+                / (double) std::max(1, detection.sampleRate);
+
+            if (nearlyEqual(actualTimeOffsetS, expectation.timeOffsetS, timeToleranceS))
+            {
+                compareDetection(detection, expectation);
+                actualIndex++;
+                expectedIndex++;
+            }
+            else if (!expectation.required && (actualTimeOffsetS > expectation.timeOffsetS))
+            {
+                expectedIndex++;
+            }
+            else if (actualTimeOffsetS < expectation.timeOffsetS)
+            {
+                err << QString("%1: unexpected detection at %2 s before expected detection %3\n")
+                    .arg(name)
+                    .arg(actualTimeOffsetS, 0, 'f', 3)
+                    .arg(expectation.index);
+                ok = false;
+                actualIndex++;
+            }
+            else
+            {
+                err << QString("%1: missing required detection %2 at %3 s\n")
+                    .arg(name)
+                    .arg(expectation.index)
+                    .arg(expectation.timeOffsetS, 0, 'f', 3);
+                ok = false;
+                expectedIndex++;
             }
         }
 

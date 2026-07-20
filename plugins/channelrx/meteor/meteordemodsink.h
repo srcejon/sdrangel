@@ -149,15 +149,16 @@ public:
         LearnedFeatureVector m_learnedModelScales {};
         LearnedFeatureVector m_learnedModelWeights {};
         double m_learnedRescueProbability = 0.80;
-        bool m_enableSettledParentReanalysis = false;
-        int m_parentReanalysisMinimumSpectralComponents = 4;
+        bool m_enableSettledParentReanalysis = true;
+        double m_parentReanalysisMinimumDurationS = 2.0;
         double m_parentFrequencyLowQuantile = 0.10;
         double m_parentFrequencyHighQuantile = 0.90;
         double m_parentEnvelopeSearchPaddingS = 0.25;
+        double m_parentEnvelopeNoiseContextS = 3.0;
         double m_parentEnvelopeMaximumLeadS = 0.75;
         double m_parentEnvelopeMaximumTrailS = 4.0;
         double m_parentEnvelopeEnterFraction = 0.06;
-        double m_parentEnvelopeExitFraction = 0.02;
+        double m_parentEnvelopeExitFraction = 0.003;
         double m_parentEnvelopeMinimumFloorRatio = 1.5;
         double m_parentEnvelopeMaximumGapS = 0.15;
         double m_parentEnvelopeMinimumExpansionS = 0.05;
@@ -663,6 +664,11 @@ private:
     double estimatePulseTotalPower(quint64 startSample, quint64 endSample, double backgroundPower) const;
     bool reportsFrequencyCompatible(const PulseReport& first, const PulseReport& second) const;
     void emitDetectionReport(const PulseReport& report, const char *source);
+    void emitDetectionReport(
+        const PulseReport& report,
+        const char *source,
+        quint64 duplicateStartSample,
+        quint64 duplicateEndSample);
     QDateTime sampleCounterToDateTimeUtc(quint64 sampleCounter) const;
     QDateTime sampleCounterToDisplayDateTimeUtc(quint64 sampleCounter) const;
     void recordDisplayTimeAnchor();

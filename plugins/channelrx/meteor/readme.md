@@ -17,7 +17,7 @@ The detector computes several secondary features used for diagnostics and tightl
 - A weighted quadratic frequency fit records curvature and its improvement over the linear fit.
 - A frozen standardized logistic model can be evaluated as a dot product when coefficients have been trained and enabled.
 
-Calibrated rescue is limited to otherwise safe three-frame candidates with strong score, contrast, support, frequency coherence, and a decaying envelope. Two-frame candidates remain rejected because the available fixtures do not provide enough temporal evidence to distinguish them reliably. Settled-parent envelope re-analysis remains disabled by default; when enabled, it is limited to continued events containing at least four accepted spectral components and uses bounded lead/trail expansion with hysteresis. Curvature rejection and the learned model also remain disabled until a larger labeled corpus demonstrates a benefit.
+Calibrated rescue is limited to otherwise safe three-frame candidates with strong score, contrast, support, frequency coherence, and a decaying envelope. Two-frame candidates remain rejected because the available fixtures do not provide enough temporal evidence to distinguish them reliably. Settled spectral parents that are already at least two seconds long receive one bounded lead/trail envelope pass with hysteresis, allowing weak fireball tails to extend the report without changing short-event timing. Curvature rejection and the learned model remain disabled until a larger labeled corpus demonstrates a benefit.
 
 The standalone regression harness can build such a corpus:
 

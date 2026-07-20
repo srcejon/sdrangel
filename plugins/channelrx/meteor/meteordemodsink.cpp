@@ -3337,24 +3337,21 @@ void MeteorDemodSink::finalizeActiveMeteorEvent(ActiveMeteorEvent& event)
 {
     updateReportFromActiveMeteorEvent(event);
     PulseReport& report = event.m_report;
+    const quint64 settledStartSample = report.m_startSample;
+    const quint64 settledEndSample = report.m_endSample;
 
-    const bool complexContinuedSpectralEvent = report.m_spectralParentEligible
-        && (event.m_spectralComponentCount
-            >= m_detectorTunables.m_parentReanalysisMinimumSpectralComponents)
-        && event.m_extendedByContinuation;
+    const bool longSettledSpectralEvent = report.m_spectralParentEligible
+        && (report.m_durationS >= m_detectorTunables.m_parentReanalysisMinimumDurationS);
 
     if (m_detectorTunables.m_enableSettledParentReanalysis
-        && complexContinuedSpectralEvent)
+        && longSettledSpectralEvent)
     {
-        const quint64 originalStartSample = report.m_startSample;
-        const quint64 originalEndSample = report.m_endSample;
-
         if (estimatePulseBandEnvelope(report, true))
         {
             qDebug() << "MeteorDemodSink::finalizeActiveMeteorEvent: settled envelope expanded"
                      << " parentEventId:" << event.m_id
-                     << " fromStartSample:" << originalStartSample
-                     << " fromEndSample:" << originalEndSample
+                     << " fromStartSample:" << settledStartSample
+                     << " fromEndSample:" << settledEndSample
                      << " toStartSample:" << report.m_startSample
                      << " toEndSample:" << report.m_endSample;
         }
@@ -3385,8 +3382,8 @@ void MeteorDemodSink::finalizeActiveMeteorEvent(ActiveMeteorEvent& event)
         : report.m_frequencySpan;
 
     if (!isDuplicateDetection(
-        report.m_startSample,
-        report.m_endSample,
+        settledStartSample,
+        settledEndSample,
         report.m_centerFrequency,
         duplicateFrequencySpan))
     {
@@ -3401,7 +3398,9 @@ void MeteorDemodSink::finalizeActiveMeteorEvent(ActiveMeteorEvent& event)
 
         emitDetectionReport(
             report,
-            report.m_spectralParentEligible ? "spectral-parent" : "power-parent");
+            report.m_spectralParentEligible ? "spectral-parent" : "power-parent",
+            settledStartSample,
+            settledEndSample);
     }
 }
 
@@ -3465,19 +3464,24 @@ bool MeteorDemodSink::refineBandEnvelope(
         + (report.m_endSample - report.m_startSample) / 2;
     const quint64 historyStartSample = m_detectionSampleRingStartSample;
     const quint64 historyEndSample = historyStartSample + (quint64) m_detectionSampleRingCount - 1;
-    const quint64 leadSamples = !boundedExpansion
+    const quint64 maximumLeadSamples = !boundedExpansion
         ? (quint64) sampleRate * 4
         : (quint64) std::ceil(m_detectorTunables.m_parentEnvelopeMaximumLeadS * sampleRate);
-    const quint64 trailSamples = !boundedExpansion
+    const quint64 maximumTrailSamples = !boundedExpansion
         ? (quint64) sampleRate * 4
         : (quint64) std::ceil(m_detectorTunables.m_parentEnvelopeMaximumTrailS * sampleRate);
-    const quint64 requestedStartSample = report.m_startSample > leadSamples + (quint64) frameSize
-        ? report.m_startSample - leadSamples - (quint64) frameSize
+    const quint64 noiseContextSamples = boundedExpansion
+        ? (quint64) std::ceil(m_detectorTunables.m_parentEnvelopeNoiseContextS * sampleRate)
+        : 0;
+    const quint64 scanLeadSamples = maximumLeadSamples + noiseContextSamples;
+    const quint64 scanTrailSamples = maximumTrailSamples + noiseContextSamples;
+    const quint64 requestedStartSample = report.m_startSample > scanLeadSamples + (quint64) frameSize
+        ? report.m_startSample - scanLeadSamples - (quint64) frameSize
         : 0;
     const quint64 scanStartSample = std::max(historyStartSample, requestedStartSample);
     const quint64 scanEndSample = std::min(
         historyEndSample,
-        report.m_endSample + trailSamples + (quint64) frameSize);
+        report.m_endSample + scanTrailSamples + (quint64) frameSize);
     ComplexVector detectionSamples;
 
     if (!copyDetectionSamples(scanStartSample, scanEndSample, detectionSamples)
@@ -3662,6 +3666,13 @@ bool MeteorDemodSink::refineBandEnvelope(
 
     if (boundedExpansion)
     {
+        const quint64 minimumStartSample = report.m_startSample > maximumLeadSamples
+            ? report.m_startSample - maximumLeadSamples
+            : 0;
+        const quint64 maximumEndSample = report.m_endSample + maximumTrailSamples;
+
+        startSample = std::max(startSample, minimumStartSample);
+        endSample = std::min(endSample, maximumEndSample);
         startSample = std::min(startSample, report.m_startSample);
         endSample = std::max(endSample, report.m_endSample);
     }
@@ -3814,6 +3825,15 @@ bool MeteorDemodSink::reportsFrequencyCompatible(const PulseReport& first, const
 
 void MeteorDemodSink::emitDetectionReport(const PulseReport& report, const char *source)
 {
+    emitDetectionReport(report, source, report.m_startSample, report.m_endSample);
+}
+
+void MeteorDemodSink::emitDetectionReport(
+    const PulseReport& report,
+    const char *source,
+    quint64 duplicateStartSample,
+    quint64 duplicateEndSample)
+{
     if (!report.m_valid) {
         return;
     }
@@ -3889,8 +3909,8 @@ void MeteorDemodSink::emitDetectionReport(const PulseReport& report, const char 
     }
 
     rememberDetection(
-        report.m_startSample,
-        report.m_endSample,
+        duplicateStartSample,
+        duplicateEndSample,
         report.m_centerFrequency,
         report.m_duplicateFrequencySpan > 0.0 ? report.m_duplicateFrequencySpan : report.m_frequencySpan);
 

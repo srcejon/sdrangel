@@ -160,7 +160,17 @@ namespace {
     {
         quint64 startSample = 0;
         quint64 endSample = 0;
+        double lowFrequency = 0.0;
+        double highFrequency = 0.0;
+        bool hasFrequencyRange = false;
         QString label;
+        QString eventId;
+    };
+
+    struct CandidateLabelMatch
+    {
+        QString label;
+        QString eventId;
     };
 
     struct Options
@@ -437,7 +447,7 @@ namespace {
         out << "      --wav <file.wav>               Input SDRangel stereo 16-bit I/Q WAV file.\n";
         out << "      --test-dir <directory>         Directory of paired .wav and .csv regression fixtures.\n";
         out << "      --candidate-csv <file.csv>     Write every spectral candidate and rejection decision.\n";
-        out << "      --candidate-labels <file.csv>  Apply startSample,endSample,label ranges to candidate rows.\n";
+        out << "      --candidate-labels <file.csv>  Apply time-only or time/frequency labels to candidate rows.\n";
         out << "      --candidate-capture-dir <dir>  Save plausible rejected candidates as stereo signed 16-bit IQ.\n";
         out << "      --channel-sample-rate <rate>   Detector sample rate: 100, 300, 1000, or 3000 Hz.\n";
         out << "      --input-frequency-offset <hz>  Channel input frequency offset in Hz.\n";
@@ -654,6 +664,9 @@ namespace {
                 && std::isfinite(audit.m_noiseFloorDeltaDB)
                 && std::isfinite(audit.m_matchedEnvelopeScore)
                 && std::isfinite(audit.m_decayTimeConstantS)
+                && std::isfinite(audit.m_envelopePeakPosition)
+                && std::isfinite(audit.m_envelopeDecayDB)
+                && std::isfinite(audit.m_envelopeMonotonicFraction)
                 && std::isfinite(audit.m_quadraticSweepR2)
                 && std::isfinite(audit.m_quadraticSweepImprovement)
                 && std::isfinite(audit.m_quadraticCurvatureHzPerS2)
@@ -663,6 +676,11 @@ namespace {
                 && std::isfinite(audit.m_maxBandwidthRateFraction);
             const bool bounded = (audit.m_matchedEnvelopeScore >= 0.0)
                 && (audit.m_matchedEnvelopeScore <= 1.0)
+                && (audit.m_envelopePeakPosition >= 0.0)
+                && (audit.m_envelopePeakPosition <= 1.0)
+                && (audit.m_envelopeMonotonicFraction >= 0.0)
+                && (audit.m_envelopeMonotonicFraction <= 1.0)
+                && (audit.m_envelopeTailFrames >= 0)
                 && (audit.m_quadraticSweepR2 >= 0.0)
                 && (audit.m_quadraticSweepR2 <= 1.0)
                 && (audit.m_quadraticSweepImprovement >= 0.0)
@@ -846,11 +864,34 @@ namespace {
             CandidateLabel label;
             label.startSample = fields[0].trimmed().toULongLong(&startOK);
             label.endSample = fields[1].trimmed().toULongLong(&endOK);
-            label.label = fields.mid(2).join(',').trimmed();
+            bool lowFrequencyOK = false;
+            bool highFrequencyOK = false;
+
+            if (fields.size() >= 5)
+            {
+                label.lowFrequency = fields[2].trimmed().toDouble(&lowFrequencyOK);
+                label.highFrequency = fields[3].trimmed().toDouble(&highFrequencyOK);
+            }
+
+            if (lowFrequencyOK && highFrequencyOK)
+            {
+                label.hasFrequencyRange = true;
+                label.label = fields[4].trimmed();
+                label.eventId = fields.mid(5).join(',').trimmed();
+            }
+            else {
+                label.label = fields.mid(2).join(',').trimmed();
+            }
 
             if (!startOK || !endOK || (label.endSample < label.startSample) || label.label.isEmpty())
             {
                 error = QString("Invalid candidate label row: %1").arg(line);
+                return false;
+            }
+
+            if (label.hasFrequencyRange && (label.highFrequency < label.lowFrequency))
+            {
+                error = QString("Invalid candidate label frequency range: %1").arg(line);
                 return false;
             }
 
@@ -860,12 +901,14 @@ namespace {
         return true;
     }
 
-    QString candidateLabelFor(
+    CandidateLabelMatch candidateLabelFor(
         const MeteorDemodSink::CandidateAudit& audit,
         const QVector<CandidateLabel>& labels)
     {
-        QString bestLabel;
+        CandidateLabelMatch bestMatch;
         quint64 bestOverlap = 0;
+        const double candidateLow = audit.m_robustCenterFrequency - 0.5 * audit.m_robustFrequencySpan;
+        const double candidateHigh = audit.m_robustCenterFrequency + 0.5 * audit.m_robustFrequencySpan;
 
         for (const CandidateLabel& label : labels)
         {
@@ -876,16 +919,23 @@ namespace {
                 continue;
             }
 
+            if (label.hasFrequencyRange
+                && ((candidateHigh < label.lowFrequency) || (candidateLow > label.highFrequency)))
+            {
+                continue;
+            }
+
             const quint64 overlap = overlapEnd - overlapStart + 1;
 
             if (overlap > bestOverlap)
             {
                 bestOverlap = overlap;
-                bestLabel = label.label;
+                bestMatch.label = label.label;
+                bestMatch.eventId = label.eventId;
             }
         }
 
-        return bestLabel;
+        return bestMatch;
     }
 
     QString candidateCaptureFileName(const MeteorDemodSink::SpectralCandidate& candidate)
@@ -939,10 +989,11 @@ namespace {
         }
 
         QTextStream out(&file);
-        out << "recording,label,captureFile,index,sampleRate,startSample,endSample,peakSample,durationS,centerFrequencyHz,frequencySpanHz,frequencyDriftHz,"
+        out << "recording,label,labelEventId,captureFile,index,sampleRate,startSample,endSample,peakSample,durationS,centerFrequencyHz,frequencySpanHz,frequencyDriftHz,"
                "peakAboveBackgroundDB,integratedSupportDB,maxBandwidthHz,maxContrastDB,logPeakRatio,sweepScore,acceptanceScore,"
                "acceptanceThreshold,scoreMargin,signalScore,supportScore,shapeScore,rejectionPenalty,trackOccupancy,"
-               "minimumNoiseContrastDB,noiseFloorDeltaDB,matchedEnvelopeScore,decayTimeConstantS,quadraticSweepR2,"
+               "minimumNoiseContrastDB,noiseFloorDeltaDB,matchedEnvelopeScore,decayTimeConstantS,"
+               "envelopePeakPosition,envelopeDecayDB,envelopeMonotonicFraction,envelopeTailFrames,quadraticSweepR2,"
                "quadraticSweepImprovement,quadraticCurvatureHzPerS2,learnedScore,centerFrequencyRateFraction,"
                "frequencySpanRateFraction,frequencyDriftRateFraction,maxBandwidthRateFraction,calibratedRescue,"
                "rescuedFramesGate,rescuedSpectralEvidenceGate,curvedSweepRejected,"
@@ -954,8 +1005,10 @@ namespace {
         {
             const MeteorDemodSink::CandidateAudit& audit = audits[i];
             const QString captureFile = candidateCaptureFileName(audit);
+            const CandidateLabelMatch labelMatch = candidateLabelFor(audit, labels);
             out << csvField(recordingId) << ','
-                << csvField(candidateLabelFor(audit, labels)) << ','
+                << csvField(labelMatch.label) << ','
+                << csvField(labelMatch.eventId) << ','
                 << csvField(!captureDir.isEmpty() && capturedFiles.contains(captureFile) ? captureFile : QString()) << ','
                 << i + 1 << ','
                 << audit.m_sampleRate << ','
@@ -984,6 +1037,10 @@ namespace {
                 << QString::number(audit.m_noiseFloorDeltaDB, 'f', 3) << ','
                 << QString::number(audit.m_matchedEnvelopeScore, 'f', 6) << ','
                 << QString::number(audit.m_decayTimeConstantS, 'f', 6) << ','
+                << QString::number(audit.m_envelopePeakPosition, 'f', 6) << ','
+                << QString::number(audit.m_envelopeDecayDB, 'f', 3) << ','
+                << QString::number(audit.m_envelopeMonotonicFraction, 'f', 6) << ','
+                << audit.m_envelopeTailFrames << ','
                 << QString::number(audit.m_quadraticSweepR2, 'f', 6) << ','
                 << QString::number(audit.m_quadraticSweepImprovement, 'f', 6) << ','
                 << QString::number(audit.m_quadraticCurvatureHzPerS2, 'f', 3) << ','

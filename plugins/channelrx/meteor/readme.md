@@ -10,14 +10,14 @@ The regression harness can write a candidate audit CSV containing the parent eve
 
 Detector thresholds that represent time or frequency are expressed in seconds and Hz, then resolved and clamped when the channel sample rate changes. The audit also records rate-normalized frequency features so candidate data collected at different supported sample rates can be compared directly.
 
-The detector computes several experimental features without changing the default acceptance decision:
+The detector computes several secondary features used for diagnostics and tightly bounded recovery:
 
 - A block minimum-statistics spectral floor is compared with the active adaptive floor. The audit records their contrast and floor delta.
-- An exponential decay template bank records the best underdense-trail envelope score and decay time constant.
+- An exponential decay template bank records the best underdense-trail envelope score, peak position, decay, and monotonic tail fraction.
 - A weighted quadratic frequency fit records curvature and its improvement over the linear fit.
 - A frozen standardized logistic model can be evaluated as a dot product when coefficients have been trained and enabled.
 
-Curvature rejection, calibrated rescue, and settled-parent envelope re-analysis are disabled by default. They remain behind detector tunables until labeled recordings show that they improve recall without adding interference detections.
+Calibrated rescue is limited to otherwise safe three-frame candidates with strong score, contrast, support, frequency coherence, and a decaying envelope. Two-frame candidates remain rejected because the available fixtures do not provide enough temporal evidence to distinguish them reliably. Settled-parent envelope re-analysis remains disabled by default; when enabled, it is limited to continued events containing at least four accepted spectral components and uses bounded lead/trail expansion with hysteresis. Curvature rejection and the learned model also remain disabled until a larger labeled corpus demonstrates a benefit.
 
 The standalone regression harness can build such a corpus:
 
@@ -31,6 +31,14 @@ Rejected candidates close to the score boundary are written as stereo signed 16-
 startSample,endSample,label
 120000,123000,meteor
 240000,245000,interference
+```
+
+For overlapping events or recordings containing several simultaneous signals, labels can also include a frequency interval and stable event ID:
+
+```text
+startSample,endSample,lowFrequencyHz,highFrequencyHz,label,eventId
+120000,123000,35,85,meteor,M001
+120000,123000,-160,-80,interference,I001
 ```
 
 Pass this file with `--candidate-labels labels.csv`. Overlapping candidates inherit the label in the audit CSV. `test/train_candidate_model.py` fits a balanced L2 logistic model, reports leave-one-recording-out metrics, writes boundary cases for review, and prints C++ initializers for a frozen model. Hard duration, usable-bandwidth, duplicate, broadband-impulse, and sweep gates remain in force even when learned rescue is enabled.

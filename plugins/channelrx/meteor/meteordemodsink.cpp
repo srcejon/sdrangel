@@ -1738,22 +1738,33 @@ MeteorDemodSink::SpectralCandidate MeteorDemodSink::buildSpectralCandidate(const
 
     const bool learnedRescue = m_detectorTunables.m_learnedModelEnabled
         && (candidate.m_learnedScore >= m_detectorTunables.m_learnedRescueProbability);
+    const bool decayEnvelopeOK =
+        (candidate.m_envelopeTailFrames >= m_detectorTunables.m_matchedEnvelopeMinimumTailFrames)
+        && (candidate.m_envelopePeakPosition <= m_detectorTunables.m_matchedEnvelopeMaximumPeakPosition)
+        && (candidate.m_envelopeDecayDB >= m_detectorTunables.m_matchedEnvelopeMinimumDecayDB)
+        && (candidate.m_envelopeDecayDB <= m_detectorTunables.m_matchedEnvelopeMaximumDecayDB)
+        && (candidate.m_envelopeMonotonicFraction
+            >= m_detectorTunables.m_matchedEnvelopeMinimumMonotonicFraction)
+        && (candidate.m_matchedEnvelopeScore
+            >= m_detectorTunables.m_rescueMinimumMatchedEnvelopeScore);
     const bool twoFrameRescue = (candidate.m_frameCount == 2)
         && (candidate.m_maxContrastDB >= m_detectorTunables.m_rescueTwoFrameMinimumContrastDB)
         && (candidate.m_peakAboveBackgroundDB >= m_detectorTunables.m_rescueTwoFrameMinimumPeakDB)
         && (candidate.m_integratedSupportDB
             >= m_detectorTunables.m_rescueTwoFrameMinimumIntegratedSupportDB)
         && (candidate.m_frequencyCoherence
-            >= m_detectorTunables.m_rescueTwoFrameMinimumFrequencyCoherence);
+            >= m_detectorTunables.m_rescueTwoFrameMinimumFrequencyCoherence)
+        && decayEnvelopeOK
+        && (candidate.m_matchedEnvelopeScore
+            >= m_detectorTunables.m_rescueTwoFrameMinimumMatchedEnvelopeScore);
     const bool threeFrameRescue = (candidate.m_frameCount == 3)
         && (candidate.m_maxContrastDB >= m_detectorTunables.m_rescueMinimumContrastDB)
         && (candidate.m_peakAboveBackgroundDB >= m_detectorTunables.m_rescueMinimumPeakDB)
         && (candidate.m_frequencyCoherence
             >= m_detectorTunables.m_rescueMinimumFrequencyCoherence)
-        && ((candidate.m_matchedEnvelopeScore
-                >= m_detectorTunables.m_rescueMinimumMatchedEnvelopeScore)
-            || (candidate.m_integratedSupportDB
-                >= m_detectorTunables.m_rescueThreeFrameMinimumIntegratedSupportDB));
+        && (candidate.m_integratedSupportDB
+            >= m_detectorTunables.m_rescueThreeFrameMinimumIntegratedSupportDB)
+        && decayEnvelopeOK;
     const bool rescueSafetyOK = candidate.m_valid
         && !candidate.m_accepted
         && !candidate.m_duplicate
@@ -1801,6 +1812,24 @@ void MeteorDemodSink::calculateShadowCandidateFeatures(
         const auto peak = std::max_element(event.m_trackStrengths.begin(), event.m_trackStrengths.end());
         const int peakIndex = (int) std::distance(event.m_trackStrengths.begin(), peak);
         const double peakStrength = std::max(*peak, 1e-30);
+        const int tailFrames = count - peakIndex;
+        candidate.m_envelopeTailFrames = tailFrames;
+        candidate.m_envelopePeakPosition = count > 1
+            ? (double) peakIndex / (double) (count - 1)
+            : 1.0;
+        candidate.m_envelopeDecayDB = 10.0 * std::log10(
+            peakStrength / std::max(event.m_trackStrengths.back(), 1e-30));
+        int monotonicSteps = 0;
+
+        for (int i = peakIndex + 1; i < count; i++) {
+            if (event.m_trackStrengths[i] <= 1.10 * event.m_trackStrengths[i - 1]) {
+                monotonicSteps++;
+            }
+        }
+
+        candidate.m_envelopeMonotonicFraction = tailFrames > 1
+            ? (double) monotonicSteps / (double) (tailFrames - 1)
+            : 0.0;
         for (double timeConstantS : m_detectorTunables.m_matchedEnvelopeTimeConstantsS)
         {
             double dot = 0.0;
@@ -2696,7 +2725,7 @@ void MeteorDemodSink::finishPulse(bool forceRejected)
         report.m_frequencyDrift = frequencyDrift;
         report.m_allowComponentMerge = false;
 
-        if (estimatePulseBandEnvelope(report)
+        if (estimatePulseBandEnvelope(report, false)
             && (1000.0 * report.m_durationS >= (double) m_settings.m_minDurationMS)
             && (1000.0 * report.m_durationS <= (double) m_settings.m_maxDurationMS))
         {
@@ -3309,17 +3338,19 @@ void MeteorDemodSink::finalizeActiveMeteorEvent(ActiveMeteorEvent& event)
     updateReportFromActiveMeteorEvent(event);
     PulseReport& report = event.m_report;
 
-    if (m_detectorTunables.m_enableSettledParentReanalysis)
+    const bool complexContinuedSpectralEvent = report.m_spectralParentEligible
+        && (event.m_spectralComponentCount
+            >= m_detectorTunables.m_parentReanalysisMinimumSpectralComponents)
+        && event.m_extendedByContinuation;
+
+    if (m_detectorTunables.m_enableSettledParentReanalysis
+        && complexContinuedSpectralEvent)
     {
         const quint64 originalStartSample = report.m_startSample;
         const quint64 originalEndSample = report.m_endSample;
 
-        if (estimatePulseBandEnvelope(report))
+        if (estimatePulseBandEnvelope(report, true))
         {
-            report.m_totalPower = estimatePulseTotalPower(
-                report.m_startSample,
-                report.m_endSample,
-                report.m_backgroundPower);
             qDebug() << "MeteorDemodSink::finalizeActiveMeteorEvent: settled envelope expanded"
                      << " parentEventId:" << event.m_id
                      << " fromStartSample:" << originalStartSample
@@ -3395,17 +3426,20 @@ MeteorDemodSink::PulseReport MeteorDemodSink::reportWithRobustFrequency(const Pu
     return output;
 }
 
-bool MeteorDemodSink::estimatePulseBandEnvelope(PulseReport& report) const
+bool MeteorDemodSink::estimatePulseBandEnvelope(PulseReport& report, bool boundedExpansion) const
 {
-    return refineBandEnvelope(report, false);
+    return refineBandEnvelope(report, false, boundedExpansion);
 }
 
 bool MeteorDemodSink::refineSpectralComponentEnvelope(PulseReport& report) const
 {
-    return refineBandEnvelope(report, true);
+    return refineBandEnvelope(report, true, false);
 }
 
-bool MeteorDemodSink::refineBandEnvelope(PulseReport& report, bool allowShrink) const
+bool MeteorDemodSink::refineBandEnvelope(
+    PulseReport& report,
+    bool allowShrink,
+    bool boundedExpansion) const
 {
     const int sampleRate = std::max(1, m_settings.m_channelSampleRate);
     int frameSize = std::clamp(sampleRate / 4, 64, 256);
@@ -3427,17 +3461,23 @@ bool MeteorDemodSink::refineBandEnvelope(PulseReport& report, bool allowShrink) 
     std::vector<quint64> centerSamples;
     std::vector<double> probeFrequencies;
     std::vector<std::vector<Complex>> probeOscillators;
-    const quint64 reportCenterSample = report.m_startSample + (report.m_endSample - report.m_startSample) / 2;
+    const quint64 reportCenterSample = report.m_startSample
+        + (report.m_endSample - report.m_startSample) / 2;
     const quint64 historyStartSample = m_detectionSampleRingStartSample;
     const quint64 historyEndSample = historyStartSample + (quint64) m_detectionSampleRingCount - 1;
-    const quint64 localRadiusSamples = (quint64) sampleRate * 4;
-    const quint64 requestedStartSample = report.m_startSample > localRadiusSamples + (quint64) frameSize
-        ? report.m_startSample - localRadiusSamples - (quint64) frameSize
+    const quint64 leadSamples = !boundedExpansion
+        ? (quint64) sampleRate * 4
+        : (quint64) std::ceil(m_detectorTunables.m_parentEnvelopeMaximumLeadS * sampleRate);
+    const quint64 trailSamples = !boundedExpansion
+        ? (quint64) sampleRate * 4
+        : (quint64) std::ceil(m_detectorTunables.m_parentEnvelopeMaximumTrailS * sampleRate);
+    const quint64 requestedStartSample = report.m_startSample > leadSamples + (quint64) frameSize
+        ? report.m_startSample - leadSamples - (quint64) frameSize
         : 0;
     const quint64 scanStartSample = std::max(historyStartSample, requestedStartSample);
     const quint64 scanEndSample = std::min(
         historyEndSample,
-        report.m_endSample + localRadiusSamples + (quint64) frameSize);
+        report.m_endSample + trailSamples + (quint64) frameSize);
     ComplexVector detectionSamples;
 
     if (!copyDetectionSamples(scanStartSample, scanEndSample, detectionSamples)
@@ -3528,18 +3568,27 @@ bool MeteorDemodSink::refineBandEnvelope(PulseReport& report, bool allowShrink) 
     std::vector<double> sortedStrengths = strengths;
     std::sort(sortedStrengths.begin(), sortedStrengths.end());
     const double floorStrength = std::max(sortedStrengths[sortedStrengths.size() / 5], 1e-30);
-    const quint64 searchRadiusSamples = (quint64) sampleRate * 2;
+    const quint64 searchPaddingSamples = !boundedExpansion
+        ? (quint64) sampleRate * 2
+        : (quint64) std::ceil(m_detectorTunables.m_parentEnvelopeSearchPaddingS * sampleRate);
+    const quint64 anchorStartSample = report.m_startSample > searchPaddingSamples
+        ? report.m_startSample - searchPaddingSamples
+        : 0;
+    const quint64 anchorEndSample = report.m_endSample + searchPaddingSamples;
     int peakIndex = -1;
     double peakStrength = 0.0;
 
     for (int i = 0; i < (int) strengths.size(); i++)
     {
         const quint64 centerSample = centerSamples[i];
-        const quint64 distance = centerSample > reportCenterSample
+        const quint64 centerDistance = centerSample > reportCenterSample
             ? centerSample - reportCenterSample
             : reportCenterSample - centerSample;
+        const bool insideAnchor = !boundedExpansion
+            ? (centerDistance <= searchPaddingSamples)
+            : ((centerSample >= anchorStartSample) && (centerSample <= anchorEndSample));
 
-        if ((distance <= searchRadiusSamples) && (strengths[i] > peakStrength))
+        if (insideAnchor && (strengths[i] > peakStrength))
         {
             peakStrength = strengths[i];
             peakIndex = i;
@@ -3550,17 +3599,37 @@ bool MeteorDemodSink::refineBandEnvelope(PulseReport& report, bool allowShrink) 
         return false;
     }
 
-    const double threshold = allowShrink
-        ? std::max(1.6 * floorStrength, floorStrength + 0.003 * (peakStrength - floorStrength))
-        : floorStrength + 0.03 * (peakStrength - floorStrength);
-    const int maxGapFrames = std::max(2, sampleRate / (hopSize * 10));
+    const double enterThreshold = boundedExpansion
+        ? std::max(
+            (m_detectorTunables.m_parentEnvelopeMinimumFloorRatio + 0.25) * floorStrength,
+            floorStrength + m_detectorTunables.m_parentEnvelopeEnterFraction
+                * (peakStrength - floorStrength))
+        : (allowShrink
+            ? std::max(1.6 * floorStrength, floorStrength + 0.003 * (peakStrength - floorStrength))
+            : floorStrength + 0.03 * (peakStrength - floorStrength));
+    const double exitThreshold = boundedExpansion
+        ? std::max(
+            m_detectorTunables.m_parentEnvelopeMinimumFloorRatio * floorStrength,
+            floorStrength + m_detectorTunables.m_parentEnvelopeExitFraction
+                * (peakStrength - floorStrength))
+        : enterThreshold;
+
+    if (boundedExpansion && (peakStrength < enterThreshold)) {
+        return false;
+    }
+
+    const double hopDurationS = (double) hopSize / (double) sampleRate;
+    const int maxGapFrames = boundedExpansion
+        ? std::max(1, (int) std::ceil(
+            m_detectorTunables.m_parentEnvelopeMaximumGapS / std::max(hopDurationS, 1e-6)))
+        : std::max(2, sampleRate / (hopSize * 10));
     int firstIndex = peakIndex;
     int lastIndex = peakIndex;
     int gapFrames = 0;
 
     for (int i = peakIndex - 1; i >= 0; i--)
     {
-        if (strengths[i] >= threshold)
+        if (strengths[i] >= exitThreshold)
         {
             firstIndex = i;
             gapFrames = 0;
@@ -3575,7 +3644,7 @@ bool MeteorDemodSink::refineBandEnvelope(PulseReport& report, bool allowShrink) 
 
     for (int i = peakIndex + 1; i < (int) strengths.size(); i++)
     {
-        if (strengths[i] >= threshold)
+        if (strengths[i] >= exitThreshold)
         {
             lastIndex = i;
             gapFrames = 0;
@@ -3586,15 +3655,29 @@ bool MeteorDemodSink::refineBandEnvelope(PulseReport& report, bool allowShrink) 
         }
     }
 
-    const quint64 startSample = centerSamples[firstIndex] > (quint64) (frameSize / 2)
+    quint64 startSample = centerSamples[firstIndex] > (quint64) (frameSize / 2)
         ? centerSamples[firstIndex] - (quint64) (frameSize / 2)
         : 0;
-    const quint64 endSample = centerSamples[lastIndex] + (quint64) (frameSize / 2);
+    quint64 endSample = centerSamples[lastIndex] + (quint64) (frameSize / 2);
+
+    if (boundedExpansion)
+    {
+        startSample = std::min(startSample, report.m_startSample);
+        endSample = std::max(endSample, report.m_endSample);
+    }
+
     const double durationS = (double) (endSample - startSample + 1) / (double) sampleRate;
 
     const double minDurationS = (double) m_settings.m_minDurationMS / 1000.0;
     const double maxDurationS = (double) m_settings.m_maxDurationMS / 1000.0;
-    const bool usefulRefinement = allowShrink || (durationS > report.m_durationS * 1.5);
+    const quint64 expansionSamples =
+        (report.m_startSample > startSample ? report.m_startSample - startSample : 0)
+        + (endSample > report.m_endSample ? endSample - report.m_endSample : 0);
+    const bool usefulRefinement = allowShrink
+        || (!boundedExpansion && (durationS > report.m_durationS * 1.5))
+        || (boundedExpansion
+            && (expansionSamples >= (quint64) std::ceil(
+                m_detectorTunables.m_parentEnvelopeMinimumExpansionS * sampleRate)));
 
     if ((endSample <= startSample)
         || !usefulRefinement

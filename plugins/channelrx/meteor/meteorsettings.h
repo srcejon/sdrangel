@@ -67,6 +67,12 @@ struct MeteorSettings
         DetectionLabelTop,
         DetectionLabelRight
     } m_detectionLabelMode;
+    double m_transmitterLatitude;
+    double m_transmitterLongitude;
+    float m_antennaAzimuth;
+    float m_antennaElevation;
+    float m_antennaBeamwidth;
+    QString m_rotator; //!< "<featureSetIndex>:<featureIndex>" of the GS232Controller to follow
 
     quint32 m_rgbColor;
     QString m_title;

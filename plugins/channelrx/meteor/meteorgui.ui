@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>390</width>
-    <height>1005</height>
+    <height>1110</height>
    </rect>
   </property>
   <property name="sizePolicy">
@@ -213,11 +213,110 @@
     </item>
    </layout>
   </widget>
-  <widget class="QWidget" name="detectionsContainer" native="true">
+  <widget class="QWidget" name="geometryContainer" native="true">
    <property name="geometry">
     <rect>
      <x>0</x>
      <y>150</y>
+     <width>390</width>
+     <height>100</height>
+    </rect>
+   </property>
+   <property name="sizePolicy">
+    <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
+     <horstretch>0</horstretch>
+     <verstretch>0</verstretch>
+    </sizepolicy>
+   </property>
+   <property name="windowTitle">
+    <string>Geometry</string>
+   </property>
+   <layout class="QGridLayout" name="geometryLayout">
+    <property name="leftMargin">
+     <number>2</number>
+    </property>
+    <property name="topMargin">
+     <number>2</number>
+    </property>
+    <property name="rightMargin">
+     <number>2</number>
+    </property>
+    <property name="bottomMargin">
+     <number>2</number>
+    </property>
+    <property name="horizontalSpacing">
+     <number>4</number>
+    </property>
+    <property name="verticalSpacing">
+     <number>3</number>
+    </property>
+    <item row="0" column="0">
+     <widget class="QLabel" name="transmitterLatitudeLabel">
+      <property name="text">
+       <string>Tx lat</string>
+      </property>
+     </widget>
+    </item>
+    <item row="0" column="1" colspan="2">
+     <widget class="QDoubleSpinBox" name="transmitterLatitude"/>
+    </item>
+    <item row="0" column="3">
+     <widget class="QLabel" name="transmitterLongitudeLabel">
+      <property name="text">
+       <string>Tx lon</string>
+      </property>
+     </widget>
+    </item>
+    <item row="0" column="4" colspan="2">
+     <widget class="QDoubleSpinBox" name="transmitterLongitude"/>
+    </item>
+    <item row="1" column="0">
+     <widget class="QLabel" name="antennaAzimuthLabel">
+      <property name="text">
+       <string>Rx az</string>
+      </property>
+     </widget>
+    </item>
+    <item row="1" column="1" colspan="2">
+     <widget class="QDoubleSpinBox" name="antennaAzimuth"/>
+    </item>
+    <item row="1" column="3">
+     <widget class="QLabel" name="antennaElevationLabel">
+      <property name="text">
+       <string>Rx el</string>
+      </property>
+     </widget>
+    </item>
+    <item row="1" column="4" colspan="2">
+     <widget class="QDoubleSpinBox" name="antennaElevation"/>
+    </item>
+    <item row="2" column="0">
+     <widget class="QLabel" name="antennaBeamwidthLabel">
+      <property name="text">
+       <string>HPBW</string>
+      </property>
+     </widget>
+    </item>
+    <item row="2" column="1" colspan="2">
+     <widget class="QDoubleSpinBox" name="antennaBeamwidth"/>
+    </item>
+    <item row="2" column="3">
+     <widget class="QLabel" name="rotatorLabel">
+      <property name="text">
+       <string>Rotator</string>
+      </property>
+     </widget>
+    </item>
+    <item row="2" column="4" colspan="2">
+     <widget class="QComboBox" name="rotator"/>
+    </item>
+   </layout>
+  </widget>
+  <widget class="QWidget" name="detectionsContainer" native="true">
+   <property name="geometry">
+    <rect>
+     <x>0</x>
+     <y>255</y>
      <width>390</width>
      <height>415</height>
     </rect>
@@ -459,7 +558,7 @@
    <property name="geometry">
     <rect>
      <x>0</x>
-     <y>570</y>
+     <y>675</y>
      <width>390</width>
      <height>210</height>
     </rect>

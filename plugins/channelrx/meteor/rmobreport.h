@@ -35,6 +35,9 @@ public:
         double m_longitude = 0.0;
         qint64 m_frequency = 0;
         QString m_receiver;
+        double m_antennaAzimuth = 0.0;
+        double m_antennaElevation = 0.0;
+        double m_antennaBeamwidth = 0.0;
         QString m_observingMethod = QStringLiteral("SDRangel");
     };
 

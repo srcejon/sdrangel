@@ -38,6 +38,7 @@
 class BasebandSampleSink;
 class ButtonSwitch;
 class DeviceUISet;
+class Feature;
 class GLSpectrum;
 class GLSpectrumGUI;
 class GLSpectrumView;
@@ -119,6 +120,12 @@ private:
     ButtonSwitch *m_highlightAllDetections;
     QSpinBox *m_detectionBoxPadding;
     QComboBox *m_detectionLabels;
+    QDoubleSpinBox *m_transmitterLatitude;
+    QDoubleSpinBox *m_transmitterLongitude;
+    QDoubleSpinBox *m_antennaAzimuth;
+    QDoubleSpinBox *m_antennaElevation;
+    QDoubleSpinBox *m_antennaBeamwidth;
+    QComboBox *m_rotator;
     QLabel *m_totalCountText;
     QLabel *m_hourCountText;
     QPushButton *m_saveDetections;
@@ -179,6 +186,10 @@ private:
     void calcOffset();
     void updateAbsoluteCenterFrequency();
     void updateVisualSampleRate();
+    void populateRotatorCombo();
+    void updateAntennaPointingControls();
+    QPair<int, int> selectedRotatorIndices() const;
+    void syncFromSelectedRotator();
     void addDetection(const MeteorDemodSink::MsgMeteorDetected& detection);
     void addCameraDetection(const Meteor::MsgCameraMeteorDetected& detection);
     void updateCounters();
@@ -232,6 +243,12 @@ private slots:
     void on_highlightAllDetections_toggled(bool checked);
     void on_detectionBoxPadding_valueChanged(int value);
     void on_detectionLabels_currentIndexChanged(int index);
+    void on_transmitterLatitude_valueChanged(double value);
+    void on_transmitterLongitude_valueChanged(double value);
+    void on_antennaAzimuth_valueChanged(double value);
+    void on_antennaElevation_valueChanged(double value);
+    void on_antennaBeamwidth_valueChanged(double value);
+    void on_rotator_currentIndexChanged(int index);
     void on_saveDetections_clicked();
     void on_saveColorgramme_clicked();
     void on_clearDetections_clicked();
@@ -241,6 +258,8 @@ private slots:
     void onWidgetRolled(QWidget* widget, bool rollDown);
     void onMenuDialogCalled(const QPoint& p);
     void handleInputMessages();
+    void onFeatureAdded(int featureSetIndex, Feature *feature);
+    void onFeatureRemoved(int featureSetIndex, Feature *feature);
     void tick();
 };
 

@@ -751,6 +751,61 @@ bool Meteor::validateChannelSettings(const MeteorSettings& settings, QString& er
         errorMessage = "detectionLabelMode must be 0 (none), 1 (top), or 2 (right)";
         return false;
     }
+    if (!std::isfinite(settings.m_transmitterLatitude)
+        || (settings.m_transmitterLatitude < -90.0)
+        || (settings.m_transmitterLatitude > 90.0))
+    {
+        errorMessage = "transmitterLatitude must be finite and between -90.0 and 90.0 degrees";
+        return false;
+    }
+    if (!std::isfinite(settings.m_transmitterLongitude)
+        || (settings.m_transmitterLongitude < -180.0)
+        || (settings.m_transmitterLongitude > 180.0))
+    {
+        errorMessage = "transmitterLongitude must be finite and between -180.0 and 180.0 degrees";
+        return false;
+    }
+    if (!std::isfinite(settings.m_antennaAzimuth)
+        || (settings.m_antennaAzimuth < 0.0f)
+        || (settings.m_antennaAzimuth > 360.0f))
+    {
+        errorMessage = "antennaAzimuth must be finite and between 0.0 and 360.0 degrees";
+        return false;
+    }
+    if (!std::isfinite(settings.m_antennaElevation)
+        || (settings.m_antennaElevation < -90.0f)
+        || (settings.m_antennaElevation > 90.0f))
+    {
+        errorMessage = "antennaElevation must be finite and between -90.0 and 90.0 degrees";
+        return false;
+    }
+    if (!std::isfinite(settings.m_antennaBeamwidth)
+        || (settings.m_antennaBeamwidth < 0.0f)
+        || (settings.m_antennaBeamwidth > 360.0f))
+    {
+        errorMessage = "antennaBeamwidth must be finite and between 0.0 and 360.0 degrees";
+        return false;
+    }
+    if (!settings.m_rotator.isEmpty())
+    {
+        const QStringList rotatorParts = settings.m_rotator.split(QLatin1Char(':'));
+        bool featureSetOK = false;
+        bool featureOK = false;
+
+        if (rotatorParts.size() == 2)
+        {
+            const int featureSetIndex = rotatorParts.at(0).toInt(&featureSetOK);
+            const int featureIndex = rotatorParts.at(1).toInt(&featureOK);
+            featureSetOK = featureSetOK && (featureSetIndex >= 0);
+            featureOK = featureOK && (featureIndex >= 0);
+        }
+
+        if (!featureSetOK || !featureOK)
+        {
+            errorMessage = "rotator must be empty or '<featureSetIndex>:<featureIndex>'";
+            return false;
+        }
+    }
     if (settings.m_streamIndex < 0)
     {
         errorMessage = "streamIndex must not be negative";

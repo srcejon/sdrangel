@@ -51,6 +51,33 @@
 #endif
 
 namespace {
+    bool runMeteorSettingsTests(QTextStream& errorStream)
+    {
+        MeteorSettings expected;
+        expected.m_transmitterLatitude = 50.123456;
+        expected.m_transmitterLongitude = -1.234567;
+        expected.m_antennaAzimuth = 220.5f;
+        expected.m_antennaElevation = 11.5f;
+        expected.m_antennaBeamwidth = 30.0f;
+        expected.m_rotator = QStringLiteral("2:3");
+
+        MeteorSettings actual;
+
+        if (!actual.deserialize(expected.serialize())
+            || (actual.m_transmitterLatitude != expected.m_transmitterLatitude)
+            || (actual.m_transmitterLongitude != expected.m_transmitterLongitude)
+            || (actual.m_antennaAzimuth != expected.m_antennaAzimuth)
+            || (actual.m_antennaElevation != expected.m_antennaElevation)
+            || (actual.m_antennaBeamwidth != expected.m_antennaBeamwidth)
+            || (actual.m_rotator != expected.m_rotator))
+        {
+            errorStream << "Meteor settings test: geometry settings did not round-trip\n";
+            return false;
+        }
+
+        return true;
+    }
+
     bool runRMOBReportTests(QTextStream& errorStream)
     {
         QTemporaryDir temporaryDir;
@@ -76,6 +103,9 @@ namespace {
         metadata.m_longitude = 19.8235;
         metadata.m_frequency = 143050000;
         metadata.m_receiver = "Test receiver";
+        metadata.m_antennaAzimuth = 220.0;
+        metadata.m_antennaElevation = 11.0;
+        metadata.m_antennaBeamwidth = 30.0;
 
         const QString fileName = temporaryDir.filePath("meteor_2026_05.rmob.txt");
         QString error;
@@ -100,6 +130,9 @@ namespace {
             || !reportText.contains("01|3   |0   |??? |")
             || !reportText.contains("[Observer]TEST\n")
             || !reportText.contains("[Frequencies]0143.050.000\n")
+            || !reportText.contains("[Antenna]HPBW 30.0 deg\n")
+            || !reportText.contains("[Azimut Antenna]220.0\n")
+            || !reportText.contains("[Elevation Antenna]11.0\n")
             || !reportText.contains("[Receiver]Test receiver\n"))
         {
             errorStream << "RMOB test: saved report content is incorrect\n";
@@ -1554,7 +1587,7 @@ int main(int argc, char *argv[])
         return 0;
     }
 
-    if (!runRMOBReportTests(err)) {
+    if (!runMeteorSettingsTests(err) || !runRMOBReportTests(err)) {
         return 2;
     }
 

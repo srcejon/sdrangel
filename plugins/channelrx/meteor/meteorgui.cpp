@@ -43,6 +43,8 @@
 #include "channel/channelwebapiutils.h"
 #include "dsp/dspcommands.h"
 #include "dsp/spectrumsettings.h"
+#include "feature/feature.h"
+#include "feature/featureset.h"
 #include "gui/basicchannelsettingsdialog.h"
 #include "gui/buttonswitch.h"
 #include "gui/dialogpositioner.h"
@@ -63,6 +65,7 @@ namespace {
     constexpr int DetectionOverlayIdRole = Qt::UserRole + 2;
     constexpr int DetectionDisplayUtcMSecsRole = Qt::UserRole + 3;
     constexpr int DetectionRadioRole = Qt::UserRole + 4;
+    constexpr int RotatorAvailableRole = Qt::UserRole + 1;
     constexpr int MeteorTrailFFTSize = 1024;
     constexpr int MeteorTrailFFTOverlap = 512;
     constexpr int MeteorHeadFFTSize = 128;
@@ -164,6 +167,8 @@ MeteorGUI::MeteorGUI(PluginAPI* pluginAPI, DeviceUISet *deviceUISet, BasebandSam
     setupSpectrum();
 
     connect(&MainCore::instance()->getMasterTimer(), SIGNAL(timeout()), this, SLOT(tick()));
+    connect(MainCore::instance(), &MainCore::featureAdded, this, &MeteorGUI::onFeatureAdded);
+    connect(MainCore::instance(), &MainCore::featureRemoved, this, &MeteorGUI::onFeatureRemoved);
 
     m_channelMarker.blockSignals(true);
     m_channelMarker.setColor(QColor(m_settings.m_rgbColor));
@@ -228,6 +233,12 @@ void MeteorGUI::setupUi(RollupContents *rollupContents)
     m_highlightAllDetections = ui->highlightAllDetections;
     m_detectionBoxPadding = ui->detectionBoxPadding;
     m_detectionLabels = ui->detectionLabels;
+    m_transmitterLatitude = ui->transmitterLatitude;
+    m_transmitterLongitude = ui->transmitterLongitude;
+    m_antennaAzimuth = ui->antennaAzimuth;
+    m_antennaElevation = ui->antennaElevation;
+    m_antennaBeamwidth = ui->antennaBeamwidth;
+    m_rotator = ui->rotator;
     m_totalCountText = ui->totalCountText;
     m_hourCountText = ui->hourCountText;
     m_saveDetections = ui->saveDetections;
@@ -282,6 +293,36 @@ void MeteorGUI::setupUi(RollupContents *rollupContents)
 
     m_detectionLabels->addItems(QStringList({"None", "Top", "Right"}));
     m_detectionLabels->setToolTip("Display peak power and duration labels on waterfall detection boxes");
+
+    m_transmitterLatitude->setDecimals(6);
+    m_transmitterLatitude->setRange(-90.0, 90.0);
+    m_transmitterLatitude->setSingleStep(0.0001);
+    m_transmitterLatitude->setSuffix(QString::fromUtf8("\u00b0"));
+    m_transmitterLatitude->setToolTip("Radar transmitter latitude in decimal degrees");
+
+    m_transmitterLongitude->setDecimals(6);
+    m_transmitterLongitude->setRange(-180.0, 180.0);
+    m_transmitterLongitude->setSingleStep(0.0001);
+    m_transmitterLongitude->setSuffix(QString::fromUtf8("\u00b0"));
+    m_transmitterLongitude->setToolTip("Radar transmitter longitude in decimal degrees");
+
+    m_antennaAzimuth->setDecimals(1);
+    m_antennaAzimuth->setRange(0.0, 360.0);
+    m_antennaAzimuth->setSuffix(QString::fromUtf8("\u00b0"));
+    m_antennaAzimuth->setToolTip("Receive antenna azimuth clockwise from north");
+
+    m_antennaElevation->setDecimals(1);
+    m_antennaElevation->setRange(-90.0, 90.0);
+    m_antennaElevation->setSuffix(QString::fromUtf8("\u00b0"));
+    m_antennaElevation->setToolTip("Receive antenna elevation above the horizon");
+
+    m_antennaBeamwidth->setDecimals(1);
+    m_antennaBeamwidth->setRange(0.0, 360.0);
+    m_antennaBeamwidth->setSuffix(QString::fromUtf8("\u00b0"));
+    m_antennaBeamwidth->setToolTip("Receive antenna half-power beamwidth; zero means unspecified");
+
+    m_rotator->setToolTip("Optionally follow the azimuth and elevation reported by a GS232Controller feature");
+    populateRotatorCombo();
 
     m_saveDetections->setIcon(QIcon(":/save.png"));
     m_saveDetections->setToolTip("Save detections to CSV");
@@ -365,6 +406,135 @@ void MeteorGUI::setupUi(RollupContents *rollupContents)
     m_hourlyChartView->setMinimumHeight(180);
     m_glSpectrum->setMinimumHeight(180);
     m_headGLSpectrum->setMinimumHeight(180);
+}
+
+void MeteorGUI::populateRotatorCombo()
+{
+    const QString currentSelection = m_settings.m_rotator.trimmed();
+    QSignalBlocker blocker(m_rotator);
+    m_rotator->clear();
+    m_rotator->addItem(tr("None"), QString());
+    m_rotator->setItemData(0, true, RotatorAvailableRole);
+
+    std::vector<FeatureSet *>& featureSets = MainCore::instance()->getFeatureeSets();
+
+    for (int featureSetIndex = 0; featureSetIndex < (int) featureSets.size(); featureSetIndex++)
+    {
+        FeatureSet *featureSet = featureSets[featureSetIndex];
+
+        if (!featureSet) {
+            continue;
+        }
+
+        for (int featureIndex = 0; featureIndex < featureSet->getNumberOfFeatures(); featureIndex++)
+        {
+            Feature *feature = featureSet->getFeatureAt(featureIndex);
+
+            if (!feature || (feature->getURI() != QLatin1String("sdrangel.feature.gs232controller"))) {
+                continue;
+            }
+
+            QString title;
+            feature->getTitle(title);
+
+            if (title.isEmpty()) {
+                title = tr("GS232 Controller");
+            }
+
+            const QString id = QStringLiteral("%1:%2").arg(featureSetIndex).arg(featureIndex);
+            m_rotator->addItem(
+                tr("F%1:%2 %3").arg(featureSetIndex).arg(featureIndex).arg(title),
+                id);
+            m_rotator->setItemData(m_rotator->count() - 1, true, RotatorAvailableRole);
+        }
+    }
+
+    int index = m_rotator->findData(currentSelection);
+
+    if ((index < 0) && !currentSelection.isEmpty())
+    {
+        m_rotator->addItem(tr("Unavailable: %1").arg(currentSelection), currentSelection);
+        m_rotator->setItemData(m_rotator->count() - 1, false, RotatorAvailableRole);
+        index = m_rotator->count() - 1;
+    }
+
+    m_rotator->setCurrentIndex(index >= 0 ? index : 0);
+    updateAntennaPointingControls();
+}
+
+void MeteorGUI::updateAntennaPointingControls()
+{
+    const bool followingRotator = !m_settings.m_rotator.isEmpty()
+        && m_rotator->itemData(m_rotator->currentIndex(), RotatorAvailableRole).toBool();
+    m_antennaAzimuth->setReadOnly(followingRotator);
+    m_antennaElevation->setReadOnly(followingRotator);
+}
+
+QPair<int, int> MeteorGUI::selectedRotatorIndices() const
+{
+    const QStringList parts = m_settings.m_rotator.trimmed().split(QLatin1Char(':'));
+
+    if (parts.size() != 2) {
+        return qMakePair(-1, -1);
+    }
+
+    bool featureSetOK = false;
+    bool featureOK = false;
+    const int featureSetIndex = parts.at(0).toInt(&featureSetOK);
+    const int featureIndex = parts.at(1).toInt(&featureOK);
+
+    if (!featureSetOK || !featureOK || (featureSetIndex < 0) || (featureIndex < 0)) {
+        return qMakePair(-1, -1);
+    }
+
+    return qMakePair(featureSetIndex, featureIndex);
+}
+
+void MeteorGUI::syncFromSelectedRotator()
+{
+    const QPair<int, int> indices = selectedRotatorIndices();
+
+    if ((indices.first < 0) || (indices.second < 0)) {
+        return;
+    }
+
+    double azimuth = 0.0;
+    double elevation = 0.0;
+
+    if ((!ChannelWebAPIUtils::getFeatureReportValue(indices.first, indices.second, "currentAzimuth", azimuth)
+            || !ChannelWebAPIUtils::getFeatureReportValue(indices.first, indices.second, "currentElevation", elevation))
+        && (!ChannelWebAPIUtils::getFeatureSetting(indices.first, indices.second, "azimuth", azimuth)
+            || !ChannelWebAPIUtils::getFeatureSetting(indices.first, indices.second, "elevation", elevation)))
+    {
+        return;
+    }
+
+    if (!std::isfinite(azimuth) || !std::isfinite(elevation)) {
+        return;
+    }
+
+    azimuth = std::fmod(azimuth, 360.0);
+
+    if (azimuth < 0.0) {
+        azimuth += 360.0;
+    }
+
+    elevation = qBound(-90.0, elevation, 90.0);
+
+    if ((std::fabs((double) m_settings.m_antennaAzimuth - azimuth) < 0.05)
+        && (std::fabs((double) m_settings.m_antennaElevation - elevation) < 0.05))
+    {
+        return;
+    }
+
+    m_settings.m_antennaAzimuth = (float) azimuth;
+    m_settings.m_antennaElevation = (float) elevation;
+
+    const QSignalBlocker azimuthBlocker(m_antennaAzimuth);
+    const QSignalBlocker elevationBlocker(m_antennaElevation);
+    m_antennaAzimuth->setValue(azimuth);
+    m_antennaElevation->setValue(elevation);
+    applySettings({"antennaAzimuth", "antennaElevation"});
 }
 
 void MeteorGUI::setupSpectrum()
@@ -702,6 +872,47 @@ void MeteorGUI::on_detectionLabels_currentIndexChanged(int index)
     updateSpectrumViews();
 }
 
+void MeteorGUI::on_transmitterLatitude_valueChanged(double value)
+{
+    m_settings.m_transmitterLatitude = value;
+    applySetting("transmitterLatitude");
+}
+
+void MeteorGUI::on_transmitterLongitude_valueChanged(double value)
+{
+    m_settings.m_transmitterLongitude = value;
+    applySetting("transmitterLongitude");
+}
+
+void MeteorGUI::on_antennaAzimuth_valueChanged(double value)
+{
+    m_settings.m_antennaAzimuth = (float) value;
+    applySetting("antennaAzimuth");
+}
+
+void MeteorGUI::on_antennaElevation_valueChanged(double value)
+{
+    m_settings.m_antennaElevation = (float) value;
+    applySetting("antennaElevation");
+}
+
+void MeteorGUI::on_antennaBeamwidth_valueChanged(double value)
+{
+    m_settings.m_antennaBeamwidth = (float) value;
+    applySetting("antennaBeamwidth");
+}
+
+void MeteorGUI::on_rotator_currentIndexChanged(int index)
+{
+    m_settings.m_rotator = m_rotator->itemData(index).toString();
+    updateAntennaPointingControls();
+    applySetting("rotator");
+
+    if (!m_settings.m_rotator.isEmpty()) {
+        syncFromSelectedRotator();
+    }
+}
+
 void MeteorGUI::on_saveDetections_clicked()
 {
     QFileDialog fileDialog(this, "Select file to save detections to", "", "*.csv");
@@ -830,6 +1041,9 @@ bool MeteorGUI::saveRMOBReport(const QString& fileName, const QDate& reportMonth
     metadata.m_longitude = MainCore::instance()->getSettings().getLongitude();
     metadata.m_frequency = rmobReportFrequency();
     metadata.m_receiver = rmobReceiverName();
+    metadata.m_antennaAzimuth = m_settings.m_antennaAzimuth;
+    metadata.m_antennaElevation = m_settings.m_antennaElevation;
+    metadata.m_antennaBeamwidth = m_settings.m_antennaBeamwidth;
 
     return RMOBReport::save(fileName, reportMonthDate, data, metadata, error);
 }
@@ -1051,6 +1265,11 @@ void MeteorGUI::displaySettings()
     const QSignalBlocker maxFrequencyDriftBlocker(m_maxFrequencyDrift);
     const QSignalBlocker detectionBoxPaddingBlocker(m_detectionBoxPadding);
     const QSignalBlocker detectionLabelsBlocker(m_detectionLabels);
+    const QSignalBlocker transmitterLatitudeBlocker(m_transmitterLatitude);
+    const QSignalBlocker transmitterLongitudeBlocker(m_transmitterLongitude);
+    const QSignalBlocker antennaAzimuthBlocker(m_antennaAzimuth);
+    const QSignalBlocker antennaElevationBlocker(m_antennaElevation);
+    const QSignalBlocker antennaBeamwidthBlocker(m_antennaBeamwidth);
 
     m_frequencyMode->setCurrentIndex((int) m_settings.m_frequencyMode);
     on_frequencyMode_currentIndexChanged((int) m_settings.m_frequencyMode);
@@ -1068,6 +1287,12 @@ void MeteorGUI::displaySettings()
         (int) m_settings.m_detectionLabelMode,
         (int) MeteorSettings::DetectionLabelNone,
         (int) MeteorSettings::DetectionLabelRight));
+    m_transmitterLatitude->setValue(m_settings.m_transmitterLatitude);
+    m_transmitterLongitude->setValue(m_settings.m_transmitterLongitude);
+    m_antennaAzimuth->setValue(m_settings.m_antennaAzimuth);
+    m_antennaElevation->setValue(m_settings.m_antennaElevation);
+    m_antennaBeamwidth->setValue(m_settings.m_antennaBeamwidth);
+    populateRotatorCombo();
     applyDetectionsColumnVisibility();
 
     updateVisualSampleRate();
@@ -1091,6 +1316,12 @@ void MeteorGUI::makeUIConnections()
     QObject::connect(m_highlightAllDetections, &ButtonSwitch::toggled, this, &MeteorGUI::on_highlightAllDetections_toggled);
     QObject::connect(m_detectionBoxPadding, QOverload<int>::of(&QSpinBox::valueChanged), this, &MeteorGUI::on_detectionBoxPadding_valueChanged);
     QObject::connect(m_detectionLabels, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &MeteorGUI::on_detectionLabels_currentIndexChanged);
+    QObject::connect(m_transmitterLatitude, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &MeteorGUI::on_transmitterLatitude_valueChanged);
+    QObject::connect(m_transmitterLongitude, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &MeteorGUI::on_transmitterLongitude_valueChanged);
+    QObject::connect(m_antennaAzimuth, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &MeteorGUI::on_antennaAzimuth_valueChanged);
+    QObject::connect(m_antennaElevation, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &MeteorGUI::on_antennaElevation_valueChanged);
+    QObject::connect(m_antennaBeamwidth, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &MeteorGUI::on_antennaBeamwidth_valueChanged);
+    QObject::connect(m_rotator, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &MeteorGUI::on_rotator_currentIndexChanged);
     QObject::connect(m_saveDetections, &QPushButton::clicked, this, &MeteorGUI::on_saveDetections_clicked);
     QObject::connect(m_saveColorgramme, &QPushButton::clicked, this, &MeteorGUI::on_saveColorgramme_clicked);
     QObject::connect(m_clearDetections, &QPushButton::clicked, this, &MeteorGUI::on_clearDetections_clicked);
@@ -2160,6 +2391,10 @@ void MeteorGUI::tick()
 {
     if ((m_tickCount++ % 20) == 0)
     {
+        if (!m_settings.m_rotator.isEmpty()) {
+            syncFromSelectedRotator();
+        }
+
         updateCounters();
 
         const QDateTime nowUtc = QDateTime::currentDateTimeUtc();
@@ -2174,5 +2409,23 @@ void MeteorGUI::tick()
 
             m_lastAutomaticRMOBSaveUtc = nowUtc;
         }
+    }
+}
+
+void MeteorGUI::onFeatureAdded(int featureSetIndex, Feature *feature)
+{
+    (void) featureSetIndex;
+
+    if (feature && (feature->getURI() == QLatin1String("sdrangel.feature.gs232controller"))) {
+        populateRotatorCombo();
+    }
+}
+
+void MeteorGUI::onFeatureRemoved(int featureSetIndex, Feature *feature)
+{
+    (void) featureSetIndex;
+
+    if (feature && (feature->getURI() == QLatin1String("sdrangel.feature.gs232controller"))) {
+        populateRotatorCombo();
     }
 }

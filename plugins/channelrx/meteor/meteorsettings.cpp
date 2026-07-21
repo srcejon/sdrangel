@@ -16,6 +16,7 @@
 ///////////////////////////////////////////////////////////////////////////////////
 
 #include <algorithm>
+#include <cmath>
 #include <sstream>
 
 #include <QColor>
@@ -47,6 +48,12 @@ void MeteorSettings::resetToDefaults()
     m_detectionsTableColumnHidden = 0;
     m_detectionBoxPaddingPixels = 4;
     m_detectionLabelMode = DetectionLabelNone;
+    m_transmitterLatitude = 0.0;
+    m_transmitterLongitude = 0.0;
+    m_antennaAzimuth = 0.0f;
+    m_antennaElevation = 0.0f;
+    m_antennaBeamwidth = 0.0f;
+    m_rotator.clear();
     m_rgbColor = QColor(255, 170, 0).rgb();
     m_title = "Meteor";
     m_streamIndex = 0;
@@ -70,6 +77,12 @@ QByteArray MeteorSettings::serialize() const
     s.writeU32(10, m_detectionsTableColumnHidden);
     s.writeS32(11, m_detectionBoxPaddingPixels);
     s.writeS32(12, (int) m_detectionLabelMode);
+    s.writeDouble(13, m_transmitterLatitude);
+    s.writeDouble(14, m_transmitterLongitude);
+    s.writeFloat(15, m_antennaAzimuth);
+    s.writeFloat(16, m_antennaElevation);
+    s.writeFloat(17, m_antennaBeamwidth);
+    s.writeString(18, m_rotator);
 
     s.writeU32(21, m_rgbColor);
     s.writeString(22, m_title);
@@ -130,6 +143,22 @@ bool MeteorSettings::deserialize(const QByteArray& data)
             (int) m_detectionLabelMode,
             (int) DetectionLabelNone,
             (int) DetectionLabelRight);
+        d.readDouble(13, &m_transmitterLatitude, 0.0);
+        d.readDouble(14, &m_transmitterLongitude, 0.0);
+        d.readFloat(15, &m_antennaAzimuth, 0.0f);
+        d.readFloat(16, &m_antennaElevation, 0.0f);
+        d.readFloat(17, &m_antennaBeamwidth, 0.0f);
+        d.readString(18, &m_rotator, "");
+        m_transmitterLatitude = std::isfinite(m_transmitterLatitude)
+            ? std::clamp(m_transmitterLatitude, -90.0, 90.0) : 0.0;
+        m_transmitterLongitude = std::isfinite(m_transmitterLongitude)
+            ? std::clamp(m_transmitterLongitude, -180.0, 180.0) : 0.0;
+        m_antennaAzimuth = std::isfinite(m_antennaAzimuth)
+            ? std::clamp(m_antennaAzimuth, 0.0f, 360.0f) : 0.0f;
+        m_antennaElevation = std::isfinite(m_antennaElevation)
+            ? std::clamp(m_antennaElevation, -90.0f, 90.0f) : 0.0f;
+        m_antennaBeamwidth = std::isfinite(m_antennaBeamwidth)
+            ? std::clamp(m_antennaBeamwidth, 0.0f, 360.0f) : 0.0f;
 
         d.readU32(21, &m_rgbColor, QColor(255, 170, 0).rgb());
         d.readString(22, &m_title, "Meteor");
@@ -209,6 +238,24 @@ void MeteorSettings::applySettings(const QStringList& settingsKeys, const Meteor
     if (settingsKeys.contains("detectionLabelMode")) {
         m_detectionLabelMode = settings.m_detectionLabelMode;
     }
+    if (settingsKeys.contains("transmitterLatitude")) {
+        m_transmitterLatitude = settings.m_transmitterLatitude;
+    }
+    if (settingsKeys.contains("transmitterLongitude")) {
+        m_transmitterLongitude = settings.m_transmitterLongitude;
+    }
+    if (settingsKeys.contains("antennaAzimuth")) {
+        m_antennaAzimuth = settings.m_antennaAzimuth;
+    }
+    if (settingsKeys.contains("antennaElevation")) {
+        m_antennaElevation = settings.m_antennaElevation;
+    }
+    if (settingsKeys.contains("antennaBeamwidth")) {
+        m_antennaBeamwidth = settings.m_antennaBeamwidth;
+    }
+    if (settingsKeys.contains("rotator")) {
+        m_rotator = settings.m_rotator;
+    }
     if (settingsKeys.contains("rgbColor")) {
         m_rgbColor = settings.m_rgbColor;
     }
@@ -265,6 +312,24 @@ QString MeteorSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("detectionLabelMode") || force) {
         ostr << " m_detectionLabelMode: " << (int) m_detectionLabelMode;
+    }
+    if (settingsKeys.contains("transmitterLatitude") || force) {
+        ostr << " m_transmitterLatitude: " << m_transmitterLatitude;
+    }
+    if (settingsKeys.contains("transmitterLongitude") || force) {
+        ostr << " m_transmitterLongitude: " << m_transmitterLongitude;
+    }
+    if (settingsKeys.contains("antennaAzimuth") || force) {
+        ostr << " m_antennaAzimuth: " << m_antennaAzimuth;
+    }
+    if (settingsKeys.contains("antennaElevation") || force) {
+        ostr << " m_antennaElevation: " << m_antennaElevation;
+    }
+    if (settingsKeys.contains("antennaBeamwidth") || force) {
+        ostr << " m_antennaBeamwidth: " << m_antennaBeamwidth;
+    }
+    if (settingsKeys.contains("rotator") || force) {
+        ostr << " m_rotator: " << m_rotator.toStdString();
     }
     if (settingsKeys.contains("streamIndex") || force) {
         ostr << " m_streamIndex: " << m_streamIndex;

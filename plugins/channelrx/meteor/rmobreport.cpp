@@ -171,9 +171,15 @@ bool RMOBReport::save(
         .arg(metadata.m_latitude >= 0.0 ? "+" : "")
         .arg(metadata.m_latitude, 0, 'f', 4) << "\n";
     out << "[Frequencies]" << formatFrequency(metadata.m_frequency) << "\n";
-    out << "[Antenna]\n";
-    out << "[Azimut Antenna]\n";
-    out << "[Elevation Antenna]\n";
+    out << "[Antenna]";
+
+    if (metadata.m_antennaBeamwidth > 0.0) {
+        out << "HPBW " << QString::number(metadata.m_antennaBeamwidth, 'f', 1) << " deg";
+    }
+
+    out << "\n";
+    out << "[Azimut Antenna]" << QString::number(metadata.m_antennaAzimuth, 'f', 1) << "\n";
+    out << "[Elevation Antenna]" << QString::number(metadata.m_antennaElevation, 'f', 1) << "\n";
     out << "[Pre-Amplifier]\n";
     out << "[Receiver]" << metadata.m_receiver << "\n";
     out << "[Observing Method]" << metadata.m_observingMethod << "\n";

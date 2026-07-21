@@ -218,6 +218,7 @@ namespace {
         QString candidateCsvPath;
         QString candidateLabelsPath;
         QString candidateCaptureDir;
+        QVector<QPair<QString, QString>> tunableOverrides;
         MeteorSettings settings;
         int chunkSamples = 4096;
         int tailMS = 2000;
@@ -225,6 +226,280 @@ namespace {
         bool details = false;
         bool showHelp = false;
     };
+
+    bool applyTunableOverrides(
+        MeteorDemodSink::DetectorTunables& tunables,
+        const QVector<QPair<QString, QString>>& overrides,
+        QString& error)
+    {
+        using Tunables = MeteorDemodSink::DetectorTunables;
+        static const QMap<QString, double Tunables::*> doubleMembers = {
+            {QStringLiteral("spectralFrameDurationS"), &Tunables::m_spectralFrameDurationS},
+            {QStringLiteral("spectralHopFraction"), &Tunables::m_spectralHopFraction},
+            {QStringLiteral("spectralActiveNoiseAlpha"), &Tunables::m_spectralActiveNoiseAlpha},
+            {QStringLiteral("spectralRisingNoiseAlpha"), &Tunables::m_spectralRisingNoiseAlpha},
+            {QStringLiteral("spectralStableNoiseAlpha"), &Tunables::m_spectralStableNoiseAlpha},
+            {QStringLiteral("minimumNoiseBlockDurationS"), &Tunables::m_minimumNoiseBlockDurationS},
+            {QStringLiteral("minimumNoiseBlockQuantile"), &Tunables::m_minimumNoiseBlockQuantile},
+            {QStringLiteral("scalarNoiseTimeConstantS"), &Tunables::m_scalarNoiseTimeConstantS},
+            {QStringLiteral("scalarRisingNoiseAlpha"), &Tunables::m_scalarRisingNoiseAlpha},
+            {QStringLiteral("edgeExclusionFraction"), &Tunables::m_edgeExclusionFraction},
+            {QStringLiteral("usableBandwidthRateFraction"), &Tunables::m_usableBandwidthRateFraction},
+            {QStringLiteral("maxSegmentedBandWidthHz"), &Tunables::m_maxSegmentedBandWidthHz},
+            {QStringLiteral("compactBandwidthHz"), &Tunables::m_compactBandwidthHz},
+            {QStringLiteral("stableBandwidthHz"), &Tunables::m_stableBandwidthHz},
+            {QStringLiteral("twoFrameMaxBandwidthHz"), &Tunables::m_twoFrameMaxBandwidthHz},
+            {QStringLiteral("twoFrameMinFrequencyCoherence"), &Tunables::m_twoFrameMinFrequencyCoherence},
+            {QStringLiteral("twoFrameMinIntegratedSupportDB"), &Tunables::m_twoFrameMinIntegratedSupportDB},
+            {QStringLiteral("localizedTwoFrameMinPeakDB"), &Tunables::m_localizedTwoFrameMinPeakDB},
+            {QStringLiteral("localizedTwoFrameMinContrastDB"), &Tunables::m_localizedTwoFrameMinContrastDB},
+            {QStringLiteral("coherentWideTwoFrameMinBandwidthHz"), &Tunables::m_coherentWideTwoFrameMinBandwidthHz},
+            {QStringLiteral("coherentWideTwoFrameMaxBandwidthHz"), &Tunables::m_coherentWideTwoFrameMaxBandwidthHz},
+            {QStringLiteral("coherentWideTwoFrameMaxOccupiedFraction"), &Tunables::m_coherentWideTwoFrameMaxOccupiedFraction},
+            {QStringLiteral("coherentWideTwoFrameMinPeakDB"), &Tunables::m_coherentWideTwoFrameMinPeakDB},
+            {QStringLiteral("coherentWideTwoFrameMinContrastDB"), &Tunables::m_coherentWideTwoFrameMinContrastDB},
+            {QStringLiteral("coherentWideTwoFrameMinIntegratedSupportDB"), &Tunables::m_coherentWideTwoFrameMinIntegratedSupportDB},
+            {QStringLiteral("coherentWideTwoFrameMinFrequencyCoherence"), &Tunables::m_coherentWideTwoFrameMinFrequencyCoherence},
+            {QStringLiteral("morphologyRescueContrastDB"), &Tunables::m_morphologyRescueContrastDB},
+            {QStringLiteral("localizedOccupiedMaxFraction"), &Tunables::m_localizedOccupiedMaxFraction},
+            {QStringLiteral("sustainedSweepMinDurationS"), &Tunables::m_sustainedSweepMinDurationS},
+            {QStringLiteral("sustainedSweepMinR2"), &Tunables::m_sustainedSweepMinR2},
+            {QStringLiteral("sustainedSweepMinDriftHz"), &Tunables::m_sustainedSweepMinDriftHz},
+            {QStringLiteral("compactSweepMinDurationS"), &Tunables::m_compactSweepMinDurationS},
+            {QStringLiteral("compactSweepMaxTrackOccupancy"), &Tunables::m_compactSweepMaxTrackOccupancy},
+            {QStringLiteral("compactSweepMaxContrastDB"), &Tunables::m_compactSweepMaxContrastDB},
+            {QStringLiteral("compactSweepMinR2"), &Tunables::m_compactSweepMinR2},
+            {QStringLiteral("compactSweepMinDriftHz"), &Tunables::m_compactSweepMinDriftHz},
+            {QStringLiteral("localizedBurstMaxDurationS"), &Tunables::m_localizedBurstMaxDurationS},
+            {QStringLiteral("localizedBurstMinTrackOccupancy"), &Tunables::m_localizedBurstMinTrackOccupancy},
+            {QStringLiteral("localizedBurstMaxOccupiedFraction"), &Tunables::m_localizedBurstMaxOccupiedFraction},
+            {QStringLiteral("localizedBurstMinPeakDB"), &Tunables::m_localizedBurstMinPeakDB},
+            {QStringLiteral("localizedBurstMinContrastDB"), &Tunables::m_localizedBurstMinContrastDB},
+            {QStringLiteral("localizedBurstMinIntegratedSupportDB"), &Tunables::m_localizedBurstMinIntegratedSupportDB},
+            {QStringLiteral("localizedBurstMinFrequencyCoherence"), &Tunables::m_localizedBurstMinFrequencyCoherence},
+            {QStringLiteral("localizedBurstMinMatchedEnvelopeScore"), &Tunables::m_localizedBurstMinMatchedEnvelopeScore},
+            {QStringLiteral("driftSweepMinR2"), &Tunables::m_driftSweepMinR2},
+            {QStringLiteral("broadbandImpulseMaxDurationS"), &Tunables::m_broadbandImpulseMaxDurationS},
+            {QStringLiteral("broadbandImpulseMinPeakDB"), &Tunables::m_broadbandImpulseMinPeakDB},
+            {QStringLiteral("broadbandImpulseMinSpanHz"), &Tunables::m_broadbandImpulseMinSpanHz},
+            {QStringLiteral("broadbandImpulseMinBandwidthHz"), &Tunables::m_broadbandImpulseMinBandwidthHz},
+            {QStringLiteral("broadbandImpulseMinOccupiedFraction"), &Tunables::m_broadbandImpulseMinOccupiedFraction},
+            {QStringLiteral("shortCandidateAcceptanceScore"), &Tunables::m_shortCandidateAcceptanceScore},
+            {QStringLiteral("candidateAcceptanceScore"), &Tunables::m_candidateAcceptanceScore},
+            {QStringLiteral("weakSupportDB"), &Tunables::m_weakSupportDB},
+            {QStringLiteral("weakSupportScorePenalty"), &Tunables::m_weakSupportScorePenalty},
+            {QStringLiteral("scoreDurationFloorS"), &Tunables::m_scoreDurationFloorS},
+            {QStringLiteral("scoreDurationRangeS"), &Tunables::m_scoreDurationRangeS},
+            {QStringLiteral("powerSweepMinR2"), &Tunables::m_powerSweepMinR2},
+            {QStringLiteral("powerStableBandwidthHz"), &Tunables::m_powerStableBandwidthHz},
+            {QStringLiteral("powerBoundedMinProminenceDB"), &Tunables::m_powerBoundedMinProminenceDB},
+            {QStringLiteral("powerStrongCoherentMinPeakDB"), &Tunables::m_powerStrongCoherentMinPeakDB},
+            {QStringLiteral("powerStrongCoherentMinProminenceDB"), &Tunables::m_powerStrongCoherentMinProminenceDB},
+            {QStringLiteral("frequencyRefinementOuterProbeFraction"), &Tunables::m_frequencyRefinementOuterProbeFraction},
+            {QStringLiteral("duplicateFrequencyOverlapFraction"), &Tunables::m_duplicateFrequencyOverlapFraction},
+            {QStringLiteral("duplicateStrongFrequencyOverlapFraction"), &Tunables::m_duplicateStrongFrequencyOverlapFraction},
+            {QStringLiteral("detachedRepeatMinimumGapS"), &Tunables::m_detachedRepeatMinimumGapS},
+            {QStringLiteral("detachedRepeatMinimumScoreMargin"), &Tunables::m_detachedRepeatMinimumScoreMargin},
+            {QStringLiteral("detachedRepeatMinimumContrastDB"), &Tunables::m_detachedRepeatMinimumContrastDB},
+            {QStringLiteral("detachedRepeatMinimumPeakDB"), &Tunables::m_detachedRepeatMinimumPeakDB},
+            {QStringLiteral("detachedRepeatMinimumIntegratedSupportDB"), &Tunables::m_detachedRepeatMinimumIntegratedSupportDB},
+            {QStringLiteral("detachedRepeatMinimumTrackOccupancy"), &Tunables::m_detachedRepeatMinimumTrackOccupancy},
+            {QStringLiteral("detachedRepeatMinimumFrequencyCoherence"), &Tunables::m_detachedRepeatMinimumFrequencyCoherence},
+            {QStringLiteral("detachedRepeatMaximumOccupiedFraction"), &Tunables::m_detachedRepeatMaximumOccupiedFraction},
+            {QStringLiteral("detachedRepeatMinimumMatchedEnvelopeScore"), &Tunables::m_detachedRepeatMinimumMatchedEnvelopeScore},
+            {QStringLiteral("continuationThresholdReductionDB"), &Tunables::m_continuationThresholdReductionDB},
+            {QStringLiteral("initialComponentHoldS"), &Tunables::m_initialComponentHoldS},
+            {QStringLiteral("continuationOrdinaryHoldS"), &Tunables::m_continuationOrdinaryHoldS},
+            {QStringLiteral("continuationStrongHoldS"), &Tunables::m_continuationStrongHoldS},
+            {QStringLiteral("continuationMaxEvidenceGapS"), &Tunables::m_continuationMaxEvidenceGapS},
+            {QStringLiteral("continuationStrongPeakDB"), &Tunables::m_continuationStrongPeakDB},
+            {QStringLiteral("singleComponentContinuationMinimumConfidence"), &Tunables::m_singleComponentContinuationMinimumConfidence},
+            {QStringLiteral("singleComponentContinuationTailPaddingS"), &Tunables::m_singleComponentContinuationTailPaddingS},
+            {QStringLiteral("continuationFrequencyPaddingHz"), &Tunables::m_continuationFrequencyPaddingHz},
+            {QStringLiteral("trackingFrequencyPaddingHz"), &Tunables::m_trackingFrequencyPaddingHz},
+            {QStringLiteral("maxTrackingJumpHz"), &Tunables::m_maxTrackingJumpHz},
+            {QStringLiteral("candidateDiagnosticMinimumMargin"), &Tunables::m_candidateDiagnosticMinimumMargin},
+            {QStringLiteral("candidateDiagnosticMaximumMargin"), &Tunables::m_candidateDiagnosticMaximumMargin},
+            {QStringLiteral("matchedEnvelopeMaximumPeakPosition"), &Tunables::m_matchedEnvelopeMaximumPeakPosition},
+            {QStringLiteral("matchedEnvelopeMinimumDecayDB"), &Tunables::m_matchedEnvelopeMinimumDecayDB},
+            {QStringLiteral("matchedEnvelopeMaximumDecayDB"), &Tunables::m_matchedEnvelopeMaximumDecayDB},
+            {QStringLiteral("matchedEnvelopeMinimumMonotonicFraction"), &Tunables::m_matchedEnvelopeMinimumMonotonicFraction},
+            {QStringLiteral("curvatureMinimumDurationS"), &Tunables::m_curvatureMinimumDurationS},
+            {QStringLiteral("curvatureMinimumR2"), &Tunables::m_curvatureMinimumR2},
+            {QStringLiteral("curvatureMinimumR2Improvement"), &Tunables::m_curvatureMinimumR2Improvement},
+            {QStringLiteral("curvatureMinimumHzPerS2"), &Tunables::m_curvatureMinimumHzPerS2},
+            {QStringLiteral("rescueMinimumScoreMargin"), &Tunables::m_rescueMinimumScoreMargin},
+            {QStringLiteral("rescueMinimumContrastDB"), &Tunables::m_rescueMinimumContrastDB},
+            {QStringLiteral("rescueMinimumPeakDB"), &Tunables::m_rescueMinimumPeakDB},
+            {QStringLiteral("rescueMinimumFrequencyCoherence"), &Tunables::m_rescueMinimumFrequencyCoherence},
+            {QStringLiteral("rescueMinimumMatchedEnvelopeScore"), &Tunables::m_rescueMinimumMatchedEnvelopeScore},
+            {QStringLiteral("rescueTwoFrameMinimumContrastDB"), &Tunables::m_rescueTwoFrameMinimumContrastDB},
+            {QStringLiteral("rescueTwoFrameMinimumPeakDB"), &Tunables::m_rescueTwoFrameMinimumPeakDB},
+            {QStringLiteral("rescueTwoFrameMinimumIntegratedSupportDB"), &Tunables::m_rescueTwoFrameMinimumIntegratedSupportDB},
+            {QStringLiteral("rescueTwoFrameMinimumFrequencyCoherence"), &Tunables::m_rescueTwoFrameMinimumFrequencyCoherence},
+            {QStringLiteral("rescueTwoFrameMinimumMatchedEnvelopeScore"), &Tunables::m_rescueTwoFrameMinimumMatchedEnvelopeScore},
+            {QStringLiteral("rescueThreeFrameMinimumIntegratedSupportDB"), &Tunables::m_rescueThreeFrameMinimumIntegratedSupportDB},
+            {QStringLiteral("rescueMaximumOccupiedFraction"), &Tunables::m_rescueMaximumOccupiedFraction},
+            {QStringLiteral("compactThreeFrameEvidenceMaximumDurationS"), &Tunables::m_compactThreeFrameEvidenceMaximumDurationS},
+            {QStringLiteral("compactThreeFrameEvidenceMinimumScoreMargin"), &Tunables::m_compactThreeFrameEvidenceMinimumScoreMargin},
+            {QStringLiteral("compactThreeFrameEvidenceMinimumContrastDB"), &Tunables::m_compactThreeFrameEvidenceMinimumContrastDB},
+            {QStringLiteral("compactThreeFrameEvidenceMinimumIntegratedSupportDB"), &Tunables::m_compactThreeFrameEvidenceMinimumIntegratedSupportDB},
+            {QStringLiteral("compactThreeFrameEvidenceMinimumMatchedEnvelopeScore"), &Tunables::m_compactThreeFrameEvidenceMinimumMatchedEnvelopeScore},
+            {QStringLiteral("compactThreeFrameEvidenceMaximumOccupiedFraction"), &Tunables::m_compactThreeFrameEvidenceMaximumOccupiedFraction},
+            {QStringLiteral("compactThreeFrameEvidenceMaximumSweepScore"), &Tunables::m_compactThreeFrameEvidenceMaximumSweepScore},
+            {QStringLiteral("compactThreeFrameEvidenceMaximumBandwidthHz"), &Tunables::m_compactThreeFrameEvidenceMaximumBandwidthHz},
+            {QStringLiteral("narrowThreeFrameEvidenceMinimumScoreMargin"), &Tunables::m_narrowThreeFrameEvidenceMinimumScoreMargin},
+            {QStringLiteral("narrowThreeFrameEvidenceMinimumContrastDB"), &Tunables::m_narrowThreeFrameEvidenceMinimumContrastDB},
+            {QStringLiteral("narrowThreeFrameEvidenceMinimumIntegratedSupportDB"), &Tunables::m_narrowThreeFrameEvidenceMinimumIntegratedSupportDB},
+            {QStringLiteral("narrowThreeFrameEvidenceMinimumMatchedEnvelopeScore"), &Tunables::m_narrowThreeFrameEvidenceMinimumMatchedEnvelopeScore},
+            {QStringLiteral("narrowThreeFrameEvidenceMaximumOccupiedFraction"), &Tunables::m_narrowThreeFrameEvidenceMaximumOccupiedFraction},
+            {QStringLiteral("narrowThreeFrameEvidenceMaximumBandwidthHz"), &Tunables::m_narrowThreeFrameEvidenceMaximumBandwidthHz},
+            {QStringLiteral("sustainedEvidenceMaximumDurationS"), &Tunables::m_sustainedEvidenceMaximumDurationS},
+            {QStringLiteral("sustainedEvidenceMinimumScoreMargin"), &Tunables::m_sustainedEvidenceMinimumScoreMargin},
+            {QStringLiteral("sustainedEvidenceMinimumContrastDB"), &Tunables::m_sustainedEvidenceMinimumContrastDB},
+            {QStringLiteral("sustainedEvidenceMinimumPeakDB"), &Tunables::m_sustainedEvidenceMinimumPeakDB},
+            {QStringLiteral("sustainedEvidenceMinimumIntegratedSupportDB"), &Tunables::m_sustainedEvidenceMinimumIntegratedSupportDB},
+            {QStringLiteral("sustainedEvidenceMinimumFrequencyCoherence"), &Tunables::m_sustainedEvidenceMinimumFrequencyCoherence},
+            {QStringLiteral("sustainedEvidenceMaximumOccupiedFraction"), &Tunables::m_sustainedEvidenceMaximumOccupiedFraction},
+            {QStringLiteral("sustainedEvidenceMaximumBandwidthHz"), &Tunables::m_sustainedEvidenceMaximumBandwidthHz},
+            {QStringLiteral("sustainedEvidenceMinimumMatchedEnvelopeScore"), &Tunables::m_sustainedEvidenceMinimumMatchedEnvelopeScore},
+            {QStringLiteral("sustainedEvidenceMaximumSweepScore"), &Tunables::m_sustainedEvidenceMaximumSweepScore},
+            {QStringLiteral("sustainedEvidenceMaximumQuadraticSweepR2"), &Tunables::m_sustainedEvidenceMaximumQuadraticSweepR2},
+            {QStringLiteral("learnedModelIntercept"), &Tunables::m_learnedModelIntercept},
+            {QStringLiteral("learnedRescueProbability"), &Tunables::m_learnedRescueProbability},
+            {QStringLiteral("rejectedCandidateReanalysisDelayS"), &Tunables::m_rejectedCandidateReanalysisDelayS},
+            {QStringLiteral("rejectedCandidateMinimumScoreMargin"), &Tunables::m_rejectedCandidateMinimumScoreMargin},
+            {QStringLiteral("rejectedCandidateMinimumFrequencyCoherence"), &Tunables::m_rejectedCandidateMinimumFrequencyCoherence},
+            {QStringLiteral("rejectedCandidateMaximumOccupiedFraction"), &Tunables::m_rejectedCandidateMaximumOccupiedFraction},
+            {QStringLiteral("rejectedTwoFrameMinimumBandwidthHz"), &Tunables::m_rejectedTwoFrameMinimumBandwidthHz},
+            {QStringLiteral("rejectedTwoFrameStrongNarrowMinimumBandwidthHz"), &Tunables::m_rejectedTwoFrameStrongNarrowMinimumBandwidthHz},
+            {QStringLiteral("rejectedTwoFrameStrongNarrowMinimumPeakDB"), &Tunables::m_rejectedTwoFrameStrongNarrowMinimumPeakDB},
+            {QStringLiteral("rejectedTwoFrameStrongNarrowMinimumScoreMargin"), &Tunables::m_rejectedTwoFrameStrongNarrowMinimumScoreMargin},
+            {QStringLiteral("rejectedStrongTwoFrameMaximumDurationS"), &Tunables::m_rejectedStrongTwoFrameMaximumDurationS},
+            {QStringLiteral("rejectedStrongTwoFrameMinimumScoreMargin"), &Tunables::m_rejectedStrongTwoFrameMinimumScoreMargin},
+            {QStringLiteral("rejectedStrongTwoFrameMinimumPeakDB"), &Tunables::m_rejectedStrongTwoFrameMinimumPeakDB},
+            {QStringLiteral("rejectedStrongTwoFrameMinimumIntegratedSupportDB"), &Tunables::m_rejectedStrongTwoFrameMinimumIntegratedSupportDB},
+            {QStringLiteral("rejectedStrongTwoFrameMinimumContrastDB"), &Tunables::m_rejectedStrongTwoFrameMinimumContrastDB},
+            {QStringLiteral("rejectedStrongTwoFrameMinimumFrequencyCoherence"), &Tunables::m_rejectedStrongTwoFrameMinimumFrequencyCoherence},
+            {QStringLiteral("rejectedStrongTwoFrameMinimumOccupiedFraction"), &Tunables::m_rejectedStrongTwoFrameMinimumOccupiedFraction},
+            {QStringLiteral("rejectedStrongTwoFrameMaximumOccupiedFraction"), &Tunables::m_rejectedStrongTwoFrameMaximumOccupiedFraction},
+            {QStringLiteral("rejectedStrongTwoFrameMaximumBandwidthHz"), &Tunables::m_rejectedStrongTwoFrameMaximumBandwidthHz},
+            {QStringLiteral("rejectedStrongTwoFrameMaximumSweepScore"), &Tunables::m_rejectedStrongTwoFrameMaximumSweepScore},
+            {QStringLiteral("rejectedStrongTwoFrameReanalysisDelayS"), &Tunables::m_rejectedStrongTwoFrameReanalysisDelayS},
+            {QStringLiteral("rejectedCandidateMinimumExpansionS"), &Tunables::m_rejectedCandidateMinimumExpansionS},
+            {QStringLiteral("rejectedCandidateMinimumDurationS"), &Tunables::m_rejectedCandidateMinimumDurationS},
+            {QStringLiteral("rejectedCandidateMinimumPersistentLineS"), &Tunables::m_rejectedCandidateMinimumPersistentLineS},
+            {QStringLiteral("rejectedCandidateMinimumPersistentLineProminenceDB"), &Tunables::m_rejectedCandidateMinimumPersistentLineProminenceDB},
+            {QStringLiteral("rejectedCandidateMaximumPersistentLineJumpHz"), &Tunables::m_rejectedCandidateMaximumPersistentLineJumpHz},
+            {QStringLiteral("rejectedCandidateSweepSearchHalfWidthHz"), &Tunables::m_rejectedCandidateSweepSearchHalfWidthHz},
+            {QStringLiteral("rejectedCandidateSweepMinimumProminenceDB"), &Tunables::m_rejectedCandidateSweepMinimumProminenceDB},
+            {QStringLiteral("rejectedCandidateSweepTemporalSupportFraction"), &Tunables::m_rejectedCandidateSweepTemporalSupportFraction},
+            {QStringLiteral("rejectedCandidateSweepMinimumDriftHz"), &Tunables::m_rejectedCandidateSweepMinimumDriftHz},
+            {QStringLiteral("rejectedCandidateSweepMinimumR2"), &Tunables::m_rejectedCandidateSweepMinimumR2},
+            {QStringLiteral("rejectedCandidateActiveEventOverlapFraction"), &Tunables::m_rejectedCandidateActiveEventOverlapFraction},
+            {QStringLiteral("compactMeteorSweepMaximumDurationS"), &Tunables::m_compactMeteorSweepMaximumDurationS},
+            {QStringLiteral("compactMeteorSweepMinimumFrequencyCoherence"), &Tunables::m_compactMeteorSweepMinimumFrequencyCoherence},
+            {QStringLiteral("compactMeteorSweepMinimumContrastDB"), &Tunables::m_compactMeteorSweepMinimumContrastDB},
+            {QStringLiteral("compactMeteorSweepMaximumOccupiedFraction"), &Tunables::m_compactMeteorSweepMaximumOccupiedFraction},
+            {QStringLiteral("parentReanalysisMinimumDurationS"), &Tunables::m_parentReanalysisMinimumDurationS},
+            {QStringLiteral("twoComponentRangeMinimumExtensionBins"), &Tunables::m_twoComponentRangeMinimumExtensionBins},
+            {QStringLiteral("parentFrequencyLowQuantile"), &Tunables::m_parentFrequencyLowQuantile},
+            {QStringLiteral("parentFrequencyHighQuantile"), &Tunables::m_parentFrequencyHighQuantile},
+            {QStringLiteral("componentEnvelopeSupportFraction"), &Tunables::m_componentEnvelopeSupportFraction},
+            {QStringLiteral("componentEnvelopeCompactDurationS"), &Tunables::m_componentEnvelopeCompactDurationS},
+            {QStringLiteral("componentEnvelopeMaximumCompactExpansionS"), &Tunables::m_componentEnvelopeMaximumCompactExpansionS},
+            {QStringLiteral("componentEnvelopeSustainedDurationS"), &Tunables::m_componentEnvelopeSustainedDurationS},
+            {QStringLiteral("componentEnvelopeSustainedExpansionFraction"), &Tunables::m_componentEnvelopeSustainedExpansionFraction},
+            {QStringLiteral("componentEnvelopeMinimumSustainedExpansionS"), &Tunables::m_componentEnvelopeMinimumSustainedExpansionS},
+            {QStringLiteral("parentEnvelopeSearchPaddingS"), &Tunables::m_parentEnvelopeSearchPaddingS},
+            {QStringLiteral("parentEnvelopeNoiseContextS"), &Tunables::m_parentEnvelopeNoiseContextS},
+            {QStringLiteral("parentEnvelopeMaximumLeadS"), &Tunables::m_parentEnvelopeMaximumLeadS},
+            {QStringLiteral("parentEnvelopeMaximumTrailS"), &Tunables::m_parentEnvelopeMaximumTrailS},
+            {QStringLiteral("parentEnvelopeEnterFraction"), &Tunables::m_parentEnvelopeEnterFraction},
+            {QStringLiteral("parentEnvelopeExitFraction"), &Tunables::m_parentEnvelopeExitFraction},
+            {QStringLiteral("parentEnvelopeMinimumFloorRatio"), &Tunables::m_parentEnvelopeMinimumFloorRatio},
+            {QStringLiteral("parentEnvelopeMaximumGapS"), &Tunables::m_parentEnvelopeMaximumGapS},
+            {QStringLiteral("parentEnvelopeMinimumExpansionS"), &Tunables::m_parentEnvelopeMinimumExpansionS},
+        };
+        static const QMap<QString, int Tunables::*> intMembers = {
+            {QStringLiteral("minimumNoiseBlockCount"), &Tunables::m_minimumNoiseBlockCount},
+            {QStringLiteral("sustainedSweepMinFrames"), &Tunables::m_sustainedSweepMinFrames},
+            {QStringLiteral("compactSweepMinFrames"), &Tunables::m_compactSweepMinFrames},
+            {QStringLiteral("localizedBurstMaxFrames"), &Tunables::m_localizedBurstMaxFrames},
+            {QStringLiteral("localizedBurstMinEnvelopeTailFrames"), &Tunables::m_localizedBurstMinEnvelopeTailFrames},
+            {QStringLiteral("broadbandImpulseMaxFrames"), &Tunables::m_broadbandImpulseMaxFrames},
+            {QStringLiteral("detachedRepeatMinimumFrames"), &Tunables::m_detachedRepeatMinimumFrames},
+            {QStringLiteral("candidateDiagnosticMinimumFrames"), &Tunables::m_candidateDiagnosticMinimumFrames},
+            {QStringLiteral("matchedEnvelopeMinimumFrames"), &Tunables::m_matchedEnvelopeMinimumFrames},
+            {QStringLiteral("matchedEnvelopeMinimumTailFrames"), &Tunables::m_matchedEnvelopeMinimumTailFrames},
+            {QStringLiteral("curvatureMinimumFrames"), &Tunables::m_curvatureMinimumFrames},
+            {QStringLiteral("compactThreeFrameEvidenceMinimumTailFrames"), &Tunables::m_compactThreeFrameEvidenceMinimumTailFrames},
+            {QStringLiteral("sustainedEvidenceMinimumFrames"), &Tunables::m_sustainedEvidenceMinimumFrames},
+            {QStringLiteral("sustainedEvidenceMaximumFrames"), &Tunables::m_sustainedEvidenceMaximumFrames},
+            {QStringLiteral("rejectedCandidateMaximumFrames"), &Tunables::m_rejectedCandidateMaximumFrames},
+            {QStringLiteral("compactMeteorSweepMaximumFrames"), &Tunables::m_compactMeteorSweepMaximumFrames},
+            {QStringLiteral("maxPendingCandidateReanalyses"), &Tunables::m_maxPendingCandidateReanalyses},
+            {QStringLiteral("maxActiveMeteorEvents"), &Tunables::m_maxActiveMeteorEvents},
+            {QStringLiteral("maxParentObservations"), &Tunables::m_maxParentObservations},
+        };
+        static const QMap<QString, bool Tunables::*> boolMembers = {
+            {QStringLiteral("enableCurvatureSweepRejection"), &Tunables::m_enableCurvatureSweepRejection},
+            {QStringLiteral("enableCalibratedRescue"), &Tunables::m_enableCalibratedRescue},
+            {QStringLiteral("learnedModelEnabled"), &Tunables::m_learnedModelEnabled},
+            {QStringLiteral("enableSettledParentReanalysis"), &Tunables::m_enableSettledParentReanalysis},
+            {QStringLiteral("enableRejectedCandidateReanalysis"), &Tunables::m_enableRejectedCandidateReanalysis},
+        };
+
+        for (const QPair<QString, QString>& override : overrides)
+        {
+            const QString& name = override.first;
+            const QString& text = override.second;
+            bool ok = false;
+
+            if (doubleMembers.contains(name))
+            {
+                const double value = text.toDouble(&ok);
+
+                if (!ok)
+                {
+                    error = QString("Invalid value for tunable %1: %2").arg(name, text);
+                    return false;
+                }
+
+                tunables.*doubleMembers.value(name) = value;
+            }
+            else if (intMembers.contains(name))
+            {
+                const int value = text.toInt(&ok);
+
+                if (!ok)
+                {
+                    error = QString("Invalid value for tunable %1: %2").arg(name, text);
+                    return false;
+                }
+
+                tunables.*intMembers.value(name) = value;
+            }
+            else if (boolMembers.contains(name))
+            {
+                if ((text == "1") || (text.compare("true", Qt::CaseInsensitive) == 0)) {
+                    tunables.*boolMembers.value(name) = true;
+                } else if ((text == "0") || (text.compare("false", Qt::CaseInsensitive) == 0)) {
+                    tunables.*boolMembers.value(name) = false;
+                } else {
+                    error = QString("Invalid boolean for tunable %1: %2").arg(name, text);
+                    return false;
+                }
+            }
+            else
+            {
+                error = QString("Unknown tunable: %1").arg(name);
+                return false;
+            }
+        }
+
+        return true;
+    }
 
     bool parseIntValue(
         const QString& name,
@@ -293,6 +568,14 @@ namespace {
 
     bool validateOptions(Options& options, QString& error)
     {
+        // Validate tunable overrides up front: runWavFile must not fail after
+        // constructing the baseband (early destruction hangs process teardown).
+        MeteorDemodSink::DetectorTunables tunablesProbe;
+
+        if (!applyTunableOverrides(tunablesProbe, options.tunableOverrides, error)) {
+            return false;
+        }
+
         if (!MeteorSettings::isSupportedSampleRate(options.settings.m_channelSampleRate))
         {
             error = QString("Invalid --channel-sample-rate %1; expected 100, 300, 1000, or 3000")
@@ -393,6 +676,20 @@ namespace {
             {
                 options.candidateCaptureDir = value;
             }
+            else if (readOptionValue(args, i, "tunable", value, error))
+            {
+                const int separator = value.indexOf('=');
+
+                if (separator <= 0)
+                {
+                    error = QString("Expected --tunable name=value, got: %1").arg(value);
+                    return false;
+                }
+
+                options.tunableOverrides.append({
+                    value.left(separator).trimmed(),
+                    value.mid(separator + 1).trimmed()});
+            }
             else if (readOptionValue(args, i, "channel-sample-rate", value, error))
             {
                 if (!parseIntValue("channel-sample-rate", value, options.settings.m_channelSampleRate, error)) {
@@ -487,6 +784,8 @@ namespace {
         out << "      --candidate-csv <file.csv>     Write every spectral candidate and rejection decision.\n";
         out << "      --candidate-labels <file.csv>  Apply time-only or time/frequency labels to candidate rows.\n";
         out << "      --candidate-capture-dir <dir>  Save plausible rejected candidates as stereo signed 16-bit IQ.\n";
+        out << "      --tunable <name=value>         Override a DetectorTunables member (repeatable). Names drop the\n";
+        out << "                                     m_ prefix, e.g. --tunable rescueMinimumScoreMargin=1.5.\n";
         out << "      --channel-sample-rate <rate>   Detector sample rate: 100, 300, 1000, or 3000 Hz.\n";
         out << "      --input-frequency-offset <hz>  Channel input frequency offset in Hz.\n";
         out << "      --power-lpf-cutoff <hz>        Power low-pass filter cutoff in Hz.\n";
@@ -1424,6 +1723,17 @@ namespace {
         baseband.setInactivityFlushEnabled(false);
         baseband.setFifoLabel("meteor_demod_sink_test");
         baseband.setMessageQueueToGUI(&outputQueue);
+
+        if (!options.tunableOverrides.isEmpty())
+        {
+            MeteorDemodSink::DetectorTunables tunables = baseband.getDetectorTunables();
+
+            if (!applyTunableOverrides(tunables, options.tunableOverrides, error)) {
+                return false;
+            }
+
+            baseband.setDetectorTunables(tunables);
+        }
 
         if (candidateAudits)
         {

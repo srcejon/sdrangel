@@ -49,6 +49,10 @@ Pass this file with `--candidate-labels labels.csv`. Overlapping candidates inhe
 
 `test/render_candidate_review.py` renders prioritized five-second waterfall windows from an audit and its original WAV. It includes newly accepted candidates relative to an optional baseline audit, positive-margin gate failures, sweep and duplicate rejects, and candidate-free control windows. The generated `review.csv` provides blank label, event ID, and notes fields for manual classification.
 
+`test/label_candidates.py` serves a local web page for one-keystroke labeling: it shows one candidate waterfall at a time from an audit and its WAV, with meteor, sweep, interference, noise, and unsure buttons, a prioritized queue (recovery acceptances, then acceptances, then boundary rejects), and resume support. Labels are written directly in the `--candidate-labels` format on every click.
+
+The regression harness accepts repeated `--tunable name=value` overrides for any `DetectorTunables` member (names drop the `m_` prefix). This allows detector operating points to be swept against a labeled corpus without rebuilding; the current defaults were chosen from such a sweep, which recovered roughly one hundred verified meteors over 8.8 hours of labeled recording at a cost of one known false accept.
+
 Regression expectation CSVs may append a `required` column. Required rows must be present and match all measurements. Optional rows describe genuinely ambiguous visual cases: they may be absent, but if detected their measurements must still match. Files without this column retain the original all-required behavior.
 
 Smooth, sustained Doppler sweeps and tracks beyond the configured drift limit are rejected to suppress satellite and other moving-carrier interference. A short 4- or 5-frame sweep can survive this gate only when it is spectrally coherent, locally strong, and compact in time, which retains brief head-echo-like meteor signatures without accepting sustained moving carriers. The detector remains primarily a trail-echo counter.

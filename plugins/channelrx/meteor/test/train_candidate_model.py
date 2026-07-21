@@ -5,7 +5,9 @@ import argparse
 import csv
 import json
 import math
+import os
 import random
+import re
 from collections import defaultdict
 
 
@@ -30,6 +32,54 @@ FEATURES = (
 
 POSITIVE_LABELS = {"1", "meteor", "positive", "true"}
 NEGATIVE_LABELS = {"0", "interference", "noise", "negative", "false", "sweep"}
+
+
+def verify_feature_order_against_cpp():
+    """Fail if FEATURES no longer matches MeteorDemodSink::candidateLearnedFeatures().
+
+    The frozen model coefficients are applied positionally in C++, so the order of
+    FEATURES here must match the member order in candidateLearnedFeatures() exactly.
+    The C++ source cannot express the CSV column names, so parse them out of the
+    sibling meteordemodsink.cpp and compare.
+    """
+    source_path = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), "..", "meteordemodsink.cpp")
+
+    if not os.path.exists(source_path):
+        print("WARNING: meteordemodsink.cpp not found; cannot verify feature order")
+        return
+
+    with open(source_path, encoding="utf-8") as handle:
+        source = handle.read()
+
+    match = re.search(
+        r"candidateLearnedFeatures\([^)]*\)\s*const\s*\{\s*return\s*\{\{(.*?)\}\};",
+        source,
+        re.DOTALL)
+
+    if not match:
+        raise SystemExit(
+            "Cannot locate candidateLearnedFeatures() in meteordemodsink.cpp; "
+            "update verify_feature_order_against_cpp()")
+
+    cpp_features = []
+    for entry in match.group(1).split(","):
+        member = re.search(r"m_(\w+)", entry)
+        if not member:
+            continue
+        if "maxPeakRatio" in entry:
+            cpp_features.append("logPeakRatio")
+        else:
+            cpp_features.append(member.group(1))
+
+    if list(FEATURES) != cpp_features:
+        raise SystemExit(
+            "FEATURE ORDER MISMATCH between train_candidate_model.py and "
+            "MeteorDemodSink::candidateLearnedFeatures().\n"
+            f"  Python FEATURES ({len(FEATURES)}): {list(FEATURES)}\n"
+            f"  C++ features    ({len(cpp_features)}): {cpp_features}\n"
+            "Frozen coefficients are applied positionally in C++; fix the order "
+            "before training.")
 
 
 def read_rows(paths):
@@ -162,6 +212,7 @@ def main():
     parser.add_argument("--learning-rate", type=float, default=0.15)
     parser.add_argument("--boundary-csv", help="Write rows ordered by distance from probability 0.5")
     args = parser.parse_args()
+    verify_feature_order_against_cpp()
     rows = read_rows(args.csv)
     if len(rows) < 4 or len({row["label"] for row in rows}) < 2:
         raise SystemExit("Need at least four labeled rows containing both positive and negative examples")

@@ -61,7 +61,7 @@ public:
         double m_maxSegmentedBandWidthHz = 250.0;
         double m_compactBandwidthHz = 50.0;
         double m_stableBandwidthHz = 220.0;
-        double m_twoFrameMaxBandwidthHz = 65.0;
+        double m_twoFrameMaxBandwidthHz = 90.0;
         double m_twoFrameMinFrequencyCoherence = 0.75;
         double m_twoFrameMinIntegratedSupportDB = -7.0;
         double m_localizedTwoFrameMinPeakDB = 12.0;
@@ -102,7 +102,7 @@ public:
         double m_broadbandImpulseMinSpanHz = 120.0;
         double m_broadbandImpulseMinBandwidthHz = 100.0;
         double m_broadbandImpulseMinOccupiedFraction = 0.45;
-        double m_shortCandidateAcceptanceScore = 9.5;
+        double m_shortCandidateAcceptanceScore = 8.5;
         double m_candidateAcceptanceScore = 9.0;
         double m_weakSupportDB = -8.0;
         double m_weakSupportScorePenalty = 1.0;
@@ -145,7 +145,7 @@ public:
         double m_matchedEnvelopeMaximumPeakPosition = 0.50;
         double m_matchedEnvelopeMinimumDecayDB = 0.75;
         double m_matchedEnvelopeMaximumDecayDB = 20.0;
-        double m_matchedEnvelopeMinimumMonotonicFraction = 0.75;
+        double m_matchedEnvelopeMinimumMonotonicFraction = 0.50;
         std::array<double, 8> m_matchedEnvelopeTimeConstantsS {{0.05, 0.10, 0.20, 0.40, 0.80, 1.60, 3.20, 6.40}};
         double m_curvatureMinimumDurationS = 0.35;
         int m_curvatureMinimumFrames = 6;
@@ -154,7 +154,7 @@ public:
         double m_curvatureMinimumHzPerS2 = 40.0;
         bool m_enableCurvatureSweepRejection = false;
         bool m_enableCalibratedRescue = true;
-        double m_rescueMinimumScoreMargin = 2.0;
+        double m_rescueMinimumScoreMargin = 0.5;
         double m_rescueMinimumContrastDB = 12.0;
         double m_rescueMinimumPeakDB = 11.0;
         double m_rescueMinimumFrequencyCoherence = 0.85;
@@ -207,7 +207,7 @@ public:
         int m_rejectedCandidateMaximumFrames = 2;
         double m_rejectedCandidateMinimumFrequencyCoherence = 0.85;
         double m_rejectedCandidateMaximumOccupiedFraction = 0.30;
-        double m_rejectedTwoFrameMinimumBandwidthHz = 35.0;
+        double m_rejectedTwoFrameMinimumBandwidthHz = 20.0;
         double m_rejectedTwoFrameStrongNarrowMinimumBandwidthHz = 30.0;
         double m_rejectedTwoFrameStrongNarrowMinimumPeakDB = 11.8;
         double m_rejectedTwoFrameStrongNarrowMinimumScoreMargin = 2.8;
@@ -224,7 +224,7 @@ public:
         double m_rejectedStrongTwoFrameReanalysisDelayS = 1.5;
         double m_rejectedCandidateMinimumExpansionS = 0.15;
         double m_rejectedCandidateMinimumDurationS = 0.30;
-        double m_rejectedCandidateMinimumPersistentLineS = 0.18;
+        double m_rejectedCandidateMinimumPersistentLineS = 0.12;
         double m_rejectedCandidateMinimumPersistentLineProminenceDB = 6.0;
         double m_rejectedCandidateMaximumPersistentLineJumpHz = 24.0;
         double m_rejectedCandidateSweepSearchHalfWidthHz = 80.0;

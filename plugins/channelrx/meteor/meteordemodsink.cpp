@@ -1280,6 +1280,7 @@ MeteorDemodSink::PulseReport MeteorDemodSink::reportFromSpectralCandidate(
 bool MeteorDemodSink::shouldReanalyzeRejectedCandidate(
     const SpectralCandidate& candidate) const
 {
+    const bool strongTwoFrameEvidence = hasStrongTwoFrameEvidence(candidate);
     const bool strongNarrowTwoFrame = (candidate.m_frameCount == 2)
         && (candidate.m_maxBandwidth
             >= m_detectorTunables.m_rejectedTwoFrameStrongNarrowMinimumBandwidthHz)
@@ -1293,7 +1294,8 @@ bool MeteorDemodSink::shouldReanalyzeRejectedCandidate(
         && ((candidate.m_frameCount < 2)
             || (candidate.m_maxBandwidth
                 >= m_detectorTunables.m_rejectedTwoFrameMinimumBandwidthHz)
-            || strongNarrowTwoFrame);
+            || strongNarrowTwoFrame
+            || strongTwoFrameEvidence);
 
     return m_detectorTunables.m_enableRejectedCandidateReanalysis
         && candidate.m_valid
@@ -1308,8 +1310,32 @@ bool MeteorDemodSink::shouldReanalyzeRejectedCandidate(
         && (candidate.m_scoreMargin >= m_detectorTunables.m_rejectedCandidateMinimumScoreMargin)
         && (candidate.m_frequencyCoherence
             >= m_detectorTunables.m_rejectedCandidateMinimumFrequencyCoherence)
+        && ((candidate.m_frameOccupiedFraction
+                <= m_detectorTunables.m_rejectedCandidateMaximumOccupiedFraction)
+            || strongTwoFrameEvidence);
+}
+
+bool MeteorDemodSink::hasStrongTwoFrameEvidence(
+    const SpectralCandidate& candidate) const
+{
+    return (candidate.m_frameCount == 2)
+        && (candidate.m_durationS <= m_detectorTunables.m_rejectedStrongTwoFrameMaximumDurationS)
+        && (candidate.m_scoreMargin >= m_detectorTunables.m_rejectedStrongTwoFrameMinimumScoreMargin)
+        && (candidate.m_peakAboveBackgroundDB
+            >= m_detectorTunables.m_rejectedStrongTwoFrameMinimumPeakDB)
+        && (candidate.m_integratedSupportDB
+            >= m_detectorTunables.m_rejectedStrongTwoFrameMinimumIntegratedSupportDB)
+        && (candidate.m_maxContrastDB
+            >= m_detectorTunables.m_rejectedStrongTwoFrameMinimumContrastDB)
+        && (candidate.m_frequencyCoherence
+            >= m_detectorTunables.m_rejectedStrongTwoFrameMinimumFrequencyCoherence)
         && (candidate.m_frameOccupiedFraction
-            <= m_detectorTunables.m_rejectedCandidateMaximumOccupiedFraction);
+            >= m_detectorTunables.m_rejectedStrongTwoFrameMinimumOccupiedFraction)
+        && (candidate.m_frameOccupiedFraction
+            <= m_detectorTunables.m_rejectedStrongTwoFrameMaximumOccupiedFraction)
+        && (candidate.m_maxBandwidth
+            <= m_detectorTunables.m_rejectedStrongTwoFrameMaximumBandwidthHz)
+        && (candidate.m_sweepScore < m_detectorTunables.m_rejectedStrongTwoFrameMaximumSweepScore);
 }
 
 void MeteorDemodSink::finishRejectedCandidate(const SpectralCandidate& candidate) const
@@ -1321,10 +1347,13 @@ void MeteorDemodSink::finishRejectedCandidate(const SpectralCandidate& candidate
 void MeteorDemodSink::queueRejectedCandidateReanalysis(
     const SpectralCandidate& candidate)
 {
+    const double reanalysisDelayS = hasStrongTwoFrameEvidence(candidate)
+        ? m_detectorTunables.m_rejectedStrongTwoFrameReanalysisDelayS
+        : m_detectorTunables.m_rejectedCandidateReanalysisDelayS;
     const quint64 delaySamples = (quint64) std::max(
         1.0,
         std::ceil(
-            m_detectorTunables.m_rejectedCandidateReanalysisDelayS
+            reanalysisDelayS
                 * (double) std::max(1, m_settings.m_channelSampleRate)));
     PendingCandidateReanalysis pending;
     pending.m_candidate = candidate;
@@ -1371,6 +1400,7 @@ void MeteorDemodSink::processPendingCandidateReanalyses(bool force)
         PendingCandidateReanalysis pending = std::move(m_pendingCandidateReanalyses.front());
         m_pendingCandidateReanalyses.erase(m_pendingCandidateReanalyses.begin());
         SpectralCandidate& candidate = pending.m_candidate;
+        const bool strongTwoFrameEvidence = hasStrongTwoFrameEvidence(candidate);
         const bool rescuedFramesGate = !candidate.m_enoughFrames;
         const bool rescuedSpectralEvidenceGate = !candidate.m_spectralEvidenceOK;
         const PulseReport candidateReport = reportFromSpectralCandidate(candidate);
@@ -1408,7 +1438,7 @@ void MeteorDemodSink::processPendingCandidateReanalyses(bool force)
         if (refined
             && enoughExpansion
             && enoughDuration
-            && persistentLine
+            && (persistentLine || strongTwoFrameEvidence)
             && !settledSweep
             && measuredEnvelope)
         {
@@ -2347,6 +2377,63 @@ MeteorDemodSink::SpectralCandidate MeteorDemodSink::buildSpectralCandidate(const
         && (candidate.m_integratedSupportDB
             >= m_detectorTunables.m_rescueThreeFrameMinimumIntegratedSupportDB)
         && decayEnvelopeOK;
+    const bool compactThreeFrameEvidenceRescue = (candidate.m_frameCount == 3)
+        && (candidate.m_durationS
+            <= m_detectorTunables.m_compactThreeFrameEvidenceMaximumDurationS)
+        && (candidate.m_scoreMargin
+            >= m_detectorTunables.m_compactThreeFrameEvidenceMinimumScoreMargin)
+        && (candidate.m_maxContrastDB
+            >= m_detectorTunables.m_compactThreeFrameEvidenceMinimumContrastDB)
+        && (candidate.m_integratedSupportDB
+            >= m_detectorTunables.m_compactThreeFrameEvidenceMinimumIntegratedSupportDB)
+        && (candidate.m_matchedEnvelopeScore
+            >= m_detectorTunables.m_compactThreeFrameEvidenceMinimumMatchedEnvelopeScore)
+        && (candidate.m_envelopeTailFrames
+            >= m_detectorTunables.m_compactThreeFrameEvidenceMinimumTailFrames)
+        && (candidate.m_frameOccupiedFraction
+            <= m_detectorTunables.m_compactThreeFrameEvidenceMaximumOccupiedFraction)
+        && (candidate.m_sweepScore
+            < m_detectorTunables.m_compactThreeFrameEvidenceMaximumSweepScore)
+        && (candidate.m_maxBandwidth
+            <= m_detectorTunables.m_compactThreeFrameEvidenceMaximumBandwidthHz);
+    const bool narrowThreeFrameEvidenceRescue = (candidate.m_frameCount == 3)
+        && (candidate.m_durationS
+            <= m_detectorTunables.m_compactThreeFrameEvidenceMaximumDurationS)
+        && (candidate.m_scoreMargin
+            >= m_detectorTunables.m_narrowThreeFrameEvidenceMinimumScoreMargin)
+        && (candidate.m_maxContrastDB
+            >= m_detectorTunables.m_narrowThreeFrameEvidenceMinimumContrastDB)
+        && (candidate.m_integratedSupportDB
+            >= m_detectorTunables.m_narrowThreeFrameEvidenceMinimumIntegratedSupportDB)
+        && (candidate.m_matchedEnvelopeScore
+            >= m_detectorTunables.m_narrowThreeFrameEvidenceMinimumMatchedEnvelopeScore)
+        && (candidate.m_envelopeTailFrames
+            >= m_detectorTunables.m_compactThreeFrameEvidenceMinimumTailFrames)
+        && (candidate.m_frameOccupiedFraction
+            <= m_detectorTunables.m_narrowThreeFrameEvidenceMaximumOccupiedFraction)
+        && (candidate.m_sweepScore
+            < m_detectorTunables.m_compactThreeFrameEvidenceMaximumSweepScore)
+        && (candidate.m_maxBandwidth
+            <= m_detectorTunables.m_narrowThreeFrameEvidenceMaximumBandwidthHz);
+    const bool sustainedEvidenceRescue =
+        (candidate.m_frameCount >= m_detectorTunables.m_sustainedEvidenceMinimumFrames)
+        && (candidate.m_frameCount <= m_detectorTunables.m_sustainedEvidenceMaximumFrames)
+        && (candidate.m_durationS <= m_detectorTunables.m_sustainedEvidenceMaximumDurationS)
+        && (candidate.m_scoreMargin >= m_detectorTunables.m_sustainedEvidenceMinimumScoreMargin)
+        && (candidate.m_maxContrastDB >= m_detectorTunables.m_sustainedEvidenceMinimumContrastDB)
+        && (candidate.m_peakAboveBackgroundDB >= m_detectorTunables.m_sustainedEvidenceMinimumPeakDB)
+        && (candidate.m_integratedSupportDB
+            >= m_detectorTunables.m_sustainedEvidenceMinimumIntegratedSupportDB)
+        && (candidate.m_frequencyCoherence
+            >= m_detectorTunables.m_sustainedEvidenceMinimumFrequencyCoherence)
+        && (candidate.m_frameOccupiedFraction
+            <= m_detectorTunables.m_sustainedEvidenceMaximumOccupiedFraction)
+        && (candidate.m_maxBandwidth <= m_detectorTunables.m_sustainedEvidenceMaximumBandwidthHz)
+        && (candidate.m_matchedEnvelopeScore
+            >= m_detectorTunables.m_sustainedEvidenceMinimumMatchedEnvelopeScore)
+        && (candidate.m_sweepScore < m_detectorTunables.m_sustainedEvidenceMaximumSweepScore)
+        && (candidate.m_quadraticSweepR2
+            < m_detectorTunables.m_sustainedEvidenceMaximumQuadraticSweepR2);
     const bool rescueSafetyOK = candidate.m_valid
         && !candidate.m_accepted
         && !candidate.m_duplicate
@@ -2364,7 +2451,12 @@ MeteorDemodSink::SpectralCandidate MeteorDemodSink::buildSpectralCandidate(const
     if (m_detectorTunables.m_enableCalibratedRescue
         && rescueSafetyOK
         && (candidate.m_scoreMargin >= m_detectorTunables.m_rescueMinimumScoreMargin)
-        && (learnedRescue || twoFrameRescue || threeFrameRescue))
+        && (learnedRescue
+            || twoFrameRescue
+            || threeFrameRescue
+            || compactThreeFrameEvidenceRescue
+            || narrowThreeFrameEvidenceRescue
+            || sustainedEvidenceRescue))
     {
         candidate.m_calibratedRescue = true;
         candidate.m_rescuedFramesGate = !candidate.m_enoughFrames;

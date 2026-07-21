@@ -127,7 +127,10 @@
 #include "maincore.h"
 #include "feature/featureset.h"
 #include "channel/channelwebapiutils.h"
+#include "channel/channelgui.h"
+#include "device/devicegui.h"
 #include "feature/featurewebapiutils.h"
+#include "mainspectrum/mainspectrumgui.h"
 #include "pipes/objectpipe.h"
 
 #include "cameraplatesolver.h"
@@ -2531,6 +2534,7 @@ void CameraGUI::displaySettings()
     settingsUI()->cloudStarSenseCheck->setChecked(m_settings.m_cloudStarSense);
     settingsUI()->cloudStarSenseMagSpin->setValue(m_settings.m_cloudStarSenseMagnitude);
     settingsUI()->cloudUseReferenceCheck->setChecked(m_settings.m_cloudUseReference);
+    settingsUI()->cloudUseRoiCheck->setChecked(m_settings.m_cloudUseDetectionRoi);
     settingsUI()->cloudAutoReferenceCheck->setChecked(m_settings.m_cloudAutoReference);
     if (!m_clearSkyReferenceSummary.isEmpty()) {
         settingsUI()->cloudReferenceStatusLabel->setText(m_clearSkyReferenceSummary);
@@ -3969,6 +3973,7 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->cloudStarSenseCheck, &QCheckBox::toggled, this, &CameraGUI::on_cloudStarSenseCheck_toggled);
     QObject::connect(settingsUI()->cloudStarSenseMagSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_cloudStarSenseMagSpin_valueChanged);
     QObject::connect(settingsUI()->cloudUseReferenceCheck, &QCheckBox::toggled, this, &CameraGUI::on_cloudUseReferenceCheck_toggled);
+    QObject::connect(settingsUI()->cloudUseRoiCheck, &QCheckBox::toggled, this, &CameraGUI::on_cloudUseRoiCheck_toggled);
     QObject::connect(settingsUI()->cloudAutoReferenceCheck, &QCheckBox::toggled, this, &CameraGUI::on_cloudAutoReferenceCheck_toggled);
     QObject::connect(settingsUI()->cloudSaveReferenceButton, &QPushButton::clicked, this, &CameraGUI::on_cloudSaveReferenceButton_clicked);
     QObject::connect(settingsUI()->cloudViewReferenceButton, &QPushButton::clicked, this, &CameraGUI::on_cloudViewReferenceButton_clicked);
@@ -4692,6 +4697,7 @@ void CameraGUI::createWindowOverlaysTab()
         {
             overlay.m_windowClass = windowOverlayClassName(windows.first());
             overlay.m_windowTitle = windows.first()->windowTitle();
+            overlay.m_windowId = windowOverlayId(windows.first());
         }
         m_settings.m_windowOverlays.append(overlay);
         updateWindowOverlaysTable();
@@ -4928,8 +4934,11 @@ void CameraGUI::updateWindowOverlaysTable()
             windowCombo->addItem(windowOverlayDisplayName(window));
             windowCombo->setItemData(index, windowOverlayClassName(window), WindowOverlayClassRole);
             windowCombo->setItemData(index, window->windowTitle(), WindowOverlayTitleRole);
-            if ((windowOverlayClassName(window) == overlay.m_windowClass)
-                && (window->windowTitle() == overlay.m_windowTitle))
+            windowCombo->setItemData(index, windowOverlayId(window), WindowOverlayIdRole);
+            if ((!overlay.m_windowId.isEmpty() && (windowOverlayId(window) == overlay.m_windowId))
+                || (overlay.m_windowId.isEmpty()
+                    && (windowOverlayClassName(window) == overlay.m_windowClass)
+                    && (window->windowTitle() == overlay.m_windowTitle)))
             {
                 windowCombo->setCurrentIndex(index);
                 selectedWindowFound = true;
@@ -4941,6 +4950,7 @@ void CameraGUI::updateWindowOverlaysTable()
             windowCombo->addItem(tr("Missing: %1").arg(overlay.m_windowTitle));
             windowCombo->setItemData(index, overlay.m_windowClass, WindowOverlayClassRole);
             windowCombo->setItemData(index, overlay.m_windowTitle, WindowOverlayTitleRole);
+            windowCombo->setItemData(index, overlay.m_windowId, WindowOverlayIdRole);
             windowCombo->setCurrentIndex(index);
         }
         m_windowOverlaysTable->setCellWidget(row, 1, windowCombo);
@@ -5076,6 +5086,7 @@ void CameraGUI::applyWindowOverlaysFromTable()
         {
             overlay.m_windowClass = windowCombo->itemData(windowCombo->currentIndex(), WindowOverlayClassRole).toString();
             overlay.m_windowTitle = windowCombo->itemData(windowCombo->currentIndex(), WindowOverlayTitleRole).toString();
+            overlay.m_windowId = windowCombo->itemData(windowCombo->currentIndex(), WindowOverlayIdRole).toString();
         }
         if (QComboBox *regionCombo = qobject_cast<QComboBox*>(m_windowOverlaysTable->cellWidget(row, 2)))
         {
@@ -5141,6 +5152,7 @@ void CameraGUI::updateWindowOverlayRegionCombo(int row)
     CameraSettings::WindowOverlay windowIdentity;
     windowIdentity.m_windowClass = windowCombo->itemData(windowCombo->currentIndex(), WindowOverlayClassRole).toString();
     windowIdentity.m_windowTitle = windowCombo->itemData(windowCombo->currentIndex(), WindowOverlayTitleRole).toString();
+    windowIdentity.m_windowId = windowCombo->itemData(windowCombo->currentIndex(), WindowOverlayIdRole).toString();
 
     if (QMdiSubWindow *window = findWindowOverlayWindow(windowIdentity))
     {
@@ -5292,7 +5304,13 @@ QMdiSubWindow* CameraGUI::findWindowOverlayWindow(const CameraSettings::WindowOv
 {
     for (QMdiSubWindow *window : availableWindowOverlayWindows())
     {
-        if ((windowOverlayClassName(window) == overlay.m_windowClass)
+        if (!overlay.m_windowId.isEmpty())
+        {
+            if (windowOverlayId(window) == overlay.m_windowId) {
+                return window;
+            }
+        }
+        else if ((windowOverlayClassName(window) == overlay.m_windowClass)
             && (window->windowTitle() == overlay.m_windowTitle))
         {
             return window;
@@ -5361,6 +5379,26 @@ QString CameraGUI::windowOverlayClassName(const QMdiSubWindow *window)
     return window ? QString::fromLatin1(window->metaObject()->className()) : QString();
 }
 
+QString CameraGUI::windowOverlayId(const QMdiSubWindow *window)
+{
+    if (!window) {
+        return QString();
+    }
+    if (const FeatureGUI *feature = qobject_cast<const FeatureGUI*>(window)) {
+        return QStringLiteral("feature:%1").arg(feature->getIndex());
+    }
+    if (const ChannelGUI *channel = qobject_cast<const ChannelGUI*>(window)) {
+        return QStringLiteral("channel:%1:%2").arg(channel->getDeviceSetIndex()).arg(channel->getIndex());
+    }
+    if (const DeviceGUI *device = qobject_cast<const DeviceGUI*>(window)) {
+        return QStringLiteral("device:%1").arg(device->getIndex());
+    }
+    if (const MainSpectrumGUI *spectrum = qobject_cast<const MainSpectrumGUI*>(window)) {
+        return QStringLiteral("spectrum:%1").arg(spectrum->getIndex());
+    }
+    return QStringLiteral("window:%1:%2").arg(windowOverlayClassName(window), window->objectName());
+}
+
 QString CameraGUI::windowOverlayDisplayName(const QMdiSubWindow *window)
 {
     if (!window) {
@@ -5370,9 +5408,11 @@ QString CameraGUI::windowOverlayDisplayName(const QMdiSubWindow *window)
     const QString title = window->windowTitle().trimmed();
     const QString objectName = window->objectName().trimmed();
     const QString name = !title.isEmpty() ? title : objectName;
-    return name.isEmpty()
+    const QString identity = windowOverlayId(window);
+    const QString descriptor = name.isEmpty()
         ? windowOverlayClassName(window)
         : QStringLiteral("%1: %2").arg(windowOverlayClassName(window), name);
+    return identity.isEmpty() ? descriptor : QStringLiteral("%1 [%2]").arg(descriptor, identity);
 }
 
 bool CameraGUI::isHdrStackingActiveForQt() const
@@ -11133,6 +11173,12 @@ void CameraGUI::on_cloudUseReferenceCheck_toggled(bool checked)
     applySetting("cloudUseReference");
 }
 
+void CameraGUI::on_cloudUseRoiCheck_toggled(bool checked)
+{
+    m_settings.m_cloudUseDetectionRoi = checked;
+    applySetting("cloudUseDetectionRoi");
+}
+
 void CameraGUI::on_cloudAutoReferenceCheck_toggled(bool checked)
 {
     m_settings.m_cloudAutoReference = checked;
@@ -11454,6 +11500,7 @@ void CameraGUI::on_windowOverlayButton_toggled(bool checked)
         {
             overlay.m_windowClass = windowOverlayClassName(windows.first());
             overlay.m_windowTitle = windows.first()->windowTitle();
+            overlay.m_windowId = windowOverlayId(windows.first());
         }
         m_settings.m_windowOverlays.append(overlay);
     }

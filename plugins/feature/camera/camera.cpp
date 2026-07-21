@@ -1305,6 +1305,7 @@ void Camera::webapiFormatFeatureSettings(
     swg->setCloudStarSenseMagnitude(settings.m_cloudStarSenseMagnitude);
     swg->setCloudUseReference(settings.m_cloudUseReference ? 1 : 0);
     swg->setCloudAutoReference(settings.m_cloudAutoReference ? 1 : 0);
+    swg->setCloudUseDetectionRoi(settings.m_cloudUseDetectionRoi ? 1 : 0);
     swg->setStarDetect(settings.m_starDetect ? 1 : 0);
     swg->setStarThreshold(settings.m_starThreshold);
     swg->setStarBackgroundBlur(settings.m_starBackgroundBlur);
@@ -2168,6 +2169,9 @@ void Camera::webapiUpdateFeatureSettings(
     }
     if (featureSettingsKeys.contains("cloudAutoReference")) {
         settings.m_cloudAutoReference = swg->getCloudAutoReference() != 0;
+    }
+    if (featureSettingsKeys.contains("cloudUseDetectionRoi")) {
+        settings.m_cloudUseDetectionRoi = swg->getCloudUseDetectionRoi() != 0;
     }
     if (featureSettingsKeys.contains("starDetect")) {
         settings.m_starDetect = swg->getStarDetect() != 0;

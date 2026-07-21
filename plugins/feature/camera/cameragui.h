@@ -218,6 +218,7 @@ private:
     {
         WindowOverlayClassRole = Qt::UserRole + 200,
         WindowOverlayTitleRole,
+        WindowOverlayIdRole,
         WindowOverlayRegionObjectNameRole,
         WindowOverlayRegionTitleRole
     };
@@ -512,6 +513,7 @@ private:
     QWidget* findWindowOverlayCaptureWidget(QMdiSubWindow* window, const CameraSettings::WindowOverlay& overlay) const;
     int windowOverlayRowForWidget(const QWidget *widget) const;
     static QString windowOverlayClassName(const QMdiSubWindow *window);
+    static QString windowOverlayId(const QMdiSubWindow *window);
     static QString windowOverlayDisplayName(const QMdiSubWindow *window);
     void updateVideoFileControls();
     void updateVideoPreRecordBufferMemoryLabel();
@@ -896,6 +898,7 @@ private slots:
     void on_cloudStarSenseCheck_toggled(bool checked);
     void on_cloudStarSenseMagSpin_valueChanged(double value);
     void on_cloudUseReferenceCheck_toggled(bool checked);
+    void on_cloudUseRoiCheck_toggled(bool checked);
     void on_cloudAutoReferenceCheck_toggled(bool checked);
     void on_cloudSaveReferenceButton_clicked();
     void on_cloudViewReferenceButton_clicked();

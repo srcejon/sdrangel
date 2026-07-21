@@ -887,6 +887,9 @@ CameraSettings:
     cloudAutoReference:
       description: "Auto-learn the clear-sky reference from verified-clear frames (1 for yes, 0 for no)"
       type: integer
+    cloudUseDetectionRoi:
+      description: "Restrict cloud detection to the shared detection RoI; 0 evaluates the whole image (1 for yes, 0 for no)"
+      type: integer
     cloudSunMoonRadiusDeg:
       description: "Maximum angular radius in degrees the sun/moon exclusion grows to; the mask sizes itself to the actual glare bloom up to this cap: 0 to 45"
       type: number

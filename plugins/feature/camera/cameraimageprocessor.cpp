@@ -275,14 +275,24 @@ void CameraImageProcessor::applySettings(const CameraSettings& settings, const Q
     // Any change that alters the extracted optical spectrum - the processed image, the
     // source, the RoI, aperture or background flag - bumps a revision stamped onto each
     // spectrum so the GUI can discard frame-averaging history that would otherwise blend
-    // incompatible extraction configurations.
+    // incompatible extraction configurations. This includes upstream stages
+    // (calibration/stacking/HDR/scaling and the raw-conversion type) whose settings
+    // change the pixel content this stage receives, even though this stage does not
+    // act on those keys itself.
+    static const QStringList kSpectrumContentKeys = {
+        "detectionRoiX", "detectionRoiY", "detectionRoiWidth", "detectionRoiHeight",
+        "opticalSpectrumApertureRows", "opticalSpectrumBackgroundSub",
+        "stackEnabled", "stackFrameCount", "stackMethod",
+        "stackHdrAlgorithm", "stackHdrExposureCount",
+        "stackHdrExposure1Ms", "stackHdrExposure2Ms", "stackHdrExposure3Ms", "stackHdrExposure4Ms",
+        "stackAlignmentMethod", "stackDisplayMode", "stackDisplayFrameIndex", "stackRejectBadFrames",
+        "scaleEnabled", "scaleWidth", "scaleHeight", "scaleKeepAspectRatio", "scaleJustification",
+        "stackDarkFileName", "stackFlatFileName", "stackBiasFileName",
+        "asiColorImageType", "postProcessUseCuda",
+    };
     if (imageProcessingChanged || sourceChanged
-        || settingsKeys.contains("detectionRoiX")
-        || settingsKeys.contains("detectionRoiY")
-        || settingsKeys.contains("detectionRoiWidth")
-        || settingsKeys.contains("detectionRoiHeight")
-        || settingsKeys.contains("opticalSpectrumApertureRows")
-        || settingsKeys.contains("opticalSpectrumBackgroundSub")) {
+        || std::any_of(kSpectrumContentKeys.cbegin(), kSpectrumContentKeys.cend(),
+            [&settingsKeys](const QString& k) { return settingsKeys.contains(k); })) {
         m_opticalSpectrumExtractionRevision++;
     }
 

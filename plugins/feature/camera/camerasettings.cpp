@@ -181,6 +181,7 @@ QString serializeWindowOverlays(const QList<CameraSettings::WindowOverlay>& over
         object.insert(QStringLiteral("enabled"), overlay.m_enabled);
         object.insert(QStringLiteral("windowClass"), overlay.m_windowClass);
         object.insert(QStringLiteral("windowTitle"), overlay.m_windowTitle);
+        object.insert(QStringLiteral("windowId"), overlay.m_windowId);
         object.insert(QStringLiteral("regionObjectName"), overlay.m_regionObjectName);
         object.insert(QStringLiteral("regionTitle"), overlay.m_regionTitle);
         object.insert(QStringLiteral("offsetX"), overlay.m_offsetX);
@@ -214,6 +215,7 @@ QList<CameraSettings::WindowOverlay> deserializeWindowOverlays(const QString& js
         overlay.m_enabled = object.value(QStringLiteral("enabled")).toBool(true);
         overlay.m_windowClass = object.value(QStringLiteral("windowClass")).toString();
         overlay.m_windowTitle = object.value(QStringLiteral("windowTitle")).toString();
+        overlay.m_windowId = object.value(QStringLiteral("windowId")).toString();
         overlay.m_regionObjectName = object.value(QStringLiteral("regionObjectName")).toString();
         overlay.m_regionTitle = object.value(QStringLiteral("regionTitle")).toString();
         overlay.m_offsetX = qBound(CameraSettings::m_minSignedUiPixelOffset,
@@ -599,6 +601,7 @@ void CameraSettings::resetToDefaults()
     m_cloudStarSenseMagnitude = 4.0;
     m_cloudUseReference = false;
     m_cloudAutoReference = false;
+    m_cloudUseDetectionRoi = true;
     m_starDetect = false;
     m_starThreshold = 24;
     m_starBackgroundBlur = 12;
@@ -1031,6 +1034,7 @@ QByteArray CameraSettings::serialize() const
     s.writeDouble(304, m_cloudStarSenseMagnitude);
     s.writeBool(305, m_cloudUseReference);
     s.writeBool(306, m_cloudAutoReference);
+    s.writeBool(364, m_cloudUseDetectionRoi);
     s.writeS32(307, static_cast<qint32>(m_yoloInferenceMode));
     s.writeBool(308, m_playbackProjectionEnabled);
     s.writeS32(309, m_playbackProjectionX);
@@ -1453,6 +1457,7 @@ bool CameraSettings::deserialize(const QByteArray& data)
         m_cloudStarSenseMagnitude = qBound(m_minCloudStarMagnitude, m_cloudStarSenseMagnitude, m_maxCloudStarMagnitude);
         d.readBool(305, &m_cloudUseReference, false);
         d.readBool(306, &m_cloudAutoReference, false);
+        d.readBool(364, &m_cloudUseDetectionRoi, true);
         d.readBool(308, &m_playbackProjectionEnabled, false);
         d.readS32(309, &m_playbackProjectionX, 0);
         d.readS32(310, &m_playbackProjectionY, 0);
@@ -2646,6 +2651,9 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     if (settingsKeys.contains("cloudAutoReference")) {
         m_cloudAutoReference = settings.m_cloudAutoReference;
     }
+    if (settingsKeys.contains("cloudUseDetectionRoi")) {
+        m_cloudUseDetectionRoi = settings.m_cloudUseDetectionRoi;
+    }
     if (settingsKeys.contains("starDetect")) {
         m_starDetect = settings.m_starDetect;
     }
@@ -3758,6 +3766,9 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("cloudStarSenseMagnitude") || force) {
         ostr << " m_cloudStarSenseMagnitude: " << m_cloudStarSenseMagnitude;
+    }
+    if (settingsKeys.contains("cloudUseDetectionRoi") || force) {
+        ostr << " m_cloudUseDetectionRoi: " << m_cloudUseDetectionRoi;
     }
     if (settingsKeys.contains("cloudUseReference") || force) {
         ostr << " m_cloudUseReference: " << m_cloudUseReference;

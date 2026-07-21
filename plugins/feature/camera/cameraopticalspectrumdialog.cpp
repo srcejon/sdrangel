@@ -602,6 +602,16 @@ void CameraOpticalSpectrumDialog::captureInstrumentResponse()
             tr("Calibrate the wavelength scale first - the response is a function of wavelength."));
         return;
     }
+    // Checked before the empty-points test: while the selected template is still
+    // downloading the points are (deliberately) empty too, and "wait for the download"
+    // is the accurate message. Also guards against dividing by a stale template.
+    if (!m_settings.m_opticalSpectrumReferenceTemplate.isEmpty()
+        && (m_referenceLoadedKey != m_settings.m_opticalSpectrumReferenceTemplate))
+    {
+        QMessageBox::information(this, tr("Capture response"),
+            tr("The selected reference template has not been loaded yet - wait for its download to finish\n(or re-select it with Reference... if the download failed)."));
+        return;
+    }
     if (m_referencePoints.isEmpty())
     {
         QMessageBox::information(this, tr("Capture response"),
@@ -723,15 +733,19 @@ void CameraOpticalSpectrumDialog::openReferenceDialog()
     m_settings.m_opticalSpectrumReferenceTemplate = key;
     applySettingChanged(QStringLiteral("opticalSpectrumReferenceTemplate"));
 
+    // The old template must not linger while the new one downloads (or after a failed
+    // download): the chart would keep overlaying it and a response capture would
+    // silently divide by it under the new selection's name
+    m_referencePoints.clear();
+    m_referenceLoadedKey.clear();
     if (key.isEmpty())
     {
-        m_referencePoints.clear();
-        m_referenceLoadedKey.clear();
         updateReferenceLabel();
         updateChart();
     }
     else
     {
+        updateChart();
         loadReferenceTemplate(key);
     }
 }

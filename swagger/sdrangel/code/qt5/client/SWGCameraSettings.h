@@ -771,6 +771,9 @@ public:
     qint32 getCloudUseReference();
     void setCloudUseReference(qint32 cloud_use_reference);
 
+    qint32 getCloudUseDetectionRoi();
+    void setCloudUseDetectionRoi(qint32 cloud_use_detection_roi);
+
     qint32 getCloudAutoReference();
     void setCloudAutoReference(qint32 cloud_auto_reference);
 
@@ -1671,6 +1674,9 @@ private:
 
     qint32 cloud_use_reference;
     bool m_cloud_use_reference_isSet;
+
+    qint32 cloud_use_detection_roi;
+    bool m_cloud_use_detection_roi_isSet;
 
     qint32 cloud_auto_reference;
     bool m_cloud_auto_reference_isSet;

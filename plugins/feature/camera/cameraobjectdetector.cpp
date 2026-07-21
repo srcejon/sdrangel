@@ -1234,6 +1234,70 @@ bool CameraObjectDetector::runYoloModelDetections(YoloModelState& modelState, co
         return false;
     };
 
+    auto decodeTfliteDetectionPostProcess = [&](const std::vector<cv::Mat>& outputs, int tileIndex) -> bool
+    {
+        // TFLite_Detection_PostProcess convention: normalized boxes [ymin, xmin,
+        // ymax, xmax], classes, scores and a scalar detection count.
+        if ((outputs.size() != 4) || (tileIndex < 0) || (tileIndex >= inferenceRects.size())) {
+            return false;
+        }
+
+        const cv::Mat& boxTensor = outputs[0];
+        const cv::Mat& classTensor = outputs[1];
+        const cv::Mat& scoreTensor = outputs[2];
+        const cv::Mat& countTensor = outputs[3];
+        const size_t boxCount = boxTensor.total() / 4U;
+        if ((boxTensor.total() != (boxCount * 4U)) || (boxCount == 0U)
+            || (classTensor.total() < boxCount) || (scoreTensor.total() < boxCount)
+            || (countTensor.total() != 1U)) {
+            return false;
+        }
+
+        const float reportedCount = countTensor.reshape(1, 1).at<float>(0);
+        const int detectionCount = qBound(0, static_cast<int>(std::lround(reportedCount)), static_cast<int>(boxCount));
+        if ((detectionCount == 0) || !std::isfinite(reportedCount)) {
+            return true;
+        }
+
+        const cv::Mat flatBoxes = boxTensor.reshape(1, 1);
+        const cv::Mat flatClasses = classTensor.reshape(1, 1);
+        const cv::Mat flatScores = scoreTensor.reshape(1, 1);
+        const float *boxValues = flatBoxes.ptr<float>();
+        const float *classValues = flatClasses.ptr<float>();
+        const float *scoreValues = flatScores.ptr<float>();
+        const float confidenceThreshold = static_cast<float>(m_settings.m_yoloConfThreshold);
+        const cv::Rect& tileRect = inferenceRects[tileIndex];
+
+        for (int detectionIndex = 0; detectionIndex < detectionCount; ++detectionIndex)
+        {
+            const float score = scoreValues[detectionIndex];
+            const float ymin = boxValues[4 * detectionIndex];
+            const float xmin = boxValues[4 * detectionIndex + 1];
+            const float ymax = boxValues[4 * detectionIndex + 2];
+            const float xmax = boxValues[4 * detectionIndex + 3];
+            if (!std::isfinite(score) || !std::isfinite(ymin) || !std::isfinite(xmin)
+                || !std::isfinite(ymax) || !std::isfinite(xmax)
+                || (score < confidenceThreshold) || (xmax <= xmin) || (ymax <= ymin)) {
+                continue;
+            }
+
+            const float left = (xmin * targetW - padXs[tileIndex]) * invScales[tileIndex];
+            const float top = (ymin * targetH - padYs[tileIndex]) * invScales[tileIndex];
+            const float right = (xmax * targetW - padXs[tileIndex]) * invScales[tileIndex];
+            const float bottom = (ymax * targetH - padYs[tileIndex]) * invScales[tileIndex];
+            const int width = std::max(1, static_cast<int>(std::lround(right - left)));
+            const int height = std::max(1, static_cast<int>(std::lround(bottom - top)));
+            boxes.emplace_back(
+                tileRect.x + static_cast<int>(std::lround(left)),
+                tileRect.y + static_cast<int>(std::lround(top)),
+                width,
+                height);
+            scores.push_back(score);
+            classIds.push_back(std::max(0, static_cast<int>(std::lround(classValues[detectionIndex]))));
+        }
+        return true;
+    };
+
     bool useOpenCvDnn = backend == YoloBackend::OpenCv;
 #ifdef CAMERA_LITERT_YOLO
     if ((backend == YoloBackend::LiteRtCpu) || (backend == YoloBackend::LiteRtGpu))
@@ -1250,7 +1314,9 @@ bool CameraObjectDetector::runYoloModelDetections(YoloModelState& modelState, co
                     tr("LiteRT inference failed"), liteRtError);
                 continue;
             }
-            if (!liteRtOutputs.empty()) {
+            if (!liteRtOutputs.empty()
+                && !decodeTfliteDetectionPostProcess(liteRtOutputs, tileIndex))
+            {
                 decodeOutput(liteRtOutputs.front(), tileIndex, 1);
             }
         }

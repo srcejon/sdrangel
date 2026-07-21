@@ -13,6 +13,9 @@
 #include <cmath>
 #include <cstring>
 
+#include <QDebug>
+#include <QStringList>
+
 #ifdef CAMERA_LITERT_YOLO
 #include <tflite/c/c_api.h>
 #include <tflite/delegates/gpu/delegate.h>
@@ -37,6 +40,7 @@ struct CameraYoloLiteRt::Impl
     cv::Size m_inputSize;
     bool m_requestedGpu = false;
     bool m_gpuActive = false;
+    bool m_loggedOutputRanges = false;
 
     void reset()
     {
@@ -53,6 +57,7 @@ struct CameraYoloLiteRt::Impl
         m_inputSize = {};
         m_requestedGpu = false;
         m_gpuActive = false;
+        m_loggedOutputRanges = false;
     }
 
 #ifdef CAMERA_LITERT_YOLO
@@ -117,6 +122,31 @@ struct CameraYoloLiteRt::Impl
             return false;
         }
         m_gpuActive = useGpu;
+
+        QStringList inputShape;
+        for (int dim = 0; dim < TfLiteTensorNumDims(input); ++dim) {
+            inputShape.append(QString::number(TfLiteTensorDim(input, dim)));
+        }
+        QStringList outputDescriptions;
+        const int outputCount = TfLiteInterpreterGetOutputTensorCount(m_interpreter.get());
+        for (int outputIndex = 0; outputIndex < outputCount; ++outputIndex)
+        {
+            const TfLiteTensor *output = TfLiteInterpreterGetOutputTensor(m_interpreter.get(), outputIndex);
+            QStringList outputShape;
+            for (int dim = 0; output && (dim < TfLiteTensorNumDims(output)); ++dim) {
+                outputShape.append(QString::number(TfLiteTensorDim(output, dim)));
+            }
+            outputDescriptions.append(QStringLiteral("%1:[%2] type=%3")
+                .arg(outputIndex)
+                .arg(outputShape.join(QLatin1Char('x')))
+                .arg(output ? static_cast<int>(TfLiteTensorType(output)) : -1));
+        }
+        qDebug() << "CameraYoloLiteRt: loaded model" << m_modelPath
+                 << "input" << inputShape.join(QLatin1Char('x'))
+                 << "type" << static_cast<int>(TfLiteTensorType(input))
+                 << "quantization" << TfLiteTensorQuantizationParams(input).scale
+                 << TfLiteTensorQuantizationParams(input).zero_point
+                 << "outputs" << outputDescriptions.join(QStringLiteral(", "));
         return true;
     }
 
@@ -289,6 +319,23 @@ struct CameraYoloLiteRt::Impl
                 return false;
             }
             outputs.push_back(std::move(output));
+        }
+        if (!m_loggedOutputRanges)
+        {
+            QStringList outputRanges;
+            for (int outputIndex = 0; outputIndex < static_cast<int>(outputs.size()); ++outputIndex)
+            {
+                const cv::Mat flattened = outputs[static_cast<size_t>(outputIndex)].reshape(1, 1);
+                double minimum = 0.0;
+                double maximum = 0.0;
+                cv::minMaxLoc(flattened, &minimum, &maximum);
+                outputRanges.append(QStringLiteral("%1:%2..%3")
+                    .arg(outputIndex)
+                    .arg(minimum, 0, 'g', 6)
+                    .arg(maximum, 0, 'g', 6));
+            }
+            qDebug() << "CameraYoloLiteRt: first inference output ranges" << outputRanges.join(QStringLiteral(", "));
+            m_loggedOutputRanges = true;
         }
         return !outputs.empty();
     }

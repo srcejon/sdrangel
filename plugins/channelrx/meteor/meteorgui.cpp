@@ -1298,20 +1298,31 @@ void MeteorGUI::updateHistogram()
     int maxCount = 1;
 
     constexpr int histogramDayCount = 7;
-    auto firstDay = m_hourlyCounts.cend();
-    int days = 0;
-    while ((firstDay != m_hourlyCounts.cbegin()) && (days < histogramDayCount)) {
-        --firstDay;
-        ++days;
+    QList<QDate> dataDates;
+
+    for (auto it = m_hourlyCounts.cbegin(); it != m_hourlyCounts.cend(); ++it)
+    {
+        bool dateHasData = false;
+
+        for (int hour = 0; (hour < 24) && !dateHasData; hour++) {
+            dateHasData = hasHourData(it.key(), hour);
+        }
+
+        if (dateHasData) {
+            dataDates.append(it.key());
+        }
     }
 
-    for (auto it = firstDay; it != m_hourlyCounts.cend(); ++it)
+    const qsizetype firstDay = std::max<qsizetype>(0, dataDates.size() - histogramDayCount);
+
+    for (qsizetype day = firstDay; day < dataDates.size(); day++)
     {
-        QBarSet *set = new QBarSet(it.key().toString(Qt::ISODate));
+        const QDate date = dataDates[day];
+        QBarSet *set = new QBarSet(date.toString(Qt::ISODate));
 
         for (int hour = 0; hour < 24; hour++)
         {
-            const int count = it.value().value(hour);
+            const int count = m_hourlyCounts.value(date).value(hour);
             *set << count;
             maxCount = std::max(maxCount, count);
         }

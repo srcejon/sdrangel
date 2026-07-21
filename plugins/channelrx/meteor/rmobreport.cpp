@@ -65,16 +65,9 @@ bool RMOBReport::load(
         }
 
         const QDate date(year, month, day);
-        QVector<int>& counts = loadedData.m_hourlyCounts[date];
-        QVector<bool>& present = loadedData.m_hourlyData[date];
-
-        if (counts.isEmpty()) {
-            counts = QVector<int>(24, 0);
-        }
-
-        if (present.isEmpty()) {
-            present = QVector<bool>(24, false);
-        }
+        QVector<int> counts(24, 0);
+        QVector<bool> present(24, false);
+        bool hasData = false;
 
         for (int hour = 0; hour < 24; hour++)
         {
@@ -90,10 +83,17 @@ bool RMOBReport::load(
             if (countOK)
             {
                 const int nonNegativeCount = std::max(0, count);
+                hasData = true;
                 present[hour] = true;
                 counts[hour] = nonNegativeCount;
                 loadedData.m_totalCount += nonNegativeCount;
             }
+        }
+
+        if (hasData)
+        {
+            loadedData.m_hourlyCounts[date] = counts;
+            loadedData.m_hourlyData[date] = present;
         }
     }
 

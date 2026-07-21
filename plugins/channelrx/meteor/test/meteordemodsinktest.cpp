@@ -115,11 +115,15 @@ namespace {
         }
 
         const bool roundTripOK = (actual.m_totalCount == 3)
+            && (actual.m_hourlyCounts.size() == 1)
+            && (actual.m_hourlyData.size() == 1)
             && (actual.m_hourlyCounts.value(firstDay).value(0) == 3)
             && (actual.m_hourlyCounts.value(firstDay).value(1) == 0)
             && actual.m_hourlyData.value(firstDay).value(0)
             && actual.m_hourlyData.value(firstDay).value(1)
-            && !actual.m_hourlyData.value(firstDay).value(2);
+            && !actual.m_hourlyData.value(firstDay).value(2)
+            && !actual.m_hourlyCounts.contains(QDate(2026, 5, 31))
+            && !actual.m_hourlyData.contains(QDate(2026, 5, 31));
 
         if (!roundTripOK) {
             errorStream << "RMOB test: round-trip data differs\n";

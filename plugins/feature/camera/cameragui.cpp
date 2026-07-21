@@ -2674,6 +2674,8 @@ void CameraGUI::displaySettings()
         settingsUI()->yoloIgnoredClassNamesEdit->setPlainText(m_settings.m_yoloIgnoredClassNames.join(QStringLiteral("\n")));
     }
     updateColorButton(settingsUI()->yoloBoxColorButton, m_settings.m_yoloBoxColor);
+    settingsUI()->yoloLabelFontCombo->setCurrentText(m_settings.m_yoloLabelFontFamily);
+    settingsUI()->yoloLabelFontScaleSpin->setValue(m_settings.m_yoloLabelFontScale);
     ui->audioMute->setChecked(m_settings.m_audioMute);
     {
         const QSignalBlocker audioPreviewVolumeBlocker(ui->audioPreviewVolumeDial);
@@ -4063,6 +4065,8 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->yoloTileOverlapSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_yoloTileOverlapSpin_valueChanged);
     QObject::connect(settingsUI()->yoloIgnoredClassNamesEdit, &QPlainTextEdit::textChanged, this, &CameraGUI::on_yoloIgnoredClassNamesEdit_textChanged);
     QObject::connect(settingsUI()->yoloBoxColorButton, &QToolButton::clicked, this, &CameraGUI::on_yoloBoxColorButton_clicked);
+    QObject::connect(settingsUI()->yoloLabelFontCombo, &QFontComboBox::currentFontChanged, this, &CameraGUI::on_yoloLabelFontCombo_currentFontChanged);
+    QObject::connect(settingsUI()->yoloLabelFontScaleSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_yoloLabelFontScaleSpin_valueChanged);
     QObject::connect(ui->zoomInButton, &QToolButton::clicked, this, &CameraGUI::on_zoomInButton_clicked);
     QObject::connect(ui->zoomOutButton, &QToolButton::clicked, this, &CameraGUI::on_zoomOutButton_clicked);
     QObject::connect(ui->fitInViewButton, &QToolButton::clicked, this, &CameraGUI::on_fitInViewButton_clicked);
@@ -12065,6 +12069,18 @@ void CameraGUI::on_yoloBoxColorButton_clicked()
         updateColorButton(settingsUI()->yoloBoxColorButton, color);
         applySetting("yoloBoxColor");
     }
+}
+
+void CameraGUI::on_yoloLabelFontCombo_currentFontChanged(const QFont& font)
+{
+    m_settings.m_yoloLabelFontFamily = font.family();
+    applySetting("yoloLabelFontFamily");
+}
+
+void CameraGUI::on_yoloLabelFontScaleSpin_valueChanged(double value)
+{
+    m_settings.m_yoloLabelFontScale = value;
+    applySetting("yoloLabelFontScale");
 }
 
 bool CameraGUI::eventFilter(QObject *watched, QEvent *event)

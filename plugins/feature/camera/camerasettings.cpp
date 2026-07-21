@@ -702,6 +702,8 @@ void CameraSettings::resetToDefaults()
     m_yoloConfThreshold = 0.5;
     m_yoloNmsThreshold = 0.45;
     m_yoloBoxColor = Qt::green;
+    m_yoloLabelFontFamily.clear();
+    m_yoloLabelFontScale = 12.0;
     m_yoloTileLargeImages = true;
     m_yoloInferenceMode = YoloInferenceTile;
     m_yoloTileOverlapPercent = 20;
@@ -1037,6 +1039,8 @@ QByteArray CameraSettings::serialize() const
     s.writeBool(306, m_cloudAutoReference);
     s.writeBool(364, m_cloudUseDetectionRoi);
     s.writeDouble(365, m_cloudMinElevation);
+    s.writeString(366, m_yoloLabelFontFamily);
+    s.writeDouble(367, m_yoloLabelFontScale);
     s.writeS32(307, static_cast<qint32>(m_yoloInferenceMode));
     s.writeBool(308, m_playbackProjectionEnabled);
     s.writeS32(309, m_playbackProjectionX);
@@ -1611,6 +1615,9 @@ bool CameraSettings::deserialize(const QByteArray& data)
         uint32_t yoloBoxColorRgba = QColor(Qt::green).rgba();
         d.readU32(167, &yoloBoxColorRgba, QColor(Qt::green).rgba());
         m_yoloBoxColor = QColor::fromRgba(yoloBoxColorRgba);
+        d.readString(366, &m_yoloLabelFontFamily, "");
+        d.readDouble(367, &m_yoloLabelFontScale, 12.0);
+        m_yoloLabelFontScale = qBound(m_minOverlayFontScale, m_yoloLabelFontScale, m_maxOverlayFontScale);
         d.readS32(169, (qint32 *) &m_yoloDnnTarget, (qint32) CPU);
 
         d.readBool(171, &m_audioMute, true);
@@ -3016,6 +3023,12 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     if (settingsKeys.contains("yoloBoxColor")) {
         m_yoloBoxColor = settings.m_yoloBoxColor;
     }
+    if (settingsKeys.contains("yoloLabelFontFamily")) {
+        m_yoloLabelFontFamily = settings.m_yoloLabelFontFamily;
+    }
+    if (settingsKeys.contains("yoloLabelFontScale")) {
+        m_yoloLabelFontScale = qBound(m_minOverlayFontScale, settings.m_yoloLabelFontScale, m_maxOverlayFontScale);
+    }
     if (settingsKeys.contains("yoloInferenceMode")) {
         m_yoloInferenceMode = qBound(YoloInferenceScale, settings.m_yoloInferenceMode, YoloInferenceTileAndScale);
         m_yoloTileLargeImages = m_yoloInferenceMode != YoloInferenceScale;
@@ -4082,6 +4095,15 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("yoloNmsThreshold") || force) {
         ostr << " m_yoloNmsThreshold: " << m_yoloNmsThreshold;
+    }
+    if (settingsKeys.contains("yoloBoxColor") || force) {
+        ostr << " m_yoloBoxColor: " << m_yoloBoxColor.name().toStdString();
+    }
+    if (settingsKeys.contains("yoloLabelFontFamily") || force) {
+        ostr << " m_yoloLabelFontFamily: " << m_yoloLabelFontFamily.toStdString();
+    }
+    if (settingsKeys.contains("yoloLabelFontScale") || force) {
+        ostr << " m_yoloLabelFontScale: " << m_yoloLabelFontScale;
     }
     if (settingsKeys.contains("yoloInferenceMode") || force) {
         ostr << " m_yoloInferenceMode: " << m_yoloInferenceMode;

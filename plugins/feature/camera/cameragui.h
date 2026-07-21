@@ -953,6 +953,8 @@ private slots:
     void on_yoloTileOverlapSpin_valueChanged(int value);
     void on_yoloIgnoredClassNamesEdit_textChanged();
     void on_yoloBoxColorButton_clicked();
+    void on_yoloLabelFontCombo_currentFontChanged(const QFont& font);
+    void on_yoloLabelFontScaleSpin_valueChanged(double value);
     void on_zoomInButton_clicked();
     void on_zoomOutButton_clicked();
     void on_fitInViewButton_clicked();

@@ -981,7 +981,7 @@ void CameraPostProcessor::applySettings(const CameraSettings& settings, const QL
         "lensProjection", "lensCenterOffsetX", "lensCenterOffsetY", "lensDistortionK1",
         "playbackProjectionEnabled", "playbackProjectionX", "playbackProjectionY", "playbackProjectionWidth", "playbackProjectionHeight",
         "owmAPIKey",
-        "yoloBoxColor"
+        "yoloBoxColor", "yoloLabelFontFamily", "yoloLabelFontScale"
     };
     const bool postProcessChanged = force || std::any_of(kPostProcessingKeys.cbegin(), kPostProcessingKeys.cend(),
         [&settingsKeys, &settings](const QString& k) {
@@ -1504,7 +1504,10 @@ void CameraPostProcessor::applyDetectionOverlay(QImage& image, const QVector<Cam
     painter.setRenderHint(QPainter::Antialiasing);
     painter.setRenderHint(QPainter::TextAntialiasing);
     QFont font = painter.font();
-    font.setPointSizeF(std::max(6.0, font.pointSizeF() > 0.0 ? font.pointSizeF() : 9.0));
+    if (!m_settings.m_yoloLabelFontFamily.isEmpty()) {
+        font.setFamily(m_settings.m_yoloLabelFontFamily);
+    }
+    font.setPointSizeF(m_settings.m_yoloLabelFontScale);
     painter.setFont(font);
     const QFontMetrics fontMetrics(font);
     QPen pen(m_settings.m_yoloBoxColor);

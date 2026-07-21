@@ -502,6 +502,18 @@ void Meteor::webapiFormatChannelSettings(
     swg->setDetectionsTableColumnHidden(settings.m_detectionsTableColumnHidden);
     swg->setDetectionBoxPaddingPixels(settings.m_detectionBoxPaddingPixels);
     swg->setDetectionLabelMode((int) settings.m_detectionLabelMode);
+    swg->setTransmitterLatitude(settings.m_transmitterLatitude);
+    swg->setTransmitterLongitude(settings.m_transmitterLongitude);
+    swg->setAntennaAzimuth(settings.m_antennaAzimuth);
+    swg->setAntennaElevation(settings.m_antennaElevation);
+    swg->setAntennaBeamwidth(settings.m_antennaBeamwidth);
+
+    if (swg->getRotator()) {
+        *swg->getRotator() = settings.m_rotator;
+    } else {
+        swg->setRotator(new QString(settings.m_rotator));
+    }
+
     swg->setRgbColor(settings.m_rgbColor);
 
     if (swg->getTitle()) {
@@ -616,6 +628,31 @@ bool Meteor::webapiUpdateChannelSettings(
     }
     if (channelSettingsKeys.contains("detectionLabelMode")) {
         updatedSettings.m_detectionLabelMode = (MeteorSettings::DetectionLabelMode) swg->getDetectionLabelMode();
+    }
+    if (channelSettingsKeys.contains("transmitterLatitude")) {
+        updatedSettings.m_transmitterLatitude = swg->getTransmitterLatitude();
+    }
+    if (channelSettingsKeys.contains("transmitterLongitude")) {
+        updatedSettings.m_transmitterLongitude = swg->getTransmitterLongitude();
+    }
+    if (channelSettingsKeys.contains("antennaAzimuth")) {
+        updatedSettings.m_antennaAzimuth = swg->getAntennaAzimuth();
+    }
+    if (channelSettingsKeys.contains("antennaElevation")) {
+        updatedSettings.m_antennaElevation = swg->getAntennaElevation();
+    }
+    if (channelSettingsKeys.contains("antennaBeamwidth")) {
+        updatedSettings.m_antennaBeamwidth = swg->getAntennaBeamwidth();
+    }
+    if (channelSettingsKeys.contains("rotator"))
+    {
+        if (!swg->getRotator())
+        {
+            errorMessage = "rotator must not be null";
+            return false;
+        }
+
+        updatedSettings.m_rotator = *swg->getRotator();
     }
     if (channelSettingsKeys.contains("rgbColor")) {
         updatedSettings.m_rgbColor = (quint32) swg->getRgbColor();
@@ -763,6 +800,27 @@ bool Meteor::validateChannelSettings(const MeteorSettings& settings, QString& er
         || (settings.m_transmitterLongitude > 180.0))
     {
         errorMessage = "transmitterLongitude must be finite and between -180.0 and 180.0 degrees";
+        return false;
+    }
+    if (!std::isfinite(settings.m_transmitterAzimuth)
+        || (settings.m_transmitterAzimuth < 0.0f)
+        || (settings.m_transmitterAzimuth > 360.0f))
+    {
+        errorMessage = "transmitterAzimuth must be finite and between 0.0 and 360.0 degrees";
+        return false;
+    }
+    if (!std::isfinite(settings.m_transmitterElevation)
+        || (settings.m_transmitterElevation < -90.0f)
+        || (settings.m_transmitterElevation > 90.0f))
+    {
+        errorMessage = "transmitterElevation must be finite and between -90.0 and 90.0 degrees";
+        return false;
+    }
+    if (!std::isfinite(settings.m_transmitterBeamwidth)
+        || (settings.m_transmitterBeamwidth < 0.0f)
+        || (settings.m_transmitterBeamwidth > 360.0f))
+    {
+        errorMessage = "transmitterBeamwidth must be finite and between 0.0 and 360.0 degrees";
         return false;
     }
     if (!std::isfinite(settings.m_antennaAzimuth)

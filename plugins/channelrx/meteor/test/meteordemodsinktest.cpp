@@ -56,6 +56,9 @@ namespace {
         MeteorSettings expected;
         expected.m_transmitterLatitude = 50.123456;
         expected.m_transmitterLongitude = -1.234567;
+        expected.m_transmitterAzimuth = 135.5f;
+        expected.m_transmitterElevation = 8.5f;
+        expected.m_transmitterBeamwidth = 12.0f;
         expected.m_antennaAzimuth = 220.5f;
         expected.m_antennaElevation = 11.5f;
         expected.m_antennaBeamwidth = 30.0f;
@@ -66,6 +69,9 @@ namespace {
         if (!actual.deserialize(expected.serialize())
             || (actual.m_transmitterLatitude != expected.m_transmitterLatitude)
             || (actual.m_transmitterLongitude != expected.m_transmitterLongitude)
+            || (actual.m_transmitterAzimuth != expected.m_transmitterAzimuth)
+            || (actual.m_transmitterElevation != expected.m_transmitterElevation)
+            || (actual.m_transmitterBeamwidth != expected.m_transmitterBeamwidth)
             || (actual.m_antennaAzimuth != expected.m_antennaAzimuth)
             || (actual.m_antennaElevation != expected.m_antennaElevation)
             || (actual.m_antennaBeamwidth != expected.m_antennaBeamwidth)

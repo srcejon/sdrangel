@@ -3345,35 +3345,101 @@ bool GLSpectrumView::waterfallTimeToY(const QDateTime& dateTimeUtc, float& y) co
         return false;
     }
 
-    for (int idx = beginIdx; idx <= endIdx; idx++)
+    const auto timeAt = [this](int idx) {
+        return m_spectrumBuffer[idx].m_dateTime.toMSecsSinceEpoch();
+    };
+    const qint64 beginMSecs = timeAt(beginIdx);
+    const qint64 endMSecs = timeAt(endIdx);
+    const bool ascending = beginMSecs <= endMSecs;
+
+    if ((targetMSecs < std::min(beginMSecs, endMSecs))
+        || (targetMSecs > std::max(beginMSecs, endMSecs)))
     {
-        const qint64 rowMSecs = m_spectrumBuffer[idx].m_dateTime.toUTC().toMSecsSinceEpoch();
-        const qint64 nextMSecs = idx < endIdx
-            ? m_spectrumBuffer[idx + 1].m_dateTime.toUTC().toMSecsSinceEpoch()
-            : rowMSecs;
-        const qint64 minMSecs = std::min(rowMSecs, nextMSecs);
-        const qint64 maxMSecs = std::max(rowMSecs, nextMSecs);
+        return false;
+    }
 
-        if ((targetMSecs >= minMSecs) && (targetMSecs <= maxMSecs))
+    int low = beginIdx;
+    int high = endIdx;
+
+    while (low < high)
+    {
+        const int mid = low + (high - low) / 2;
+        const qint64 midMSecs = timeAt(mid);
+
+        if ((ascending && (midMSecs < targetMSecs))
+            || (!ascending && (midMSecs > targetMSecs)))
         {
-            double row = (double) (idx - firstIdx);
-
-            if (nextMSecs != rowMSecs) {
-                row += (double) (targetMSecs - rowMSecs) / (double) (nextMSecs - rowMSecs);
-            }
-
-            y = (float) (row / (double) std::max(1, m_waterfallHeight));
-
-            if (m_invertedWaterfall) {
-                y = 1.0f - y;
-            }
-
-            y = std::clamp(y, 0.0f, 1.0f);
-            return true;
+            low = mid + 1;
+        }
+        else
+        {
+            high = mid;
         }
     }
 
-    return false;
+    const int idx = low > beginIdx ? low - 1 : low;
+    const qint64 rowMSecs = timeAt(idx);
+    const qint64 nextMSecs = idx < endIdx ? timeAt(idx + 1) : rowMSecs;
+
+    if ((targetMSecs < std::min(rowMSecs, nextMSecs))
+        || (targetMSecs > std::max(rowMSecs, nextMSecs)))
+    {
+        return false;
+    }
+
+    double row = (double) (idx - firstIdx);
+
+    if (nextMSecs != rowMSecs) {
+        row += (double) (targetMSecs - rowMSecs) / (double) (nextMSecs - rowMSecs);
+    }
+
+    y = (float) (row / (double) std::max(1, m_waterfallHeight));
+
+    if (m_invertedWaterfall) {
+        y = 1.0f - y;
+    }
+
+    y = std::clamp(y, 0.0f, 1.0f);
+    return true;
+}
+
+bool GLSpectrumView::waterfallVisibleTimeRange(
+    QDateTime& startDateTimeUtc,
+    QDateTime& endDateTimeUtc) const
+{
+    if ((m_waterfallHeight <= 0) || m_spectrumBuffer.isEmpty()) {
+        return false;
+    }
+
+    const int firstIdx = (int) m_spectrumBuffer.size() - 1 - scrollBarValue() - m_waterfallHeight;
+    const int lastIdx = (int) m_spectrumBuffer.size() - 1 - scrollBarValue();
+
+    if ((lastIdx < 0) || (firstIdx >= (int) m_spectrumBuffer.size())) {
+        return false;
+    }
+
+    const int beginIdx = std::max(0, firstIdx);
+    const int endIdx = std::min(lastIdx, (int) m_spectrumBuffer.size() - 1);
+
+    if (beginIdx > endIdx) {
+        return false;
+    }
+
+    const QDateTime firstVisibleDateTimeUtc = m_spectrumBuffer[beginIdx].m_dateTime.toUTC();
+    const QDateTime lastVisibleDateTimeUtc = m_spectrumBuffer[endIdx].m_dateTime.toUTC();
+
+    if (firstVisibleDateTimeUtc <= lastVisibleDateTimeUtc)
+    {
+        startDateTimeUtc = firstVisibleDateTimeUtc;
+        endDateTimeUtc = lastVisibleDateTimeUtc;
+    }
+    else
+    {
+        startDateTimeUtc = lastVisibleDateTimeUtc;
+        endDateTimeUtc = firstVisibleDateTimeUtc;
+    }
+
+    return true;
 }
 
 bool GLSpectrumView::waterfallFrequencyToX(double frequency, float& x) const

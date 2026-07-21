@@ -281,6 +281,7 @@ public:
     void setMemory(int memoryIdx, const SpectrumSettings::SpectrumMemory &memory);
     bool scrollWaterfallToUTC(const QDateTime& dateTimeUtc);
     void setPaintGLCallback(PaintGLCallback callback);
+    bool waterfallVisibleTimeRange(QDateTime& startDateTimeUtc, QDateTime& endDateTimeUtc) const;
     bool waterfallTimeToY(const QDateTime& dateTimeUtc, float& y) const;
     bool waterfallFrequencyToX(double frequency, float& x) const;
     double waterfallTimePerPixel() const;

@@ -1810,8 +1810,6 @@ void MeteorGUI::drawDetectionOverlays(
         bool m_selected;
     };
     QVector<LabelOverlay> labelOverlays;
-    QDateTime visibleStartUtc;
-    QDateTime visibleEndUtc;
 
     if (!m_highlightAllDetectionOverlays && selectedIds.isEmpty())
     {
@@ -1820,10 +1818,22 @@ void MeteorGUI::drawDetectionOverlays(
         return;
     }
 
-    auto scanOverlays = [&](int beginIndex, int endIndex) -> int
-    {
-        int visibleCount = 0;
+    QDateTime visibleStartUtc;
+    QDateTime visibleEndUtc;
 
+    if (!spectrumView->waterfallVisibleTimeRange(visibleStartUtc, visibleEndUtc))
+    {
+        hideDetectionOverlayLabels(overlayLabels);
+        overlayWindowValid = false;
+        return;
+    }
+
+    overlayWindowStartUtc = visibleStartUtc;
+    overlayWindowEndUtc = visibleEndUtc;
+    overlayWindowValid = true;
+
+    auto scanOverlays = [&](int beginIndex, int endIndex)
+    {
         for (int i = beginIndex; i < endIndex; i++)
         {
             const DetectionOverlay& detection = m_detectionOverlays[i];
@@ -1899,27 +1909,14 @@ void MeteorGUI::drawDetectionOverlays(
                 labelOverlays.push_back({&detection, xMin, yStart, xMax, yEnd, selected});
             }
 
-            if (!visibleStartUtc.isValid() || (detection.m_startTimeUtc < visibleStartUtc)) {
-                visibleStartUtc = detection.m_startTimeUtc;
-            }
-
-            if (!visibleEndUtc.isValid() || (endTimeUtc > visibleEndUtc)) {
-                visibleEndUtc = endTimeUtc;
-            }
-
-            visibleCount++;
         }
-
-        return visibleCount;
     };
 
-    int visibleCount = 0;
-
-    if (overlayWindowValid && !m_detectionOverlays.isEmpty())
+    if (!m_detectionOverlays.isEmpty())
     {
-        const qint64 windowPaddingMSecs = std::max(1000, m_settings.m_maxDurationMS + 1000);
-        const qint64 windowStartMSecs = overlayWindowStartUtc.addMSecs(-windowPaddingMSecs).toMSecsSinceEpoch();
-        const qint64 windowEndMSecs = overlayWindowEndUtc.addMSecs(windowPaddingMSecs).toMSecsSinceEpoch();
+        const qint64 durationPaddingMSecs = std::max(1000, m_settings.m_maxDurationMS + 1000);
+        const qint64 windowStartMSecs = visibleStartUtc.addMSecs(-durationPaddingMSecs).toMSecsSinceEpoch();
+        const qint64 windowEndMSecs = visibleEndUtc.addMSecs(1000).toMSecsSinceEpoch();
         const auto beginIt = std::lower_bound(
             m_detectionOverlays.cbegin(),
             m_detectionOverlays.cend(),
@@ -1934,23 +1931,9 @@ void MeteorGUI::drawDetectionOverlays(
             [](qint64 targetMSecs, const DetectionOverlay& detection) {
                 return targetMSecs < detection.m_startTimeUtc.toMSecsSinceEpoch();
             });
-        visibleCount = scanOverlays((int) std::distance(m_detectionOverlays.cbegin(), beginIt), (int) std::distance(m_detectionOverlays.cbegin(), endIt));
-    }
-
-    if ((visibleCount == 0) && !m_detectionOverlays.isEmpty()) {
-        visibleCount = scanOverlays(0, m_detectionOverlays.size());
-    }
-
-    if ((visibleCount > 0) && visibleStartUtc.isValid() && visibleEndUtc.isValid())
-    {
-        const qint64 windowPaddingMSecs = std::max(1000, m_settings.m_maxDurationMS + 1000);
-        overlayWindowStartUtc = visibleStartUtc.addMSecs(-windowPaddingMSecs);
-        overlayWindowEndUtc = visibleEndUtc.addMSecs(windowPaddingMSecs);
-        overlayWindowValid = true;
-    }
-    else
-    {
-        overlayWindowValid = false;
+        scanOverlays(
+            (int) std::distance(m_detectionOverlays.cbegin(), beginIt),
+            (int) std::distance(m_detectionOverlays.cbegin(), endIt));
     }
 
     if (labelOverlays.isEmpty()) {

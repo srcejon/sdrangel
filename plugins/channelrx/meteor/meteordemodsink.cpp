@@ -1274,6 +1274,7 @@ MeteorDemodSink::PulseReport MeteorDemodSink::reportFromSpectralCandidate(
     report.m_componentSupportDB = candidate.m_integratedSupportDB;
     report.m_truncated = candidate.m_truncated;
     report.m_spectralParentEligible = true;
+    report.m_bypassRecentDuplicate = candidate.m_detachedRepeat;
     return report;
 }
 
@@ -1296,7 +1297,6 @@ bool MeteorDemodSink::shouldReanalyzeRejectedCandidate(
                 >= m_detectorTunables.m_rejectedTwoFrameMinimumBandwidthHz)
             || strongNarrowTwoFrame
             || strongTwoFrameEvidence);
-
     return m_detectorTunables.m_enableRejectedCandidateReanalysis
         && candidate.m_valid
         && !candidate.m_accepted
@@ -2319,11 +2319,13 @@ MeteorDemodSink::SpectralCandidate MeteorDemodSink::buildSpectralCandidate(const
         && (candidate.m_frameOccupiedFraction >= m_detectorTunables.m_broadbandImpulseMinOccupiedFraction);
     candidate.m_insideUsableBandwidth = std::fabs(candidate.m_robustCenterFrequency)
         <= m_resolvedDetectorTunables.m_usableBandwidthHz;
+    quint64 duplicateGapSamples = 0;
     candidate.m_duplicate = isDuplicateDetection(
         candidate.m_startSample,
         candidate.m_endSample,
         candidate.m_robustCenterFrequency,
-        candidate.m_robustFrequencySpan);
+        candidate.m_robustFrequencySpan,
+        &duplicateGapSamples);
     candidate.m_acceptanceThreshold = candidate.m_frameCount <= 2
         ? m_detectorTunables.m_shortCandidateAcceptanceScore
         : m_detectorTunables.m_candidateAcceptanceScore;
@@ -2333,6 +2335,33 @@ MeteorDemodSink::SpectralCandidate MeteorDemodSink::buildSpectralCandidate(const
     }
 
     classifySpectralCandidate(candidate);
+
+    const quint64 detachedRepeatMinimumGapSamples = (quint64) std::ceil(
+        m_detectorTunables.m_detachedRepeatMinimumGapS
+            * (double) std::max(1, m_settings.m_channelSampleRate));
+    const bool detachedRepeat = candidate.m_duplicate
+        && (duplicateGapSamples >= detachedRepeatMinimumGapSamples)
+        && (candidate.m_frameCount >= m_detectorTunables.m_detachedRepeatMinimumFrames)
+        && (candidate.m_scoreMargin >= m_detectorTunables.m_detachedRepeatMinimumScoreMargin)
+        && (candidate.m_maxContrastDB >= m_detectorTunables.m_detachedRepeatMinimumContrastDB)
+        && (candidate.m_peakAboveBackgroundDB >= m_detectorTunables.m_detachedRepeatMinimumPeakDB)
+        && (candidate.m_integratedSupportDB
+            >= m_detectorTunables.m_detachedRepeatMinimumIntegratedSupportDB)
+        && (candidate.m_trackOccupancy
+            >= m_detectorTunables.m_detachedRepeatMinimumTrackOccupancy)
+        && (candidate.m_frequencyCoherence
+            >= m_detectorTunables.m_detachedRepeatMinimumFrequencyCoherence)
+        && (candidate.m_frameOccupiedFraction
+            <= m_detectorTunables.m_detachedRepeatMaximumOccupiedFraction)
+        && (candidate.m_matchedEnvelopeScore
+            >= m_detectorTunables.m_detachedRepeatMinimumMatchedEnvelopeScore);
+
+    if (detachedRepeat)
+    {
+        candidate.m_duplicate = false;
+        candidate.m_detachedRepeat = true;
+        classifySpectralCandidate(candidate);
+    }
 
     candidate.m_curvedSweepRejected = m_detectorTunables.m_enableCurvatureSweepRejection
         && (candidate.m_quadraticSweepR2 >= m_detectorTunables.m_curvatureMinimumR2)
@@ -3493,9 +3522,26 @@ bool MeteorDemodSink::isDuplicateDetection(quint64 startSample, quint64 endSampl
 
 bool MeteorDemodSink::isDuplicateDetection(quint64 startSample, quint64 endSample, double centerFrequency, double frequencySpan) const
 {
+    return isDuplicateDetection(startSample, endSample, centerFrequency, frequencySpan, nullptr);
+}
+
+bool MeteorDemodSink::isDuplicateDetection(
+    quint64 startSample,
+    quint64 endSample,
+    double centerFrequency,
+    double frequencySpan,
+    quint64 *minimumGapSamples) const
+{
     if (endSample < startSample) {
         return false;
     }
+
+    if (minimumGapSamples) {
+        *minimumGapSamples = 0;
+    }
+
+    bool duplicateFound = false;
+    quint64 closestDuplicateGap = std::numeric_limits<quint64>::max();
 
     const quint64 detectionLength = endSample - startSample + 1;
     const bool hasFrequencyRange = frequencySpan > 0.0;
@@ -3547,7 +3593,13 @@ bool MeteorDemodSink::isDuplicateDetection(quint64 startSample, quint64 endSampl
                 if (!rangeHasFrequencyRange
                     || (frequencyOverlapRatio >= m_detectorTunables.m_duplicateFrequencyOverlapFraction))
                 {
-                    return true;
+                    if (!minimumGapSamples) {
+                        return true;
+                    }
+
+                    duplicateFound = true;
+                    closestDuplicateGap = 0;
+                    continue;
                 }
             }
         }
@@ -3586,11 +3638,21 @@ bool MeteorDemodSink::isDuplicateDetection(quint64 startSample, quint64 endSampl
                      << " previousEnd:" << range.m_endSample
                      << " previousFrequencyLow:" << range.m_lowFrequency
                      << " previousFrequencyHigh:" << range.m_highFrequency;
-            return true;
+
+            if (!minimumGapSamples) {
+                return true;
+            }
+
+            duplicateFound = true;
+            closestDuplicateGap = std::min(closestDuplicateGap, gapSamples);
         }
     }
 
-    return false;
+    if (minimumGapSamples && duplicateFound) {
+        *minimumGapSamples = closestDuplicateGap;
+    }
+
+    return duplicateFound;
 }
 
 void MeteorDemodSink::rememberDetection(quint64 startSample, quint64 endSample)
@@ -3652,11 +3714,12 @@ MeteorDemodSink::AssociationResult MeteorDemodSink::emitOrDeferSpectralReport(
         ? outputReport.m_duplicateFrequencySpan
         : outputReport.m_frequencySpan;
 
-    if (!isDuplicateDetection(
-        outputReport.m_startSample,
-        outputReport.m_endSample,
-        outputReport.m_centerFrequency,
-        duplicateFrequencySpan))
+    if (outputReport.m_bypassRecentDuplicate
+        || !isDuplicateDetection(
+            outputReport.m_startSample,
+            outputReport.m_endSample,
+            outputReport.m_centerFrequency,
+            duplicateFrequencySpan))
     {
         return queueSpectralComponentReport(outputReport);
     }
@@ -4144,11 +4207,12 @@ void MeteorDemodSink::finalizeActiveMeteorEvent(ActiveMeteorEvent& event)
         ? report.m_duplicateFrequencySpan
         : report.m_frequencySpan;
 
-    if (!isDuplicateDetection(
-        settledStartSample,
-        settledEndSample,
-        report.m_centerFrequency,
-        duplicateFrequencySpan))
+    if (report.m_bypassRecentDuplicate
+        || !isDuplicateDetection(
+            settledStartSample,
+            settledEndSample,
+            report.m_centerFrequency,
+            duplicateFrequencySpan))
     {
         if (m_diagnosticCaptureCallback)
         {

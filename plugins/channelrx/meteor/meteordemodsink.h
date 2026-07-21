@@ -116,6 +116,16 @@ public:
         double m_frequencyRefinementOuterProbeFraction = 0.85;
         double m_duplicateFrequencyOverlapFraction = 0.65;
         double m_duplicateStrongFrequencyOverlapFraction = 0.85;
+        double m_detachedRepeatMinimumGapS = 2.0;
+        int m_detachedRepeatMinimumFrames = 3;
+        double m_detachedRepeatMinimumScoreMargin = 3.0;
+        double m_detachedRepeatMinimumContrastDB = 20.0;
+        double m_detachedRepeatMinimumPeakDB = 14.0;
+        double m_detachedRepeatMinimumIntegratedSupportDB = 8.0;
+        double m_detachedRepeatMinimumTrackOccupancy = 0.80;
+        double m_detachedRepeatMinimumFrequencyCoherence = 0.95;
+        double m_detachedRepeatMaximumOccupiedFraction = 0.30;
+        double m_detachedRepeatMinimumMatchedEnvelopeScore = 0.92;
         double m_continuationThresholdReductionDB = 3.0;
         double m_initialComponentHoldS = 0.75;
         double m_continuationOrdinaryHoldS = 1.0;
@@ -349,6 +359,7 @@ public:
         bool m_spectralEvidenceOK = false;
         bool m_insideUsableBandwidth = false;
         bool m_duplicate = false;
+        bool m_detachedRepeat = false;
         bool m_broadbandImpulse = false;
         bool m_sweepContinuationRejected = false;
         bool m_scoreOK = false;
@@ -462,6 +473,7 @@ private:
         double m_componentSupportDB;
         bool m_allowComponentMerge;
         bool m_spectralParentEligible;
+        bool m_bypassRecentDuplicate;
         PulseReport() :
             m_reportFrequencySpan(0.0),
             m_duplicateFrequencySpan(0.0),
@@ -472,7 +484,8 @@ private:
             m_confidence(0.0),
             m_componentSupportDB(-200.0),
             m_allowComponentMerge(true),
-            m_spectralParentEligible(false)
+            m_spectralParentEligible(false),
+            m_bypassRecentDuplicate(false)
         {}
     };
 
@@ -753,6 +766,12 @@ private:
     double estimateSpectralEventDurationSamples(const SpectralEvent& event, double& startSample) const;
     bool isDuplicateDetection(quint64 startSample, quint64 endSample) const;
     bool isDuplicateDetection(quint64 startSample, quint64 endSample, double centerFrequency, double frequencySpan) const;
+    bool isDuplicateDetection(
+        quint64 startSample,
+        quint64 endSample,
+        double centerFrequency,
+        double frequencySpan,
+        quint64 *minimumGapSamples) const;
     void rememberDetection(quint64 startSample, quint64 endSample);
     void rememberDetection(quint64 startSample, quint64 endSample, double centerFrequency, double frequencySpan);
     void pruneRecentDetections();

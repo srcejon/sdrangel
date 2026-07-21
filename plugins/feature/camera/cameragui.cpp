@@ -2081,8 +2081,29 @@ bool CameraGUI::chooseVideoFileCameraFile(int comboIndex, const QString& previou
         return false;
     }
 
+    QString accessibleFilePath = filePath;
+#if defined(Q_OS_ANDROID)
+    QString errorMessage;
+    accessibleFilePath = copyAndroidContentFile(
+        filePath,
+        QStringLiteral("mp4"),
+        &errorMessage,
+        QStringLiteral("camera/video"));
+
+    if (accessibleFilePath.isEmpty())
+    {
+        QMessageBox::warning(this, tr("Video selection failed"), errorMessage);
+        restorePreviousCameraSelection(
+            previousCameraProtocol,
+            previousCameraId,
+            previousAlpacaHost,
+            previousAlpacaPort);
+        return false;
+    }
+#endif
+
     const QString description = QFileInfo(filePath).fileName();
-    ui->cameraCombo->setItemData(comboIndex, filePath, CameraIdRole);
+    ui->cameraCombo->setItemData(comboIndex, accessibleFilePath, CameraIdRole);
     ui->cameraCombo->setItemData(comboIndex, description, CameraDescriptionRole);
     ui->cameraCombo->setItemText(comboIndex, CameraProtocol::playbackDisplayText(CameraProtocol::video(), description));
     return true;
@@ -11606,7 +11627,8 @@ void CameraGUI::applyYoloPathSetting(const QString& settingKey, const QString& p
 QString CameraGUI::copyAndroidContentFile(
     const QString& contentUri,
     const QString& fallbackSuffix,
-    QString *errorMessage) const
+    QString *errorMessage,
+    const QString& destinationSubdirectory) const
 {
     if (!contentUri.startsWith(QStringLiteral("content://"), Qt::CaseInsensitive)) {
         return contentUri;
@@ -11635,12 +11657,14 @@ QString CameraGUI::copyAndroidContentFile(
     }
 
     QDir directory(appDataDirectory);
-    const QString yoloDirectory = QStringLiteral("camera/yolo");
+    const QString cacheDirectory = destinationSubdirectory.isEmpty()
+        ? QStringLiteral("camera/imports")
+        : destinationSubdirectory;
 
-    if (!directory.mkpath(yoloDirectory))
+    if (!directory.mkpath(cacheDirectory))
     {
         if (errorMessage) {
-            *errorMessage = tr("Cannot create %1.").arg(directory.filePath(yoloDirectory));
+            *errorMessage = tr("Cannot create %1.").arg(directory.filePath(cacheDirectory));
         }
 
         return QString();
@@ -11654,7 +11678,7 @@ QString CameraGUI::copyAndroidContentFile(
     const QString contentHash = QString::fromLatin1(
         QCryptographicHash::hash(contentUri.toUtf8(), QCryptographicHash::Sha256).toHex().left(16));
     const QString filename = QStringLiteral("content-%1.%2").arg(contentHash, suffix);
-    const QString destination = directory.filePath(yoloDirectory + QLatin1Char('/') + filename);
+    const QString destination = directory.filePath(cacheDirectory + QLatin1Char('/') + filename);
     QSaveFile destinationFile(destination);
 
     if (!destinationFile.open(QIODevice::WriteOnly))

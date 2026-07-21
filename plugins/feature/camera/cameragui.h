@@ -571,7 +571,8 @@ private:
     void applyYoloPathSetting(const QString& settingKey, const QString& path);
 #if defined(Q_OS_ANDROID)
     QString copyAndroidContentFile(const QString& contentUri, const QString& fallbackSuffix,
-                                   QString *errorMessage) const;
+                                   QString *errorMessage,
+                                   const QString& destinationSubdirectory = QStringLiteral("camera/yolo")) const;
 #endif
     void requestYoloDownload(const QString& settingKey, const QString& path);
     void handleYoloDownloadComplete(const QString& filename, bool success, const QString& url, const QString& errorMessage);

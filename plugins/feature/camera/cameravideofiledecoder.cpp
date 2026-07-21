@@ -215,13 +215,17 @@ bool CameraVideoFileDecoder::open(
         av_dict_free(&options);
         if (ret < 0)
         {
-            const QString error = CameraFFmpegAudio::avErrorString(ret);
+            QString error = CameraFFmpegAudio::avErrorString(ret).trimmed();
+            if (error.isEmpty()) {
+                error = QStringLiteral("FFmpeg error %1").arg(ret);
+            }
             qWarning() << "CameraVideoFileDecoder: open media source failed"
                        << fileName
                        << "rtspTransport" << (rtspSource ? transportName : QStringLiteral("n/a"))
                        << "elapsedMs" << openTimer.elapsed()
                        << error;
-            openErrors.append(QStringLiteral("%1: %2").arg(transportName, error));
+            const QString attempt = rtspSource ? transportName : QStringLiteral("automatic input format");
+            openErrors.append(QStringLiteral("%1: %2").arg(attempt, error));
             avformat_close_input(&m_formatContext);
             return false;
         }

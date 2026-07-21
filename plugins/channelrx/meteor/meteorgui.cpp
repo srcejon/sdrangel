@@ -1161,6 +1161,17 @@ void MeteorGUI::addDetection(const MeteorDemodSink::MsgMeteorDetected& detection
     m_totalCount++;
     markRMOBDirty(date);
 
+    const quint64 displayStartSample = detection.getDisplayStartSample();
+    const quint64 displayEndSample = detection.getDisplayEndSample();
+    const quint64 displaySampleCount = displayEndSample >= displayStartSample
+        ? displayEndSample - displayStartSample + 1
+        : 1;
+    const double displaySampleDurationS = (double) displaySampleCount
+        / (double) std::max(1, detection.getSampleRate());
+    const double displayTimeScale = std::clamp(
+        detection.getDisplayDurationS() / std::max(1e-9, displaySampleDurationS),
+        1e-3,
+        1e3);
     const quint64 overlayId = m_nextDetectionOverlayId++;
     const DetectionOverlay overlay = {
         overlayId,
@@ -1170,6 +1181,7 @@ void MeteorGUI::addDetection(const MeteorDemodSink::MsgMeteorDetected& detection
         detection.getFrequencySpan(),
         detection.getFrequencyDrift(),
         detection.getPeakPowerDB(),
+        displayTimeScale,
         nullptr
     };
     const qint64 overlayStartMSecs = overlay.m_startTimeUtc.toMSecsSinceEpoch();
@@ -1784,10 +1796,10 @@ void MeteorGUI::drawDetectionOverlays(
                 spectrumSettings.m_averagingMode));
     }
 
-    const double waterfallRowDurationS = m_settings.m_channelSampleRate > 0
+    const double sampleWaterfallRowDurationS = m_settings.m_channelSampleRate > 0
         ? (double) (fftHopSize * timingRate) / (double) m_settings.m_channelSampleRate
         : 0.0;
-    const double spectrumWindowCenterDelayS = m_settings.m_channelSampleRate > 0
+    const double sampleSpectrumWindowCenterDelayS = m_settings.m_channelSampleRate > 0
         ? (double) (fftSize + (timingRate - 1) * fftHopSize)
             / (2.0 * (double) m_settings.m_channelSampleRate)
         : 0.0;
@@ -1832,6 +1844,10 @@ void MeteorGUI::drawDetectionOverlays(
 
             if (fftOverlap > 0)
             {
+                const double waterfallRowDurationS = sampleWaterfallRowDurationS
+                    * detection.m_displayTimeScale;
+                const double spectrumWindowCenterDelayS = sampleSpectrumWindowCenterDelayS
+                    * detection.m_displayTimeScale;
                 const qint64 centerDelayMSecs = (qint64) std::llround(spectrumWindowCenterDelayS * 1000.0);
                 const QDateTime centerTimeUtc = detection.m_startTimeUtc.addMSecs(durationMSecs / 2 + centerDelayMSecs);
                 float yCenter = 0.0f;

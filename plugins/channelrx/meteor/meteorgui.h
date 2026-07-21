@@ -158,6 +158,7 @@ private:
         double m_frequencySpan;
         double m_frequencyDrift;
         double m_peakPowerDB;
+        double m_displayTimeScale;
         QTableWidgetItem *m_tableItem;
     };
 

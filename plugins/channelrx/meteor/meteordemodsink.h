@@ -387,6 +387,8 @@ public:
         int getSampleRate() const { return m_detection.m_sampleRate; }
         quint64 getStartSample() const { return m_detection.m_startSample; }
         quint64 getEndSample() const { return m_detection.m_endSample; }
+        quint64 getDisplayStartSample() const { return m_detection.m_displayStartSample; }
+        quint64 getDisplayEndSample() const { return m_detection.m_displayEndSample; }
         bool getTruncated() const { return m_detection.m_truncated; }
 
         static MsgMeteorDetected* create(const DetectionRecord& detection) {

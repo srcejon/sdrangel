@@ -177,7 +177,7 @@ private:
     bool runYoloModelDetections(YoloModelState& modelState, const QString& modelPath, const cv::Mat& bgrMat,
         const QVector<cv::Rect>& inferenceRects, std::vector<cv::Rect>& boxes, std::vector<float>& scores, std::vector<int>& classIds,
         YoloBackend backend);
-    void decodeYoloDetections(const cv::Mat& det, const cv::Rect& tileRect, int padX, int padY, float invScale,
+    void decodeYoloDetections(const cv::Mat& det, const cv::Rect& tileRect, const cv::Size& modelInputSize, int padX, int padY, float invScale,
         std::vector<cv::Rect>& boxes, std::vector<float>& scores, std::vector<int>& classIds) const;
     QVector<cv::Rect> makeYoloTiles(const cv::Rect& roi, const cv::Size& inputSize) const;
     void processObjectDetections(const QVector<CameraPipelineDetection>& detections, const QDateTime& now, CameraPipelineFrame& frame);

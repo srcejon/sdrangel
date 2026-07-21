@@ -901,7 +901,12 @@ void CameraObjectDetector::runYoloDetections(const cv::Mat& bgrMat, const cv::Re
         }
 
         CameraPipelineDetection detection;
-        detection.m_box = QRect(boxes[idx].x, boxes[idx].y, boxes[idx].width, boxes[idx].height);
+        const cv::Rect boundedBox = boxes[idx] & cv::Rect(0, 0, bgrMat.cols, bgrMat.rows);
+        if ((boundedBox.width <= 0) || (boundedBox.height <= 0)) {
+            continue;
+        }
+
+        detection.m_box = QRect(boundedBox.x, boundedBox.y, boundedBox.width, boundedBox.height);
         if (intersectsExclusionRects(detection.m_box)) {
             continue;
         }
@@ -1208,7 +1213,7 @@ bool CameraObjectDetector::runYoloModelDetections(YoloModelState& modelState, co
             {
                 const int tileIndex = firstTile + localTileIndex;
                 cv::Mat det(output.size[1], output.size[2], output.type(), output.ptr(localTileIndex));
-                decodeYoloDetections(det, inferenceRects[tileIndex], padXs[tileIndex], padYs[tileIndex], invScales[tileIndex], boxes, scores, classIds);
+                decodeYoloDetections(det, inferenceRects[tileIndex], modelState.m_inputSize, padXs[tileIndex], padYs[tileIndex], invScales[tileIndex], boxes, scores, classIds);
             }
             return true;
         }
@@ -1227,7 +1232,7 @@ bool CameraObjectDetector::runYoloModelDetections(YoloModelState& modelState, co
             if (det.dims == 3) {
                 det = det.reshape(1, det.size[1]);
             }
-            decodeYoloDetections(det, inferenceRects[firstTile], padXs[firstTile], padYs[firstTile], invScales[firstTile], boxes, scores, classIds);
+            decodeYoloDetections(det, inferenceRects[firstTile], modelState.m_inputSize, padXs[firstTile], padYs[firstTile], invScales[firstTile], boxes, scores, classIds);
             return true;
         }
 
@@ -1436,7 +1441,7 @@ bool CameraObjectDetector::runYoloModelDetections(YoloModelState& modelState, co
     return true;
 }
 
-void CameraObjectDetector::decodeYoloDetections(const cv::Mat& det, const cv::Rect& tileRect, int padX, int padY, float invScale,
+void CameraObjectDetector::decodeYoloDetections(const cv::Mat& det, const cv::Rect& tileRect, const cv::Size& modelInputSize, int padX, int padY, float invScale,
     std::vector<cv::Rect>& boxes, std::vector<float>& scores, std::vector<int>& classIds) const
 {
     if (det.empty()) {
@@ -1445,6 +1450,15 @@ void CameraObjectDetector::decodeYoloDetections(const cv::Mat& det, const cv::Re
 
     const float confThresh = static_cast<float>(m_settings.m_yoloConfThreshold);
     const bool isV8Style = (det.rows < det.cols);
+    const double coordinateMagnitude = isV8Style
+        ? cv::norm(det.rowRange(0, std::min(4, det.rows)), cv::NORM_INF)
+        : cv::norm(det.colRange(0, std::min(4, det.cols)), cv::NORM_INF);
+    // Most raw YOLO exports use model-pixel coordinates. Some TFLite exports
+    // normalize x/y/w/h to 0..1 instead; treating those values as pixels
+    // produces zero-sized boxes that reach the history but cannot be painted.
+    const bool normalizedCoordinates = coordinateMagnitude <= 1.5;
+    const float coordinateScaleX = normalizedCoordinates ? static_cast<float>(modelInputSize.width) : 1.0f;
+    const float coordinateScaleY = normalizedCoordinates ? static_cast<float>(modelInputSize.height) : 1.0f;
 
     if (isV8Style)
     {
@@ -1473,10 +1487,10 @@ void CameraObjectDetector::decodeYoloDetections(const cv::Mat& det, const cv::Re
                 continue;
             }
 
-            const float cx = (row[0] - padX) * invScale;
-            const float cy = (row[1] - padY) * invScale;
-            const float w = row[2] * invScale;
-            const float h = row[3] * invScale;
+            const float cx = (row[0] * coordinateScaleX - padX) * invScale;
+            const float cy = (row[1] * coordinateScaleY - padY) * invScale;
+            const float w = row[2] * coordinateScaleX * invScale;
+            const float h = row[3] * coordinateScaleY * invScale;
 
             boxes.push_back(cv::Rect(
                 tileRect.x + static_cast<int>(cx - w / 2.0f),
@@ -1518,10 +1532,10 @@ void CameraObjectDetector::decodeYoloDetections(const cv::Mat& det, const cv::Re
                 continue;
             }
 
-            const float cx = (row[0] - padX) * invScale;
-            const float cy = (row[1] - padY) * invScale;
-            const float w = row[2] * invScale;
-            const float h = row[3] * invScale;
+            const float cx = (row[0] * coordinateScaleX - padX) * invScale;
+            const float cy = (row[1] * coordinateScaleY - padY) * invScale;
+            const float w = row[2] * coordinateScaleX * invScale;
+            const float h = row[3] * coordinateScaleY * invScale;
 
             boxes.push_back(cv::Rect(
                 tileRect.x + static_cast<int>(cx - w / 2.0f),

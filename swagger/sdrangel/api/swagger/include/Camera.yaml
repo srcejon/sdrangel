@@ -871,6 +871,10 @@ CameraSettings:
       description: "Exclude a margin this percentage of the frame in from the sky-region edge (fisheye rim / vignette / foreground); 0 disables: 0 to 25"
       type: number
       format: double
+    cloudMinElevation:
+      description: "Exclude sky below this elevation in degrees from cloud evaluation (needs the lens pose), so coverage tracks the usable sky; 0 disables: 0 to 90"
+      type: number
+      format: double
     cloudMaskSunMoon:
       description: "Exclude the projected sun (day) / moon (night) so their bright bloom is not classified as cloud (1 for yes, 0 for no)"
       type: integer

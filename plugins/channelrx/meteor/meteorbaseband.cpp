@@ -29,6 +29,13 @@
 
 MESSAGE_CLASS_DEFINITION(MeteorBaseband::MsgConfigureMeteorBaseband, Message)
 
+namespace {
+
+constexpr int InactivityCheckIntervalMS = 250;
+constexpr int InactivityFlushDelayMS = 2000;
+
+}
+
 MeteorBaseband::MeteorBaseband() :
     m_spectrumVis(nullptr),
     m_secondarySpectrumVis(nullptr),
@@ -40,7 +47,7 @@ MeteorBaseband::MeteorBaseband() :
 
     m_sampleFifo.setSize(SampleSinkFifo::getSizePolicy(192000));
     m_channelizer = new DownChannelizer(&m_sink);
-    m_inactivityTimer->setInterval(250);
+    m_inactivityTimer->setInterval(InactivityCheckIntervalMS);
     m_inactivityTimer->setSingleShot(false);
     connect(m_inactivityTimer, &QTimer::timeout, this, &MeteorBaseband::handleInactivity);
 }
@@ -157,12 +164,15 @@ void MeteorBaseband::handleInactivity()
     if (!m_inactivityFlushEnabled
         || !m_running
         || !m_lastDataTimer.isValid()
-        || (m_lastDataTimer.elapsed() < 250))
+        || (m_lastDataTimer.elapsed() < InactivityFlushDelayMS))
     {
         return;
     }
 
-    if (m_sink.flushPendingPulse()) {
+    if (m_sink.flushPendingPulse())
+    {
+        qDebug() << "MeteorBaseband::handleInactivity: flushed pending detector state after"
+                 << m_lastDataTimer.elapsed() << "ms without samples";
         m_lastDataTimer.restart();
     }
 }

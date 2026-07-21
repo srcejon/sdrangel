@@ -1194,9 +1194,6 @@ void MeteorGUI::addDetection(const MeteorDemodSink::MsgMeteorDetected& detection
         });
     m_detectionOverlays.insert((int) std::distance(m_detectionOverlays.cbegin(), insertIt), overlay);
 
-    while (m_detectionOverlays.size() > 200) {
-        m_detectionOverlays.removeFirst();
-    }
     invalidateDetectionOverlayWindows();
 
     const bool sortingEnabled = m_detectionsTable->isSortingEnabled();

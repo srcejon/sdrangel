@@ -292,6 +292,7 @@ struct CameraSettings
         bool m_enabled = true;
         QString m_windowClass;
         QString m_windowTitle;
+        QString m_windowId;
         QString m_regionObjectName;
         QString m_regionTitle;
         int m_offsetX = 0;

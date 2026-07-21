@@ -181,6 +181,7 @@ QString serializeWindowOverlays(const QList<CameraSettings::WindowOverlay>& over
         object.insert(QStringLiteral("enabled"), overlay.m_enabled);
         object.insert(QStringLiteral("windowClass"), overlay.m_windowClass);
         object.insert(QStringLiteral("windowTitle"), overlay.m_windowTitle);
+        object.insert(QStringLiteral("windowId"), overlay.m_windowId);
         object.insert(QStringLiteral("regionObjectName"), overlay.m_regionObjectName);
         object.insert(QStringLiteral("regionTitle"), overlay.m_regionTitle);
         object.insert(QStringLiteral("offsetX"), overlay.m_offsetX);
@@ -214,6 +215,7 @@ QList<CameraSettings::WindowOverlay> deserializeWindowOverlays(const QString& js
         overlay.m_enabled = object.value(QStringLiteral("enabled")).toBool(true);
         overlay.m_windowClass = object.value(QStringLiteral("windowClass")).toString();
         overlay.m_windowTitle = object.value(QStringLiteral("windowTitle")).toString();
+        overlay.m_windowId = object.value(QStringLiteral("windowId")).toString();
         overlay.m_regionObjectName = object.value(QStringLiteral("regionObjectName")).toString();
         overlay.m_regionTitle = object.value(QStringLiteral("regionTitle")).toString();
         overlay.m_offsetX = qBound(CameraSettings::m_minSignedUiPixelOffset,

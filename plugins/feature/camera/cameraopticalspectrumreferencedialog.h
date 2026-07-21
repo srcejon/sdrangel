@@ -55,6 +55,7 @@ private:
     QLabel* m_resultLabel;
     QComboBox* m_templateCombo;
     QNetworkAccessManager* m_networkManager;
+    QNetworkReply* m_pendingLookupReply = nullptr; ///< The one in-flight lookup; other replies are stale and ignored
 };
 
 #endif // INCLUDE_FEATURE_CAMERAOPTICALSPECTRUMREFERENCEDIALOG_H_

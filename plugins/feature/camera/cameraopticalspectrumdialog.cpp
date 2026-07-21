@@ -608,6 +608,14 @@ void CameraOpticalSpectrumDialog::captureInstrumentResponse()
             tr("Select the reference star's spectral type with Reference... first,\nso there is a template to divide the observed spectrum by."));
         return;
     }
+    // Guards against dividing by a previously loaded template while the selected one
+    // is still downloading (or was loaded from an earlier session's setting)
+    if (m_referenceLoadedKey != m_settings.m_opticalSpectrumReferenceTemplate)
+    {
+        QMessageBox::information(this, tr("Capture response"),
+            tr("The selected reference template has not been loaded yet - wait for its download to finish\n(or re-select it with Reference... if the download failed)."));
+        return;
+    }
     if (m_displayLuminanceRaw.size() < 2)
     {
         QMessageBox::information(this, tr("Capture response"), tr("No spectrum data to capture from."));
@@ -723,15 +731,19 @@ void CameraOpticalSpectrumDialog::openReferenceDialog()
     m_settings.m_opticalSpectrumReferenceTemplate = key;
     applySettingChanged(QStringLiteral("opticalSpectrumReferenceTemplate"));
 
+    // The old template must not linger while the new one downloads (or after a failed
+    // download): the chart would keep overlaying it and a response capture would
+    // silently divide by it under the new selection's name
+    m_referencePoints.clear();
+    m_referenceLoadedKey.clear();
     if (key.isEmpty())
     {
-        m_referencePoints.clear();
-        m_referenceLoadedKey.clear();
         updateReferenceLabel();
         updateChart();
     }
     else
     {
+        updateChart();
         loadReferenceTemplate(key);
     }
 }

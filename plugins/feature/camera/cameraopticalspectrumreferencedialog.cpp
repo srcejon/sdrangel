@@ -123,6 +123,11 @@ void CameraOpticalSpectrumReferenceDialog::lookUpObject()
     if (name.isEmpty()) {
         return;
     }
+    // One lookup at a time: Enter in the line edit still fires while the button is
+    // disabled, and concurrent replies could apply an older result over a newer one
+    if (m_pendingLookupReply) {
+        return;
+    }
 
     m_lookUpButton->setEnabled(false);
     m_resultLabel->setText(tr("Looking up %1...").arg(name));
@@ -130,12 +135,18 @@ void CameraOpticalSpectrumReferenceDialog::lookUpObject()
     QNetworkRequest request{QUrl(CameraOpticalSpectrumLibrary::simbadLookupUrl(name))};
     request.setHeader(QNetworkRequest::UserAgentHeader, kUserAgent);
     request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
-    m_networkManager->get(request);
+    m_pendingLookupReply = m_networkManager->get(request);
 }
 
 void CameraOpticalSpectrumReferenceDialog::handleLookupReply(QNetworkReply* reply)
 {
     reply->deleteLater();
+    // A reply that is not the current lookup is stale (e.g. one that timed out
+    // before a retry was issued) and must not overwrite the newer result
+    if (reply != m_pendingLookupReply) {
+        return;
+    }
+    m_pendingLookupReply = nullptr;
     m_lookUpButton->setEnabled(true);
 
     if (reply->error() != QNetworkReply::NoError)

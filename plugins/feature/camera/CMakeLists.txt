@@ -302,6 +302,7 @@ if(ANDROID AND ENABLE_CAMERA_LITERT)
             "${LITERT_ROOT}/include"
             "${LITERT_ROOT}/headers"
             "${EXTERNAL_LIBRARY_FOLDER}/${ANDROID_ABI}/litert/include"
+        NO_CMAKE_FIND_ROOT_PATH
     )
     find_path(LITERT_GPU_INCLUDE_DIR tflite/delegates/gpu/delegate.h
         HINTS
@@ -310,6 +311,7 @@ if(ANDROID AND ENABLE_CAMERA_LITERT)
             "${LITERT_GPU_ROOT}/include"
             "${LITERT_GPU_ROOT}/headers"
             "${EXTERNAL_LIBRARY_FOLDER}/${ANDROID_ABI}/litert-gpu/include"
+        NO_CMAKE_FIND_ROOT_PATH
     )
     find_library(LITERT_LIBRARY
         NAMES tensorflowlite_c tensorflowlite tensorflow-lite tensorflowlite_jni
@@ -321,7 +323,24 @@ if(ANDROID AND ENABLE_CAMERA_LITERT)
             "${LITERT_ROOT}/lib"
             "${LITERT_ROOT}/jni/${ANDROID_ABI}"
             "${EXTERNAL_LIBRARY_FOLDER}/${ANDROID_ABI}/litert/lib"
+        NO_CMAKE_FIND_ROOT_PATH
     )
+    if(NOT LITERT_LIBRARY)
+        # On a Windows host CMake may retain host suffix rules while cross-compiling,
+        # so explicitly accept the Android shared-library filenames as a fallback.
+        find_file(LITERT_LIBRARY
+            NAMES libtensorflowlite_c.so libtensorflowlite.so libtensorflow-lite.so libtensorflowlite_jni.so
+            HINTS
+                "$ENV{LITERT_ROOT}/lib/${ANDROID_ABI}"
+                "$ENV{LITERT_ROOT}/lib"
+                "$ENV{LITERT_ROOT}/jni/${ANDROID_ABI}"
+                "${LITERT_ROOT}/lib/${ANDROID_ABI}"
+                "${LITERT_ROOT}/lib"
+                "${LITERT_ROOT}/jni/${ANDROID_ABI}"
+                "${EXTERNAL_LIBRARY_FOLDER}/${ANDROID_ABI}/litert/lib"
+            NO_CMAKE_FIND_ROOT_PATH
+        )
+    endif()
     find_library(LITERT_GPU_DELEGATE_LIBRARY
         NAMES tensorflowlite_gpu_delegate tensorflow-lite-gpu-delegate tensorflowlite_gpu_jni
         HINTS
@@ -332,7 +351,22 @@ if(ANDROID AND ENABLE_CAMERA_LITERT)
             "${LITERT_GPU_ROOT}/lib"
             "${LITERT_GPU_ROOT}/jni/${ANDROID_ABI}"
             "${EXTERNAL_LIBRARY_FOLDER}/${ANDROID_ABI}/litert-gpu/lib"
+        NO_CMAKE_FIND_ROOT_PATH
     )
+    if(NOT LITERT_GPU_DELEGATE_LIBRARY)
+        find_file(LITERT_GPU_DELEGATE_LIBRARY
+            NAMES libtensorflowlite_gpu_delegate.so libtensorflow-lite-gpu-delegate.so libtensorflowlite_gpu_jni.so
+            HINTS
+                "$ENV{LITERT_GPU_ROOT}/lib/${ANDROID_ABI}"
+                "$ENV{LITERT_GPU_ROOT}/lib"
+                "$ENV{LITERT_GPU_ROOT}/jni/${ANDROID_ABI}"
+                "${LITERT_GPU_ROOT}/lib/${ANDROID_ABI}"
+                "${LITERT_GPU_ROOT}/lib"
+                "${LITERT_GPU_ROOT}/jni/${ANDROID_ABI}"
+                "${EXTERNAL_LIBRARY_FOLDER}/${ANDROID_ABI}/litert-gpu/lib"
+            NO_CMAKE_FIND_ROOT_PATH
+        )
+    endif()
 
     if(LITERT_INCLUDE_DIR AND LITERT_GPU_INCLUDE_DIR AND LITERT_LIBRARY AND LITERT_GPU_DELEGATE_LIBRARY)
         target_compile_definitions(${TARGET_NAME} PRIVATE CAMERA_LITERT_YOLO)

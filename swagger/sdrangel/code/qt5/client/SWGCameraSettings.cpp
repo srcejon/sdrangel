@@ -504,6 +504,8 @@ SWGCameraSettings::SWGCameraSettings() {
     m_cloud_event_threshold_isSet = false;
     cloud_edge_margin_percent = 0.0;
     m_cloud_edge_margin_percent_isSet = false;
+    cloud_min_elevation = 0.0;
+    m_cloud_min_elevation_isSet = false;
     cloud_mask_sun_moon = 0;
     m_cloud_mask_sun_moon_isSet = false;
     cloud_star_sense = 0;
@@ -512,10 +514,10 @@ SWGCameraSettings::SWGCameraSettings() {
     m_cloud_star_sense_magnitude_isSet = false;
     cloud_use_reference = 0;
     m_cloud_use_reference_isSet = false;
-    cloud_use_detection_roi = 0;
-    m_cloud_use_detection_roi_isSet = false;
     cloud_auto_reference = 0;
     m_cloud_auto_reference_isSet = false;
+    cloud_use_detection_roi = 0;
+    m_cloud_use_detection_roi_isSet = false;
     cloud_sun_moon_radius_deg = 0.0;
     m_cloud_sun_moon_radius_deg_isSet = false;
     star_detect = 0;
@@ -614,6 +616,38 @@ SWGCameraSettings::SWGCameraSettings() {
     m_focus_distance_isSet = false;
     zoom_factor = 0.0;
     m_zoom_factor_isSet = false;
+    thermal_decoder = 0;
+    m_thermal_decoder_isSet = false;
+    thermal_palette = 0;
+    m_thermal_palette_isSet = false;
+    thermal_units = 0;
+    m_thermal_units_isSet = false;
+    thermal_auto_range = 0;
+    m_thermal_auto_range_isSet = false;
+    thermal_minimum_c = 0.0;
+    m_thermal_minimum_c_isSet = false;
+    thermal_maximum_c = 0.0;
+    m_thermal_maximum_c_isSet = false;
+    thermal_auto_low_percentile = 0.0;
+    m_thermal_auto_low_percentile_isSet = false;
+    thermal_auto_high_percentile = 0.0;
+    m_thermal_auto_high_percentile_isSet = false;
+    thermal_auto_range_smoothing = 0.0;
+    m_thermal_auto_range_smoothing_isSet = false;
+    thermal_marker_enabled = 0;
+    m_thermal_marker_enabled_isSet = false;
+    thermal_marker_x = 0.0;
+    m_thermal_marker_x_isSet = false;
+    thermal_marker_y = 0.0;
+    m_thermal_marker_y_isSet = false;
+    thermal_show_min_max = 0;
+    m_thermal_show_min_max_isSet = false;
+    thermal_chart_enabled = 0;
+    m_thermal_chart_enabled_isSet = false;
+    thermal_chart_history_seconds = 0;
+    m_thermal_chart_history_seconds_isSet = false;
+    thermal_chart_sample_interval_ms = 0;
+    m_thermal_chart_sample_interval_ms_isSet = false;
     use_reverse_api = 0;
     m_use_reverse_api_isSet = false;
     reverse_api_address = nullptr;
@@ -1112,6 +1146,8 @@ SWGCameraSettings::init() {
     m_cloud_event_threshold_isSet = false;
     cloud_edge_margin_percent = 0.0;
     m_cloud_edge_margin_percent_isSet = false;
+    cloud_min_elevation = 0.0;
+    m_cloud_min_elevation_isSet = false;
     cloud_mask_sun_moon = 0;
     m_cloud_mask_sun_moon_isSet = false;
     cloud_star_sense = 0;
@@ -1120,10 +1156,10 @@ SWGCameraSettings::init() {
     m_cloud_star_sense_magnitude_isSet = false;
     cloud_use_reference = 0;
     m_cloud_use_reference_isSet = false;
-    cloud_use_detection_roi = 0;
-    m_cloud_use_detection_roi_isSet = false;
     cloud_auto_reference = 0;
     m_cloud_auto_reference_isSet = false;
+    cloud_use_detection_roi = 0;
+    m_cloud_use_detection_roi_isSet = false;
     cloud_sun_moon_radius_deg = 0.0;
     m_cloud_sun_moon_radius_deg_isSet = false;
     star_detect = 0;
@@ -1222,6 +1258,38 @@ SWGCameraSettings::init() {
     m_focus_distance_isSet = false;
     zoom_factor = 0.0;
     m_zoom_factor_isSet = false;
+    thermal_decoder = 0;
+    m_thermal_decoder_isSet = false;
+    thermal_palette = 0;
+    m_thermal_palette_isSet = false;
+    thermal_units = 0;
+    m_thermal_units_isSet = false;
+    thermal_auto_range = 0;
+    m_thermal_auto_range_isSet = false;
+    thermal_minimum_c = 0.0;
+    m_thermal_minimum_c_isSet = false;
+    thermal_maximum_c = 0.0;
+    m_thermal_maximum_c_isSet = false;
+    thermal_auto_low_percentile = 0.0;
+    m_thermal_auto_low_percentile_isSet = false;
+    thermal_auto_high_percentile = 0.0;
+    m_thermal_auto_high_percentile_isSet = false;
+    thermal_auto_range_smoothing = 0.0;
+    m_thermal_auto_range_smoothing_isSet = false;
+    thermal_marker_enabled = 0;
+    m_thermal_marker_enabled_isSet = false;
+    thermal_marker_x = 0.0;
+    m_thermal_marker_x_isSet = false;
+    thermal_marker_y = 0.0;
+    m_thermal_marker_y_isSet = false;
+    thermal_show_min_max = 0;
+    m_thermal_show_min_max_isSet = false;
+    thermal_chart_enabled = 0;
+    m_thermal_chart_enabled_isSet = false;
+    thermal_chart_history_seconds = 0;
+    m_thermal_chart_history_seconds_isSet = false;
+    thermal_chart_sample_interval_ms = 0;
+    m_thermal_chart_sample_interval_ms_isSet = false;
     use_reverse_api = 0;
     m_use_reverse_api_isSet = false;
     reverse_api_address = new QString("");
@@ -1570,6 +1638,8 @@ SWGCameraSettings::cleanup() {
 
 
 
+
+
     if(plate_solve_date_time != nullptr) { 
         delete plate_solve_date_time;
     }
@@ -1613,6 +1683,22 @@ SWGCameraSettings::cleanup() {
     if(audio_device_name != nullptr) { 
         delete audio_device_name;
     }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -2118,6 +2204,8 @@ SWGCameraSettings::fromJsonObject(QJsonObject &pJson) {
     
     ::SWGSDRangel::setValue(&cloud_edge_margin_percent, pJson["cloudEdgeMarginPercent"], "double", "");
     
+    ::SWGSDRangel::setValue(&cloud_min_elevation, pJson["cloudMinElevation"], "double", "");
+    
     ::SWGSDRangel::setValue(&cloud_mask_sun_moon, pJson["cloudMaskSunMoon"], "qint32", "");
     
     ::SWGSDRangel::setValue(&cloud_star_sense, pJson["cloudStarSense"], "qint32", "");
@@ -2125,9 +2213,10 @@ SWGCameraSettings::fromJsonObject(QJsonObject &pJson) {
     ::SWGSDRangel::setValue(&cloud_star_sense_magnitude, pJson["cloudStarSenseMagnitude"], "double", "");
     
     ::SWGSDRangel::setValue(&cloud_use_reference, pJson["cloudUseReference"], "qint32", "");
-    ::SWGSDRangel::setValue(&cloud_use_detection_roi, pJson["cloudUseDetectionRoi"], "qint32", "");
     
     ::SWGSDRangel::setValue(&cloud_auto_reference, pJson["cloudAutoReference"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&cloud_use_detection_roi, pJson["cloudUseDetectionRoi"], "qint32", "");
     
     ::SWGSDRangel::setValue(&cloud_sun_moon_radius_deg, pJson["cloudSunMoonRadiusDeg"], "double", "");
     
@@ -2226,6 +2315,38 @@ SWGCameraSettings::fromJsonObject(QJsonObject &pJson) {
     ::SWGSDRangel::setValue(&focus_distance, pJson["focusDistance"], "double", "");
     
     ::SWGSDRangel::setValue(&zoom_factor, pJson["zoomFactor"], "double", "");
+    
+    ::SWGSDRangel::setValue(&thermal_decoder, pJson["thermalDecoder"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&thermal_palette, pJson["thermalPalette"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&thermal_units, pJson["thermalUnits"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&thermal_auto_range, pJson["thermalAutoRange"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&thermal_minimum_c, pJson["thermalMinimumC"], "double", "");
+    
+    ::SWGSDRangel::setValue(&thermal_maximum_c, pJson["thermalMaximumC"], "double", "");
+    
+    ::SWGSDRangel::setValue(&thermal_auto_low_percentile, pJson["thermalAutoLowPercentile"], "double", "");
+    
+    ::SWGSDRangel::setValue(&thermal_auto_high_percentile, pJson["thermalAutoHighPercentile"], "double", "");
+    
+    ::SWGSDRangel::setValue(&thermal_auto_range_smoothing, pJson["thermalAutoRangeSmoothing"], "double", "");
+    
+    ::SWGSDRangel::setValue(&thermal_marker_enabled, pJson["thermalMarkerEnabled"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&thermal_marker_x, pJson["thermalMarkerX"], "double", "");
+    
+    ::SWGSDRangel::setValue(&thermal_marker_y, pJson["thermalMarkerY"], "double", "");
+    
+    ::SWGSDRangel::setValue(&thermal_show_min_max, pJson["thermalShowMinMax"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&thermal_chart_enabled, pJson["thermalChartEnabled"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&thermal_chart_history_seconds, pJson["thermalChartHistorySeconds"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&thermal_chart_sample_interval_ms, pJson["thermalChartSampleIntervalMs"], "qint32", "");
     
     ::SWGSDRangel::setValue(&use_reverse_api, pJson["useReverseAPI"], "qint32", "");
     
@@ -2971,6 +3092,9 @@ SWGCameraSettings::asJsonObject() {
     if(m_cloud_edge_margin_percent_isSet){
         obj->insert("cloudEdgeMarginPercent", QJsonValue(cloud_edge_margin_percent));
     }
+    if(m_cloud_min_elevation_isSet){
+        obj->insert("cloudMinElevation", QJsonValue(cloud_min_elevation));
+    }
     if(m_cloud_mask_sun_moon_isSet){
         obj->insert("cloudMaskSunMoon", QJsonValue(cloud_mask_sun_moon));
     }
@@ -2983,11 +3107,11 @@ SWGCameraSettings::asJsonObject() {
     if(m_cloud_use_reference_isSet){
         obj->insert("cloudUseReference", QJsonValue(cloud_use_reference));
     }
-    if(m_cloud_use_detection_roi_isSet){
-        obj->insert("cloudUseDetectionRoi", QJsonValue(cloud_use_detection_roi));
-    }
     if(m_cloud_auto_reference_isSet){
         obj->insert("cloudAutoReference", QJsonValue(cloud_auto_reference));
+    }
+    if(m_cloud_use_detection_roi_isSet){
+        obj->insert("cloudUseDetectionRoi", QJsonValue(cloud_use_detection_roi));
     }
     if(m_cloud_sun_moon_radius_deg_isSet){
         obj->insert("cloudSunMoonRadiusDeg", QJsonValue(cloud_sun_moon_radius_deg));
@@ -3135,6 +3259,54 @@ SWGCameraSettings::asJsonObject() {
     }
     if(m_zoom_factor_isSet){
         obj->insert("zoomFactor", QJsonValue(zoom_factor));
+    }
+    if(m_thermal_decoder_isSet){
+        obj->insert("thermalDecoder", QJsonValue(thermal_decoder));
+    }
+    if(m_thermal_palette_isSet){
+        obj->insert("thermalPalette", QJsonValue(thermal_palette));
+    }
+    if(m_thermal_units_isSet){
+        obj->insert("thermalUnits", QJsonValue(thermal_units));
+    }
+    if(m_thermal_auto_range_isSet){
+        obj->insert("thermalAutoRange", QJsonValue(thermal_auto_range));
+    }
+    if(m_thermal_minimum_c_isSet){
+        obj->insert("thermalMinimumC", QJsonValue(thermal_minimum_c));
+    }
+    if(m_thermal_maximum_c_isSet){
+        obj->insert("thermalMaximumC", QJsonValue(thermal_maximum_c));
+    }
+    if(m_thermal_auto_low_percentile_isSet){
+        obj->insert("thermalAutoLowPercentile", QJsonValue(thermal_auto_low_percentile));
+    }
+    if(m_thermal_auto_high_percentile_isSet){
+        obj->insert("thermalAutoHighPercentile", QJsonValue(thermal_auto_high_percentile));
+    }
+    if(m_thermal_auto_range_smoothing_isSet){
+        obj->insert("thermalAutoRangeSmoothing", QJsonValue(thermal_auto_range_smoothing));
+    }
+    if(m_thermal_marker_enabled_isSet){
+        obj->insert("thermalMarkerEnabled", QJsonValue(thermal_marker_enabled));
+    }
+    if(m_thermal_marker_x_isSet){
+        obj->insert("thermalMarkerX", QJsonValue(thermal_marker_x));
+    }
+    if(m_thermal_marker_y_isSet){
+        obj->insert("thermalMarkerY", QJsonValue(thermal_marker_y));
+    }
+    if(m_thermal_show_min_max_isSet){
+        obj->insert("thermalShowMinMax", QJsonValue(thermal_show_min_max));
+    }
+    if(m_thermal_chart_enabled_isSet){
+        obj->insert("thermalChartEnabled", QJsonValue(thermal_chart_enabled));
+    }
+    if(m_thermal_chart_history_seconds_isSet){
+        obj->insert("thermalChartHistorySeconds", QJsonValue(thermal_chart_history_seconds));
+    }
+    if(m_thermal_chart_sample_interval_ms_isSet){
+        obj->insert("thermalChartSampleIntervalMs", QJsonValue(thermal_chart_sample_interval_ms));
     }
     if(m_use_reverse_api_isSet){
         obj->insert("useReverseAPI", QJsonValue(use_reverse_api));
@@ -5541,6 +5713,16 @@ SWGCameraSettings::setCloudEdgeMarginPercent(double cloud_edge_margin_percent) {
     this->m_cloud_edge_margin_percent_isSet = true;
 }
 
+double
+SWGCameraSettings::getCloudMinElevation() {
+    return cloud_min_elevation;
+}
+void
+SWGCameraSettings::setCloudMinElevation(double cloud_min_elevation) {
+    this->cloud_min_elevation = cloud_min_elevation;
+    this->m_cloud_min_elevation_isSet = true;
+}
+
 qint32
 SWGCameraSettings::getCloudMaskSunMoon() {
     return cloud_mask_sun_moon;
@@ -5582,16 +5764,6 @@ SWGCameraSettings::setCloudUseReference(qint32 cloud_use_reference) {
 }
 
 qint32
-SWGCameraSettings::getCloudUseDetectionRoi() {
-    return cloud_use_detection_roi;
-}
-void
-SWGCameraSettings::setCloudUseDetectionRoi(qint32 cloud_use_detection_roi) {
-    this->cloud_use_detection_roi = cloud_use_detection_roi;
-    this->m_cloud_use_detection_roi_isSet = true;
-}
-
-qint32
 SWGCameraSettings::getCloudAutoReference() {
     return cloud_auto_reference;
 }
@@ -5599,6 +5771,16 @@ void
 SWGCameraSettings::setCloudAutoReference(qint32 cloud_auto_reference) {
     this->cloud_auto_reference = cloud_auto_reference;
     this->m_cloud_auto_reference_isSet = true;
+}
+
+qint32
+SWGCameraSettings::getCloudUseDetectionRoi() {
+    return cloud_use_detection_roi;
+}
+void
+SWGCameraSettings::setCloudUseDetectionRoi(qint32 cloud_use_detection_roi) {
+    this->cloud_use_detection_roi = cloud_use_detection_roi;
+    this->m_cloud_use_detection_roi_isSet = true;
 }
 
 double
@@ -6089,6 +6271,166 @@ void
 SWGCameraSettings::setZoomFactor(double zoom_factor) {
     this->zoom_factor = zoom_factor;
     this->m_zoom_factor_isSet = true;
+}
+
+qint32
+SWGCameraSettings::getThermalDecoder() {
+    return thermal_decoder;
+}
+void
+SWGCameraSettings::setThermalDecoder(qint32 thermal_decoder) {
+    this->thermal_decoder = thermal_decoder;
+    this->m_thermal_decoder_isSet = true;
+}
+
+qint32
+SWGCameraSettings::getThermalPalette() {
+    return thermal_palette;
+}
+void
+SWGCameraSettings::setThermalPalette(qint32 thermal_palette) {
+    this->thermal_palette = thermal_palette;
+    this->m_thermal_palette_isSet = true;
+}
+
+qint32
+SWGCameraSettings::getThermalUnits() {
+    return thermal_units;
+}
+void
+SWGCameraSettings::setThermalUnits(qint32 thermal_units) {
+    this->thermal_units = thermal_units;
+    this->m_thermal_units_isSet = true;
+}
+
+qint32
+SWGCameraSettings::getThermalAutoRange() {
+    return thermal_auto_range;
+}
+void
+SWGCameraSettings::setThermalAutoRange(qint32 thermal_auto_range) {
+    this->thermal_auto_range = thermal_auto_range;
+    this->m_thermal_auto_range_isSet = true;
+}
+
+double
+SWGCameraSettings::getThermalMinimumC() {
+    return thermal_minimum_c;
+}
+void
+SWGCameraSettings::setThermalMinimumC(double thermal_minimum_c) {
+    this->thermal_minimum_c = thermal_minimum_c;
+    this->m_thermal_minimum_c_isSet = true;
+}
+
+double
+SWGCameraSettings::getThermalMaximumC() {
+    return thermal_maximum_c;
+}
+void
+SWGCameraSettings::setThermalMaximumC(double thermal_maximum_c) {
+    this->thermal_maximum_c = thermal_maximum_c;
+    this->m_thermal_maximum_c_isSet = true;
+}
+
+double
+SWGCameraSettings::getThermalAutoLowPercentile() {
+    return thermal_auto_low_percentile;
+}
+void
+SWGCameraSettings::setThermalAutoLowPercentile(double thermal_auto_low_percentile) {
+    this->thermal_auto_low_percentile = thermal_auto_low_percentile;
+    this->m_thermal_auto_low_percentile_isSet = true;
+}
+
+double
+SWGCameraSettings::getThermalAutoHighPercentile() {
+    return thermal_auto_high_percentile;
+}
+void
+SWGCameraSettings::setThermalAutoHighPercentile(double thermal_auto_high_percentile) {
+    this->thermal_auto_high_percentile = thermal_auto_high_percentile;
+    this->m_thermal_auto_high_percentile_isSet = true;
+}
+
+double
+SWGCameraSettings::getThermalAutoRangeSmoothing() {
+    return thermal_auto_range_smoothing;
+}
+void
+SWGCameraSettings::setThermalAutoRangeSmoothing(double thermal_auto_range_smoothing) {
+    this->thermal_auto_range_smoothing = thermal_auto_range_smoothing;
+    this->m_thermal_auto_range_smoothing_isSet = true;
+}
+
+qint32
+SWGCameraSettings::getThermalMarkerEnabled() {
+    return thermal_marker_enabled;
+}
+void
+SWGCameraSettings::setThermalMarkerEnabled(qint32 thermal_marker_enabled) {
+    this->thermal_marker_enabled = thermal_marker_enabled;
+    this->m_thermal_marker_enabled_isSet = true;
+}
+
+double
+SWGCameraSettings::getThermalMarkerX() {
+    return thermal_marker_x;
+}
+void
+SWGCameraSettings::setThermalMarkerX(double thermal_marker_x) {
+    this->thermal_marker_x = thermal_marker_x;
+    this->m_thermal_marker_x_isSet = true;
+}
+
+double
+SWGCameraSettings::getThermalMarkerY() {
+    return thermal_marker_y;
+}
+void
+SWGCameraSettings::setThermalMarkerY(double thermal_marker_y) {
+    this->thermal_marker_y = thermal_marker_y;
+    this->m_thermal_marker_y_isSet = true;
+}
+
+qint32
+SWGCameraSettings::getThermalShowMinMax() {
+    return thermal_show_min_max;
+}
+void
+SWGCameraSettings::setThermalShowMinMax(qint32 thermal_show_min_max) {
+    this->thermal_show_min_max = thermal_show_min_max;
+    this->m_thermal_show_min_max_isSet = true;
+}
+
+qint32
+SWGCameraSettings::getThermalChartEnabled() {
+    return thermal_chart_enabled;
+}
+void
+SWGCameraSettings::setThermalChartEnabled(qint32 thermal_chart_enabled) {
+    this->thermal_chart_enabled = thermal_chart_enabled;
+    this->m_thermal_chart_enabled_isSet = true;
+}
+
+qint32
+SWGCameraSettings::getThermalChartHistorySeconds() {
+    return thermal_chart_history_seconds;
+}
+void
+SWGCameraSettings::setThermalChartHistorySeconds(qint32 thermal_chart_history_seconds) {
+    this->thermal_chart_history_seconds = thermal_chart_history_seconds;
+    this->m_thermal_chart_history_seconds_isSet = true;
+}
+
+qint32
+SWGCameraSettings::getThermalChartSampleIntervalMs() {
+    return thermal_chart_sample_interval_ms;
+}
+void
+SWGCameraSettings::setThermalChartSampleIntervalMs(qint32 thermal_chart_sample_interval_ms) {
+    this->thermal_chart_sample_interval_ms = thermal_chart_sample_interval_ms;
+    this->m_thermal_chart_sample_interval_ms_isSet = true;
 }
 
 qint32
@@ -6883,6 +7225,9 @@ SWGCameraSettings::isSet(){
         if(m_cloud_edge_margin_percent_isSet){
             isObjectUpdated = true; break;
         }
+        if(m_cloud_min_elevation_isSet){
+            isObjectUpdated = true; break;
+        }
         if(m_cloud_mask_sun_moon_isSet){
             isObjectUpdated = true; break;
         }
@@ -6895,10 +7240,10 @@ SWGCameraSettings::isSet(){
         if(m_cloud_use_reference_isSet){
             isObjectUpdated = true; break;
         }
-        if(m_cloud_use_detection_roi_isSet){
+        if(m_cloud_auto_reference_isSet){
             isObjectUpdated = true; break;
         }
-        if(m_cloud_auto_reference_isSet){
+        if(m_cloud_use_detection_roi_isSet){
             isObjectUpdated = true; break;
         }
         if(m_cloud_sun_moon_radius_deg_isSet){
@@ -7046,6 +7391,54 @@ SWGCameraSettings::isSet(){
             isObjectUpdated = true; break;
         }
         if(m_zoom_factor_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_thermal_decoder_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_thermal_palette_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_thermal_units_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_thermal_auto_range_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_thermal_minimum_c_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_thermal_maximum_c_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_thermal_auto_low_percentile_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_thermal_auto_high_percentile_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_thermal_auto_range_smoothing_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_thermal_marker_enabled_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_thermal_marker_x_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_thermal_marker_y_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_thermal_show_min_max_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_thermal_chart_enabled_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_thermal_chart_history_seconds_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_thermal_chart_sample_interval_ms_isSet){
             isObjectUpdated = true; break;
         }
         if(m_use_reverse_api_isSet){

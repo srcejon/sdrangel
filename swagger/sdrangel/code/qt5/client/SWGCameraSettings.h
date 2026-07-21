@@ -759,6 +759,9 @@ public:
     double getCloudEdgeMarginPercent();
     void setCloudEdgeMarginPercent(double cloud_edge_margin_percent);
 
+    double getCloudMinElevation();
+    void setCloudMinElevation(double cloud_min_elevation);
+
     qint32 getCloudMaskSunMoon();
     void setCloudMaskSunMoon(qint32 cloud_mask_sun_moon);
 
@@ -771,11 +774,11 @@ public:
     qint32 getCloudUseReference();
     void setCloudUseReference(qint32 cloud_use_reference);
 
-    qint32 getCloudUseDetectionRoi();
-    void setCloudUseDetectionRoi(qint32 cloud_use_detection_roi);
-
     qint32 getCloudAutoReference();
     void setCloudAutoReference(qint32 cloud_auto_reference);
+
+    qint32 getCloudUseDetectionRoi();
+    void setCloudUseDetectionRoi(qint32 cloud_use_detection_roi);
 
     double getCloudSunMoonRadiusDeg();
     void setCloudSunMoonRadiusDeg(double cloud_sun_moon_radius_deg);
@@ -923,6 +926,54 @@ public:
 
     double getZoomFactor();
     void setZoomFactor(double zoom_factor);
+
+    qint32 getThermalDecoder();
+    void setThermalDecoder(qint32 thermal_decoder);
+
+    qint32 getThermalPalette();
+    void setThermalPalette(qint32 thermal_palette);
+
+    qint32 getThermalUnits();
+    void setThermalUnits(qint32 thermal_units);
+
+    qint32 getThermalAutoRange();
+    void setThermalAutoRange(qint32 thermal_auto_range);
+
+    double getThermalMinimumC();
+    void setThermalMinimumC(double thermal_minimum_c);
+
+    double getThermalMaximumC();
+    void setThermalMaximumC(double thermal_maximum_c);
+
+    double getThermalAutoLowPercentile();
+    void setThermalAutoLowPercentile(double thermal_auto_low_percentile);
+
+    double getThermalAutoHighPercentile();
+    void setThermalAutoHighPercentile(double thermal_auto_high_percentile);
+
+    double getThermalAutoRangeSmoothing();
+    void setThermalAutoRangeSmoothing(double thermal_auto_range_smoothing);
+
+    qint32 getThermalMarkerEnabled();
+    void setThermalMarkerEnabled(qint32 thermal_marker_enabled);
+
+    double getThermalMarkerX();
+    void setThermalMarkerX(double thermal_marker_x);
+
+    double getThermalMarkerY();
+    void setThermalMarkerY(double thermal_marker_y);
+
+    qint32 getThermalShowMinMax();
+    void setThermalShowMinMax(qint32 thermal_show_min_max);
+
+    qint32 getThermalChartEnabled();
+    void setThermalChartEnabled(qint32 thermal_chart_enabled);
+
+    qint32 getThermalChartHistorySeconds();
+    void setThermalChartHistorySeconds(qint32 thermal_chart_history_seconds);
+
+    qint32 getThermalChartSampleIntervalMs();
+    void setThermalChartSampleIntervalMs(qint32 thermal_chart_sample_interval_ms);
 
     qint32 getUseReverseApi();
     void setUseReverseApi(qint32 use_reverse_api);
@@ -1663,6 +1714,9 @@ private:
     double cloud_edge_margin_percent;
     bool m_cloud_edge_margin_percent_isSet;
 
+    double cloud_min_elevation;
+    bool m_cloud_min_elevation_isSet;
+
     qint32 cloud_mask_sun_moon;
     bool m_cloud_mask_sun_moon_isSet;
 
@@ -1675,11 +1729,11 @@ private:
     qint32 cloud_use_reference;
     bool m_cloud_use_reference_isSet;
 
-    qint32 cloud_use_detection_roi;
-    bool m_cloud_use_detection_roi_isSet;
-
     qint32 cloud_auto_reference;
     bool m_cloud_auto_reference_isSet;
+
+    qint32 cloud_use_detection_roi;
+    bool m_cloud_use_detection_roi_isSet;
 
     double cloud_sun_moon_radius_deg;
     bool m_cloud_sun_moon_radius_deg_isSet;
@@ -1827,6 +1881,54 @@ private:
 
     double zoom_factor;
     bool m_zoom_factor_isSet;
+
+    qint32 thermal_decoder;
+    bool m_thermal_decoder_isSet;
+
+    qint32 thermal_palette;
+    bool m_thermal_palette_isSet;
+
+    qint32 thermal_units;
+    bool m_thermal_units_isSet;
+
+    qint32 thermal_auto_range;
+    bool m_thermal_auto_range_isSet;
+
+    double thermal_minimum_c;
+    bool m_thermal_minimum_c_isSet;
+
+    double thermal_maximum_c;
+    bool m_thermal_maximum_c_isSet;
+
+    double thermal_auto_low_percentile;
+    bool m_thermal_auto_low_percentile_isSet;
+
+    double thermal_auto_high_percentile;
+    bool m_thermal_auto_high_percentile_isSet;
+
+    double thermal_auto_range_smoothing;
+    bool m_thermal_auto_range_smoothing_isSet;
+
+    qint32 thermal_marker_enabled;
+    bool m_thermal_marker_enabled_isSet;
+
+    double thermal_marker_x;
+    bool m_thermal_marker_x_isSet;
+
+    double thermal_marker_y;
+    bool m_thermal_marker_y_isSet;
+
+    qint32 thermal_show_min_max;
+    bool m_thermal_show_min_max_isSet;
+
+    qint32 thermal_chart_enabled;
+    bool m_thermal_chart_enabled_isSet;
+
+    qint32 thermal_chart_history_seconds;
+    bool m_thermal_chart_history_seconds_isSet;
+
+    qint32 thermal_chart_sample_interval_ms;
+    bool m_thermal_chart_sample_interval_ms_isSet;
 
     qint32 use_reverse_api;
     bool m_use_reverse_api_isSet;

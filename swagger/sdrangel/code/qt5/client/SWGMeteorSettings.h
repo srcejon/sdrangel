@@ -81,6 +81,24 @@ public:
     qint32 getDetectionLabelMode();
     void setDetectionLabelMode(qint32 detection_label_mode);
 
+    double getTransmitterLatitude();
+    void setTransmitterLatitude(double transmitter_latitude);
+
+    double getTransmitterLongitude();
+    void setTransmitterLongitude(double transmitter_longitude);
+
+    float getAntennaAzimuth();
+    void setAntennaAzimuth(float antenna_azimuth);
+
+    float getAntennaElevation();
+    void setAntennaElevation(float antenna_elevation);
+
+    float getAntennaBeamwidth();
+    void setAntennaBeamwidth(float antenna_beamwidth);
+
+    QString* getRotator();
+    void setRotator(QString* rotator);
+
     qint32 getRgbColor();
     void setRgbColor(qint32 rgb_color);
 
@@ -144,6 +162,24 @@ private:
 
     qint32 detection_label_mode;
     bool m_detection_label_mode_isSet;
+
+    double transmitter_latitude;
+    bool m_transmitter_latitude_isSet;
+
+    double transmitter_longitude;
+    bool m_transmitter_longitude_isSet;
+
+    float antenna_azimuth;
+    bool m_antenna_azimuth_isSet;
+
+    float antenna_elevation;
+    bool m_antenna_elevation_isSet;
+
+    float antenna_beamwidth;
+    bool m_antenna_beamwidth_isSet;
+
+    QString* rotator;
+    bool m_rotator_isSet;
 
     qint32 rgb_color;
     bool m_rgb_color_isSet;

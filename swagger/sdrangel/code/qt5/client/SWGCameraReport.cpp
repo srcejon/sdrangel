@@ -40,6 +40,18 @@ SWGCameraReport::SWGCameraReport() {
     m_cloud_coverage_percent_isSet = false;
     cloud_coverage_valid = 0;
     m_cloud_coverage_valid_isSet = false;
+    thermal_valid = 0;
+    m_thermal_valid_isSet = false;
+    thermal_decoder_name = nullptr;
+    m_thermal_decoder_name_isSet = false;
+    thermal_marker_temperature_c = 0.0f;
+    m_thermal_marker_temperature_c_isSet = false;
+    thermal_minimum_c = 0.0f;
+    m_thermal_minimum_c_isSet = false;
+    thermal_maximum_c = 0.0f;
+    m_thermal_maximum_c_isSet = false;
+    thermal_mean_c = 0.0f;
+    m_thermal_mean_c_isSet = false;
 }
 
 SWGCameraReport::~SWGCameraReport() {
@@ -60,6 +72,18 @@ SWGCameraReport::init() {
     m_cloud_coverage_percent_isSet = false;
     cloud_coverage_valid = 0;
     m_cloud_coverage_valid_isSet = false;
+    thermal_valid = 0;
+    m_thermal_valid_isSet = false;
+    thermal_decoder_name = new QString("");
+    m_thermal_decoder_name_isSet = false;
+    thermal_marker_temperature_c = 0.0f;
+    m_thermal_marker_temperature_c_isSet = false;
+    thermal_minimum_c = 0.0f;
+    m_thermal_minimum_c_isSet = false;
+    thermal_maximum_c = 0.0f;
+    m_thermal_maximum_c_isSet = false;
+    thermal_mean_c = 0.0f;
+    m_thermal_mean_c_isSet = false;
 }
 
 void
@@ -75,6 +99,14 @@ SWGCameraReport::cleanup() {
         }
         delete detected_object_classes;
     }
+
+
+
+
+    if(thermal_decoder_name != nullptr) { 
+        delete thermal_decoder_name;
+    }
+
 
 
 
@@ -102,6 +134,18 @@ SWGCameraReport::fromJsonObject(QJsonObject &pJson) {
     ::SWGSDRangel::setValue(&cloud_coverage_percent, pJson["cloudCoveragePercent"], "float", "");
     
     ::SWGSDRangel::setValue(&cloud_coverage_valid, pJson["cloudCoverageValid"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&thermal_valid, pJson["thermalValid"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&thermal_decoder_name, pJson["thermalDecoderName"], "QString", "QString");
+    
+    ::SWGSDRangel::setValue(&thermal_marker_temperature_c, pJson["thermalMarkerTemperatureC"], "float", "");
+    
+    ::SWGSDRangel::setValue(&thermal_minimum_c, pJson["thermalMinimumC"], "float", "");
+    
+    ::SWGSDRangel::setValue(&thermal_maximum_c, pJson["thermalMaximumC"], "float", "");
+    
+    ::SWGSDRangel::setValue(&thermal_mean_c, pJson["thermalMeanC"], "float", "");
     
 }
 
@@ -136,6 +180,24 @@ SWGCameraReport::asJsonObject() {
     }
     if(m_cloud_coverage_valid_isSet){
         obj->insert("cloudCoverageValid", QJsonValue(cloud_coverage_valid));
+    }
+    if(m_thermal_valid_isSet){
+        obj->insert("thermalValid", QJsonValue(thermal_valid));
+    }
+    if(thermal_decoder_name != nullptr && *thermal_decoder_name != QString("")){
+        toJsonValue(QString("thermalDecoderName"), thermal_decoder_name, obj, QString("QString"));
+    }
+    if(m_thermal_marker_temperature_c_isSet){
+        obj->insert("thermalMarkerTemperatureC", QJsonValue(thermal_marker_temperature_c));
+    }
+    if(m_thermal_minimum_c_isSet){
+        obj->insert("thermalMinimumC", QJsonValue(thermal_minimum_c));
+    }
+    if(m_thermal_maximum_c_isSet){
+        obj->insert("thermalMaximumC", QJsonValue(thermal_maximum_c));
+    }
+    if(m_thermal_mean_c_isSet){
+        obj->insert("thermalMeanC", QJsonValue(thermal_mean_c));
     }
 
     return obj;
@@ -201,6 +263,66 @@ SWGCameraReport::setCloudCoverageValid(qint32 cloud_coverage_valid) {
     this->m_cloud_coverage_valid_isSet = true;
 }
 
+qint32
+SWGCameraReport::getThermalValid() {
+    return thermal_valid;
+}
+void
+SWGCameraReport::setThermalValid(qint32 thermal_valid) {
+    this->thermal_valid = thermal_valid;
+    this->m_thermal_valid_isSet = true;
+}
+
+QString*
+SWGCameraReport::getThermalDecoderName() {
+    return thermal_decoder_name;
+}
+void
+SWGCameraReport::setThermalDecoderName(QString* thermal_decoder_name) {
+    this->thermal_decoder_name = thermal_decoder_name;
+    this->m_thermal_decoder_name_isSet = true;
+}
+
+float
+SWGCameraReport::getThermalMarkerTemperatureC() {
+    return thermal_marker_temperature_c;
+}
+void
+SWGCameraReport::setThermalMarkerTemperatureC(float thermal_marker_temperature_c) {
+    this->thermal_marker_temperature_c = thermal_marker_temperature_c;
+    this->m_thermal_marker_temperature_c_isSet = true;
+}
+
+float
+SWGCameraReport::getThermalMinimumC() {
+    return thermal_minimum_c;
+}
+void
+SWGCameraReport::setThermalMinimumC(float thermal_minimum_c) {
+    this->thermal_minimum_c = thermal_minimum_c;
+    this->m_thermal_minimum_c_isSet = true;
+}
+
+float
+SWGCameraReport::getThermalMaximumC() {
+    return thermal_maximum_c;
+}
+void
+SWGCameraReport::setThermalMaximumC(float thermal_maximum_c) {
+    this->thermal_maximum_c = thermal_maximum_c;
+    this->m_thermal_maximum_c_isSet = true;
+}
+
+float
+SWGCameraReport::getThermalMeanC() {
+    return thermal_mean_c;
+}
+void
+SWGCameraReport::setThermalMeanC(float thermal_mean_c) {
+    this->thermal_mean_c = thermal_mean_c;
+    this->m_thermal_mean_c_isSet = true;
+}
+
 
 bool
 SWGCameraReport::isSet(){
@@ -222,6 +344,24 @@ SWGCameraReport::isSet(){
             isObjectUpdated = true; break;
         }
         if(m_cloud_coverage_valid_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_thermal_valid_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(thermal_decoder_name && *thermal_decoder_name != QString("")){
+            isObjectUpdated = true; break;
+        }
+        if(m_thermal_marker_temperature_c_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_thermal_minimum_c_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_thermal_maximum_c_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_thermal_mean_c_isSet){
             isObjectUpdated = true; break;
         }
     }while(false);

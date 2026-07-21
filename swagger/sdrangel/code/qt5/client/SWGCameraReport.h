@@ -61,6 +61,24 @@ public:
     qint32 getCloudCoverageValid();
     void setCloudCoverageValid(qint32 cloud_coverage_valid);
 
+    qint32 getThermalValid();
+    void setThermalValid(qint32 thermal_valid);
+
+    QString* getThermalDecoderName();
+    void setThermalDecoderName(QString* thermal_decoder_name);
+
+    float getThermalMarkerTemperatureC();
+    void setThermalMarkerTemperatureC(float thermal_marker_temperature_c);
+
+    float getThermalMinimumC();
+    void setThermalMinimumC(float thermal_minimum_c);
+
+    float getThermalMaximumC();
+    void setThermalMaximumC(float thermal_maximum_c);
+
+    float getThermalMeanC();
+    void setThermalMeanC(float thermal_mean_c);
+
 
     virtual bool isSet() override;
 
@@ -82,6 +100,24 @@ private:
 
     qint32 cloud_coverage_valid;
     bool m_cloud_coverage_valid_isSet;
+
+    qint32 thermal_valid;
+    bool m_thermal_valid_isSet;
+
+    QString* thermal_decoder_name;
+    bool m_thermal_decoder_name_isSet;
+
+    float thermal_marker_temperature_c;
+    bool m_thermal_marker_temperature_c_isSet;
+
+    float thermal_minimum_c;
+    bool m_thermal_minimum_c_isSet;
+
+    float thermal_maximum_c;
+    bool m_thermal_maximum_c_isSet;
+
+    float thermal_mean_c;
+    bool m_thermal_mean_c_isSet;
 
 };
 

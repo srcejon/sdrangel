@@ -52,6 +52,18 @@ SWGMeteorSettings::SWGMeteorSettings() {
     m_detection_box_padding_pixels_isSet = false;
     detection_label_mode = 0;
     m_detection_label_mode_isSet = false;
+    transmitter_latitude = 0.0;
+    m_transmitter_latitude_isSet = false;
+    transmitter_longitude = 0.0;
+    m_transmitter_longitude_isSet = false;
+    antenna_azimuth = 0.0f;
+    m_antenna_azimuth_isSet = false;
+    antenna_elevation = 0.0f;
+    m_antenna_elevation_isSet = false;
+    antenna_beamwidth = 0.0f;
+    m_antenna_beamwidth_isSet = false;
+    rotator = nullptr;
+    m_rotator_isSet = false;
     rgb_color = 0;
     m_rgb_color_isSet = false;
     title = nullptr;
@@ -100,6 +112,18 @@ SWGMeteorSettings::init() {
     m_detection_box_padding_pixels_isSet = false;
     detection_label_mode = 0;
     m_detection_label_mode_isSet = false;
+    transmitter_latitude = 0.0;
+    m_transmitter_latitude_isSet = false;
+    transmitter_longitude = 0.0;
+    m_transmitter_longitude_isSet = false;
+    antenna_azimuth = 0.0f;
+    m_antenna_azimuth_isSet = false;
+    antenna_elevation = 0.0f;
+    m_antenna_elevation_isSet = false;
+    antenna_beamwidth = 0.0f;
+    m_antenna_beamwidth_isSet = false;
+    rotator = new QString("");
+    m_rotator_isSet = false;
     rgb_color = 0;
     m_rgb_color_isSet = false;
     title = new QString("");
@@ -132,6 +156,14 @@ SWGMeteorSettings::cleanup() {
 
 
 
+
+
+
+
+
+    if(rotator != nullptr) { 
+        delete rotator;
+    }
 
     if(title != nullptr) { 
         delete title;
@@ -184,6 +216,18 @@ SWGMeteorSettings::fromJsonObject(QJsonObject &pJson) {
     ::SWGSDRangel::setValue(&detection_box_padding_pixels, pJson["detectionBoxPaddingPixels"], "qint32", "");
     
     ::SWGSDRangel::setValue(&detection_label_mode, pJson["detectionLabelMode"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&transmitter_latitude, pJson["transmitterLatitude"], "double", "");
+    
+    ::SWGSDRangel::setValue(&transmitter_longitude, pJson["transmitterLongitude"], "double", "");
+    
+    ::SWGSDRangel::setValue(&antenna_azimuth, pJson["antennaAzimuth"], "float", "");
+    
+    ::SWGSDRangel::setValue(&antenna_elevation, pJson["antennaElevation"], "float", "");
+    
+    ::SWGSDRangel::setValue(&antenna_beamwidth, pJson["antennaBeamwidth"], "float", "");
+    
+    ::SWGSDRangel::setValue(&rotator, pJson["rotator"], "QString", "QString");
     
     ::SWGSDRangel::setValue(&rgb_color, pJson["rgbColor"], "qint32", "");
     
@@ -252,6 +296,24 @@ SWGMeteorSettings::asJsonObject() {
     }
     if(m_detection_label_mode_isSet){
         obj->insert("detectionLabelMode", QJsonValue(detection_label_mode));
+    }
+    if(m_transmitter_latitude_isSet){
+        obj->insert("transmitterLatitude", QJsonValue(transmitter_latitude));
+    }
+    if(m_transmitter_longitude_isSet){
+        obj->insert("transmitterLongitude", QJsonValue(transmitter_longitude));
+    }
+    if(m_antenna_azimuth_isSet){
+        obj->insert("antennaAzimuth", QJsonValue(antenna_azimuth));
+    }
+    if(m_antenna_elevation_isSet){
+        obj->insert("antennaElevation", QJsonValue(antenna_elevation));
+    }
+    if(m_antenna_beamwidth_isSet){
+        obj->insert("antennaBeamwidth", QJsonValue(antenna_beamwidth));
+    }
+    if(rotator != nullptr && *rotator != QString("")){
+        toJsonValue(QString("rotator"), rotator, obj, QString("QString"));
     }
     if(m_rgb_color_isSet){
         obj->insert("rgbColor", QJsonValue(rgb_color));
@@ -401,6 +463,66 @@ SWGMeteorSettings::setDetectionLabelMode(qint32 detection_label_mode) {
     this->m_detection_label_mode_isSet = true;
 }
 
+double
+SWGMeteorSettings::getTransmitterLatitude() {
+    return transmitter_latitude;
+}
+void
+SWGMeteorSettings::setTransmitterLatitude(double transmitter_latitude) {
+    this->transmitter_latitude = transmitter_latitude;
+    this->m_transmitter_latitude_isSet = true;
+}
+
+double
+SWGMeteorSettings::getTransmitterLongitude() {
+    return transmitter_longitude;
+}
+void
+SWGMeteorSettings::setTransmitterLongitude(double transmitter_longitude) {
+    this->transmitter_longitude = transmitter_longitude;
+    this->m_transmitter_longitude_isSet = true;
+}
+
+float
+SWGMeteorSettings::getAntennaAzimuth() {
+    return antenna_azimuth;
+}
+void
+SWGMeteorSettings::setAntennaAzimuth(float antenna_azimuth) {
+    this->antenna_azimuth = antenna_azimuth;
+    this->m_antenna_azimuth_isSet = true;
+}
+
+float
+SWGMeteorSettings::getAntennaElevation() {
+    return antenna_elevation;
+}
+void
+SWGMeteorSettings::setAntennaElevation(float antenna_elevation) {
+    this->antenna_elevation = antenna_elevation;
+    this->m_antenna_elevation_isSet = true;
+}
+
+float
+SWGMeteorSettings::getAntennaBeamwidth() {
+    return antenna_beamwidth;
+}
+void
+SWGMeteorSettings::setAntennaBeamwidth(float antenna_beamwidth) {
+    this->antenna_beamwidth = antenna_beamwidth;
+    this->m_antenna_beamwidth_isSet = true;
+}
+
+QString*
+SWGMeteorSettings::getRotator() {
+    return rotator;
+}
+void
+SWGMeteorSettings::setRotator(QString* rotator) {
+    this->rotator = rotator;
+    this->m_rotator_isSet = true;
+}
+
 qint32
 SWGMeteorSettings::getRgbColor() {
     return rgb_color;
@@ -520,6 +642,24 @@ SWGMeteorSettings::isSet(){
             isObjectUpdated = true; break;
         }
         if(m_detection_label_mode_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_transmitter_latitude_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_transmitter_longitude_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_antenna_azimuth_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_antenna_elevation_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_antenna_beamwidth_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(rotator && *rotator != QString("")){
             isObjectUpdated = true; break;
         }
         if(m_rgb_color_isSet){

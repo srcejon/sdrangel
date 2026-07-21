@@ -2529,6 +2529,7 @@ void CameraGUI::displaySettings()
     settingsUI()->cloudMotionOverlapSpin->setValue(m_settings.m_cloudMotionOverlapThreshold);
     settingsUI()->cloudEventThresholdSpin->setValue(m_settings.m_cloudEventThreshold);
     settingsUI()->cloudEdgeMarginSpin->setValue(m_settings.m_cloudEdgeMarginPercent);
+    settingsUI()->cloudMinElevationSpin->setValue(m_settings.m_cloudMinElevation);
     settingsUI()->cloudMaskSunMoonCheck->setChecked(m_settings.m_cloudMaskSunMoon);
     settingsUI()->cloudSunMoonRadiusSpin->setValue(m_settings.m_cloudSunMoonRadiusDeg);
     settingsUI()->cloudStarSenseCheck->setChecked(m_settings.m_cloudStarSense);
@@ -3968,6 +3969,7 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->cloudMotionOverlapSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_cloudMotionOverlapSpin_valueChanged);
     QObject::connect(settingsUI()->cloudEventThresholdSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_cloudEventThresholdSpin_valueChanged);
     QObject::connect(settingsUI()->cloudEdgeMarginSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_cloudEdgeMarginSpin_valueChanged);
+    QObject::connect(settingsUI()->cloudMinElevationSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_cloudMinElevationSpin_valueChanged);
     QObject::connect(settingsUI()->cloudMaskSunMoonCheck, &QCheckBox::toggled, this, &CameraGUI::on_cloudMaskSunMoonCheck_toggled);
     QObject::connect(settingsUI()->cloudSunMoonRadiusSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_cloudSunMoonRadiusSpin_valueChanged);
     QObject::connect(settingsUI()->cloudStarSenseCheck, &QCheckBox::toggled, this, &CameraGUI::on_cloudStarSenseCheck_toggled);
@@ -11141,6 +11143,12 @@ void CameraGUI::on_cloudEdgeMarginSpin_valueChanged(double value)
 {
     m_settings.m_cloudEdgeMarginPercent = value;
     applySetting("cloudEdgeMarginPercent");
+}
+
+void CameraGUI::on_cloudMinElevationSpin_valueChanged(double value)
+{
+    m_settings.m_cloudMinElevation = value;
+    applySetting("cloudMinElevation");
 }
 
 void CameraGUI::on_cloudMaskSunMoonCheck_toggled(bool checked)

@@ -58,6 +58,14 @@ constexpr double kVetoRawRatioCap = 0.12;      // raw |anchored ratio deviation|
 // Cue: deviation from the reference strong enough to flag as cloud on its own
 constexpr double kCueBrightness = 0.12;     // relative to the sky anchor
 constexpr double kCueRatio = 0.12;
+// Day slots also cue on standing DARKER than the clear reference: dark grey overcast carries
+// the clear sky's red/blue ratio on IR-sensitive cameras, so brightness against the
+// reference is its only signature. Slightly stricter than the bright cue - shadows and
+// vignette drift skew dark, never bright. Night slots must not use this: a dark night sky's
+// darker patches are noise. Note the residual comparison (and the per-frame anchor
+// normalisation) make this blind to UNIFORM darkening by construction; it catches patchy
+// dark cloud, while a fully uniform dark overcast is the sun-visibility gate's job.
+constexpr double kCueDarkBrightness = 0.15;
 
 // Frame-level sanity: if the sky disagrees with the reference this much at the median, the
 // exposure/white-balance regime changed and the comparison abstains entirely
@@ -342,6 +350,9 @@ void CameraClearSkyReference::ensureLoaded(const QString& cameraId)
     for (Slot& slot : m_slots) {
         slot = Slot();
     }
+    for (QDateTime& attempted : m_learnAttempted) {
+        attempted = QDateTime();
+    }
     m_foregroundDirty = true;
     load();
     m_loaded = true;
@@ -420,22 +431,23 @@ void CameraClearSkyReference::load()
         loaded.moonElevation = moonUp ? 20.0 : -20.0;
         for (int bin = kV1FirstBin[index]; bin <= kV1LastBin[index]; ++bin)
         {
-            Slot replica = loaded;
+            Slot replica = detachedCopy(loaded);
             replica.sunElevation = -4.0 - 2.0 * bin - 1.0; // bin centre
             m_slots[slotFromBin(bin, moonUp)] = replica;
         }
     }
 
-    // Pre-CSR4 stores held a single Day slot; replicate it into every day sub-bin (map
-    // copies share pixel data - every update builds fresh mats), preserving the coverage
-    // the old single slot provided. The anchor guard rejects any bin where the old
-    // reference no longer corresponds to the frame's exposure.
+    // Pre-CSR4 stores held a single Day slot; replicate it into every day sub-bin,
+    // preserving the coverage the old single slot provided. Each replica owns its pixel
+    // storage (see detachedCopy) so a later save/auto-learn into one bin cannot rewrite
+    // the others. The anchor guard rejects any bin where the old reference no longer
+    // corresponds to the frame's exposure.
     if ((magic != kFileMagic) && m_slots[0].valid())
     {
         static constexpr double kDayBinCentreSun[] = {30.0, 15.0, 7.0, 2.0, -2.0};
         for (int bin = 1; bin < kDayBins; ++bin)
         {
-            Slot replica = m_slots[0];
+            Slot replica = detachedCopy(m_slots[0]);
             replica.sunElevation = kDayBinCentreSun[bin];
             m_slots[slotFromDayBin(bin)] = replica;
         }
@@ -496,6 +508,23 @@ bool CameraClearSkyReference::saveToPath(const QString& path) const
         return false;
     }
     return true;
+}
+
+// Detaches a slot's maps so it shares no pixel storage with the slot it was copied from.
+// cv::Mat assignment is a refcounted shallow copy, and the update paths (buildMaps'
+// resize/convertTo, the auto-learn blends) evaluate into an existing destination buffer
+// whenever its size and type already match - Mat::create() returns early and ignores the
+// refcount. So a shallow replica would have its pixels rewritten by an update to any of
+// its siblings, while keeping its own (now wrong) anchors.
+CameraClearSkyReference::Slot CameraClearSkyReference::detachedCopy(const Slot& slot)
+{
+    Slot copy = slot;
+    copy.brightness = slot.brightness.clone();
+    copy.ratio = slot.ratio.clone();
+    copy.texture = slot.texture.clone();
+    copy.sky = slot.sky.clone();
+    copy.weight = slot.weight.clone();
+    return copy;
 }
 
 // A slot usable for comparison against a frame: filled, same ROI, and exposed similarly
@@ -750,6 +779,16 @@ bool CameraClearSkyReference::applyCueAndVeto(int slot, cv::Mat& mask, const cv:
     cv::bitwise_and(cueBrightnessRel, cueBrightnessAbs, cueBrightness);
     cv::bitwise_and(cueRatioRel, brightPixels, cueRatio);
     cv::bitwise_or(cueBrightness, cueRatio, cue);
+    // Day slots: standing DARKER than the clear reference is also cloud (dark overcast that
+    // shares the clear sky's colour). Relative and absolute together, like the bright cue.
+    if (!slotIsNight(slot))
+    {
+        const cv::Mat cueDarkRel = brightnessDev < -kCueDarkBrightness;
+        const cv::Mat cueDarkAbs = absDev < -static_cast<double>(nightThreshold);
+        cv::Mat cueDark;
+        cv::bitwise_and(cueDarkRel, cueDarkAbs, cueDark);
+        cv::bitwise_or(cue, cueDark, cue);
+    }
     cv::bitwise_and(cue, valid, cue);
 
     // Veto: matches the reference within tolerances tighter than any detection margin.
@@ -784,6 +823,15 @@ bool CameraClearSkyReference::learnDue(int slot, const QRectF& roiNorm, const QD
     if ((slot < 0) || (slot >= kSlotCount)) {
         return false;
     }
+    // An attempt within the throttle window counts whether or not it learned anything:
+    // the caller's work to prepare one (building the confirmed-clear mask) is the cost
+    // this gate exists to avoid, and a slot whose gates just refused the sky will refuse
+    // it again on the next frame
+    const QDateTime& attempted = m_learnAttempted[slot];
+    if (attempted.isValid() && when.isValid()
+        && (attempted.secsTo(when) >= 0) && (attempted.secsTo(when) < kAutoLearnThrottleSecs)) {
+        return false;
+    }
     const Slot& target = m_slots[slot];
     if (!target.valid() || !roiMatches(target, roiNorm)) {
         return true;
@@ -799,6 +847,7 @@ CameraClearSkyReference::LearnResult CameraClearSkyReference::autoLearn(int slot
     if ((slot < 0) || (slot >= kSlotCount)) {
         return LearnResult::None;
     }
+    m_learnAttempted[slot] = when;
     Slot& target = m_slots[slot];
     const bool replace = !target.valid() || !roiMatches(target, roiNorm);
 
@@ -861,11 +910,19 @@ CameraClearSkyReference::LearnResult CameraClearSkyReference::autoLearn(int slot
     {
         // Slow exponential blend where the reference is established, so one mis-verified
         // frame cannot poison it; a patch-bootstrapped slot's never-confirmed gaps are
-        // adopted outright, since this frame as a whole is verified clear. Every update
-        // builds a fresh mat: v1-migrated bins can share map storage.
+        // adopted outright, since this frame as a whole is verified clear.
         const cv::Mat established = target.weight >= kWeightUsable;
         cv::Mat alphaMap(target.weight.size(), CV_32F, cv::Scalar(1.0));
         alphaMap.setTo(kAutoLearnAlpha, established);
+        // Pixels this frame did not evaluate carry no information about the clear sky:
+        // the sun/moon glare disc, the rim margin and the learned foreground are all
+        // excluded per frame and move (the sun's disc tracks across the sky through the
+        // day). Blending them in would walk glare into the reference along the sun's path
+        // until the raw-deviation caps stop the veto firing there - exactly the static
+        // false positives the reference exists to retire. Freeze them instead.
+        cv::Mat unevaluated;
+        cv::bitwise_not(sky, unevaluated);
+        alphaMap.setTo(0.0f, unevaluated);
         cv::Mat oneMinusAlpha;
         cv::subtract(cv::Scalar::all(1.0), alphaMap, oneMinusAlpha);
         target.brightness = target.brightness.mul(oneMinusAlpha) + brightness.mul(alphaMap);
@@ -1028,8 +1085,9 @@ cv::Mat CameraClearSkyReference::foregroundMask(const cv::Size& workSize, const 
                 m_foregroundCache = foreground;
                 // Remember the ROI of the slot the mask was derived from: the geometry
                 // gate below must test the SOURCE slot, not whichever slot a scan order
-                // happens to find first
-                m_foregroundRoiNorm = darkSlot ? darkSlot->roiNorm : m_slots[0].roiNorm;
+                // happens to find first. With no night slot the source is the day slot
+                // that supplied the texture (which need not be slot 0).
+                m_foregroundRoiNorm = darkSlot ? darkSlot->roiNorm : daySlot->roiNorm;
             }
         }
         m_foregroundDirty = false;

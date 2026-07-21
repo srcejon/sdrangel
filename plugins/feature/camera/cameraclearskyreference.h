@@ -176,6 +176,12 @@ private:
         [[nodiscard]] bool valid() const { return !brightness.empty(); }
     };
 
+    // A copy of the slot owning its own pixel storage. Migration replicates one stored
+    // slot into several bins; without detaching, all of them share buffers and the update
+    // paths (which write into existing destinations) would rewrite every sibling's pixels
+    // while leaving their anchors and metadata stale.
+    [[nodiscard]] static Slot detachedCopy(const Slot& slot);
+
     [[nodiscard]] const Slot* usableSlot(int slot, const QRectF& roiNorm, double frameAnchor) const;
     [[nodiscard]] static QString storageDir();
     [[nodiscard]] QString storageFileName() const;
@@ -196,6 +202,12 @@ private:
     QString m_cameraId;
     bool m_loaded = false;
     Slot m_slots[kSlotCount];
+    // When learning was last ATTEMPTED for each slot, successful or not. An empty slot has
+    // no update time to throttle against, so without this a slot that keeps failing its
+    // gates (too few confirmed pixels, coverage too high) would have the detector rebuild
+    // the confirmed-clear mask on every single recompute, forever. In memory only: a
+    // restart is allowed one immediate attempt per slot.
+    QDateTime m_learnAttempted[kSlotCount];
     mutable cv::Mat m_foregroundCache; // at reference resolution; invalidated on slot updates
     mutable QRectF m_foregroundRoiNorm; // ROI of the slot the cache was derived from, for the geometry gate
     mutable bool m_foregroundDirty = true;

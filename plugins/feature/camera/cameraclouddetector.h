@@ -19,11 +19,17 @@
 #ifndef INCLUDE_FEATURE_CAMERACLOUDDETECTOR_H_
 #define INCLUDE_FEATURE_CAMERACLOUDDETECTOR_H_
 
+#include <algorithm>
+
+#include <QHash>
+
 #ifdef CAMERA_OPENCV_CUDA_CLOUD_DETECTION
 #include <opencv2/cudafilters.hpp>
 #endif
 
 #include "cameraclearskyreference.h"
+#include "cameraplatesolver.h"
+
 #include "cameradetector.h"
 
 /**
@@ -32,8 +38,10 @@
  *
  * The state starts unknown at capture start, so the first coverage report emits an event
  * describing the initial sky state (an already-overcast sky fires High immediately).
- * Thereafter events fire only on transitions, with a fixed hysteresis band below the
- * threshold so coverage hovering around it does not chatter.
+ * Thereafter events fire only on transitions, with a hysteresis band below the threshold
+ * so coverage hovering around it does not chatter. The band shrinks with a low threshold
+ * (half of it at most): a fixed band would put the Low transition below 0 % coverage for
+ * thresholds under the band width, making Low unreachable once High had fired.
  */
 struct CameraCloudEventTracker
 {
@@ -45,6 +53,9 @@ struct CameraCloudEventTracker
 
     Event update(double coveragePercent, double thresholdPercent)
     {
+        // Cap the hysteresis at half the threshold so the Low transition always sits at a
+        // reachable coverage; the full band below a small threshold would sit below 0 %
+        const double hysteresis = std::min(m_hysteresisPercent, thresholdPercent / 2.0);
         switch (m_state)
         {
         case StateUnknown:
@@ -59,7 +70,7 @@ struct CameraCloudEventTracker
             return None;
         case StateHigh:
         default:
-            if (coveragePercent <= thresholdPercent - m_hysteresisPercent)
+            if (coveragePercent <= thresholdPercent - hysteresis)
             {
                 m_state = StateLow;
                 return Low;
@@ -228,6 +239,31 @@ private:
     CameraClearSkyReference m_clearSkyReference;
     bool m_saveReferencePending;
     QString m_saveTestCaseDir; // Non-empty: write a test-case bundle here on the next recompute
+    // Cached minimum-elevation keep-mask (255 = at or above the configured elevation).
+    // Rebuilt when the geometry it was computed for changes; settings changes (lens pose,
+    // FoV, the elevation itself) invalidate it through invalidateCache().
+    // The debug view rendered at the last recompute, reused verbatim on the intermediate
+    // frames that carry the cached mask: the render is a full-resolution canvas fill,
+    // colour conversion and QImage build, and its result cannot change while the mask
+    // does not. QImage is implicitly shared, so handing it to each frame is free.
+    QImage m_lastDebugImage;
+    cv::Mat m_elevationKeepMask;
+    cv::Rect m_elevationMaskRoi;
+    cv::Size m_elevationMaskWorkSize;
+    QSize m_elevationMaskImageSize;
+    // When each predicted star was last actually detected, keyed by catalog index. The
+    // star-blank cue only trusts the DISAPPEARANCE of a recently seen star: on real frames
+    // most predicted stars fail detection even under a clear sky (twilight, faintness,
+    // lens softness), so absence alone is meaningless. Cleared with the cache, so a pose
+    // or settings change never carries sightings across geometries.
+    QHash<int, QDateTime> m_starLastVisible;
+    // The bright-star catalog filtered to the sensing magnitude. The plate solver caches
+    // the catalog itself, but hands out a freshly built vector of every entry (order 1e5)
+    // on each call, of which star sensing wants a few hundred. Rebuilt when the magnitude
+    // changes and dropped by invalidateCache(), so a catalog downloaded mid-session is
+    // picked up at the next settings change or capture start.
+    mutable QVector<CameraPlateSolver::BrightStar> m_sensedStarCatalog;
+    mutable double m_sensedStarCatalogMagnitude = -1.0;
 
 #ifdef CAMERA_OPENCV_CUDA_CLOUD_DETECTION
     cv::cuda::Stream m_cudaCloudStream;
@@ -244,10 +280,17 @@ private:
         {
             QPointF position; // full-image coordinates
             bool visible;
+            float magnitude;    // catalog magnitude, for diagnostics
+            int catalogIndex;   // stable index into the bright-star catalog, keys the last-seen record
         };
         QVector<Star> stars;
         bool valid = false;
     };
+
+    // Geometric visibility of the sun's glare at its projected position: Visible proves that
+    // line of sight is clear, Obscured proves cloud in front of the sun, Unknown means the
+    // check could not run (no time, sun low or outside the frame)
+    enum class BodyVisibility { Unknown, Visible, Obscured };
 
     [[nodiscard]] static bool cloudSettingsChanged(const QList<QString>& settingsKeys);
     [[nodiscard]] bool resolveNightMode(const cv::Mat& medianGray, const cv::Mat& evaluationMask, const QDateTime& captureDateTime);
@@ -256,9 +299,17 @@ private:
     void applySunMoonMask(cv::Mat& mask, cv::Mat& evaluationMask, const cv::Mat& gray, const cv::Rect& roi, const QSize& imageSize, const CameraPipelineImageTransform& imageTransform, const QDateTime& captureDateTime) const;
     cv::Mat structureContrastMask(const cv::Mat& gray, const cv::Mat& evaluationMask, bool requirePixelContrast, cv::Mat* debugMask) const;
     [[nodiscard]] CloudStarSense senseStarVisibility(const CameraPipelineFramePtr& frame, const QSize& imageSize) const;
-    static bool samplePatchGray(const CameraPipelineFramePtr& frame, const QPoint& centre, int half, cv::Mat& patch);
+    // fullResBgr, when non-empty, supplies the pixels instead of the frame: the GPU path
+    // otherwise pays a synchronous download per star
+    static bool samplePatchGray(const CameraPipelineFramePtr& frame, const QPoint& centre, int half, cv::Mat& patch,
+                                const cv::Mat& fullResBgr = cv::Mat());
+    [[nodiscard]] const QVector<CameraPlateSolver::BrightStar>& sensedStarCatalog() const;
     void applyStarVisibilityVeto(cv::Mat& mask, const CloudStarSense& starSense, const cv::Rect& roi) const;
-    void renderDebugView(const CameraPipelineFramePtr& frame, const cv::Size& frameCvSize, const cv::Rect& roi) const;
+    void applyStarBlankCue(cv::Mat& mask, const cv::Mat& evaluationMask, const CloudStarSense& starSense, const cv::Rect& roi, const QSize& imageSize, const QDateTime& observationTime) const;
+    void recordStarVisibility(const CloudStarSense& starSense, const QDateTime& observationTime);
+    [[nodiscard]] BodyVisibility sunVisibility(const cv::Mat& gray, const cv::Rect& roi, const QSize& imageSize, const CameraPipelineImageTransform& imageTransform, const QDateTime& captureDateTime) const;
+    void applyMinElevationMask(cv::Mat& evaluationMask, const cv::Rect& roi, const QSize& imageSize, const CameraPipelineImageTransform& imageTransform);
+    void renderDebugView(const CameraPipelineFramePtr& frame, const cv::Size& frameCvSize, const cv::Rect& roi);
     void saveTestCaseBundle(const CameraPipelineFramePtr& frame);
     void invalidateCache();
 };

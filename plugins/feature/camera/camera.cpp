@@ -382,6 +382,7 @@ void Camera::start()
     m_state = StRunning;
     // First coverage report of the new capture emits an event describing the initial sky state
     m_cloudEventTracker.reset();
+    m_cloudCoverageEma = -1.0;
 
     if (m_worker) {
         m_worker->getInputMessageQueue()->push(CameraWorker::MsgStartStop::create(true, captureEpoch));
@@ -637,9 +638,15 @@ bool Camera::handleMessage(const Message& cmd)
 
         // Emit Scheduler events when coverage crosses the event threshold. This runs in the
         // feature (not the GUI) so it also works in server mode; the tracker resets at
-        // capture start, so the first report describes the initial sky state.
+        // capture start, so the first report describes the initial sky state. The event
+        // decision uses coverage smoothed over a couple of recomputes so one marginal
+        // recompute (a passing wisp, a noise spike at the threshold) cannot fire an event;
+        // the displayed/reported coverage stays raw.
+        m_cloudCoverageEma = (m_cloudCoverageEma < 0.0)
+            ? report.getCoveragePercent()
+            : 0.5 * m_cloudCoverageEma + 0.5 * report.getCoveragePercent();
         const CameraCloudEventTracker::Event event =
-            m_cloudEventTracker.update(report.getCoveragePercent(), m_settings.m_cloudEventThreshold);
+            m_cloudEventTracker.update(m_cloudCoverageEma, m_settings.m_cloudEventThreshold);
         if (event != CameraCloudEventTracker::None)
         {
             QList<ObjectPipe*> eventPipes;
@@ -649,8 +656,9 @@ bool Camera::handleMessage(const Message& cmd)
                 const QDateTime eventTime = report.getCaptureDateTime().isValid()
                     ? report.getCaptureDateTime()
                     : QDateTime::currentDateTime();
+                // The smoothed value is what crossed the threshold, so it is what the event reports
                 const QString eventData = QStringLiteral("coverage=%1,threshold=%2,night=%3")
-                    .arg(report.getCoveragePercent(), 0, 'f', 1)
+                    .arg(m_cloudCoverageEma, 0, 'f', 1)
                     .arg(m_settings.m_cloudEventThreshold, 0, 'f', 1)
                     .arg(report.isNight() ? 1 : 0);
                 const MainCore::MsgEvent::EventType eventType = (event == CameraCloudEventTracker::High)
@@ -1299,6 +1307,7 @@ void Camera::webapiFormatFeatureSettings(
     swg->setCloudMotionOverlapThreshold(settings.m_cloudMotionOverlapThreshold);
     swg->setCloudEventThreshold(settings.m_cloudEventThreshold);
     swg->setCloudEdgeMarginPercent(settings.m_cloudEdgeMarginPercent);
+    swg->setCloudMinElevation(settings.m_cloudMinElevation);
     swg->setCloudMaskSunMoon(settings.m_cloudMaskSunMoon ? 1 : 0);
     swg->setCloudSunMoonRadiusDeg(settings.m_cloudSunMoonRadiusDeg);
     swg->setCloudStarSense(settings.m_cloudStarSense ? 1 : 0);
@@ -2151,6 +2160,9 @@ void Camera::webapiUpdateFeatureSettings(
     }
     if (featureSettingsKeys.contains("cloudEdgeMarginPercent")) {
         settings.m_cloudEdgeMarginPercent = swg->getCloudEdgeMarginPercent();
+    }
+    if (featureSettingsKeys.contains("cloudMinElevation")) {
+        settings.m_cloudMinElevation = qBound(0.0, swg->getCloudMinElevation(), 90.0);
     }
     if (featureSettingsKeys.contains("cloudMaskSunMoon")) {
         settings.m_cloudMaskSunMoon = swg->getCloudMaskSunMoon() != 0;

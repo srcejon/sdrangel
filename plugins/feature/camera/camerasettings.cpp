@@ -595,6 +595,7 @@ void CameraSettings::resetToDefaults()
     m_cloudMotionOverlapThreshold = 0.6;
     m_cloudEventThreshold = 80.0;
     m_cloudEdgeMarginPercent = 0.0;
+    m_cloudMinElevation = 0.0;
     m_cloudMaskSunMoon = false;
     m_cloudSunMoonRadiusDeg = 20.0;
     m_cloudStarSense = false;
@@ -1035,6 +1036,7 @@ QByteArray CameraSettings::serialize() const
     s.writeBool(305, m_cloudUseReference);
     s.writeBool(306, m_cloudAutoReference);
     s.writeBool(364, m_cloudUseDetectionRoi);
+    s.writeDouble(365, m_cloudMinElevation);
     s.writeS32(307, static_cast<qint32>(m_yoloInferenceMode));
     s.writeBool(308, m_playbackProjectionEnabled);
     s.writeS32(309, m_playbackProjectionX);
@@ -1458,6 +1460,8 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readBool(305, &m_cloudUseReference, false);
         d.readBool(306, &m_cloudAutoReference, false);
         d.readBool(364, &m_cloudUseDetectionRoi, true);
+        d.readDouble(365, &m_cloudMinElevation, 0.0);
+        m_cloudMinElevation = qBound(0.0, m_cloudMinElevation, 90.0);
         d.readBool(308, &m_playbackProjectionEnabled, false);
         d.readS32(309, &m_playbackProjectionX, 0);
         d.readS32(310, &m_playbackProjectionY, 0);
@@ -2633,6 +2637,9 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     if (settingsKeys.contains("cloudEdgeMarginPercent")) {
         m_cloudEdgeMarginPercent = qBound(m_minCloudEdgeMargin, settings.m_cloudEdgeMarginPercent, m_maxCloudEdgeMargin);
     }
+    if (settingsKeys.contains("cloudMinElevation")) {
+        m_cloudMinElevation = qBound(0.0, settings.m_cloudMinElevation, 90.0);
+    }
     if (settingsKeys.contains("cloudMaskSunMoon")) {
         m_cloudMaskSunMoon = settings.m_cloudMaskSunMoon;
     }
@@ -3754,6 +3761,9 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("cloudEdgeMarginPercent") || force) {
         ostr << " m_cloudEdgeMarginPercent: " << m_cloudEdgeMarginPercent;
+    }
+    if (settingsKeys.contains("cloudMinElevation") || force) {
+        ostr << " m_cloudMinElevation: " << m_cloudMinElevation;
     }
     if (settingsKeys.contains("cloudMaskSunMoon") || force) {
         ostr << " m_cloudMaskSunMoon: " << m_cloudMaskSunMoon;

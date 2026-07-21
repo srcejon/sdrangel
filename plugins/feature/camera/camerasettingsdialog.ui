@@ -6420,6 +6420,35 @@ car</string>
              </property>
             </widget>
            </item>
+           <item row="12" column="0">
+            <widget class="QLabel" name="cloudMinElevationLabel">
+             <property name="text">
+              <string>Min elevation</string>
+             </property>
+            </widget>
+           </item>
+           <item row="12" column="1">
+            <widget class="QDoubleSpinBox" name="cloudMinElevationSpin">
+             <property name="toolTip">
+              <string>Exclude sky below this elevation from cloud evaluation, so coverage tracks the usable observing sky instead of being dominated by the horizon band. Requires the lens pose (azimuth/elevation/FoV/projection) to be set. 0 disables</string>
+             </property>
+             <property name="suffix">
+              <string>°</string>
+             </property>
+             <property name="decimals">
+              <number>0</number>
+             </property>
+             <property name="maximum">
+              <double>90.000000000000000</double>
+             </property>
+             <property name="singleStep">
+              <double>5.000000000000000</double>
+             </property>
+             <property name="value">
+              <double>0.000000000000000</double>
+             </property>
+            </widget>
+           </item>
            <item row="8" column="2">
             <widget class="QLabel" name="cloudUseRoiLabel">
              <property name="text">

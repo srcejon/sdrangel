@@ -415,6 +415,7 @@ private:
     bool m_reportMotionDetected = false;
     CameraPipelineThermal m_reportThermal;
     CameraCloudEventTracker m_cloudEventTracker;
+    double m_cloudCoverageEma = -1.0; ///< Coverage smoothed over recomputes for event decisions; -1 = no report yet
 
     void start();
     void stop();

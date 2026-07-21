@@ -46,6 +46,12 @@ inline double skyDegToRad(double value)
     return value * kPi / 180.0;
 }
 
+inline double skyRadToDeg(double value)
+{
+    static constexpr double kPi = 3.14159265358979323846;
+    return value * 180.0 / kPi;
+}
+
 inline double skyDot(const SkyVector& lhs, const SkyVector& rhs)
 {
     return lhs.x * rhs.x + lhs.y * rhs.y + lhs.z * rhs.z;
@@ -231,6 +237,86 @@ struct SkyProjector
             opticalPoint.setX(static_cast<double>(width - 1) - opticalPoint.x());
         }
         point = imageTransform.mapOpticalToImage(opticalPoint);
+        return true;
+    }
+
+    // Exact inverse of projectAltAz: image pixel to sky azimuth/elevation. Each step
+    // mirrors the forward path in reverse order (image transform, mirror, principal
+    // point/scales, distortion, projection radius, camera basis). The k1 distortion is
+    // inverted iteratively; a handful of fixed-point steps converge for the small k1
+    // magnitudes lens calibration produces.
+    bool unprojectToAltAz(const QPointF& imagePoint, double& azimuthDegrees, double& elevationDegrees) const
+    {
+        if (!valid) {
+            return false;
+        }
+
+        QPointF opticalPoint = imageTransform.mapImageToOptical(imagePoint);
+        if (mirrorX) {
+            opticalPoint.setX(static_cast<double>(width - 1) - opticalPoint.x());
+        }
+        const double normalizedX = (opticalPoint.x() - principalPointX) / (0.5 * static_cast<double>(width));
+        const double normalizedY = (principalPointY - opticalPoint.y()) / (0.5 * static_cast<double>(height));
+        double projectedX = normalizedX * horizontalScale;
+        double projectedY = normalizedY * verticalScale;
+
+        if (std::fabs(distortionK1) > 1e-9)
+        {
+            // Forward: distorted = undistorted * (1 + k1 * |undistorted|^2). Fixed-point
+            // iteration from the distorted radius recovers the undistorted coordinates.
+            const double distortedX = projectedX;
+            const double distortedY = projectedY;
+            double undistortedX = distortedX;
+            double undistortedY = distortedY;
+            for (int iteration = 0; iteration < 6; ++iteration)
+            {
+                const double radiusSquared = undistortedX * undistortedX + undistortedY * undistortedY;
+                const double distortionScale = std::max(0.1, 1.0 + distortionK1 * radiusSquared);
+                undistortedX = distortedX / distortionScale;
+                undistortedY = distortedY / distortionScale;
+            }
+            projectedX = undistortedX;
+            projectedY = undistortedY;
+        }
+
+        const double projectionRadius = std::hypot(projectedX, projectedY);
+        double theta = 0.0;
+        switch (lensProjection)
+        {
+        case CameraSettings::LensProjectionEquidistant:
+            theta = projectionRadius * halfHorizontalFov;
+            break;
+        case CameraSettings::LensProjectionEquisolid:
+        {
+            const double halfSine = projectionRadius * std::sin(halfHorizontalFov * 0.5);
+            if (halfSine > 1.0) {
+                return false;
+            }
+            theta = 2.0 * std::asin(halfSine);
+            break;
+        }
+        case CameraSettings::LensProjectionRectilinear:
+        default:
+            theta = std::atan(projectionRadius * std::tan(halfHorizontalFov));
+            break;
+        }
+        static constexpr double kPi = 3.14159265358979323846;
+        if (!std::isfinite(theta) || (theta >= kPi)) {
+            return false;
+        }
+
+        const double phi = std::atan2(projectedY, projectedX);
+        const double sinTheta = std::sin(theta);
+        const SkyVector vector = {
+            std::cos(theta) * center.x + sinTheta * (std::cos(phi) * right.x + std::sin(phi) * up.x),
+            std::cos(theta) * center.y + sinTheta * (std::cos(phi) * right.y + std::sin(phi) * up.y),
+            std::cos(theta) * center.z + sinTheta * (std::cos(phi) * right.z + std::sin(phi) * up.z)
+        };
+        elevationDegrees = skyRadToDeg(std::asin(std::clamp(vector.z, -1.0, 1.0)));
+        azimuthDegrees = skyRadToDeg(std::atan2(vector.x, vector.y));
+        if (azimuthDegrees < 0.0) {
+            azimuthDegrees += 360.0;
+        }
         return true;
     }
 };

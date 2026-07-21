@@ -3510,6 +3510,10 @@ void CameraGUI::updatePreviewOverlayItems()
 
         QPen pen(previewRect.m_color);
         pen.setWidthF(std::max(1.0, previewRect.m_lineWidth));
+        // Preview rectangles are scene items over a potentially much larger image.
+        // Keep their stroke visible when a high-resolution frame is fitted into a
+        // small display, particularly on Android.
+        pen.setCosmetic(true);
         QGraphicsItem *shapeItem = previewRect.m_ellipse
             ? static_cast<QGraphicsItem*>(m_imageScene->addEllipse(clipped, pen, QBrush(Qt::NoBrush)))
             : static_cast<QGraphicsItem*>(m_imageScene->addRect(clipped, pen, QBrush(Qt::NoBrush)));

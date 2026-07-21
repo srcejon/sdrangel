@@ -230,6 +230,7 @@ public:
         double m_compactMeteorSweepMaximumOccupiedFraction = 0.40;
         int m_maxPendingCandidateReanalyses = 32;
         double m_parentReanalysisMinimumDurationS = 2.0;
+        double m_twoComponentRangeMinimumExtensionBins = 5.0;
         double m_parentFrequencyLowQuantile = 0.10;
         double m_parentFrequencyHighQuantile = 0.90;
         double m_componentEnvelopeSupportFraction = 0.003;

@@ -3954,6 +3954,8 @@ void MeteorDemodSink::updateReportFromActiveMeteorEvent(ActiveMeteorEvent& event
         const double maxPersistentBandwidth = m_resolvedDetectorTunables.m_stableBandwidthHz;
         const bool preserveAcceptedComponentRange = (event.m_spectralComponentCount >= 3)
             && (report.m_durationS < m_detectorTunables.m_parentReanalysisMinimumDurationS);
+        const bool preserveTwoComponentRange = (event.m_spectralComponentCount == 2)
+            && (report.m_durationS < m_detectorTunables.m_parentReanalysisMinimumDurationS);
         double componentLow = std::numeric_limits<double>::infinity();
         double componentHigh = -std::numeric_limits<double>::infinity();
 
@@ -3999,6 +4001,14 @@ void MeteorDemodSink::updateReportFromActiveMeteorEvent(ActiveMeteorEvent& event
                 / (double) std::max(1, m_spectralFrameSize);
             double center = robustCenter;
             double span = std::max({binWidth, high - low, acceptedCoreSpan});
+            const double acceptedCoreLow = robustCenter - 0.5 * acceptedCoreSpan;
+            const double acceptedCoreHigh = robustCenter + 0.5 * acceptedCoreSpan;
+            const double minimumComponentExtension =
+                m_detectorTunables.m_twoComponentRangeMinimumExtensionBins * binWidth;
+            const bool componentRangeExpandsCore = std::isfinite(componentLow)
+                && std::isfinite(componentHigh)
+                && ((componentLow < acceptedCoreLow - minimumComponentExtension)
+                    || (componentHigh > acceptedCoreHigh + minimumComponentExtension));
 
             if (preserveAcceptedComponentRange
                 && std::isfinite(componentLow)
@@ -4010,6 +4020,20 @@ void MeteorDemodSink::updateReportFromActiveMeteorEvent(ActiveMeteorEvent& event
                 high = std::max(high, componentHigh);
                 span = std::max(binWidth, high - low);
                 center = 0.5 * (low + high);
+            }
+            else if (preserveTwoComponentRange && componentRangeExpandsCore)
+            {
+                const double componentUnionLow = std::min({low, acceptedCoreLow, componentLow});
+                const double componentUnionHigh = std::max({high, acceptedCoreHigh, componentHigh});
+                const double componentUnionSpan = std::max(binWidth, componentUnionHigh - componentUnionLow);
+
+                if (componentUnionSpan > span + 0.5 * binWidth)
+                {
+                    low = componentUnionLow;
+                    high = componentUnionHigh;
+                    span = componentUnionSpan;
+                    center = 0.5 * (low + high);
+                }
             }
 
             double drift = report.m_frequencyDrift;

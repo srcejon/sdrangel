@@ -81,6 +81,24 @@ MeteorSettings:
       format: double
       minimum: -180.0
       maximum: 180.0
+    transmitterAzimuth:
+      description: "Radar transmitter beam azimuth clockwise from true north in degrees"
+      type: number
+      format: float
+      minimum: 0.0
+      maximum: 360.0
+    transmitterElevation:
+      description: "Radar transmitter beam elevation above the horizon in degrees"
+      type: number
+      format: float
+      minimum: -90.0
+      maximum: 90.0
+    transmitterBeamwidth:
+      description: "Radar transmitter half-power beamwidth in degrees; zero means unspecified"
+      type: number
+      format: float
+      minimum: 0.0
+      maximum: 360.0
     antennaAzimuth:
       description: "Receive antenna azimuth clockwise from true north in degrees"
       type: number

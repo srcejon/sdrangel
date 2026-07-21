@@ -2,7 +2,7 @@
 
 The Meteor Detector channel is intended for RF meteor-scatter trail monitoring. It channelizes the selected receiver offset and resamples the channel to 100, 300, 1000, or 3000 Hz. The GUI displays the same resampled IQ in two independently configurable waterfalls. The trail-echo view defaults to a 1024-point FFT with 50% overlap for frequency resolution, while the head-echo view defaults to a 128-point FFT with 75% overlap and faster updates for time resolution.
 
-The Geometry rollup records the radar transmitter latitude and longitude, plus the receive antenna azimuth, elevation, and half-power beamwidth. Receive pointing can be entered manually or synchronized once per second from a selected GS232Controller feature. Selecting no rotator restores manual azimuth and elevation entry. The current receive pointing and beamwidth are included in exported RMOB reports.
+The Geometry rollup records the radar transmitter latitude, longitude, beam azimuth, elevation, and half-power beamwidth, plus the receive antenna azimuth, elevation, and half-power beamwidth. Receive pointing can be entered manually or synchronized once per second from a selected GS232Controller feature. Selecting no rotator restores manual receive azimuth and elevation entry. The current receive pointing and beamwidth are included in exported RMOB reports.
 
 Detection combines two paths. A scalar power gate finds increases above an adaptive noise floor, while an overlapping-FFT tracker follows narrow spectral bands through time. Candidates are scored from signal strength, integrated support, bandwidth, frequency coherence, duration, and track occupancy.
 

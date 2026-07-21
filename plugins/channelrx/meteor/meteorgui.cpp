@@ -235,6 +235,9 @@ void MeteorGUI::setupUi(RollupContents *rollupContents)
     m_detectionLabels = ui->detectionLabels;
     m_transmitterLatitude = ui->transmitterLatitude;
     m_transmitterLongitude = ui->transmitterLongitude;
+    m_transmitterAzimuth = ui->transmitterAzimuth;
+    m_transmitterElevation = ui->transmitterElevation;
+    m_transmitterBeamwidth = ui->transmitterBeamwidth;
     m_antennaAzimuth = ui->antennaAzimuth;
     m_antennaElevation = ui->antennaElevation;
     m_antennaBeamwidth = ui->antennaBeamwidth;
@@ -305,6 +308,21 @@ void MeteorGUI::setupUi(RollupContents *rollupContents)
     m_transmitterLongitude->setSingleStep(0.0001);
     m_transmitterLongitude->setSuffix(QString::fromUtf8("\u00b0"));
     m_transmitterLongitude->setToolTip("Radar transmitter longitude in decimal degrees");
+
+    m_transmitterAzimuth->setDecimals(1);
+    m_transmitterAzimuth->setRange(0.0, 360.0);
+    m_transmitterAzimuth->setSuffix(QString::fromUtf8("\u00b0"));
+    m_transmitterAzimuth->setToolTip("Radar transmitter beam azimuth clockwise from north");
+
+    m_transmitterElevation->setDecimals(1);
+    m_transmitterElevation->setRange(-90.0, 90.0);
+    m_transmitterElevation->setSuffix(QString::fromUtf8("\u00b0"));
+    m_transmitterElevation->setToolTip("Radar transmitter beam elevation above the horizon");
+
+    m_transmitterBeamwidth->setDecimals(1);
+    m_transmitterBeamwidth->setRange(0.0, 360.0);
+    m_transmitterBeamwidth->setSuffix(QString::fromUtf8("\u00b0"));
+    m_transmitterBeamwidth->setToolTip("Radar transmitter half-power beamwidth; zero means unspecified");
 
     m_antennaAzimuth->setDecimals(1);
     m_antennaAzimuth->setRange(0.0, 360.0);
@@ -884,6 +902,24 @@ void MeteorGUI::on_transmitterLongitude_valueChanged(double value)
     applySetting("transmitterLongitude");
 }
 
+void MeteorGUI::on_transmitterAzimuth_valueChanged(double value)
+{
+    m_settings.m_transmitterAzimuth = (float) value;
+    applySetting("transmitterAzimuth");
+}
+
+void MeteorGUI::on_transmitterElevation_valueChanged(double value)
+{
+    m_settings.m_transmitterElevation = (float) value;
+    applySetting("transmitterElevation");
+}
+
+void MeteorGUI::on_transmitterBeamwidth_valueChanged(double value)
+{
+    m_settings.m_transmitterBeamwidth = (float) value;
+    applySetting("transmitterBeamwidth");
+}
+
 void MeteorGUI::on_antennaAzimuth_valueChanged(double value)
 {
     m_settings.m_antennaAzimuth = (float) value;
@@ -1267,6 +1303,9 @@ void MeteorGUI::displaySettings()
     const QSignalBlocker detectionLabelsBlocker(m_detectionLabels);
     const QSignalBlocker transmitterLatitudeBlocker(m_transmitterLatitude);
     const QSignalBlocker transmitterLongitudeBlocker(m_transmitterLongitude);
+    const QSignalBlocker transmitterAzimuthBlocker(m_transmitterAzimuth);
+    const QSignalBlocker transmitterElevationBlocker(m_transmitterElevation);
+    const QSignalBlocker transmitterBeamwidthBlocker(m_transmitterBeamwidth);
     const QSignalBlocker antennaAzimuthBlocker(m_antennaAzimuth);
     const QSignalBlocker antennaElevationBlocker(m_antennaElevation);
     const QSignalBlocker antennaBeamwidthBlocker(m_antennaBeamwidth);
@@ -1289,6 +1328,9 @@ void MeteorGUI::displaySettings()
         (int) MeteorSettings::DetectionLabelRight));
     m_transmitterLatitude->setValue(m_settings.m_transmitterLatitude);
     m_transmitterLongitude->setValue(m_settings.m_transmitterLongitude);
+    m_transmitterAzimuth->setValue(m_settings.m_transmitterAzimuth);
+    m_transmitterElevation->setValue(m_settings.m_transmitterElevation);
+    m_transmitterBeamwidth->setValue(m_settings.m_transmitterBeamwidth);
     m_antennaAzimuth->setValue(m_settings.m_antennaAzimuth);
     m_antennaElevation->setValue(m_settings.m_antennaElevation);
     m_antennaBeamwidth->setValue(m_settings.m_antennaBeamwidth);
@@ -1318,6 +1360,9 @@ void MeteorGUI::makeUIConnections()
     QObject::connect(m_detectionLabels, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &MeteorGUI::on_detectionLabels_currentIndexChanged);
     QObject::connect(m_transmitterLatitude, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &MeteorGUI::on_transmitterLatitude_valueChanged);
     QObject::connect(m_transmitterLongitude, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &MeteorGUI::on_transmitterLongitude_valueChanged);
+    QObject::connect(m_transmitterAzimuth, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &MeteorGUI::on_transmitterAzimuth_valueChanged);
+    QObject::connect(m_transmitterElevation, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &MeteorGUI::on_transmitterElevation_valueChanged);
+    QObject::connect(m_transmitterBeamwidth, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &MeteorGUI::on_transmitterBeamwidth_valueChanged);
     QObject::connect(m_antennaAzimuth, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &MeteorGUI::on_antennaAzimuth_valueChanged);
     QObject::connect(m_antennaElevation, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &MeteorGUI::on_antennaElevation_valueChanged);
     QObject::connect(m_antennaBeamwidth, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &MeteorGUI::on_antennaBeamwidth_valueChanged);

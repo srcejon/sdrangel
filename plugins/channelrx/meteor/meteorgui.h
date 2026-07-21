@@ -122,6 +122,9 @@ private:
     QComboBox *m_detectionLabels;
     QDoubleSpinBox *m_transmitterLatitude;
     QDoubleSpinBox *m_transmitterLongitude;
+    QDoubleSpinBox *m_transmitterAzimuth;
+    QDoubleSpinBox *m_transmitterElevation;
+    QDoubleSpinBox *m_transmitterBeamwidth;
     QDoubleSpinBox *m_antennaAzimuth;
     QDoubleSpinBox *m_antennaElevation;
     QDoubleSpinBox *m_antennaBeamwidth;
@@ -245,6 +248,9 @@ private slots:
     void on_detectionLabels_currentIndexChanged(int index);
     void on_transmitterLatitude_valueChanged(double value);
     void on_transmitterLongitude_valueChanged(double value);
+    void on_transmitterAzimuth_valueChanged(double value);
+    void on_transmitterElevation_valueChanged(double value);
+    void on_transmitterBeamwidth_valueChanged(double value);
     void on_antennaAzimuth_valueChanged(double value);
     void on_antennaElevation_valueChanged(double value);
     void on_antennaBeamwidth_valueChanged(double value);

@@ -50,6 +50,9 @@ void MeteorSettings::resetToDefaults()
     m_detectionLabelMode = DetectionLabelNone;
     m_transmitterLatitude = 0.0;
     m_transmitterLongitude = 0.0;
+    m_transmitterAzimuth = 0.0f;
+    m_transmitterElevation = 0.0f;
+    m_transmitterBeamwidth = 0.0f;
     m_antennaAzimuth = 0.0f;
     m_antennaElevation = 0.0f;
     m_antennaBeamwidth = 0.0f;
@@ -83,6 +86,9 @@ QByteArray MeteorSettings::serialize() const
     s.writeFloat(16, m_antennaElevation);
     s.writeFloat(17, m_antennaBeamwidth);
     s.writeString(18, m_rotator);
+    s.writeFloat(19, m_transmitterAzimuth);
+    s.writeFloat(20, m_transmitterElevation);
+    s.writeFloat(27, m_transmitterBeamwidth);
 
     s.writeU32(21, m_rgbColor);
     s.writeString(22, m_title);
@@ -149,10 +155,19 @@ bool MeteorSettings::deserialize(const QByteArray& data)
         d.readFloat(16, &m_antennaElevation, 0.0f);
         d.readFloat(17, &m_antennaBeamwidth, 0.0f);
         d.readString(18, &m_rotator, "");
+        d.readFloat(19, &m_transmitterAzimuth, 0.0f);
+        d.readFloat(20, &m_transmitterElevation, 0.0f);
+        d.readFloat(27, &m_transmitterBeamwidth, 0.0f);
         m_transmitterLatitude = std::isfinite(m_transmitterLatitude)
             ? std::clamp(m_transmitterLatitude, -90.0, 90.0) : 0.0;
         m_transmitterLongitude = std::isfinite(m_transmitterLongitude)
             ? std::clamp(m_transmitterLongitude, -180.0, 180.0) : 0.0;
+        m_transmitterAzimuth = std::isfinite(m_transmitterAzimuth)
+            ? std::clamp(m_transmitterAzimuth, 0.0f, 360.0f) : 0.0f;
+        m_transmitterElevation = std::isfinite(m_transmitterElevation)
+            ? std::clamp(m_transmitterElevation, -90.0f, 90.0f) : 0.0f;
+        m_transmitterBeamwidth = std::isfinite(m_transmitterBeamwidth)
+            ? std::clamp(m_transmitterBeamwidth, 0.0f, 360.0f) : 0.0f;
         m_antennaAzimuth = std::isfinite(m_antennaAzimuth)
             ? std::clamp(m_antennaAzimuth, 0.0f, 360.0f) : 0.0f;
         m_antennaElevation = std::isfinite(m_antennaElevation)
@@ -244,6 +259,15 @@ void MeteorSettings::applySettings(const QStringList& settingsKeys, const Meteor
     if (settingsKeys.contains("transmitterLongitude")) {
         m_transmitterLongitude = settings.m_transmitterLongitude;
     }
+    if (settingsKeys.contains("transmitterAzimuth")) {
+        m_transmitterAzimuth = settings.m_transmitterAzimuth;
+    }
+    if (settingsKeys.contains("transmitterElevation")) {
+        m_transmitterElevation = settings.m_transmitterElevation;
+    }
+    if (settingsKeys.contains("transmitterBeamwidth")) {
+        m_transmitterBeamwidth = settings.m_transmitterBeamwidth;
+    }
     if (settingsKeys.contains("antennaAzimuth")) {
         m_antennaAzimuth = settings.m_antennaAzimuth;
     }
@@ -318,6 +342,15 @@ QString MeteorSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("transmitterLongitude") || force) {
         ostr << " m_transmitterLongitude: " << m_transmitterLongitude;
+    }
+    if (settingsKeys.contains("transmitterAzimuth") || force) {
+        ostr << " m_transmitterAzimuth: " << m_transmitterAzimuth;
+    }
+    if (settingsKeys.contains("transmitterElevation") || force) {
+        ostr << " m_transmitterElevation: " << m_transmitterElevation;
+    }
+    if (settingsKeys.contains("transmitterBeamwidth") || force) {
+        ostr << " m_transmitterBeamwidth: " << m_transmitterBeamwidth;
     }
     if (settingsKeys.contains("antennaAzimuth") || force) {
         ostr << " m_antennaAzimuth: " << m_antennaAzimuth;

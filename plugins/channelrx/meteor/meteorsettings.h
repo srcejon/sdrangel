@@ -69,6 +69,9 @@ struct MeteorSettings
     } m_detectionLabelMode;
     double m_transmitterLatitude;
     double m_transmitterLongitude;
+    float m_transmitterAzimuth;
+    float m_transmitterElevation;
+    float m_transmitterBeamwidth;
     float m_antennaAzimuth;
     float m_antennaElevation;
     float m_antennaBeamwidth;

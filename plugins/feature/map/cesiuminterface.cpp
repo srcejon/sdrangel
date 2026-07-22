@@ -15,7 +15,6 @@
 // along with this program. If not, see <http://www.gnu.org/licenses/>.          //
 ///////////////////////////////////////////////////////////////////////////////////
 
-#include <QJsonArray>
 #include <QJsonObject>
 
 #include "cesiuminterface.h"
@@ -358,46 +357,7 @@ void CesiumInterface::update(PolylineMapItem *mapItem)
 
 void CesiumInterface::update(MeshMapItem *mapItem)
 {
-    if (mapItem->m_deleted || !mapItem->m_valid)
-    {
-        QJsonObject obj {
-            {"command", "removeMesh"},
-            {"name", mapItem->m_name}
-        };
-        send(obj);
-        return;
-    }
-
-    QJsonArray vertices;
-    for (const QGeoCoordinate& vertex : mapItem->m_vertices)
-    {
-        vertices.append(vertex.longitude());
-        vertices.append(vertex.latitude());
-        vertices.append(vertex.altitude());
-    }
-
-    QJsonArray indices;
-    for (quint32 index : mapItem->m_triangleIndices) {
-        indices.append((int) index);
-    }
-
-    const QColor color = mapItem->m_colorValid
-        ? QColor::fromRgba(mapItem->m_color)
-        : QColor::fromRgba(mapItem->m_itemSettings->m_2DTrackColor);
-    QJsonObject obj {
-        {"command", "updateMesh"},
-        {"name", mapItem->m_name},
-        {"label", mapItem->m_label},
-        {"longitude", mapItem->m_longitude},
-        {"latitude", mapItem->m_latitude},
-        {"altitude", mapItem->m_altitude},
-        {"red", color.red()},
-        {"green", color.green()},
-        {"blue", color.blue()},
-        {"alpha", color.alpha()},
-        {"vertices", vertices},
-        {"indices", indices}
-    };
+    QJsonObject obj = m_czml.update(mapItem);
     send(obj);
 }
 

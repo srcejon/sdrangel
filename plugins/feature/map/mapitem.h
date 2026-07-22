@@ -215,7 +215,7 @@ public:
 
 protected:
     friend MeshMapModel;
-    friend CesiumInterface;
+    friend CZML;
 
     QVariantList m_footprint;
     QGeoRectangle m_bounds;

@@ -244,6 +244,53 @@ QJsonObject CZML::update(PolylineMapItem *mapItem)
     return obj;
 }
 
+QJsonObject CZML::update(MeshMapItem *mapItem)
+{
+    if (   !mapItem->m_itemSettings->m_enabled
+        || !mapItem->m_itemSettings->m_display3DTrack
+        || filter(mapItem)
+        || mapItem->m_deleted
+        || !mapItem->m_valid
+       )
+    {
+        return {
+            {"command", "removeMesh"},
+            {"name", mapItem->m_name}
+        };
+    }
+
+    QJsonArray vertices;
+    for (const QGeoCoordinate& vertex : mapItem->m_vertices)
+    {
+        vertices.append(vertex.longitude());
+        vertices.append(vertex.latitude());
+        vertices.append(vertex.altitude());
+    }
+
+    QJsonArray indices;
+    for (quint32 index : mapItem->m_triangleIndices) {
+        indices.append((int) index);
+    }
+
+    const QColor color = mapItem->m_colorValid
+        ? QColor::fromRgba(mapItem->m_color)
+        : QColor::fromRgba(mapItem->m_itemSettings->m_2DTrackColor);
+    return {
+        {"command", "updateMesh"},
+        {"name", mapItem->m_name},
+        {"label", mapItem->m_label},
+        {"longitude", mapItem->m_longitude},
+        {"latitude", mapItem->m_latitude},
+        {"altitude", mapItem->m_altitude},
+        {"red", color.red()},
+        {"green", color.green()},
+        {"blue", color.blue()},
+        {"alpha", color.alpha()},
+        {"vertices", vertices},
+        {"indices", indices}
+    };
+}
+
 static void insertConstantProperty(QJsonObject& properties, const QString& name, const QString& value)
 {
     properties.insert(name, value);

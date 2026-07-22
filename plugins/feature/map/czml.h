@@ -36,6 +36,7 @@ class MapItem;
 class ObjectMapItem;
 class PolygonMapItem;
 class PolylineMapItem;
+class MeshMapItem;
 
 class CZML
 {
@@ -99,6 +100,7 @@ public:
     QJsonObject update(ObjectMapItem *mapItem, bool isTarget, bool isSelected);
     QJsonObject update(PolygonMapItem *mapItem);
     QJsonObject update(PolylineMapItem *mapItem);
+    QJsonObject update(MeshMapItem *mapItem);
     bool filter(const MapItem *mapItem) const;
     void setPosition(const QGeoCoordinate& position);
 

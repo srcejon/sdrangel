@@ -964,7 +964,8 @@
                             flat: true,
                             faceForward: true
                         }),
-                        asynchronous: true,
+                        // Raw Geometry has no Cesium worker module, so it must be processed locally.
+                        asynchronous: false,
                         allowPicking: true
                     }));
                     meshes.set(command.name, mesh);

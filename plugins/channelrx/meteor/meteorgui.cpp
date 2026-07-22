@@ -789,19 +789,19 @@ void MeteorGUI::updateAntennaPatternsOnMap(bool force)
                 txName,
                 tr("Transmitter HPBW volume"),
                 txGeometry,
-                QColor(255, 96, 32, 72).rgba());
+                QColor(255, 96, 32, 20).rgba());
             addMesh(
                 messageQueue,
                 rxName,
                 tr("Receiver HPBW volume"),
                 rxGeometry,
-                QColor(0, 190, 255, 72).rgba());
+                QColor(0, 190, 255, 20).rgba());
             addMesh(
                 messageQueue,
                 intersectionName,
                 tr("TX/RX HPBW intersection volume"),
                 intersectionGeometry,
-                QColor(128, 255, 64, 152).rgba());
+                QColor(128, 255, 64, 60).rgba());
         }
     }
 

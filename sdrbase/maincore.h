@@ -922,6 +922,7 @@ public:
              DCSEvent,                   // Data: code=032             
              CameraCloudCoverageHighEvent, // Data: coverage=82.4,threshold=80.0,night=1
              CameraCloudCoverageLowEvent,
+             FrequencyActiveEvent,       // Data: frequency=145500000
          };
 
          const QObject *getPipeSource() const { return m_pipeSource; }

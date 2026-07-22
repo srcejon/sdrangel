@@ -530,6 +530,7 @@ QStringList Scheduler::eventTypeNames()
         QStringLiteral("DCS Code"),
         QStringLiteral("Camera Cloud Coverage High"),
         QStringLiteral("Camera Cloud Coverage Low"),
+        QStringLiteral("Frequency Active"),
         });
 }
 

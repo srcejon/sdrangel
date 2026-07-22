@@ -197,6 +197,12 @@ Exports frequencies to a .csv file. Note that annotations are not included. Thes
 
 Press to reset the value in the Active Count column to 0 for all rows.
 
+<h2>Message pipes</h2>
+
+When the scanner starts receiving an active frequency, it sends a `MainCore::MsgEvent` on the `event` message pipe. The event type is `FrequencyActiveEvent` and its data is `frequency=<Hz>`, for example `frequency=145500000`.
+
+The event is not sent in Scan only mode.
+
 <h2>API</h2>
 
 Full details of the API can be found in the Swagger documentation. Below are a few examples.

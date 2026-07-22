@@ -442,6 +442,7 @@ private:
     void continueScan();
     void processScanResults(const QDateTime& fftStartTime, const QList<MsgScanResult::ScanResult>& results);
     void setDeviceCenterFrequency(qint64 frequency);
+    void sendFrequencyActiveEvent(qint64 frequency);
     void applyChannelSetting(const QString& channel);
     void muteAll();
     void unmuteAll();

@@ -307,6 +307,29 @@ void FreqScanner::setDeviceCenterFrequency(qint64 frequency)
     m_minFFTStartTime = QDateTime::currentDateTime().addMSecs(m_settings.m_tuneTime);
 }
 
+void FreqScanner::sendFrequencyActiveEvent(qint64 frequency)
+{
+    QList<ObjectPipe*> eventPipes;
+    MainCore::instance()->getMessagePipes().getMessagePipes(this, QStringLiteral("event"), eventPipes);
+
+    const QDateTime eventTime = QDateTime::currentDateTime();
+    const QString eventData = QStringLiteral("frequency=%1").arg(frequency);
+
+    for (const ObjectPipe *pipe : eventPipes)
+    {
+        MessageQueue *messageQueue = qobject_cast<MessageQueue*>(pipe->m_element);
+
+        if (messageQueue)
+        {
+            messageQueue->push(MainCore::MsgEvent::create(
+                this,
+                eventTime,
+                MainCore::MsgEvent::FrequencyActiveEvent,
+                eventData));
+        }
+    }
+}
+
 void FreqScanner::initScan()
 {
     // if (m_scanChannelIndex < 0) { // Always false
@@ -391,6 +414,8 @@ void FreqScanner::processScanResults(const QDateTime& fftStartTime, const QList<
             bool complete = lockDeviceFrequency; // Have all frequencies been scanned?
             bool freqInRange = lockDeviceFrequency;
             qint64 nextCenterFrequency = m_centerFrequency;
+            bool frequencyBecameActive = false;
+            qint64 activeFrequencyForEvent = 0;
             int usableBW = (m_scannerSampleRate * 3 / 4) & ~1;
             int nextFrequencyIndex = -1;
             const auto isInCurrentScanRange = [currentCenterFrequency, usableBW](qint64 frequency)
@@ -609,6 +634,8 @@ void FreqScanner::processScanResults(const QDateTime& fftStartTime, const QList<
                             }
 
                             m_activeFrequency = frequency;
+                            frequencyBecameActive = true;
+                            activeFrequencyForEvent = frequency;
 
                             if (m_settings.m_mode == FreqScannerSettings::SINGLE)
                             {
@@ -653,6 +680,10 @@ void FreqScanner::processScanResults(const QDateTime& fftStartTime, const QList<
             if (nextCenterFrequency != m_centerFrequency)
             {
                 setDeviceCenterFrequency(nextCenterFrequency);
+            }
+
+            if (frequencyBecameActive) {
+                sendFrequencyActiveEvent(activeFrequencyForEvent);
             }
 
             if (complete)

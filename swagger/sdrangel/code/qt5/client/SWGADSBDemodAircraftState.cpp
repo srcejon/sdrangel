@@ -36,10 +36,40 @@ SWGADSBDemodAircraftState::SWGADSBDemodAircraftState() {
     m_latitude_isSet = false;
     longitude = 0.0f;
     m_longitude_isSet = false;
+    position_valid = 0;
+    m_position_valid_isSet = false;
+    position_date_time = nullptr;
+    m_position_date_time_isSet = false;
     altitude = 0;
     m_altitude_isSet = false;
+    altitude_valid = 0;
+    m_altitude_valid_isSet = false;
+    altitude_date_time = nullptr;
+    m_altitude_date_time_isSet = false;
     ground_speed = 0;
     m_ground_speed_isSet = false;
+    ground_speed_valid = 0;
+    m_ground_speed_valid_isSet = false;
+    ground_speed_date_time = nullptr;
+    m_ground_speed_date_time_isSet = false;
+    track = 0.0f;
+    m_track_isSet = false;
+    track_valid = 0;
+    m_track_valid_isSet = false;
+    track_date_time = nullptr;
+    m_track_date_time_isSet = false;
+    heading = 0.0f;
+    m_heading_isSet = false;
+    heading_valid = 0;
+    m_heading_valid_isSet = false;
+    heading_date_time = nullptr;
+    m_heading_date_time_isSet = false;
+    vertical_rate = 0;
+    m_vertical_rate_isSet = false;
+    vertical_rate_valid = 0;
+    m_vertical_rate_valid_isSet = false;
+    vertical_rate_date_time = nullptr;
+    m_vertical_rate_date_time_isSet = false;
 }
 
 SWGADSBDemodAircraftState::~SWGADSBDemodAircraftState() {
@@ -56,10 +86,40 @@ SWGADSBDemodAircraftState::init() {
     m_latitude_isSet = false;
     longitude = 0.0f;
     m_longitude_isSet = false;
+    position_valid = 0;
+    m_position_valid_isSet = false;
+    position_date_time = new QString("");
+    m_position_date_time_isSet = false;
     altitude = 0;
     m_altitude_isSet = false;
+    altitude_valid = 0;
+    m_altitude_valid_isSet = false;
+    altitude_date_time = new QString("");
+    m_altitude_date_time_isSet = false;
     ground_speed = 0;
     m_ground_speed_isSet = false;
+    ground_speed_valid = 0;
+    m_ground_speed_valid_isSet = false;
+    ground_speed_date_time = new QString("");
+    m_ground_speed_date_time_isSet = false;
+    track = 0.0f;
+    m_track_isSet = false;
+    track_valid = 0;
+    m_track_valid_isSet = false;
+    track_date_time = new QString("");
+    m_track_date_time_isSet = false;
+    heading = 0.0f;
+    m_heading_isSet = false;
+    heading_valid = 0;
+    m_heading_valid_isSet = false;
+    heading_date_time = new QString("");
+    m_heading_date_time_isSet = false;
+    vertical_rate = 0;
+    m_vertical_rate_isSet = false;
+    vertical_rate_valid = 0;
+    m_vertical_rate_valid_isSet = false;
+    vertical_rate_date_time = new QString("");
+    m_vertical_rate_date_time_isSet = false;
 }
 
 void
@@ -73,7 +133,34 @@ SWGADSBDemodAircraftState::cleanup() {
 
 
 
+    if(position_date_time != nullptr) { 
+        delete position_date_time;
+    }
 
+
+    if(altitude_date_time != nullptr) { 
+        delete altitude_date_time;
+    }
+
+
+    if(ground_speed_date_time != nullptr) { 
+        delete ground_speed_date_time;
+    }
+
+
+    if(track_date_time != nullptr) { 
+        delete track_date_time;
+    }
+
+
+    if(heading_date_time != nullptr) { 
+        delete heading_date_time;
+    }
+
+
+    if(vertical_rate_date_time != nullptr) { 
+        delete vertical_rate_date_time;
+    }
 }
 
 SWGADSBDemodAircraftState*
@@ -95,9 +182,39 @@ SWGADSBDemodAircraftState::fromJsonObject(QJsonObject &pJson) {
     
     ::SWGSDRangel::setValue(&longitude, pJson["longitude"], "float", "");
     
+    ::SWGSDRangel::setValue(&position_valid, pJson["positionValid"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&position_date_time, pJson["positionDateTime"], "QString", "QString");
+    
     ::SWGSDRangel::setValue(&altitude, pJson["altitude"], "qint32", "");
     
+    ::SWGSDRangel::setValue(&altitude_valid, pJson["altitudeValid"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&altitude_date_time, pJson["altitudeDateTime"], "QString", "QString");
+    
     ::SWGSDRangel::setValue(&ground_speed, pJson["groundSpeed"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&ground_speed_valid, pJson["groundSpeedValid"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&ground_speed_date_time, pJson["groundSpeedDateTime"], "QString", "QString");
+    
+    ::SWGSDRangel::setValue(&track, pJson["track"], "float", "");
+    
+    ::SWGSDRangel::setValue(&track_valid, pJson["trackValid"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&track_date_time, pJson["trackDateTime"], "QString", "QString");
+    
+    ::SWGSDRangel::setValue(&heading, pJson["heading"], "float", "");
+    
+    ::SWGSDRangel::setValue(&heading_valid, pJson["headingValid"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&heading_date_time, pJson["headingDateTime"], "QString", "QString");
+    
+    ::SWGSDRangel::setValue(&vertical_rate, pJson["verticalRate"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&vertical_rate_valid, pJson["verticalRateValid"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&vertical_rate_date_time, pJson["verticalRateDateTime"], "QString", "QString");
     
 }
 
@@ -127,11 +244,56 @@ SWGADSBDemodAircraftState::asJsonObject() {
     if(m_longitude_isSet){
         obj->insert("longitude", QJsonValue(longitude));
     }
+    if(m_position_valid_isSet){
+        obj->insert("positionValid", QJsonValue(position_valid));
+    }
+    if(position_date_time != nullptr && *position_date_time != QString("")){
+        toJsonValue(QString("positionDateTime"), position_date_time, obj, QString("QString"));
+    }
     if(m_altitude_isSet){
         obj->insert("altitude", QJsonValue(altitude));
     }
+    if(m_altitude_valid_isSet){
+        obj->insert("altitudeValid", QJsonValue(altitude_valid));
+    }
+    if(altitude_date_time != nullptr && *altitude_date_time != QString("")){
+        toJsonValue(QString("altitudeDateTime"), altitude_date_time, obj, QString("QString"));
+    }
     if(m_ground_speed_isSet){
         obj->insert("groundSpeed", QJsonValue(ground_speed));
+    }
+    if(m_ground_speed_valid_isSet){
+        obj->insert("groundSpeedValid", QJsonValue(ground_speed_valid));
+    }
+    if(ground_speed_date_time != nullptr && *ground_speed_date_time != QString("")){
+        toJsonValue(QString("groundSpeedDateTime"), ground_speed_date_time, obj, QString("QString"));
+    }
+    if(m_track_isSet){
+        obj->insert("track", QJsonValue(track));
+    }
+    if(m_track_valid_isSet){
+        obj->insert("trackValid", QJsonValue(track_valid));
+    }
+    if(track_date_time != nullptr && *track_date_time != QString("")){
+        toJsonValue(QString("trackDateTime"), track_date_time, obj, QString("QString"));
+    }
+    if(m_heading_isSet){
+        obj->insert("heading", QJsonValue(heading));
+    }
+    if(m_heading_valid_isSet){
+        obj->insert("headingValid", QJsonValue(heading_valid));
+    }
+    if(heading_date_time != nullptr && *heading_date_time != QString("")){
+        toJsonValue(QString("headingDateTime"), heading_date_time, obj, QString("QString"));
+    }
+    if(m_vertical_rate_isSet){
+        obj->insert("verticalRate", QJsonValue(vertical_rate));
+    }
+    if(m_vertical_rate_valid_isSet){
+        obj->insert("verticalRateValid", QJsonValue(vertical_rate_valid));
+    }
+    if(vertical_rate_date_time != nullptr && *vertical_rate_date_time != QString("")){
+        toJsonValue(QString("verticalRateDateTime"), vertical_rate_date_time, obj, QString("QString"));
     }
 
     return obj;
@@ -178,6 +340,26 @@ SWGADSBDemodAircraftState::setLongitude(float longitude) {
 }
 
 qint32
+SWGADSBDemodAircraftState::getPositionValid() {
+    return position_valid;
+}
+void
+SWGADSBDemodAircraftState::setPositionValid(qint32 position_valid) {
+    this->position_valid = position_valid;
+    this->m_position_valid_isSet = true;
+}
+
+QString*
+SWGADSBDemodAircraftState::getPositionDateTime() {
+    return position_date_time;
+}
+void
+SWGADSBDemodAircraftState::setPositionDateTime(QString* position_date_time) {
+    this->position_date_time = position_date_time;
+    this->m_position_date_time_isSet = true;
+}
+
+qint32
 SWGADSBDemodAircraftState::getAltitude() {
     return altitude;
 }
@@ -188,6 +370,26 @@ SWGADSBDemodAircraftState::setAltitude(qint32 altitude) {
 }
 
 qint32
+SWGADSBDemodAircraftState::getAltitudeValid() {
+    return altitude_valid;
+}
+void
+SWGADSBDemodAircraftState::setAltitudeValid(qint32 altitude_valid) {
+    this->altitude_valid = altitude_valid;
+    this->m_altitude_valid_isSet = true;
+}
+
+QString*
+SWGADSBDemodAircraftState::getAltitudeDateTime() {
+    return altitude_date_time;
+}
+void
+SWGADSBDemodAircraftState::setAltitudeDateTime(QString* altitude_date_time) {
+    this->altitude_date_time = altitude_date_time;
+    this->m_altitude_date_time_isSet = true;
+}
+
+qint32
 SWGADSBDemodAircraftState::getGroundSpeed() {
     return ground_speed;
 }
@@ -195,6 +397,116 @@ void
 SWGADSBDemodAircraftState::setGroundSpeed(qint32 ground_speed) {
     this->ground_speed = ground_speed;
     this->m_ground_speed_isSet = true;
+}
+
+qint32
+SWGADSBDemodAircraftState::getGroundSpeedValid() {
+    return ground_speed_valid;
+}
+void
+SWGADSBDemodAircraftState::setGroundSpeedValid(qint32 ground_speed_valid) {
+    this->ground_speed_valid = ground_speed_valid;
+    this->m_ground_speed_valid_isSet = true;
+}
+
+QString*
+SWGADSBDemodAircraftState::getGroundSpeedDateTime() {
+    return ground_speed_date_time;
+}
+void
+SWGADSBDemodAircraftState::setGroundSpeedDateTime(QString* ground_speed_date_time) {
+    this->ground_speed_date_time = ground_speed_date_time;
+    this->m_ground_speed_date_time_isSet = true;
+}
+
+float
+SWGADSBDemodAircraftState::getTrack() {
+    return track;
+}
+void
+SWGADSBDemodAircraftState::setTrack(float track) {
+    this->track = track;
+    this->m_track_isSet = true;
+}
+
+qint32
+SWGADSBDemodAircraftState::getTrackValid() {
+    return track_valid;
+}
+void
+SWGADSBDemodAircraftState::setTrackValid(qint32 track_valid) {
+    this->track_valid = track_valid;
+    this->m_track_valid_isSet = true;
+}
+
+QString*
+SWGADSBDemodAircraftState::getTrackDateTime() {
+    return track_date_time;
+}
+void
+SWGADSBDemodAircraftState::setTrackDateTime(QString* track_date_time) {
+    this->track_date_time = track_date_time;
+    this->m_track_date_time_isSet = true;
+}
+
+float
+SWGADSBDemodAircraftState::getHeading() {
+    return heading;
+}
+void
+SWGADSBDemodAircraftState::setHeading(float heading) {
+    this->heading = heading;
+    this->m_heading_isSet = true;
+}
+
+qint32
+SWGADSBDemodAircraftState::getHeadingValid() {
+    return heading_valid;
+}
+void
+SWGADSBDemodAircraftState::setHeadingValid(qint32 heading_valid) {
+    this->heading_valid = heading_valid;
+    this->m_heading_valid_isSet = true;
+}
+
+QString*
+SWGADSBDemodAircraftState::getHeadingDateTime() {
+    return heading_date_time;
+}
+void
+SWGADSBDemodAircraftState::setHeadingDateTime(QString* heading_date_time) {
+    this->heading_date_time = heading_date_time;
+    this->m_heading_date_time_isSet = true;
+}
+
+qint32
+SWGADSBDemodAircraftState::getVerticalRate() {
+    return vertical_rate;
+}
+void
+SWGADSBDemodAircraftState::setVerticalRate(qint32 vertical_rate) {
+    this->vertical_rate = vertical_rate;
+    this->m_vertical_rate_isSet = true;
+}
+
+qint32
+SWGADSBDemodAircraftState::getVerticalRateValid() {
+    return vertical_rate_valid;
+}
+void
+SWGADSBDemodAircraftState::setVerticalRateValid(qint32 vertical_rate_valid) {
+    this->vertical_rate_valid = vertical_rate_valid;
+    this->m_vertical_rate_valid_isSet = true;
+}
+
+QString*
+SWGADSBDemodAircraftState::getVerticalRateDateTime() {
+    return vertical_rate_date_time;
+}
+void
+SWGADSBDemodAircraftState::setVerticalRateDateTime(QString* vertical_rate_date_time) {
+    this->vertical_rate_date_time = vertical_rate_date_time;
+    this->m_vertical_rate_date_time_isSet = true;
 }
 
 
@@ -214,10 +526,55 @@ SWGADSBDemodAircraftState::isSet(){
         if(m_longitude_isSet){
             isObjectUpdated = true; break;
         }
+        if(m_position_valid_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(position_date_time && *position_date_time != QString("")){
+            isObjectUpdated = true; break;
+        }
         if(m_altitude_isSet){
             isObjectUpdated = true; break;
         }
+        if(m_altitude_valid_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(altitude_date_time && *altitude_date_time != QString("")){
+            isObjectUpdated = true; break;
+        }
         if(m_ground_speed_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_ground_speed_valid_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(ground_speed_date_time && *ground_speed_date_time != QString("")){
+            isObjectUpdated = true; break;
+        }
+        if(m_track_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_track_valid_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(track_date_time && *track_date_time != QString("")){
+            isObjectUpdated = true; break;
+        }
+        if(m_heading_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_heading_valid_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(heading_date_time && *heading_date_time != QString("")){
+            isObjectUpdated = true; break;
+        }
+        if(m_vertical_rate_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_vertical_rate_valid_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(vertical_rate_date_time && *vertical_rate_date_time != QString("")){
             isObjectUpdated = true; break;
         }
     }while(false);

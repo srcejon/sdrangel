@@ -94,13 +94,13 @@ MeteorSettings:
       minimum: -90.0
       maximum: 90.0
     transmitterBeamwidth:
-      description: "Radar transmitter azimuthal beam coverage in degrees; zero means unspecified"
+      description: "Radar transmitter azimuth beamwidth in degrees; zero means unspecified"
       type: number
       format: float
       minimum: 0.0
       maximum: 360.0
     transmitterHPBW:
-      description: "Radar transmitter vertical half-power beamwidth in degrees; zero means unspecified"
+      description: "Radar transmitter elevation beamwidth in degrees; zero means unspecified"
       type: number
       format: float
       minimum: 0.0

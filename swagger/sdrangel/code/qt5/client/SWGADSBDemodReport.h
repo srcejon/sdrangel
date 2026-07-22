@@ -62,6 +62,9 @@ public:
     float getTargetRange();
     void setTargetRange(float target_range);
 
+    QString* getReportDateTime();
+    void setReportDateTime(QString* report_date_time);
+
     QList<SWGADSBDemodAircraftState*>* getAircraftState();
     void setAircraftState(QList<SWGADSBDemodAircraftState*>* aircraft_state);
 
@@ -86,6 +89,9 @@ private:
 
     float target_range;
     bool m_target_range_isSet;
+
+    QString* report_date_time;
+    bool m_report_date_time_isSet;
 
     QList<SWGADSBDemodAircraftState*>* aircraft_state;
     bool m_aircraft_state_isSet;

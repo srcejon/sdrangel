@@ -54,11 +54,56 @@ public:
     float getLongitude();
     void setLongitude(float longitude);
 
+    qint32 getPositionValid();
+    void setPositionValid(qint32 position_valid);
+
+    QString* getPositionDateTime();
+    void setPositionDateTime(QString* position_date_time);
+
     qint32 getAltitude();
     void setAltitude(qint32 altitude);
 
+    qint32 getAltitudeValid();
+    void setAltitudeValid(qint32 altitude_valid);
+
+    QString* getAltitudeDateTime();
+    void setAltitudeDateTime(QString* altitude_date_time);
+
     qint32 getGroundSpeed();
     void setGroundSpeed(qint32 ground_speed);
+
+    qint32 getGroundSpeedValid();
+    void setGroundSpeedValid(qint32 ground_speed_valid);
+
+    QString* getGroundSpeedDateTime();
+    void setGroundSpeedDateTime(QString* ground_speed_date_time);
+
+    float getTrack();
+    void setTrack(float track);
+
+    qint32 getTrackValid();
+    void setTrackValid(qint32 track_valid);
+
+    QString* getTrackDateTime();
+    void setTrackDateTime(QString* track_date_time);
+
+    float getHeading();
+    void setHeading(float heading);
+
+    qint32 getHeadingValid();
+    void setHeadingValid(qint32 heading_valid);
+
+    QString* getHeadingDateTime();
+    void setHeadingDateTime(QString* heading_date_time);
+
+    qint32 getVerticalRate();
+    void setVerticalRate(qint32 vertical_rate);
+
+    qint32 getVerticalRateValid();
+    void setVerticalRateValid(qint32 vertical_rate_valid);
+
+    QString* getVerticalRateDateTime();
+    void setVerticalRateDateTime(QString* vertical_rate_date_time);
 
 
     virtual bool isSet() override;
@@ -76,11 +121,56 @@ private:
     float longitude;
     bool m_longitude_isSet;
 
+    qint32 position_valid;
+    bool m_position_valid_isSet;
+
+    QString* position_date_time;
+    bool m_position_date_time_isSet;
+
     qint32 altitude;
     bool m_altitude_isSet;
 
+    qint32 altitude_valid;
+    bool m_altitude_valid_isSet;
+
+    QString* altitude_date_time;
+    bool m_altitude_date_time_isSet;
+
     qint32 ground_speed;
     bool m_ground_speed_isSet;
+
+    qint32 ground_speed_valid;
+    bool m_ground_speed_valid_isSet;
+
+    QString* ground_speed_date_time;
+    bool m_ground_speed_date_time_isSet;
+
+    float track;
+    bool m_track_isSet;
+
+    qint32 track_valid;
+    bool m_track_valid_isSet;
+
+    QString* track_date_time;
+    bool m_track_date_time_isSet;
+
+    float heading;
+    bool m_heading_isSet;
+
+    qint32 heading_valid;
+    bool m_heading_valid_isSet;
+
+    QString* heading_date_time;
+    bool m_heading_date_time_isSet;
+
+    qint32 vertical_rate;
+    bool m_vertical_rate_isSet;
+
+    qint32 vertical_rate_valid;
+    bool m_vertical_rate_valid_isSet;
+
+    QString* vertical_rate_date_time;
+    bool m_vertical_rate_date_time_isSet;
 
 };
 

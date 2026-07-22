@@ -716,13 +716,75 @@ margin-bottom: 20px;
       "format" : "float",
       "description" : "Longitude of aircraft in degrees"
     },
+    "positionValid" : {
+      "type" : "integer",
+      "description" : "Whether latitude and longitude contain a valid aircraft position (1 for yes, 0 for no)"
+    },
+    "positionDateTime" : {
+      "type" : "string",
+      "description" : "Date and time at this position (ISO 8601 extended format)"
+    },
     "altitude" : {
       "type" : "integer",
       "description" : "Altitude of aircraft in feet"
     },
+    "altitudeValid" : {
+      "type" : "integer",
+      "description" : "Whether altitude contains a valid value (1 for yes, 0 for no)"
+    },
+    "altitudeDateTime" : {
+      "type" : "string",
+      "description" : "Date and time at this altitude (ISO 8601 extended format)"
+    },
     "groundSpeed" : {
       "type" : "integer",
       "description" : "Groundspeed of aircraft in knots"
+    },
+    "groundSpeedValid" : {
+      "type" : "integer",
+      "description" : "Whether groundSpeed contains a valid value (1 for yes, 0 for no)"
+    },
+    "groundSpeedDateTime" : {
+      "type" : "string",
+      "description" : "Date and time at this ground speed (ISO 8601 extended format)"
+    },
+    "track" : {
+      "type" : "number",
+      "format" : "float",
+      "description" : "Aircraft ground track in degrees true"
+    },
+    "trackValid" : {
+      "type" : "integer",
+      "description" : "Whether track contains a valid value (1 for yes, 0 for no)"
+    },
+    "trackDateTime" : {
+      "type" : "string",
+      "description" : "Date and time at this ground track (ISO 8601 extended format)"
+    },
+    "heading" : {
+      "type" : "number",
+      "format" : "float",
+      "description" : "Aircraft magnetic heading in degrees"
+    },
+    "headingValid" : {
+      "type" : "integer",
+      "description" : "Whether heading contains a valid value (1 for yes, 0 for no)"
+    },
+    "headingDateTime" : {
+      "type" : "string",
+      "description" : "Date and time at this heading (ISO 8601 extended format)"
+    },
+    "verticalRate" : {
+      "type" : "integer",
+      "description" : "Aircraft vertical rate in feet per minute (positive for climb)"
+    },
+    "verticalRateValid" : {
+      "type" : "integer",
+      "description" : "Whether verticalRate contains a valid value (1 for yes, 0 for no)"
+    },
+    "verticalRateDateTime" : {
+      "type" : "string",
+      "description" : "Date and time at this vertical rate (ISO 8601 extended format)"
     }
   }
 };
@@ -750,6 +812,10 @@ margin-bottom: 20px;
     "targetRange" : {
       "type" : "number",
       "format" : "float"
+    },
+    "reportDateTime" : {
+      "type" : "string",
+      "description" : "Date and time at which the aircraft state snapshot was generated (ISO 8601 extended format)"
     },
     "aircraftState" : {
       "type" : "array",
@@ -13393,14 +13459,14 @@ margin-bottom: 20px;
     "transmitterBeamwidth" : {
       "type" : "number",
       "format" : "float",
-      "description" : "Radar transmitter azimuthal beam coverage in degrees; zero means unspecified",
+      "description" : "Radar transmitter azimuth beamwidth in degrees; zero means unspecified",
       "minimum" : 0.0,
       "maximum" : 360.0
     },
     "transmitterHPBW" : {
       "type" : "number",
       "format" : "float",
-      "description" : "Radar transmitter vertical half-power beamwidth in degrees; zero means unspecified",
+      "description" : "Radar transmitter elevation beamwidth in degrees; zero means unspecified",
       "minimum" : 0.0,
       "maximum" : 180.0
     },
@@ -62913,7 +62979,7 @@ except ApiException as e:
           </div>
           <div id="generator">
             <div class="content">
-              Generated 2026-07-22T13:11:23.592+02:00
+              Generated 2026-07-22T19:14:31.228+02:00
             </div>
           </div>
       </div>

@@ -40,6 +40,8 @@ SWGADSBDemodReport::SWGADSBDemodReport() {
     m_target_elevation_isSet = false;
     target_range = 0.0f;
     m_target_range_isSet = false;
+    report_date_time = nullptr;
+    m_report_date_time_isSet = false;
     aircraft_state = nullptr;
     m_aircraft_state_isSet = false;
 }
@@ -62,6 +64,8 @@ SWGADSBDemodReport::init() {
     m_target_elevation_isSet = false;
     target_range = 0.0f;
     m_target_range_isSet = false;
+    report_date_time = new QString("");
+    m_report_date_time_isSet = false;
     aircraft_state = new QList<SWGADSBDemodAircraftState*>();
     m_aircraft_state_isSet = false;
 }
@@ -76,6 +80,9 @@ SWGADSBDemodReport::cleanup() {
 
 
 
+    if(report_date_time != nullptr) { 
+        delete report_date_time;
+    }
     if(aircraft_state != nullptr) { 
         auto arr = aircraft_state;
         for(auto o: *arr) { 
@@ -107,6 +114,8 @@ SWGADSBDemodReport::fromJsonObject(QJsonObject &pJson) {
     ::SWGSDRangel::setValue(&target_elevation, pJson["targetElevation"], "float", "");
     
     ::SWGSDRangel::setValue(&target_range, pJson["targetRange"], "float", "");
+    
+    ::SWGSDRangel::setValue(&report_date_time, pJson["reportDateTime"], "QString", "QString");
     
     
     ::SWGSDRangel::setValue(&aircraft_state, pJson["aircraftState"], "QList", "SWGADSBDemodAircraftState");
@@ -143,6 +152,9 @@ SWGADSBDemodReport::asJsonObject() {
     }
     if(m_target_range_isSet){
         obj->insert("targetRange", QJsonValue(target_range));
+    }
+    if(report_date_time != nullptr && *report_date_time != QString("")){
+        toJsonValue(QString("reportDateTime"), report_date_time, obj, QString("QString"));
     }
     if(aircraft_state && aircraft_state->size() > 0){
         toJsonArray((QList<void*>*)aircraft_state, obj, "aircraftState", "SWGADSBDemodAircraftState");
@@ -211,6 +223,16 @@ SWGADSBDemodReport::setTargetRange(float target_range) {
     this->m_target_range_isSet = true;
 }
 
+QString*
+SWGADSBDemodReport::getReportDateTime() {
+    return report_date_time;
+}
+void
+SWGADSBDemodReport::setReportDateTime(QString* report_date_time) {
+    this->report_date_time = report_date_time;
+    this->m_report_date_time_isSet = true;
+}
+
 QList<SWGADSBDemodAircraftState*>*
 SWGADSBDemodReport::getAircraftState() {
     return aircraft_state;
@@ -242,6 +264,9 @@ SWGADSBDemodReport::isSet(){
             isObjectUpdated = true; break;
         }
         if(m_target_range_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(report_date_time && *report_date_time != QString("")){
             isObjectUpdated = true; break;
         }
         if(aircraft_state && (aircraft_state->size() > 0)){

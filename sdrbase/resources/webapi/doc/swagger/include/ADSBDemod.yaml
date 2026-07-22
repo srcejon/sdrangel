@@ -126,6 +126,9 @@ ADSBDemodReport:
     targetRange:
       type: number
       format: float
+    reportDateTime:
+      description: "Date and time at which the aircraft state snapshot was generated (ISO 8601 extended format)"
+      type: string
     aircraftState:
       type: array
       items:
@@ -147,9 +150,56 @@ ADSBDemodAircraftState:
       description: "Longitude of aircraft in degrees"
       type: number
       format: float
+    positionValid:
+      description: "Whether latitude and longitude contain a valid aircraft position (1 for yes, 0 for no)"
+      type: integer
+    positionDateTime:
+      description: "Date and time at this position (ISO 8601 extended format)"
+      type: string
     altitude:
       description: "Altitude of aircraft in feet"
       type: integer
+    altitudeValid:
+      description: "Whether altitude contains a valid value (1 for yes, 0 for no)"
+      type: integer
+    altitudeDateTime:
+      description: "Date and time at this altitude (ISO 8601 extended format)"
+      type: string
     groundSpeed:
       description: "Groundspeed of aircraft in knots"
       type: integer
+    groundSpeedValid:
+      description: "Whether groundSpeed contains a valid value (1 for yes, 0 for no)"
+      type: integer
+    groundSpeedDateTime:
+      description: "Date and time at this ground speed (ISO 8601 extended format)"
+      type: string
+    track:
+      description: "Aircraft ground track in degrees true"
+      type: number
+      format: float
+    trackValid:
+      description: "Whether track contains a valid value (1 for yes, 0 for no)"
+      type: integer
+    trackDateTime:
+      description: "Date and time at this ground track (ISO 8601 extended format)"
+      type: string
+    heading:
+      description: "Aircraft magnetic heading in degrees"
+      type: number
+      format: float
+    headingValid:
+      description: "Whether heading contains a valid value (1 for yes, 0 for no)"
+      type: integer
+    headingDateTime:
+      description: "Date and time at this heading (ISO 8601 extended format)"
+      type: string
+    verticalRate:
+      description: "Aircraft vertical rate in feet per minute (positive for climb)"
+      type: integer
+    verticalRateValid:
+      description: "Whether verticalRate contains a valid value (1 for yes, 0 for no)"
+      type: integer
+    verticalRateDateTime:
+      description: "Date and time at this vertical rate (ISO 8601 extended format)"
+      type: string

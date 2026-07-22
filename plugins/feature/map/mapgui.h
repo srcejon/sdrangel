@@ -213,6 +213,8 @@ private:
     ImageFilter m_imageMapFilter;
     PolygonMapModel m_polygonMapModel;
     PolygonFilter m_polygonMapFilter;
+    MeshMapModel m_meshMapModel;
+    PolygonFilter m_meshMapFilter;
     PolylineMapModel m_polylineMapModel;
     PolylineFilter m_polylineMapFilter;
     AzEl m_azEl;                        // Position of station

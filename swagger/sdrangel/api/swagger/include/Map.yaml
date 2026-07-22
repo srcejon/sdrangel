@@ -183,7 +183,7 @@ MapItem:
       items:
         $ref: "http://swgserver:8081/api/swagger/include/Map.yaml#/MapAnimation"
     type:
-      description: "(0 - Map Item, 1 - Image Tile, 2 - Polygon, 3 - Polyline)"
+      description: "(0 - Map Item, 1 - Image Tile, 2 - Polygon, 3 - Polyline, 4 - Indexed mesh)"
       type: integer
     imageTileWest:
       type: number
@@ -202,10 +202,13 @@ MapItem:
       type: number
       format: float
     coordinates:
-      description: "Polygon/polyline coordinates"
+      description: "Polygon/polyline coordinates, or the optional 2D footprint of an indexed mesh"
       type: array
       items:
         $ref: "http://swgserver:8081/api/swagger/include/Map.yaml#/MapCoordinate"
+    mesh:
+      description: "Indexed triangle mesh for type 4 map items"
+      $ref: "http://swgserver:8081/api/swagger/include/Map.yaml#/MapMesh"
     extrudedHeight:
       description: "Extruded height (from surface) for polygons"
       type: number
@@ -220,7 +223,7 @@ MapItem:
       description: "0 - Use default color, 1 - Use specified color"
       type: integer
     color:
-      description: "RGBA for polygon and polyline"
+      description: "RGBA for polygon, polyline and indexed mesh"
       type: integer
     aircraftState:
       $ref: "http://swgserver:8081/api/swagger/include/Map.yaml#/MapAircraftState"
@@ -277,6 +280,28 @@ MapCoordinate:
     dateTime:
       description: "Date and time at this coordinate (ISO 8601 extended format)"
       type: string
+
+MapMesh:
+  description: "A generic indexed triangle mesh. Vertices use WGS84 coordinates and triangle indices use counter-clockwise outward winding."
+  required:
+    - vertices
+    - triangleIndices
+  properties:
+    vertices:
+      description: "Mesh vertices in WGS84 latitude, longitude and altitude"
+      type: array
+      minItems: 4
+      maxItems: 20000
+      items:
+        $ref: "http://swgserver:8081/api/swagger/include/Map.yaml#/MapCoordinate"
+    triangleIndices:
+      description: "Zero-based vertex indices, with each consecutive group of three defining one triangle"
+      type: array
+      minItems: 3
+      maxItems: 120000
+      items:
+        type: integer
+        format: int32
 
 MapAircraftState:
   description: "Aircraft state for PFD/ND"

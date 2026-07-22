@@ -330,6 +330,47 @@ void PolygonMapModel::update3D(MapItem *item)
     }
 }
 
+MapItem *MeshMapModel::newMapItem(const QObject *sourcePipe, const QString &group, MapSettings::MapItemSettings *itemSettings, SWGSDRangel::SWGMapItem *mapItem)
+{
+    return new MeshMapItem(sourcePipe, group, itemSettings, mapItem);
+}
+
+QVariant MeshMapModel::data(const QModelIndex &index, int role) const
+{
+    const int row = index.row();
+    if ((row < 0) || (row >= m_items.count())) {
+        return QVariant();
+    }
+
+    MeshMapItem *meshItem = (MeshMapItem *) m_items[row];
+    switch (role)
+    {
+    case borderColorRole:
+        return QVariant::fromValue(QColor(0x00, 0x00, 0x00, 0x00));
+    case fillColorRole:
+        if (!meshItem->m_itemSettings->m_display2DTrack) {
+            return QVariant::fromValue(QColor(0x00, 0x00, 0x00, 0x00));
+        }
+        return QVariant::fromValue(meshItem->m_colorValid
+            ? QColor::fromRgba(meshItem->m_color)
+            : QColor::fromRgba(meshItem->m_itemSettings->m_2DTrackColor));
+    case polygonRole:
+        return meshItem->m_footprint;
+    case boundsRole:
+        return QVariant::fromValue(meshItem->m_bounds);
+    default:
+        return MapModel::data(index, role);
+    }
+}
+
+void MeshMapModel::update3D(MapItem *item)
+{
+    CesiumInterface *cesium = m_gui->cesium();
+    if (cesium) {
+        cesium->update((MeshMapItem *) item);
+    }
+}
+
 MapItem *PolylineMapModel::newMapItem(const QObject *sourcePipe, const QString &group, MapSettings::MapItemSettings *itemSettings, SWGSDRangel::SWGMapItem *mapItem)
 {
     return new PolylineMapItem(sourcePipe, group, itemSettings, mapItem);
@@ -1392,4 +1433,3 @@ void ImageFilter::setPosition(const QGeoCoordinate& position)
     m_position = position;
     invalidateFilter();
 }
-

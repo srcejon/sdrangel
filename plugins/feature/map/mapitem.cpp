@@ -15,7 +15,11 @@
 // along with this program. If not, see <http://www.gnu.org/licenses/>.          //
 ///////////////////////////////////////////////////////////////////////////////////
 
+#include <cmath>
+
 #include "mapitem.h"
+
+#include "SWGMapMesh.h"
 
 static bool hasCompactTrack(
     const QList<double> *latitudes,
@@ -308,6 +312,112 @@ void PolylineMapItem::update(SWGSDRangel::SWGMapItem *mapItem)
         m_polyline.push_back(QVariant::fromValue(coord));
     }
     m_bounds = QGeoRectangle(QGeoCoordinate(latMax, lonMin), QGeoCoordinate(latMin, lonMax));
+}
+
+void MeshMapItem::update(SWGSDRangel::SWGMapItem *mapItem)
+{
+    static constexpr int MaxMeshVertices = 20000;
+    static constexpr int MaxMeshTriangleIndices = 120000;
+
+    MapItem::update(mapItem);
+    m_colorValid = mapItem->getColorValid();
+    m_color = mapItem->getColor();
+    m_altitudeReference = mapItem->getAltitudeReference();
+    m_deleted = *mapItem->getImage() == "";
+    m_valid = false;
+    m_footprint.clear();
+    m_vertices.clear();
+    m_triangleIndices.clear();
+
+    qreal latitudeMin = 90.0;
+    qreal latitudeMax = -90.0;
+    qreal longitudeMin = 180.0;
+    qreal longitudeMax = -180.0;
+    QList<SWGSDRangel::SWGMapCoordinate *> *coordinates = mapItem->getCoordinates();
+    if (coordinates)
+    {
+        for (SWGSDRangel::SWGMapCoordinate *point : *coordinates)
+        {
+            const QGeoCoordinate coordinate(point->getLatitude(), point->getLongitude(), point->getAltitude());
+            if (!coordinate.isValid()) {
+                continue;
+            }
+            latitudeMin = std::min(latitudeMin, coordinate.latitude());
+            latitudeMax = std::max(latitudeMax, coordinate.latitude());
+            longitudeMin = std::min(longitudeMin, coordinate.longitude());
+            longitudeMax = std::max(longitudeMax, coordinate.longitude());
+            m_footprint.push_back(QVariant::fromValue(coordinate));
+        }
+    }
+
+    SWGSDRangel::SWGMapMesh *mesh = mapItem->getMesh();
+    if (!mesh || !mesh->getVertices() || !mesh->getTriangleIndices()) {
+        return;
+    }
+
+    const QList<SWGSDRangel::SWGMapCoordinate *> *vertices = mesh->getVertices();
+    const QList<qint32> *indices = mesh->getTriangleIndices();
+    if ((vertices->size() < 4)
+        || (vertices->size() > MaxMeshVertices)
+        || indices->isEmpty()
+        || (indices->size() > MaxMeshTriangleIndices)
+        || ((indices->size() % 3) != 0))
+    {
+        qWarning() << "MeshMapItem::update: invalid mesh sizes for" << m_name
+                   << "vertices:" << vertices->size()
+                   << "indices:" << indices->size();
+        return;
+    }
+
+    m_vertices.reserve(vertices->size());
+    for (SWGSDRangel::SWGMapCoordinate *point : *vertices)
+    {
+        const QGeoCoordinate coordinate(point->getLatitude(), point->getLongitude(), point->getAltitude());
+        if (!coordinate.isValid() || !std::isfinite(coordinate.altitude()))
+        {
+            qWarning() << "MeshMapItem::update: invalid vertex for" << m_name;
+            m_vertices.clear();
+            return;
+        }
+        m_vertices.append(coordinate);
+        if (m_footprint.isEmpty())
+        {
+            latitudeMin = std::min(latitudeMin, coordinate.latitude());
+            latitudeMax = std::max(latitudeMax, coordinate.latitude());
+            longitudeMin = std::min(longitudeMin, coordinate.longitude());
+            longitudeMax = std::max(longitudeMax, coordinate.longitude());
+        }
+    }
+
+    m_triangleIndices.reserve(indices->size());
+    for (int i = 0; i < indices->size(); ++i)
+    {
+        const qint32 index = indices->at(i);
+        if ((index < 0) || (index >= m_vertices.size()))
+        {
+            qWarning() << "MeshMapItem::update: out-of-range triangle index for" << m_name << index;
+            m_vertices.clear();
+            m_triangleIndices.clear();
+            return;
+        }
+        m_triangleIndices.append((quint32) index);
+
+        if (((i % 3) == 2)
+            && ((indices->at(i - 2) == indices->at(i - 1))
+                || (indices->at(i - 1) == indices->at(i))
+                || (indices->at(i) == indices->at(i - 2))))
+        {
+            qWarning() << "MeshMapItem::update: degenerate triangle for" << m_name;
+            m_vertices.clear();
+            m_triangleIndices.clear();
+            return;
+        }
+    }
+
+    m_bounds = QGeoRectangle(
+        QGeoCoordinate(latitudeMax, longitudeMin),
+        QGeoCoordinate(latitudeMin, longitudeMax));
+    m_valid = true;
 }
 
 // Look for a frequency in the text for this object

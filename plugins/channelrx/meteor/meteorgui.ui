@@ -387,7 +387,7 @@
     <item row="6" column="0">
      <widget class="QToolButton" name="showAntennaPatterns">
       <property name="toolTip">
-       <string>Show transmitter and receiver antenna patterns on Map features</string>
+       <string>Show transmitter, receiver and intersection HPBW volumes on Map features</string>
       </property>
       <property name="text">
        <string/>

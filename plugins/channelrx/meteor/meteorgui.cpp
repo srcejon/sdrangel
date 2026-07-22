@@ -41,6 +41,7 @@
 
 #include "SWGMapCoordinate.h"
 #include "SWGMapItem.h"
+#include "SWGMapMesh.h"
 
 #include "device/deviceuiset.h"
 #include "device/deviceapi.h"
@@ -664,6 +665,7 @@ void MeteorGUI::updateAntennaPatternsOnMap(bool force)
 {
     static const QString txName = QStringLiteral("Meteor TX antenna pattern");
     static const QString rxName = QStringLiteral("Meteor RX antenna pattern");
+    static const QString intersectionName = QStringLiteral("Meteor antenna pattern intersection");
     QList<ObjectPipe *> mapPipes;
     MainCore::instance()->getMessagePipes().getMessagePipes(m_meteor, "mapitems", mapPipes);
     QSet<MessageQueue *> currentQueues;
@@ -679,39 +681,40 @@ void MeteorGUI::updateAntennaPatternsOnMap(bool force)
         return;
     }
 
-    auto removeItem = [this](MessageQueue *messageQueue, const QString& name) {
+    auto removeItem = [this](MessageQueue *messageQueue, const QString& name, int type) {
         SWGSDRangel::SWGMapItem *item = new SWGSDRangel::SWGMapItem();
         item->setName(new QString(name));
         item->setImage(new QString());
+        item->setType(type);
         messageQueue->push(MainCore::MsgMapItem::create(m_meteor, item));
     };
-    auto addPolygon = [this](
+    auto addMesh = [this](
         MessageQueue *messageQueue,
         const QString& name,
         const QString& label,
-        const std::vector<MeteorMapGeometry::Coordinate>& coordinates,
+        const MeteorMapGeometry::Mesh& geometry,
         QRgb color)
     {
-        if (coordinates.empty()) {
+        if (!geometry.isValid()) {
             return;
         }
 
         SWGSDRangel::SWGMapItem *item = new SWGSDRangel::SWGMapItem();
         item->setName(new QString(name));
         item->setLabel(new QString(label));
-        item->setLatitude(coordinates.front().m_latitude);
-        item->setLongitude(coordinates.front().m_longitude);
-        item->setAltitude(coordinates.front().m_altitudeM);
+        item->setLatitude(geometry.m_vertices.front().m_latitude);
+        item->setLongitude(geometry.m_vertices.front().m_longitude);
+        item->setAltitude(geometry.m_vertices.front().m_altitudeM);
         item->setImage(new QString(QStringLiteral("none")));
         item->setImageRotation(0);
         item->setFixedPosition(true);
-        item->setAltitudeReference(3); // CLIP_TO_GROUND
+        item->setAltitudeReference(0); // Absolute WGS84 altitudes
         item->setColorValid(true);
         item->setColor(color);
         QList<SWGSDRangel::SWGMapCoordinate *> *mapCoordinates =
             new QList<SWGSDRangel::SWGMapCoordinate *>();
 
-        for (const MeteorMapGeometry::Coordinate& coordinate : coordinates)
+        for (const MeteorMapGeometry::Coordinate& coordinate : geometry.m_footprint)
         {
             SWGSDRangel::SWGMapCoordinate *mapCoordinate = new SWGSDRangel::SWGMapCoordinate();
             mapCoordinate->setLatitude(coordinate.m_latitude);
@@ -721,49 +724,84 @@ void MeteorGUI::updateAntennaPatternsOnMap(bool force)
         }
 
         item->setCoordinates(mapCoordinates);
-        item->setType(2);
+        SWGSDRangel::SWGMapMesh *mapMesh = new SWGSDRangel::SWGMapMesh();
+        QList<SWGSDRangel::SWGMapCoordinate *> *vertices =
+            new QList<SWGSDRangel::SWGMapCoordinate *>();
+        for (const MeteorMapGeometry::Coordinate& coordinate : geometry.m_vertices)
+        {
+            SWGSDRangel::SWGMapCoordinate *vertex = new SWGSDRangel::SWGMapCoordinate();
+            vertex->setLatitude(coordinate.m_latitude);
+            vertex->setLongitude(coordinate.m_longitude);
+            vertex->setAltitude(coordinate.m_altitudeM);
+            vertices->append(vertex);
+        }
+        mapMesh->setVertices(vertices);
+        QList<qint32> *indices = new QList<qint32>();
+        indices->reserve((int) geometry.m_triangleIndices.size());
+        for (std::uint32_t index : geometry.m_triangleIndices) {
+            indices->append((qint32) index);
+        }
+        mapMesh->setTriangleIndices(indices);
+        item->setMesh(mapMesh);
+        item->setType(4);
         messageQueue->push(MainCore::MsgMapItem::create(m_meteor, item));
     };
 
     const double maxAltitudeM = m_settings.m_mapMaxAltitudeKM * 1000.0;
-    const std::vector<MeteorMapGeometry::Coordinate> txCoordinates =
-        MeteorMapGeometry::beamFootprint(
+    const MeteorMapGeometry::BeamDefinition txDefinition {
             m_settings.m_transmitterLatitude,
             m_settings.m_transmitterLongitude,
+            0.0,
             m_settings.m_transmitterAzimuth,
             m_settings.m_transmitterElevation,
             m_settings.m_transmitterBeamwidth,
             m_settings.m_transmitterHPBW,
-            maxAltitudeM);
-    const std::vector<MeteorMapGeometry::Coordinate> rxCoordinates =
-        MeteorMapGeometry::beamFootprint(
+            maxAltitudeM
+    };
+    const MeteorMapGeometry::BeamDefinition rxDefinition {
             m_settings.m_receiverLatitude,
             m_settings.m_receiverLongitude,
+            MainCore::instance()->getSettings().getAltitude(),
             m_settings.m_antennaAzimuth,
             m_settings.m_antennaElevation,
             m_settings.m_antennaBeamwidth,
             m_settings.m_antennaBeamwidth,
-            maxAltitudeM);
+            maxAltitudeM
+    };
+    const MeteorMapGeometry::Mesh txGeometry = MeteorMapGeometry::beamVolume(txDefinition);
+    const MeteorMapGeometry::Mesh rxGeometry = MeteorMapGeometry::beamVolume(rxDefinition);
+    const MeteorMapGeometry::Mesh intersectionGeometry =
+        MeteorMapGeometry::beamIntersection(txDefinition, rxDefinition);
 
     for (MessageQueue *messageQueue : currentQueues)
     {
-        removeItem(messageQueue, txName);
-        removeItem(messageQueue, rxName);
+        // Type 2 removals clear footprints created by versions before indexed meshes.
+        removeItem(messageQueue, txName, 2);
+        removeItem(messageQueue, rxName, 2);
+        removeItem(messageQueue, txName, 4);
+        removeItem(messageQueue, rxName, 4);
+        removeItem(messageQueue, intersectionName, 4);
 
         if (m_settings.m_showAntennaPatterns)
         {
-            addPolygon(
+            addMesh(
                 messageQueue,
                 txName,
-                tr("Transmitter antenna pattern"),
-                txCoordinates,
-                QColor(255, 96, 32, 96).rgba());
-            addPolygon(
+                tr("Transmitter HPBW volume"),
+                txGeometry,
+                QColor(255, 96, 32, 72).rgba());
+            addMesh(
                 messageQueue,
                 rxName,
-                tr("Receiver antenna pattern"),
-                rxCoordinates,
-                QColor(0, 190, 255, 96).rgba());
+                tr("Receiver HPBW volume"),
+                rxGeometry,
+                QColor(0, 190, 255, 72).rgba());
+            addMesh(
+                messageQueue,
+                intersectionName,
+                tr("TX/RX HPBW intersection volume"),
+                intersectionGeometry,
+                QColor(128, 255, 64, 152).rgba());
         }
     }
 

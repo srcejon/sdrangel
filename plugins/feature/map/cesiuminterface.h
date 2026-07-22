@@ -25,6 +25,7 @@
 class ObjectMapItem;
 class PolygonMapItem;
 class PolylineMapItem;
+class MeshMapItem;
 
 class CesiumInterface : public MapWebSocketServer
 {
@@ -80,12 +81,14 @@ public:
     void updateImage(const QString &name, float east, float west, float north, float south, float altitude, const QString &data);
     void removeImage(const QString &name);
     void removeAllImages();
+    void removeAllMeshes();
     void removeAllCZMLEntities();
     void initCZML();
     void czml(QJsonObject &obj);
     void update(ObjectMapItem *mapItem, bool isTarget, bool isSelected);
     void update(PolygonMapItem *mapItem);
     void update(PolylineMapItem *mapItem);
+    void update(MeshMapItem *mapItem);
     void setPosition(const QGeoCoordinate& position);
     void save(const QString& filename, const QString& dataDir);
 

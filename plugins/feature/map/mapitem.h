@@ -22,6 +22,7 @@
 #include <QGeoCoordinate>
 #include <QGeoRectangle>
 #include <QColor>
+#include <QVector>
 
 #include "mapsettings.h"
 #include "cesiuminterface.h"
@@ -33,6 +34,7 @@
 class MapModel;
 class ObjectMapModel;
 class PolygonMapModel;
+class MeshMapModel;
 class PolylineMapModel;
 class ImageMapModel;
 class CZML;
@@ -51,6 +53,7 @@ protected:
     friend MapModel;
     friend ObjectMapModel;
     friend PolygonMapModel;
+    friend MeshMapModel;
     friend PolylineMapModel;
 
     QString m_group;
@@ -198,6 +201,31 @@ protected:
     QRgb m_color;
     int m_altitudeReference;
     bool m_deleted;
+};
+
+class MeshMapItem : public MapItem {
+
+public:
+    MeshMapItem(const QObject *sourcePipe, const QString &group, MapSettings::MapItemSettings *itemSettings, SWGSDRangel::SWGMapItem *mapItem) :
+        MapItem(sourcePipe, group, itemSettings, mapItem)
+    {
+        update(mapItem);
+    }
+    void update(SWGSDRangel::SWGMapItem *mapItem) override;
+
+protected:
+    friend MeshMapModel;
+    friend CesiumInterface;
+
+    QVariantList m_footprint;
+    QGeoRectangle m_bounds;
+    QList<QGeoCoordinate> m_vertices;
+    QVector<quint32> m_triangleIndices;
+    bool m_colorValid;
+    QRgb m_color;
+    int m_altitudeReference;
+    bool m_deleted;
+    bool m_valid;
 };
 
 class ImageMapItem : public MapItem {

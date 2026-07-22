@@ -192,6 +192,38 @@ protected:
     MapItem *newMapItem(const QObject *sourcePipe, const QString &group, MapSettings::MapItemSettings *itemSettings, SWGSDRangel::SWGMapItem *mapItem) override;
 };
 
+class MeshMapModel : public MapModel {
+    Q_OBJECT
+
+public:
+    enum MarkerRoles {
+        borderColorRole = MapModel::lastRole + 0,
+        fillColorRole = MapModel::lastRole + 1,
+        polygonRole = MapModel::lastRole + 2,
+        boundsRole = MapModel::lastRole + 3
+    };
+
+    MeshMapModel(MapGUI *gui) :
+        MapModel(gui)
+    {}
+
+    QHash<int, QByteArray> roleNames() const override
+    {
+        QHash<int, QByteArray> roles = MapModel::roleNames();
+        roles[borderColorRole] = "borderColor";
+        roles[fillColorRole] = "fillColor";
+        roles[polygonRole] = "polygon";
+        roles[boundsRole] = "bounds";
+        return roles;
+    }
+
+    QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const override;
+
+protected:
+    void update3D(MapItem *item) override;
+    MapItem *newMapItem(const QObject *sourcePipe, const QString &group, MapSettings::MapItemSettings *itemSettings, SWGSDRangel::SWGMapItem *mapItem) override;
+};
+
 // Model used for each item on the map
 class ObjectMapModel : public MapModel {
     Q_OBJECT
@@ -399,4 +431,3 @@ private:
 };
 
 #endif // INCLUDE_FEATURE_MAPMODEL_H_
-

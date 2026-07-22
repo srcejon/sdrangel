@@ -136,6 +136,35 @@ namespace {
             return false;
         }
 
+        const MeteorMapGeometry::BeamDefinition beam {
+            47.348, 5.5151, 0.0, 180.0, 27.5, 60.0, 25.0, 1000000.0
+        };
+        const MeteorMapGeometry::Mesh volume = MeteorMapGeometry::beamVolume(beam);
+        if (!volume.isValid() || (volume.m_footprint.size() < 10))
+        {
+            errorStream << "Meteor map geometry test: beam volume is invalid\n";
+            return false;
+        }
+
+        const MeteorMapGeometry::Mesh identicalIntersection =
+            MeteorMapGeometry::beamIntersection(beam, beam);
+        if (!identicalIntersection.isValid() || identicalIntersection.m_footprint.empty())
+        {
+            errorStream << "Meteor map geometry test: identical beams have no volume intersection\n";
+            return false;
+        }
+
+        MeteorMapGeometry::BeamDefinition oppositeBeam = beam;
+        oppositeBeam.m_azimuthDegrees = 0.0;
+        oppositeBeam.m_horizontalBeamwidthDegrees = 20.0;
+        MeteorMapGeometry::BeamDefinition narrowBeam = beam;
+        narrowBeam.m_horizontalBeamwidthDegrees = 20.0;
+        if (MeteorMapGeometry::beamIntersection(narrowBeam, oppositeBeam).isValid())
+        {
+            errorStream << "Meteor map geometry test: opposing narrow beams unexpectedly intersect\n";
+            return false;
+        }
+
         return true;
     }
 

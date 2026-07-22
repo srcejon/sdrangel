@@ -90,6 +90,18 @@ Item {
             }
 
             MapItemView {
+                model: meshModelFiltered
+                delegate: polygonComponent
+                parent: mapView.map
+            }
+
+            MapItemView {
+                model: meshModelFiltered
+                delegate: polygonNameComponent
+                parent: mapView.map
+            }
+
+            MapItemView {
                 model: polylineModelFiltered
                 delegate: polylineComponent
                 parent: mapView.map
@@ -137,6 +149,7 @@ Item {
                 mapModelFiltered.viewChanged(map.visibleRegion.boundingGeoRectangle().topLeft.longitude, map.visibleRegion.boundingGeoRectangle().topLeft.latitude, map.visibleRegion.boundingGeoRectangle().bottomRight.longitude, map.visibleRegion.boundingGeoRectangle().bottomRight.latitude, map.zoomLevel);
                 imageModelFiltered.viewChanged(map.visibleRegion.boundingGeoRectangle().topLeft.longitude, map.visibleRegion.boundingGeoRectangle().topLeft.latitude, map.visibleRegion.boundingGeoRectangle().bottomRight.longitude, map.visibleRegion.boundingGeoRectangle().bottomRight.latitude, map.zoomLevel);
                 polygonModelFiltered.viewChanged(map.visibleRegion.boundingGeoRectangle().topLeft.longitude, map.visibleRegion.boundingGeoRectangle().topLeft.latitude, map.visibleRegion.boundingGeoRectangle().bottomRight.longitude, map.visibleRegion.boundingGeoRectangle().bottomRight.latitude, map.zoomLevel);
+                meshModelFiltered.viewChanged(map.visibleRegion.boundingGeoRectangle().topLeft.longitude, map.visibleRegion.boundingGeoRectangle().topLeft.latitude, map.visibleRegion.boundingGeoRectangle().bottomRight.longitude, map.visibleRegion.boundingGeoRectangle().bottomRight.latitude, map.zoomLevel);
                 polylineModelFiltered.viewChanged(map.visibleRegion.boundingGeoRectangle().topLeft.longitude, map.visibleRegion.boundingGeoRectangle().topLeft.latitude, map.visibleRegion.boundingGeoRectangle().bottomRight.longitude, map.visibleRegion.boundingGeoRectangle().bottomRight.latitude, map.zoomLevel);
             }
 
@@ -146,6 +159,7 @@ Item {
             map.onCenterChanged: {
                 polylineModelFiltered.viewChanged(map.visibleRegion.boundingGeoRectangle().topLeft.longitude, map.visibleRegion.boundingGeoRectangle().topLeft.latitude, map.visibleRegion.boundingGeoRectangle().bottomRight.longitude, map.visibleRegion.boundingGeoRectangle().bottomRight.latitude, map.zoomLevel);
                 polygonModelFiltered.viewChanged(map.visibleRegion.boundingGeoRectangle().topLeft.longitude, map.visibleRegion.boundingGeoRectangle().topLeft.latitude, map.visibleRegion.boundingGeoRectangle().bottomRight.longitude, map.visibleRegion.boundingGeoRectangle().bottomRight.latitude, map.zoomLevel);
+                meshModelFiltered.viewChanged(map.visibleRegion.boundingGeoRectangle().topLeft.longitude, map.visibleRegion.boundingGeoRectangle().topLeft.latitude, map.visibleRegion.boundingGeoRectangle().bottomRight.longitude, map.visibleRegion.boundingGeoRectangle().bottomRight.latitude, map.zoomLevel);
                 imageModelFiltered.viewChanged(map.visibleRegion.boundingGeoRectangle().topLeft.longitude, map.visibleRegion.boundingGeoRectangle().topLeft.latitude, map.visibleRegion.boundingGeoRectangle().bottomRight.longitude, map.visibleRegion.boundingGeoRectangle().bottomRight.latitude, map.zoomLevel);
                 mapModelFiltered.viewChanged(map.visibleRegion.boundingGeoRectangle().topLeft.longitude, map.visibleRegion.boundingGeoRectangle().topLeft.latitude, map.visibleRegion.boundingGeoRectangle().bottomRight.longitude, map.visibleRegion.boundingGeoRectangle().bottomRight.latitude, map.zoomLevel);
                 mapModel.viewChanged(map.visibleRegion.boundingGeoRectangle().bottomLeft.longitude, map.visibleRegion.boundingGeoRectangle().bottomRight.longitude);

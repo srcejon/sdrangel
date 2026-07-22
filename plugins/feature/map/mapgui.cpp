@@ -195,6 +195,7 @@ MapGUI::MapGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *featur
     m_objectMapModel(this),
     m_imageMapModel(this),
     m_polygonMapModel(this),
+    m_meshMapModel(this),
     m_polylineMapModel(this),
     m_beacons(nullptr),
     m_beaconDialog(this),
@@ -267,12 +268,14 @@ MapGUI::MapGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *featur
     m_objectMapFilter.setSourceModel(&m_objectMapModel);
     m_imageMapFilter.setSourceModel(&m_imageMapModel);
     m_polygonMapFilter.setSourceModel(&m_polygonMapModel);
+    m_meshMapFilter.setSourceModel(&m_meshMapModel);
     m_polylineMapFilter.setSourceModel(&m_polylineMapModel);
 
     ui->map->rootContext()->setContextProperty("mapModelFiltered", &m_objectMapFilter);
     ui->map->rootContext()->setContextProperty("mapModel", &m_objectMapModel);
     ui->map->rootContext()->setContextProperty("imageModelFiltered", &m_imageMapFilter);
     ui->map->rootContext()->setContextProperty("polygonModelFiltered", &m_polygonMapFilter);
+    ui->map->rootContext()->setContextProperty("meshModelFiltered", &m_meshMapFilter);
     ui->map->rootContext()->setContextProperty("polylineModelFiltered", &m_polylineMapFilter);
     connect(ui->map, &QQuickWidget::statusChanged, this, &MapGUI::statusChanged);
 #if (QT_VERSION < QT_VERSION_CHECK(6, 0, 0))
@@ -318,6 +321,7 @@ MapGUI::MapGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *featur
     m_objectMapFilter.setPosition(stationPosition);
     m_imageMapFilter.setPosition(stationPosition);
     m_polygonMapFilter.setPosition(stationPosition);
+    m_meshMapFilter.setPosition(stationPosition);
     m_polylineMapFilter.setPosition(stationPosition);
 
     // Centre map at My Position
@@ -434,6 +438,8 @@ void MapGUI::update(const QObject *source, SWGSDRangel::SWGMapItem *swgMapItem, 
         m_polygonMapModel.update(source, swgMapItem, group);
     } else if (type == 3) {
         m_polylineMapModel.update(source, swgMapItem, group);
+    } else if (type == 4) {
+        m_meshMapModel.update(source, swgMapItem, group);
     }
 }
 
@@ -1984,6 +1990,7 @@ void MapGUI::applyMap3DSettings(bool reloadMap)
         m_objectMapModel.allUpdated();
         m_imageMapModel.allUpdated();
         m_polygonMapModel.allUpdated();
+        m_meshMapModel.allUpdated();
         m_polylineMapModel.allUpdated();
     }
     MapSettings::MapItemSettings *ionosondeItemSettings = getItemSettings("Ionosonde Stations");
@@ -2006,6 +2013,7 @@ void MapGUI::applyMap3DSettings(bool reloadMap)
     m_objectMapModel.allUpdated();
     m_imageMapModel.allUpdated();
     m_polygonMapModel.allUpdated();
+    m_meshMapModel.allUpdated();
     m_polylineMapModel.allUpdated();
     (void)reloadMap;
 #endif
@@ -2070,6 +2078,7 @@ void MapGUI::init3DMap()
     m_objectMapModel.allUpdated();
     m_imageMapModel.allUpdated();
     m_polygonMapModel.allUpdated();
+    m_meshMapModel.allUpdated();
     m_polylineMapModel.allUpdated();
 
     // Set 3D view after loading initial objects
@@ -2145,6 +2154,7 @@ void MapGUI::displaySettings()
     m_objectMapModel.updateItemSettings(m_settings.m_itemSettings);
     m_imageMapModel.updateItemSettings(m_settings.m_itemSettings);
     m_polygonMapModel.updateItemSettings(m_settings.m_itemSettings);
+    m_meshMapModel.updateItemSettings(m_settings.m_itemSettings);
     m_polylineMapModel.updateItemSettings(m_settings.m_itemSettings);
     setEnableOverlay();
     displayToolbar();
@@ -2780,11 +2790,13 @@ void MapGUI::on_deleteAll_clicked()
     m_objectMapModel.removeAll();
     m_imageMapModel.removeAll();
     m_polygonMapModel.removeAll();
+    m_meshMapModel.removeAll();
     m_polylineMapModel.removeAll();
     if (m_cesium)
     {
         m_cesium->removeAllCZMLEntities();
         m_cesium->removeAllImages();
+        m_cesium->removeAllMeshes();
     }
 }
 
@@ -2807,6 +2819,7 @@ void MapGUI::on_displaySettings_clicked()
         m_objectMapModel.allUpdated();
         m_imageMapModel.allUpdated();
         m_polygonMapModel.allUpdated();
+        m_meshMapModel.allUpdated();
         m_polylineMapModel.allUpdated();
     }
 }
@@ -3023,6 +3036,7 @@ void MapGUI::preferenceChanged(int elementType)
             m_objectMapFilter.setPosition(stationPosition);
             m_imageMapFilter.setPosition(stationPosition);
             m_polygonMapFilter.setPosition(stationPosition);
+            m_meshMapFilter.setPosition(stationPosition);
             m_polylineMapFilter.setPosition(stationPosition);
             if (m_cesium)
             {

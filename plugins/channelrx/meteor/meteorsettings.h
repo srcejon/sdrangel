@@ -29,6 +29,11 @@ struct MeteorSettings
 {
     inline static constexpr std::array<int, 4> m_supportedSampleRates = {100, 300, 1000, 3000};
     inline static constexpr int m_defaultSampleRate = 1000;
+    inline static constexpr double m_gravesLatitude = 47.3480;
+    inline static constexpr double m_gravesLongitude = 5.5151;
+    inline static constexpr float m_gravesAzimuth = 180.0f;
+    inline static constexpr float m_gravesElevation = 27.5f;
+    inline static constexpr float m_gravesBeamwidth = 180.0f;
 
     static constexpr bool isSupportedSampleRate(int sampleRate)
     {
@@ -72,6 +77,9 @@ struct MeteorSettings
     float m_transmitterAzimuth;
     float m_transmitterElevation;
     float m_transmitterBeamwidth;
+    double m_receiverLatitude;
+    double m_receiverLongitude;
+    bool m_receiverPositionSet;
     float m_antennaAzimuth;
     float m_antennaElevation;
     float m_antennaBeamwidth;

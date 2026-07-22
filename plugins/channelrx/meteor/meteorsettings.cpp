@@ -48,11 +48,14 @@ void MeteorSettings::resetToDefaults()
     m_detectionsTableColumnHidden = 0;
     m_detectionBoxPaddingPixels = 4;
     m_detectionLabelMode = DetectionLabelNone;
-    m_transmitterLatitude = 0.0;
-    m_transmitterLongitude = 0.0;
-    m_transmitterAzimuth = 0.0f;
-    m_transmitterElevation = 0.0f;
-    m_transmitterBeamwidth = 0.0f;
+    m_transmitterLatitude = m_gravesLatitude;
+    m_transmitterLongitude = m_gravesLongitude;
+    m_transmitterAzimuth = m_gravesAzimuth;
+    m_transmitterElevation = m_gravesElevation;
+    m_transmitterBeamwidth = m_gravesBeamwidth;
+    m_receiverLatitude = 0.0;
+    m_receiverLongitude = 0.0;
+    m_receiverPositionSet = false;
     m_antennaAzimuth = 0.0f;
     m_antennaElevation = 0.0f;
     m_antennaBeamwidth = 0.0f;
@@ -89,6 +92,9 @@ QByteArray MeteorSettings::serialize() const
     s.writeFloat(19, m_transmitterAzimuth);
     s.writeFloat(20, m_transmitterElevation);
     s.writeFloat(27, m_transmitterBeamwidth);
+    s.writeDouble(28, m_receiverLatitude);
+    s.writeDouble(29, m_receiverLongitude);
+    s.writeBool(35, m_receiverPositionSet);
 
     s.writeU32(21, m_rgbColor);
     s.writeString(22, m_title);
@@ -158,6 +164,21 @@ bool MeteorSettings::deserialize(const QByteArray& data)
         d.readFloat(19, &m_transmitterAzimuth, 0.0f);
         d.readFloat(20, &m_transmitterElevation, 0.0f);
         d.readFloat(27, &m_transmitterBeamwidth, 0.0f);
+        d.readDouble(28, &m_receiverLatitude, 0.0);
+        d.readDouble(29, &m_receiverLongitude, 0.0);
+        d.readBool(35, &m_receiverPositionSet, false);
+        if ((m_transmitterLatitude == 0.0)
+            && (m_transmitterLongitude == 0.0)
+            && (m_transmitterAzimuth == 0.0f)
+            && (m_transmitterElevation == 0.0f)
+            && (m_transmitterBeamwidth == 0.0f))
+        {
+            m_transmitterLatitude = m_gravesLatitude;
+            m_transmitterLongitude = m_gravesLongitude;
+            m_transmitterAzimuth = m_gravesAzimuth;
+            m_transmitterElevation = m_gravesElevation;
+            m_transmitterBeamwidth = m_gravesBeamwidth;
+        }
         m_transmitterLatitude = std::isfinite(m_transmitterLatitude)
             ? std::clamp(m_transmitterLatitude, -90.0, 90.0) : 0.0;
         m_transmitterLongitude = std::isfinite(m_transmitterLongitude)
@@ -168,6 +189,10 @@ bool MeteorSettings::deserialize(const QByteArray& data)
             ? std::clamp(m_transmitterElevation, -90.0f, 90.0f) : 0.0f;
         m_transmitterBeamwidth = std::isfinite(m_transmitterBeamwidth)
             ? std::clamp(m_transmitterBeamwidth, 0.0f, 360.0f) : 0.0f;
+        m_receiverLatitude = std::isfinite(m_receiverLatitude)
+            ? std::clamp(m_receiverLatitude, -90.0, 90.0) : 0.0;
+        m_receiverLongitude = std::isfinite(m_receiverLongitude)
+            ? std::clamp(m_receiverLongitude, -180.0, 180.0) : 0.0;
         m_antennaAzimuth = std::isfinite(m_antennaAzimuth)
             ? std::clamp(m_antennaAzimuth, 0.0f, 360.0f) : 0.0f;
         m_antennaElevation = std::isfinite(m_antennaElevation)
@@ -268,6 +293,15 @@ void MeteorSettings::applySettings(const QStringList& settingsKeys, const Meteor
     if (settingsKeys.contains("transmitterBeamwidth")) {
         m_transmitterBeamwidth = settings.m_transmitterBeamwidth;
     }
+    if (settingsKeys.contains("receiverLatitude")) {
+        m_receiverLatitude = settings.m_receiverLatitude;
+    }
+    if (settingsKeys.contains("receiverLongitude")) {
+        m_receiverLongitude = settings.m_receiverLongitude;
+    }
+    if (settingsKeys.contains("receiverPositionSet")) {
+        m_receiverPositionSet = settings.m_receiverPositionSet;
+    }
     if (settingsKeys.contains("antennaAzimuth")) {
         m_antennaAzimuth = settings.m_antennaAzimuth;
     }
@@ -351,6 +385,15 @@ QString MeteorSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("transmitterBeamwidth") || force) {
         ostr << " m_transmitterBeamwidth: " << m_transmitterBeamwidth;
+    }
+    if (settingsKeys.contains("receiverLatitude") || force) {
+        ostr << " m_receiverLatitude: " << m_receiverLatitude;
+    }
+    if (settingsKeys.contains("receiverLongitude") || force) {
+        ostr << " m_receiverLongitude: " << m_receiverLongitude;
+    }
+    if (settingsKeys.contains("receiverPositionSet") || force) {
+        ostr << " m_receiverPositionSet: " << m_receiverPositionSet;
     }
     if (settingsKeys.contains("antennaAzimuth") || force) {
         ostr << " m_antennaAzimuth: " << m_antennaAzimuth;

@@ -57,6 +57,7 @@ class QLabel;
 class QPushButton;
 class QSpinBox;
 class QTableWidget;
+class QToolButton;
 class QWidget;
 
 #if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
@@ -125,6 +126,9 @@ private:
     QDoubleSpinBox *m_transmitterAzimuth;
     QDoubleSpinBox *m_transmitterElevation;
     QDoubleSpinBox *m_transmitterBeamwidth;
+    QDoubleSpinBox *m_receiverLatitude;
+    QDoubleSpinBox *m_receiverLongitude;
+    QToolButton *m_updateReceiverPosition;
     QDoubleSpinBox *m_antennaAzimuth;
     QDoubleSpinBox *m_antennaElevation;
     QDoubleSpinBox *m_antennaBeamwidth;
@@ -194,6 +198,8 @@ private:
     void updateVisualSampleRate();
     void populateRotatorCombo();
     void updateAntennaPointingControls();
+    void initializeReceiverPosition();
+    void syncReceiverPositionFromPreferences();
     QPair<int, int> selectedRotatorIndices() const;
     void syncFromSelectedRotator();
     void addDetection(const MeteorDemodSink::MsgMeteorDetected& detection);
@@ -258,6 +264,9 @@ private slots:
     void on_transmitterAzimuth_valueChanged(double value);
     void on_transmitterElevation_valueChanged(double value);
     void on_transmitterBeamwidth_valueChanged(double value);
+    void on_receiverLatitude_valueChanged(double value);
+    void on_receiverLongitude_valueChanged(double value);
+    void on_updateReceiverPosition_clicked();
     void on_antennaAzimuth_valueChanged(double value);
     void on_antennaElevation_valueChanged(double value);
     void on_antennaBeamwidth_valueChanged(double value);

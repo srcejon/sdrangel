@@ -802,6 +802,20 @@ bool Meteor::validateChannelSettings(const MeteorSettings& settings, QString& er
         errorMessage = "transmitterLongitude must be finite and between -180.0 and 180.0 degrees";
         return false;
     }
+    if (!std::isfinite(settings.m_receiverLatitude)
+        || (settings.m_receiverLatitude < -90.0)
+        || (settings.m_receiverLatitude > 90.0))
+    {
+        errorMessage = "receiverLatitude must be finite and between -90.0 and 90.0 degrees";
+        return false;
+    }
+    if (!std::isfinite(settings.m_receiverLongitude)
+        || (settings.m_receiverLongitude < -180.0)
+        || (settings.m_receiverLongitude > 180.0))
+    {
+        errorMessage = "receiverLongitude must be finite and between -180.0 and 180.0 degrees";
+        return false;
+    }
     if (!std::isfinite(settings.m_transmitterAzimuth)
         || (settings.m_transmitterAzimuth < 0.0f)
         || (settings.m_transmitterAzimuth > 360.0f))

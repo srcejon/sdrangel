@@ -293,7 +293,7 @@
     <item row="2" column="0">
      <widget class="QLabel" name="transmitterBeamwidthLabel">
       <property name="text">
-       <string>Tx HPBW</string>
+       <string>Tx cov</string>
       </property>
      </widget>
     </item>
@@ -301,43 +301,77 @@
      <widget class="QDoubleSpinBox" name="transmitterBeamwidth"/>
     </item>
     <item row="3" column="0">
+     <widget class="QLabel" name="receiverLatitudeLabel">
+      <property name="text">
+       <string>Rx lat</string>
+      </property>
+     </widget>
+    </item>
+    <item row="3" column="1" colspan="2">
+     <widget class="QDoubleSpinBox" name="receiverLatitude"/>
+    </item>
+    <item row="3" column="3">
+     <widget class="QLabel" name="receiverLongitudeLabel">
+      <property name="text">
+       <string>Rx lon</string>
+      </property>
+     </widget>
+    </item>
+    <item row="3" column="4">
+     <widget class="QDoubleSpinBox" name="receiverLongitude"/>
+    </item>
+    <item row="3" column="5">
+     <widget class="QToolButton" name="updateReceiverPosition">
+      <property name="toolTip">
+       <string>Update receive antenna position from Preferences &gt; My Position</string>
+      </property>
+      <property name="text">
+       <string/>
+      </property>
+      <property name="icon">
+       <iconset resource="../../../sdrgui/resources/res.qrc">
+        <normaloff>:/import.png</normaloff>:/import.png</iconset>
+      </property>
+     </widget>
+    </item>
+    <item row="4" column="0">
      <widget class="QLabel" name="antennaAzimuthLabel">
       <property name="text">
        <string>Rx az</string>
       </property>
      </widget>
     </item>
-    <item row="3" column="1" colspan="2">
+    <item row="4" column="1" colspan="2">
      <widget class="QDoubleSpinBox" name="antennaAzimuth"/>
     </item>
-    <item row="3" column="3">
+    <item row="4" column="3">
      <widget class="QLabel" name="antennaElevationLabel">
       <property name="text">
        <string>Rx el</string>
       </property>
      </widget>
     </item>
-    <item row="3" column="4" colspan="2">
+    <item row="4" column="4" colspan="2">
      <widget class="QDoubleSpinBox" name="antennaElevation"/>
     </item>
-    <item row="4" column="0">
+    <item row="5" column="0">
      <widget class="QLabel" name="antennaBeamwidthLabel">
       <property name="text">
        <string>Rx HPBW</string>
       </property>
      </widget>
     </item>
-    <item row="4" column="1" colspan="2">
+    <item row="5" column="1" colspan="2">
      <widget class="QDoubleSpinBox" name="antennaBeamwidth"/>
     </item>
-    <item row="4" column="3">
+    <item row="5" column="3">
      <widget class="QLabel" name="rotatorLabel">
       <property name="text">
        <string>Rotator</string>
       </property>
      </widget>
     </item>
-    <item row="4" column="4" colspan="2">
+    <item row="5" column="4" colspan="2">
      <widget class="QComboBox" name="rotator"/>
     </item>
    </layout>
@@ -486,7 +520,7 @@
         </sizepolicy>
        </property>
        <attribute name="title">
-        <string>Detections</string>
+        <string>Meteors</string>
        </attribute>
        <layout class="QVBoxLayout" name="detectionsPageLayout">
         <property name="spacing">

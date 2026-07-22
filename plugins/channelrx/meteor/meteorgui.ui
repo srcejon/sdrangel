@@ -219,7 +219,7 @@
      <x>0</x>
      <y>150</y>
      <width>390</width>
-     <height>145</height>
+     <height>170</height>
     </rect>
    </property>
    <property name="sizePolicy">
@@ -300,6 +300,16 @@
     <item row="2" column="1" colspan="2">
      <widget class="QDoubleSpinBox" name="transmitterBeamwidth"/>
     </item>
+    <item row="2" column="3">
+     <widget class="QLabel" name="transmitterHPBWLabel">
+      <property name="text">
+       <string>Tx HPBW</string>
+      </property>
+     </widget>
+    </item>
+    <item row="2" column="4" colspan="2">
+     <widget class="QDoubleSpinBox" name="transmitterHPBW"/>
+    </item>
     <item row="3" column="0">
      <widget class="QLabel" name="receiverLatitudeLabel">
       <property name="text">
@@ -374,13 +384,40 @@
     <item row="5" column="4" colspan="2">
      <widget class="QComboBox" name="rotator"/>
     </item>
+    <item row="6" column="0">
+     <widget class="QToolButton" name="showAntennaPatterns">
+      <property name="toolTip">
+       <string>Show transmitter and receiver antenna patterns on Map features</string>
+      </property>
+      <property name="text">
+       <string/>
+      </property>
+      <property name="icon">
+       <iconset resource="../../../sdrgui/resources/res.qrc">
+        <normaloff>:/world.png</normaloff>:/world.png</iconset>
+      </property>
+      <property name="checkable">
+       <bool>true</bool>
+      </property>
+     </widget>
+    </item>
+    <item row="6" column="1">
+     <widget class="QLabel" name="mapMaxAltitudeLabel">
+      <property name="text">
+       <string>Max alt</string>
+      </property>
+     </widget>
+    </item>
+    <item row="6" column="2" colspan="4">
+     <widget class="QDoubleSpinBox" name="mapMaxAltitude"/>
+    </item>
    </layout>
   </widget>
   <widget class="QWidget" name="detectionsContainer" native="true">
    <property name="geometry">
     <rect>
      <x>0</x>
-     <y>300</y>
+     <y>325</y>
      <width>390</width>
      <height>415</height>
     </rect>

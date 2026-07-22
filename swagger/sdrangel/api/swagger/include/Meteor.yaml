@@ -99,6 +99,12 @@ MeteorSettings:
       format: float
       minimum: 0.0
       maximum: 360.0
+    transmitterHPBW:
+      description: "Radar transmitter vertical half-power beamwidth in degrees; zero means unspecified"
+      type: number
+      format: float
+      minimum: 0.0
+      maximum: 180.0
     receiverLatitude:
       description: "Receive antenna latitude in decimal degrees"
       type: number
@@ -132,6 +138,17 @@ MeteorSettings:
     rotator:
       description: "Optional GS232Controller feature to follow, encoded as '<featureSetIndex>:<featureIndex>'"
       type: string
+    showAntennaPatterns:
+      description: "Show transmitter and receiver antenna-pattern polygons in Map features"
+      type: integer
+      minimum: 0
+      maximum: 1
+    mapMaxAltitudeKM:
+      description: "Maximum altitude in kilometres used to project antenna-pattern polygons"
+      type: number
+      format: float
+      minimum: 1.0
+      maximum: 50000.0
     rgbColor:
       type: integer
     title:

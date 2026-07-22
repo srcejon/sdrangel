@@ -126,6 +126,7 @@ private:
     QDoubleSpinBox *m_transmitterAzimuth;
     QDoubleSpinBox *m_transmitterElevation;
     QDoubleSpinBox *m_transmitterBeamwidth;
+    QDoubleSpinBox *m_transmitterHPBW;
     QDoubleSpinBox *m_receiverLatitude;
     QDoubleSpinBox *m_receiverLongitude;
     QToolButton *m_updateReceiverPosition;
@@ -133,6 +134,8 @@ private:
     QDoubleSpinBox *m_antennaElevation;
     QDoubleSpinBox *m_antennaBeamwidth;
     QComboBox *m_rotator;
+    QToolButton *m_showAntennaPatterns;
+    QDoubleSpinBox *m_mapMaxAltitude;
     QLabel *m_totalCountText;
     QLabel *m_hourCountText;
     QPushButton *m_saveDetections;
@@ -163,6 +166,7 @@ private:
     QMap<QDate, QVector<bool> > m_hourlyData;
     QSet<QDate> m_dirtyRMOBMonths;
     QDateTime m_lastAutomaticRMOBSaveUtc;
+    QSet<MessageQueue *> m_mapMessageQueues;
 
     struct DetectionOverlay
     {
@@ -202,6 +206,8 @@ private:
     void syncReceiverPositionFromPreferences();
     QPair<int, int> selectedRotatorIndices() const;
     void syncFromSelectedRotator();
+    void updateAntennaPatternsOnMap(bool force = false);
+    void clearAntennaPatternsFromMap();
     void addDetection(const MeteorDemodSink::MsgMeteorDetected& detection);
     void addSatelliteDetection(const MeteorDemodSink::MsgSatelliteDetected& detection);
     void addCameraDetection(const Meteor::MsgCameraMeteorDetected& detection);
@@ -264,6 +270,7 @@ private slots:
     void on_transmitterAzimuth_valueChanged(double value);
     void on_transmitterElevation_valueChanged(double value);
     void on_transmitterBeamwidth_valueChanged(double value);
+    void on_transmitterHPBW_valueChanged(double value);
     void on_receiverLatitude_valueChanged(double value);
     void on_receiverLongitude_valueChanged(double value);
     void on_updateReceiverPosition_clicked();
@@ -271,6 +278,8 @@ private slots:
     void on_antennaElevation_valueChanged(double value);
     void on_antennaBeamwidth_valueChanged(double value);
     void on_rotator_currentIndexChanged(int index);
+    void on_showAntennaPatterns_toggled(bool checked);
+    void on_mapMaxAltitude_valueChanged(double value);
     void on_saveDetections_clicked();
     void on_saveColorgramme_clicked();
     void on_clearDetections_clicked();

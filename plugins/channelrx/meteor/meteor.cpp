@@ -837,6 +837,13 @@ bool Meteor::validateChannelSettings(const MeteorSettings& settings, QString& er
         errorMessage = "transmitterBeamwidth must be finite and between 0.0 and 360.0 degrees";
         return false;
     }
+    if (!std::isfinite(settings.m_transmitterHPBW)
+        || (settings.m_transmitterHPBW < 0.0f)
+        || (settings.m_transmitterHPBW > 180.0f))
+    {
+        errorMessage = "transmitterHPBW must be finite and between 0.0 and 180.0 degrees";
+        return false;
+    }
     if (!std::isfinite(settings.m_antennaAzimuth)
         || (settings.m_antennaAzimuth < 0.0f)
         || (settings.m_antennaAzimuth > 360.0f))
@@ -856,6 +863,13 @@ bool Meteor::validateChannelSettings(const MeteorSettings& settings, QString& er
         || (settings.m_antennaBeamwidth > 360.0f))
     {
         errorMessage = "antennaBeamwidth must be finite and between 0.0 and 360.0 degrees";
+        return false;
+    }
+    if (!std::isfinite(settings.m_mapMaxAltitudeKM)
+        || (settings.m_mapMaxAltitudeKM < 1.0f)
+        || (settings.m_mapMaxAltitudeKM > 50000.0f))
+    {
+        errorMessage = "mapMaxAltitudeKM must be finite and between 1.0 and 50000.0 km";
         return false;
     }
     if (!settings.m_rotator.isEmpty())

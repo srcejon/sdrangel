@@ -53,6 +53,7 @@ void MeteorSettings::resetToDefaults()
     m_transmitterAzimuth = m_gravesAzimuth;
     m_transmitterElevation = m_gravesElevation;
     m_transmitterBeamwidth = m_gravesBeamwidth;
+    m_transmitterHPBW = m_gravesHPBW;
     m_receiverLatitude = 0.0;
     m_receiverLongitude = 0.0;
     m_receiverPositionSet = false;
@@ -60,6 +61,8 @@ void MeteorSettings::resetToDefaults()
     m_antennaElevation = 0.0f;
     m_antennaBeamwidth = 0.0f;
     m_rotator.clear();
+    m_showAntennaPatterns = false;
+    m_mapMaxAltitudeKM = m_defaultMapMaxAltitudeKM;
     m_rgbColor = QColor(255, 170, 0).rgb();
     m_title = "Meteor";
     m_streamIndex = 0;
@@ -95,6 +98,9 @@ QByteArray MeteorSettings::serialize() const
     s.writeDouble(28, m_receiverLatitude);
     s.writeDouble(29, m_receiverLongitude);
     s.writeBool(35, m_receiverPositionSet);
+    s.writeFloat(36, m_transmitterHPBW);
+    s.writeBool(37, m_showAntennaPatterns);
+    s.writeFloat(38, m_mapMaxAltitudeKM);
 
     s.writeU32(21, m_rgbColor);
     s.writeString(22, m_title);
@@ -167,6 +173,9 @@ bool MeteorSettings::deserialize(const QByteArray& data)
         d.readDouble(28, &m_receiverLatitude, 0.0);
         d.readDouble(29, &m_receiverLongitude, 0.0);
         d.readBool(35, &m_receiverPositionSet, false);
+        d.readFloat(36, &m_transmitterHPBW, m_gravesHPBW);
+        d.readBool(37, &m_showAntennaPatterns, false);
+        d.readFloat(38, &m_mapMaxAltitudeKM, m_defaultMapMaxAltitudeKM);
         if ((m_transmitterLatitude == 0.0)
             && (m_transmitterLongitude == 0.0)
             && (m_transmitterAzimuth == 0.0f)
@@ -189,6 +198,8 @@ bool MeteorSettings::deserialize(const QByteArray& data)
             ? std::clamp(m_transmitterElevation, -90.0f, 90.0f) : 0.0f;
         m_transmitterBeamwidth = std::isfinite(m_transmitterBeamwidth)
             ? std::clamp(m_transmitterBeamwidth, 0.0f, 360.0f) : 0.0f;
+        m_transmitterHPBW = std::isfinite(m_transmitterHPBW)
+            ? std::clamp(m_transmitterHPBW, 0.0f, 180.0f) : m_gravesHPBW;
         m_receiverLatitude = std::isfinite(m_receiverLatitude)
             ? std::clamp(m_receiverLatitude, -90.0, 90.0) : 0.0;
         m_receiverLongitude = std::isfinite(m_receiverLongitude)
@@ -199,6 +210,8 @@ bool MeteorSettings::deserialize(const QByteArray& data)
             ? std::clamp(m_antennaElevation, -90.0f, 90.0f) : 0.0f;
         m_antennaBeamwidth = std::isfinite(m_antennaBeamwidth)
             ? std::clamp(m_antennaBeamwidth, 0.0f, 360.0f) : 0.0f;
+        m_mapMaxAltitudeKM = std::isfinite(m_mapMaxAltitudeKM)
+            ? std::clamp(m_mapMaxAltitudeKM, 1.0f, 50000.0f) : m_defaultMapMaxAltitudeKM;
 
         d.readU32(21, &m_rgbColor, QColor(255, 170, 0).rgb());
         d.readString(22, &m_title, "Meteor");
@@ -293,6 +306,9 @@ void MeteorSettings::applySettings(const QStringList& settingsKeys, const Meteor
     if (settingsKeys.contains("transmitterBeamwidth")) {
         m_transmitterBeamwidth = settings.m_transmitterBeamwidth;
     }
+    if (settingsKeys.contains("transmitterHPBW")) {
+        m_transmitterHPBW = settings.m_transmitterHPBW;
+    }
     if (settingsKeys.contains("receiverLatitude")) {
         m_receiverLatitude = settings.m_receiverLatitude;
     }
@@ -313,6 +329,12 @@ void MeteorSettings::applySettings(const QStringList& settingsKeys, const Meteor
     }
     if (settingsKeys.contains("rotator")) {
         m_rotator = settings.m_rotator;
+    }
+    if (settingsKeys.contains("showAntennaPatterns")) {
+        m_showAntennaPatterns = settings.m_showAntennaPatterns;
+    }
+    if (settingsKeys.contains("mapMaxAltitudeKM")) {
+        m_mapMaxAltitudeKM = settings.m_mapMaxAltitudeKM;
     }
     if (settingsKeys.contains("rgbColor")) {
         m_rgbColor = settings.m_rgbColor;
@@ -386,6 +408,9 @@ QString MeteorSettings::getDebugString(const QStringList& settingsKeys, bool for
     if (settingsKeys.contains("transmitterBeamwidth") || force) {
         ostr << " m_transmitterBeamwidth: " << m_transmitterBeamwidth;
     }
+    if (settingsKeys.contains("transmitterHPBW") || force) {
+        ostr << " m_transmitterHPBW: " << m_transmitterHPBW;
+    }
     if (settingsKeys.contains("receiverLatitude") || force) {
         ostr << " m_receiverLatitude: " << m_receiverLatitude;
     }
@@ -406,6 +431,12 @@ QString MeteorSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("rotator") || force) {
         ostr << " m_rotator: " << m_rotator.toStdString();
+    }
+    if (settingsKeys.contains("showAntennaPatterns") || force) {
+        ostr << " m_showAntennaPatterns: " << m_showAntennaPatterns;
+    }
+    if (settingsKeys.contains("mapMaxAltitudeKM") || force) {
+        ostr << " m_mapMaxAltitudeKM: " << m_mapMaxAltitudeKM;
     }
     if (settingsKeys.contains("streamIndex") || force) {
         ostr << " m_streamIndex: " << m_streamIndex;

@@ -34,6 +34,8 @@ struct MeteorSettings
     inline static constexpr float m_gravesAzimuth = 180.0f;
     inline static constexpr float m_gravesElevation = 27.5f;
     inline static constexpr float m_gravesBeamwidth = 180.0f;
+    inline static constexpr float m_gravesHPBW = 25.0f;
+    inline static constexpr float m_defaultMapMaxAltitudeKM = 1000.0f;
 
     static constexpr bool isSupportedSampleRate(int sampleRate)
     {
@@ -77,6 +79,7 @@ struct MeteorSettings
     float m_transmitterAzimuth;
     float m_transmitterElevation;
     float m_transmitterBeamwidth;
+    float m_transmitterHPBW;
     double m_receiverLatitude;
     double m_receiverLongitude;
     bool m_receiverPositionSet;
@@ -84,6 +87,8 @@ struct MeteorSettings
     float m_antennaElevation;
     float m_antennaBeamwidth;
     QString m_rotator; //!< "<featureSetIndex>:<featureIndex>" of the GS232Controller to follow
+    bool m_showAntennaPatterns;
+    float m_mapMaxAltitudeKM;
 
     quint32 m_rgbColor;
     QString m_title;

@@ -1,6 +1,7 @@
 set(meteor_demod_sink_test_SOURCES
     meteordemodsinktest.cpp
     ../meteorsettings.cpp
+    ../meteormapgeometry.cpp
     ../meteordemodsink.cpp
     ../meteorbaseband.cpp
     ../rmobreport.cpp
@@ -8,6 +9,7 @@ set(meteor_demod_sink_test_SOURCES
 
 set(meteor_demod_sink_test_HEADERS
     ../meteorsettings.h
+    ../meteormapgeometry.h
     ../meteordemodsink.h
     ../meteorbaseband.h
     ../rmobreport.h

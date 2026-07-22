@@ -39,6 +39,9 @@
 #include <QTextStream>
 #include <QToolButton>
 
+#include "SWGMapCoordinate.h"
+#include "SWGMapItem.h"
+
 #include "device/deviceuiset.h"
 #include "device/deviceapi.h"
 #include "channel/channelwebapiutils.h"
@@ -55,10 +58,12 @@
 #include "gui/rollupcontents.h"
 #include "maincore.h"
 #include "plugin/pluginapi.h"
+#include "pipes/objectpipe.h"
 #include "util/astronomy.h"
 #include "util/csv.h"
 
 #include "meteorgui.h"
+#include "meteormapgeometry.h"
 #include "rmobreport.h"
 #include "ui_meteorgui.h"
 
@@ -207,6 +212,7 @@ MeteorGUI::MeteorGUI(PluginAPI* pluginAPI, DeviceUISet *deviceUISet, BasebandSam
 
 MeteorGUI::~MeteorGUI()
 {
+    clearAntennaPatternsFromMap();
     saveAutomaticRMOBReports();
     disconnect(&MainCore::instance()->getMasterTimer(), SIGNAL(timeout()), this, SLOT(tick()));
     m_glSpectrum->setPaintGLCallback(nullptr);
@@ -243,6 +249,7 @@ void MeteorGUI::setupUi(RollupContents *rollupContents)
     m_transmitterAzimuth = ui->transmitterAzimuth;
     m_transmitterElevation = ui->transmitterElevation;
     m_transmitterBeamwidth = ui->transmitterBeamwidth;
+    m_transmitterHPBW = ui->transmitterHPBW;
     m_receiverLatitude = ui->receiverLatitude;
     m_receiverLongitude = ui->receiverLongitude;
     m_updateReceiverPosition = ui->updateReceiverPosition;
@@ -250,6 +257,8 @@ void MeteorGUI::setupUi(RollupContents *rollupContents)
     m_antennaElevation = ui->antennaElevation;
     m_antennaBeamwidth = ui->antennaBeamwidth;
     m_rotator = ui->rotator;
+    m_showAntennaPatterns = ui->showAntennaPatterns;
+    m_mapMaxAltitude = ui->mapMaxAltitude;
     m_totalCountText = ui->totalCountText;
     m_hourCountText = ui->hourCountText;
     m_saveDetections = ui->saveDetections;
@@ -333,6 +342,11 @@ void MeteorGUI::setupUi(RollupContents *rollupContents)
     m_transmitterBeamwidth->setSuffix(QString::fromUtf8("\u00b0"));
     m_transmitterBeamwidth->setToolTip("Radar transmitter azimuthal coverage; GRAVES illuminates approximately 180 degrees of southern sky");
 
+    m_transmitterHPBW->setDecimals(1);
+    m_transmitterHPBW->setRange(0.0, 180.0);
+    m_transmitterHPBW->setSuffix(QString::fromUtf8("\u00b0"));
+    m_transmitterHPBW->setToolTip("Radar transmitter vertical half-power beamwidth; GRAVES defaults to approximately 25 degrees");
+
     m_receiverLatitude->setDecimals(6);
     m_receiverLatitude->setRange(-90.0, 90.0);
     m_receiverLatitude->setSingleStep(0.0001);
@@ -364,6 +378,12 @@ void MeteorGUI::setupUi(RollupContents *rollupContents)
     m_antennaBeamwidth->setToolTip("Receive antenna half-power beamwidth; zero means unspecified");
 
     m_rotator->setToolTip("Optionally follow the azimuth and elevation reported by a GS232Controller feature");
+
+    m_mapMaxAltitude->setDecimals(0);
+    m_mapMaxAltitude->setRange(1.0, 50000.0);
+    m_mapMaxAltitude->setSingleStep(100.0);
+    m_mapMaxAltitude->setSuffix(" km");
+    m_mapMaxAltitude->setToolTip("Altitude at which the antenna half-power beam footprints are projected");
     populateRotatorCombo();
 
     m_saveDetections->setIcon(QIcon(":/save.png"));
@@ -427,7 +447,7 @@ void MeteorGUI::setupUi(RollupContents *rollupContents)
 
     m_satellitesTable->setColumnCount(11);
     QStringList satelliteHeaders = detectionHeaders.mid(0, 9);
-    satelliteHeaders.append("Radial (km/s)");
+    satelliteHeaders.append("Radial (kph)");
     satelliteHeaders.append(detectionHeaders[9]);
     const QStringList satelliteHeaderTooltips = {
         "Local date and time when the Doppler sweep started",
@@ -439,7 +459,7 @@ void MeteorGUI::setupUi(RollupContents *rollupContents)
         "Robust center frequency of the sweep relative to channel center in hertz",
         "Tracked frequency span across the sweep in hertz",
         "Robust start-to-end frequency drift across the sweep in hertz",
-        "Equivalent signed radial speed derived from center Doppler shift; positive is approaching. For bistatic radar this is not the satellite's full orbital speed.",
+        "Equivalent signed radial speed in kilometres per hour derived from center Doppler shift; positive is approaching. For bistatic radar this is not the satellite's full orbital speed.",
         "Meteor channel detector sample rate in hertz"
     };
 
@@ -569,6 +589,7 @@ void MeteorGUI::syncReceiverPositionFromPreferences()
     m_receiverLatitude->setValue(m_settings.m_receiverLatitude);
     m_receiverLongitude->setValue(m_settings.m_receiverLongitude);
     applySettings({"receiverLatitude", "receiverLongitude", "receiverPositionSet"});
+    updateAntennaPatternsOnMap(true);
 }
 
 QPair<int, int> MeteorGUI::selectedRotatorIndices() const
@@ -636,6 +657,127 @@ void MeteorGUI::syncFromSelectedRotator()
     m_antennaAzimuth->setValue(azimuth);
     m_antennaElevation->setValue(elevation);
     applySettings({"antennaAzimuth", "antennaElevation"});
+    updateAntennaPatternsOnMap(true);
+}
+
+void MeteorGUI::updateAntennaPatternsOnMap(bool force)
+{
+    static const QString txName = QStringLiteral("Meteor TX antenna pattern");
+    static const QString rxName = QStringLiteral("Meteor RX antenna pattern");
+    QList<ObjectPipe *> mapPipes;
+    MainCore::instance()->getMessagePipes().getMessagePipes(m_meteor, "mapitems", mapPipes);
+    QSet<MessageQueue *> currentQueues;
+
+    for (ObjectPipe *pipe : mapPipes)
+    {
+        if (MessageQueue *messageQueue = qobject_cast<MessageQueue *>(pipe->m_element)) {
+            currentQueues.insert(messageQueue);
+        }
+    }
+
+    if (!force && (currentQueues == m_mapMessageQueues)) {
+        return;
+    }
+
+    auto removeItem = [this](MessageQueue *messageQueue, const QString& name) {
+        SWGSDRangel::SWGMapItem *item = new SWGSDRangel::SWGMapItem();
+        item->setName(new QString(name));
+        item->setImage(new QString());
+        messageQueue->push(MainCore::MsgMapItem::create(m_meteor, item));
+    };
+    auto addPolygon = [this](
+        MessageQueue *messageQueue,
+        const QString& name,
+        const QString& label,
+        const std::vector<MeteorMapGeometry::Coordinate>& coordinates,
+        QRgb color)
+    {
+        if (coordinates.empty()) {
+            return;
+        }
+
+        SWGSDRangel::SWGMapItem *item = new SWGSDRangel::SWGMapItem();
+        item->setName(new QString(name));
+        item->setLabel(new QString(label));
+        item->setLatitude(coordinates.front().m_latitude);
+        item->setLongitude(coordinates.front().m_longitude);
+        item->setAltitude(coordinates.front().m_altitudeM);
+        item->setImage(new QString(QStringLiteral("none")));
+        item->setImageRotation(0);
+        item->setFixedPosition(true);
+        item->setAltitudeReference(3); // CLIP_TO_GROUND
+        item->setColorValid(true);
+        item->setColor(color);
+        QList<SWGSDRangel::SWGMapCoordinate *> *mapCoordinates =
+            new QList<SWGSDRangel::SWGMapCoordinate *>();
+
+        for (const MeteorMapGeometry::Coordinate& coordinate : coordinates)
+        {
+            SWGSDRangel::SWGMapCoordinate *mapCoordinate = new SWGSDRangel::SWGMapCoordinate();
+            mapCoordinate->setLatitude(coordinate.m_latitude);
+            mapCoordinate->setLongitude(coordinate.m_longitude);
+            mapCoordinate->setAltitude(coordinate.m_altitudeM);
+            mapCoordinates->append(mapCoordinate);
+        }
+
+        item->setCoordinates(mapCoordinates);
+        item->setType(2);
+        messageQueue->push(MainCore::MsgMapItem::create(m_meteor, item));
+    };
+
+    const double maxAltitudeM = m_settings.m_mapMaxAltitudeKM * 1000.0;
+    const std::vector<MeteorMapGeometry::Coordinate> txCoordinates =
+        MeteorMapGeometry::beamFootprint(
+            m_settings.m_transmitterLatitude,
+            m_settings.m_transmitterLongitude,
+            m_settings.m_transmitterAzimuth,
+            m_settings.m_transmitterElevation,
+            m_settings.m_transmitterBeamwidth,
+            m_settings.m_transmitterHPBW,
+            maxAltitudeM);
+    const std::vector<MeteorMapGeometry::Coordinate> rxCoordinates =
+        MeteorMapGeometry::beamFootprint(
+            m_settings.m_receiverLatitude,
+            m_settings.m_receiverLongitude,
+            m_settings.m_antennaAzimuth,
+            m_settings.m_antennaElevation,
+            m_settings.m_antennaBeamwidth,
+            m_settings.m_antennaBeamwidth,
+            maxAltitudeM);
+
+    for (MessageQueue *messageQueue : currentQueues)
+    {
+        removeItem(messageQueue, txName);
+        removeItem(messageQueue, rxName);
+
+        if (m_settings.m_showAntennaPatterns)
+        {
+            addPolygon(
+                messageQueue,
+                txName,
+                tr("Transmitter antenna pattern"),
+                txCoordinates,
+                QColor(255, 96, 32, 96).rgba());
+            addPolygon(
+                messageQueue,
+                rxName,
+                tr("Receiver antenna pattern"),
+                rxCoordinates,
+                QColor(0, 190, 255, 96).rgba());
+        }
+    }
+
+    m_mapMessageQueues = currentQueues;
+}
+
+void MeteorGUI::clearAntennaPatternsFromMap()
+{
+    const bool showAntennaPatterns = m_settings.m_showAntennaPatterns;
+    m_settings.m_showAntennaPatterns = false;
+    updateAntennaPatternsOnMap(true);
+    m_settings.m_showAntennaPatterns = showAntennaPatterns;
+
+    m_mapMessageQueues.clear();
 }
 
 void MeteorGUI::setupSpectrum()
@@ -983,30 +1125,42 @@ void MeteorGUI::on_transmitterLatitude_valueChanged(double value)
 {
     m_settings.m_transmitterLatitude = value;
     applySetting("transmitterLatitude");
+    updateAntennaPatternsOnMap(true);
 }
 
 void MeteorGUI::on_transmitterLongitude_valueChanged(double value)
 {
     m_settings.m_transmitterLongitude = value;
     applySetting("transmitterLongitude");
+    updateAntennaPatternsOnMap(true);
 }
 
 void MeteorGUI::on_transmitterAzimuth_valueChanged(double value)
 {
     m_settings.m_transmitterAzimuth = (float) value;
     applySetting("transmitterAzimuth");
+    updateAntennaPatternsOnMap(true);
 }
 
 void MeteorGUI::on_transmitterElevation_valueChanged(double value)
 {
     m_settings.m_transmitterElevation = (float) value;
     applySetting("transmitterElevation");
+    updateAntennaPatternsOnMap(true);
 }
 
 void MeteorGUI::on_transmitterBeamwidth_valueChanged(double value)
 {
     m_settings.m_transmitterBeamwidth = (float) value;
     applySetting("transmitterBeamwidth");
+    updateAntennaPatternsOnMap(true);
+}
+
+void MeteorGUI::on_transmitterHPBW_valueChanged(double value)
+{
+    m_settings.m_transmitterHPBW = (float) value;
+    applySetting("transmitterHPBW");
+    updateAntennaPatternsOnMap(true);
 }
 
 void MeteorGUI::on_receiverLatitude_valueChanged(double value)
@@ -1014,6 +1168,7 @@ void MeteorGUI::on_receiverLatitude_valueChanged(double value)
     m_settings.m_receiverLatitude = value;
     m_settings.m_receiverPositionSet = true;
     applySettings({"receiverLatitude", "receiverPositionSet"});
+    updateAntennaPatternsOnMap(true);
 }
 
 void MeteorGUI::on_receiverLongitude_valueChanged(double value)
@@ -1021,6 +1176,7 @@ void MeteorGUI::on_receiverLongitude_valueChanged(double value)
     m_settings.m_receiverLongitude = value;
     m_settings.m_receiverPositionSet = true;
     applySettings({"receiverLongitude", "receiverPositionSet"});
+    updateAntennaPatternsOnMap(true);
 }
 
 void MeteorGUI::on_updateReceiverPosition_clicked()
@@ -1032,18 +1188,21 @@ void MeteorGUI::on_antennaAzimuth_valueChanged(double value)
 {
     m_settings.m_antennaAzimuth = (float) value;
     applySetting("antennaAzimuth");
+    updateAntennaPatternsOnMap(true);
 }
 
 void MeteorGUI::on_antennaElevation_valueChanged(double value)
 {
     m_settings.m_antennaElevation = (float) value;
     applySetting("antennaElevation");
+    updateAntennaPatternsOnMap(true);
 }
 
 void MeteorGUI::on_antennaBeamwidth_valueChanged(double value)
 {
     m_settings.m_antennaBeamwidth = (float) value;
     applySetting("antennaBeamwidth");
+    updateAntennaPatternsOnMap(true);
 }
 
 void MeteorGUI::on_rotator_currentIndexChanged(int index)
@@ -1055,6 +1214,20 @@ void MeteorGUI::on_rotator_currentIndexChanged(int index)
     if (!m_settings.m_rotator.isEmpty()) {
         syncFromSelectedRotator();
     }
+}
+
+void MeteorGUI::on_showAntennaPatterns_toggled(bool checked)
+{
+    m_settings.m_showAntennaPatterns = checked;
+    applySetting("showAntennaPatterns");
+    updateAntennaPatternsOnMap(true);
+}
+
+void MeteorGUI::on_mapMaxAltitude_valueChanged(double value)
+{
+    m_settings.m_mapMaxAltitudeKM = (float) value;
+    applySetting("mapMaxAltitudeKM");
+    updateAntennaPatternsOnMap(true);
 }
 
 void MeteorGUI::on_saveDetections_clicked()
@@ -1455,11 +1628,14 @@ void MeteorGUI::displaySettings()
     const QSignalBlocker transmitterAzimuthBlocker(m_transmitterAzimuth);
     const QSignalBlocker transmitterElevationBlocker(m_transmitterElevation);
     const QSignalBlocker transmitterBeamwidthBlocker(m_transmitterBeamwidth);
+    const QSignalBlocker transmitterHPBWBlocker(m_transmitterHPBW);
     const QSignalBlocker receiverLatitudeBlocker(m_receiverLatitude);
     const QSignalBlocker receiverLongitudeBlocker(m_receiverLongitude);
     const QSignalBlocker antennaAzimuthBlocker(m_antennaAzimuth);
     const QSignalBlocker antennaElevationBlocker(m_antennaElevation);
     const QSignalBlocker antennaBeamwidthBlocker(m_antennaBeamwidth);
+    const QSignalBlocker showAntennaPatternsBlocker(m_showAntennaPatterns);
+    const QSignalBlocker mapMaxAltitudeBlocker(m_mapMaxAltitude);
 
     m_frequencyMode->setCurrentIndex((int) m_settings.m_frequencyMode);
     on_frequencyMode_currentIndexChanged((int) m_settings.m_frequencyMode);
@@ -1482,11 +1658,14 @@ void MeteorGUI::displaySettings()
     m_transmitterAzimuth->setValue(m_settings.m_transmitterAzimuth);
     m_transmitterElevation->setValue(m_settings.m_transmitterElevation);
     m_transmitterBeamwidth->setValue(m_settings.m_transmitterBeamwidth);
+    m_transmitterHPBW->setValue(m_settings.m_transmitterHPBW);
     m_receiverLatitude->setValue(m_settings.m_receiverLatitude);
     m_receiverLongitude->setValue(m_settings.m_receiverLongitude);
     m_antennaAzimuth->setValue(m_settings.m_antennaAzimuth);
     m_antennaElevation->setValue(m_settings.m_antennaElevation);
     m_antennaBeamwidth->setValue(m_settings.m_antennaBeamwidth);
+    m_showAntennaPatterns->setChecked(m_settings.m_showAntennaPatterns);
+    m_mapMaxAltitude->setValue(m_settings.m_mapMaxAltitudeKM);
     populateRotatorCombo();
     applyDetectionsColumnVisibility();
 
@@ -1496,6 +1675,7 @@ void MeteorGUI::displaySettings()
     updateAbsoluteCenterFrequency();
 
     blockApplySettings(false);
+    updateAntennaPatternsOnMap(true);
 }
 
 void MeteorGUI::makeUIConnections()
@@ -1516,6 +1696,7 @@ void MeteorGUI::makeUIConnections()
     QObject::connect(m_transmitterAzimuth, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &MeteorGUI::on_transmitterAzimuth_valueChanged);
     QObject::connect(m_transmitterElevation, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &MeteorGUI::on_transmitterElevation_valueChanged);
     QObject::connect(m_transmitterBeamwidth, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &MeteorGUI::on_transmitterBeamwidth_valueChanged);
+    QObject::connect(m_transmitterHPBW, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &MeteorGUI::on_transmitterHPBW_valueChanged);
     QObject::connect(m_receiverLatitude, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &MeteorGUI::on_receiverLatitude_valueChanged);
     QObject::connect(m_receiverLongitude, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &MeteorGUI::on_receiverLongitude_valueChanged);
     QObject::connect(m_updateReceiverPosition, &QToolButton::clicked, this, &MeteorGUI::on_updateReceiverPosition_clicked);
@@ -1523,6 +1704,8 @@ void MeteorGUI::makeUIConnections()
     QObject::connect(m_antennaElevation, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &MeteorGUI::on_antennaElevation_valueChanged);
     QObject::connect(m_antennaBeamwidth, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &MeteorGUI::on_antennaBeamwidth_valueChanged);
     QObject::connect(m_rotator, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &MeteorGUI::on_rotator_currentIndexChanged);
+    QObject::connect(m_showAntennaPatterns, &QToolButton::toggled, this, &MeteorGUI::on_showAntennaPatterns_toggled);
+    QObject::connect(m_mapMaxAltitude, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &MeteorGUI::on_mapMaxAltitude_valueChanged);
     QObject::connect(m_saveDetections, &QPushButton::clicked, this, &MeteorGUI::on_saveDetections_clicked);
     QObject::connect(m_saveColorgramme, &QPushButton::clicked, this, &MeteorGUI::on_saveColorgramme_clicked);
     QObject::connect(m_clearDetections, &QPushButton::clicked, this, &MeteorGUI::on_clearDetections_clicked);
@@ -1770,10 +1953,10 @@ void MeteorGUI::addSatelliteDetection(const MeteorDemodSink::MsgSatelliteDetecte
     const qint64 referenceFrequency = rmobReportFrequency();
     if (referenceFrequency > 0)
     {
-        const double radialSpeedKMS = Astronomy::dopplerToVelocity(
+        const double radialSpeedKPH = Astronomy::dopplerToVelocity(
             (double) referenceFrequency + detection.m_centerFrequency,
-            (double) referenceFrequency) / 1000.0;
-        m_satellitesTable->setItem(row, 9, makeTableItem(QString::number(radialSpeedKMS, 'f', 3), radialSpeedKMS));
+            (double) referenceFrequency) * 3.6;
+        m_satellitesTable->setItem(row, 9, makeTableItem(QString::number(radialSpeedKPH, 'f', 1), radialSpeedKPH));
     }
     else {
         m_satellitesTable->setItem(row, 9, makeTableItem(QString()));
@@ -2738,6 +2921,8 @@ void MeteorGUI::tick()
         if (!m_settings.m_rotator.isEmpty()) {
             syncFromSelectedRotator();
         }
+
+        updateAntennaPatternsOnMap();
 
         updateCounters();
 

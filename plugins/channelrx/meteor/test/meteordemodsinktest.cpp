@@ -43,6 +43,7 @@
 
 #include "meteorbaseband.h"
 #include "meteordemodsink.h"
+#include "meteormapgeometry.h"
 #include "meteorsettings.h"
 #include "rmobreport.h"
 
@@ -59,10 +60,13 @@ namespace {
         expected.m_transmitterAzimuth = 135.5f;
         expected.m_transmitterElevation = 8.5f;
         expected.m_transmitterBeamwidth = 12.0f;
+        expected.m_transmitterHPBW = 16.0f;
         expected.m_antennaAzimuth = 220.5f;
         expected.m_antennaElevation = 11.5f;
         expected.m_antennaBeamwidth = 30.0f;
         expected.m_rotator = QStringLiteral("2:3");
+        expected.m_showAntennaPatterns = true;
+        expected.m_mapMaxAltitudeKM = 750.0f;
 
         MeteorSettings actual;
 
@@ -72,12 +76,63 @@ namespace {
             || (actual.m_transmitterAzimuth != expected.m_transmitterAzimuth)
             || (actual.m_transmitterElevation != expected.m_transmitterElevation)
             || (actual.m_transmitterBeamwidth != expected.m_transmitterBeamwidth)
+            || (actual.m_transmitterHPBW != expected.m_transmitterHPBW)
             || (actual.m_antennaAzimuth != expected.m_antennaAzimuth)
             || (actual.m_antennaElevation != expected.m_antennaElevation)
             || (actual.m_antennaBeamwidth != expected.m_antennaBeamwidth)
-            || (actual.m_rotator != expected.m_rotator))
+            || (actual.m_rotator != expected.m_rotator)
+            || (actual.m_showAntennaPatterns != expected.m_showAntennaPatterns)
+            || (actual.m_mapMaxAltitudeKM != expected.m_mapMaxAltitudeKM))
         {
             errorStream << "Meteor settings test: geometry settings did not round-trip\n";
+            return false;
+        }
+
+        return true;
+    }
+
+    bool runMeteorMapGeometryTests(QTextStream& errorStream)
+    {
+        const double horizonDistance = MeteorMapGeometry::groundDistanceAtAltitude(0.0, 1000000.0);
+        const double middleDistance = MeteorMapGeometry::groundDistanceAtAltitude(45.0, 1000000.0);
+        const double zenithDistance = MeteorMapGeometry::groundDistanceAtAltitude(90.0, 1000000.0);
+
+        if (!(horizonDistance > middleDistance)
+            || !(middleDistance > zenithDistance)
+            || (std::fabs(zenithDistance) > 0.001))
+        {
+            errorStream << "Meteor map geometry test: altitude intersection ranges are invalid\n";
+            return false;
+        }
+
+        const std::vector<MeteorMapGeometry::Coordinate> footprint =
+            MeteorMapGeometry::beamFootprint(47.348, 5.5151, 180.0, 27.5, 180.0, 25.0, 1000000.0);
+
+        if (footprint.size() < 10)
+        {
+            errorStream << "Meteor map geometry test: GRAVES footprint is empty\n";
+            return false;
+        }
+
+        for (const MeteorMapGeometry::Coordinate& coordinate : footprint)
+        {
+            if (!std::isfinite(coordinate.m_latitude)
+                || !std::isfinite(coordinate.m_longitude)
+                || (coordinate.m_latitude < -90.0)
+                || (coordinate.m_latitude > 90.0)
+                || (coordinate.m_longitude < -180.0)
+                || (coordinate.m_longitude > 180.0)
+                || (coordinate.m_altitudeM != 1000000.0))
+            {
+                errorStream << "Meteor map geometry test: footprint contains an invalid coordinate\n";
+                return false;
+            }
+        }
+
+        if (!MeteorMapGeometry::beamFootprint(
+                47.348, 5.5151, 180.0, 27.5, 180.0, 0.0, 1000000.0).empty())
+        {
+            errorStream << "Meteor map geometry test: unspecified HPBW produced a footprint\n";
             return false;
         }
 
@@ -1961,7 +2016,10 @@ int main(int argc, char *argv[])
         return 0;
     }
 
-    if (!runMeteorSettingsTests(err) || !runRMOBReportTests(err)) {
+    if (!runMeteorSettingsTests(err)
+        || !runMeteorMapGeometryTests(err)
+        || !runRMOBReportTests(err))
+    {
         return 2;
     }
 

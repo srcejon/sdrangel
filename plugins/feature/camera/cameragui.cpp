@@ -5596,6 +5596,13 @@ void CameraGUI::populateDirectionSourceCombo()
     const QList<QByteArray> compassSensors = QSensor::sensorsForType(QCompass::sensorType);
     const QList<QByteArray> rotationSensors = QSensor::sensorsForType(QRotationSensor::sensorType);
     const QList<QByteArray> tiltSensors = QSensor::sensorsForType(QTiltSensor::sensorType);
+#ifdef Q_OS_ANDROID
+    compatibleDirectionSensors = !rotationSensors.isEmpty();
+
+    if (compatibleDirectionSensors) {
+        combo->addItem(tr("Sensor fused rotation"), sensorDirectionSourceId(kDefaultDirectionSensorId));
+    }
+#else
     compatibleDirectionSensors = !compassSensors.isEmpty() && !rotationSensors.isEmpty() && !tiltSensors.isEmpty();
 
     if (compatibleDirectionSensors)
@@ -5608,6 +5615,7 @@ void CameraGUI::populateDirectionSourceCombo()
             combo->addItem(tr("Sensor compass %1 + default tilt/rotation").arg(id), sensorDirectionSourceId(id));
         }
     }
+#endif
     else
     {
         combo->addItem(tr("No compatible Qt Sensors"), QString());
@@ -5625,7 +5633,7 @@ void CameraGUI::populateDirectionSourceCombo()
         index = combo->count() - 1;
     }
     combo->setCurrentIndex(index >= 0 ? index : 0);
-    combo->setToolTip(tr("Select a GS232Controller rotator or Qt Sensors compass/tilt/rotation sensor set to continually synchronize the camera direction."));
+    combo->setToolTip(tr("Select a GS232Controller rotator or Qt Sensors orientation source to continually synchronize the camera direction."));
     settingsUI()->directionSourceLabel->setEnabled(combo->isEnabled());
 
     if (compatibleDirectionSensors && !m_settings.m_directionSensor.isEmpty()) {
@@ -5710,11 +5718,18 @@ void CameraGUI::startDirectionSensors()
     connect(m_directionRotationSensor, &QSensor::readingChanged, this, &CameraGUI::syncFromDirectionSensors);
     connect(m_directionTiltSensor, &QSensor::readingChanged, this, &CameraGUI::syncFromDirectionSensors);
 
-    const bool compassStarted = m_directionCompassSensor->start();
     const bool rotationStarted = m_directionRotationSensor->start();
+    const bool compassStarted = m_directionCompassSensor->start();
     const bool tiltStarted = m_directionTiltSensor->start();
 
-    if (!compassStarted || !rotationStarted || !tiltStarted)
+#ifdef Q_OS_ANDROID
+    const bool sensorsStarted = rotationStarted
+        && (m_directionRotationSensor->hasZ() || (compassStarted && tiltStarted));
+#else
+    const bool sensorsStarted = compassStarted && rotationStarted && tiltStarted;
+#endif
+
+    if (!sensorsStarted)
     {
         qWarning() << "CameraGUI: failed to start Qt direction sensors"
             << "compass" << compassStarted
@@ -5769,9 +5784,7 @@ void CameraGUI::syncFromDirectionSensors()
 {
 #ifdef QT_SENSORS_FOUND
     if (m_settings.m_directionSensor.isEmpty()
-        || !m_directionCompassSensor
-        || !m_directionRotationSensor
-        || !m_directionTiltSensor)
+        || !m_directionRotationSensor)
     {
         return;
     }
@@ -5781,23 +5794,65 @@ void CameraGUI::syncFromDirectionSensors()
     double roll = m_settings.m_roll;
     SkyVector imageUpWorld {0.0, 0.0, 0.0};
     bool imageUpValid = false;
-
-    if (const QCompassReading *compassReading = m_directionCompassSensor->reading())
-    {
-        const double readingAzimuth = compassReading->azimuth();
-        if (std::isfinite(readingAzimuth))
-        {
-            azimuth = readingAzimuth;
-            m_directionCompassReadingValid = true;
-        }
-    }
+    bool fusedRotationValid = false;
+    double xRotation = 0.0;
+    double yRotation = 0.0;
+    double zRotation = 0.0;
 
     if (const QRotationReading *rotationReading = m_directionRotationSensor->reading())
     {
-        const double xRotation = rotationReading->x();
-        const double yRotation = rotationReading->y();
-        const double zRotation = rotationReading->z();
+        xRotation = rotationReading->x();
+        yRotation = rotationReading->y();
+        zRotation = rotationReading->z();
         if (std::isfinite(xRotation) && std::isfinite(yRotation) && std::isfinite(zRotation))
+        {
+            m_directionRotationReadingValid = true;
+
+#ifdef Q_OS_ANDROID
+            if (m_directionRotationSensor->hasZ())
+            {
+                // Android's QRotationSensor uses the fused rotation-vector
+                // sensor. Transform the camera optical axis and image-up axis
+                // together so azimuth, elevation, and roll come from one
+                // timestamped device-to-world orientation.
+                const SkyVector opticalAxis =
+                    m_resolvedSensorOpticalAxis == CameraSettings::SensorOpticalAxisRear
+                        ? SkyVector {0.0, 0.0, -1.0}
+                        : SkyVector {0.0, 0.0, 1.0};
+                const SkyVector centerWorld = skyNormalize(
+                    qtEulerTransform(opticalAxis, xRotation, yRotation, zRotation));
+                imageUpWorld = skyNormalize(
+                    qtEulerTransform({0.0, 1.0, 0.0}, xRotation, yRotation, zRotation));
+
+                if ((skyLength(centerWorld) > 1e-9) && (skyLength(imageUpWorld) > 1e-9))
+                {
+                    azimuth = skyRadToDeg(std::atan2(centerWorld.x, centerWorld.y));
+                    elevation = skyRadToDeg(std::asin(qBound(-1.0, centerWorld.z, 1.0)));
+                    imageUpValid = true;
+                    fusedRotationValid = true;
+                }
+            }
+#endif
+        }
+    }
+
+    if (!fusedRotationValid)
+    {
+        if (!m_directionCompassSensor || !m_directionTiltSensor || !m_directionRotationReadingValid) {
+            return;
+        }
+
+        if (const QCompassReading *compassReading = m_directionCompassSensor->reading())
+        {
+            const double readingAzimuth = compassReading->azimuth();
+            if (std::isfinite(readingAzimuth))
+            {
+                azimuth = readingAzimuth;
+                m_directionCompassReadingValid = true;
+            }
+        }
+
+        if (m_directionRotationReadingValid)
         {
             imageUpWorld = qtEulerTransform({0.0, 1.0, 0.0}, xRotation, yRotation, zRotation);
 
@@ -5810,35 +5865,34 @@ void CameraGUI::syncFromDirectionSensors()
                 {0.0, 0.0, 1.0},
                 skyDegToRad(azimuth + zRotation));
             imageUpValid = skyLength(imageUpWorld) > 1e-9;
-            m_directionRotationReadingValid = true;
         }
-    }
 
-    if (const QTiltReading *tiltReading = m_directionTiltSensor->reading())
-    {
-        const double xRotation = tiltReading->xRotation();
-        const double yRotation = tiltReading->yRotation();
-        if (std::isfinite(xRotation) && std::isfinite(yRotation))
+        if (const QTiltReading *tiltReading = m_directionTiltSensor->reading())
         {
-            // Use the front-facing optical-axis convention here. A rear-facing
-            // camera reverses the complete pointing vector below.
-            const double tiltDegrees = std::min(180.0, std::hypot(xRotation, yRotation));
-            elevation = qBound(
-                static_cast<double>(CameraSettings::m_minElevation),
-                90.0 - tiltDegrees,
-                static_cast<double>(CameraSettings::m_maxElevation));
-            m_directionTiltReadingValid = true;
+            const double xTilt = tiltReading->xRotation();
+            const double yTilt = tiltReading->yRotation();
+            if (std::isfinite(xTilt) && std::isfinite(yTilt))
+            {
+                // Use the front-facing optical-axis convention here. A rear-facing
+                // camera reverses the complete pointing vector below.
+                const double tiltDegrees = std::min(180.0, std::hypot(xTilt, yTilt));
+                elevation = qBound(
+                    static_cast<double>(CameraSettings::m_minElevation),
+                    90.0 - tiltDegrees,
+                    static_cast<double>(CameraSettings::m_maxElevation));
+                m_directionTiltReadingValid = true;
+            }
         }
-    }
 
-    if (!m_directionCompassReadingValid || !m_directionRotationReadingValid || !m_directionTiltReadingValid) {
-        return;
-    }
+        if (!m_directionCompassReadingValid || !m_directionTiltReadingValid) {
+            return;
+        }
 
-    if (m_resolvedSensorOpticalAxis == CameraSettings::SensorOpticalAxisRear)
-    {
-        azimuth += 180.0;
-        elevation = -elevation;
+        if (m_resolvedSensorOpticalAxis == CameraSettings::SensorOpticalAxisRear)
+        {
+            azimuth += 180.0;
+            elevation = -elevation;
+        }
     }
 
     azimuth += m_settings.m_azimuthOffset;

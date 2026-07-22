@@ -220,7 +220,7 @@ def extract_iq(data, source_rate, detector_rate, center_s, before_s, after_s):
     return iq
 
 
-def render_panel(axis, row, category, data, source_rate, before_s, after_s):
+def render_panel(axis, row, category, data, source_rate, before_s, after_s, full_band=False):
     detector_rate = max(1, integer(row, "sampleRate", 1000))
     start_s = number(row, "startSample") / detector_rate
     end_s = number(row, "endSample") / detector_rate
@@ -272,13 +272,19 @@ def render_panel(axis, row, category, data, source_rate, before_s, after_s):
         ))
 
     axis.set_xlim(-before_s, after_s)
-    half_view_hz = max(180.0, span_hz)
-    view_center_hz = center_hz if span_hz > 0.0 else 0.0
     nyquist_limit = 0.48 * detector_rate
-    axis.set_ylim(
-        max(-nyquist_limit, view_center_hz - half_view_hz),
-        min(nyquist_limit, view_center_hz + half_view_hz),
-    )
+
+    if full_band:
+        # Show the whole detector band so signals away from the candidate
+        # (for example sweeps the detector ignored) remain visible.
+        axis.set_ylim(-nyquist_limit, nyquist_limit)
+    else:
+        half_view_hz = max(180.0, span_hz)
+        view_center_hz = center_hz if span_hz > 0.0 else 0.0
+        axis.set_ylim(
+            max(-nyquist_limit, view_center_hz - half_view_hz),
+            min(nyquist_limit, view_center_hz + half_view_hz),
+        )
     axis.set_ylabel("Hz")
     axis.set_title(
         f"{category}  t={center_s:.3f}s  idx={row.get('index', '')}  "

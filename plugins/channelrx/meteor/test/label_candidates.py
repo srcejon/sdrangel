@@ -45,7 +45,7 @@ def parse_args():
     parser.add_argument("--audit", required=True, help="Candidate audit CSV for the recording")
     parser.add_argument("--labels", required=True, help="Labels CSV to read and update")
     parser.add_argument("--port", type=int, default=8765)
-    parser.add_argument("--queue", choices=("priority", "accepted", "rejected", "all"), default="priority")
+    parser.add_argument("--queue", choices=("priority", "accepted", "rejected", "all", "relabel-meteors"), default="priority")
     parser.add_argument("--relabel", action="store_true", help="Include already-labeled candidates")
     parser.add_argument("--context-before", type=float, default=2.0)
     parser.add_argument("--context-after", type=float, default=3.0)
@@ -113,8 +113,8 @@ def save_labels(path, labels):
     os.replace(temporary, path)
 
 
-def best_label(labels, start, end):
-    best = ""
+def best_entry(labels, start, end):
+    best = None
     best_overlap = 0
 
     for entry in labels:
@@ -122,9 +122,14 @@ def best_label(labels, start, end):
 
         if overlap > best_overlap:
             best_overlap = overlap
-            best = entry["label"]
+            best = entry
 
     return best
+
+
+def best_label(labels, start, end):
+    entry = best_entry(labels, start, end)
+    return entry["label"] if entry else ""
 
 
 def candidate_category(row):
@@ -146,6 +151,40 @@ def candidate_category(row):
 
 def build_queue(rows, labels, mode, relabel):
     order = {"recovery-accepted": 0, "accepted": 1, "boundary-reject": 2, "reject": 3}
+
+    if mode == "relabel-meteors":
+        # Serve back previously labeled meteors for re-adjudication, weakest
+        # first. Only labeler-written labels (frequency-bounded rows) qualify:
+        # seed labels imported from a verified expectation CSV are trusted.
+        queue = []
+        seen_ranges = set()
+
+        for index, row in enumerate(rows):
+            start = rcr.integer(row, "startSample")
+            end = rcr.integer(row, "endSample")
+            entry = best_entry(labels, start, end)
+
+            if (not entry) or (entry["label"] != "meteor") or (entry["low"] is None):
+                continue
+
+            label_range = (entry["start"], entry["end"])
+
+            if label_range in seen_ranges:
+                continue  # one review per label, not per overlapping fragment
+
+            seen_ranges.add(label_range)
+            queue.append({
+                "audit_index": index,
+                "category": candidate_category(row),
+                "existing": "meteor",
+            })
+
+        queue.sort(key=lambda item: (
+            rcr.number(rows[item["audit_index"]], "maxContrastDB"),
+            rcr.number(rows[item["audit_index"]], "scoreMargin"),
+        ))
+        return queue
+
     included = {
         "priority": {"recovery-accepted", "accepted", "boundary-reject"},
         "accepted": {"recovery-accepted", "accepted"},
@@ -310,9 +349,15 @@ class LabelerState:
     def render(self, pos):
         entry = self.queue[pos]
         row = self.rows[entry["audit_index"]]
-        figure, axes = plt.subplots(1, 1, figsize=(13, 4.2), squeeze=False)
+        # Two scales: the full detector band exposes sweeps anywhere in the
+        # channel; the zoomed view shows whether the boxed candidate itself
+        # looks like a small meteor.
+        figure, axes = plt.subplots(2, 1, figsize=(13, 8.6), squeeze=False)
         rcr.render_panel(
             axes[0, 0], row, entry["category"], self.data, self.source_rate,
+            self.args.context_before, self.args.context_after, full_band=True)
+        rcr.render_panel(
+            axes[1, 0], row, "zoom", self.data, self.source_rate,
             self.args.context_before, self.args.context_after)
         buffer = io.BytesIO()
         figure.tight_layout()

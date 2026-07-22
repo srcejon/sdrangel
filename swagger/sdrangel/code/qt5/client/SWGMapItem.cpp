@@ -106,6 +106,8 @@ SWGMapItem::SWGMapItem() {
     m_image_zoom_level_isSet = false;
     coordinates = nullptr;
     m_coordinates_isSet = false;
+    mesh = nullptr;
+    m_mesh_isSet = false;
     extruded_height = 0.0f;
     m_extruded_height_isSet = false;
     available_from = nullptr;
@@ -204,6 +206,8 @@ SWGMapItem::init() {
     m_image_zoom_level_isSet = false;
     coordinates = new QList<SWGMapCoordinate*>();
     m_coordinates_isSet = false;
+    mesh = new SWGMapMesh();
+    m_mesh_isSet = false;
     extruded_height = 0.0f;
     m_extruded_height_isSet = false;
     available_from = new QString("");
@@ -300,6 +304,9 @@ SWGMapItem::cleanup() {
             delete o;
         }
         delete coordinates;
+    }
+    if(mesh != nullptr) { 
+        delete mesh;
     }
 
     if(available_from != nullptr) { 
@@ -404,6 +411,8 @@ SWGMapItem::fromJsonObject(QJsonObject &pJson) {
     
     
     ::SWGSDRangel::setValue(&coordinates, pJson["coordinates"], "QList", "SWGMapCoordinate");
+    ::SWGSDRangel::setValue(&mesh, pJson["mesh"], "SWGMapMesh", "SWGMapMesh");
+    
     ::SWGSDRangel::setValue(&extruded_height, pJson["extrudedHeight"], "float", "");
     
     ::SWGSDRangel::setValue(&available_from, pJson["availableFrom"], "QString", "QString");
@@ -548,6 +557,9 @@ SWGMapItem::asJsonObject() {
     }
     if(coordinates && coordinates->size() > 0){
         toJsonArray((QList<void*>*)coordinates, obj, "coordinates", "SWGMapCoordinate");
+    }
+    if((mesh != nullptr) && (mesh->isSet())){
+        toJsonValue(QString("mesh"), mesh, obj, QString("SWGMapMesh"));
     }
     if(m_extruded_height_isSet){
         obj->insert("extrudedHeight", QJsonValue(extruded_height));
@@ -961,6 +973,16 @@ SWGMapItem::setCoordinates(QList<SWGMapCoordinate*>* coordinates) {
     this->m_coordinates_isSet = true;
 }
 
+SWGMapMesh*
+SWGMapItem::getMesh() {
+    return mesh;
+}
+void
+SWGMapItem::setMesh(SWGMapMesh* mesh) {
+    this->mesh = mesh;
+    this->m_mesh_isSet = true;
+}
+
 float
 SWGMapItem::getExtrudedHeight() {
     return extruded_height;
@@ -1165,6 +1187,9 @@ SWGMapItem::isSet(){
             isObjectUpdated = true; break;
         }
         if(coordinates && (coordinates->size() > 0)){
+            isObjectUpdated = true; break;
+        }
+        if(mesh && mesh->isSet()){
             isObjectUpdated = true; break;
         }
         if(m_extruded_height_isSet){

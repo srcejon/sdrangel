@@ -69,6 +69,86 @@ MeteorSettings:
       type: integer
       minimum: 0
       maximum: 2
+    transmitterLatitude:
+      description: "Radar transmitter latitude in decimal degrees"
+      type: number
+      format: double
+      minimum: -90.0
+      maximum: 90.0
+    transmitterLongitude:
+      description: "Radar transmitter longitude in decimal degrees"
+      type: number
+      format: double
+      minimum: -180.0
+      maximum: 180.0
+    transmitterAzimuth:
+      description: "Radar transmitter beam azimuth clockwise from true north in degrees"
+      type: number
+      format: float
+      minimum: 0.0
+      maximum: 360.0
+    transmitterElevation:
+      description: "Radar transmitter beam elevation above the horizon in degrees"
+      type: number
+      format: float
+      minimum: -90.0
+      maximum: 90.0
+    transmitterBeamwidth:
+      description: "Radar transmitter azimuthal beam coverage in degrees; zero means unspecified"
+      type: number
+      format: float
+      minimum: 0.0
+      maximum: 360.0
+    transmitterHPBW:
+      description: "Radar transmitter vertical half-power beamwidth in degrees; zero means unspecified"
+      type: number
+      format: float
+      minimum: 0.0
+      maximum: 180.0
+    receiverLatitude:
+      description: "Receive antenna latitude in decimal degrees"
+      type: number
+      format: double
+      minimum: -90.0
+      maximum: 90.0
+    receiverLongitude:
+      description: "Receive antenna longitude in decimal degrees"
+      type: number
+      format: double
+      minimum: -180.0
+      maximum: 180.0
+    antennaAzimuth:
+      description: "Receive antenna azimuth clockwise from true north in degrees"
+      type: number
+      format: float
+      minimum: 0.0
+      maximum: 360.0
+    antennaElevation:
+      description: "Receive antenna elevation above the horizon in degrees"
+      type: number
+      format: float
+      minimum: -90.0
+      maximum: 90.0
+    antennaBeamwidth:
+      description: "Receive antenna half-power beamwidth in degrees; zero means unspecified"
+      type: number
+      format: float
+      minimum: 0.0
+      maximum: 360.0
+    rotator:
+      description: "Optional GS232Controller feature to follow, encoded as '<featureSetIndex>:<featureIndex>'"
+      type: string
+    showAntennaPatterns:
+      description: "Show transmitter and receiver antenna-pattern polygons in Map features"
+      type: integer
+      minimum: 0
+      maximum: 1
+    mapMaxAltitudeKM:
+      description: "Maximum altitude in kilometres used to project antenna-pattern polygons"
+      type: number
+      format: float
+      minimum: 1.0
+      maximum: 50000.0
     rgbColor:
       type: integer
     title:

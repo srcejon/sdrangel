@@ -87,6 +87,24 @@ public:
     double getTransmitterLongitude();
     void setTransmitterLongitude(double transmitter_longitude);
 
+    float getTransmitterAzimuth();
+    void setTransmitterAzimuth(float transmitter_azimuth);
+
+    float getTransmitterElevation();
+    void setTransmitterElevation(float transmitter_elevation);
+
+    float getTransmitterBeamwidth();
+    void setTransmitterBeamwidth(float transmitter_beamwidth);
+
+    float getTransmitterHpbw();
+    void setTransmitterHpbw(float transmitter_hpbw);
+
+    double getReceiverLatitude();
+    void setReceiverLatitude(double receiver_latitude);
+
+    double getReceiverLongitude();
+    void setReceiverLongitude(double receiver_longitude);
+
     float getAntennaAzimuth();
     void setAntennaAzimuth(float antenna_azimuth);
 
@@ -98,6 +116,12 @@ public:
 
     QString* getRotator();
     void setRotator(QString* rotator);
+
+    qint32 getShowAntennaPatterns();
+    void setShowAntennaPatterns(qint32 show_antenna_patterns);
+
+    float getMapMaxAltitudeKm();
+    void setMapMaxAltitudeKm(float map_max_altitude_km);
 
     qint32 getRgbColor();
     void setRgbColor(qint32 rgb_color);
@@ -169,6 +193,24 @@ private:
     double transmitter_longitude;
     bool m_transmitter_longitude_isSet;
 
+    float transmitter_azimuth;
+    bool m_transmitter_azimuth_isSet;
+
+    float transmitter_elevation;
+    bool m_transmitter_elevation_isSet;
+
+    float transmitter_beamwidth;
+    bool m_transmitter_beamwidth_isSet;
+
+    float transmitter_hpbw;
+    bool m_transmitter_hpbw_isSet;
+
+    double receiver_latitude;
+    bool m_receiver_latitude_isSet;
+
+    double receiver_longitude;
+    bool m_receiver_longitude_isSet;
+
     float antenna_azimuth;
     bool m_antenna_azimuth_isSet;
 
@@ -180,6 +222,12 @@ private:
 
     QString* rotator;
     bool m_rotator_isSet;
+
+    qint32 show_antenna_patterns;
+    bool m_show_antenna_patterns_isSet;
+
+    float map_max_altitude_km;
+    bool m_map_max_altitude_km_isSet;
 
     qint32 rgb_color;
     bool m_rgb_color_isSet;

@@ -871,6 +871,10 @@ CameraSettings:
       description: "Exclude a margin this percentage of the frame in from the sky-region edge (fisheye rim / vignette / foreground); 0 disables: 0 to 25"
       type: number
       format: double
+    cloudMinElevation:
+      description: "Exclude sky below this elevation in degrees from cloud evaluation (needs the lens pose), so coverage tracks the usable sky; 0 disables: 0 to 90"
+      type: number
+      format: double
     cloudMaskSunMoon:
       description: "Exclude the projected sun (day) / moon (night) so their bright bloom is not classified as cloud (1 for yes, 0 for no)"
       type: integer
@@ -886,6 +890,9 @@ CameraSettings:
       type: integer
     cloudAutoReference:
       description: "Auto-learn the clear-sky reference from verified-clear frames (1 for yes, 0 for no)"
+      type: integer
+    cloudUseDetectionRoi:
+      description: "Restrict cloud detection to the shared detection RoI; 0 evaluates the whole image (1 for yes, 0 for no)"
       type: integer
     cloudSunMoonRadiusDeg:
       description: "Maximum angular radius in degrees the sun/moon exclusion grows to; the mask sizes itself to the actual glare bloom up to this cap: 0 to 45"
@@ -1087,6 +1094,61 @@ CameraSettings:
       description: "Qt camera hardware optical zoom factor (1.0 = no zoom)"
       type: number
       format: double
+    thermalDecoder:
+      description: "Radiometric UVC decoder: 0 off, 1 auto, 2 Thermal Master P2, 3 TOPDON TC001"
+      type: integer
+    thermalPalette:
+      description: "Thermal palette: 0 white hot, 1 black hot, 2 iron, 3 inferno, 4 turbo, 5 viridis"
+      type: integer
+    thermalUnits:
+      description: "Displayed thermal units: 0 Celsius, 1 Fahrenheit"
+      type: integer
+    thermalAutoRange:
+      description: "Automatically determine thermal display limits from percentiles (1 for yes, 0 for no)"
+      type: integer
+    thermalMinimumC:
+      description: "Manual thermal palette minimum in Celsius"
+      type: number
+      format: double
+    thermalMaximumC:
+      description: "Manual thermal palette maximum in Celsius"
+      type: number
+      format: double
+    thermalAutoLowPercentile:
+      description: "Lower percentile used for automatic thermal display ranging"
+      type: number
+      format: double
+    thermalAutoHighPercentile:
+      description: "Upper percentile used for automatic thermal display ranging"
+      type: number
+      format: double
+    thermalAutoRangeSmoothing:
+      description: "Thermal automatic-range response factor from 0.01 to 1.0"
+      type: number
+      format: double
+    thermalMarkerEnabled:
+      description: "Display the thermal measurement marker (1 for yes, 0 for no)"
+      type: integer
+    thermalMarkerX:
+      description: "Thermal marker horizontal position normalized from 0 to 1"
+      type: number
+      format: double
+    thermalMarkerY:
+      description: "Thermal marker vertical position normalized from 0 to 1"
+      type: number
+      format: double
+    thermalShowMinMax:
+      description: "Display minimum and maximum temperature markers (1 for yes, 0 for no)"
+      type: integer
+    thermalChartEnabled:
+      description: "Add marker measurements to the thermal chart (1 for yes, 0 for no)"
+      type: integer
+    thermalChartHistorySeconds:
+      description: "Maximum thermal chart history in seconds"
+      type: integer
+    thermalChartSampleIntervalMs:
+      description: "Minimum interval between thermal chart samples in milliseconds"
+      type: integer
     useReverseAPI:
       description: "Synchronize with reverse API (1 for yes, 0 for no)"
       type: integer
@@ -1132,6 +1194,28 @@ CameraReport:
     cloudCoverageValid:
       description: "Whether cloudCoveragePercent is valid (1 for yes, 0 for no)"
       type: integer
+    thermalValid:
+      description: "Whether the latest frame contains valid radiometric temperature data (1 for yes, 0 for no)"
+      type: integer
+    thermalDecoderName:
+      description: "Radiometric decoder used for the latest thermal frame"
+      type: string
+    thermalMarkerTemperatureC:
+      description: "Temperature in Celsius at the configured marker in the latest thermal frame"
+      type: number
+      format: float
+    thermalMinimumC:
+      description: "Minimum temperature in Celsius in the latest thermal frame"
+      type: number
+      format: float
+    thermalMaximumC:
+      description: "Maximum temperature in Celsius in the latest thermal frame"
+      type: number
+      format: float
+    thermalMeanC:
+      description: "Mean temperature in Celsius in the latest thermal frame"
+      type: number
+      format: float
 
 CameraActions:
   description: "Camera feature actions"

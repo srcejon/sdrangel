@@ -25,6 +25,7 @@
 #include "SWGMapAircraftState.h"
 #include "SWGMapAnimation.h"
 #include "SWGMapCoordinate.h"
+#include "SWGMapMesh.h"
 #include <QList>
 #include <QString>
 
@@ -162,6 +163,9 @@ public:
 
     QList<SWGMapCoordinate*>* getCoordinates();
     void setCoordinates(QList<SWGMapCoordinate*>* coordinates);
+
+    SWGMapMesh* getMesh();
+    void setMesh(SWGMapMesh* mesh);
 
     float getExtrudedHeight();
     void setExtrudedHeight(float extruded_height);
@@ -301,6 +305,9 @@ private:
 
     QList<SWGMapCoordinate*>* coordinates;
     bool m_coordinates_isSet;
+
+    SWGMapMesh* mesh;
+    bool m_mesh_isSet;
 
     float extruded_height;
     bool m_extruded_height_isSet;

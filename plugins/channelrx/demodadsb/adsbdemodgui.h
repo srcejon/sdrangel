@@ -216,6 +216,8 @@ struct Aircraft {
     QDateTime m_headingDateTime;
     QDateTime m_trackDateTime;
     QDateTime m_altitudeDateTime;
+    QDateTime m_groundspeedDateTime;
+    QDateTime m_verticalRateDateTime;
     QDateTime m_indicatedAirspeedDateTime;
     QDateTime m_prevTrackDateTime;
     int m_prevTrack;
@@ -495,8 +497,8 @@ struct Aircraft {
 
     void setOnSurface(const QDateTime& dateTime);
     void setAltitude(int altitudeFt, bool gnss, const QDateTime& dateTime, const ADSBDemodSettings& settings);
-    void setVerticalRate(int verticalRate, const ADSBDemodSettings& settings);
-    void setGroundspeed(float groundspeed, const ADSBDemodSettings& settings);
+    void setVerticalRate(int verticalRate, const QDateTime& dateTime, const ADSBDemodSettings& settings);
+    void setGroundspeed(float groundspeed, const QDateTime& dateTime, const ADSBDemodSettings& settings);
     void setTrueAirspeed(int airspeed, const ADSBDemodSettings& settings);
     void setIndicatedAirspeed(int airspeed, const QDateTime& dateTime, const ADSBDemodSettings& settings);
     void setTrack(float track, const QDateTime& dateTime);
@@ -1513,4 +1515,3 @@ signals:
 };
 
 #endif // INCLUDE_ADSBDEMODGUI_H
-

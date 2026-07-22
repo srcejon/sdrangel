@@ -1973,10 +1973,11 @@ void Aircraft::setAltitude(int altitudeFt, bool gnss, const QDateTime& dateTime,
     m_altitudeDateTime = dateTime;
 }
 
-void Aircraft::setVerticalRate(int verticalRate, const ADSBDemodSettings& settings)
+void Aircraft::setVerticalRate(int verticalRate, const QDateTime& dateTime, const ADSBDemodSettings& settings)
 {
     m_verticalRate = verticalRate;
     m_verticalRateValid = true;
+    m_verticalRateDateTime = dateTime;
     if (settings.m_siUnits) {
         m_verticalRateItem->setData(Qt::DisplayRole, Units::feetPerMinToIntegerMetresPerSecond(verticalRate));
     } else {
@@ -1984,12 +1985,12 @@ void Aircraft::setVerticalRate(int verticalRate, const ADSBDemodSettings& settin
     }
 }
 
-void Aircraft::setGroundspeed(float groundspeed, const ADSBDemodSettings& settings)
+void Aircraft::setGroundspeed(float groundspeed, const QDateTime& dateTime, const ADSBDemodSettings& settings)
 {
     m_groundspeed = groundspeed;
     m_groundspeedValid = true;
+    m_groundspeedDateTime = dateTime;
     m_groundspeedItem->setData(Qt::DisplayRole, settings.m_siUnits ? Units::knotsToIntegerKPH(m_groundspeed) : (int)std::round(m_groundspeed));
-    // FIXME: dateTime?
 }
 
 void Aircraft::setTrueAirspeed(int airspeed, const ADSBDemodSettings& settings)
@@ -2144,7 +2145,7 @@ void ADSBDemodGUI::handleADSB(
                 else if (movement == 1)
                 {
                     // Aircraft stopped
-                    aircraft->setGroundspeed(0, m_settings);
+                    aircraft->setGroundspeed(0, dateTime, m_settings);
                 }
                 else if ((movement >= 2) && (movement <= 123))
                 {
@@ -2186,11 +2187,11 @@ void ADSBDemodGUI::handleADSB(
                         step = 5.0f;
                         adjust = 109;
                     }
-                    aircraft->setGroundspeed(base + (movement - adjust) * step, m_settings);
+                    aircraft->setGroundspeed(base + (movement - adjust) * step, dateTime, m_settings);
                 }
                 else if (movement == 124)
                 {
-                    aircraft->setGroundspeed(175, m_settings); // Actually greater than this
+                    aircraft->setGroundspeed(175, dateTime, m_settings); // Actually greater than this
                 }
 
                 int groundTrackStatus = (data[5] >> 3) & 1;
@@ -2344,7 +2345,7 @@ void ADSBDemodGUI::handleADSB(
 
                 clearOldHeading(aircraft, dateTime, h);
                 aircraft->setTrack(h, dateTime);
-                aircraft->setGroundspeed(v, m_settings);
+                aircraft->setGroundspeed(v, dateTime, m_settings);
             }
             else
             {
@@ -2369,7 +2370,7 @@ void ADSBDemodGUI::handleADSB(
 
             int verticalRate;
             decodeVerticalRate(data, verticalRate);
-            aircraft->setVerticalRate(verticalRate, m_settings);
+            aircraft->setVerticalRate(verticalRate, dateTime, m_settings);
         }
         else if (tc == 28)
         {
@@ -4252,7 +4253,7 @@ void ADSBDemodGUI::decodeCommB(const QByteArray data, const QDateTime dateTime, 
             {
                 if (groundspeedSubType)
                 {
-                    aircraft->setGroundspeed(groundspeed_0_9, m_settings);
+                    aircraft->setGroundspeed(groundspeed_0_9, dateTime, m_settings);
                     aircraft->setTrack(track, dateTime);
                 }
                 else
@@ -4264,7 +4265,7 @@ void ADSBDemodGUI::decodeCommB(const QByteArray data, const QDateTime dateTime, 
                     }
                     aircraft->setHeading(heading, dateTime);
                 }
-                aircraft->setVerticalRate(verticalRate, m_settings);
+                aircraft->setVerticalRate(verticalRate, dateTime, m_settings);
             }
             if (bds_1_7)
             {
@@ -4439,7 +4440,7 @@ void ADSBDemodGUI::decodeCommB(const QByteArray data, const QDateTime dateTime, 
                 }
                 if (groundSpeedStatus)
                 {
-                    aircraft->setGroundspeed(groundSpeed, m_settings);
+                    aircraft->setGroundspeed(groundSpeed, dateTime, m_settings);
                 }
                 if (trackAngleRateStatus)
                 {
@@ -4514,7 +4515,7 @@ void ADSBDemodGUI::decodeCommB(const QByteArray data, const QDateTime dateTime, 
                     aircraft->m_machItem->setData(Qt::DisplayRole, aircraft->m_mach);
                 }
                 if (verticalVelStatus) {
-                    aircraft->setVerticalRate(verticalVel, m_settings);
+                    aircraft->setVerticalRate(verticalVel, dateTime, m_settings);
                 }
             }
 
@@ -7703,8 +7704,23 @@ void ADSBDemodGUI::sendAircraftReport()
             aircraft->m_callsign,
             aircraft->m_latitude,
             aircraft->m_longitude,
+            aircraft->m_positionValid,
+            aircraft->m_positionDateTime,
             aircraft->m_altitude,
-            aircraft->m_groundspeed
+            aircraft->m_altitudeValid,
+            aircraft->m_altitudeDateTime,
+            aircraft->m_groundspeed,
+            aircraft->m_groundspeedValid,
+            aircraft->m_groundspeedDateTime,
+            aircraft->m_track,
+            aircraft->m_trackValid,
+            aircraft->m_trackDateTime,
+            aircraft->m_heading,
+            aircraft->m_headingValid,
+            aircraft->m_headingDateTime,
+            aircraft->m_verticalRate,
+            aircraft->m_verticalRateValid,
+            aircraft->m_verticalRateDateTime
         };
 
         report.append(aircraftReport);
@@ -8448,13 +8464,13 @@ void ADSBDemodGUI::handleImportReply(QNetworkReply* reply)
                         aircraft->m_onSurface = state[8].toBool(false);
                         aircraft->m_onSurfaceValid = true;
                         if (!state[9].isNull()) {
-                            aircraft->setGroundspeed((int)state[9].toDouble(), m_settings);
+                            aircraft->setGroundspeed((int)state[9].toDouble(), aircraft->m_rxTime, m_settings);
                         }
                         if (!state[10].isNull()) {
                             aircraft->setTrack((float)state[10].toDouble(), aircraft->m_rxTime);
                         }
                         if (!state[11].isNull()) {
-                            aircraft->setVerticalRate((int)state[10].toDouble(), m_settings);
+                            aircraft->setVerticalRate((int)state[11].toDouble(), aircraft->m_rxTime, m_settings);
                         }
                         if (!state[14].isNull())
                         {

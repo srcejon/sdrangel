@@ -20,6 +20,7 @@
 #ifndef INCLUDE_ADSBDEMOD_H
 #define INCLUDE_ADSBDEMOD_H
 
+#include <QDateTime>
 #include <QNetworkRequest>
 
 #include "dsp/basebandsamplesink.h"
@@ -73,11 +74,27 @@ public:
             QString m_callsign;
             float m_latitude;
             float m_longitude;
+            bool m_positionValid;
+            QDateTime m_positionDateTime;
             int m_altitude;
+            bool m_altitudeValid;
+            QDateTime m_altitudeDateTime;
             int m_groundSpeed;
+            bool m_groundSpeedValid;
+            QDateTime m_groundSpeedDateTime;
+            float m_track;
+            bool m_trackValid;
+            QDateTime m_trackDateTime;
+            float m_heading;
+            bool m_headingValid;
+            QDateTime m_headingDateTime;
+            int m_verticalRate;
+            bool m_verticalRateValid;
+            QDateTime m_verticalRateDateTime;
         };
 
         QList<AircraftReport>& getReport() { return m_report; }
+        const QDateTime& getReportDateTime() const { return m_reportDateTime; }
 
         static MsgAircraftReport* create()
         {
@@ -86,9 +103,11 @@ public:
 
     private:
         QList<AircraftReport> m_report;
+        QDateTime m_reportDateTime;
 
         MsgAircraftReport() :
-            Message()
+            Message(),
+            m_reportDateTime(QDateTime::currentDateTimeUtc())
         { }
     };
 
@@ -196,6 +215,7 @@ private:
     float m_targetRange;
     QString m_targetName;
     QList<MsgAircraftReport::AircraftReport> m_aircraftReport;
+    QDateTime m_aircraftReportDateTime;
 
     QNetworkAccessManager *m_networkManager;
     QNetworkRequest m_networkRequest;

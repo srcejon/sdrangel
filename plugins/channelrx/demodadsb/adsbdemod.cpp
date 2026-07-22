@@ -190,6 +190,7 @@ bool ADSBDemod::handleMessage(const Message& cmd)
     {
         MsgAircraftReport& msg = (MsgAircraftReport&) cmd;
         m_aircraftReport = msg.getReport();
+        m_aircraftReportDateTime = msg.getReportDateTime();
         return true;
     }
     else if (MsgResetStats::match(cmd))
@@ -542,6 +543,11 @@ void ADSBDemod::webapiFormatChannelReport(SWGSDRangel::SWGChannelReport& respons
     response.getAdsbDemodReport()->setChannelPowerDb(CalcDb::dbPower(magsqAvg));
     response.getAdsbDemodReport()->setChannelSampleRate(m_basebandSink->getChannelSampleRate());
 
+    if (m_aircraftReportDateTime.isValid()) {
+        response.getAdsbDemodReport()->setReportDateTime(
+            new QString(m_aircraftReportDateTime.toUTC().toString(Qt::ISODateWithMs)));
+    }
+
     if (m_targetAzElValid)
     {
         response.getAdsbDemodReport()->setTargetName(new QString(m_targetName));
@@ -558,8 +564,41 @@ void ADSBDemod::webapiFormatChannelReport(SWGSDRangel::SWGChannelReport& respons
         aircraftState->setCallsign(new QString(report.m_callsign));
         aircraftState->setLatitude(report.m_latitude);
         aircraftState->setLongitude(report.m_longitude);
+        aircraftState->setPositionValid(report.m_positionValid ? 1 : 0);
+        if (report.m_positionDateTime.isValid()) {
+            aircraftState->setPositionDateTime(
+                new QString(report.m_positionDateTime.toUTC().toString(Qt::ISODateWithMs)));
+        }
         aircraftState->setAltitude(report.m_altitude);
+        aircraftState->setAltitudeValid(report.m_altitudeValid ? 1 : 0);
+        if (report.m_altitudeDateTime.isValid()) {
+            aircraftState->setAltitudeDateTime(
+                new QString(report.m_altitudeDateTime.toUTC().toString(Qt::ISODateWithMs)));
+        }
         aircraftState->setGroundSpeed(report.m_groundSpeed);
+        aircraftState->setGroundSpeedValid(report.m_groundSpeedValid ? 1 : 0);
+        if (report.m_groundSpeedDateTime.isValid()) {
+            aircraftState->setGroundSpeedDateTime(
+                new QString(report.m_groundSpeedDateTime.toUTC().toString(Qt::ISODateWithMs)));
+        }
+        aircraftState->setTrack(report.m_track);
+        aircraftState->setTrackValid(report.m_trackValid ? 1 : 0);
+        if (report.m_trackDateTime.isValid()) {
+            aircraftState->setTrackDateTime(
+                new QString(report.m_trackDateTime.toUTC().toString(Qt::ISODateWithMs)));
+        }
+        aircraftState->setHeading(report.m_heading);
+        aircraftState->setHeadingValid(report.m_headingValid ? 1 : 0);
+        if (report.m_headingDateTime.isValid()) {
+            aircraftState->setHeadingDateTime(
+                new QString(report.m_headingDateTime.toUTC().toString(Qt::ISODateWithMs)));
+        }
+        aircraftState->setVerticalRate(report.m_verticalRate);
+        aircraftState->setVerticalRateValid(report.m_verticalRateValid ? 1 : 0);
+        if (report.m_verticalRateDateTime.isValid()) {
+            aircraftState->setVerticalRateDateTime(
+                new QString(report.m_verticalRateDateTime.toUTC().toString(Qt::ISODateWithMs)));
+        }
         list->append(aircraftState);
     }
 }

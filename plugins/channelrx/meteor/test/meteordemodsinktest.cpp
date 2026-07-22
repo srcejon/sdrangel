@@ -46,6 +46,7 @@
 #include "meteordemodsink.h"
 #include "meteormapgeometry.h"
 #include "meteorsettings.h"
+#include "movingtargetmatcher.h"
 #include "rmobreport.h"
 
 #ifndef METEOR_TEST_DATA_DIR
@@ -163,6 +164,85 @@ namespace {
         if (MeteorMapGeometry::beamIntersection(narrowBeam, oppositeBeam).isValid())
         {
             errorStream << "Meteor map geometry test: opposing narrow beams unexpectedly intersect\n";
+            return false;
+        }
+
+        return true;
+    }
+
+    bool runMovingTargetMatcherTests(QTextStream& errorStream)
+    {
+        MovingTargetMatcher::Observation observation;
+        observation.m_startDateTimeUtc = QDateTime(
+            QDate(2026, 7, 22),
+            QTime(12, 0),
+            Qt::UTC);
+        observation.m_durationS = 3.0;
+        observation.m_frequencySpanHz = 120.0;
+        observation.m_referenceFrequencyHz = 143050000.0;
+        observation.m_transmitter = {47.3480, 5.5151, 0.0};
+        observation.m_receiver = {50.0535, 19.8235, 0.0};
+
+        MovingTargetMatcher::TargetState expectedTarget;
+        expectedTarget.m_source = QStringLiteral("ADS-B");
+        expectedTarget.m_id = QStringLiteral("ABC123");
+        expectedTarget.m_label = QStringLiteral("TEST123");
+        expectedTarget.m_dateTimeUtc = observation.m_startDateTimeUtc.addSecs(-5);
+        expectedTarget.m_position = {49.0, 8.0, 10000.0};
+        expectedTarget.m_eastVelocityMPS = 210.0;
+        expectedTarget.m_northVelocityMPS = 45.0;
+        expectedTarget.m_upVelocityMPS = 2.0;
+
+        const MovingTargetMatcher::Prediction expectedPrediction =
+            MovingTargetMatcher::predict(observation, expectedTarget);
+
+        if (!expectedPrediction.m_valid)
+        {
+            errorStream << "Moving-target matcher test: valid state produced no prediction\n";
+            return false;
+        }
+
+        observation.m_centerFrequencyOffsetHz = expectedPrediction.m_centerFrequencyOffsetHz;
+        observation.m_frequencyDriftHz = expectedPrediction.m_frequencyDriftHz;
+        MovingTargetMatcher::TargetState distractor = expectedTarget;
+        distractor.m_id = QStringLiteral("DEF456");
+        distractor.m_label = QStringLiteral("OTHER");
+        distractor.m_eastVelocityMPS *= -1.0;
+        distractor.m_northVelocityMPS *= -1.0;
+        const MovingTargetMatcher::Match match = MovingTargetMatcher::match(
+            observation,
+            {distractor, expectedTarget});
+
+        if (!match.m_matched
+            || (match.m_id != expectedTarget.m_id)
+            || (match.m_scorePercent < 99.9)
+            || (match.m_endpointResidualRMSHz > 1e-6))
+        {
+            errorStream << "Moving-target matcher test: exact target was not selected\n";
+            return false;
+        }
+
+        MovingTargetMatcher::TargetState duplicateTarget = expectedTarget;
+        duplicateTarget.m_id = QStringLiteral("ABC124");
+        const MovingTargetMatcher::Match ambiguousMatch = MovingTargetMatcher::match(
+            observation,
+            {expectedTarget, duplicateTarget});
+
+        if (!ambiguousMatch.m_ambiguous || ambiguousMatch.m_matched)
+        {
+            errorStream << "Moving-target matcher test: indistinguishable targets were not ambiguous\n";
+            return false;
+        }
+
+        MovingTargetMatcher::TargetState staleTarget = expectedTarget;
+        staleTarget.m_dateTimeUtc = observation.m_startDateTimeUtc.addSecs(-120);
+        const MovingTargetMatcher::Match staleMatch = MovingTargetMatcher::match(
+            observation,
+            {staleTarget});
+
+        if (staleMatch.m_hasCandidate)
+        {
+            errorStream << "Moving-target matcher test: stale target was considered\n";
             return false;
         }
 
@@ -2062,6 +2142,7 @@ int main(int argc, char *argv[])
 
     if (!runMeteorSettingsTests(err)
         || !runMeteorMapGeometryTests(err)
+        || !runMovingTargetMatcherTests(err)
         || !runRMOBReportTests(err))
     {
         return 2;

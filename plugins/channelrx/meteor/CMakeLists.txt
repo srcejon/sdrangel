@@ -9,6 +9,7 @@ set(meteor_SOURCES
     meteorwebapiadapter.cpp
     meteorsettings.cpp
     meteormapgeometry.cpp
+    movingtargetmatcher.cpp
     meteorbaseband.cpp
     meteordemodsink.cpp
     rmobreport.cpp
@@ -20,6 +21,7 @@ set(meteor_HEADERS
     meteorwebapiadapter.h
     meteorsettings.h
     meteormapgeometry.h
+    movingtargetmatcher.h
     meteorbaseband.h
     meteordemodsink.h
     rmobreport.h

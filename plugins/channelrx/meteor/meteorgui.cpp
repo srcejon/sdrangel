@@ -26,6 +26,7 @@
 #include <QFileDialog>
 #include <QFontMetrics>
 #include <QHeaderView>
+#include <QHash>
 #include <QLabel>
 #include <QMenu>
 #include <QMessageBox>
@@ -42,9 +43,14 @@
 #include "SWGMapCoordinate.h"
 #include "SWGMapItem.h"
 #include "SWGMapMesh.h"
+#include "SWGADSBDemodAircraftState.h"
+#include "SWGADSBDemodReport.h"
+#include "SWGChannelReport.h"
 
+#include "channel/channelapi.h"
 #include "device/deviceuiset.h"
 #include "device/deviceapi.h"
+#include "device/deviceset.h"
 #include "channel/channelwebapiutils.h"
 #include "dsp/dspcommands.h"
 #include "dsp/spectrumsettings.h"
@@ -62,9 +68,11 @@
 #include "pipes/objectpipe.h"
 #include "util/astronomy.h"
 #include "util/csv.h"
+#include "util/units.h"
 
 #include "meteorgui.h"
 #include "meteormapgeometry.h"
+#include "movingtargetmatcher.h"
 #include "rmobreport.h"
 #include "ui_meteorgui.h"
 
@@ -79,6 +87,7 @@ namespace {
     constexpr int MeteorHeadFFTSize = 128;
     constexpr int MeteorHeadFFTOverlap = 96;
     constexpr qint64 AutomaticRMOBSaveIntervalS = 60;
+    constexpr double MaximumADSBStateAgeS = 45.0;
 
     struct SweepClassification
     {
@@ -116,6 +125,162 @@ namespace {
         }
 
         return {classification, satelliteScore};
+    }
+
+    QDateTime parseUtcDateTime(const QString *text)
+    {
+        if (!text || text->isEmpty()) {
+            return QDateTime();
+        }
+
+        return QDateTime::fromString(*text, Qt::ISODateWithMs).toUTC();
+    }
+
+    bool isFreshForDetection(const QDateTime& stateTimeUtc, const QDateTime& detectionTimeUtc)
+    {
+        return stateTimeUtc.isValid()
+            && (std::fabs((double) stateTimeUtc.msecsTo(detectionTimeUtc) / 1000.0)
+                <= MaximumADSBStateAgeS);
+    }
+
+    QVector<MovingTargetMatcher::TargetState> collectADSBTargets(const QDateTime& detectionTimeUtc)
+    {
+        QHash<QString, MovingTargetMatcher::TargetState> targetsByICAO;
+        const std::vector<DeviceSet *>& deviceSets = MainCore::instance()->getDeviceSets();
+
+        for (size_t deviceIndex = 0; deviceIndex < deviceSets.size(); ++deviceIndex)
+        {
+            DeviceSet *deviceSet = deviceSets[deviceIndex];
+
+            if (!deviceSet) {
+                continue;
+            }
+
+            for (int channelIndex = 0; channelIndex < deviceSet->getNumberOfChannels(); ++channelIndex)
+            {
+                ChannelAPI *channel = deviceSet->getChannelAt(channelIndex);
+
+                if (!channel || (channel->getURI() != QStringLiteral("sdrangel.channel.adsbdemod"))) {
+                    continue;
+                }
+
+                SWGSDRangel::SWGChannelReport channelReport;
+
+                if (!ChannelWebAPIUtils::getChannelReport(
+                        (unsigned int) deviceIndex,
+                        (unsigned int) channelIndex,
+                        channelReport))
+                {
+                    continue;
+                }
+
+                SWGSDRangel::SWGADSBDemodReport *adsbReport = channelReport.getAdsbDemodReport();
+
+                if (!adsbReport || !adsbReport->getAircraftState()) {
+                    continue;
+                }
+
+                for (SWGSDRangel::SWGADSBDemodAircraftState *aircraft : *adsbReport->getAircraftState())
+                {
+                    if (!aircraft
+                        || (aircraft->getPositionValid() == 0)
+                        || (aircraft->getAltitudeValid() == 0)
+                        || (aircraft->getGroundSpeedValid() == 0))
+                    {
+                        continue;
+                    }
+
+                    const bool trackValid = aircraft->getTrackValid() != 0;
+                    const bool headingValid = aircraft->getHeadingValid() != 0;
+
+                    if (!trackValid && !headingValid) {
+                        continue;
+                    }
+
+                    const QDateTime positionTimeUtc = parseUtcDateTime(aircraft->getPositionDateTime());
+                    const QDateTime altitudeTimeUtc = parseUtcDateTime(aircraft->getAltitudeDateTime());
+                    const QDateTime speedTimeUtc = parseUtcDateTime(aircraft->getGroundSpeedDateTime());
+                    const QDateTime directionTimeUtc = parseUtcDateTime(trackValid
+                        ? aircraft->getTrackDateTime()
+                        : aircraft->getHeadingDateTime());
+
+                    if (!isFreshForDetection(positionTimeUtc, detectionTimeUtc)
+                        || !isFreshForDetection(altitudeTimeUtc, detectionTimeUtc)
+                        || !isFreshForDetection(speedTimeUtc, detectionTimeUtc)
+                        || !isFreshForDetection(directionTimeUtc, detectionTimeUtc))
+                    {
+                        continue;
+                    }
+
+                    const QString icao = aircraft->getIcao()
+                        ? aircraft->getIcao()->trimmed().toUpper()
+                        : QString();
+                    const QString callsign = aircraft->getCallsign()
+                        ? aircraft->getCallsign()->trimmed()
+                        : QString();
+                    const QString identity = !icao.isEmpty()
+                        ? icao
+                        : QStringLiteral("%1:%2:%3")
+                            .arg((qulonglong) deviceIndex)
+                            .arg(channelIndex)
+                            .arg(callsign);
+                    const double directionDegrees = trackValid
+                        ? aircraft->getTrack()
+                        : aircraft->getHeading();
+                    const double directionRadians = directionDegrees * M_PI / 180.0;
+                    const double groundSpeedMPS = Units::knotsToMetresPerSecond(
+                        (float) aircraft->getGroundSpeed());
+                    MovingTargetMatcher::TargetState target;
+                    target.m_source = QStringLiteral("ADS-B");
+                    target.m_id = icao;
+                    target.m_label = !callsign.isEmpty()
+                        ? callsign
+                        : (!icao.isEmpty() ? icao : identity);
+                    target.m_dateTimeUtc = positionTimeUtc;
+                    target.m_position = {
+                        aircraft->getLatitude(),
+                        aircraft->getLongitude(),
+                        Units::feetToMetres((float) aircraft->getAltitude())
+                    };
+                    target.m_eastVelocityMPS = groundSpeedMPS * std::sin(directionRadians);
+                    target.m_northVelocityMPS = groundSpeedMPS * std::cos(directionRadians);
+                    target.m_upVelocityMPS = (aircraft->getVerticalRateValid() != 0)
+                        && isFreshForDetection(
+                            parseUtcDateTime(aircraft->getVerticalRateDateTime()),
+                            detectionTimeUtc)
+                        ? Units::feetPerMinToMetresPerSecond((float) aircraft->getVerticalRate())
+                        : 0.0;
+
+                    const auto existing = targetsByICAO.constFind(identity);
+
+                    if ((existing == targetsByICAO.cend())
+                        || (existing->m_dateTimeUtc < target.m_dateTimeUtc))
+                    {
+                        targetsByICAO.insert(identity, target);
+                    }
+                }
+            }
+        }
+
+        QVector<MovingTargetMatcher::TargetState> targets;
+        targets.reserve(targetsByICAO.size());
+
+        for (auto target = targetsByICAO.cbegin(); target != targetsByICAO.cend(); ++target) {
+            targets.append(target.value());
+        }
+
+        return targets;
+    }
+
+    QString movingTargetLabel(const MovingTargetMatcher::Match& match)
+    {
+        QString identity = match.m_label;
+
+        if (!match.m_id.isEmpty() && (match.m_id != identity)) {
+            identity += QStringLiteral(" [%1]").arg(match.m_id);
+        }
+
+        return QStringLiteral("%1: %2").arg(match.m_source, identity);
     }
 
     class NumericTableWidgetItem : public QTableWidgetItem
@@ -493,13 +658,16 @@ void MeteorGUI::setupUi(RollupContents *rollupContents)
     m_detectionsTable->setSortingEnabled(true);
     m_detectionsTable->setMinimumHeight(120);
 
-    m_satellitesTable->setColumnCount(15);
+    m_satellitesTable->setColumnCount(18);
     QStringList satelliteHeaders = detectionHeaders.mid(0, 9);
     satelliteHeaders.append("Radial (kph)");
     satelliteHeaders.append("Max radial (kph)");
     satelliteHeaders.append("Drift rate (Hz/s)");
     satelliteHeaders.append("RF class");
     satelliteHeaders.append("Sat score (%)");
+    satelliteHeaders.append("Target match");
+    satelliteHeaders.append("Match score (%)");
+    satelliteHeaders.append("Residual (Hz)");
     satelliteHeaders.append(detectionHeaders[9]);
     const QStringList satelliteHeaderTooltips = {
         "Local date and time when the Doppler sweep started",
@@ -515,7 +683,10 @@ void MeteorGUI::setupUi(RollupContents *rollupContents)
         "Maximum absolute equivalent radial speed in kilometres per hour, calculated from the robust fitted sweep endpoints.",
         "Average Doppler drift rate across the sweep in hertz per second.",
         "Conservative RF-only classification from endpoint speed, Doppler rate, sweep excursion and track duration.",
-        "Heuristic satellite evidence score from 0 to 100; this is not a calibrated probability and does not yet use ADS-B or TLE correlation.",
+        "Heuristic RF-only satellite evidence score from 0 to 100; this is not a calibrated probability.",
+        "Strong, unambiguous moving-target correlation. ADS-B aircraft are supported; the matcher is source-neutral for future TLE states.",
+        "Doppler endpoint match score from 0 to 100. A match requires at least 60 and an 8 point lead over the next target.",
+        "Root-mean-square residual between observed and predicted start/end Doppler offsets in hertz.",
         "Meteor channel detector sample rate in hertz"
     };
 
@@ -2080,6 +2251,7 @@ void MeteorGUI::addSatelliteDetection(const MeteorDemodSink::MsgSatelliteDetecte
     const double driftRateHzPerS = detection.m_frequencyDrift
         / std::max(0.001, detection.m_durationS);
     const qint64 referenceFrequency = rmobReportFrequency();
+    MovingTargetMatcher::Match targetMatch;
     if (referenceFrequency > 0)
     {
         const double radialSpeedKPH = Astronomy::dopplerToVelocity(
@@ -2101,9 +2273,32 @@ void MeteorGUI::addSatelliteDetection(const MeteorDemodSink::MsgSatelliteDetecte
             driftRateHzPerS,
             detection.m_frequencyDrift,
             detection.m_durationS);
+        MovingTargetMatcher::Observation observation;
+        observation.m_startDateTimeUtc = sampleTimeUtc;
+        observation.m_durationS = detection.m_durationS;
+        observation.m_centerFrequencyOffsetHz = detection.m_centerFrequency;
+        observation.m_frequencyDriftHz = detection.m_frequencyDrift;
+        observation.m_frequencySpanHz = detection.m_frequencySpan;
+        observation.m_referenceFrequencyHz = (double) referenceFrequency;
+        observation.m_transmitter = {
+            m_settings.m_transmitterLatitude,
+            m_settings.m_transmitterLongitude,
+            0.0
+        };
+        observation.m_receiver = {
+            m_settings.m_receiverLatitude,
+            m_settings.m_receiverLongitude,
+            0.0
+        };
+        targetMatch = MovingTargetMatcher::match(
+            observation,
+            collectADSBTargets(sampleTimeUtc.addMSecs(
+                (qint64) std::llround(detection.m_durationS * 500.0))));
         m_satellitesTable->setItem(row, 9, makeTableItem(QString::number(radialSpeedKPH, 'f', 1), radialSpeedKPH));
         m_satellitesTable->setItem(row, 10, makeTableItem(QString::number(maximumRadialSpeedKPH, 'f', 1), maximumRadialSpeedKPH));
-        m_satellitesTable->setItem(row, 12, makeTableItem(classification.m_classification));
+        m_satellitesTable->setItem(row, 12, makeTableItem(targetMatch.m_matched
+            ? QStringLiteral("Aircraft (ADS-B)")
+            : classification.m_classification));
         m_satellitesTable->setItem(row, 13, makeTableItem(
             QString::number(classification.m_satelliteScorePercent, 'f', 1),
             classification.m_satelliteScorePercent));
@@ -2116,7 +2311,35 @@ void MeteorGUI::addSatelliteDetection(const MeteorDemodSink::MsgSatelliteDetecte
         m_satellitesTable->setItem(row, 13, makeTableItem(QString()));
     }
     m_satellitesTable->setItem(row, 11, makeTableItem(QString::number(driftRateHzPerS, 'f', 1), driftRateHzPerS));
-    m_satellitesTable->setItem(row, 14, makeTableItem(QString::number(detection.m_sampleRate), detection.m_sampleRate));
+    QTableWidgetItem *matchItem = makeTableItem(targetMatch.m_matched
+        ? movingTargetLabel(targetMatch)
+        : (targetMatch.m_ambiguous
+            ? QStringLiteral("Ambiguous ADS-B")
+            : QString()));
+
+    if (targetMatch.m_hasCandidate)
+    {
+        matchItem->setToolTip(tr(
+            "Best %1 candidate: %2\n"
+            "Predicted start/end: %3 / %4 Hz\n"
+            "Center/drift residual: %5 / %6 Hz\n"
+            "State age: %7 s")
+            .arg(targetMatch.m_source, movingTargetLabel(targetMatch))
+            .arg(targetMatch.m_prediction.m_startFrequencyOffsetHz, 0, 'f', 1)
+            .arg(targetMatch.m_prediction.m_endFrequencyOffsetHz, 0, 'f', 1)
+            .arg(targetMatch.m_centerResidualHz, 0, 'f', 1)
+            .arg(targetMatch.m_driftResidualHz, 0, 'f', 1)
+            .arg(targetMatch.m_stateAgeS, 0, 'f', 1));
+    }
+
+    m_satellitesTable->setItem(row, 14, matchItem);
+    m_satellitesTable->setItem(row, 15, targetMatch.m_hasCandidate
+        ? makeTableItem(QString::number(targetMatch.m_scorePercent, 'f', 1), targetMatch.m_scorePercent)
+        : makeTableItem(QString()));
+    m_satellitesTable->setItem(row, 16, targetMatch.m_hasCandidate
+        ? makeTableItem(QString::number(targetMatch.m_endpointResidualRMSHz, 'f', 1), targetMatch.m_endpointResidualRMSHz)
+        : makeTableItem(QString()));
+    m_satellitesTable->setItem(row, 17, makeTableItem(QString::number(detection.m_sampleRate), detection.m_sampleRate));
     m_satellitesTable->setSortingEnabled(sortingEnabled);
     updateSpectrumViews();
 }

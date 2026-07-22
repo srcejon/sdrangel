@@ -263,7 +263,7 @@
     <item row="8" column="0">
      <widget class="QToolButton" name="showAntennaPatterns">
       <property name="toolTip">
-       <string>Show transmitter, receiver and intersection HPBW volumes on Map features</string>
+       <string>Show transmitter, receiver and intersection beam volumes on Map features</string>
       </property>
       <property name="text">
        <string/>
@@ -409,7 +409,7 @@
        <item row="2" column="0">
         <widget class="QLabel" name="transmitterHPBWLabel">
          <property name="text">
-          <string>HPBW</string>
+          <string>Tx El BW</string>
          </property>
         </widget>
        </item>
@@ -419,7 +419,7 @@
        <item row="2" column="2">
         <widget class="QLabel" name="transmitterBeamwidthLabel">
          <property name="text">
-          <string>Tx cov</string>
+          <string>Tx Az BW</string>
          </property>
         </widget>
        </item>

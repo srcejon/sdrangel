@@ -80,6 +80,44 @@ namespace {
     constexpr int MeteorHeadFFTOverlap = 96;
     constexpr qint64 AutomaticRMOBSaveIntervalS = 60;
 
+    struct SweepClassification
+    {
+        QString m_classification;
+        double m_satelliteScorePercent;
+    };
+
+    double smoothEvidence(double value, double low, double high)
+    {
+        const double normalized = std::clamp((value - low) / (high - low), 0.0, 1.0);
+        return normalized * normalized * (3.0 - 2.0 * normalized);
+    }
+
+    SweepClassification classifySweep(
+        double maximumRadialSpeedKPH,
+        double driftRateHzPerS,
+        double frequencyDriftHz,
+        double durationS)
+    {
+        const double speedEvidence = smoothEvidence(maximumRadialSpeedKPH, 1500.0, 3500.0);
+        const double rateEvidence = smoothEvidence(std::fabs(driftRateHzPerS), 40.0, 250.0);
+        const double excursionEvidence = smoothEvidence(std::fabs(frequencyDriftHz), 100.0, 800.0);
+        double satelliteScore = 100.0
+            * (0.70 * speedEvidence + 0.20 * rateEvidence + 0.10 * excursionEvidence);
+
+        // Very short tracks do not constrain the sweep shape reliably.
+        const double reliability = std::clamp(durationS / 0.5, 0.4, 1.0);
+        satelliteScore = 50.0 + (satelliteScore - 50.0) * reliability;
+
+        QString classification = QStringLiteral("Uncertain");
+        if (satelliteScore >= 65.0) {
+            classification = QStringLiteral("Satellite");
+        } else if (satelliteScore <= 25.0) {
+            classification = QStringLiteral("Aircraft");
+        }
+
+        return {classification, satelliteScore};
+    }
+
     class NumericTableWidgetItem : public QTableWidgetItem
     {
     public:
@@ -341,12 +379,12 @@ void MeteorGUI::setupUi(RollupContents *rollupContents)
     m_transmitterBeamwidth->setDecimals(1);
     m_transmitterBeamwidth->setRange(0.0, 360.0);
     m_transmitterBeamwidth->setSuffix(QString::fromUtf8("\u00b0"));
-    m_transmitterBeamwidth->setToolTip("Radar transmitter azimuthal coverage; GRAVES illuminates approximately 180 degrees of southern sky");
+    m_transmitterBeamwidth->setToolTip("Radar transmitter azimuth beamwidth; GRAVES illuminates approximately 180 degrees of southern sky");
 
     m_transmitterHPBW->setDecimals(1);
     m_transmitterHPBW->setRange(0.0, 180.0);
     m_transmitterHPBW->setSuffix(QString::fromUtf8("\u00b0"));
-    m_transmitterHPBW->setToolTip("Radar transmitter vertical half-power beamwidth; GRAVES defaults to approximately 25 degrees");
+    m_transmitterHPBW->setToolTip("Radar transmitter elevation beamwidth; GRAVES defaults to approximately 25 degrees");
 
     m_receiverLatitude->setDecimals(6);
     m_receiverLatitude->setRange(-90.0, 90.0);
@@ -446,9 +484,13 @@ void MeteorGUI::setupUi(RollupContents *rollupContents)
     m_detectionsTable->setSortingEnabled(true);
     m_detectionsTable->setMinimumHeight(120);
 
-    m_satellitesTable->setColumnCount(11);
+    m_satellitesTable->setColumnCount(15);
     QStringList satelliteHeaders = detectionHeaders.mid(0, 9);
     satelliteHeaders.append("Radial (kph)");
+    satelliteHeaders.append("Max radial (kph)");
+    satelliteHeaders.append("Drift rate (Hz/s)");
+    satelliteHeaders.append("RF class");
+    satelliteHeaders.append("Sat score (%)");
     satelliteHeaders.append(detectionHeaders[9]);
     const QStringList satelliteHeaderTooltips = {
         "Local date and time when the Doppler sweep started",
@@ -461,6 +503,10 @@ void MeteorGUI::setupUi(RollupContents *rollupContents)
         "Tracked frequency span across the sweep in hertz",
         "Robust start-to-end frequency drift across the sweep in hertz",
         "Equivalent signed radial speed in kilometres per hour derived from center Doppler shift; positive is approaching. For bistatic radar this is not the satellite's full orbital speed.",
+        "Maximum absolute equivalent radial speed in kilometres per hour, calculated from the robust fitted sweep endpoints.",
+        "Average Doppler drift rate across the sweep in hertz per second.",
+        "Conservative RF-only classification from endpoint speed, Doppler rate, sweep excursion and track duration.",
+        "Heuristic satellite evidence score from 0 to 100; this is not a calibrated probability and does not yet use ADS-B or TLE correlation.",
         "Meteor channel detector sample rate in hertz"
     };
 
@@ -787,19 +833,19 @@ void MeteorGUI::updateAntennaPatternsOnMap(bool force)
             addMesh(
                 messageQueue,
                 txName,
-                tr("Transmitter HPBW volume"),
+                tr("Transmitter beam volume"),
                 txGeometry,
                 QColor(255, 96, 32, 20).rgba());
             addMesh(
                 messageQueue,
                 rxName,
-                tr("Receiver HPBW volume"),
+                tr("Receiver beam volume"),
                 rxGeometry,
                 QColor(0, 190, 255, 20).rgba());
             addMesh(
                 messageQueue,
                 intersectionName,
-                tr("TX/RX HPBW intersection volume"),
+                tr("TX/RX beam intersection volume"),
                 intersectionGeometry,
                 QColor(128, 255, 64, 60).rgba());
         }
@@ -1988,18 +2034,46 @@ void MeteorGUI::addSatelliteDetection(const MeteorDemodSink::MsgSatelliteDetecte
     m_satellitesTable->setItem(row, 6, makeTableItem(QString::number(detection.m_centerFrequency, 'f', 1), detection.m_centerFrequency));
     m_satellitesTable->setItem(row, 7, makeTableItem(QString::number(detection.m_frequencySpan, 'f', 1), detection.m_frequencySpan));
     m_satellitesTable->setItem(row, 8, makeTableItem(QString::number(detection.m_frequencyDrift, 'f', 1), detection.m_frequencyDrift));
+    const double driftRateHzPerS = detection.m_frequencyDrift
+        / std::max(0.001, detection.m_durationS);
     const qint64 referenceFrequency = rmobReportFrequency();
     if (referenceFrequency > 0)
     {
         const double radialSpeedKPH = Astronomy::dopplerToVelocity(
             (double) referenceFrequency + detection.m_centerFrequency,
             (double) referenceFrequency) * 3.6;
+        const double startFrequency = detection.m_centerFrequency - detection.m_frequencyDrift * 0.5;
+        const double endFrequency = detection.m_centerFrequency + detection.m_frequencyDrift * 0.5;
+        const double startRadialSpeedKPH = Astronomy::dopplerToVelocity(
+            (double) referenceFrequency + startFrequency,
+            (double) referenceFrequency) * 3.6;
+        const double endRadialSpeedKPH = Astronomy::dopplerToVelocity(
+            (double) referenceFrequency + endFrequency,
+            (double) referenceFrequency) * 3.6;
+        const double maximumRadialSpeedKPH = std::max(
+            std::fabs(startRadialSpeedKPH),
+            std::fabs(endRadialSpeedKPH));
+        const SweepClassification classification = classifySweep(
+            maximumRadialSpeedKPH,
+            driftRateHzPerS,
+            detection.m_frequencyDrift,
+            detection.m_durationS);
         m_satellitesTable->setItem(row, 9, makeTableItem(QString::number(radialSpeedKPH, 'f', 1), radialSpeedKPH));
+        m_satellitesTable->setItem(row, 10, makeTableItem(QString::number(maximumRadialSpeedKPH, 'f', 1), maximumRadialSpeedKPH));
+        m_satellitesTable->setItem(row, 12, makeTableItem(classification.m_classification));
+        m_satellitesTable->setItem(row, 13, makeTableItem(
+            QString::number(classification.m_satelliteScorePercent, 'f', 1),
+            classification.m_satelliteScorePercent));
     }
-    else {
+    else
+    {
         m_satellitesTable->setItem(row, 9, makeTableItem(QString()));
+        m_satellitesTable->setItem(row, 10, makeTableItem(QString()));
+        m_satellitesTable->setItem(row, 12, makeTableItem(QStringLiteral("Uncertain")));
+        m_satellitesTable->setItem(row, 13, makeTableItem(QString()));
     }
-    m_satellitesTable->setItem(row, 10, makeTableItem(QString::number(detection.m_sampleRate), detection.m_sampleRate));
+    m_satellitesTable->setItem(row, 11, makeTableItem(QString::number(driftRateHzPerS, 'f', 1), driftRateHzPerS));
+    m_satellitesTable->setItem(row, 14, makeTableItem(QString::number(detection.m_sampleRate), detection.m_sampleRate));
     m_satellitesTable->setSortingEnabled(sortingEnabled);
     updateSpectrumViews();
 }

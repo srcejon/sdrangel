@@ -248,6 +248,7 @@ void MeteorGUI::setupUi(RollupContents *rollupContents)
     m_saveColorgramme = ui->saveColorgramme;
     m_clearDetections = ui->clearDetections;
     m_detectionsTable = ui->detectionsTable;
+    m_satellitesTable = ui->satellitesTable;
     m_colorgrammeTable = ui->colorgrammeTable;
     m_hourlyChartView = ui->hourlyChartView;
     m_glSpectrum = ui->glSpectrum;
@@ -343,7 +344,7 @@ void MeteorGUI::setupUi(RollupContents *rollupContents)
     populateRotatorCombo();
 
     m_saveDetections->setIcon(QIcon(":/save.png"));
-    m_saveDetections->setToolTip("Save detections to CSV");
+    m_saveDetections->setToolTip("Save the current detections table to CSV");
     m_saveDetections->setMaximumWidth(28);
     m_saveColorgramme->setIcon(QIcon(":/save.png"));
     m_saveColorgramme->setToolTip("Save Colorgramme to RMOB text report");
@@ -400,6 +401,38 @@ void MeteorGUI::setupUi(RollupContents *rollupContents)
     m_detectionsTable->verticalHeader()->setVisible(true);
     m_detectionsTable->setSortingEnabled(true);
     m_detectionsTable->setMinimumHeight(120);
+
+    m_satellitesTable->setColumnCount(10);
+    const QStringList satelliteHeaders = detectionHeaders.mid(0, 10);
+    const QStringList satelliteHeaderTooltips = {
+        "Local date and time when the Doppler sweep started",
+        "Peak signal power during the sweep in dB",
+        "Estimated background power level at detection time in dB",
+        "Integrated sweep signal power across the detection in dB",
+        "Peak linear signal amplitude during the sweep",
+        "Tracked sweep duration in milliseconds",
+        "Robust center frequency of the sweep relative to channel center in hertz",
+        "Tracked frequency span across the sweep in hertz",
+        "Robust start-to-end frequency drift across the sweep in hertz",
+        "Meteor channel detector sample rate in hertz"
+    };
+
+    for (int i = 0; i < satelliteHeaders.size(); i++)
+    {
+        QTableWidgetItem *headerItem = new QTableWidgetItem(satelliteHeaders[i]);
+        headerItem->setToolTip(satelliteHeaderTooltips[i]);
+        m_satellitesTable->setHorizontalHeaderItem(i, headerItem);
+    }
+
+    m_satellitesTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    m_satellitesTable->setSelectionBehavior(QAbstractItemView::SelectRows);
+    m_satellitesTable->setSelectionMode(QAbstractItemView::ExtendedSelection);
+    m_satellitesTable->setContextMenuPolicy(Qt::CustomContextMenu);
+    m_satellitesTable->horizontalHeader()->setStretchLastSection(true);
+    m_satellitesTable->horizontalHeader()->setSectionsMovable(true);
+    m_satellitesTable->verticalHeader()->setVisible(true);
+    m_satellitesTable->setSortingEnabled(true);
+    m_satellitesTable->setMinimumHeight(120);
 
     m_colorgrammeTable->setRowCount(24);
     m_colorgrammeTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
@@ -686,6 +719,12 @@ bool MeteorGUI::handleMessage(const Message& message)
         addDetection(detection);
         return true;
     }
+    else if (MeteorDemodSink::MsgSatelliteDetected::match(message))
+    {
+        const auto& detection = (const MeteorDemodSink::MsgSatelliteDetected&) message;
+        addSatelliteDetection(detection);
+        return true;
+    }
     else if (Meteor::MsgCameraMeteorDetected::match(message))
     {
         const Meteor::MsgCameraMeteorDetected& detection = (const Meteor::MsgCameraMeteorDetected&) message;
@@ -951,6 +990,9 @@ void MeteorGUI::on_rotator_currentIndexChanged(int index)
 
 void MeteorGUI::on_saveDetections_clicked()
 {
+    QTableWidget *table = ui->detectionsTabWidget->currentWidget() == ui->satellitesPage
+        ? m_satellitesTable
+        : m_detectionsTable;
     QFileDialog fileDialog(this, "Select file to save detections to", "", "*.csv");
     fileDialog.setDefaultSuffix("csv");
     fileDialog.setAcceptMode(QFileDialog::AcceptSave);
@@ -974,14 +1016,14 @@ void MeteorGUI::on_saveDetections_clicked()
     }
 
     QTextStream out(&file);
-    QHeaderView *header = m_detectionsTable->horizontalHeader();
+    QHeaderView *header = table->horizontalHeader();
     QVector<int> visibleColumns;
 
     for (int visualIndex = 0; visualIndex < header->count(); visualIndex++)
     {
         const int logicalIndex = header->logicalIndex(visualIndex);
 
-        if (!m_detectionsTable->isColumnHidden(logicalIndex)) {
+        if (!table->isColumnHidden(logicalIndex)) {
             visibleColumns.push_back(logicalIndex);
         }
     }
@@ -992,12 +1034,12 @@ void MeteorGUI::on_saveDetections_clicked()
             out << ",";
         }
 
-        out << CSV::escape(m_detectionsTable->horizontalHeaderItem(visibleColumns[i])->text());
+        out << CSV::escape(table->horizontalHeaderItem(visibleColumns[i])->text());
     }
 
     out << "\n";
 
-    for (int row = 0; row < m_detectionsTable->rowCount(); row++)
+    for (int row = 0; row < table->rowCount(); row++)
     {
         for (int i = 0; i < visibleColumns.size(); i++)
         {
@@ -1005,7 +1047,7 @@ void MeteorGUI::on_saveDetections_clicked()
                 out << ",";
             }
 
-            QTableWidgetItem *item = m_detectionsTable->item(row, visibleColumns[i]);
+            QTableWidgetItem *item = table->item(row, visibleColumns[i]);
             out << CSV::escape(item ? item->text() : QString());
         }
 
@@ -1101,6 +1143,7 @@ void MeteorGUI::on_clearDetections_clicked()
     m_nextDetectionOverlayId = 1;
     invalidateDetectionOverlayWindows();
     m_detectionsTable->setRowCount(0);
+    m_satellitesTable->setRowCount(0);
     hideDetectionOverlayLabels();
     updateCounters();
     updateHistogram();
@@ -1110,7 +1153,17 @@ void MeteorGUI::on_clearDetections_clicked()
 
 void MeteorGUI::on_detectionsTable_itemSelectionChanged()
 {
-    const QList<QTableWidgetItem*> selectedItems = m_detectionsTable->selectedItems();
+    handleDetectionTableSelectionChanged(m_detectionsTable);
+}
+
+void MeteorGUI::on_satellitesTable_itemSelectionChanged()
+{
+    handleDetectionTableSelectionChanged(m_satellitesTable);
+}
+
+void MeteorGUI::handleDetectionTableSelectionChanged(QTableWidget *table)
+{
+    const QList<QTableWidgetItem*> selectedItems = table->selectedItems();
 
     if (selectedItems.isEmpty())
     {
@@ -1118,7 +1171,10 @@ void MeteorGUI::on_detectionsTable_itemSelectionChanged()
         return;
     }
 
-    QTableWidgetItem *timeItem = m_detectionsTable->item(selectedItems.first()->row(), 0);
+    QTableWidget *otherTable = table == m_detectionsTable ? m_satellitesTable : m_detectionsTable;
+    const QSignalBlocker blocker(otherTable);
+    otherTable->clearSelection();
+    QTableWidgetItem *timeItem = table->item(selectedItems.first()->row(), 0);
 
     if (!timeItem) {
         return;
@@ -1137,6 +1193,30 @@ void MeteorGUI::on_detectionsTable_itemSelectionChanged()
 
     scrollSpectrumViewsToUTC(QDateTime::fromMSecsSinceEpoch(utcMSecs, Qt::UTC));
     updateSpectrumViews();
+}
+
+void MeteorGUI::on_satellitesTable_customContextMenuRequested(const QPoint& pos)
+{
+    QTableWidgetItem *item = m_satellitesTable->itemAt(pos);
+
+    if (item && !item->isSelected())
+    {
+        m_satellitesTable->clearSelection();
+        m_satellitesTable->selectRow(item->row());
+    }
+
+    if (!m_satellitesTable->selectionModel()
+        || m_satellitesTable->selectionModel()->selectedRows().isEmpty())
+    {
+        return;
+    }
+
+    QMenu menu(this);
+    QAction *deleteAction = menu.addAction("Delete selected satellite detections");
+
+    if (menu.exec(m_satellitesTable->viewport()->mapToGlobal(pos)) == deleteAction) {
+        deleteSelectedSatellites();
+    }
 }
 
 void MeteorGUI::on_detectionsTable_customContextMenuRequested(const QPoint& pos)
@@ -1372,8 +1452,13 @@ void MeteorGUI::makeUIConnections()
     QObject::connect(m_clearDetections, &QPushButton::clicked, this, &MeteorGUI::on_clearDetections_clicked);
     QObject::connect(m_detectionsTable, &QTableWidget::itemSelectionChanged, this, &MeteorGUI::on_detectionsTable_itemSelectionChanged);
     QObject::connect(m_detectionsTable, &QTableWidget::customContextMenuRequested, this, &MeteorGUI::on_detectionsTable_customContextMenuRequested);
+    QObject::connect(m_satellitesTable, &QTableWidget::itemSelectionChanged, this, &MeteorGUI::on_satellitesTable_itemSelectionChanged);
+    QObject::connect(m_satellitesTable, &QTableWidget::customContextMenuRequested, this, &MeteorGUI::on_satellitesTable_customContextMenuRequested);
     QObject::connect(m_detectionsTable->horizontalHeader(), &QHeaderView::customContextMenuRequested, this, &MeteorGUI::on_detectionsTableHeader_customContextMenuRequested);
     QObject::connect(m_detectionsTable->horizontalHeader(), &QHeaderView::sortIndicatorChanged, this, [this](int, Qt::SortOrder) {
+        updateSpectrumViews();
+    });
+    QObject::connect(m_satellitesTable->horizontalHeader(), &QHeaderView::sortIndicatorChanged, this, [this](int, Qt::SortOrder) {
         updateSpectrumViews();
     });
 }
@@ -1458,6 +1543,8 @@ void MeteorGUI::addDetection(const MeteorDemodSink::MsgMeteorDetected& detection
         detection.getFrequencyDrift(),
         detection.getPeakPowerDB(),
         displayTimeScale,
+        false,
+        m_detectionsTable,
         nullptr
     };
     const qint64 overlayStartMSecs = overlay.m_startTimeUtc.toMSecsSinceEpoch();
@@ -1513,6 +1600,99 @@ void MeteorGUI::addDetection(const MeteorDemodSink::MsgMeteorDetected& detection
     updateCounters();
     updateHistogram();
     updateColorgramme();
+    updateSpectrumViews();
+}
+
+void MeteorGUI::addSatelliteDetection(const MeteorDemodSink::MsgSatelliteDetected& message)
+{
+    const MeteorDemodSink::DetectionRecord& detection = message.getDetection();
+    const QDateTime sampleTimeUtc = detection.m_dateTimeUtc;
+    const QDateTime displayTimeUtc = detection.m_displayDateTimeUtc.isValid()
+        ? detection.m_displayDateTimeUtc
+        : sampleTimeUtc;
+    const QDateTime displayLocalTime = displayTimeUtc.toLocalTime();
+    const double peakPowerDB = 10.0 * std::log10(std::max(1e-20, detection.m_peakPower));
+    const double backgroundPowerDB = 10.0 * std::log10(std::max(1e-20, detection.m_backgroundPower));
+    const double totalPowerDB = 10.0 * std::log10(std::max(1e-20, detection.m_totalPower));
+    const double peakAmplitude = std::sqrt(std::max(0.0, detection.m_peakPower));
+    const quint64 displaySampleCount = detection.m_displayEndSample >= detection.m_displayStartSample
+        ? detection.m_displayEndSample - detection.m_displayStartSample + 1
+        : 1;
+    const double displaySampleDurationS = (double) displaySampleCount
+        / (double) std::max(1, detection.m_sampleRate);
+    const double displayDurationS = detection.m_displayDurationS > 0.0
+        ? detection.m_displayDurationS
+        : detection.m_durationS;
+    const double displayTimeScale = std::clamp(
+        displayDurationS / std::max(1e-9, displaySampleDurationS),
+        1e-3,
+        1e3);
+    const quint64 overlayId = m_nextDetectionOverlayId++;
+    const DetectionOverlay overlay = {
+        overlayId,
+        displayTimeUtc,
+        displayDurationS,
+        detection.m_centerFrequency,
+        detection.m_frequencySpan,
+        detection.m_frequencyDrift,
+        peakPowerDB,
+        displayTimeScale,
+        true,
+        m_satellitesTable,
+        nullptr
+    };
+    const qint64 overlayStartMSecs = overlay.m_startTimeUtc.toMSecsSinceEpoch();
+    const auto insertIt = std::upper_bound(
+        m_detectionOverlays.cbegin(),
+        m_detectionOverlays.cend(),
+        overlayStartMSecs,
+        [](qint64 targetMSecs, const DetectionOverlay& existing) {
+            return targetMSecs < existing.m_startTimeUtc.toMSecsSinceEpoch();
+        });
+    m_detectionOverlays.insert((int) std::distance(m_detectionOverlays.cbegin(), insertIt), overlay);
+    invalidateDetectionOverlayWindows();
+
+    const bool sortingEnabled = m_satellitesTable->isSortingEnabled();
+    m_satellitesTable->setSortingEnabled(false);
+    const int row = m_satellitesTable->rowCount();
+    m_satellitesTable->insertRow(row);
+    QTableWidgetItem *timeItem = makeTableItem(
+        displayLocalTime.toString("yyyy-MM-dd HH:mm:ss.zzz"),
+        displayLocalTime.toMSecsSinceEpoch());
+    timeItem->setData(DetectionSampleUtcMSecsRole, sampleTimeUtc.toMSecsSinceEpoch());
+    timeItem->setData(DetectionOverlayIdRole, QVariant::fromValue<qulonglong>(overlayId));
+    timeItem->setData(DetectionDisplayUtcMSecsRole, displayTimeUtc.toMSecsSinceEpoch());
+    timeItem->setData(DetectionRadioRole, false);
+    if (detection.m_truncated) {
+        timeItem->setToolTip(tr("Satellite sweep duration was clipped to the configured maximum."));
+    }
+    m_satellitesTable->setItem(row, 0, timeItem);
+
+    for (DetectionOverlay& detectionOverlay : m_detectionOverlays)
+    {
+        if (detectionOverlay.m_id == overlayId)
+        {
+            detectionOverlay.m_tableItem = timeItem;
+            break;
+        }
+    }
+
+    m_satellitesTable->setItem(row, 1, makeTableItem(QString::number(peakPowerDB, 'f', 1), peakPowerDB));
+    m_satellitesTable->setItem(row, 2, makeTableItem(QString::number(backgroundPowerDB, 'f', 1), backgroundPowerDB));
+    m_satellitesTable->setItem(row, 3, makeTableItem(QString::number(totalPowerDB, 'f', 1), totalPowerDB));
+    m_satellitesTable->setItem(row, 4, makeTableItem(QString::number(peakAmplitude, 'f', 4), peakAmplitude));
+    QTableWidgetItem *durationItem = makeTableItem(
+        QString::number(detection.m_durationS * 1000.0, 'f', 1),
+        detection.m_durationS);
+    if (detection.m_truncated) {
+        durationItem->setToolTip(tr("Satellite sweep duration was clipped to the configured maximum."));
+    }
+    m_satellitesTable->setItem(row, 5, durationItem);
+    m_satellitesTable->setItem(row, 6, makeTableItem(QString::number(detection.m_centerFrequency, 'f', 1), detection.m_centerFrequency));
+    m_satellitesTable->setItem(row, 7, makeTableItem(QString::number(detection.m_frequencySpan, 'f', 1), detection.m_frequencySpan));
+    m_satellitesTable->setItem(row, 8, makeTableItem(QString::number(detection.m_frequencyDrift, 'f', 1), detection.m_frequencyDrift));
+    m_satellitesTable->setItem(row, 9, makeTableItem(QString::number(detection.m_sampleRate), detection.m_sampleRate));
+    m_satellitesTable->setSortingEnabled(sortingEnabled);
     updateSpectrumViews();
 }
 
@@ -1944,18 +2124,20 @@ QSet<quint64> MeteorGUI::selectedDetectionOverlayIds() const
 {
     QSet<quint64> ids;
 
-    if (!m_detectionsTable->selectionModel()) {
-        return ids;
-    }
-
-    const QModelIndexList rows = m_detectionsTable->selectionModel()->selectedRows();
-
-    for (const QModelIndex& rowIndex : rows)
+    for (QTableWidget *table : {m_detectionsTable, m_satellitesTable})
     {
-        QTableWidgetItem *timeItem = m_detectionsTable->item(rowIndex.row(), 0);
+        if (!table->selectionModel()) {
+            continue;
+        }
 
-        if (timeItem)
+        for (const QModelIndex& rowIndex : table->selectionModel()->selectedRows())
         {
+            QTableWidgetItem *timeItem = table->item(rowIndex.row(), 0);
+
+            if (!timeItem) {
+                continue;
+            }
+
             bool ok = false;
             const quint64 id = timeItem->data(DetectionOverlayIdRole).toULongLong(&ok);
 
@@ -1970,17 +2152,27 @@ QSet<quint64> MeteorGUI::selectedDetectionOverlayIds() const
 
 void MeteorGUI::deleteSelectedDetections()
 {
-    if (!m_detectionsTable->selectionModel()) {
+    deleteSelectedTableRows(m_detectionsTable, true);
+}
+
+void MeteorGUI::deleteSelectedSatellites()
+{
+    deleteSelectedTableRows(m_satellitesTable, false);
+}
+
+void MeteorGUI::deleteSelectedTableRows(QTableWidget *table, bool updateMeteorCounts)
+{
+    if (!table->selectionModel()) {
         return;
     }
 
     QSet<quint64> idsToDelete;
     QVector<int> rowsToDelete;
-    const QModelIndexList rows = m_detectionsTable->selectionModel()->selectedRows();
+    const QModelIndexList rows = table->selectionModel()->selectedRows();
 
     for (const QModelIndex& rowIndex : rows)
     {
-        QTableWidgetItem *timeItem = m_detectionsTable->item(rowIndex.row(), 0);
+        QTableWidgetItem *timeItem = table->item(rowIndex.row(), 0);
 
         if (!timeItem) {
             continue;
@@ -1997,7 +2189,7 @@ void MeteorGUI::deleteSelectedDetections()
         const bool radioDetection = timeItem->data(DetectionRadioRole).toBool();
         const qint64 utcMSecs = timeItem->data(DetectionDisplayUtcMSecsRole).toLongLong(&timeOK);
 
-        if (timeOK && radioDetection)
+        if (updateMeteorCounts && timeOK && radioDetection)
         {
             const QDateTime localTime = QDateTime::fromMSecsSinceEpoch(utcMSecs, Qt::UTC).toLocalTime();
             const QDate date = localTime.date();
@@ -2011,7 +2203,7 @@ void MeteorGUI::deleteSelectedDetections()
 
         }
 
-        if (m_totalCount > 0) {
+        if (updateMeteorCounts && (m_totalCount > 0)) {
             m_totalCount--;
         }
 
@@ -2032,12 +2224,15 @@ void MeteorGUI::deleteSelectedDetections()
     std::sort(rowsToDelete.begin(), rowsToDelete.end(), std::greater<int>());
 
     for (int row : rowsToDelete) {
-        m_detectionsTable->removeRow(row);
+        table->removeRow(row);
     }
 
-    updateCounters();
-    updateHistogram();
-    updateColorgramme();
+    if (updateMeteorCounts)
+    {
+        updateCounters();
+        updateHistogram();
+        updateColorgramme();
+    }
     updateSpectrumViews();
 }
 
@@ -2049,8 +2244,10 @@ void MeteorGUI::drawDetectionOverlays(
     QDateTime& overlayWindowStartUtc,
     QDateTime& overlayWindowEndUtc)
 {
-    const QColor color(255, 190, 0);
-    const QColor selectedColor(255, 225, 96);
+    const QColor meteorColor(255, 190, 0);
+    const QColor selectedMeteorColor(255, 225, 96);
+    const QColor satelliteColor(0, 205, 255);
+    const QColor selectedSatelliteColor(128, 240, 255);
     const QSet<quint64> selectedIds = selectedDetectionOverlayIds();
     const SpectrumSettings spectrumSettings = spectrumVis->getSettings();
     const double timePerPixel = spectrumView->waterfallTimePerPixel();
@@ -2173,6 +2370,10 @@ void MeteorGUI::drawDetectionOverlays(
 
             yStart = std::clamp(yStart - paddingY, 0.0f, 1.0f);
             yEnd = std::clamp(yEnd + paddingY, 0.0f, 1.0f);
+            const QColor color = detection.m_satellite ? satelliteColor : meteorColor;
+            const QColor selectedColor = detection.m_satellite
+                ? selectedSatelliteColor
+                : selectedMeteorColor;
             spectrumView->drawWaterfallOverlayBox(
                 xMin,
                 yStart,
@@ -2330,14 +2531,23 @@ void MeteorGUI::drawDetectionOverlays(
         }
 
         QLabel *labelWidget = overlayLabels[labelIndex++];
-        const QVariant selectedProperty = labelWidget->property("meteorSelected");
+        const int styleKey = (overlay.m_detection->m_satellite ? 2 : 0)
+            + (overlay.m_selected ? 1 : 0);
+        const QVariant styleProperty = labelWidget->property("detectionStyle");
 
-        if (!selectedProperty.isValid() || (selectedProperty.toBool() != overlay.m_selected))
+        if (!styleProperty.isValid() || (styleProperty.toInt() != styleKey))
         {
-            labelWidget->setProperty("meteorSelected", overlay.m_selected);
-            labelWidget->setStyleSheet(overlay.m_selected
-                ? "QLabel { color: rgb(255, 225, 96); background-color: rgba(0, 0, 0, 190); padding: 1px 3px; }"
-                : "QLabel { color: rgb(255, 190, 0); background-color: rgba(0, 0, 0, 190); padding: 1px 3px; }");
+            labelWidget->setProperty("detectionStyle", styleKey);
+
+            if (overlay.m_detection->m_satellite) {
+                labelWidget->setStyleSheet(overlay.m_selected
+                    ? "QLabel { color: rgb(128, 240, 255); background-color: rgba(0, 0, 0, 190); padding: 1px 3px; }"
+                    : "QLabel { color: rgb(0, 205, 255); background-color: rgba(0, 0, 0, 190); padding: 1px 3px; }");
+            } else {
+                labelWidget->setStyleSheet(overlay.m_selected
+                    ? "QLabel { color: rgb(255, 225, 96); background-color: rgba(0, 0, 0, 190); padding: 1px 3px; }"
+                    : "QLabel { color: rgb(255, 190, 0); background-color: rgba(0, 0, 0, 190); padding: 1px 3px; }");
+            }
         }
 
         labelWidget->setText(label);
@@ -2386,7 +2596,9 @@ void MeteorGUI::scrollSpectrumViewsToUTC(const QDateTime& dateTimeUtc)
 QString MeteorGUI::detectionOverlayLabel(const DetectionOverlay& detection) const
 {
     const QString duration = QString("%1 ms").arg(detection.m_durationS * 1000.0, 0, 'f', 0);
-    const int tableRow = detection.m_tableItem ? m_detectionsTable->row(detection.m_tableItem) : -1;
+    const int tableRow = detection.m_table && detection.m_tableItem
+        ? detection.m_table->row(detection.m_tableItem)
+        : -1;
     const QString prefix = tableRow >= 0 ? QString("#%1 ").arg(tableRow + 1) : QString();
 
     if (std::isfinite(detection.m_peakPowerDB)) {

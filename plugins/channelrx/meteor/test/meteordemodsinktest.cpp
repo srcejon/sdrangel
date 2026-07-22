@@ -821,7 +821,10 @@ namespace {
         QCoreApplication::processEvents(QEventLoop::AllEvents);
     }
 
-    void drainDetections(MessageQueue& queue, QVector<Detection>& detections)
+    void drainDetections(
+        MessageQueue& queue,
+        QVector<Detection>& detections,
+        QVector<Detection> *satelliteDetections = nullptr)
     {
         Message* message;
 
@@ -848,12 +851,39 @@ namespace {
                     detection.getEndSample()
                 });
             }
+            else if (satelliteDetections && MeteorDemodSink::MsgSatelliteDetected::match(*message))
+            {
+                const auto& messageDetection = (const MeteorDemodSink::MsgSatelliteDetected&) *message;
+                const MeteorDemodSink::DetectionRecord& detection = messageDetection.getDetection();
+                satelliteDetections->push_back({
+                    detection.m_dateTimeUtc,
+                    detection.m_displayDateTimeUtc.isValid()
+                        ? detection.m_displayDateTimeUtc
+                        : detection.m_dateTimeUtc,
+                    std::sqrt(std::max(0.0, detection.m_peakPower)),
+                    10.0 * std::log10(std::max(1e-20, detection.m_peakPower)),
+                    10.0 * std::log10(std::max(1e-20, detection.m_backgroundPower)),
+                    10.0 * std::log10(std::max(1e-20, detection.m_totalPower)),
+                    detection.m_durationS,
+                    detection.m_centerFrequency,
+                    detection.m_frequencySpan,
+                    detection.m_frequencyDrift,
+                    detection.m_sampleRate,
+                    detection.m_startSample,
+                    detection.m_endSample
+                });
+            }
 
             delete message;
         }
     }
 
-    bool feedSamples(MeteorBaseband& baseband, const SampleVector& samples, MessageQueue& outputQueue, QVector<Detection>& detections)
+    bool feedSamples(
+        MeteorBaseband& baseband,
+        const SampleVector& samples,
+        MessageQueue& outputQueue,
+        QVector<Detection>& detections,
+        QVector<Detection> *satelliteDetections = nullptr)
     {
         if (samples.empty()) {
             return true;
@@ -861,7 +891,7 @@ namespace {
 
         baseband.feed(samples.begin(), samples.end());
         processEvents();
-        drainDetections(outputQueue, detections);
+        drainDetections(outputQueue, detections, satelliteDetections);
         return true;
     }
 
@@ -898,6 +928,7 @@ namespace {
         const QString& name,
         const SampleVector& samples,
         int expectedCount,
+        int expectedSatelliteCount,
         double minimumFirstDurationS,
         QTextStream& errorStream)
     {
@@ -906,6 +937,7 @@ namespace {
         MeteorBaseband baseband;
         MeteorSettings settings;
         QVector<Detection> detections;
+        QVector<Detection> satelliteDetections;
         QVector<MeteorDemodSink::CandidateAudit> candidateAudits;
         SampleVector chunk;
         int diagnosticCaptureCount = 0;
@@ -940,16 +972,42 @@ namespace {
         {
             const int count = std::min(127, (int) samples.size() - offset);
             chunk.assign(samples.begin() + offset, samples.begin() + offset + count);
-            feedSamples(baseband, chunk, outputQueue, detections);
+            feedSamples(baseband, chunk, outputQueue, detections, &satelliteDetections);
         }
 
         chunk.assign(3000, Sample(0, 0));
-        feedSamples(baseband, chunk, outputQueue, detections);
+        feedSamples(baseband, chunk, outputQueue, detections, &satelliteDetections);
         processEvents();
-        drainDetections(outputQueue, detections);
+        drainDetections(outputQueue, detections, &satelliteDetections);
         baseband.stopWork();
 
         bool ok = detections.size() == expectedCount;
+
+        if (satelliteDetections.size() != expectedSatelliteCount)
+        {
+            errorStream << QString("Synthetic %1: expected %2 satellite detections, got %3\n")
+                .arg(name)
+                .arg(expectedSatelliteCount)
+                .arg(satelliteDetections.size());
+            ok = false;
+        }
+
+        if ((expectedSatelliteCount > 0) && !satelliteDetections.isEmpty())
+        {
+            const Detection& satellite = satelliteDetections.first();
+
+            if ((satellite.durationS < 2.5)
+                || (std::fabs(satellite.frequencyDrift) < 300.0)
+                || (satellite.frequencySpan < std::fabs(satellite.frequencyDrift)))
+            {
+                errorStream << QString("Synthetic %1: satellite measurements are incomplete: duration=%2 span=%3 drift=%4\n")
+                    .arg(name)
+                    .arg(satellite.durationS, 0, 'f', 3)
+                    .arg(satellite.frequencySpan, 0, 'f', 1)
+                    .arg(satellite.frequencyDrift, 0, 'f', 1);
+                ok = false;
+            }
+        }
 
         if (diagnosticCaptureCount != detections.size())
         {
@@ -1052,7 +1110,7 @@ namespace {
         appendSyntheticSignal(samples, sampleRate, 0.18, 12.0, 55.0, 55.0, noiseState);
         appendSyntheticSignal(samples, sampleRate, 1.7, 58.0, 55.0, 58.0, noiseState);
         appendSyntheticSignal(samples, sampleRate, 2.0, 0.0, 0.0, 0.0, noiseState);
-        ok = runSyntheticScenario("faded-long-trail", samples, 1, 2.5, errorStream) && ok;
+        ok = runSyntheticScenario("faded-long-trail", samples, 1, 0, 2.5, errorStream) && ok;
 
         samples.clear();
         appendSyntheticSignal(samples, sampleRate, 2.0, 0.0, 0.0, 0.0, noiseState);
@@ -1060,13 +1118,13 @@ namespace {
         appendSyntheticSignal(samples, sampleRate, 3.0, 0.0, 0.0, 0.0, noiseState);
         appendSyntheticSignal(samples, sampleRate, 0.6, 65.0, 150.0, 150.0, noiseState);
         appendSyntheticSignal(samples, sampleRate, 2.0, 0.0, 0.0, 0.0, noiseState);
-        ok = runSyntheticScenario("separate-echoes", samples, 2, 0.0, errorStream) && ok;
+        ok = runSyntheticScenario("separate-echoes", samples, 2, 0, 0.0, errorStream) && ok;
 
         samples.clear();
         appendSyntheticSignal(samples, sampleRate, 2.0, 0.0, 0.0, 0.0, noiseState);
         appendSyntheticSignal(samples, sampleRate, 3.0, 60.0, -220.0, 220.0, noiseState);
         appendSyntheticSignal(samples, sampleRate, 2.0, 0.0, 0.0, 0.0, noiseState);
-        ok = runSyntheticScenario("smooth-sweep", samples, 0, 0.0, errorStream) && ok;
+        ok = runSyntheticScenario("smooth-sweep", samples, 0, 1, 0.0, errorStream) && ok;
 
         bool truncated = false;
         const quint64 clippedEnd = MeteorDemodSink::clipDetectionEndSample(2000, 23999, 20000, truncated);

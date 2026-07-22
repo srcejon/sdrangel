@@ -416,6 +416,25 @@ public:
         {}
     };
 
+    class MsgSatelliteDetected : public Message {
+        MESSAGE_CLASS_DECLARATION
+
+    public:
+        const DetectionRecord& getDetection() const { return m_detection; }
+
+        static MsgSatelliteDetected* create(const DetectionRecord& detection) {
+            return new MsgSatelliteDetected(detection);
+        }
+
+    private:
+        DetectionRecord m_detection;
+
+        explicit MsgSatelliteDetected(const DetectionRecord& detection) :
+            Message(),
+            m_detection(detection)
+        {}
+    };
+
     class MsgMeteorDataCollected : public Message {
         MESSAGE_CLASS_DECLARATION
 
@@ -728,6 +747,8 @@ private:
     void updateSpectralEvent(SpectralEvent& event, const SpectralBand& band, quint64 frameCenterSample);
     void finishSpectralEvent(const SpectralEvent& event);
     PulseReport reportFromSpectralCandidate(const SpectralCandidate& candidate) const;
+    bool isSatelliteSweepCandidate(const SpectralCandidate& candidate) const;
+    void emitSatelliteDetection(const SpectralCandidate& candidate);
     bool hasStrongTwoFrameEvidence(const SpectralCandidate& candidate) const;
     bool shouldReanalyzeRejectedCandidate(const SpectralCandidate& candidate) const;
     void queueRejectedCandidateReanalysis(const SpectralCandidate& candidate);
@@ -741,6 +762,7 @@ private:
     void captureCandidateDiagnostic(const SpectralCandidate& candidate) const;
     bool isLocalizedCompactBurst(const SpectralCandidate& candidate) const;
     bool isSweepContinuation(const SpectralCandidate& candidate) const;
+    bool isSpectralInterferenceContinuation(const SpectralCandidate& candidate) const;
     bool overlapsBroadbandInterference(quint64 startSample, quint64 endSample) const;
     void rememberSpectralInterference(const SpectralCandidate& candidate);
     SpectralCandidate buildSpectralCandidate(const SpectralEvent& event) const;

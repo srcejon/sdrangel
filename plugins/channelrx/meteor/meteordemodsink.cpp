@@ -30,6 +30,7 @@
 #include "meteordemodsink.h"
 
 MESSAGE_CLASS_DEFINITION(MeteorDemodSink::MsgMeteorDetected, Message)
+MESSAGE_CLASS_DEFINITION(MeteorDemodSink::MsgSatelliteDetected, Message)
 MESSAGE_CLASS_DEFINITION(MeteorDemodSink::MsgMeteorDataCollected, Message)
 
 namespace {
@@ -1151,6 +1152,9 @@ void MeteorDemodSink::updateSpectralEvent(SpectralEvent& event, const SpectralBa
 void MeteorDemodSink::finishSpectralEvent(const SpectralEvent& event)
 {
     SpectralCandidate candidate = buildSpectralCandidate(event);
+    const bool satelliteSweep = isSatelliteSweepCandidate(candidate);
+    const bool satelliteContinuation = satelliteSweep
+        && isSpectralInterferenceContinuation(candidate);
 
     if (candidate.m_valid
         && candidate.m_accepted
@@ -1165,6 +1169,10 @@ void MeteorDemodSink::finishSpectralEvent(const SpectralEvent& event)
 
     if (candidate.m_broadbandImpulse || candidate.m_sweepRejected || candidate.m_sweepContinuationRejected) {
         rememberSpectralInterference(candidate);
+    }
+
+    if (satelliteSweep && !satelliteContinuation) {
+        emitSatelliteDetection(candidate);
     }
 
     if (!candidate.m_valid)
@@ -1244,6 +1252,81 @@ void MeteorDemodSink::finishSpectralEvent(const SpectralEvent& event)
     candidate.m_parentEventId = association.m_parentEventId;
     candidate.m_associationDecision = association.m_decision;
     auditSpectralCandidate(candidate);
+}
+
+bool MeteorDemodSink::isSatelliteSweepCandidate(const SpectralCandidate& candidate) const
+{
+    return candidate.m_valid
+        && !candidate.m_duplicate
+        && !candidate.m_broadbandImpulse
+        && candidate.m_sweepRejected
+        && candidate.m_spectralEvidenceOK
+        && candidate.m_insideUsableBandwidth
+        && (candidate.m_durationS >= m_detectorTunables.m_sustainedSweepMinDurationS)
+        && (candidate.m_frameCount >= m_detectorTunables.m_sustainedSweepMinFrames);
+}
+
+void MeteorDemodSink::emitSatelliteDetection(const SpectralCandidate& candidate)
+{
+    if (!m_messageQueueToGUI) {
+        return;
+    }
+
+    DetectionRecord detection = candidate;
+    detection.m_dateTimeUtc = sampleCounterToDateTimeUtc(candidate.m_startSample);
+    detection.m_displayDateTimeUtc = sampleCounterToDisplayDateTimeUtc(candidate.m_displayStartSample);
+    detection.m_centerFrequency = candidate.m_robustCenterFrequency;
+    detection.m_frequencySpan = std::max({
+        candidate.m_reportFrequencySpan,
+        candidate.m_robustFrequencySpan,
+        std::fabs(candidate.m_robustFrequencyDrift),
+        candidate.m_maxBandwidth
+    });
+    detection.m_frequencyDrift = candidate.m_robustFrequencyDrift;
+    detection.m_sampleRate = m_settings.m_channelSampleRate;
+
+    const QDateTime displayEndDateTimeUtc = sampleCounterToDisplayDateTimeUtc(
+        candidate.m_displayEndSample + 1);
+    detection.m_displayDurationS = candidate.m_durationS;
+
+    if (detection.m_displayDateTimeUtc.isValid() && displayEndDateTimeUtc.isValid())
+    {
+        const qint64 displayDurationMS = detection.m_displayDateTimeUtc.msecsTo(displayEndDateTimeUtc);
+
+        if (displayDurationMS >= 0) {
+            detection.m_displayDurationS = std::max(0.001, (double) displayDurationMS / 1000.0);
+        }
+    }
+
+    if (detection.m_totalPower <= 0.0) {
+        detection.m_totalPower = estimatePulseTotalPower(
+            detection.m_startSample,
+            detection.m_endSample,
+            detection.m_backgroundPower);
+    }
+
+    if (detection.m_totalPower <= 0.0)
+    {
+        const quint64 sampleCount = detection.m_endSample >= detection.m_startSample
+            ? detection.m_endSample - detection.m_startSample + 1
+            : 1;
+        detection.m_totalPower = std::max(
+            detection.m_peakPower - detection.m_backgroundPower,
+            detection.m_peakPower) * (double) sampleCount;
+    }
+
+    qDebug() << "MeteorDemodSink::emitSatelliteDetection:"
+             << " dateTimeUtc:" << detection.m_dateTimeUtc
+             << " displayDateTimeUtc:" << detection.m_displayDateTimeUtc
+             << " durationS:" << detection.m_durationS
+             << " centerFrequency:" << detection.m_centerFrequency
+             << " frequencySpan:" << detection.m_frequencySpan
+             << " frequencyDrift:" << detection.m_frequencyDrift
+             << " sweepScore:" << candidate.m_sweepScore
+             << " startSample:" << detection.m_startSample
+             << " endSample:" << detection.m_endSample;
+
+    m_messageQueueToGUI->push(MsgSatelliteDetected::create(detection));
 }
 
 MeteorDemodSink::PulseReport MeteorDemodSink::reportFromSpectralCandidate(
@@ -1823,6 +1906,15 @@ bool MeteorDemodSink::settledCandidateIsSweep(
 bool MeteorDemodSink::isSweepContinuation(const SpectralCandidate& candidate) const
 {
     if (!candidate.m_valid || (candidate.m_durationS > 0.5)) {
+        return false;
+    }
+
+    return isSpectralInterferenceContinuation(candidate);
+}
+
+bool MeteorDemodSink::isSpectralInterferenceContinuation(const SpectralCandidate& candidate) const
+{
+    if (!candidate.m_valid) {
         return false;
     }
 

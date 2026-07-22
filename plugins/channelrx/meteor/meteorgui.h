@@ -135,6 +135,7 @@ private:
     QPushButton *m_saveColorgramme;
     QPushButton *m_clearDetections;
     QTableWidget *m_detectionsTable;
+    QTableWidget *m_satellitesTable;
     QTableWidget *m_colorgrammeTable;
     QChartView *m_hourlyChartView;
     QChart *m_hourlyChart;
@@ -169,6 +170,8 @@ private:
         double m_frequencyDrift;
         double m_peakPowerDB;
         double m_displayTimeScale;
+        bool m_satellite;
+        QTableWidget *m_table;
         QTableWidgetItem *m_tableItem;
     };
 
@@ -194,6 +197,7 @@ private:
     QPair<int, int> selectedRotatorIndices() const;
     void syncFromSelectedRotator();
     void addDetection(const MeteorDemodSink::MsgMeteorDetected& detection);
+    void addSatelliteDetection(const MeteorDemodSink::MsgSatelliteDetected& detection);
     void addCameraDetection(const Meteor::MsgCameraMeteorDetected& detection);
     void updateCounters();
     void updateHistogram();
@@ -227,7 +231,10 @@ private:
     void applyDetectionsColumnVisibility();
     void saveDetectionsColumnVisibility();
     QSet<quint64> selectedDetectionOverlayIds() const;
+    void handleDetectionTableSelectionChanged(QTableWidget *table);
+    void deleteSelectedTableRows(QTableWidget *table, bool updateMeteorCounts);
     void deleteSelectedDetections();
+    void deleteSelectedSatellites();
     int sampleRateIndex(int sampleRate) const;
     QTableWidgetItem *makeTableItem(const QString& text, const QVariant& sortValue = QVariant()) const;
 
@@ -259,7 +266,9 @@ private slots:
     void on_saveColorgramme_clicked();
     void on_clearDetections_clicked();
     void on_detectionsTable_itemSelectionChanged();
+    void on_satellitesTable_itemSelectionChanged();
     void on_detectionsTable_customContextMenuRequested(const QPoint& pos);
+    void on_satellitesTable_customContextMenuRequested(const QPoint& pos);
     void on_detectionsTableHeader_customContextMenuRequested(const QPoint& pos);
     void onWidgetRolled(QWidget* widget, bool rollDown);
     void onMenuDialogCalled(const QPoint& p);

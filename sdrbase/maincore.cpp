@@ -462,6 +462,17 @@ void MainCore::initPosition()
         m_position = m_positionSource->lastKnownPosition();
         m_positionSource->setUpdateInterval(1000);
         m_positionSource->startUpdates();
+
+        // Stop updates while the event loop still runs: exiting with an async
+        // position request in flight hangs process teardown on Windows
+        connect(qApp, &QCoreApplication::aboutToQuit, this, [this]() {
+            if (m_positionSource)
+            {
+                m_positionSource->stopUpdates();
+                delete m_positionSource;
+                m_positionSource = nullptr;
+            }
+        });
     }
     else
     {

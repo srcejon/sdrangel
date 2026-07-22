@@ -307,6 +307,8 @@ void MeteorGUI::setupUi(RollupContents *rollupContents)
     m_satellitesTable = ui->satellitesTable;
     m_colorgrammeTable = ui->colorgrammeTable;
     m_hourlyChartView = ui->hourlyChartView;
+    m_trailSpectrumEnabled = ui->trailSpectrumEnabled;
+    m_headSpectrumEnabled = ui->headSpectrumEnabled;
     m_glSpectrum = ui->glSpectrum;
     m_spectrumGUI = ui->spectrumGUI;
     m_headGLSpectrum = ui->headGLSpectrum;
@@ -435,6 +437,13 @@ void MeteorGUI::setupUi(RollupContents *rollupContents)
     m_clearDetections->setIcon(QIcon(":/bin.png"));
     m_clearDetections->setToolTip("Clear detections");
     m_clearDetections->setMaximumWidth(28);
+
+    m_trailSpectrumEnabled->setChecked(true);
+    m_trailSpectrumEnabled->setToolTip("Enable the trail-echo spectrum");
+    m_headSpectrumEnabled->setChecked(true);
+    m_headSpectrumEnabled->setToolTip("Enable the head-echo spectrum");
+    ui->detectionsSpectrumSplitter->setStretchFactor(0, 1);
+    ui->detectionsSpectrumSplitter->setStretchFactor(1, 2);
 
     m_detectionsTable->setColumnCount(12);
     const QStringList detectionHeaders = {
@@ -1188,6 +1197,38 @@ void MeteorGUI::on_highlightAllDetections_toggled(bool checked)
     updateSpectrumViews();
 }
 
+void MeteorGUI::on_trailSpectrumEnabled_toggled(bool checked)
+{
+    ui->trailSpectrumView->setVisible(checked);
+    m_spectrumVis->setGLSpectrum(checked ? m_glSpectrum : nullptr);
+
+    if (checked)
+    {
+        m_detectionOverlayWindowValid = false;
+        m_glSpectrum->getSpectrumView()->update();
+    }
+    else
+    {
+        hideDetectionOverlayLabels(m_detectionOverlayLabels);
+    }
+}
+
+void MeteorGUI::on_headSpectrumEnabled_toggled(bool checked)
+{
+    ui->headSpectrumView->setVisible(checked);
+    m_headSpectrumVis->setGLSpectrum(checked ? m_headGLSpectrum : nullptr);
+
+    if (checked)
+    {
+        m_headDetectionOverlayWindowValid = false;
+        m_headGLSpectrum->getSpectrumView()->update();
+    }
+    else
+    {
+        hideDetectionOverlayLabels(m_headDetectionOverlayLabels);
+    }
+}
+
 void MeteorGUI::on_detectionBoxPadding_valueChanged(int value)
 {
     m_settings.m_detectionBoxPaddingPixels = value;
@@ -1773,6 +1814,8 @@ void MeteorGUI::makeUIConnections()
     QObject::connect(m_maxDuration, QOverload<int>::of(&QSpinBox::valueChanged), this, &MeteorGUI::on_maxDuration_valueChanged);
     QObject::connect(m_maxFrequencyDrift, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &MeteorGUI::on_maxFrequencyDrift_valueChanged);
     QObject::connect(m_highlightAllDetections, &ButtonSwitch::toggled, this, &MeteorGUI::on_highlightAllDetections_toggled);
+    QObject::connect(m_trailSpectrumEnabled, &ButtonSwitch::toggled, this, &MeteorGUI::on_trailSpectrumEnabled_toggled);
+    QObject::connect(m_headSpectrumEnabled, &ButtonSwitch::toggled, this, &MeteorGUI::on_headSpectrumEnabled_toggled);
     QObject::connect(m_detectionBoxPadding, QOverload<int>::of(&QSpinBox::valueChanged), this, &MeteorGUI::on_detectionBoxPadding_valueChanged);
     QObject::connect(m_detectionLabels, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &MeteorGUI::on_detectionLabels_currentIndexChanged);
     QObject::connect(m_transmitterLatitude, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &MeteorGUI::on_transmitterLatitude_valueChanged);

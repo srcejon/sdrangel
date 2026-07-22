@@ -447,7 +447,7 @@
     </sizepolicy>
    </property>
    <property name="windowTitle">
-    <string>Detections</string>
+    <string>Detections and spectra</string>
    </property>
    <layout class="QVBoxLayout" name="detectionsLayout">
     <property name="spacing">
@@ -563,7 +563,14 @@
      </layout>
     </item>
     <item>
-     <widget class="QTabWidget" name="detectionsTabWidget">
+     <widget class="QSplitter" name="detectionsSpectrumSplitter">
+      <property name="orientation">
+       <enum>Qt::Orientation::Vertical</enum>
+      </property>
+      <property name="childrenCollapsible">
+       <bool>false</bool>
+      </property>
+      <widget class="QTabWidget" name="detectionsTabWidget">
       <property name="currentIndex">
        <number>0</number>
       </property>
@@ -707,97 +714,169 @@
         </item>
        </layout>
       </widget>
+      </widget>
+      <widget class="QWidget" name="spectrumContainer" native="true">
+       <property name="sizePolicy">
+        <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+         <horstretch>0</horstretch>
+         <verstretch>0</verstretch>
+        </sizepolicy>
+       </property>
+       <layout class="QVBoxLayout" name="spectrumLayout">
+        <property name="spacing">
+         <number>2</number>
+        </property>
+        <property name="leftMargin">
+         <number>2</number>
+        </property>
+        <property name="topMargin">
+         <number>2</number>
+        </property>
+        <property name="rightMargin">
+         <number>2</number>
+        </property>
+        <property name="bottomMargin">
+         <number>2</number>
+        </property>
+        <item>
+         <layout class="QHBoxLayout" name="trailSpectrumHeaderLayout">
+          <item>
+           <widget class="QLabel" name="trailSpectrumTitle">
+            <property name="font">
+             <font>
+              <family>Liberation Sans</family>
+              <pointsize>9</pointsize>
+              <bold>true</bold>
+             </font>
+            </property>
+            <property name="text">
+             <string>Trail echoes</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <spacer name="trailSpectrumHeaderSpacer">
+            <property name="orientation">
+             <enum>Qt::Orientation::Horizontal</enum>
+            </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>40</width>
+              <height>20</height>
+             </size>
+            </property>
+           </spacer>
+          </item>
+          <item>
+           <widget class="ButtonSwitch" name="trailSpectrumEnabled"/>
+          </item>
+         </layout>
+        </item>
+        <item>
+         <widget class="QWidget" name="trailSpectrumView" native="true">
+          <layout class="QVBoxLayout" name="trailSpectrumViewLayout">
+           <property name="spacing">
+            <number>2</number>
+           </property>
+           <property name="leftMargin">
+            <number>0</number>
+           </property>
+           <property name="topMargin">
+            <number>0</number>
+           </property>
+           <property name="rightMargin">
+            <number>0</number>
+           </property>
+           <property name="bottomMargin">
+            <number>0</number>
+           </property>
+           <item>
+            <widget class="GLSpectrum" name="glSpectrum" native="true">
+             <property name="minimumSize">
+              <size>
+               <width>0</width>
+               <height>180</height>
+              </size>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="GLSpectrumGUI" name="spectrumGUI" native="true"/>
+           </item>
+          </layout>
+         </widget>
+        </item>
+        <item>
+         <layout class="QHBoxLayout" name="headSpectrumHeaderLayout">
+          <item>
+           <widget class="QLabel" name="headSpectrumTitle">
+            <property name="font">
+             <font>
+              <family>Liberation Sans</family>
+              <pointsize>9</pointsize>
+              <bold>true</bold>
+             </font>
+            </property>
+            <property name="text">
+             <string>Head echoes</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <spacer name="headSpectrumHeaderSpacer">
+            <property name="orientation">
+             <enum>Qt::Orientation::Horizontal</enum>
+            </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>40</width>
+              <height>20</height>
+             </size>
+            </property>
+           </spacer>
+          </item>
+          <item>
+           <widget class="ButtonSwitch" name="headSpectrumEnabled"/>
+          </item>
+         </layout>
+        </item>
+        <item>
+         <widget class="QWidget" name="headSpectrumView" native="true">
+          <layout class="QVBoxLayout" name="headSpectrumViewLayout">
+           <property name="spacing">
+            <number>2</number>
+           </property>
+           <property name="leftMargin">
+            <number>0</number>
+           </property>
+           <property name="topMargin">
+            <number>0</number>
+           </property>
+           <property name="rightMargin">
+            <number>0</number>
+           </property>
+           <property name="bottomMargin">
+            <number>0</number>
+           </property>
+           <item>
+            <widget class="GLSpectrum" name="headGLSpectrum" native="true">
+             <property name="minimumSize">
+              <size>
+               <width>0</width>
+               <height>180</height>
+              </size>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="GLSpectrumGUI" name="headSpectrumGUI" native="true"/>
+           </item>
+          </layout>
+         </widget>
+        </item>
+       </layout>
+      </widget>
      </widget>
-    </item>
-   </layout>
-  </widget>
-  <widget class="QWidget" name="spectrumContainer" native="true">
-   <property name="geometry">
-    <rect>
-     <x>30</x>
-     <y>920</y>
-     <width>390</width>
-     <height>210</height>
-    </rect>
-   </property>
-   <property name="sizePolicy">
-    <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
-     <horstretch>0</horstretch>
-     <verstretch>0</verstretch>
-    </sizepolicy>
-   </property>
-   <property name="windowTitle">
-    <string>Spectra</string>
-   </property>
-   <layout class="QVBoxLayout" name="spectrumLayout">
-    <property name="spacing">
-     <number>2</number>
-    </property>
-    <property name="leftMargin">
-     <number>2</number>
-    </property>
-    <property name="topMargin">
-     <number>2</number>
-    </property>
-    <property name="rightMargin">
-     <number>2</number>
-    </property>
-    <property name="bottomMargin">
-     <number>2</number>
-    </property>
-    <item>
-     <widget class="QLabel" name="trailSpectrumTitle">
-      <property name="font">
-       <font>
-        <family>Liberation Sans</family>
-        <pointsize>9</pointsize>
-        <bold>true</bold>
-       </font>
-      </property>
-      <property name="text">
-       <string>Trail echoes</string>
-      </property>
-     </widget>
-    </item>
-    <item>
-     <widget class="GLSpectrum" name="glSpectrum" native="true">
-      <property name="minimumSize">
-       <size>
-        <width>0</width>
-        <height>180</height>
-       </size>
-      </property>
-     </widget>
-    </item>
-    <item>
-     <widget class="GLSpectrumGUI" name="spectrumGUI" native="true"/>
-    </item>
-    <item>
-     <widget class="QLabel" name="headSpectrumTitle">
-      <property name="font">
-       <font>
-        <family>Liberation Sans</family>
-        <pointsize>9</pointsize>
-        <bold>true</bold>
-       </font>
-      </property>
-      <property name="text">
-       <string>Head echoes</string>
-      </property>
-     </widget>
-    </item>
-    <item>
-     <widget class="GLSpectrum" name="headGLSpectrum" native="true">
-      <property name="minimumSize">
-       <size>
-        <width>0</width>
-        <height>180</height>
-       </size>
-      </property>
-     </widget>
-    </item>
-    <item>
-     <widget class="GLSpectrumGUI" name="headSpectrumGUI" native="true"/>
     </item>
    </layout>
   </widget>

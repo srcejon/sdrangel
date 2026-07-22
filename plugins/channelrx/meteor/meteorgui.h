@@ -146,6 +146,8 @@ private:
     QTableWidget *m_colorgrammeTable;
     QChartView *m_hourlyChartView;
     QChart *m_hourlyChart;
+    ButtonSwitch *m_trailSpectrumEnabled;
+    ButtonSwitch *m_headSpectrumEnabled;
     GLSpectrum *m_glSpectrum;
     GLSpectrumGUI *m_spectrumGUI;
     GLSpectrum *m_headGLSpectrum;
@@ -263,6 +265,8 @@ private slots:
     void on_maxDuration_valueChanged(int value);
     void on_maxFrequencyDrift_valueChanged(double value);
     void on_highlightAllDetections_toggled(bool checked);
+    void on_trailSpectrumEnabled_toggled(bool checked);
+    void on_headSpectrumEnabled_toggled(bool checked);
     void on_detectionBoxPadding_valueChanged(int value);
     void on_detectionLabels_currentIndexChanged(int index);
     void on_transmitterLatitude_valueChanged(double value);

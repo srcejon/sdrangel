@@ -85,6 +85,11 @@ public:
         double m_driftScale = 0.25;
         double m_minimumMatchScorePercent = 60.0;
         double m_minimumScoreMarginPercent = 8.0;
+
+        // User-declared, defaulted out of line: lets GCC/Clang defer the NSDMI
+        // exception-spec evaluation past the `= Tunables()` default argument below
+        // (MSVC accepts the in-class form, GCC/Clang reject it).
+        Tunables();
     };
 
     static Prediction predict(const Observation& observation, const TargetState& target);
@@ -93,5 +98,7 @@ public:
         const QVector<TargetState>& targets,
         const Tunables& tunables = Tunables());
 };
+
+inline MovingTargetMatcher::Tunables::Tunables() = default;
 
 #endif // INCLUDE_MOVINGTARGETMATCHER_H

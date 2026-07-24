@@ -67,6 +67,8 @@ struct MeteorSettings
     int m_minDurationMS;
     int m_maxDurationMS;
     float m_maxFrequencyDrift;
+    bool m_enableBlobDetector;     //!< 2D blob detector replaces the legacy detector's meteors
+    float m_blobSensitivity;       //!< blob acceptance threshold (integrated excess dB, lower = more sensitive)
     quint32 m_detectionsTableColumnHidden;
     int m_detectionBoxPaddingPixels;
     enum DetectionLabelMode {

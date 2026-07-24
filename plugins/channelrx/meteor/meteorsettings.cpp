@@ -45,6 +45,8 @@ void MeteorSettings::resetToDefaults()
     m_minDurationMS = 5;
     m_maxDurationMS = 20000;
     m_maxFrequencyDrift = 50.0f;
+    m_enableBlobDetector = true;
+    m_blobSensitivity = 145.0f;
     m_detectionsTableColumnHidden = 0;
     m_detectionBoxPaddingPixels = 4;
     m_detectionLabelMode = DetectionLabelNone;
@@ -101,6 +103,8 @@ QByteArray MeteorSettings::serialize() const
     s.writeFloat(36, m_transmitterHPBW);
     s.writeBool(37, m_showAntennaPatterns);
     s.writeFloat(38, m_mapMaxAltitudeKM);
+    s.writeBool(39, m_enableBlobDetector);
+    s.writeFloat(40, m_blobSensitivity);
 
     s.writeU32(21, m_rgbColor);
     s.writeString(22, m_title);
@@ -176,6 +180,10 @@ bool MeteorSettings::deserialize(const QByteArray& data)
         d.readFloat(36, &m_transmitterHPBW, m_gravesHPBW);
         d.readBool(37, &m_showAntennaPatterns, false);
         d.readFloat(38, &m_mapMaxAltitudeKM, m_defaultMapMaxAltitudeKM);
+        d.readBool(39, &m_enableBlobDetector, true);
+        d.readFloat(40, &m_blobSensitivity, 145.0f);
+        m_blobSensitivity = std::isfinite(m_blobSensitivity)
+            ? std::clamp(m_blobSensitivity, 10.0f, 10000.0f) : 145.0f;
         if ((m_transmitterLatitude == 0.0)
             && (m_transmitterLongitude == 0.0)
             && (m_transmitterAzimuth == 0.0f)
@@ -282,6 +290,12 @@ void MeteorSettings::applySettings(const QStringList& settingsKeys, const Meteor
     if (settingsKeys.contains("maxFrequencyDrift")) {
         m_maxFrequencyDrift = settings.m_maxFrequencyDrift;
     }
+    if (settingsKeys.contains("enableBlobDetector")) {
+        m_enableBlobDetector = settings.m_enableBlobDetector;
+    }
+    if (settingsKeys.contains("blobSensitivity")) {
+        m_blobSensitivity = settings.m_blobSensitivity;
+    }
     if (settingsKeys.contains("detectionsTableColumnHidden")) {
         m_detectionsTableColumnHidden = settings.m_detectionsTableColumnHidden;
     }
@@ -383,6 +397,12 @@ QString MeteorSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("maxFrequencyDrift") || force) {
         ostr << " m_maxFrequencyDrift: " << m_maxFrequencyDrift;
+    }
+    if (settingsKeys.contains("enableBlobDetector") || force) {
+        ostr << " m_enableBlobDetector: " << m_enableBlobDetector;
+    }
+    if (settingsKeys.contains("blobSensitivity") || force) {
+        ostr << " m_blobSensitivity: " << m_blobSensitivity;
     }
     if (settingsKeys.contains("detectionsTableColumnHidden") || force) {
         ostr << " m_detectionsTableColumnHidden: " << m_detectionsTableColumnHidden;

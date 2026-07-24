@@ -33,6 +33,7 @@
 #include "util/message.h"
 
 #include "meteorsettings.h"
+#include "meteorblobdetector.h"
 
 class ChannelAPI;
 class MessageQueue;
@@ -320,7 +321,56 @@ public:
             bool m_enableCalibratedRescue = true;
             bool m_enableSettledParentReanalysis = true;
             bool m_enableRejectedCandidateReanalysis = true;
+            // When true, the chunked 2D MeteorBlobDetector (test/detector2d-validated
+            // integrated-power recipe) replaces the legacy detector's meteor emissions:
+            // it runs a parallel zero-padded spectral front-end and its accepted blobs are
+            // emitted; the legacy path still runs for satellite sweeps + noise-floor upkeep,
+            // but its MsgMeteorDetected reports are suppressed. Default OFF (opt-in A/B).
+            bool m_enableBlobDetector = true;
         } m_flags;
+        // Knobs for the 2D blob detector (mirror MeteorBlobDetector::Config); binHz/dt/fMin
+        // are resolved from the channel at configure time, not stored here.
+        struct BlobDetectorTunables
+        {
+            double m_seedDb = 11.0;
+            double m_growDb = 6.5;
+            double m_floorOffsetDb = 0.0;      // 0: median floor matches offline with no offset
+            int    m_minPix = 3;
+            int    m_closeFreqBins = 3;
+            double m_linkGapSeconds = 0.12;    // max temporal gap when linking fragments
+            double m_linkMaxDriftHzPerS = 300.0;
+            double m_linkTolHz = 40.0;
+            double m_trimKeepTime = 0.97;      // energy kept along time (loose: preserve tails)
+            double m_trimKeepFreq = 0.90;      // energy kept along frequency (tight: hug the core)
+            double m_occLimit = 0.5;
+            double m_minPeakExcessDb = 16.0;       // "red blob" gate: reject faint spread noise
+            double m_sweepMinLinR2 = 0.9;          // reject linear drifting tracks (satellite sweeps)
+            double m_sweepMinAbsSlopeHzPerS = 20.0;
+            double m_sweepMinDurationS = 0.4;
+            // Weak-sweep EXTENSION: attach faint below-seed linear segments that continue an
+            // already-detected sweep's drift line (lengthens real sweeps; cannot add rows). No
+            // faint-only discovery (calibration: inseparable from noise).
+            bool   m_weakSweepExtend = true;
+            double m_faintSeedDb = 10.0;
+            int    m_segMinCols = 4;
+            int    m_segMinPix = 4;
+            double m_segMinR2 = 0.8;
+            double m_segSlopeMinHzPerS = 20.0;
+            double m_segSlopeMaxHzPerS = 1000.0;
+            double m_sweepLinkTolHz = 70.0;        // consolidation: freq tolerance on the drift line
+            // Max time gap when stitching sweep fragments/segments along the drift line. Generous
+            // because the line's frequency prediction is a strong discriminator — a collinear
+            // segment seconds later still belongs to the same pass (user: extend by the gradient).
+            double m_sweepLinkMaxGapS = 6.0;
+            double m_scoreThreshold = 145.0;   // USER SENSITIVITY KNOB (integrated excess dB)
+            // Stride scheduling (low latency): rolling window re-analysed every stride; a blob
+            // is emitted ~finalMargin+stride (~1 s) after it ends. Window must stay much longer
+            // than the longest meteor (median floor) — also bounds the max intact duration.
+            double m_windowSeconds = 20.0;
+            double m_minWindowSeconds = 10.0;
+            double m_emitStrideS = 0.5;
+            double m_finalMarginS = 0.5;
+        } m_blob;
     };
 
     struct ResolvedDetectorTunables
@@ -765,6 +815,31 @@ private:
     std::vector<char> m_spectralActiveBins;
     FFTEngine *m_spectralFFT;
     FFTEngine *m_pulseFFT;
+
+    // Parallel zero-padded front-end for the 2D blob detector (only live when
+    // m_detectorTunables.m_flags.m_enableBlobDetector). Kept independent of the legacy
+    // spectral state so the default-OFF path is byte-identical to before.
+    MeteorBlobDetector m_blobDetector;             // computes its own per-chunk median floor
+    FFTEngine *m_blobFFT;
+    int m_blobFFTSize;                              // zero-padded FFT size (nfft)
+    std::vector<Real> m_blobWindow;                // Hann over the frame (pre-pad)
+    std::vector<double> m_blobBinPower;            // padded magnitude^2 per bin
+    bool m_emittingBlobDetection;                  // guards emitDetectionReport suppression
+
+    // Consolidates the detector's sweep fragments (which arrive across chunks) into one
+    // Doppler-sweep detection by stitching collinear fragments along their drift line.
+    struct ActiveSweep {
+        double m_t0 = 0.0, m_t1 = 0.0;             // seconds (stream-relative)
+        double m_f0 = 0.0, m_f1 = 0.0;             // Hz bounding box
+        quint64 m_startSample = 0, m_endSample = 0;
+        double m_peakPower = 0.0, m_totalPower = 0.0, m_backgroundSum = 0.0;
+        int m_fragCount = 0;
+        double m_sumT = 0.0, m_sumF = 0.0, m_sumTT = 0.0, m_sumTF = 0.0;  // running line fit
+        int m_nPts = 0;
+        double m_lastCentreT = 0.0, m_lastCentreF = 0.0, m_lastSlope = 0.0;
+        quint64 m_lastSample = 0;
+    };
+    std::vector<ActiveSweep> m_activeSweeps;
     int m_spectralFrameSize;
     int m_spectralHopSize;
     int m_spectralFFTSize;
@@ -797,6 +872,16 @@ private:
     void finishPulse(bool forceRejected);
     void processSpectralSample(const Complex& sample);
     void processSpectralFrame(quint64 frameStartSample);
+    void configureBlobDetector();
+    void processBlobDetectorFrame(quint64 frameStartSample);
+    void emitBlobDetection(const MeteorBlobDetector::Blob& blob);
+    void drainBlobDetections();
+    void addSweepFragment(const MeteorBlobDetector::Blob& blob);
+    void extendSweepWithSegment(const MeteorBlobDetector::SweepSegment& seg);
+    void mergeSweepFragment(ActiveSweep& sweep, const MeteorBlobDetector::Blob& blob);
+    bool absorbedByActiveSweep(const MeteorBlobDetector::Blob& blob);
+    void finalizeStaleSweeps(quint64 currentSample, bool force);
+    void emitConsolidatedSweep(const ActiveSweep& sweep);
     void initializeSpectralNoiseFloor();
     void processCalibratedSpectralFrame(const SpectralFrameSnapshot& frame);
     std::vector<SpectralBand> detectSpectralBands(const std::vector<double>& binPower);

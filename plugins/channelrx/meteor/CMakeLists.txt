@@ -12,6 +12,7 @@ set(meteor_SOURCES
     movingtargetmatcher.cpp
     meteorbaseband.cpp
     meteordemodsink.cpp
+    meteorblobdetector.cpp
     rmobreport.cpp
     meteorplugin.cpp
 )
@@ -24,6 +25,7 @@ set(meteor_HEADERS
     movingtargetmatcher.h
     meteorbaseband.h
     meteordemodsink.h
+    meteorblobdetector.h
     rmobreport.h
     meteorplugin.h
 )

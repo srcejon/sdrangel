@@ -18,6 +18,7 @@
 #include <algorithm>
 #include <cmath>
 
+#include <QCheckBox>
 #include <QComboBox>
 #include <QDateTime>
 #include <QDir>
@@ -445,6 +446,8 @@ void MeteorGUI::setupUi(RollupContents *rollupContents)
     m_minDuration = ui->minDuration;
     m_maxDuration = ui->maxDuration;
     m_maxFrequencyDrift = ui->maxFrequencyDrift;
+    m_enableBlobDetector = ui->enableBlobDetector;
+    m_blobSensitivity = ui->blobSensitivity;
     m_highlightAllDetections = ui->highlightAllDetections;
     m_detectionBoxPadding = ui->detectionBoxPadding;
     m_detectionLabels = ui->detectionLabels;
@@ -1323,6 +1326,18 @@ void MeteorGUI::on_detectionThreshold_valueChanged(double value)
     applySetting("detectionThresholdDB");
 }
 
+void MeteorGUI::on_enableBlobDetector_toggled(bool checked)
+{
+    m_settings.m_enableBlobDetector = checked;
+    applySetting("enableBlobDetector");
+}
+
+void MeteorGUI::on_blobSensitivity_valueChanged(int value)
+{
+    m_settings.m_blobSensitivity = (float) value;
+    applySetting("blobSensitivity");
+}
+
 void MeteorGUI::on_minDuration_valueChanged(int value)
 {
     m_settings.m_minDurationMS = value;
@@ -1917,6 +1932,8 @@ void MeteorGUI::displaySettings()
     const QSignalBlocker minDurationBlocker(m_minDuration);
     const QSignalBlocker maxDurationBlocker(m_maxDuration);
     const QSignalBlocker maxFrequencyDriftBlocker(m_maxFrequencyDrift);
+    const QSignalBlocker enableBlobDetectorBlocker(m_enableBlobDetector);
+    const QSignalBlocker blobSensitivityBlocker(m_blobSensitivity);
     const QSignalBlocker detectionBoxPaddingBlocker(m_detectionBoxPadding);
     const QSignalBlocker detectionLabelsBlocker(m_detectionLabels);
     const QSignalBlocker transmitterLatitudeBlocker(m_transmitterLatitude);
@@ -1944,6 +1961,8 @@ void MeteorGUI::displaySettings()
     m_minDuration->setValue(m_settings.m_minDurationMS);
     m_maxDuration->setValue(m_settings.m_maxDurationMS);
     m_maxFrequencyDrift->setValue(m_settings.m_maxFrequencyDrift);
+    m_enableBlobDetector->setChecked(m_settings.m_enableBlobDetector);
+    m_blobSensitivity->setValue((int) m_settings.m_blobSensitivity);
     m_detectionBoxPadding->setValue(m_settings.m_detectionBoxPaddingPixels);
     m_detectionLabels->setCurrentIndex(std::clamp(
         (int) m_settings.m_detectionLabelMode,
@@ -1984,6 +2003,8 @@ void MeteorGUI::makeUIConnections()
     QObject::connect(m_minDuration, QOverload<int>::of(&QSpinBox::valueChanged), this, &MeteorGUI::on_minDuration_valueChanged);
     QObject::connect(m_maxDuration, QOverload<int>::of(&QSpinBox::valueChanged), this, &MeteorGUI::on_maxDuration_valueChanged);
     QObject::connect(m_maxFrequencyDrift, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &MeteorGUI::on_maxFrequencyDrift_valueChanged);
+    QObject::connect(m_enableBlobDetector, &QCheckBox::toggled, this, &MeteorGUI::on_enableBlobDetector_toggled);
+    QObject::connect(m_blobSensitivity, QOverload<int>::of(&QSpinBox::valueChanged), this, &MeteorGUI::on_blobSensitivity_valueChanged);
     QObject::connect(m_highlightAllDetections, &ButtonSwitch::toggled, this, &MeteorGUI::on_highlightAllDetections_toggled);
     QObject::connect(m_trailSpectrumEnabled, &ButtonSwitch::toggled, this, &MeteorGUI::on_trailSpectrumEnabled_toggled);
     QObject::connect(m_headSpectrumEnabled, &ButtonSwitch::toggled, this, &MeteorGUI::on_headSpectrumEnabled_toggled);

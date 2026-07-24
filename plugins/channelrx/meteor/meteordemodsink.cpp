@@ -818,7 +818,18 @@ void MeteorDemodSink::emitConsolidatedSweep(const ActiveSweep& sweep)
     d.m_hasDisplaySamples = true;
     d.m_durationS = (sweep.m_endSample >= sweep.m_startSample)
         ? (double) (sweep.m_endSample - sweep.m_startSample) / (double) sampleRate : 0.0;
+    // Display duration must be WALL-CLOCK time via the anchors (the waterfall y-axis is wall
+    // time): at accelerated file playback, stream seconds occupy less display time and a
+    // stream-duration box is drawn too tall (mirrors emitDetectionReport's handling).
     d.m_displayDurationS = d.m_durationS;
+    const QDateTime displayEndDateTimeUtc = sampleCounterToDisplayDateTimeUtc(sweep.m_endSample + 1);
+    if (d.m_displayDateTimeUtc.isValid() && displayEndDateTimeUtc.isValid())
+    {
+        const qint64 displayDurationMS = d.m_displayDateTimeUtc.msecsTo(displayEndDateTimeUtc);
+        if (displayDurationMS >= 0) {
+            d.m_displayDurationS = std::max(0.001, (double) displayDurationMS / 1000.0);
+        }
+    }
     d.m_centerFrequency = 0.5 * (sweep.m_f0 + sweep.m_f1);
     d.m_frequencySpan = sweep.m_f1 - sweep.m_f0;
     d.m_frequencyDrift = slope * d.m_durationS;   // total Hz swept over the pass

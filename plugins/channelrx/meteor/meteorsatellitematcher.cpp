@@ -232,6 +232,9 @@ public:
         request.setAttribute(
             QNetworkRequest::RedirectPolicyAttribute,
             QNetworkRequest::NoLessSafeRedirectPolicy);
+        // A stalled connection must not wedge m_downloadInProgress until restart: the
+        // finished signal always fires once the transfer timeout elapses.
+        request.setTransferTimeout(2 * 60 * 1000);
         QNetworkReply *reply = m_networkManager->get(request);
         connect(reply, &QNetworkReply::finished, this, [this, reply]() {
             m_downloadInProgress = false;

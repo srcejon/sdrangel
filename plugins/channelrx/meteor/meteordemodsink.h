@@ -73,7 +73,7 @@ public:
             // already-detected sweep's drift line (lengthens real sweeps; cannot add rows). No
             // faint-only discovery (calibration: inseparable from noise).
             bool   m_weakSweepExtend = true;
-            double m_faintSeedDb = 10.0;
+            double m_faintSeedDb = 9.0;
             int    m_segMinCols = 4;
             int    m_segMinPix = 4;
             double m_segMinR2 = 0.8;
@@ -84,6 +84,15 @@ public:
             // because the line's frequency prediction is a strong discriminator — a collinear
             // segment seconds later still belongs to the same pass.
             double m_sweepLinkMaxGapS = 6.0;
+            // Collinear-continuation merge: two consolidated sweeps that continue the same
+            // pass (the fast, faint mid-pass of the Doppler S-curve can be invisible for
+            // longer than the link gap) are merged instead of reported twice.
+            double m_sweepMergeMaxGapS = 30.0;
+            // Dash-walk box extension: the faint leading/trailing parts of a pass are dashed
+            // fragments too short for shape gates; walk the sweep's fitted drift line outward
+            // through chained on-line dashes (each step must find one within the step gap).
+            double m_dashWalkStepGapS = 1.5;
+            double m_dashWalkMaxS = 15.0;
             double m_scoreThreshold = 145.0;   // USER SENSITIVITY KNOB (integrated excess dB)
             // Stride scheduling (low latency): rolling window re-analysed every stride; a blob
             // is emitted ~finalMargin+stride (~1 s) after it ends. Window must stay much longer
@@ -282,6 +291,7 @@ private:
     std::vector<Real> m_blobWindow;                // Hann over the frame (pre-pad)
     std::vector<double> m_blobBinPower;            // padded magnitude^2 per bin
     std::vector<ActiveSweep> m_activeSweeps;
+    std::vector<MeteorBlobDetector::SweepSegment> m_faintDashes;   // relaxed segments for dash-walk
 
     void processOneSample(Complex& ci, bool realSample = true);
     void processSpectralSample(const Complex& sample);
@@ -294,6 +304,9 @@ private:
     void mergeSweepFragment(ActiveSweep& sweep, const MeteorBlobDetector::Blob& blob);
     bool absorbedByActiveSweep(const MeteorBlobDetector::Blob& blob);
     void finalizeStaleSweeps(quint64 currentSample, bool force);
+    void retireSweepAt(size_t index);
+    bool mergeIntoContinuationSweep(size_t sweepIndex);
+    void walkSweepAlongDashes(ActiveSweep& sweep);
     void emitConsolidatedSweep(const ActiveSweep& sweep);
     void rememberDetection(quint64 startSample, quint64 endSample, double centerFrequency, double frequencySpan);
     void pruneRecentDetections();

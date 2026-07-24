@@ -140,10 +140,16 @@ bool MeteorSettings::deserialize(const QByteArray& data)
 
         d.readS32(1, &m_inputFrequencyOffset, 0);
         d.readS32(2, (int *) &m_frequencyMode, (int) Offset);
+
+        if ((m_frequencyMode != Offset) && (m_frequencyMode != Absolute)) {
+            m_frequencyMode = Offset;
+        }
+
         d.readS64(3, &m_frequency, 0);
         d.readS32(4, &m_channelSampleRate, m_defaultSampleRate);
         m_channelSampleRate = validatedSampleRate(m_channelSampleRate);
         d.readS32(8, &m_maxDurationMS, 20000);
+        m_maxDurationMS = std::clamp(m_maxDurationMS, 1, 60000);
         d.readU32(10, &m_detectionsTableColumnHidden, 0);
         d.readS32(11, &m_detectionBoxPaddingPixels, 4);
         d.readS32(12, (int *) &m_detectionLabelMode, (int) DetectionLabelNone);

@@ -112,15 +112,26 @@ void MeteorBlobDetector::processFrame(const std::vector<double>& binPower,
     }
 }
 
-void MeteorBlobDetector::flush()
+bool MeteorBlobDetector::flush()
 {
     if (m_buf.empty()) {
-        return;
+        return false;
     }
-    processChunk(m_absStart + (long long) m_buf.size());   // emit everything left
-    m_absStart += (long long) m_buf.size();
-    m_buf.clear();
+
+    const long long lastCol = m_absStart + (long long) m_buf.size() - 1;
+
+    if (lastCol <= m_emittedThroughAbs) {
+        return false;                       // nothing new since the last flush
+    }
+
+    // Emit everything buffered, ignoring the final margin, but KEEP the window: the
+    // inactivity flush must not wipe the analysis context, or a resuming stream loses
+    // its median floor and waits out the minimum window again. A blob emitted here that
+    // is later extended by resumed columns re-emits longer and is caught by the sink's
+    // overlap dedup.
+    processChunk(lastCol);
     m_colsSinceProcess = 0;
+    return true;
 }
 
 // ---------------------------------------------------------------------------------
@@ -611,6 +622,7 @@ void MeteorBlobDetector::processChunk(long long emitThroughAbs)
             s.m_fc = mf;
             s.m_slopeHzPerS = slope;
             s.m_r2 = r2;
+            s.m_cols = n;
             s.m_startSample = m_buf[xmn].m_sample;
             s.m_endSample = m_buf[xmx].m_sample;
             s.m_npix = (long) pix.size();

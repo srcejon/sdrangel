@@ -194,6 +194,7 @@ private:
     };
 
     QVector<DetectionOverlay> m_detectionOverlays;
+    double m_maxOverlayDurationS = 0.0;      //!< longest overlay duration, bounds the paint-scan lookback
 
     explicit MeteorGUI(PluginAPI* pluginAPI, DeviceUISet *deviceUISet, BasebandSampleSink *rxChannel, QWidget* parent = nullptr);
     virtual ~MeteorGUI();

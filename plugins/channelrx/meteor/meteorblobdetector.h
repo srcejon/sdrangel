@@ -82,7 +82,7 @@ public:
         // enables it. Discovery of faint-only sweeps is deliberately NOT done — calibration
         // showed faint chains are inseparable from noise (would add false satellite rows).
         bool   m_extractSweepSegments = false;
-        double m_faintSeedDb = 10.0;       // faint threshold for segment pixels
+        double m_faintSeedDb = 9.0;        // faint threshold for segment pixels
         int    m_segMinCols = 4;           // segment must span this many time columns
         int    m_segMinPix = 4;
         double m_segMinR2 = 0.8;           // internal linearity of the segment's own track
@@ -116,6 +116,7 @@ public:
         double m_f0 = 0.0, m_f1 = 0.0, m_fc = 0.0;
         double m_slopeHzPerS = 0.0, m_r2 = 0.0;
         std::uint64_t m_startSample = 0, m_endSample = 0;
+        int    m_cols = 0;                 // time columns spanned (shape reliability indicator)
         long   m_npix = 0;
         double m_peakPower = 0.0, m_backgroundPower = 1e-20, m_totalPower = 0.0;
     };
@@ -129,8 +130,10 @@ public:
                       const std::vector<double>& noiseFloor,
                       std::uint64_t frameCenterSample);
 
-    // Process whatever remains in the buffer (end of stream / teardown).
-    void flush();
+    // Emit everything buffered without waiting for the final margin (end of stream or
+    // inactivity). The analysis window is preserved so a resuming stream keeps its noise
+    // context. Returns true if anything new was analysed.
+    bool flush();
 
     // Accepted blobs completed since the last call (moved out).
     std::vector<Blob> takeBlobs();
@@ -147,6 +150,9 @@ public:
     // Live sensitivity update: acceptance is evaluated at emission time, so this takes
     // effect immediately without resetting the analysis window.
     void setScoreThreshold(double threshold) { m_cfg.m_scoreThreshold = threshold; }
+
+    // True when any columns are buffered (flush() itself reports whether it did new work).
+    bool hasBufferedColumns() const { return !m_buf.empty(); }
 
 private:
     struct Col

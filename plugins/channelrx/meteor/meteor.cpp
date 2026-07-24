@@ -462,12 +462,44 @@ int Meteor::webapiSettingsPutPatch(
         return 400;
     }
 
-    MsgConfigureMeteor *msg = MsgConfigureMeteor::create(settings, channelSettingsKeys, force);
+    QStringList appliedSettingsKeys = channelSettingsKeys;
+
+    // Headless parity with MeteorGUI::calcOffset(): an absolute-frequency update must
+    // retune the channel offset, and an offset update must track the absolute readout.
+    if ((settings.m_frequencyMode == MeteorSettings::Absolute)
+        && (appliedSettingsKeys.contains("frequency") || appliedSettingsKeys.contains("frequencyMode")))
+    {
+        const qint64 offset = settings.m_frequency - m_centerFrequency;
+
+        if ((offset < std::numeric_limits<qint32>::min())
+            || (offset > std::numeric_limits<qint32>::max()))
+        {
+            errorMessage = "frequency is too far from the device center frequency";
+            return 400;
+        }
+
+        settings.m_inputFrequencyOffset = (qint32) offset;
+
+        if (!appliedSettingsKeys.contains("inputFrequencyOffset")) {
+            appliedSettingsKeys.append("inputFrequencyOffset");
+        }
+    }
+    else if ((settings.m_frequencyMode == MeteorSettings::Offset)
+        && appliedSettingsKeys.contains("inputFrequencyOffset"))
+    {
+        settings.m_frequency = m_centerFrequency + settings.m_inputFrequencyOffset;
+
+        if (!appliedSettingsKeys.contains("frequency")) {
+            appliedSettingsKeys.append("frequency");
+        }
+    }
+
+    MsgConfigureMeteor *msg = MsgConfigureMeteor::create(settings, appliedSettingsKeys, force);
     m_inputMessageQueue.push(msg);
 
     if (m_guiMessageQueue)
     {
-        MsgConfigureMeteor *msgToGUI = MsgConfigureMeteor::create(settings, channelSettingsKeys, force);
+        MsgConfigureMeteor *msgToGUI = MsgConfigureMeteor::create(settings, appliedSettingsKeys, force);
         m_guiMessageQueue->push(msgToGUI);
     }
 

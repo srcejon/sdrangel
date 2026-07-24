@@ -82,6 +82,7 @@ namespace {
     constexpr int DetectionOverlayIdRole = Qt::UserRole + 2;
     constexpr int DetectionDisplayUtcMSecsRole = Qt::UserRole + 3;
     constexpr int DetectionRadioRole = Qt::UserRole + 4;
+    constexpr int DetectionBinUtcMSecsRole = Qt::UserRole + 5;   //!< UT time used for hourly/RMOB binning
     constexpr int RotatorAvailableRole = Qt::UserRole + 1;
     constexpr int MeteorTrailFFTSize = 1024;
     constexpr int MeteorTrailFFTOverlap = 512;
@@ -706,7 +707,7 @@ void MeteorGUI::setupUi(RollupContents *rollupContents)
     m_colorgrammeTable->setGridStyle(Qt::SolidLine);
     m_colorgrammeTable->setStyleSheet("QTableWidget { gridline-color: black; }");
     m_colorgrammeTable->setMinimumHeight(180);
-    m_colorgrammeTable->setToolTip("Monthly meteor count colorgramme: columns are days, rows are UTC/local display hours, color shows detections per hour");
+    m_colorgrammeTable->setToolTip("Monthly meteor count colorgramme: columns are days, rows are UT hours (RMOB convention), color shows detections per hour");
 
     for (int hour = 0; hour < 24; hour++)
     {
@@ -1178,9 +1179,9 @@ bool MeteorGUI::handleMessage(const Message& message)
     else if (MeteorDemodSink::MsgMeteorDataCollected::match(message))
     {
         const MeteorDemodSink::MsgMeteorDataCollected& data = (const MeteorDemodSink::MsgMeteorDataCollected&) message;
-        const QDateTime localTime = data.getDateTimeUtc().toLocalTime();
+        const QDateTime binTimeUtc = movingTargetObservationDateTimeUtc(data.getDateTimeUtc()).toUTC();
 
-        if (markHourData(localTime.date(), localTime.time().hour()))
+        if (markHourData(binTimeUtc.date(), binTimeUtc.time().hour()))
         {
             updateHistogram();
             updateColorgramme();
@@ -1619,6 +1620,7 @@ void MeteorGUI::on_clearDetections_clicked()
     m_hourlyCounts.clear();
     m_hourlyData.clear();
     m_detectionOverlays.clear();
+    m_maxOverlayDurationS = 0.0;
     m_pendingTargetMatches.clear();
     invalidateDetectionOverlayWindows();
     m_detectionsTable->setRowCount(0);
@@ -1998,8 +2000,12 @@ void MeteorGUI::addDetection(const MeteorDemodSink::MsgMeteorDetected& detection
         ? detection.getDisplayDateTimeUtc()
         : sampleTimeUtc;
     const QDateTime displayLocalTime = displayTimeUtc.toLocalTime();
-    const QDate date = displayLocalTime.date();
-    const int hour = displayLocalTime.time().hour();
+    // Hourly counts feed the RMOB export, which is a UT-hours convention: bin in UT, using
+    // the recording-corrected observation time so file playback credits the recording epoch
+    // rather than the wall-clock of the replay.
+    const QDateTime binTimeUtc = movingTargetObservationDateTimeUtc(displayTimeUtc).toUTC();
+    const QDate date = binTimeUtc.date();
+    const int hour = binTimeUtc.time().hour();
 
     if (!m_hourlyCounts.contains(date)) {
         m_hourlyCounts[date] = QVector<int>(24, 0);
@@ -2044,6 +2050,7 @@ void MeteorGUI::addDetection(const MeteorDemodSink::MsgMeteorDetected& detection
             return targetMSecs < detection.m_startTimeUtc.toMSecsSinceEpoch();
         });
     m_detectionOverlays.insert((int) std::distance(m_detectionOverlays.cbegin(), insertIt), overlay);
+    m_maxOverlayDurationS = std::max(m_maxOverlayDurationS, overlay.m_durationS);
 
     invalidateDetectionOverlayWindows();
 
@@ -2055,6 +2062,7 @@ void MeteorGUI::addDetection(const MeteorDemodSink::MsgMeteorDetected& detection
     timeItem->setData(DetectionSampleUtcMSecsRole, sampleTimeUtc.toMSecsSinceEpoch());
     timeItem->setData(DetectionOverlayIdRole, QVariant::fromValue<qulonglong>(overlayId));
     timeItem->setData(DetectionDisplayUtcMSecsRole, displayTimeUtc.toMSecsSinceEpoch());
+    timeItem->setData(DetectionBinUtcMSecsRole, binTimeUtc.toMSecsSinceEpoch());
     timeItem->setData(DetectionRadioRole, true);
     if (detection.getTruncated()) {
         timeItem->setToolTip(tr("Detection duration was clipped to the configured maximum."));
@@ -2139,6 +2147,7 @@ void MeteorGUI::addSatelliteDetection(const MeteorDemodSink::MsgSatelliteDetecte
             return targetMSecs < existing.m_startTimeUtc.toMSecsSinceEpoch();
         });
     m_detectionOverlays.insert((int) std::distance(m_detectionOverlays.cbegin(), insertIt), overlay);
+    m_maxOverlayDurationS = std::max(m_maxOverlayDurationS, overlay.m_durationS);
     invalidateDetectionOverlayWindows();
 
     const bool sortingEnabled = m_satellitesTable->isSortingEnabled();
@@ -2510,7 +2519,7 @@ void MeteorGUI::updateCounters()
 {
     m_totalCountText->setText(QString::number(m_totalCount));
 
-    const QDateTime now = QDateTime::currentDateTime();
+    const QDateTime now = QDateTime::currentDateTimeUtc();
     int hourCount = 0;
 
     if (m_hourlyCounts.contains(now.date())) {
@@ -2958,13 +2967,17 @@ void MeteorGUI::deleteSelectedTableRows(QTableWidget *table, bool updateMeteorCo
 
         bool timeOK = false;
         const bool radioDetection = timeItem->data(DetectionRadioRole).toBool();
-        const qint64 utcMSecs = timeItem->data(DetectionDisplayUtcMSecsRole).toLongLong(&timeOK);
+        qint64 utcMSecs = timeItem->data(DetectionBinUtcMSecsRole).toLongLong(&timeOK);
+
+        if (!timeOK) {
+            utcMSecs = timeItem->data(DetectionDisplayUtcMSecsRole).toLongLong(&timeOK);
+        }
 
         if (updateMeteorCounts && timeOK && radioDetection)
         {
-            const QDateTime localTime = QDateTime::fromMSecsSinceEpoch(utcMSecs, Qt::UTC).toLocalTime();
-            const QDate date = localTime.date();
-            const int hour = localTime.time().hour();
+            const QDateTime binTimeUtc = QDateTime::fromMSecsSinceEpoch(utcMSecs, Qt::UTC);
+            const QDate date = binTimeUtc.date();
+            const int hour = binTimeUtc.time().hour();
 
             if (m_hourlyCounts.contains(date) && (hour >= 0) && (hour < m_hourlyCounts[date].size()) && (m_hourlyCounts[date][hour] > 0)) {
                 m_hourlyCounts[date][hour]--;
@@ -2993,6 +3006,13 @@ void MeteorGUI::deleteSelectedTableRows(QTableWidget *table, bool updateMeteorCo
                 m_detectionOverlays.removeAt(i);
             }
         }
+
+        m_maxOverlayDurationS = 0.0;
+
+        for (const DetectionOverlay& remaining : m_detectionOverlays) {
+            m_maxOverlayDurationS = std::max(m_maxOverlayDurationS, remaining.m_durationS);
+        }
+
         invalidateDetectionOverlayWindows();
     }
 
@@ -3166,7 +3186,9 @@ void MeteorGUI::drawDetectionOverlays(
 
     if (!m_detectionOverlays.isEmpty())
     {
-        const qint64 durationPaddingMSecs = std::max(1000, m_settings.m_maxDurationMS + 1000);
+        const qint64 durationPaddingMSecs = std::max<qint64>(
+            std::max(1000, m_settings.m_maxDurationMS + 1000),
+            (qint64) std::ceil(m_maxOverlayDurationS * 1000.0) + 1000);
         const qint64 windowStartMSecs = visibleStartUtc.addMSecs(-durationPaddingMSecs).toMSecsSinceEpoch();
         const qint64 windowEndMSecs = visibleEndUtc.addMSecs(1000).toMSecsSinceEpoch();
         const auto beginIt = std::lower_bound(

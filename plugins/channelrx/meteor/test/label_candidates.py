@@ -2,10 +2,10 @@
 """Interactive web labeler for meteor candidate audits.
 
 Serves a local page showing one candidate waterfall at a time with
-one-keystroke classification buttons. Labels are written to a
-``--candidate-labels`` compatible CSV (``startSample,endSample,lowFrequencyHz,
-highFrequencyHz,label,eventId`` rows), so the output feeds directly back into
-``meteor_demod_sink_test --candidate-labels`` and ``train_candidate_model.py``.
+one-keystroke classification buttons. Labels are written as
+``startSample,endSample,lowFrequencyHz,highFrequencyHz,label,eventId`` rows.
+Audit CSVs are produced by the offline research tooling in ``detector2d/``
+(e.g. its review-set generators), which also consumes the labels.
 
 Example:
     python label_candidates.py --wav rec.wav --audit rec.audit.csv \

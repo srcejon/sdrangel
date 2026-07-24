@@ -439,6 +439,9 @@ namespace {
             {QStringLiteral("blobSegSlopeMaxHzPerS"), [](Tunables& t) -> auto& { return t.m_blob.m_segSlopeMaxHzPerS; }},
             {QStringLiteral("blobSweepLinkTolHz"), [](Tunables& t) -> auto& { return t.m_blob.m_sweepLinkTolHz; }},
             {QStringLiteral("blobSweepLinkMaxGapS"), [](Tunables& t) -> auto& { return t.m_blob.m_sweepLinkMaxGapS; }},
+            {QStringLiteral("blobSweepMergeMaxGapS"), [](Tunables& t) -> auto& { return t.m_blob.m_sweepMergeMaxGapS; }},
+            {QStringLiteral("blobDashWalkStepGapS"), [](Tunables& t) -> auto& { return t.m_blob.m_dashWalkStepGapS; }},
+            {QStringLiteral("blobDashWalkMaxS"), [](Tunables& t) -> auto& { return t.m_blob.m_dashWalkMaxS; }},
             {QStringLiteral("blobScoreThreshold"), [](Tunables& t) -> auto& { return t.m_blob.m_scoreThreshold; }},
             {QStringLiteral("blobWindowSeconds"), [](Tunables& t) -> auto& { return t.m_blob.m_windowSeconds; }},
             {QStringLiteral("blobMinWindowSeconds"), [](Tunables& t) -> auto& { return t.m_blob.m_minWindowSeconds; }},
@@ -727,7 +730,7 @@ namespace {
         out << "      --wav <file.wav>               Input SDRangel stereo 16-bit I/Q WAV file.\n";
         out << "      --test-dir <directory>         Directory of paired .wav and .csv regression fixtures.\n";
         out << "      --tunable <name=value>         Override a DetectorTunables member (repeatable). Names drop the\n";
-        out << "                                     m_ prefix, e.g. --tunable rescueMinimumScoreMargin=1.5.\n";
+        out << "                                     m_ prefix, e.g. --tunable blobScoreThreshold=100.\n";
         out << "      --channel-sample-rate <rate>   Detector sample rate: 100, 300, 1000, or 3000 Hz.\n";
         out << "      --input-frequency-offset <hz>  Channel input frequency offset in Hz.\n";
         out << "      --max-duration-ms <ms>         Maximum pulse duration in milliseconds.\n";
@@ -1278,7 +1281,25 @@ namespace {
         for (const QString& csvFileName : csvFiles)
         {
             const QFileInfo csvInfo(testDir.filePath(csvFileName));
-            const QString wavPath = testDir.filePath(csvInfo.completeBaseName() + ".wav");
+            // "<base>@<rate>.csv" runs <base>.wav at the given channel sample rate, so both
+            // calibrated rates can be covered by fixtures for the same recording.
+            QString baseName = csvInfo.completeBaseName();
+            Options fixtureOptions = options;
+            const int atIndex = baseName.lastIndexOf(QChar('@'));
+
+            if (atIndex > 0)
+            {
+                bool rateOk = false;
+                const int rate = baseName.mid(atIndex + 1).toInt(&rateOk);
+
+                if (rateOk && MeteorSettings::isSupportedSampleRate(rate))
+                {
+                    fixtureOptions.settings.m_channelSampleRate = rate;
+                    baseName = baseName.left(atIndex);
+                }
+            }
+
+            const QString wavPath = testDir.filePath(baseName + ".wav");
             QVector<ExpectedDetection> expectedDetections;
             QVector<Detection> actualDetections;
             QString error;
@@ -1297,7 +1318,7 @@ namespace {
                 continue;
             }
 
-            if (!runWavFile(options, wavPath, actualDetections, error))
+            if (!runWavFile(fixtureOptions, wavPath, actualDetections, error))
             {
                 err << QString("%1: %2\n").arg(csvFileName, error);
                 allOK = false;

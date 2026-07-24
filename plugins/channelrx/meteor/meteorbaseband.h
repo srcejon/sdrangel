@@ -83,9 +83,6 @@ public:
         m_sink.setSecondarySpectrumSink(secondarySpectrumSink);
     }
     void setMessageQueueToGUI(MessageQueue *messageQueue) { m_sink.setMessageQueueToGUI(messageQueue); }
-    void setCandidateAuditCallback(const MeteorDemodSink::CandidateAuditCallback& callback) { m_sink.setCandidateAuditCallback(callback); }
-    void setDiagnosticCaptureCallback(const MeteorDemodSink::DiagnosticCaptureCallback& callback) { m_sink.setDiagnosticCaptureCallback(callback); }
-    void setCandidateDiagnosticCaptureCallback(const MeteorDemodSink::CandidateDiagnosticCaptureCallback& callback) { m_sink.setCandidateDiagnosticCaptureCallback(callback); }
     void setDetectorTunables(const MeteorDemodSink::DetectorTunables& tunables) { m_sink.setDetectorTunables(tunables); }
     const MeteorDemodSink::DetectorTunables& getDetectorTunables() const { return m_sink.getDetectorTunables(); }
     void setInactivityFlushEnabled(bool enabled) { m_inactivityFlushEnabled = enabled; }

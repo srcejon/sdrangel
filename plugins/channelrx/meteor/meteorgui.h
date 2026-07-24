@@ -53,7 +53,6 @@ namespace Ui {
     class MeteorGUI;
 }
 
-class QCheckBox;
 class QComboBox;
 class QDoubleSpinBox;
 class QLabel;
@@ -117,12 +116,7 @@ private:
     ValueDialZ *m_deltaFrequency;
     QLabel *m_deltaUnits;
     QComboBox *m_sampleRate;
-    QDoubleSpinBox *m_powerLPFCutoff;
-    QDoubleSpinBox *m_detectionThreshold;
-    QSpinBox *m_minDuration;
     QSpinBox *m_maxDuration;
-    QDoubleSpinBox *m_maxFrequencyDrift;
-    QCheckBox *m_enableBlobDetector;
     QSpinBox *m_blobSensitivity;
     ButtonSwitch *m_highlightAllDetections;
     QSpinBox *m_detectionBoxPadding;
@@ -279,13 +273,8 @@ private slots:
     void on_frequencyMode_currentIndexChanged(int index);
     void on_deltaFrequency_changed(qint64 value);
     void on_sampleRate_currentIndexChanged(int index);
-    void on_powerLPFCutoff_valueChanged(double value);
-    void on_detectionThreshold_valueChanged(double value);
-    void on_enableBlobDetector_toggled(bool checked);
     void on_blobSensitivity_valueChanged(int value);
-    void on_minDuration_valueChanged(int value);
     void on_maxDuration_valueChanged(int value);
-    void on_maxFrequencyDrift_valueChanged(double value);
     void on_highlightAllDetections_toggled(bool checked);
     void on_trailSpectrumEnabled_toggled(bool checked);
     void on_headSpectrumEnabled_toggled(bool checked);

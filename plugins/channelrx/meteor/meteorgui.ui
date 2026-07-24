@@ -127,101 +127,26 @@
      <widget class="QComboBox" name="sampleRate"/>
     </item>
     <item row="1" column="0">
-     <widget class="QLabel" name="powerLPFCutoffLabel">
-      <property name="text">
-       <string>LPF</string>
-      </property>
-     </widget>
-    </item>
-    <item row="1" column="1" colspan="2">
-     <widget class="QDoubleSpinBox" name="powerLPFCutoff"/>
-    </item>
-    <item row="1" column="3">
-     <widget class="QLabel" name="detectionThresholdLabel">
-      <property name="text">
-       <string>TH</string>
-      </property>
-     </widget>
-    </item>
-    <item row="1" column="4" colspan="2">
-     <widget class="QDoubleSpinBox" name="detectionThreshold"/>
-    </item>
-    <item row="2" column="0">
-     <widget class="QLabel" name="minDurationLabel">
-      <property name="text">
-       <string>Min</string>
-      </property>
-     </widget>
-    </item>
-    <item row="2" column="1" colspan="2">
-     <widget class="QSpinBox" name="minDuration"/>
-    </item>
-    <item row="2" column="3">
      <widget class="QLabel" name="maxDurationLabel">
       <property name="text">
        <string>Max</string>
       </property>
      </widget>
     </item>
-    <item row="2" column="4" colspan="2">
+    <item row="1" column="1" colspan="2">
      <widget class="QSpinBox" name="maxDuration"/>
     </item>
-    <item row="3" column="0">
-     <widget class="QLabel" name="maxFrequencyDriftLabel">
-      <property name="text">
-       <string>Drift</string>
-      </property>
-     </widget>
-    </item>
-    <item row="3" column="1" colspan="2">
-     <widget class="QDoubleSpinBox" name="maxFrequencyDrift"/>
-    </item>
-    <item row="3" column="3" colspan="2">
-     <widget class="QLabel" name="highlightDetectionsLabel">
-      <property name="text">
-       <string>Highlight</string>
-      </property>
-     </widget>
-    </item>
-    <item row="3" column="5">
-     <widget class="ButtonSwitch" name="highlightAllDetections">
-      <property name="icon">
-       <iconset resource="../../../sdrgui/resources/res.qrc">
-        <normaloff>:/dock.png</normaloff>:/dock.png</iconset>
-      </property>
-     </widget>
-    </item>
-    <item row="4" column="0">
-     <widget class="QLabel" name="detectionBoxPaddingLabel">
-      <property name="text">
-       <string>Box px</string>
-      </property>
-     </widget>
-    </item>
-    <item row="4" column="1" colspan="2">
-     <widget class="QSpinBox" name="detectionBoxPadding"/>
-    </item>
-    <item row="4" column="3">
-     <widget class="QLabel" name="detectionLabelsLabel">
-      <property name="text">
-       <string>Labels</string>
-      </property>
-     </widget>
-    </item>
-    <item row="4" column="4" colspan="2">
-     <widget class="QComboBox" name="detectionLabels"/>
-    </item>
-    <item row="5" column="0">
+    <item row="1" column="3">
      <widget class="QLabel" name="blobSensitivityLabel">
       <property name="text">
        <string>Sens</string>
       </property>
      </widget>
     </item>
-    <item row="5" column="1" colspan="2">
+    <item row="1" column="4" colspan="2">
      <widget class="QSpinBox" name="blobSensitivity">
       <property name="toolTip">
-       <string>2D detector sensitivity: minimum integrated power (dB above noise) to accept a meteor. Lower = more sensitive.</string>
+       <string>Detector sensitivity: minimum integrated power (dB above noise) to accept a meteor. Lower = more sensitive.</string>
       </property>
       <property name="minimum">
        <number>10</number>
@@ -237,23 +162,38 @@
       </property>
      </widget>
     </item>
-    <item row="5" column="3">
-     <widget class="QLabel" name="enableBlobDetectorLabel">
+    <item row="2" column="0">
+     <widget class="QLabel" name="detectionBoxPaddingLabel">
       <property name="text">
-       <string>2D det</string>
+       <string>Box px</string>
       </property>
      </widget>
     </item>
-    <item row="5" column="4" colspan="2">
-     <widget class="QCheckBox" name="enableBlobDetector">
-      <property name="toolTip">
-       <string>Use the 2D blob detector (recommended). Unchecked: legacy detector.</string>
-      </property>
+    <item row="2" column="1" colspan="2">
+     <widget class="QSpinBox" name="detectionBoxPadding"/>
+    </item>
+    <item row="2" column="3">
+     <widget class="QLabel" name="detectionLabelsLabel">
       <property name="text">
-       <string/>
+       <string>Labels</string>
       </property>
-      <property name="checked">
-       <bool>true</bool>
+     </widget>
+    </item>
+    <item row="2" column="4" colspan="2">
+     <widget class="QComboBox" name="detectionLabels"/>
+    </item>
+    <item row="3" column="0" colspan="2">
+     <widget class="QLabel" name="highlightDetectionsLabel">
+      <property name="text">
+       <string>Highlight</string>
+      </property>
+     </widget>
+    </item>
+    <item row="3" column="2">
+     <widget class="ButtonSwitch" name="highlightAllDetections">
+      <property name="icon">
+       <iconset resource="../../../sdrgui/resources/res.qrc">
+        <normaloff>:/dock.png</normaloff>:/dock.png</iconset>
       </property>
      </widget>
     </item>

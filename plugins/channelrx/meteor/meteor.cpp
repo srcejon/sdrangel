@@ -494,11 +494,7 @@ void Meteor::webapiFormatChannelSettings(
     swg->setFrequencyMode((int) settings.m_frequencyMode);
     swg->setFrequency(settings.m_frequency);
     swg->setChannelSampleRate(settings.m_channelSampleRate);
-    swg->setPowerLpfCutoff(settings.m_powerLPFCutoff);
-    swg->setDetectionThresholdDb(settings.m_detectionThresholdDB);
-    swg->setMinDurationMs(settings.m_minDurationMS);
     swg->setMaxDurationMs(settings.m_maxDurationMS);
-    swg->setMaxFrequencyDrift(settings.m_maxFrequencyDrift);
     swg->setDetectionsTableColumnHidden(settings.m_detectionsTableColumnHidden);
     swg->setDetectionBoxPaddingPixels(settings.m_detectionBoxPaddingPixels);
     swg->setDetectionLabelMode((int) settings.m_detectionLabelMode);
@@ -597,20 +593,8 @@ bool Meteor::webapiUpdateChannelSettings(
     if (channelSettingsKeys.contains("channelSampleRate")) {
         updatedSettings.m_channelSampleRate = swg->getChannelSampleRate();
     }
-    if (channelSettingsKeys.contains("powerLPFCutoff")) {
-        updatedSettings.m_powerLPFCutoff = swg->getPowerLpfCutoff();
-    }
-    if (channelSettingsKeys.contains("detectionThresholdDB")) {
-        updatedSettings.m_detectionThresholdDB = swg->getDetectionThresholdDb();
-    }
-    if (channelSettingsKeys.contains("minDurationMS")) {
-        updatedSettings.m_minDurationMS = swg->getMinDurationMs();
-    }
     if (channelSettingsKeys.contains("maxDurationMS")) {
         updatedSettings.m_maxDurationMS = swg->getMaxDurationMs();
-    }
-    if (channelSettingsKeys.contains("maxFrequencyDrift")) {
-        updatedSettings.m_maxFrequencyDrift = swg->getMaxFrequencyDrift();
     }
     if (channelSettingsKeys.contains("detectionsTableColumnHidden")) {
         const qint32 columnMask = swg->getDetectionsTableColumnHidden();
@@ -738,43 +722,9 @@ bool Meteor::validateChannelSettings(const MeteorSettings& settings, QString& er
         return false;
     }
 
-    const float maxPowerLPFCutoff = settings.m_channelSampleRate * 0.45f;
-
-    if (!std::isfinite(settings.m_powerLPFCutoff)
-        || (settings.m_powerLPFCutoff < 0.1f)
-        || (settings.m_powerLPFCutoff > maxPowerLPFCutoff))
-    {
-        errorMessage = QString("powerLPFCutoff must be finite and between 0.1 and %1 Hz")
-            .arg(maxPowerLPFCutoff);
-        return false;
-    }
-    if (!std::isfinite(settings.m_detectionThresholdDB)
-        || (settings.m_detectionThresholdDB < 1.0f)
-        || (settings.m_detectionThresholdDB > 60.0f))
-    {
-        errorMessage = "detectionThresholdDB must be finite and between 1.0 and 60.0 dB";
-        return false;
-    }
-    if ((settings.m_minDurationMS < 1) || (settings.m_minDurationMS > 10000))
-    {
-        errorMessage = "minDurationMS must be between 1 and 10000";
-        return false;
-    }
     if ((settings.m_maxDurationMS < 1) || (settings.m_maxDurationMS > 60000))
     {
         errorMessage = "maxDurationMS must be between 1 and 60000";
-        return false;
-    }
-    if (settings.m_minDurationMS > settings.m_maxDurationMS)
-    {
-        errorMessage = "minDurationMS must not exceed maxDurationMS";
-        return false;
-    }
-    if (!std::isfinite(settings.m_maxFrequencyDrift)
-        || (settings.m_maxFrequencyDrift < 0.0f)
-        || (settings.m_maxFrequencyDrift > 1500.0f))
-    {
-        errorMessage = "maxFrequencyDrift must be finite and between 0.0 and 1500.0 Hz";
         return false;
     }
     if ((settings.m_detectionBoxPaddingPixels < 0) || (settings.m_detectionBoxPaddingPixels > 100))

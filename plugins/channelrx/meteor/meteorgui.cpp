@@ -18,7 +18,6 @@
 #include <algorithm>
 #include <cmath>
 
-#include <QCheckBox>
 #include <QComboBox>
 #include <QDateTime>
 #include <QDir>
@@ -451,12 +450,7 @@ void MeteorGUI::setupUi(RollupContents *rollupContents)
     m_deltaFrequency = ui->deltaFrequency;
     m_deltaUnits = ui->deltaUnits;
     m_sampleRate = ui->sampleRate;
-    m_powerLPFCutoff = ui->powerLPFCutoff;
-    m_detectionThreshold = ui->detectionThreshold;
-    m_minDuration = ui->minDuration;
     m_maxDuration = ui->maxDuration;
-    m_maxFrequencyDrift = ui->maxFrequencyDrift;
-    m_enableBlobDetector = ui->enableBlobDetector;
     m_blobSensitivity = ui->blobSensitivity;
     m_highlightAllDetections = ui->highlightAllDetections;
     m_detectionBoxPadding = ui->detectionBoxPadding;
@@ -501,28 +495,9 @@ void MeteorGUI::setupUi(RollupContents *rollupContents)
     m_sampleRate->addItems(QStringList({"100 Hz", "300 Hz", "1000 Hz", "3000 Hz"}));
     m_sampleRate->setToolTip("Meteor detector channel sample rate");
 
-    m_powerLPFCutoff->setDecimals(1);
-    m_powerLPFCutoff->setRange(0.1, 1350.0);
-    m_powerLPFCutoff->setSuffix(" Hz");
-    m_powerLPFCutoff->setToolTip("Power low pass filter cutoff frequency");
-
-    m_detectionThreshold->setDecimals(1);
-    m_detectionThreshold->setRange(1.0, 60.0);
-    m_detectionThreshold->setSuffix(" dB");
-    m_detectionThreshold->setToolTip("Detection threshold above the tracked noise floor");
-
-    m_minDuration->setRange(1, 10000);
-    m_minDuration->setSuffix(" ms");
-    m_minDuration->setToolTip("Minimum pulse duration");
-
     m_maxDuration->setRange(1, 60000);
     m_maxDuration->setSuffix(" ms");
     m_maxDuration->setToolTip("Maximum pulse duration");
-
-    m_maxFrequencyDrift->setDecimals(1);
-    m_maxFrequencyDrift->setRange(0.0, 1500.0);
-    m_maxFrequencyDrift->setSuffix(" Hz");
-    m_maxFrequencyDrift->setToolTip("Maximum frequency span or drift accepted for a meteor pulse");
 
     m_highlightAllDetections->setChecked(true);
     m_highlightAllDetections->setToolTip("Highlight all detections on the waterfall. Turn off to highlight only selected table rows.");
@@ -1308,38 +1283,11 @@ void MeteorGUI::on_sampleRate_currentIndexChanged(int index)
     }
 
     m_settings.m_channelSampleRate = MeteorSettings::m_supportedSampleRates[index];
-    const double maxCutoff = std::max(0.1, m_settings.m_channelSampleRate * 0.45);
-    m_powerLPFCutoff->setMaximum(maxCutoff);
 
     QStringList keys({"channelSampleRate"});
-    if (m_settings.m_powerLPFCutoff > maxCutoff)
-    {
-        m_settings.m_powerLPFCutoff = maxCutoff;
-        m_powerLPFCutoff->setValue(m_settings.m_powerLPFCutoff);
-        keys.append("powerLPFCutoff");
-    }
-
     m_channelMarker.setBandwidth(m_settings.m_channelSampleRate);
     updateVisualSampleRate();
     applySettings(keys);
-}
-
-void MeteorGUI::on_powerLPFCutoff_valueChanged(double value)
-{
-    m_settings.m_powerLPFCutoff = (float) value;
-    applySetting("powerLPFCutoff");
-}
-
-void MeteorGUI::on_detectionThreshold_valueChanged(double value)
-{
-    m_settings.m_detectionThresholdDB = (float) value;
-    applySetting("detectionThresholdDB");
-}
-
-void MeteorGUI::on_enableBlobDetector_toggled(bool checked)
-{
-    m_settings.m_enableBlobDetector = checked;
-    applySetting("enableBlobDetector");
 }
 
 void MeteorGUI::on_blobSensitivity_valueChanged(int value)
@@ -1348,42 +1296,10 @@ void MeteorGUI::on_blobSensitivity_valueChanged(int value)
     applySetting("blobSensitivity");
 }
 
-void MeteorGUI::on_minDuration_valueChanged(int value)
-{
-    m_settings.m_minDurationMS = value;
-
-    if (m_settings.m_maxDurationMS < m_settings.m_minDurationMS)
-    {
-        m_settings.m_maxDurationMS = m_settings.m_minDurationMS;
-        m_maxDuration->setValue(m_settings.m_maxDurationMS);
-        applySettings({"minDurationMS", "maxDurationMS"});
-    }
-    else
-    {
-        applySetting("minDurationMS");
-    }
-}
-
 void MeteorGUI::on_maxDuration_valueChanged(int value)
 {
     m_settings.m_maxDurationMS = value;
-
-    if (m_settings.m_minDurationMS > m_settings.m_maxDurationMS)
-    {
-        m_settings.m_minDurationMS = m_settings.m_maxDurationMS;
-        m_minDuration->setValue(m_settings.m_minDurationMS);
-        applySettings({"minDurationMS", "maxDurationMS"});
-    }
-    else
-    {
-        applySetting("maxDurationMS");
-    }
-}
-
-void MeteorGUI::on_maxFrequencyDrift_valueChanged(double value)
-{
-    m_settings.m_maxFrequencyDrift = (float) value;
-    applySetting("maxFrequencyDrift");
+    applySetting("maxDurationMS");
 }
 
 void MeteorGUI::on_highlightAllDetections_toggled(bool checked)
@@ -1937,12 +1853,7 @@ void MeteorGUI::displaySettings()
     blockApplySettings(true);
     const QSignalBlocker frequencyModeBlocker(m_frequencyMode);
     const QSignalBlocker sampleRateBlocker(m_sampleRate);
-    const QSignalBlocker powerLPFCutoffBlocker(m_powerLPFCutoff);
-    const QSignalBlocker detectionThresholdBlocker(m_detectionThreshold);
-    const QSignalBlocker minDurationBlocker(m_minDuration);
     const QSignalBlocker maxDurationBlocker(m_maxDuration);
-    const QSignalBlocker maxFrequencyDriftBlocker(m_maxFrequencyDrift);
-    const QSignalBlocker enableBlobDetectorBlocker(m_enableBlobDetector);
     const QSignalBlocker blobSensitivityBlocker(m_blobSensitivity);
     const QSignalBlocker detectionBoxPaddingBlocker(m_detectionBoxPadding);
     const QSignalBlocker detectionLabelsBlocker(m_detectionLabels);
@@ -1965,13 +1876,7 @@ void MeteorGUI::displaySettings()
 
     const int rateIndex = sampleRateIndex(m_settings.m_channelSampleRate);
     m_sampleRate->setCurrentIndex(rateIndex);
-    m_powerLPFCutoff->setMaximum(std::max(0.1, m_settings.m_channelSampleRate * 0.45));
-    m_powerLPFCutoff->setValue(m_settings.m_powerLPFCutoff);
-    m_detectionThreshold->setValue(m_settings.m_detectionThresholdDB);
-    m_minDuration->setValue(m_settings.m_minDurationMS);
     m_maxDuration->setValue(m_settings.m_maxDurationMS);
-    m_maxFrequencyDrift->setValue(m_settings.m_maxFrequencyDrift);
-    m_enableBlobDetector->setChecked(m_settings.m_enableBlobDetector);
     m_blobSensitivity->setValue((int) m_settings.m_blobSensitivity);
     m_detectionBoxPadding->setValue(m_settings.m_detectionBoxPaddingPixels);
     m_detectionLabels->setCurrentIndex(std::clamp(
@@ -2008,12 +1913,7 @@ void MeteorGUI::makeUIConnections()
     QObject::connect(m_frequencyMode, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &MeteorGUI::on_frequencyMode_currentIndexChanged);
     QObject::connect(m_deltaFrequency, &ValueDialZ::changed, this, &MeteorGUI::on_deltaFrequency_changed);
     QObject::connect(m_sampleRate, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &MeteorGUI::on_sampleRate_currentIndexChanged);
-    QObject::connect(m_powerLPFCutoff, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &MeteorGUI::on_powerLPFCutoff_valueChanged);
-    QObject::connect(m_detectionThreshold, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &MeteorGUI::on_detectionThreshold_valueChanged);
-    QObject::connect(m_minDuration, QOverload<int>::of(&QSpinBox::valueChanged), this, &MeteorGUI::on_minDuration_valueChanged);
     QObject::connect(m_maxDuration, QOverload<int>::of(&QSpinBox::valueChanged), this, &MeteorGUI::on_maxDuration_valueChanged);
-    QObject::connect(m_maxFrequencyDrift, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &MeteorGUI::on_maxFrequencyDrift_valueChanged);
-    QObject::connect(m_enableBlobDetector, &QCheckBox::toggled, this, &MeteorGUI::on_enableBlobDetector_toggled);
     QObject::connect(m_blobSensitivity, QOverload<int>::of(&QSpinBox::valueChanged), this, &MeteorGUI::on_blobSensitivity_valueChanged);
     QObject::connect(m_highlightAllDetections, &ButtonSwitch::toggled, this, &MeteorGUI::on_highlightAllDetections_toggled);
     QObject::connect(m_trailSpectrumEnabled, &ButtonSwitch::toggled, this, &MeteorGUI::on_trailSpectrumEnabled_toggled);

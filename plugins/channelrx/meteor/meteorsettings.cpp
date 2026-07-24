@@ -40,12 +40,7 @@ void MeteorSettings::resetToDefaults()
     m_frequencyMode = Offset;
     m_frequency = 0;
     m_channelSampleRate = m_defaultSampleRate;
-    m_powerLPFCutoff = 50.0f;
-    m_detectionThresholdDB = 6.0f;
-    m_minDurationMS = 5;
     m_maxDurationMS = 20000;
-    m_maxFrequencyDrift = 50.0f;
-    m_enableBlobDetector = true;
     m_blobSensitivity = 145.0f;
     m_detectionsTableColumnHidden = 0;
     m_detectionBoxPaddingPixels = 4;
@@ -80,11 +75,7 @@ QByteArray MeteorSettings::serialize() const
     s.writeS32(2, (int) m_frequencyMode);
     s.writeS64(3, m_frequency);
     s.writeS32(4, m_channelSampleRate);
-    s.writeFloat(5, m_powerLPFCutoff);
-    s.writeFloat(6, m_detectionThresholdDB);
-    s.writeS32(7, m_minDurationMS);
     s.writeS32(8, m_maxDurationMS);
-    s.writeFloat(9, m_maxFrequencyDrift);
     s.writeU32(10, m_detectionsTableColumnHidden);
     s.writeS32(11, m_detectionBoxPaddingPixels);
     s.writeS32(12, (int) m_detectionLabelMode);
@@ -103,7 +94,6 @@ QByteArray MeteorSettings::serialize() const
     s.writeFloat(36, m_transmitterHPBW);
     s.writeBool(37, m_showAntennaPatterns);
     s.writeFloat(38, m_mapMaxAltitudeKM);
-    s.writeBool(39, m_enableBlobDetector);
     s.writeFloat(40, m_blobSensitivity);
 
     s.writeU32(21, m_rgbColor);
@@ -153,11 +143,7 @@ bool MeteorSettings::deserialize(const QByteArray& data)
         d.readS64(3, &m_frequency, 0);
         d.readS32(4, &m_channelSampleRate, m_defaultSampleRate);
         m_channelSampleRate = validatedSampleRate(m_channelSampleRate);
-        d.readFloat(5, &m_powerLPFCutoff, 50.0f);
-        d.readFloat(6, &m_detectionThresholdDB, 6.0f);
-        d.readS32(7, &m_minDurationMS, 5);
         d.readS32(8, &m_maxDurationMS, 20000);
-        d.readFloat(9, &m_maxFrequencyDrift, 50.0f);
         d.readU32(10, &m_detectionsTableColumnHidden, 0);
         d.readS32(11, &m_detectionBoxPaddingPixels, 4);
         d.readS32(12, (int *) &m_detectionLabelMode, (int) DetectionLabelNone);
@@ -180,7 +166,6 @@ bool MeteorSettings::deserialize(const QByteArray& data)
         d.readFloat(36, &m_transmitterHPBW, m_gravesHPBW);
         d.readBool(37, &m_showAntennaPatterns, false);
         d.readFloat(38, &m_mapMaxAltitudeKM, m_defaultMapMaxAltitudeKM);
-        d.readBool(39, &m_enableBlobDetector, true);
         d.readFloat(40, &m_blobSensitivity, 145.0f);
         m_blobSensitivity = std::isfinite(m_blobSensitivity)
             ? std::clamp(m_blobSensitivity, 10.0f, 10000.0f) : 145.0f;
@@ -275,23 +260,8 @@ void MeteorSettings::applySettings(const QStringList& settingsKeys, const Meteor
     if (settingsKeys.contains("channelSampleRate")) {
         m_channelSampleRate = validatedSampleRate(settings.m_channelSampleRate);
     }
-    if (settingsKeys.contains("powerLPFCutoff")) {
-        m_powerLPFCutoff = settings.m_powerLPFCutoff;
-    }
-    if (settingsKeys.contains("detectionThresholdDB")) {
-        m_detectionThresholdDB = settings.m_detectionThresholdDB;
-    }
-    if (settingsKeys.contains("minDurationMS")) {
-        m_minDurationMS = settings.m_minDurationMS;
-    }
     if (settingsKeys.contains("maxDurationMS")) {
         m_maxDurationMS = settings.m_maxDurationMS;
-    }
-    if (settingsKeys.contains("maxFrequencyDrift")) {
-        m_maxFrequencyDrift = settings.m_maxFrequencyDrift;
-    }
-    if (settingsKeys.contains("enableBlobDetector")) {
-        m_enableBlobDetector = settings.m_enableBlobDetector;
     }
     if (settingsKeys.contains("blobSensitivity")) {
         m_blobSensitivity = settings.m_blobSensitivity;
@@ -383,23 +353,8 @@ QString MeteorSettings::getDebugString(const QStringList& settingsKeys, bool for
     if (settingsKeys.contains("channelSampleRate") || force) {
         ostr << " m_channelSampleRate: " << m_channelSampleRate;
     }
-    if (settingsKeys.contains("powerLPFCutoff") || force) {
-        ostr << " m_powerLPFCutoff: " << m_powerLPFCutoff;
-    }
-    if (settingsKeys.contains("detectionThresholdDB") || force) {
-        ostr << " m_detectionThresholdDB: " << m_detectionThresholdDB;
-    }
-    if (settingsKeys.contains("minDurationMS") || force) {
-        ostr << " m_minDurationMS: " << m_minDurationMS;
-    }
     if (settingsKeys.contains("maxDurationMS") || force) {
         ostr << " m_maxDurationMS: " << m_maxDurationMS;
-    }
-    if (settingsKeys.contains("maxFrequencyDrift") || force) {
-        ostr << " m_maxFrequencyDrift: " << m_maxFrequencyDrift;
-    }
-    if (settingsKeys.contains("enableBlobDetector") || force) {
-        ostr << " m_enableBlobDetector: " << m_enableBlobDetector;
     }
     if (settingsKeys.contains("blobSensitivity") || force) {
         ostr << " m_blobSensitivity: " << m_blobSensitivity;

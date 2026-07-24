@@ -397,30 +397,10 @@ namespace {
         bool required = true;
     };
 
-    struct CandidateLabel
-    {
-        quint64 startSample = 0;
-        quint64 endSample = 0;
-        double lowFrequency = 0.0;
-        double highFrequency = 0.0;
-        bool hasFrequencyRange = false;
-        QString label;
-        QString eventId;
-    };
-
-    struct CandidateLabelMatch
-    {
-        QString label;
-        QString eventId;
-    };
-
     struct Options
     {
         QString wavPath;
         QString testDir;
-        QString candidateCsvPath;
-        QString candidateLabelsPath;
-        QString candidateCaptureDir;
         QVector<QPair<QString, QString>> tunableOverrides;
         MeteorSettings settings;
         int chunkSamples = 4096;
@@ -439,253 +419,39 @@ namespace {
         static const QMap<QString, std::function<double&(Tunables&)>> doubleMembers = {
             {QStringLiteral("spectralFrameDurationS"), [](Tunables& t) -> auto& { return t.m_spectral.m_spectralFrameDurationS; }},
             {QStringLiteral("spectralHopFraction"), [](Tunables& t) -> auto& { return t.m_spectral.m_spectralHopFraction; }},
-            {QStringLiteral("spectralActiveNoiseAlpha"), [](Tunables& t) -> auto& { return t.m_spectral.m_spectralActiveNoiseAlpha; }},
-            {QStringLiteral("spectralRisingNoiseAlpha"), [](Tunables& t) -> auto& { return t.m_spectral.m_risingNoiseAlpha; }},
-            {QStringLiteral("spectralStableNoiseAlpha"), [](Tunables& t) -> auto& { return t.m_spectral.m_spectralStableNoiseAlpha; }},
-            {QStringLiteral("minimumNoiseBlockDurationS"), [](Tunables& t) -> auto& { return t.m_spectral.m_minimumNoiseBlockDurationS; }},
-            {QStringLiteral("minimumNoiseBlockQuantile"), [](Tunables& t) -> auto& { return t.m_spectral.m_minimumNoiseBlockQuantile; }},
-            {QStringLiteral("scalarNoiseTimeConstantS"), [](Tunables& t) -> auto& { return t.m_spectral.m_scalarNoiseTimeConstantS; }},
-            {QStringLiteral("scalarRisingNoiseAlpha"), [](Tunables& t) -> auto& { return t.m_spectral.m_risingNoiseAlpha; }},
-            {QStringLiteral("edgeExclusionFraction"), [](Tunables& t) -> auto& { return t.m_spectral.m_edgeExclusionFraction; }},
-            {QStringLiteral("usableBandwidthRateFraction"), [](Tunables& t) -> auto& { return t.m_band.m_usableBandwidthRateFraction; }},
-            {QStringLiteral("maxSegmentedBandWidthHz"), [](Tunables& t) -> auto& { return t.m_band.m_maxSegmentedBandWidthHz; }},
-            {QStringLiteral("compactBandwidthHz"), [](Tunables& t) -> auto& { return t.m_band.m_compactBandwidthHz; }},
-            {QStringLiteral("stableBandwidthHz"), [](Tunables& t) -> auto& { return t.m_band.m_stableBandwidthHz; }},
-            {QStringLiteral("twoFrameMaxBandwidthHz"), [](Tunables& t) -> auto& { return t.m_twoFrameEcho.m_twoFrameMaxBandwidthHz; }},
-            {QStringLiteral("twoFrameMinFrequencyCoherence"), [](Tunables& t) -> auto& { return t.m_twoFrameEcho.m_twoFrameMinFrequencyCoherence; }},
-            {QStringLiteral("twoFrameMinIntegratedSupportDB"), [](Tunables& t) -> auto& { return t.m_twoFrameEcho.m_twoFrameMinIntegratedSupportDB; }},
-            {QStringLiteral("localizedTwoFrameMinPeakDB"), [](Tunables& t) -> auto& { return t.m_twoFrameEcho.m_localizedTwoFrameMinPeakDB; }},
-            {QStringLiteral("localizedTwoFrameMinContrastDB"), [](Tunables& t) -> auto& { return t.m_twoFrameEcho.m_localizedTwoFrameMinContrastDB; }},
-            {QStringLiteral("coherentWideTwoFrameMinBandwidthHz"), [](Tunables& t) -> auto& { return t.m_twoFrameEcho.m_coherentWideTwoFrameMinBandwidthHz; }},
-            {QStringLiteral("coherentWideTwoFrameMaxBandwidthHz"), [](Tunables& t) -> auto& { return t.m_twoFrameEcho.m_coherentWideTwoFrameMaxBandwidthHz; }},
-            {QStringLiteral("coherentWideTwoFrameMaxOccupiedFraction"), [](Tunables& t) -> auto& { return t.m_twoFrameEcho.m_coherentWideTwoFrameMaxOccupiedFraction; }},
-            {QStringLiteral("coherentWideTwoFrameMinPeakDB"), [](Tunables& t) -> auto& { return t.m_twoFrameEcho.m_coherentWideTwoFrameMinPeakDB; }},
-            {QStringLiteral("coherentWideTwoFrameMinContrastDB"), [](Tunables& t) -> auto& { return t.m_twoFrameEcho.m_coherentWideTwoFrameMinContrastDB; }},
-            {QStringLiteral("coherentWideTwoFrameMinIntegratedSupportDB"), [](Tunables& t) -> auto& { return t.m_twoFrameEcho.m_coherentWideTwoFrameMinIntegratedSupportDB; }},
-            {QStringLiteral("coherentWideTwoFrameMinFrequencyCoherence"), [](Tunables& t) -> auto& { return t.m_twoFrameEcho.m_coherentWideTwoFrameMinFrequencyCoherence; }},
-            {QStringLiteral("morphologyRescueContrastDB"), [](Tunables& t) -> auto& { return t.m_twoFrameEcho.m_morphologyRescueContrastDB; }},
-            {QStringLiteral("localizedOccupiedMaxFraction"), [](Tunables& t) -> auto& { return t.m_twoFrameEcho.m_localizedOccupiedMaxFraction; }},
-            {QStringLiteral("sustainedSweepMinDurationS"), [](Tunables& t) -> auto& { return t.m_sweep.m_sustainedSweepMinDurationS; }},
-            {QStringLiteral("sustainedSweepMinR2"), [](Tunables& t) -> auto& { return t.m_sweep.m_smoothSweepMinR2; }},
-            {QStringLiteral("sustainedSweepMinDriftHz"), [](Tunables& t) -> auto& { return t.m_sweep.m_sustainedSweepMinDriftHz; }},
-            {QStringLiteral("compactSweepMinDurationS"), [](Tunables& t) -> auto& { return t.m_sweep.m_compactSweepMinDurationS; }},
-            {QStringLiteral("compactSweepMaxTrackOccupancy"), [](Tunables& t) -> auto& { return t.m_sweep.m_compactSweepMaxTrackOccupancy; }},
-            {QStringLiteral("compactSweepMaxContrastDB"), [](Tunables& t) -> auto& { return t.m_sweep.m_compactSweepMaxContrastDB; }},
-            {QStringLiteral("compactSweepMinR2"), [](Tunables& t) -> auto& { return t.m_sweep.m_smoothSweepMinR2; }},
-            {QStringLiteral("compactSweepMinDriftHz"), [](Tunables& t) -> auto& { return t.m_sweep.m_compactSweepMinDriftHz; }},
-            {QStringLiteral("localizedBurstMaxDurationS"), [](Tunables& t) -> auto& { return t.m_localizedBurst.m_localizedBurstMaxDurationS; }},
-            {QStringLiteral("localizedBurstMinTrackOccupancy"), [](Tunables& t) -> auto& { return t.m_localizedBurst.m_localizedBurstMinTrackOccupancy; }},
-            {QStringLiteral("localizedBurstMaxOccupiedFraction"), [](Tunables& t) -> auto& { return t.m_localizedBurst.m_localizedBurstMaxOccupiedFraction; }},
-            {QStringLiteral("localizedBurstMinPeakDB"), [](Tunables& t) -> auto& { return t.m_localizedBurst.m_localizedBurstMinPeakDB; }},
-            {QStringLiteral("localizedBurstMinContrastDB"), [](Tunables& t) -> auto& { return t.m_localizedBurst.m_localizedBurstMinContrastDB; }},
-            {QStringLiteral("localizedBurstMinIntegratedSupportDB"), [](Tunables& t) -> auto& { return t.m_localizedBurst.m_localizedBurstMinIntegratedSupportDB; }},
-            {QStringLiteral("localizedBurstMinFrequencyCoherence"), [](Tunables& t) -> auto& { return t.m_localizedBurst.m_localizedBurstMinFrequencyCoherence; }},
-            {QStringLiteral("localizedBurstMinMatchedEnvelopeScore"), [](Tunables& t) -> auto& { return t.m_localizedBurst.m_localizedBurstMinMatchedEnvelopeScore; }},
-            {QStringLiteral("driftSweepMinR2"), [](Tunables& t) -> auto& { return t.m_sweep.m_driftSweepMinR2; }},
-            {QStringLiteral("broadbandImpulseMaxDurationS"), [](Tunables& t) -> auto& { return t.m_broadbandImpulse.m_broadbandImpulseMaxDurationS; }},
-            {QStringLiteral("broadbandImpulseMinPeakDB"), [](Tunables& t) -> auto& { return t.m_broadbandImpulse.m_broadbandImpulseMinPeakDB; }},
-            {QStringLiteral("broadbandImpulseMinSpanHz"), [](Tunables& t) -> auto& { return t.m_broadbandImpulse.m_broadbandImpulseMinSpanHz; }},
-            {QStringLiteral("broadbandImpulseMinBandwidthHz"), [](Tunables& t) -> auto& { return t.m_broadbandImpulse.m_broadbandImpulseMinBandwidthHz; }},
-            {QStringLiteral("broadbandImpulseMinOccupiedFraction"), [](Tunables& t) -> auto& { return t.m_broadbandImpulse.m_broadbandImpulseMinOccupiedFraction; }},
-            {QStringLiteral("shortCandidateAcceptanceScore"), [](Tunables& t) -> auto& { return t.m_scoring.m_shortCandidateAcceptanceScore; }},
-            {QStringLiteral("candidateAcceptanceScore"), [](Tunables& t) -> auto& { return t.m_scoring.m_candidateAcceptanceScore; }},
-            {QStringLiteral("weakSupportDB"), [](Tunables& t) -> auto& { return t.m_scoring.m_weakSupportDB; }},
-            {QStringLiteral("weakSupportScorePenalty"), [](Tunables& t) -> auto& { return t.m_scoring.m_weakSupportScorePenalty; }},
-            {QStringLiteral("scoreDurationFloorS"), [](Tunables& t) -> auto& { return t.m_scoring.m_scoreDurationFloorS; }},
-            {QStringLiteral("scoreDurationRangeS"), [](Tunables& t) -> auto& { return t.m_scoring.m_scoreDurationRangeS; }},
-            {QStringLiteral("powerSweepMinR2"), [](Tunables& t) -> auto& { return t.m_power.m_powerSweepMinR2; }},
-            {QStringLiteral("powerStableBandwidthHz"), [](Tunables& t) -> auto& { return t.m_power.m_powerStableBandwidthHz; }},
-            {QStringLiteral("powerBoundedMinProminenceDB"), [](Tunables& t) -> auto& { return t.m_power.m_powerBoundedMinProminenceDB; }},
-            {QStringLiteral("powerStrongCoherentMinPeakDB"), [](Tunables& t) -> auto& { return t.m_power.m_powerStrongCoherentMinPeakDB; }},
-            {QStringLiteral("powerStrongCoherentMinProminenceDB"), [](Tunables& t) -> auto& { return t.m_power.m_powerStrongCoherentMinProminenceDB; }},
-            {QStringLiteral("frequencyRefinementOuterProbeFraction"), [](Tunables& t) -> auto& { return t.m_band.m_frequencyRefinementOuterProbeFraction; }},
             {QStringLiteral("duplicateFrequencyOverlapFraction"), [](Tunables& t) -> auto& { return t.m_duplicate.m_duplicateFrequencyOverlapFraction; }},
-            {QStringLiteral("duplicateStrongFrequencyOverlapFraction"), [](Tunables& t) -> auto& { return t.m_duplicate.m_duplicateStrongFrequencyOverlapFraction; }},
-            {QStringLiteral("detachedRepeatMinimumGapS"), [](Tunables& t) -> auto& { return t.m_detachedRepeat.m_detachedRepeatMinimumGapS; }},
-            {QStringLiteral("detachedRepeatMinimumScoreMargin"), [](Tunables& t) -> auto& { return t.m_detachedRepeat.m_detachedRepeatMinimumScoreMargin; }},
-            {QStringLiteral("detachedRepeatMinimumContrastDB"), [](Tunables& t) -> auto& { return t.m_detachedRepeat.m_detachedRepeatMinimumContrastDB; }},
-            {QStringLiteral("detachedRepeatMinimumPeakDB"), [](Tunables& t) -> auto& { return t.m_detachedRepeat.m_detachedRepeatMinimumPeakDB; }},
-            {QStringLiteral("detachedRepeatMinimumIntegratedSupportDB"), [](Tunables& t) -> auto& { return t.m_detachedRepeat.m_detachedRepeatMinimumIntegratedSupportDB; }},
-            {QStringLiteral("detachedRepeatMinimumTrackOccupancy"), [](Tunables& t) -> auto& { return t.m_detachedRepeat.m_detachedRepeatMinimumTrackOccupancy; }},
-            {QStringLiteral("detachedRepeatMinimumFrequencyCoherence"), [](Tunables& t) -> auto& { return t.m_detachedRepeat.m_detachedRepeatMinimumFrequencyCoherence; }},
-            {QStringLiteral("detachedRepeatMaximumOccupiedFraction"), [](Tunables& t) -> auto& { return t.m_detachedRepeat.m_detachedRepeatMaximumOccupiedFraction; }},
-            {QStringLiteral("detachedRepeatMinimumMatchedEnvelopeScore"), [](Tunables& t) -> auto& { return t.m_detachedRepeat.m_detachedRepeatMinimumMatchedEnvelopeScore; }},
-            {QStringLiteral("continuationThresholdReductionDB"), [](Tunables& t) -> auto& { return t.m_continuation.m_continuationThresholdReductionDB; }},
-            {QStringLiteral("initialComponentHoldS"), [](Tunables& t) -> auto& { return t.m_continuation.m_initialComponentHoldS; }},
-            {QStringLiteral("continuationOrdinaryHoldS"), [](Tunables& t) -> auto& { return t.m_continuation.m_continuationOrdinaryHoldS; }},
-            {QStringLiteral("continuationStrongHoldS"), [](Tunables& t) -> auto& { return t.m_continuation.m_continuationStrongHoldS; }},
-            {QStringLiteral("continuationMaxEvidenceGapS"), [](Tunables& t) -> auto& { return t.m_continuation.m_continuationMaxEvidenceGapS; }},
-            {QStringLiteral("continuationStrongPeakDB"), [](Tunables& t) -> auto& { return t.m_continuation.m_continuationStrongPeakDB; }},
-            {QStringLiteral("singleComponentContinuationMinimumConfidence"), [](Tunables& t) -> auto& { return t.m_continuation.m_singleComponentContinuationMinimumConfidence; }},
-            {QStringLiteral("singleComponentContinuationTailPaddingS"), [](Tunables& t) -> auto& { return t.m_continuation.m_singleComponentContinuationTailPaddingS; }},
-            {QStringLiteral("continuationFrequencyPaddingHz"), [](Tunables& t) -> auto& { return t.m_continuation.m_continuationFrequencyPaddingHz; }},
-            {QStringLiteral("trackingFrequencyPaddingHz"), [](Tunables& t) -> auto& { return t.m_continuation.m_trackingFrequencyPaddingHz; }},
-            {QStringLiteral("maxTrackingJumpHz"), [](Tunables& t) -> auto& { return t.m_continuation.m_maxTrackingJumpHz; }},
-            {QStringLiteral("candidateDiagnosticMinimumMargin"), [](Tunables& t) -> auto& { return t.m_diagnostics.m_candidateDiagnosticMinimumMargin; }},
-            {QStringLiteral("candidateDiagnosticMaximumMargin"), [](Tunables& t) -> auto& { return t.m_diagnostics.m_candidateDiagnosticMaximumMargin; }},
             {QStringLiteral("blobSeedDb"), [](Tunables& t) -> auto& { return t.m_blob.m_seedDb; }},
             {QStringLiteral("blobGrowDb"), [](Tunables& t) -> auto& { return t.m_blob.m_growDb; }},
             {QStringLiteral("blobFloorOffsetDb"), [](Tunables& t) -> auto& { return t.m_blob.m_floorOffsetDb; }},
+            {QStringLiteral("blobLinkGapSeconds"), [](Tunables& t) -> auto& { return t.m_blob.m_linkGapSeconds; }},
             {QStringLiteral("blobLinkMaxDriftHzPerS"), [](Tunables& t) -> auto& { return t.m_blob.m_linkMaxDriftHzPerS; }},
             {QStringLiteral("blobLinkTolHz"), [](Tunables& t) -> auto& { return t.m_blob.m_linkTolHz; }},
-            {QStringLiteral("blobOccLimit"), [](Tunables& t) -> auto& { return t.m_blob.m_occLimit; }},
-            {QStringLiteral("blobScoreThreshold"), [](Tunables& t) -> auto& { return t.m_blob.m_scoreThreshold; }},
-            {QStringLiteral("blobMinPeakExcessDb"), [](Tunables& t) -> auto& { return t.m_blob.m_minPeakExcessDb; }},
             {QStringLiteral("blobTrimKeepTime"), [](Tunables& t) -> auto& { return t.m_blob.m_trimKeepTime; }},
             {QStringLiteral("blobTrimKeepFreq"), [](Tunables& t) -> auto& { return t.m_blob.m_trimKeepFreq; }},
+            {QStringLiteral("blobOccLimit"), [](Tunables& t) -> auto& { return t.m_blob.m_occLimit; }},
+            {QStringLiteral("blobMinPeakExcessDb"), [](Tunables& t) -> auto& { return t.m_blob.m_minPeakExcessDb; }},
             {QStringLiteral("blobSweepMinLinR2"), [](Tunables& t) -> auto& { return t.m_blob.m_sweepMinLinR2; }},
             {QStringLiteral("blobSweepMinAbsSlopeHzPerS"), [](Tunables& t) -> auto& { return t.m_blob.m_sweepMinAbsSlopeHzPerS; }},
             {QStringLiteral("blobSweepMinDurationS"), [](Tunables& t) -> auto& { return t.m_blob.m_sweepMinDurationS; }},
-            {QStringLiteral("blobSweepLinkTolHz"), [](Tunables& t) -> auto& { return t.m_blob.m_sweepLinkTolHz; }},
-            {QStringLiteral("blobSweepLinkMaxGapS"), [](Tunables& t) -> auto& { return t.m_blob.m_sweepLinkMaxGapS; }},
             {QStringLiteral("blobFaintSeedDb"), [](Tunables& t) -> auto& { return t.m_blob.m_faintSeedDb; }},
             {QStringLiteral("blobSegMinR2"), [](Tunables& t) -> auto& { return t.m_blob.m_segMinR2; }},
             {QStringLiteral("blobSegSlopeMinHzPerS"), [](Tunables& t) -> auto& { return t.m_blob.m_segSlopeMinHzPerS; }},
             {QStringLiteral("blobSegSlopeMaxHzPerS"), [](Tunables& t) -> auto& { return t.m_blob.m_segSlopeMaxHzPerS; }},
+            {QStringLiteral("blobSweepLinkTolHz"), [](Tunables& t) -> auto& { return t.m_blob.m_sweepLinkTolHz; }},
+            {QStringLiteral("blobSweepLinkMaxGapS"), [](Tunables& t) -> auto& { return t.m_blob.m_sweepLinkMaxGapS; }},
+            {QStringLiteral("blobScoreThreshold"), [](Tunables& t) -> auto& { return t.m_blob.m_scoreThreshold; }},
             {QStringLiteral("blobWindowSeconds"), [](Tunables& t) -> auto& { return t.m_blob.m_windowSeconds; }},
             {QStringLiteral("blobMinWindowSeconds"), [](Tunables& t) -> auto& { return t.m_blob.m_minWindowSeconds; }},
             {QStringLiteral("blobEmitStrideS"), [](Tunables& t) -> auto& { return t.m_blob.m_emitStrideS; }},
             {QStringLiteral("blobFinalMarginS"), [](Tunables& t) -> auto& { return t.m_blob.m_finalMarginS; }},
-            {QStringLiteral("matchedEnvelopeMaximumPeakPosition"), [](Tunables& t) -> auto& { return t.m_rescue.m_matchedEnvelopeMaximumPeakPosition; }},
-            {QStringLiteral("matchedEnvelopeMinimumDecayDB"), [](Tunables& t) -> auto& { return t.m_rescue.m_matchedEnvelopeMinimumDecayDB; }},
-            {QStringLiteral("matchedEnvelopeMaximumDecayDB"), [](Tunables& t) -> auto& { return t.m_rescue.m_matchedEnvelopeMaximumDecayDB; }},
-            {QStringLiteral("matchedEnvelopeMinimumMonotonicFraction"), [](Tunables& t) -> auto& { return t.m_rescue.m_matchedEnvelopeMinimumMonotonicFraction; }},
-            {QStringLiteral("curvatureMinimumDurationS"), [](Tunables& t) -> auto& { return t.m_sweep.m_curvatureMinimumDurationS; }},
-            {QStringLiteral("curvatureMinimumR2"), [](Tunables& t) -> auto& { return t.m_sweep.m_curvatureMinimumR2; }},
-            {QStringLiteral("curvatureMinimumR2Improvement"), [](Tunables& t) -> auto& { return t.m_sweep.m_curvatureMinimumR2Improvement; }},
-            {QStringLiteral("curvatureMinimumHzPerS2"), [](Tunables& t) -> auto& { return t.m_sweep.m_curvatureMinimumHzPerS2; }},
-            {QStringLiteral("linearSweepMinimumR2"), [](Tunables& t) -> auto& { return t.m_sweep.m_linearSweepMinimumR2; }},
-            {QStringLiteral("linearSweepMaximumBandwidthHz"), [](Tunables& t) -> auto& { return t.m_sweep.m_linearSweepMaximumBandwidthHz; }},
-            {QStringLiteral("linearSweepMinimumDriftHz"), [](Tunables& t) -> auto& { return t.m_sweep.m_linearSweepMinimumDriftHz; }},
-            {QStringLiteral("linearSweepMaximumContrastDB"), [](Tunables& t) -> auto& { return t.m_sweep.m_linearSweepMaximumContrastDB; }},
-            {QStringLiteral("linearSweepMaximumPeakDB"), [](Tunables& t) -> auto& { return t.m_sweep.m_linearSweepMaximumPeakDB; }},
-            {QStringLiteral("rescueMinimumScoreMargin"), [](Tunables& t) -> auto& { return t.m_rescue.m_rescueMinimumScoreMargin; }},
-            {QStringLiteral("rescueMinimumContrastDB"), [](Tunables& t) -> auto& { return t.m_rescue.m_rescueMinimumContrastDB; }},
-            {QStringLiteral("rescueMinimumPeakDB"), [](Tunables& t) -> auto& { return t.m_rescue.m_rescueMinimumPeakDB; }},
-            {QStringLiteral("rescueMinimumFrequencyCoherence"), [](Tunables& t) -> auto& { return t.m_rescue.m_rescueMinimumFrequencyCoherence; }},
-            {QStringLiteral("rescueMinimumMatchedEnvelopeScore"), [](Tunables& t) -> auto& { return t.m_rescue.m_rescueMinimumMatchedEnvelopeScore; }},
-            {QStringLiteral("rescueTwoFrameMinimumContrastDB"), [](Tunables& t) -> auto& { return t.m_rescue.m_rescueTwoFrameMinimumContrastDB; }},
-            {QStringLiteral("rescueTwoFrameMinimumPeakDB"), [](Tunables& t) -> auto& { return t.m_rescue.m_rescueTwoFrameMinimumPeakDB; }},
-            {QStringLiteral("rescueTwoFrameMinimumIntegratedSupportDB"), [](Tunables& t) -> auto& { return t.m_rescue.m_rescueTwoFrameMinimumIntegratedSupportDB; }},
-            {QStringLiteral("rescueTwoFrameMinimumFrequencyCoherence"), [](Tunables& t) -> auto& { return t.m_rescue.m_rescueTwoFrameMinimumFrequencyCoherence; }},
-            {QStringLiteral("rescueTwoFrameMinimumMatchedEnvelopeScore"), [](Tunables& t) -> auto& { return t.m_rescue.m_rescueTwoFrameMinimumMatchedEnvelopeScore; }},
-            {QStringLiteral("rescueThreeFrameMinimumIntegratedSupportDB"), [](Tunables& t) -> auto& { return t.m_rescue.m_rescueThreeFrameMinimumIntegratedSupportDB; }},
-            {QStringLiteral("rescueMaximumOccupiedFraction"), [](Tunables& t) -> auto& { return t.m_rescue.m_rescueMaximumOccupiedFraction; }},
-            {QStringLiteral("compactThreeFrameEvidenceMaximumDurationS"), [](Tunables& t) -> auto& { return t.m_rescue.m_compactThreeFrameEvidenceMaximumDurationS; }},
-            {QStringLiteral("compactThreeFrameEvidenceMinimumScoreMargin"), [](Tunables& t) -> auto& { return t.m_rescue.m_compactThreeFrameEvidenceMinimumScoreMargin; }},
-            {QStringLiteral("compactThreeFrameEvidenceMinimumContrastDB"), [](Tunables& t) -> auto& { return t.m_rescue.m_compactThreeFrameEvidenceMinimumContrastDB; }},
-            {QStringLiteral("compactThreeFrameEvidenceMinimumIntegratedSupportDB"), [](Tunables& t) -> auto& { return t.m_rescue.m_compactThreeFrameEvidenceMinimumIntegratedSupportDB; }},
-            {QStringLiteral("compactThreeFrameEvidenceMinimumMatchedEnvelopeScore"), [](Tunables& t) -> auto& { return t.m_rescue.m_compactThreeFrameEvidenceMinimumMatchedEnvelopeScore; }},
-            {QStringLiteral("compactThreeFrameEvidenceMaximumOccupiedFraction"), [](Tunables& t) -> auto& { return t.m_rescue.m_compactThreeFrameEvidenceMaximumOccupiedFraction; }},
-            {QStringLiteral("compactThreeFrameEvidenceMaximumSweepScore"), [](Tunables& t) -> auto& { return t.m_rescue.m_evidenceMaximumSweepScore; }},
-            {QStringLiteral("compactThreeFrameEvidenceMaximumBandwidthHz"), [](Tunables& t) -> auto& { return t.m_rescue.m_compactThreeFrameEvidenceMaximumBandwidthHz; }},
-            {QStringLiteral("narrowThreeFrameEvidenceMinimumScoreMargin"), [](Tunables& t) -> auto& { return t.m_rescue.m_narrowThreeFrameEvidenceMinimumScoreMargin; }},
-            {QStringLiteral("narrowThreeFrameEvidenceMinimumContrastDB"), [](Tunables& t) -> auto& { return t.m_rescue.m_narrowThreeFrameEvidenceMinimumContrastDB; }},
-            {QStringLiteral("narrowThreeFrameEvidenceMinimumIntegratedSupportDB"), [](Tunables& t) -> auto& { return t.m_rescue.m_narrowThreeFrameEvidenceMinimumIntegratedSupportDB; }},
-            {QStringLiteral("narrowThreeFrameEvidenceMinimumMatchedEnvelopeScore"), [](Tunables& t) -> auto& { return t.m_rescue.m_narrowThreeFrameEvidenceMinimumMatchedEnvelopeScore; }},
-            {QStringLiteral("narrowThreeFrameEvidenceMaximumOccupiedFraction"), [](Tunables& t) -> auto& { return t.m_rescue.m_narrowThreeFrameEvidenceMaximumOccupiedFraction; }},
-            {QStringLiteral("narrowThreeFrameEvidenceMaximumBandwidthHz"), [](Tunables& t) -> auto& { return t.m_rescue.m_narrowThreeFrameEvidenceMaximumBandwidthHz; }},
-            {QStringLiteral("sustainedEvidenceMaximumDurationS"), [](Tunables& t) -> auto& { return t.m_rescue.m_sustainedEvidenceMaximumDurationS; }},
-            {QStringLiteral("sustainedEvidenceMinimumScoreMargin"), [](Tunables& t) -> auto& { return t.m_rescue.m_sustainedEvidenceMinimumScoreMargin; }},
-            {QStringLiteral("sustainedEvidenceMinimumContrastDB"), [](Tunables& t) -> auto& { return t.m_rescue.m_sustainedEvidenceMinimumContrastDB; }},
-            {QStringLiteral("sustainedEvidenceMinimumPeakDB"), [](Tunables& t) -> auto& { return t.m_rescue.m_sustainedEvidenceMinimumPeakDB; }},
-            {QStringLiteral("sustainedEvidenceMinimumIntegratedSupportDB"), [](Tunables& t) -> auto& { return t.m_rescue.m_sustainedEvidenceMinimumIntegratedSupportDB; }},
-            {QStringLiteral("sustainedEvidenceMinimumFrequencyCoherence"), [](Tunables& t) -> auto& { return t.m_rescue.m_sustainedEvidenceMinimumFrequencyCoherence; }},
-            {QStringLiteral("sustainedEvidenceMaximumOccupiedFraction"), [](Tunables& t) -> auto& { return t.m_rescue.m_sustainedEvidenceMaximumOccupiedFraction; }},
-            {QStringLiteral("sustainedEvidenceMaximumBandwidthHz"), [](Tunables& t) -> auto& { return t.m_rescue.m_sustainedEvidenceMaximumBandwidthHz; }},
-            {QStringLiteral("sustainedEvidenceMinimumMatchedEnvelopeScore"), [](Tunables& t) -> auto& { return t.m_rescue.m_sustainedEvidenceMinimumMatchedEnvelopeScore; }},
-            {QStringLiteral("sustainedEvidenceMaximumSweepScore"), [](Tunables& t) -> auto& { return t.m_rescue.m_evidenceMaximumSweepScore; }},
-            {QStringLiteral("sustainedEvidenceMaximumQuadraticSweepR2"), [](Tunables& t) -> auto& { return t.m_rescue.m_sustainedEvidenceMaximumQuadraticSweepR2; }},
-            {QStringLiteral("learnedModelIntercept"), [](Tunables& t) -> auto& { return t.m_learned.m_learnedModelIntercept; }},
-            {QStringLiteral("learnedRescueProbability"), [](Tunables& t) -> auto& { return t.m_learned.m_learnedRescueProbability; }},
-            {QStringLiteral("rejectedCandidateReanalysisDelayS"), [](Tunables& t) -> auto& { return t.m_rejected.m_rejectedCandidateReanalysisDelayS; }},
-            {QStringLiteral("rejectedCandidateMinimumScoreMargin"), [](Tunables& t) -> auto& { return t.m_rejected.m_rejectedCandidateMinimumScoreMargin; }},
-            {QStringLiteral("rejectedCandidateMinimumFrequencyCoherence"), [](Tunables& t) -> auto& { return t.m_rejected.m_rejectedCandidateMinimumFrequencyCoherence; }},
-            {QStringLiteral("rejectedCandidateMaximumOccupiedFraction"), [](Tunables& t) -> auto& { return t.m_rejected.m_rejectedCandidateMaximumOccupiedFraction; }},
-            {QStringLiteral("rejectedTwoFrameMinimumBandwidthHz"), [](Tunables& t) -> auto& { return t.m_rejected.m_rejectedTwoFrameMinimumBandwidthHz; }},
-            {QStringLiteral("rejectedTwoFrameStrongNarrowMinimumBandwidthHz"), [](Tunables& t) -> auto& { return t.m_rejected.m_rejectedTwoFrameStrongNarrowMinimumBandwidthHz; }},
-            {QStringLiteral("rejectedTwoFrameStrongNarrowMinimumPeakDB"), [](Tunables& t) -> auto& { return t.m_rejected.m_rejectedTwoFrameStrongNarrowMinimumPeakDB; }},
-            {QStringLiteral("rejectedTwoFrameStrongNarrowMinimumScoreMargin"), [](Tunables& t) -> auto& { return t.m_rejected.m_rejectedTwoFrameStrongNarrowMinimumScoreMargin; }},
-            {QStringLiteral("rejectedStrongTwoFrameMaximumDurationS"), [](Tunables& t) -> auto& { return t.m_rejected.m_rejectedStrongTwoFrameMaximumDurationS; }},
-            {QStringLiteral("rejectedStrongTwoFrameMinimumScoreMargin"), [](Tunables& t) -> auto& { return t.m_rejected.m_rejectedStrongTwoFrameMinimumScoreMargin; }},
-            {QStringLiteral("rejectedStrongTwoFrameMinimumPeakDB"), [](Tunables& t) -> auto& { return t.m_rejected.m_rejectedStrongTwoFrameMinimumPeakDB; }},
-            {QStringLiteral("rejectedStrongTwoFrameMinimumIntegratedSupportDB"), [](Tunables& t) -> auto& { return t.m_rejected.m_rejectedStrongTwoFrameMinimumIntegratedSupportDB; }},
-            {QStringLiteral("rejectedStrongTwoFrameMinimumContrastDB"), [](Tunables& t) -> auto& { return t.m_rejected.m_rejectedStrongTwoFrameMinimumContrastDB; }},
-            {QStringLiteral("rejectedStrongTwoFrameMinimumFrequencyCoherence"), [](Tunables& t) -> auto& { return t.m_rejected.m_rejectedStrongTwoFrameMinimumFrequencyCoherence; }},
-            {QStringLiteral("rejectedStrongTwoFrameMinimumOccupiedFraction"), [](Tunables& t) -> auto& { return t.m_rejected.m_rejectedStrongTwoFrameMinimumOccupiedFraction; }},
-            {QStringLiteral("rejectedStrongTwoFrameMaximumOccupiedFraction"), [](Tunables& t) -> auto& { return t.m_rejected.m_rejectedStrongTwoFrameMaximumOccupiedFraction; }},
-            {QStringLiteral("rejectedStrongTwoFrameMaximumBandwidthHz"), [](Tunables& t) -> auto& { return t.m_rejected.m_rejectedStrongTwoFrameMaximumBandwidthHz; }},
-            {QStringLiteral("rejectedStrongTwoFrameMaximumSweepScore"), [](Tunables& t) -> auto& { return t.m_rejected.m_rejectedStrongTwoFrameMaximumSweepScore; }},
-            {QStringLiteral("rejectedStrongTwoFrameReanalysisDelayS"), [](Tunables& t) -> auto& { return t.m_rejected.m_rejectedStrongTwoFrameReanalysisDelayS; }},
-            {QStringLiteral("rejectedCandidateMinimumExpansionS"), [](Tunables& t) -> auto& { return t.m_rejected.m_rejectedCandidateMinimumExpansionS; }},
-            {QStringLiteral("rejectedCandidateMinimumDurationS"), [](Tunables& t) -> auto& { return t.m_rejected.m_rejectedCandidateMinimumDurationS; }},
-            {QStringLiteral("rejectedCandidateMinimumPersistentLineS"), [](Tunables& t) -> auto& { return t.m_rejected.m_rejectedCandidateMinimumPersistentLineS; }},
-            {QStringLiteral("rejectedCandidateMinimumPersistentLineProminenceDB"), [](Tunables& t) -> auto& { return t.m_rejected.m_rejectedCandidateMinimumPersistentLineProminenceDB; }},
-            {QStringLiteral("rejectedCandidateMaximumPersistentLineJumpHz"), [](Tunables& t) -> auto& { return t.m_rejected.m_rejectedCandidateMaximumPersistentLineJumpHz; }},
-            {QStringLiteral("rejectedCandidateSweepSearchHalfWidthHz"), [](Tunables& t) -> auto& { return t.m_rejected.m_rejectedCandidateSweepSearchHalfWidthHz; }},
-            {QStringLiteral("rejectedCandidateSweepMinimumProminenceDB"), [](Tunables& t) -> auto& { return t.m_rejected.m_rejectedCandidateSweepMinimumProminenceDB; }},
-            {QStringLiteral("rejectedCandidateSweepTemporalSupportFraction"), [](Tunables& t) -> auto& { return t.m_rejected.m_rejectedCandidateSweepTemporalSupportFraction; }},
-            {QStringLiteral("rejectedCandidateSweepMinimumDriftHz"), [](Tunables& t) -> auto& { return t.m_rejected.m_rejectedCandidateSweepMinimumDriftHz; }},
-            {QStringLiteral("rejectedCandidateSweepMinimumR2"), [](Tunables& t) -> auto& { return t.m_rejected.m_rejectedCandidateSweepMinimumR2; }},
-            {QStringLiteral("rejectedCandidateActiveEventOverlapFraction"), [](Tunables& t) -> auto& { return t.m_rejected.m_rejectedCandidateActiveEventOverlapFraction; }},
-            {QStringLiteral("compactMeteorSweepMaximumDurationS"), [](Tunables& t) -> auto& { return t.m_sweep.m_compactMeteorSweepMaximumDurationS; }},
-            {QStringLiteral("compactMeteorSweepMinimumFrequencyCoherence"), [](Tunables& t) -> auto& { return t.m_sweep.m_compactMeteorSweepMinimumFrequencyCoherence; }},
-            {QStringLiteral("compactMeteorSweepMinimumContrastDB"), [](Tunables& t) -> auto& { return t.m_sweep.m_compactMeteorSweepMinimumContrastDB; }},
-            {QStringLiteral("compactMeteorSweepMaximumOccupiedFraction"), [](Tunables& t) -> auto& { return t.m_sweep.m_compactMeteorSweepMaximumOccupiedFraction; }},
-            {QStringLiteral("parentReanalysisMinimumDurationS"), [](Tunables& t) -> auto& { return t.m_envelope.m_parentReanalysisMinimumDurationS; }},
-            {QStringLiteral("twoComponentRangeMinimumExtensionBins"), [](Tunables& t) -> auto& { return t.m_envelope.m_twoComponentRangeMinimumExtensionBins; }},
-            {QStringLiteral("parentFrequencyLowQuantile"), [](Tunables& t) -> auto& { return t.m_envelope.m_parentFrequencyLowQuantile; }},
-            {QStringLiteral("parentFrequencyHighQuantile"), [](Tunables& t) -> auto& { return t.m_envelope.m_parentFrequencyHighQuantile; }},
-            {QStringLiteral("componentEnvelopeSupportFraction"), [](Tunables& t) -> auto& { return t.m_envelope.m_componentEnvelopeSupportFraction; }},
-            {QStringLiteral("componentEnvelopeCompactDurationS"), [](Tunables& t) -> auto& { return t.m_envelope.m_componentEnvelopeCompactDurationS; }},
-            {QStringLiteral("componentEnvelopeMaximumCompactExpansionS"), [](Tunables& t) -> auto& { return t.m_envelope.m_componentEnvelopeMaximumCompactExpansionS; }},
-            {QStringLiteral("componentEnvelopeSustainedDurationS"), [](Tunables& t) -> auto& { return t.m_envelope.m_componentEnvelopeSustainedDurationS; }},
-            {QStringLiteral("componentEnvelopeSustainedExpansionFraction"), [](Tunables& t) -> auto& { return t.m_envelope.m_componentEnvelopeSustainedExpansionFraction; }},
-            {QStringLiteral("componentEnvelopeMinimumSustainedExpansionS"), [](Tunables& t) -> auto& { return t.m_envelope.m_componentEnvelopeMinimumSustainedExpansionS; }},
-            {QStringLiteral("parentEnvelopeSearchPaddingS"), [](Tunables& t) -> auto& { return t.m_envelope.m_parentEnvelopeSearchPaddingS; }},
-            {QStringLiteral("parentEnvelopeNoiseContextS"), [](Tunables& t) -> auto& { return t.m_envelope.m_parentEnvelopeNoiseContextS; }},
-            {QStringLiteral("parentEnvelopeMaximumLeadS"), [](Tunables& t) -> auto& { return t.m_envelope.m_parentEnvelopeMaximumLeadS; }},
-            {QStringLiteral("parentEnvelopeMaximumTrailS"), [](Tunables& t) -> auto& { return t.m_envelope.m_parentEnvelopeMaximumTrailS; }},
-            {QStringLiteral("parentEnvelopeEnterFraction"), [](Tunables& t) -> auto& { return t.m_envelope.m_parentEnvelopeEnterFraction; }},
-            {QStringLiteral("parentEnvelopeExitFraction"), [](Tunables& t) -> auto& { return t.m_envelope.m_parentEnvelopeExitFraction; }},
-            {QStringLiteral("parentEnvelopeMinimumFloorRatio"), [](Tunables& t) -> auto& { return t.m_envelope.m_parentEnvelopeMinimumFloorRatio; }},
-            {QStringLiteral("parentEnvelopeMaximumGapS"), [](Tunables& t) -> auto& { return t.m_envelope.m_parentEnvelopeMaximumGapS; }},
-            {QStringLiteral("parentEnvelopeMinimumExpansionS"), [](Tunables& t) -> auto& { return t.m_envelope.m_parentEnvelopeMinimumExpansionS; }},
         };
         static const QMap<QString, std::function<int&(Tunables&)>> intMembers = {
-            {QStringLiteral("minimumNoiseBlockCount"), [](Tunables& t) -> auto& { return t.m_spectral.m_minimumNoiseBlockCount; }},
-            {QStringLiteral("sustainedSweepMinFrames"), [](Tunables& t) -> auto& { return t.m_sweep.m_sustainedSweepMinFrames; }},
-            {QStringLiteral("compactSweepMinFrames"), [](Tunables& t) -> auto& { return t.m_sweep.m_compactSweepMinFrames; }},
-            {QStringLiteral("localizedBurstMaxFrames"), [](Tunables& t) -> auto& { return t.m_localizedBurst.m_localizedBurstMaxFrames; }},
-            {QStringLiteral("localizedBurstMinEnvelopeTailFrames"), [](Tunables& t) -> auto& { return t.m_localizedBurst.m_localizedBurstMinEnvelopeTailFrames; }},
-            {QStringLiteral("broadbandImpulseMaxFrames"), [](Tunables& t) -> auto& { return t.m_broadbandImpulse.m_broadbandImpulseMaxFrames; }},
-            {QStringLiteral("detachedRepeatMinimumFrames"), [](Tunables& t) -> auto& { return t.m_detachedRepeat.m_detachedRepeatMinimumFrames; }},
-            {QStringLiteral("candidateDiagnosticMinimumFrames"), [](Tunables& t) -> auto& { return t.m_diagnostics.m_candidateDiagnosticMinimumFrames; }},
-            {QStringLiteral("matchedEnvelopeMinimumFrames"), [](Tunables& t) -> auto& { return t.m_rescue.m_matchedEnvelopeMinimumFrames; }},
-            {QStringLiteral("matchedEnvelopeMinimumTailFrames"), [](Tunables& t) -> auto& { return t.m_rescue.m_matchedEnvelopeMinimumTailFrames; }},
-            {QStringLiteral("curvatureMinimumFrames"), [](Tunables& t) -> auto& { return t.m_sweep.m_curvatureMinimumFrames; }},
-            {QStringLiteral("linearSweepMinimumFrames"), [](Tunables& t) -> auto& { return t.m_sweep.m_linearSweepMinimumFrames; }},
-            {QStringLiteral("compactThreeFrameEvidenceMinimumTailFrames"), [](Tunables& t) -> auto& { return t.m_rescue.m_compactThreeFrameEvidenceMinimumTailFrames; }},
-            {QStringLiteral("sustainedEvidenceMinimumFrames"), [](Tunables& t) -> auto& { return t.m_rescue.m_sustainedEvidenceMinimumFrames; }},
-            {QStringLiteral("sustainedEvidenceMaximumFrames"), [](Tunables& t) -> auto& { return t.m_rescue.m_sustainedEvidenceMaximumFrames; }},
-            {QStringLiteral("rejectedCandidateMaximumFrames"), [](Tunables& t) -> auto& { return t.m_rejected.m_rejectedCandidateMaximumFrames; }},
-            {QStringLiteral("compactMeteorSweepMaximumFrames"), [](Tunables& t) -> auto& { return t.m_sweep.m_compactMeteorSweepMaximumFrames; }},
-            {QStringLiteral("maxPendingCandidateReanalyses"), [](Tunables& t) -> auto& { return t.m_limits.m_maxPendingCandidateReanalyses; }},
-            {QStringLiteral("maxActiveMeteorEvents"), [](Tunables& t) -> auto& { return t.m_limits.m_maxActiveMeteorEvents; }},
-            {QStringLiteral("maxParentObservations"), [](Tunables& t) -> auto& { return t.m_limits.m_maxParentObservations; }},
             {QStringLiteral("blobMinPix"), [](Tunables& t) -> auto& { return t.m_blob.m_minPix; }},
+            {QStringLiteral("blobCloseFreqBins"), [](Tunables& t) -> auto& { return t.m_blob.m_closeFreqBins; }},
             {QStringLiteral("blobSegMinCols"), [](Tunables& t) -> auto& { return t.m_blob.m_segMinCols; }},
             {QStringLiteral("blobSegMinPix"), [](Tunables& t) -> auto& { return t.m_blob.m_segMinPix; }},
-            {QStringLiteral("blobCloseFreqBins"), [](Tunables& t) -> auto& { return t.m_blob.m_closeFreqBins; }},
         };
         static const QMap<QString, std::function<bool&(Tunables&)>> boolMembers = {
-            {QStringLiteral("enableCurvatureSweepRejection"), [](Tunables& t) -> auto& { return t.m_flags.m_enableCurvatureSweepRejection; }},
-            {QStringLiteral("enableLinearSweepRejection"), [](Tunables& t) -> auto& { return t.m_flags.m_enableLinearSweepRejection; }},
-            {QStringLiteral("enableCalibratedRescue"), [](Tunables& t) -> auto& { return t.m_flags.m_enableCalibratedRescue; }},
-            {QStringLiteral("learnedModelEnabled"), [](Tunables& t) -> auto& { return t.m_learned.m_learnedModelEnabled; }},
-            {QStringLiteral("enableSettledParentReanalysis"), [](Tunables& t) -> auto& { return t.m_flags.m_enableSettledParentReanalysis; }},
-            {QStringLiteral("enableRejectedCandidateReanalysis"), [](Tunables& t) -> auto& { return t.m_flags.m_enableRejectedCandidateReanalysis; }},
-            {QStringLiteral("enableBlobDetector"), [](Tunables& t) -> auto& { return t.m_flags.m_enableBlobDetector; }},
             {QStringLiteral("blobWeakSweepExtend"), [](Tunables& t) -> auto& { return t.m_blob.m_weakSweepExtend; }},
         };
 
@@ -822,33 +588,9 @@ namespace {
             return false;
         }
 
-        if (options.settings.m_powerLPFCutoff <= 0.0f)
+        if (options.settings.m_maxDurationMS < 1)
         {
-            error = "--power-lpf-cutoff must be greater than zero";
-            return false;
-        }
-
-        if (options.settings.m_detectionThresholdDB <= 0.0f)
-        {
-            error = "--threshold-db must be greater than zero";
-            return false;
-        }
-
-        if (options.settings.m_minDurationMS < 1)
-        {
-            error = "--min-duration-ms must be at least 1";
-            return false;
-        }
-
-        if (options.settings.m_maxDurationMS < options.settings.m_minDurationMS)
-        {
-            error = "--max-duration-ms must be greater than or equal to --min-duration-ms";
-            return false;
-        }
-
-        if (options.settings.m_maxFrequencyDrift < 0.0f)
-        {
-            error = "--max-frequency-drift must be zero or greater";
+            error = "--max-duration-ms must be at least 1";
             return false;
         }
 
@@ -903,18 +645,6 @@ namespace {
             {
                 options.testDir = value;
             }
-            else if (readOptionValue(args, i, "candidate-csv", value, error))
-            {
-                options.candidateCsvPath = value;
-            }
-            else if (readOptionValue(args, i, "candidate-labels", value, error))
-            {
-                options.candidateLabelsPath = value;
-            }
-            else if (readOptionValue(args, i, "candidate-capture-dir", value, error))
-            {
-                options.candidateCaptureDir = value;
-            }
             else if (readOptionValue(args, i, "tunable", value, error))
             {
                 const int separator = value.indexOf('=');
@@ -941,33 +671,9 @@ namespace {
                     return false;
                 }
             }
-            else if (readOptionValue(args, i, "power-lpf-cutoff", value, error))
-            {
-                if (!parseFloatValue("power-lpf-cutoff", value, options.settings.m_powerLPFCutoff, error)) {
-                    return false;
-                }
-            }
-            else if (readOptionValue(args, i, "threshold-db", value, error))
-            {
-                if (!parseFloatValue("threshold-db", value, options.settings.m_detectionThresholdDB, error)) {
-                    return false;
-                }
-            }
-            else if (readOptionValue(args, i, "min-duration-ms", value, error))
-            {
-                if (!parseIntValue("min-duration-ms", value, options.settings.m_minDurationMS, error)) {
-                    return false;
-                }
-            }
             else if (readOptionValue(args, i, "max-duration-ms", value, error))
             {
                 if (!parseIntValue("max-duration-ms", value, options.settings.m_maxDurationMS, error)) {
-                    return false;
-                }
-            }
-            else if (readOptionValue(args, i, "max-frequency-drift", value, error))
-            {
-                if (!parseFloatValue("max-frequency-drift", value, options.settings.m_maxFrequencyDrift, error)) {
                     return false;
                 }
             }
@@ -1020,18 +726,11 @@ namespace {
         out << "  -h, --help                         Show this help text.\n";
         out << "      --wav <file.wav>               Input SDRangel stereo 16-bit I/Q WAV file.\n";
         out << "      --test-dir <directory>         Directory of paired .wav and .csv regression fixtures.\n";
-        out << "      --candidate-csv <file.csv>     Write every spectral candidate and rejection decision.\n";
-        out << "      --candidate-labels <file.csv>  Apply time-only or time/frequency labels to candidate rows.\n";
-        out << "      --candidate-capture-dir <dir>  Save plausible rejected candidates as stereo signed 16-bit IQ.\n";
         out << "      --tunable <name=value>         Override a DetectorTunables member (repeatable). Names drop the\n";
         out << "                                     m_ prefix, e.g. --tunable rescueMinimumScoreMargin=1.5.\n";
         out << "      --channel-sample-rate <rate>   Detector sample rate: 100, 300, 1000, or 3000 Hz.\n";
         out << "      --input-frequency-offset <hz>  Channel input frequency offset in Hz.\n";
-        out << "      --power-lpf-cutoff <hz>        Power low-pass filter cutoff in Hz.\n";
-        out << "      --threshold-db <db>            Detection threshold above noise floor in dB.\n";
-        out << "      --min-duration-ms <ms>         Minimum pulse duration in milliseconds.\n";
         out << "      --max-duration-ms <ms>         Maximum pulse duration in milliseconds.\n";
-        out << "      --max-frequency-drift <hz>     Maximum accepted frequency span or drift in Hz.\n";
         out << "      --chunk-samples <samples>      Number of input samples to feed per chunk.\n";
         out << "      --tail-ms <ms>                 Trailing silence in milliseconds after EOF.\n";
         out << "      --expect-count <count>         Expected detection count; mismatch returns nonzero.\n";
@@ -1128,249 +827,6 @@ namespace {
         return true;
     }
 
-    void appendSyntheticSignal(
-        SampleVector& samples,
-        int sampleRate,
-        double durationS,
-        double amplitude,
-        double startFrequency,
-        double endFrequency,
-        quint32& noiseState)
-    {
-        constexpr double pi = 3.14159265358979323846;
-        const int count = std::max(1, (int) std::llround(durationS * (double) sampleRate));
-        double phase = 2.0 * pi * startFrequency
-            * (double) samples.size() / (double) sampleRate;
-
-        for (int i = 0; i < count; i++)
-        {
-            noiseState = 1664525U * noiseState + 1013904223U;
-            const double noiseReal = ((double) ((noiseState >> 16) & 0xffU) / 127.5 - 1.0) * 2.0;
-            noiseState = 1664525U * noiseState + 1013904223U;
-            const double noiseImag = ((double) ((noiseState >> 16) & 0xffU) / 127.5 - 1.0) * 2.0;
-            const double fraction = count > 1 ? (double) i / (double) (count - 1) : 0.0;
-            const double frequency = startFrequency + fraction * (endFrequency - startFrequency);
-            phase += 2.0 * pi * frequency / (double) sampleRate;
-            samples.emplace_back(
-                (FixReal) std::llround(noiseReal + amplitude * std::cos(phase)),
-                (FixReal) std::llround(noiseImag + amplitude * std::sin(phase)));
-        }
-    }
-
-    bool runSyntheticScenario(
-        const QString& name,
-        const SampleVector& samples,
-        int expectedCount,
-        int expectedSatelliteCount,
-        double minimumFirstDurationS,
-        QTextStream& errorStream)
-    {
-        constexpr int sampleRate = 1000;
-        MessageQueue outputQueue;
-        MeteorBaseband baseband;
-        MeteorSettings settings;
-        QVector<Detection> detections;
-        QVector<Detection> satelliteDetections;
-        QVector<MeteorDemodSink::CandidateAudit> candidateAudits;
-        SampleVector chunk;
-        int diagnosticCaptureCount = 0;
-
-        settings.m_channelSampleRate = sampleRate;
-        settings.m_minDurationMS = 20;
-        settings.m_maxDurationMS = 20000;
-        baseband.setInactivityFlushEnabled(false);
-        baseband.setFifoLabel("meteor_synthetic_test");
-        baseband.setMessageQueueToGUI(&outputQueue);
-        baseband.setCandidateAuditCallback(
-            [&candidateAudits](const MeteorDemodSink::CandidateAudit& audit) {
-                candidateAudits.push_back(audit);
-            });
-        baseband.setDiagnosticCaptureCallback(
-            [&diagnosticCaptureCount](
-                quint64,
-                const MeteorDemodSink::DetectionRecord&,
-                const ComplexVector& capturedSamples)
-            {
-                if (!capturedSamples.empty()) {
-                    diagnosticCaptureCount++;
-                }
-            });
-        baseband.startWork();
-        baseband.getInputMessageQueue()->push(new DSPSignalNotification(sampleRate, 143050000));
-        baseband.getInputMessageQueue()->push(
-            MeteorBaseband::MsgConfigureMeteorBaseband::create(settings, QStringList(), true));
-        processEvents();
-
-        for (int offset = 0; offset < (int) samples.size(); offset += 127)
-        {
-            const int count = std::min(127, (int) samples.size() - offset);
-            chunk.assign(samples.begin() + offset, samples.begin() + offset + count);
-            feedSamples(baseband, chunk, outputQueue, detections, &satelliteDetections);
-        }
-
-        chunk.assign(3000, Sample(0, 0));
-        feedSamples(baseband, chunk, outputQueue, detections, &satelliteDetections);
-        processEvents();
-        drainDetections(outputQueue, detections, &satelliteDetections);
-        baseband.stopWork();
-
-        bool ok = detections.size() == expectedCount;
-
-        if (satelliteDetections.size() != expectedSatelliteCount)
-        {
-            errorStream << QString("Synthetic %1: expected %2 satellite detections, got %3\n")
-                .arg(name)
-                .arg(expectedSatelliteCount)
-                .arg(satelliteDetections.size());
-            ok = false;
-        }
-
-        if ((expectedSatelliteCount > 0) && !satelliteDetections.isEmpty())
-        {
-            const Detection& satellite = satelliteDetections.first();
-
-            if ((satellite.durationS < 2.5)
-                || (std::fabs(satellite.frequencyDrift) < 300.0)
-                || (satellite.frequencySpan < std::fabs(satellite.frequencyDrift)))
-            {
-                errorStream << QString("Synthetic %1: satellite measurements are incomplete: duration=%2 span=%3 drift=%4\n")
-                    .arg(name)
-                    .arg(satellite.durationS, 0, 'f', 3)
-                    .arg(satellite.frequencySpan, 0, 'f', 1)
-                    .arg(satellite.frequencyDrift, 0, 'f', 1);
-                ok = false;
-            }
-        }
-
-        if (diagnosticCaptureCount != detections.size())
-        {
-            errorStream << QString("Synthetic %1: expected %2 diagnostic captures, got %3\n")
-                .arg(name)
-                .arg(detections.size())
-                .arg(diagnosticCaptureCount);
-            ok = false;
-        }
-
-        if (!ok)
-        {
-            errorStream << QString("Synthetic %1: expected %2 detections, got %3\n")
-                .arg(name)
-                .arg(expectedCount)
-                .arg(detections.size());
-
-            for (int i = 0; i < detections.size(); i++)
-            {
-                errorStream << QString("  actual %1: start=%2 duration=%3 center=%4 span=%5 drift=%6\n")
-                    .arg(i + 1)
-                    .arg(detections[i].startSample)
-                    .arg(detections[i].durationS, 0, 'f', 3)
-                    .arg(detections[i].centerFrequency, 0, 'f', 1)
-                    .arg(detections[i].frequencySpan, 0, 'f', 1)
-                    .arg(detections[i].frequencyDrift, 0, 'f', 1);
-            }
-        }
-
-        if ((minimumFirstDurationS > 0.0)
-            && (detections.isEmpty() || (detections.first().durationS < minimumFirstDurationS)))
-        {
-            errorStream << QString("Synthetic %1: first duration was shorter than %2 s\n")
-                .arg(name)
-                .arg(minimumFirstDurationS, 0, 'f', 2);
-            if (!detections.isEmpty()) {
-                errorStream << QString("  actual first: start=%1 duration=%2 center=%3 span=%4\n")
-                    .arg(detections.first().startSample)
-                    .arg(detections.first().durationS, 0, 'f', 3)
-                    .arg(detections.first().centerFrequency, 0, 'f', 1)
-                    .arg(detections.first().frequencySpan, 0, 'f', 1);
-            }
-            ok = false;
-        }
-
-        if (candidateAudits.isEmpty())
-        {
-            errorStream << QString("Synthetic %1: no spectral candidates were audited\n").arg(name);
-            ok = false;
-        }
-
-        for (const MeteorDemodSink::CandidateAudit& audit : candidateAudits)
-        {
-            const bool finite = std::isfinite(audit.m_minimumNoiseContrastDB)
-                && std::isfinite(audit.m_noiseFloorDeltaDB)
-                && std::isfinite(audit.m_matchedEnvelopeScore)
-                && std::isfinite(audit.m_decayTimeConstantS)
-                && std::isfinite(audit.m_envelopePeakPosition)
-                && std::isfinite(audit.m_envelopeDecayDB)
-                && std::isfinite(audit.m_envelopeMonotonicFraction)
-                && std::isfinite(audit.m_quadraticSweepR2)
-                && std::isfinite(audit.m_quadraticSweepImprovement)
-                && std::isfinite(audit.m_quadraticCurvatureHzPerS2)
-                && std::isfinite(audit.m_centerFrequencyRateFraction)
-                && std::isfinite(audit.m_frequencySpanRateFraction)
-                && std::isfinite(audit.m_frequencyDriftRateFraction)
-                && std::isfinite(audit.m_maxBandwidthRateFraction);
-            const bool bounded = (audit.m_matchedEnvelopeScore >= 0.0)
-                && (audit.m_matchedEnvelopeScore <= 1.0)
-                && (audit.m_envelopePeakPosition >= 0.0)
-                && (audit.m_envelopePeakPosition <= 1.0)
-                && (audit.m_envelopeMonotonicFraction >= 0.0)
-                && (audit.m_envelopeMonotonicFraction <= 1.0)
-                && (audit.m_envelopeTailFrames >= 0)
-                && (audit.m_quadraticSweepR2 >= 0.0)
-                && (audit.m_quadraticSweepR2 <= 1.0)
-                && (audit.m_quadraticSweepImprovement >= 0.0)
-                && (audit.m_quadraticSweepImprovement <= 1.0);
-
-            if (!finite || !bounded)
-            {
-                errorStream << QString("Synthetic %1: candidate shadow features are invalid\n").arg(name);
-                ok = false;
-                break;
-            }
-        }
-
-        return ok;
-    }
-
-    bool runSyntheticDetectorTests(QTextStream& errorStream)
-    {
-        constexpr int sampleRate = 1000;
-        bool ok = true;
-        quint32 noiseState = 0x31415926U;
-        SampleVector samples;
-
-        appendSyntheticSignal(samples, sampleRate, 2.0, 0.0, 0.0, 0.0, noiseState);
-        appendSyntheticSignal(samples, sampleRate, 1.5, 70.0, 55.0, 55.0, noiseState);
-        appendSyntheticSignal(samples, sampleRate, 0.18, 12.0, 55.0, 55.0, noiseState);
-        appendSyntheticSignal(samples, sampleRate, 1.7, 58.0, 55.0, 58.0, noiseState);
-        appendSyntheticSignal(samples, sampleRate, 2.0, 0.0, 0.0, 0.0, noiseState);
-        ok = runSyntheticScenario("faded-long-trail", samples, 1, 0, 2.5, errorStream) && ok;
-
-        samples.clear();
-        appendSyntheticSignal(samples, sampleRate, 2.0, 0.0, 0.0, 0.0, noiseState);
-        appendSyntheticSignal(samples, sampleRate, 0.6, 65.0, -150.0, -150.0, noiseState);
-        appendSyntheticSignal(samples, sampleRate, 3.0, 0.0, 0.0, 0.0, noiseState);
-        appendSyntheticSignal(samples, sampleRate, 0.6, 65.0, 150.0, 150.0, noiseState);
-        appendSyntheticSignal(samples, sampleRate, 2.0, 0.0, 0.0, 0.0, noiseState);
-        ok = runSyntheticScenario("separate-echoes", samples, 2, 0, 0.0, errorStream) && ok;
-
-        samples.clear();
-        appendSyntheticSignal(samples, sampleRate, 2.0, 0.0, 0.0, 0.0, noiseState);
-        appendSyntheticSignal(samples, sampleRate, 3.0, 60.0, -220.0, 220.0, noiseState);
-        appendSyntheticSignal(samples, sampleRate, 2.0, 0.0, 0.0, 0.0, noiseState);
-        ok = runSyntheticScenario("smooth-sweep", samples, 0, 1, 0.0, errorStream) && ok;
-
-        bool truncated = false;
-        const quint64 clippedEnd = MeteorDemodSink::clipDetectionEndSample(2000, 23999, 20000, truncated);
-
-        if (!truncated || (clippedEnd != 21999))
-        {
-            errorStream << "Synthetic max-duration: clipping boundary is incorrect\n";
-            ok = false;
-        }
-
-        return ok;
-    }
-
     bool readWavChunk(QFile& file, int maxSamples, SampleVector& samples, qint64& remainingBytes, QString& error)
     {
         const int bytesPerSample = 2 * (int) sizeof(qint16);
@@ -1438,274 +894,6 @@ namespace {
                 .arg(detection.startSample)
                 .arg(detection.endSample);
         }
-    }
-
-    QString csvField(const QString& value)
-    {
-        QString escaped = value;
-        escaped.replace('"', "\"\"");
-        return '"' + escaped + '"';
-    }
-
-    bool loadCandidateLabels(const QString& path, QVector<CandidateLabel>& labels, QString& error)
-    {
-        labels.clear();
-
-        if (path.isEmpty()) {
-            return true;
-        }
-
-        QFile file(path);
-
-        if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
-        {
-            error = QString("Unable to read candidate labels CSV: %1").arg(path);
-            return false;
-        }
-
-        QTextStream in(&file);
-        bool firstLine = true;
-
-        while (!in.atEnd())
-        {
-            const QString line = in.readLine().trimmed();
-
-            if (line.isEmpty() || line.startsWith('#')) {
-                continue;
-            }
-
-            const QStringList fields = line.split(',');
-
-            bool firstValueNumeric = false;
-            fields.value(0).trimmed().toULongLong(&firstValueNumeric);
-
-            if (firstLine && !firstValueNumeric)
-            {
-                firstLine = false;
-                continue;
-            }
-
-            firstLine = false;
-
-            if (fields.size() < 3)
-            {
-                error = QString("Invalid candidate label row: %1").arg(line);
-                return false;
-            }
-
-            bool startOK = false;
-            bool endOK = false;
-            CandidateLabel label;
-            label.startSample = fields[0].trimmed().toULongLong(&startOK);
-            label.endSample = fields[1].trimmed().toULongLong(&endOK);
-            bool lowFrequencyOK = false;
-            bool highFrequencyOK = false;
-
-            if (fields.size() >= 5)
-            {
-                label.lowFrequency = fields[2].trimmed().toDouble(&lowFrequencyOK);
-                label.highFrequency = fields[3].trimmed().toDouble(&highFrequencyOK);
-            }
-
-            if (lowFrequencyOK && highFrequencyOK)
-            {
-                label.hasFrequencyRange = true;
-                label.label = fields[4].trimmed();
-                label.eventId = fields.mid(5).join(',').trimmed();
-            }
-            else {
-                label.label = fields.mid(2).join(',').trimmed();
-            }
-
-            if (!startOK || !endOK || (label.endSample < label.startSample) || label.label.isEmpty())
-            {
-                error = QString("Invalid candidate label row: %1").arg(line);
-                return false;
-            }
-
-            if (label.hasFrequencyRange && (label.highFrequency < label.lowFrequency))
-            {
-                error = QString("Invalid candidate label frequency range: %1").arg(line);
-                return false;
-            }
-
-            labels.push_back(label);
-        }
-
-        return true;
-    }
-
-    CandidateLabelMatch candidateLabelFor(
-        const MeteorDemodSink::CandidateAudit& audit,
-        const QVector<CandidateLabel>& labels)
-    {
-        CandidateLabelMatch bestMatch;
-        quint64 bestOverlap = 0;
-        const double candidateLow = audit.m_robustCenterFrequency - 0.5 * audit.m_robustFrequencySpan;
-        const double candidateHigh = audit.m_robustCenterFrequency + 0.5 * audit.m_robustFrequencySpan;
-
-        for (const CandidateLabel& label : labels)
-        {
-            const quint64 overlapStart = std::max(audit.m_startSample, label.startSample);
-            const quint64 overlapEnd = std::min(audit.m_endSample, label.endSample);
-
-            if (overlapEnd < overlapStart) {
-                continue;
-            }
-
-            if (label.hasFrequencyRange
-                && ((candidateHigh < label.lowFrequency) || (candidateLow > label.highFrequency)))
-            {
-                continue;
-            }
-
-            const quint64 overlap = overlapEnd - overlapStart + 1;
-
-            if (overlap > bestOverlap)
-            {
-                bestOverlap = overlap;
-                bestMatch.label = label.label;
-                bestMatch.eventId = label.eventId;
-            }
-        }
-
-        return bestMatch;
-    }
-
-    QString candidateCaptureFileName(const MeteorDemodSink::SpectralCandidate& candidate)
-    {
-        QString reason = candidate.m_rejectionReason;
-        reason.replace(QRegularExpression("[^A-Za-z0-9_-]"), "_");
-        return QString("candidate_%1_%2_%3.ci16")
-            .arg(candidate.m_startSample)
-            .arg(candidate.m_endSample)
-            .arg(reason);
-    }
-
-    bool writeCandidateIQ(const QString& path, const ComplexVector& samples)
-    {
-        QFile file(path);
-
-        if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-            return false;
-        }
-
-        QByteArray bytes;
-        bytes.resize((int) samples.size() * 2 * (int) sizeof(qint16));
-        qint16 *output = reinterpret_cast<qint16 *>(bytes.data());
-
-        for (int i = 0; i < (int) samples.size(); i++)
-        {
-            const qint64 real = qRound64((double) samples[i].real() * 32768.0 / (double) SDR_RX_SCALEF);
-            const qint64 imag = qRound64((double) samples[i].imag() * 32768.0 / (double) SDR_RX_SCALEF);
-            output[2 * i] = qToLittleEndian((qint16) std::clamp<qint64>(real, -32768, 32767));
-            output[2 * i + 1] = qToLittleEndian((qint16) std::clamp<qint64>(imag, -32768, 32767));
-        }
-
-        return file.write(bytes) == bytes.size();
-    }
-
-    bool writeCandidateAudits(
-        const QString& path,
-        const QVector<MeteorDemodSink::CandidateAudit>& audits,
-        const QString& recordingId,
-        const QVector<CandidateLabel>& labels,
-        const QString& captureDir,
-        const QSet<QString>& capturedFiles,
-        QString& error)
-    {
-        QFile file(path);
-
-        if (!file.open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Truncate))
-        {
-            error = QString("Unable to write candidate CSV: %1").arg(path);
-            return false;
-        }
-
-        QTextStream out(&file);
-        out << "recording,label,labelEventId,captureFile,index,sampleRate,startSample,endSample,peakSample,durationS,centerFrequencyHz,frequencySpanHz,frequencyDriftHz,"
-               "peakAboveBackgroundDB,integratedSupportDB,maxBandwidthHz,maxContrastDB,logPeakRatio,sweepScore,acceptanceScore,"
-               "acceptanceThreshold,scoreMargin,signalScore,supportScore,shapeScore,rejectionPenalty,trackOccupancy,"
-               "minimumNoiseContrastDB,noiseFloorDeltaDB,matchedEnvelopeScore,decayTimeConstantS,"
-               "envelopePeakPosition,envelopeDecayDB,envelopeMonotonicFraction,envelopeTailFrames,quadraticSweepR2,"
-               "quadraticSweepImprovement,quadraticCurvatureHzPerS2,learnedScore,centerFrequencyRateFraction,"
-               "frequencySpanRateFraction,frequencyDriftRateFraction,maxBandwidthRateFraction,calibratedRescue,"
-               "rescuedFramesGate,rescuedSpectralEvidenceGate,curvedSweepRejected,"
-               "frequencyCoherence,frameOccupiedFraction,frameCount,durationOK,enoughFrames,sweepRejected,spectralEvidenceOK,"
-               "insideUsableBandwidth,duplicate,broadbandImpulse,sweepContinuationRejected,accepted,"
-               "parentEventId,associationDecision,classification,rejectionReason\n";
-
-        for (int i = 0; i < audits.size(); i++)
-        {
-            const MeteorDemodSink::CandidateAudit& audit = audits[i];
-            const QString captureFile = candidateCaptureFileName(audit);
-            const CandidateLabelMatch labelMatch = candidateLabelFor(audit, labels);
-            out << csvField(recordingId) << ','
-                << csvField(labelMatch.label) << ','
-                << csvField(labelMatch.eventId) << ','
-                << csvField(!captureDir.isEmpty() && capturedFiles.contains(captureFile) ? captureFile : QString()) << ','
-                << i + 1 << ','
-                << audit.m_sampleRate << ','
-                << audit.m_startSample << ','
-                << audit.m_endSample << ','
-                << audit.m_peakSample << ','
-                << QString::number(audit.m_durationS, 'f', 6) << ','
-                << QString::number(audit.m_robustCenterFrequency, 'f', 3) << ','
-                << QString::number(audit.m_robustFrequencySpan, 'f', 3) << ','
-                << QString::number(audit.m_robustFrequencyDrift, 'f', 3) << ','
-                << QString::number(audit.m_peakAboveBackgroundDB, 'f', 3) << ','
-                << QString::number(audit.m_integratedSupportDB, 'f', 3) << ','
-                << QString::number(audit.m_maxBandwidth, 'f', 3) << ','
-                << QString::number(audit.m_maxContrastDB, 'f', 3) << ','
-                << QString::number(std::log10(std::max(audit.m_maxPeakRatio, 1.0)), 'f', 6) << ','
-                << QString::number(audit.m_sweepScore, 'f', 6) << ','
-                << QString::number(audit.m_acceptanceScore, 'f', 3) << ','
-                << QString::number(audit.m_acceptanceThreshold, 'f', 3) << ','
-                << QString::number(audit.m_scoreMargin, 'f', 3) << ','
-                << QString::number(audit.m_signalScore, 'f', 3) << ','
-                << QString::number(audit.m_supportScore, 'f', 3) << ','
-                << QString::number(audit.m_shapeScore, 'f', 3) << ','
-                << QString::number(audit.m_rejectionPenalty, 'f', 3) << ','
-                << QString::number(audit.m_trackOccupancy, 'f', 3) << ','
-                << QString::number(audit.m_minimumNoiseContrastDB, 'f', 3) << ','
-                << QString::number(audit.m_noiseFloorDeltaDB, 'f', 3) << ','
-                << QString::number(audit.m_matchedEnvelopeScore, 'f', 6) << ','
-                << QString::number(audit.m_decayTimeConstantS, 'f', 6) << ','
-                << QString::number(audit.m_envelopePeakPosition, 'f', 6) << ','
-                << QString::number(audit.m_envelopeDecayDB, 'f', 3) << ','
-                << QString::number(audit.m_envelopeMonotonicFraction, 'f', 6) << ','
-                << audit.m_envelopeTailFrames << ','
-                << QString::number(audit.m_quadraticSweepR2, 'f', 6) << ','
-                << QString::number(audit.m_quadraticSweepImprovement, 'f', 6) << ','
-                << QString::number(audit.m_quadraticCurvatureHzPerS2, 'f', 3) << ','
-                << QString::number(audit.m_learnedScore, 'f', 6) << ','
-                << QString::number(audit.m_centerFrequencyRateFraction, 'f', 9) << ','
-                << QString::number(audit.m_frequencySpanRateFraction, 'f', 9) << ','
-                << QString::number(audit.m_frequencyDriftRateFraction, 'f', 9) << ','
-                << QString::number(audit.m_maxBandwidthRateFraction, 'f', 9) << ','
-                << (audit.m_calibratedRescue ? 1 : 0) << ','
-                << (audit.m_rescuedFramesGate ? 1 : 0) << ','
-                << (audit.m_rescuedSpectralEvidenceGate ? 1 : 0) << ','
-                << (audit.m_curvedSweepRejected ? 1 : 0) << ','
-                << QString::number(audit.m_frequencyCoherence, 'f', 3) << ','
-                << QString::number(audit.m_frameOccupiedFraction, 'f', 3) << ','
-                << audit.m_frameCount << ','
-                << (audit.m_durationOK ? 1 : 0) << ','
-                << (audit.m_enoughFrames ? 1 : 0) << ','
-                << (audit.m_sweepRejected ? 1 : 0) << ','
-                << (audit.m_spectralEvidenceOK ? 1 : 0) << ','
-                << (audit.m_insideUsableBandwidth ? 1 : 0) << ','
-                << (audit.m_duplicate ? 1 : 0) << ','
-                << (audit.m_broadbandImpulse ? 1 : 0) << ','
-                << (audit.m_sweepContinuationRejected ? 1 : 0) << ','
-                << (audit.m_accepted ? 1 : 0) << ','
-                << audit.m_parentEventId << ','
-                << audit.m_associationDecision << ','
-                << audit.m_classification << ','
-                << audit.m_rejectionReason << '\n';
-        }
-
-        return true;
     }
 
     bool parseDoubleField(const QString& text, double& value)
@@ -1976,8 +1164,6 @@ namespace {
         const QString& wavPath,
         QVector<Detection>& detections,
         QString& error,
-        QVector<MeteorDemodSink::CandidateAudit> *candidateAudits = nullptr,
-        QSet<QString> *capturedFiles = nullptr,
         QVector<Detection> *satelliteDetections = nullptr)
     {
         QFile wavFile(wavPath);
@@ -2016,47 +1202,10 @@ namespace {
         MessageQueue outputQueue;
         MeteorBaseband baseband;
         SampleVector samples;
-        bool candidateCaptureWriteFailed = false;
 
         baseband.setInactivityFlushEnabled(false);
         baseband.setFifoLabel("meteor_demod_sink_test");
         baseband.setMessageQueueToGUI(&outputQueue);
-
-        if (candidateAudits)
-        {
-            baseband.setCandidateAuditCallback(
-                [candidateAudits](const MeteorDemodSink::CandidateAudit& audit) {
-                    candidateAudits->push_back(audit);
-                });
-        }
-
-        if (!options.candidateCaptureDir.isEmpty())
-        {
-            QDir captureDir;
-
-            if (!captureDir.mkpath(options.candidateCaptureDir))
-            {
-                error = QString("Unable to create candidate capture directory: %1")
-                    .arg(options.candidateCaptureDir);
-                return false;
-            }
-
-            baseband.setCandidateDiagnosticCaptureCallback(
-                [&options, &candidateCaptureWriteFailed, capturedFiles](
-                    const MeteorDemodSink::SpectralCandidate& candidate,
-                    const ComplexVector& candidateSamples) {
-                    const QString fileName = candidateCaptureFileName(candidate);
-                    const QString path = QDir(options.candidateCaptureDir).filePath(fileName);
-
-                    if (writeCandidateIQ(path, candidateSamples)) {
-                        if (capturedFiles) {
-                            capturedFiles->insert(fileName);
-                        }
-                    } else {
-                        candidateCaptureWriteFailed = true;
-                    }
-                });
-        }
 
         baseband.startWork();
         baseband.getInputMessageQueue()->push(new DSPSignalNotification(header.m_sampleRate, centerFrequency));
@@ -2102,13 +1251,6 @@ namespace {
         processEvents();
         drainDetections(outputQueue, detections, satelliteDetections);
         baseband.stopWork();
-
-        if (candidateCaptureWriteFailed)
-        {
-            error = QString("Unable to write one or more candidate IQ captures to: %1")
-                .arg(options.candidateCaptureDir);
-            return false;
-        }
 
         return true;
     }
@@ -2213,13 +1355,6 @@ int main(int argc, char *argv[])
         return 2;
     }
 
-    if (!runSyntheticDetectorTests(err)) {
-        // The synthetic scenarios exercise legacy-detector edge cases that are obsolete for
-        // the 2D detector work; treat them as non-fatal so the real regression fixtures and
-        // wav/A-B runs still execute. (They fail identically with the 2D path disabled.)
-        err << "(synthetic self-tests failed; obsolete, continuing)\n";
-    }
-
     if (!options.testDir.isEmpty() && options.wavPath.isEmpty())
     {
         return runRegressionTests(options, out, err) ? 0 : 2;
@@ -2227,25 +1362,12 @@ int main(int argc, char *argv[])
 
     QVector<Detection> detections;
     QVector<Detection> satelliteDetections;
-    QVector<MeteorDemodSink::CandidateAudit> candidateAudits;
-    QVector<CandidateLabel> candidateLabels;
-    QSet<QString> capturedFiles;
-
-    if (!loadCandidateLabels(options.candidateLabelsPath, candidateLabels, error))
-    {
-        err << error << "\n";
-        return 1;
-    }
 
     if (!runWavFile(
         options,
         options.wavPath,
         detections,
         error,
-        (options.candidateCsvPath.isEmpty() && options.candidateCaptureDir.isEmpty())
-            ? nullptr
-            : &candidateAudits,
-        &capturedFiles,
         &satelliteDetections))
     {
         err << error << "\n";
@@ -2261,20 +1383,6 @@ int main(int argc, char *argv[])
             out << "Satellites:\n";
             printDetails(out, satelliteDetections);
         }
-    }
-
-    if (!options.candidateCsvPath.isEmpty()
-        && !writeCandidateAudits(
-            options.candidateCsvPath,
-            candidateAudits,
-            QFileInfo(options.wavPath).fileName(),
-            candidateLabels,
-            options.candidateCaptureDir,
-            capturedFiles,
-            error))
-    {
-        err << error << "\n";
-        return 1;
     }
 
     if ((options.expectCount >= 0) && (detections.size() != options.expectCount))

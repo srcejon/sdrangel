@@ -62,12 +62,7 @@ struct MeteorSettings
     qint32 m_inputFrequencyOffset;
     qint64 m_frequency;
     int m_channelSampleRate;
-    float m_powerLPFCutoff;
-    float m_detectionThresholdDB;
-    int m_minDurationMS;
     int m_maxDurationMS;
-    float m_maxFrequencyDrift;
-    bool m_enableBlobDetector;     //!< 2D blob detector replaces the legacy detector's meteors
     float m_blobSensitivity;       //!< blob acceptance threshold (integrated excess dB, lower = more sensitive)
     quint32 m_detectionsTableColumnHidden;
     int m_detectionBoxPaddingPixels;

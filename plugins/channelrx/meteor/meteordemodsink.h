@@ -19,15 +19,12 @@
 #define INCLUDE_METEORDEMODSINK_H
 
 #include <algorithm>
-#include <array>
 #include <cmath>
-#include <functional>
 #include <vector>
 
 #include <QDateTime>
 
 #include "dsp/channelsamplesink.h"
-#include "dsp/firfilter.h"
 #include "dsp/interpolator.h"
 #include "dsp/nco.h"
 #include "util/message.h"
@@ -42,292 +39,17 @@ class FFTEngine;
 
 class MeteorDemodSink : public ChannelSampleSink {
 public:
-    static constexpr int m_learnedFeatureCount = 16;
-    using LearnedFeatureVector = std::array<double, m_learnedFeatureCount>;
-
+    // Tunables for the 2D blob detector and the shared spectral front-end. The detection
+    // algorithm itself lives in MeteorBlobDetector (an exact port of the offline reference
+    // in test/detector2d/blobs.py); these knobs are harness-overridable and the user-facing
+    // settings (sensitivity) mirror into them.
     struct DetectorTunables
     {
         struct SpectralTunables
         {
             double m_spectralFrameDurationS = 0.125;
             double m_spectralHopFraction = 0.25;
-            double m_spectralActiveNoiseAlpha = 0.0005;
-            double m_risingNoiseAlpha = 0.05;
-            double m_spectralStableNoiseAlpha = 0.02;
-            double m_minimumNoiseBlockDurationS = 1.0;
-            double m_minimumNoiseBlockQuantile = 0.20;
-            int m_minimumNoiseBlockCount = 12;
-            double m_scalarNoiseTimeConstantS = 10.0;
-            double m_edgeExclusionFraction = 0.05;
         } m_spectral;
-        struct BandTunables
-        {
-            double m_usableBandwidthRateFraction = 0.45;
-            double m_maxSegmentedBandWidthHz = 250.0;
-            double m_compactBandwidthHz = 50.0;
-            double m_stableBandwidthHz = 220.0;
-            double m_frequencyRefinementOuterProbeFraction = 0.85;
-        } m_band;
-        struct TwoFrameEchoTunables
-        {
-            double m_twoFrameMaxBandwidthHz = 90.0;
-            double m_twoFrameMinFrequencyCoherence = 0.75;
-            double m_twoFrameMinIntegratedSupportDB = -7.0;
-            double m_localizedTwoFrameMinPeakDB = 12.0;
-            double m_localizedTwoFrameMinContrastDB = 18.0;
-            double m_coherentWideTwoFrameMinBandwidthHz = 60.0;
-            double m_coherentWideTwoFrameMaxBandwidthHz = 130.0;
-            double m_coherentWideTwoFrameMaxOccupiedFraction = 0.25;
-            double m_coherentWideTwoFrameMinPeakDB = 11.5;
-            double m_coherentWideTwoFrameMinContrastDB = 14.0;
-            double m_coherentWideTwoFrameMinIntegratedSupportDB = 5.0;
-            double m_coherentWideTwoFrameMinFrequencyCoherence = 0.9;
-            double m_morphologyRescueContrastDB = 14.0;
-            double m_localizedOccupiedMaxFraction = 0.45;
-        } m_twoFrameEcho;
-        struct SweepTunables
-        {
-            double m_sustainedSweepMinDurationS = 0.5;
-            int m_sustainedSweepMinFrames = 8;
-            double m_smoothSweepMinR2 = 0.85;
-            double m_sustainedSweepMinDriftHz = 16.0;
-            double m_compactSweepMinDurationS = 0.2;
-            int m_compactSweepMinFrames = 4;
-            double m_compactSweepMaxTrackOccupancy = 0.80;
-            double m_compactSweepMaxContrastDB = 18.0;
-            double m_compactSweepMinDriftHz = 32.0;
-            double m_driftSweepMinR2 = 0.65;
-            double m_curvatureMinimumDurationS = 0.35;
-            int m_curvatureMinimumFrames = 6;
-            double m_curvatureMinimumR2 = 0.90;
-            double m_curvatureMinimumR2Improvement = 0.08;
-            double m_curvatureMinimumHzPerS2 = 40.0;
-            double m_linearSweepMinimumR2 = 0.70;
-            double m_linearSweepMaximumBandwidthHz = 55.0;
-            double m_linearSweepMinimumDriftHz = 6.0;
-            int m_linearSweepMinimumFrames = 4;
-            double m_linearSweepMaximumContrastDB = 16.0;
-            double m_linearSweepMaximumPeakDB = 15.0;
-            double m_compactMeteorSweepMaximumDurationS = 0.32;
-            int m_compactMeteorSweepMaximumFrames = 5;
-            double m_compactMeteorSweepMinimumFrequencyCoherence = 0.60;
-            double m_compactMeteorSweepMinimumContrastDB = 16.0;
-            double m_compactMeteorSweepMaximumOccupiedFraction = 0.40;
-        } m_sweep;
-        struct LocalizedBurstTunables
-        {
-            double m_localizedBurstMaxDurationS = 0.25;
-            int m_localizedBurstMaxFrames = 4;
-            double m_localizedBurstMinTrackOccupancy = 0.95;
-            double m_localizedBurstMaxOccupiedFraction = 0.25;
-            double m_localizedBurstMinPeakDB = 16.0;
-            double m_localizedBurstMinContrastDB = 17.5;
-            double m_localizedBurstMinIntegratedSupportDB = 10.0;
-            double m_localizedBurstMinFrequencyCoherence = 0.95;
-            double m_localizedBurstMinMatchedEnvelopeScore = 0.94;
-            int m_localizedBurstMinEnvelopeTailFrames = 2;
-        } m_localizedBurst;
-        struct BroadbandImpulseTunables
-        {
-            double m_broadbandImpulseMaxDurationS = 0.22;
-            int m_broadbandImpulseMaxFrames = 3;
-            double m_broadbandImpulseMinPeakDB = 12.0;
-            double m_broadbandImpulseMinSpanHz = 120.0;
-            double m_broadbandImpulseMinBandwidthHz = 100.0;
-            double m_broadbandImpulseMinOccupiedFraction = 0.45;
-        } m_broadbandImpulse;
-        struct PowerTunables
-        {
-            double m_powerSweepMinR2 = 0.75;
-            double m_powerStableBandwidthHz = 180.0;
-            double m_powerBoundedMinProminenceDB = 9.0;
-            double m_powerStrongCoherentMinPeakDB = 18.0;
-            double m_powerStrongCoherentMinProminenceDB = 18.0;
-        } m_power;
-        struct ScoringTunables
-        {
-            double m_shortCandidateAcceptanceScore = 8.5;
-            double m_candidateAcceptanceScore = 9.0;
-            double m_weakSupportDB = -8.0;
-            double m_weakSupportScorePenalty = 1.0;
-            double m_scoreDurationFloorS = 0.05;
-            double m_scoreDurationRangeS = 0.45;
-        } m_scoring;
-        struct RescueTunables
-        {
-            int m_matchedEnvelopeMinimumFrames = 3;
-            int m_matchedEnvelopeMinimumTailFrames = 2;
-            double m_matchedEnvelopeMaximumPeakPosition = 0.50;
-            double m_matchedEnvelopeMinimumDecayDB = 0.75;
-            double m_matchedEnvelopeMaximumDecayDB = 20.0;
-            double m_matchedEnvelopeMinimumMonotonicFraction = 0.50;
-            std::array<double, 8> m_matchedEnvelopeTimeConstantsS {{0.05, 0.10, 0.20, 0.40, 0.80, 1.60, 3.20, 6.40}};
-            double m_rescueMinimumScoreMargin = 0.5;
-            double m_rescueMinimumContrastDB = 12.0;
-            double m_rescueMinimumPeakDB = 11.0;
-            double m_rescueMinimumFrequencyCoherence = 0.85;
-            double m_rescueMinimumMatchedEnvelopeScore = 0.72;
-            double m_rescueTwoFrameMinimumContrastDB = 14.0;
-            double m_rescueTwoFrameMinimumPeakDB = 11.5;
-            double m_rescueTwoFrameMinimumIntegratedSupportDB = -2.0;
-            double m_rescueTwoFrameMinimumFrequencyCoherence = 0.95;
-            double m_rescueTwoFrameMinimumMatchedEnvelopeScore = 0.94;
-            double m_rescueThreeFrameMinimumIntegratedSupportDB = 2.0;
-            double m_rescueMaximumOccupiedFraction = 0.30;
-            double m_compactThreeFrameEvidenceMaximumDurationS = 0.25;
-            double m_compactThreeFrameEvidenceMinimumScoreMargin = 3.3;
-            double m_compactThreeFrameEvidenceMinimumContrastDB = 13.0;
-            double m_compactThreeFrameEvidenceMinimumIntegratedSupportDB = 5.5;
-            double m_compactThreeFrameEvidenceMinimumMatchedEnvelopeScore = 0.98;
-            int m_compactThreeFrameEvidenceMinimumTailFrames = 2;
-            double m_compactThreeFrameEvidenceMaximumOccupiedFraction = 0.15;
-            double m_evidenceMaximumSweepScore = 0.20;
-            double m_compactThreeFrameEvidenceMaximumBandwidthHz = 60.0;
-            double m_narrowThreeFrameEvidenceMinimumScoreMargin = 2.8;
-            double m_narrowThreeFrameEvidenceMinimumContrastDB = 13.2;
-            double m_narrowThreeFrameEvidenceMinimumIntegratedSupportDB = 6.4;
-            double m_narrowThreeFrameEvidenceMinimumMatchedEnvelopeScore = 0.99;
-            double m_narrowThreeFrameEvidenceMaximumOccupiedFraction = 0.07;
-            double m_narrowThreeFrameEvidenceMaximumBandwidthHz = 35.0;
-            int m_sustainedEvidenceMinimumFrames = 4;
-            int m_sustainedEvidenceMaximumFrames = 20;
-            double m_sustainedEvidenceMaximumDurationS = 1.0;
-            double m_sustainedEvidenceMinimumScoreMargin = 3.5;
-            double m_sustainedEvidenceMinimumContrastDB = 12.5;
-            double m_sustainedEvidenceMinimumPeakDB = 11.0;
-            double m_sustainedEvidenceMinimumIntegratedSupportDB = 6.0;
-            double m_sustainedEvidenceMinimumFrequencyCoherence = 0.90;
-            double m_sustainedEvidenceMaximumOccupiedFraction = 0.20;
-            double m_sustainedEvidenceMaximumBandwidthHz = 100.0;
-            double m_sustainedEvidenceMinimumMatchedEnvelopeScore = 0.85;
-            double m_sustainedEvidenceMaximumQuadraticSweepR2 = 0.60;
-        } m_rescue;
-        struct RejectedTunables
-        {
-            double m_rejectedCandidateReanalysisDelayS = 1.0;
-            double m_rejectedCandidateMinimumScoreMargin = 2.0;
-            int m_rejectedCandidateMaximumFrames = 2;
-            double m_rejectedCandidateMinimumFrequencyCoherence = 0.85;
-            double m_rejectedCandidateMaximumOccupiedFraction = 0.30;
-            double m_rejectedTwoFrameMinimumBandwidthHz = 20.0;
-            double m_rejectedTwoFrameStrongNarrowMinimumBandwidthHz = 30.0;
-            double m_rejectedTwoFrameStrongNarrowMinimumPeakDB = 11.8;
-            double m_rejectedTwoFrameStrongNarrowMinimumScoreMargin = 2.8;
-            double m_rejectedStrongTwoFrameMaximumDurationS = 0.25;
-            double m_rejectedStrongTwoFrameMinimumScoreMargin = 3.43;
-            double m_rejectedStrongTwoFrameMinimumPeakDB = 11.3;
-            double m_rejectedStrongTwoFrameMinimumIntegratedSupportDB = 6.4;
-            double m_rejectedStrongTwoFrameMinimumContrastDB = 13.3;
-            double m_rejectedStrongTwoFrameMinimumFrequencyCoherence = 0.95;
-            double m_rejectedStrongTwoFrameMinimumOccupiedFraction = 0.04;
-            double m_rejectedStrongTwoFrameMaximumOccupiedFraction = 0.35;
-            double m_rejectedStrongTwoFrameMaximumBandwidthHz = 190.0;
-            double m_rejectedStrongTwoFrameMaximumSweepScore = 0.50;
-            double m_rejectedStrongTwoFrameReanalysisDelayS = 1.5;
-            double m_rejectedCandidateMinimumExpansionS = 0.15;
-            double m_rejectedCandidateMinimumDurationS = 0.30;
-            double m_rejectedCandidateMinimumPersistentLineS = 0.12;
-            double m_rejectedCandidateMinimumPersistentLineProminenceDB = 6.0;
-            double m_rejectedCandidateMaximumPersistentLineJumpHz = 24.0;
-            double m_rejectedCandidateSweepSearchHalfWidthHz = 80.0;
-            double m_rejectedCandidateSweepMinimumProminenceDB = 6.0;
-            double m_rejectedCandidateSweepTemporalSupportFraction = 0.05;
-            double m_rejectedCandidateSweepMinimumDriftHz = 20.0;
-            double m_rejectedCandidateSweepMinimumR2 = 0.65;
-            double m_rejectedCandidateActiveEventOverlapFraction = 0.75;
-        } m_rejected;
-        struct ContinuationTunables
-        {
-            double m_continuationThresholdReductionDB = 3.0;
-            double m_initialComponentHoldS = 0.75;
-            double m_continuationOrdinaryHoldS = 1.0;
-            double m_continuationStrongHoldS = 3.0;
-            double m_continuationMaxEvidenceGapS = 0.75;
-            double m_continuationStrongPeakDB = 12.0;
-            double m_singleComponentContinuationMinimumConfidence = 9.0;
-            double m_singleComponentContinuationTailPaddingS = 0.20;
-            double m_continuationFrequencyPaddingHz = 20.0;
-            double m_trackingFrequencyPaddingHz = 12.0;
-            double m_maxTrackingJumpHz = 80.0;
-        } m_continuation;
-        struct DetachedRepeatTunables
-        {
-            double m_detachedRepeatMinimumGapS = 2.0;
-            int m_detachedRepeatMinimumFrames = 3;
-            double m_detachedRepeatMinimumScoreMargin = 3.0;
-            double m_detachedRepeatMinimumContrastDB = 20.0;
-            double m_detachedRepeatMinimumPeakDB = 14.0;
-            double m_detachedRepeatMinimumIntegratedSupportDB = 8.0;
-            double m_detachedRepeatMinimumTrackOccupancy = 0.80;
-            double m_detachedRepeatMinimumFrequencyCoherence = 0.95;
-            double m_detachedRepeatMaximumOccupiedFraction = 0.30;
-            double m_detachedRepeatMinimumMatchedEnvelopeScore = 0.92;
-        } m_detachedRepeat;
-        struct DuplicateTunables
-        {
-            double m_duplicateFrequencyOverlapFraction = 0.65;
-            double m_duplicateStrongFrequencyOverlapFraction = 0.85;
-        } m_duplicate;
-        struct EnvelopeTunables
-        {
-            double m_parentReanalysisMinimumDurationS = 2.0;
-            double m_twoComponentRangeMinimumExtensionBins = 5.0;
-            double m_parentFrequencyLowQuantile = 0.10;
-            double m_parentFrequencyHighQuantile = 0.90;
-            double m_componentEnvelopeSupportFraction = 0.003;
-            double m_componentEnvelopeCompactDurationS = 0.25;
-            double m_componentEnvelopeMaximumCompactExpansionS = 0.20;
-            double m_componentEnvelopeSustainedDurationS = 0.75;
-            double m_componentEnvelopeSustainedExpansionFraction = 0.35;
-            double m_componentEnvelopeMinimumSustainedExpansionS = 0.32;
-            double m_parentEnvelopeSearchPaddingS = 0.25;
-            double m_parentEnvelopeNoiseContextS = 3.0;
-            double m_parentEnvelopeMaximumLeadS = 0.75;
-            double m_parentEnvelopeMaximumTrailS = 4.0;
-            double m_parentEnvelopeEnterFraction = 0.06;
-            double m_parentEnvelopeExitFraction = 0.003;
-            double m_parentEnvelopeMinimumFloorRatio = 1.5;
-            double m_parentEnvelopeMaximumGapS = 0.15;
-            double m_parentEnvelopeMinimumExpansionS = 0.05;
-        } m_envelope;
-        struct LearnedTunables
-        {
-            bool m_learnedModelEnabled = false;
-            double m_learnedModelIntercept = 0.0;
-            LearnedFeatureVector m_learnedModelMeans {};
-            LearnedFeatureVector m_learnedModelScales {};
-            LearnedFeatureVector m_learnedModelWeights {};
-            double m_learnedRescueProbability = 0.80;
-        } m_learned;
-        struct DiagnosticsTunables
-        {
-            double m_candidateDiagnosticMinimumMargin = -2.0;
-            double m_candidateDiagnosticMaximumMargin = 5.0;
-            int m_candidateDiagnosticMinimumFrames = 2;
-        } m_diagnostics;
-        struct LimitsTunables
-        {
-            int m_maxPendingCandidateReanalyses = 32;
-            int m_maxActiveMeteorEvents = 16;
-            int m_maxParentObservations = 512;
-        } m_limits;
-        struct FlagsTunables
-        {
-            bool m_enableCurvatureSweepRejection = false;
-            // Enabled: rejects narrow, weak, drifting, highly-linear frequency tracks
-            // (aircraft Doppler) that clear the acceptance score. Validated on labelled
-            // daytime data (+~4 precision points at <1% recall cost); see corpus report.
-            bool m_enableLinearSweepRejection = true;
-            bool m_enableCalibratedRescue = true;
-            bool m_enableSettledParentReanalysis = true;
-            bool m_enableRejectedCandidateReanalysis = true;
-            // When true, the chunked 2D MeteorBlobDetector (test/detector2d-validated
-            // integrated-power recipe) replaces the legacy detector's meteor emissions:
-            // it runs a parallel zero-padded spectral front-end and its accepted blobs are
-            // emitted; the legacy path still runs for satellite sweeps + noise-floor upkeep,
-            // but its MsgMeteorDetected reports are suppressed. Default OFF (opt-in A/B).
-            bool m_enableBlobDetector = true;
-        } m_flags;
         // Knobs for the 2D blob detector (mirror MeteorBlobDetector::Config); binHz/dt/fMin
         // are resolved from the channel at configure time, not stored here.
         struct BlobDetectorTunables
@@ -360,7 +82,7 @@ public:
             double m_sweepLinkTolHz = 70.0;        // consolidation: freq tolerance on the drift line
             // Max time gap when stitching sweep fragments/segments along the drift line. Generous
             // because the line's frequency prediction is a strong discriminator — a collinear
-            // segment seconds later still belongs to the same pass (user: extend by the gradient).
+            // segment seconds later still belongs to the same pass.
             double m_sweepLinkMaxGapS = 6.0;
             double m_scoreThreshold = 145.0;   // USER SENSITIVITY KNOB (integrated excess dB)
             // Stride scheduling (low latency): rolling window re-analysed every stride; a blob
@@ -371,27 +93,10 @@ public:
             double m_emitStrideS = 0.5;
             double m_finalMarginS = 0.5;
         } m_blob;
-    };
-
-    struct ResolvedDetectorTunables
-    {
-        double m_binWidthHz = 1.0;
-        double m_usableBandwidthHz = 1.0;
-        double m_maxSegmentedBandWidthHz = 1.0;
-        double m_compactBandwidthHz = 1.0;
-        double m_stableBandwidthHz = 1.0;
-        double m_twoFrameMaxBandwidthHz = 1.0;
-        double m_coherentWideTwoFrameMinBandwidthHz = 1.0;
-        double m_coherentWideTwoFrameMaxBandwidthHz = 1.0;
-        double m_broadbandImpulseMinSpanHz = 1.0;
-        double m_broadbandImpulseMinBandwidthHz = 1.0;
-        double m_powerStableBandwidthHz = 1.0;
-        double m_trackingFrequencyPaddingHz = 1.0;
-        double m_maxTrackingJumpHz = 1.0;
-        double m_sustainedSweepMinDriftHz = 1.0;
-        double m_compactSweepMinDriftHz = 1.0;
-        double m_continuationFrequencyPaddingHz = 1.0;
-        int m_minimumNoiseFramesPerBlock = 1;
+        struct DuplicateTunables
+        {
+            double m_duplicateFrequencyOverlapFraction = 0.65;
+        } m_duplicate;
     };
 
     struct DetectionRecord
@@ -415,82 +120,6 @@ public:
         int m_sampleRate = 0;
         bool m_truncated = false;
     };
-
-    struct SpectralCandidate : DetectionRecord
-    {
-        quint64 m_peakSample = 0;
-        double m_robustCenterFrequency = 0.0;
-        double m_robustFrequencySpan = 0.0;
-        double m_robustFrequencyDrift = 0.0;
-        double m_reportFrequencySpan = 0.0;
-        double m_sweepScore = 0.0;
-        double m_peakAboveBackgroundDB = 0.0;
-        double m_integratedSupportDB = 0.0;
-        double m_maxBandwidth = 0.0;
-        double m_maxContrastDB = 0.0;
-        double m_maxPeakRatio = 0.0;
-        double m_acceptanceScore = 0.0;
-        double m_acceptanceThreshold = 0.0;
-        double m_scoreMargin = 0.0;
-        double m_signalScore = 0.0;
-        double m_supportScore = 0.0;
-        double m_shapeScore = 0.0;
-        double m_rejectionPenalty = 0.0;
-        double m_trackOccupancy = 0.0;
-        double m_frequencyCoherence = 0.0;
-        double m_frameOccupiedFraction = 0.0;
-        double m_minimumNoiseContrastDB = 0.0;
-        double m_noiseFloorDeltaDB = 0.0;
-        double m_matchedEnvelopeScore = 0.0;
-        double m_decayTimeConstantS = 0.0;
-        double m_envelopePeakPosition = 1.0;
-        double m_envelopeDecayDB = 0.0;
-        double m_envelopeMonotonicFraction = 0.0;
-        int m_envelopeTailFrames = 0;
-        double m_quadraticSweepR2 = 0.0;
-        double m_quadraticSweepImprovement = 0.0;
-        double m_quadraticCurvatureHzPerS2 = 0.0;
-        double m_learnedScore = 0.0;
-        double m_centerFrequencyRateFraction = 0.0;
-        double m_frequencySpanRateFraction = 0.0;
-        double m_frequencyDriftRateFraction = 0.0;
-        double m_maxBandwidthRateFraction = 0.0;
-        bool m_calibratedRescue = false;
-        bool m_rescuedFramesGate = false;
-        bool m_rescuedSpectralEvidenceGate = false;
-        bool m_curvedSweepRejected = false;
-        bool m_linearSweepRejected = false;
-        int m_frameCount = 0;
-        bool m_durationOK = false;
-        bool m_enoughFrames = false;
-        bool m_smoothSweepRejected = false;
-        bool m_longDriftRejected = false;
-        bool m_sweepRejected = false;
-        bool m_strongLineOK = false;
-        bool m_boundedBandOK = false;
-        bool m_spectralEvidenceOK = false;
-        bool m_insideUsableBandwidth = false;
-        bool m_duplicate = false;
-        bool m_detachedRepeat = false;
-        bool m_broadbandImpulse = false;
-        bool m_sweepContinuationRejected = false;
-        bool m_scoreOK = false;
-        bool m_accepted = false;
-        quint64 m_parentEventId = 0;
-        QString m_associationDecision = QStringLiteral("none");
-        QString m_classification = QStringLiteral("invalid");
-        QString m_rejectionReason = QStringLiteral("invalid");
-    };
-
-    using CandidateAudit = SpectralCandidate;
-    using CandidateAuditCallback = std::function<void(const CandidateAudit&)>;
-    using DiagnosticCaptureCallback = std::function<void(
-        quint64,
-        const DetectionRecord&,
-        const ComplexVector&)>;
-    using CandidateDiagnosticCaptureCallback = std::function<void(
-        const SpectralCandidate&,
-        const ComplexVector&)>;
 
     class MsgMeteorDetected : public Message {
         MESSAGE_CLASS_DECLARATION
@@ -576,181 +205,17 @@ public:
     void setSpectrumSink(SpectrumVis* spectrumSink) { m_spectrumSink = spectrumSink; }
     void setSecondarySpectrumSink(SpectrumVis* spectrumSink) { m_secondarySpectrumSink = spectrumSink; }
     void setMessageQueueToGUI(MessageQueue *messageQueue) { m_messageQueueToGUI = messageQueue; }
-    void setCandidateAuditCallback(const CandidateAuditCallback& callback) { m_candidateAuditCallback = callback; }
-    void setDiagnosticCaptureCallback(const DiagnosticCaptureCallback& callback) { m_diagnosticCaptureCallback = callback; }
-    void setCandidateDiagnosticCaptureCallback(const CandidateDiagnosticCaptureCallback& callback) { m_candidateDiagnosticCaptureCallback = callback; }
     void setDetectorTunables(const DetectorTunables& tunables);
     const DetectorTunables& getDetectorTunables() const { return m_detectorTunables; }
-    const ResolvedDetectorTunables& getResolvedDetectorTunables() const { return m_resolvedDetectorTunables; }
     void setChannel(ChannelAPI *channel) { m_channel = channel; }
     void applyChannelSettings(int channelSampleRate, int channelFrequencyOffset, bool force = false);
     void applySettings(const MeteorSettings& settings, const QStringList& settingsKeys, bool force = false);
     int getOutputSampleRate() const { return m_settings.m_channelSampleRate; }
-    static quint64 clipDetectionEndSample(
-        quint64 startSample,
-        quint64 endSample,
-        quint64 maximumDurationSamples,
-        bool& truncated);
 
 private:
     struct PulseReport : DetectionRecord {
-        double m_reportFrequencySpan;
-        double m_duplicateFrequencySpan;
-        bool m_hasRobustFrequency;
-        double m_robustCenterFrequency;
-        double m_robustFrequencySpan;
-        double m_robustFrequencyDrift;
-        double m_confidence;
-        double m_componentSupportDB;
-        bool m_allowComponentMerge;
-        bool m_spectralParentEligible;
-        bool m_bypassRecentDuplicate;
-        PulseReport() :
-            m_reportFrequencySpan(0.0),
-            m_duplicateFrequencySpan(0.0),
-            m_hasRobustFrequency(false),
-            m_robustCenterFrequency(0.0),
-            m_robustFrequencySpan(0.0),
-            m_robustFrequencyDrift(0.0),
-            m_confidence(0.0),
-            m_componentSupportDB(-200.0),
-            m_allowComponentMerge(true),
-            m_spectralParentEligible(false),
-            m_bypassRecentDuplicate(false)
-        {}
-    };
-
-    struct MeteorEventObservation {
-        quint64 m_sample = 0;
-        double m_centerFrequency = 0.0;
-        double m_lowFrequency = 0.0;
-        double m_highFrequency = 0.0;
-        double m_weight = 1.0;
-        double m_peakPower = 0.0;
-        double m_backgroundPower = 1e-20;
-        bool m_broadband = false;
-        bool m_component = false;
-    };
-
-    struct ActiveMeteorEvent {
-        quint64 m_id = 0;
-        PulseReport m_report;
-        quint64 m_lastEvidenceSample = 0;
-        quint64 m_lastComponentSample = 0;
-        int m_componentCount = 0;
-        int m_spectralComponentCount = 0;
-        bool m_strong = false;
-        bool m_extendedByContinuation = false;
-        std::vector<MeteorEventObservation> m_observations;
-    };
-
-    struct PendingCandidateReanalysis {
-        SpectralCandidate m_candidate;
-        quint64 m_dueSample = 0;
-    };
-
-    struct AssociationResult {
-        quint64 m_parentEventId = 0;
-        QString m_decision = QStringLiteral("rejected");
-    };
-
-    struct SpectralBand {
-        bool m_valid;
-        double m_centerFrequency;
-        double m_peakFrequency;
-        double m_lowFrequency;
-        double m_highFrequency;
-        double m_bandwidth;
-        double m_peakBinPower;
-        double m_totalExcessPower;
-        double m_contrastDB;
-        double m_peakRatio;
-        double m_framePeakPower;
-        double m_frameOccupiedFraction;
-        double m_backgroundPower;
-        double m_minimumNoiseContrastDB;
-        double m_noiseFloorDeltaDB;
-        int m_lowIndex;
-        int m_highIndex;
-
-        SpectralBand() :
-            m_valid(false),
-            m_centerFrequency(0.0),
-            m_peakFrequency(0.0),
-            m_lowFrequency(0.0),
-            m_highFrequency(0.0),
-            m_bandwidth(0.0),
-            m_peakBinPower(0.0),
-            m_totalExcessPower(0.0),
-            m_contrastDB(0.0),
-            m_peakRatio(0.0),
-            m_framePeakPower(0.0),
-            m_frameOccupiedFraction(0.0),
-            m_backgroundPower(1e-20),
-            m_minimumNoiseContrastDB(0.0),
-            m_noiseFloorDeltaDB(0.0),
-            m_lowIndex(0),
-            m_highIndex(0)
-        {}
-    };
-
-    struct SpectralFrameSnapshot {
-        quint64 m_startSample;
-        std::vector<double> m_binPower;
-
-        SpectralFrameSnapshot() :
-            m_startSample(0)
-        {}
-    };
-
-    struct SpectralEvent {
-        bool m_valid;
-        quint64 m_startCenterSample;
-        quint64 m_lastCenterSample;
-        int m_missingFrames;
-        double m_peakPower;
-        double m_backgroundPower;
-        double m_backgroundPowerSum;
-        int m_backgroundFrameCount;
-        double m_totalPower;
-        double m_minFrequency;
-        double m_maxFrequency;
-        double m_maxBandwidth;
-        double m_weightedFrequencySum;
-        double m_weightSum;
-        double m_maxContrastDB;
-        double m_maxPeakRatio;
-        double m_maxMinimumNoiseContrastDB;
-        double m_weightedNoiseFloorDeltaDBSum;
-        std::vector<double> m_trackFrequencies;
-        std::vector<double> m_trackPeakFrequencies;
-        std::vector<double> m_trackLowFrequencies;
-        std::vector<double> m_trackHighFrequencies;
-        std::vector<double> m_trackBandwidths;
-        std::vector<quint64> m_trackSamples;
-        std::vector<double> m_trackStrengths;
-        std::vector<double> m_trackFrameOccupiedFractions;
-
-        SpectralEvent() :
-            m_valid(false),
-            m_startCenterSample(0),
-            m_lastCenterSample(0),
-            m_missingFrames(0),
-            m_peakPower(0.0),
-            m_backgroundPower(1e-20),
-            m_backgroundPowerSum(0.0),
-            m_backgroundFrameCount(0),
-            m_totalPower(0.0),
-            m_minFrequency(0.0),
-            m_maxFrequency(0.0),
-            m_maxBandwidth(0.0),
-            m_weightedFrequencySum(0.0),
-            m_weightSum(0.0),
-            m_maxContrastDB(0.0),
-            m_maxPeakRatio(0.0),
-            m_maxMinimumNoiseContrastDB(0.0),
-            m_weightedNoiseFloorDeltaDBSum(0.0)
-        {}
+        double m_reportFrequencySpan = 0.0;
+        double m_duplicateFrequencySpan = 0.0;
     };
 
     struct DetectionRange {
@@ -760,71 +225,10 @@ private:
         double m_highFrequency;
     };
 
-    struct SpectralInterferenceRange {
-        quint64 m_startSample;
-        quint64 m_endSample;
-        double m_centerFrequency;
-        double m_frequencySpan;
-        bool m_broadband;
-    };
-
     struct DisplayTimeAnchor {
         quint64 m_sampleCounter;
         QDateTime m_dateTimeUtc;
     };
-
-    SpectrumVis* m_spectrumSink;
-    SpectrumVis* m_secondarySpectrumSink;
-    MessageQueue *m_messageQueueToGUI;
-    CandidateAuditCallback m_candidateAuditCallback;
-    DiagnosticCaptureCallback m_diagnosticCaptureCallback;
-    CandidateDiagnosticCaptureCallback m_candidateDiagnosticCaptureCallback;
-    DetectorTunables m_detectorTunables;
-    ResolvedDetectorTunables m_resolvedDetectorTunables;
-    MeteorSettings m_settings;
-    ChannelAPI *m_channel;
-
-    int m_channelSampleRate;
-    int m_channelFrequencyOffset;
-    NCO m_nco;
-    Interpolator m_interpolator;
-    Real m_interpolatorDistance;
-    Real m_interpolatorDistanceRemain;
-    Lowpass<Real> m_powerLowpass;
-
-    int m_spectrumBufferSize;
-    ComplexVector m_spectrumBuffer;
-    ComplexVector m_pulseSamples;
-    ComplexVector m_detectionSampleRing;
-    ComplexVector m_spectralFrameBuffer;
-    std::vector<Real> m_spectralWindow;
-    std::vector<double> m_spectralBinPower;
-    std::vector<double> m_spectralNoiseFloor;
-    std::vector<double> m_spectralMinimumNoiseFloor;
-    std::vector<SpectralFrameSnapshot> m_minimumNoiseCurrentBlock;
-    std::vector<std::vector<double>> m_minimumNoiseBlocks;
-    std::vector<SpectralFrameSnapshot> m_spectralCalibrationFrames;
-    std::vector<SpectralEvent> m_spectralEvents;
-    std::vector<DetectionRange> m_recentDetectionRanges;
-    std::vector<SpectralInterferenceRange> m_recentSpectralInterference;
-    std::vector<ActiveMeteorEvent> m_activeMeteorEvents;
-    std::vector<PendingCandidateReanalysis> m_pendingCandidateReanalyses;
-    quint64 m_nextMeteorEventId;
-    quint64 m_nextComponentFlushSample;
-    quint64 m_nextCandidateReanalysisSample;
-    std::vector<char> m_spectralActiveBins;
-    FFTEngine *m_spectralFFT;
-    FFTEngine *m_pulseFFT;
-
-    // Parallel zero-padded front-end for the 2D blob detector (only live when
-    // m_detectorTunables.m_flags.m_enableBlobDetector). Kept independent of the legacy
-    // spectral state so the default-OFF path is byte-identical to before.
-    MeteorBlobDetector m_blobDetector;             // computes its own per-chunk median floor
-    FFTEngine *m_blobFFT;
-    int m_blobFFTSize;                              // zero-padded FFT size (nfft)
-    std::vector<Real> m_blobWindow;                // Hann over the frame (pre-pad)
-    std::vector<double> m_blobBinPower;            // padded magnitude^2 per bin
-    bool m_emittingBlobDetection;                  // guards emitDetectionReport suppression
 
     // Consolidates the detector's sweep fragments (which arrive across chunks) into one
     // Doppler-sweep detection by stitching collinear fragments along their drift line.
@@ -839,39 +243,48 @@ private:
         double m_lastCentreT = 0.0, m_lastCentreF = 0.0, m_lastSlope = 0.0;
         quint64 m_lastSample = 0;
     };
-    std::vector<ActiveSweep> m_activeSweeps;
+
+    SpectrumVis* m_spectrumSink;
+    SpectrumVis* m_secondarySpectrumSink;
+    MessageQueue *m_messageQueueToGUI;
+    DetectorTunables m_detectorTunables;
+    MeteorSettings m_settings;
+    ChannelAPI *m_channel;
+
+    int m_channelSampleRate;
+    int m_channelFrequencyOffset;
+    NCO m_nco;
+    Interpolator m_interpolator;
+    Real m_interpolatorDistance;
+    Real m_interpolatorDistanceRemain;
+
+    int m_spectrumBufferSize;
+    ComplexVector m_spectrumBuffer;
+    ComplexVector m_detectionSampleRing;
+    ComplexVector m_spectralFrameBuffer;
+    std::vector<DetectionRange> m_recentDetectionRanges;
     int m_spectralFrameSize;
     int m_spectralHopSize;
-    int m_spectralFFTSize;
-    int m_pulseFFTSize;
-    double m_spectralEnergyScale;
     int m_detectionSampleRingStart;
     int m_detectionSampleRingCount;
     quint64 m_detectionSampleRingStartSample;
-    std::vector<Real> m_pulseFFTWindow;
-    bool m_spectralNoiseFloorInitialized;
     quint64 m_sampleCounter;
     std::vector<DisplayTimeAnchor> m_displayTimeAnchors;
     quint64 m_nextDisplayTimeAnchorSample;
     quint64 m_nextDataMarkerSample;
-    bool m_noiseFloorInitialized;
-    double m_noiseFloor;
-    bool m_pulseActive;
-    bool m_rearmNeeded;
     QDateTime m_streamStartDateTimeUtc;
-    quint64 m_pulseStartSample;
-    quint64 m_pulseLastAboveSample;
-    quint64 m_pulsePeakSample;
-    QDateTime m_pulseStartDateTimeUtc;
-    double m_pulsePeakPower;
-    PulseReport m_pendingBroadPulse;
+
+    // 2D blob detector front-end: zero-padded FFT feeding MeteorBlobDetector, which owns
+    // segmentation, the median noise floor and acceptance.
+    MeteorBlobDetector m_blobDetector;
+    FFTEngine *m_blobFFT;
+    int m_blobFFTSize;                              // zero-padded FFT size (nfft)
+    std::vector<Real> m_blobWindow;                // Hann over the frame (pre-pad)
+    std::vector<double> m_blobBinPower;            // padded magnitude^2 per bin
+    std::vector<ActiveSweep> m_activeSweeps;
+
     void processOneSample(Complex& ci, bool realSample = true);
-    void processDetectorSample(const Complex& sample, double power, double filteredPower);
-    void startPulse(const Complex& sample, double power);
-    void updatePulse(const Complex& sample, double power);
-    void finishPulse(bool forceRejected);
     void processSpectralSample(const Complex& sample);
-    void processSpectralFrame(quint64 frameStartSample);
     void configureBlobDetector();
     void processBlobDetectorFrame(quint64 frameStartSample);
     void emitBlobDetection(const MeteorBlobDetector::Blob& blob);
@@ -882,82 +295,11 @@ private:
     bool absorbedByActiveSweep(const MeteorBlobDetector::Blob& blob);
     void finalizeStaleSweeps(quint64 currentSample, bool force);
     void emitConsolidatedSweep(const ActiveSweep& sweep);
-    void initializeSpectralNoiseFloor();
-    void processCalibratedSpectralFrame(const SpectralFrameSnapshot& frame);
-    std::vector<SpectralBand> detectSpectralBands(const std::vector<double>& binPower);
-    bool frequencyProtectedByActiveMeteor(double frequency) const;
-    void protectActiveMeteorNoiseBins();
-    void updateActiveMeteorEvents(const std::vector<SpectralBand>& bands, quint64 frameCenterSample);
-    bool bandCompatibleWithActiveMeteor(const ActiveMeteorEvent& event, const SpectralBand& band) const;
-    void addMeteorEventObservation(ActiveMeteorEvent& event, const MeteorEventObservation& observation);
-    void updateSpectralEvents(const std::vector<SpectralBand>& bands, quint64 frameCenterSample);
-    void updateSpectralEvent(SpectralEvent& event, const SpectralBand& band, quint64 frameCenterSample);
-    void finishSpectralEvent(const SpectralEvent& event);
-    PulseReport reportFromSpectralCandidate(const SpectralCandidate& candidate) const;
-    bool isSatelliteSweepCandidate(const SpectralCandidate& candidate) const;
-    void emitSatelliteDetection(const SpectralCandidate& candidate);
-    bool hasStrongTwoFrameEvidence(const SpectralCandidate& candidate) const;
-    bool shouldReanalyzeRejectedCandidate(const SpectralCandidate& candidate) const;
-    void queueRejectedCandidateReanalysis(const SpectralCandidate& candidate);
-    void processPendingCandidateReanalyses(bool force);
-    void finishRejectedCandidate(const SpectralCandidate& candidate) const;
-    bool settledCandidateHasPersistentLine(
-        const PulseReport& report,
-        quint64 originalEndSample) const;
-    bool settledCandidateIsSweep(const PulseReport& report, double& driftHz, double& r2) const;
-    void auditSpectralCandidate(const SpectralCandidate& candidate) const;
-    void captureCandidateDiagnostic(const SpectralCandidate& candidate) const;
-    bool isLocalizedCompactBurst(const SpectralCandidate& candidate) const;
-    bool isSweepContinuation(const SpectralCandidate& candidate) const;
-    bool isSpectralInterferenceContinuation(const SpectralCandidate& candidate) const;
-    bool overlapsBroadbandInterference(quint64 startSample, quint64 endSample) const;
-    void rememberSpectralInterference(const SpectralCandidate& candidate);
-    SpectralCandidate buildSpectralCandidate(const SpectralEvent& event) const;
-    void classifySpectralCandidate(SpectralCandidate& candidate) const;
-    double scoreSpectralCandidate(SpectralCandidate& candidate) const;
-    void calculateShadowCandidateFeatures(SpectralCandidate& candidate, const SpectralEvent& event) const;
-    LearnedFeatureVector candidateLearnedFeatures(const SpectralCandidate& candidate) const;
-    double evaluateLearnedCandidate(const SpectralCandidate& candidate) const;
-    void updateMinimumStatisticsNoiseFloor(const SpectralFrameSnapshot& frame);
-    void resolveDetectorTunables();
-    static double weightedQuantile(
-        const std::vector<double>& values,
-        const std::vector<double>& weights,
-        double quantile,
-        double fallback);
-    static double weightedQuantile(
-        const std::vector<double>& values,
-        const std::vector<double>& weights,
-        int begin,
-        int end,
-        double quantile,
-        double fallback);
-    double estimateSpectralEventDurationSamples(const SpectralEvent& event, double& startSample) const;
-    bool isDuplicateDetection(quint64 startSample, quint64 endSample) const;
-    bool isDuplicateDetection(quint64 startSample, quint64 endSample, double centerFrequency, double frequencySpan) const;
-    bool isDuplicateDetection(
-        quint64 startSample,
-        quint64 endSample,
-        double centerFrequency,
-        double frequencySpan,
-        quint64 *minimumGapSamples) const;
-    void rememberDetection(quint64 startSample, quint64 endSample);
     void rememberDetection(quint64 startSample, quint64 endSample, double centerFrequency, double frequencySpan);
     void pruneRecentDetections();
-    AssociationResult emitOrDeferSpectralReport(const PulseReport& report, bool refineEnvelope = true);
-    AssociationResult queueSpectralComponentReport(const PulseReport& report);
-    void scheduleNextComponentFlush();
-    void flushPendingComponentReports(bool force);
-    void finalizeActiveMeteorEvent(ActiveMeteorEvent& event);
-    void updateReportFromActiveMeteorEvent(ActiveMeteorEvent& event) const;
-    PulseReport reportWithRobustFrequency(const PulseReport& report) const;
-    bool estimatePulseBandEnvelope(PulseReport& report, bool boundedExpansion) const;
-    bool refineSpectralComponentEnvelope(PulseReport& report) const;
-    bool refineBandEnvelope(PulseReport& report, bool allowShrink, bool boundedExpansion) const;
     void appendDetectionSample(const Complex& sample);
     bool copyDetectionSamples(quint64 startSample, quint64 endSample, ComplexVector& samples) const;
     double estimatePulseTotalPower(quint64 startSample, quint64 endSample, double backgroundPower) const;
-    bool reportsFrequencyCompatible(const PulseReport& first, const PulseReport& second) const;
     void emitDetectionReport(const PulseReport& report, const char *source);
     void emitDetectionReport(
         const PulseReport& report,
@@ -968,24 +310,7 @@ private:
     QDateTime sampleCounterToDisplayDateTimeUtc(quint64 sampleCounter) const;
     void recordDisplayTimeAnchor();
     void emitDataCollectionMarker();
-    void updateNoiseFloor(double filteredPower);
-    double getDetectionThresholdPower() const;
-    bool estimatePulseFrequency(
-        double& centerFrequency,
-        double& frequencySpan,
-        double& frequencyDrift,
-        double& sweepScore,
-        double& spectralProminence,
-        double& frequencyConcentration,
-        double& spectralBandwidth,
-        double& spectralBandContrastDB);
-    bool estimateWindowPeakFrequency(int startIndex, int windowSize, double& frequency, double& strength, double& prominence);
-    bool estimatePulseSpectralBand(int windowSize, int hopSize, double& centerFrequency, double& bandwidth, double& contrastDB);
-    bool computePulseWindowSpectrum(int startIndex, int windowSize, std::vector<double>& binPower, double *windowedEnergy);
-    bool ensurePulseFFT(int windowSize);
-    static double averageFrequency(const std::vector<double>& frequencies, int begin, int end);
     void configureInterpolator();
-    void configurePowerLowpass();
     void configureDetectionHistory();
     void configureSpectralDetector();
     void resizeSpectrumBuffer();

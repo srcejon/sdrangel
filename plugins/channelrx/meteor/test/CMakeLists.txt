@@ -4,6 +4,7 @@ set(meteor_demod_sink_test_SOURCES
     ../meteormapgeometry.cpp
     ../movingtargetmatcher.cpp
     ../meteordemodsink.cpp
+    ../meteorblobdetector.cpp
     ../meteorbaseband.cpp
     ../rmobreport.cpp
 )
@@ -13,6 +14,7 @@ set(meteor_demod_sink_test_HEADERS
     ../meteormapgeometry.h
     ../movingtargetmatcher.h
     ../meteordemodsink.h
+    ../meteorblobdetector.h
     ../meteorbaseband.h
     ../rmobreport.h
 )

@@ -47,6 +47,8 @@ def parse_args():
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--queue", choices=("priority", "accepted", "rejected", "all", "relabel-meteors"), default="priority")
     parser.add_argument("--relabel", action="store_true", help="Include already-labeled candidates")
+    parser.add_argument("--label-set", default=",".join(LABEL_KEYS),
+                        help="Comma-separated label buttons (number keys 1..N select them)")
     parser.add_argument("--context-before", type=float, default=2.0)
     parser.add_argument("--context-after", type=float, default=3.0)
     return parser.parse_args()
@@ -240,17 +242,12 @@ kbd { background: #333; border-radius: 3px; padding: 1px 5px; font-size: 12px; }
 <img id="panel" alt="candidate waterfall">
 <div id="meta"></div>
 <div id="buttons">
-  <button data-label="meteor"><b>M</b>eteor</button>
-  <button data-label="sweep"><b>S</b>weep</button>
-  <button data-label="interference"><b>I</b>nterference</button>
-  <button data-label="noise"><b>N</b>oise</button>
-  <button data-label="unsure"><b>U</b>nsure</button>
-  <button data-action="skip">S<b>k</b>ip</button>
-  <button data-action="undo"><b>Z</b> Undo</button>
+%LABEL_BUTTONS%
+  <button data-action="skip">Skip</button>
+  <button data-action="undo">Undo</button>
   <button data-action="back">&larr; Back</button>
 </div>
-<div id="help">Keys: <kbd>m</kbd> meteor, <kbd>s</kbd> sweep, <kbd>i</kbd> interference,
-<kbd>n</kbd> noise, <kbd>u</kbd> unsure, <kbd>k</kbd>/<kbd>space</kbd> skip,
+<div id="help">Keys: %KEY_HELP% <kbd>k</kbd>/<kbd>space</kbd> skip,
 <kbd>z</kbd> undo, <kbd>&larr;</kbd> back</div>
 <div id="done">All queued candidates reviewed. Labels saved.</div>
 <script>
@@ -302,7 +299,7 @@ document.getElementById("buttons").addEventListener("click", (event) => {
 });
 
 document.addEventListener("keydown", (event) => {
-  const keys = {m: "meteor", s: "sweep", i: "interference", n: "noise", u: "unsure"};
+  const keys = %KEY_MAP%;
   if (keys[event.key]) label(keys[event.key]);
   else if (event.key === "k" || event.key === " ") { event.preventDefault(); show(pos + 1); }
   else if (event.key === "z") undo();
@@ -317,6 +314,7 @@ show(0);
 class LabelerState:
     def __init__(self, args):
         self.args = args
+        self.label_keys = tuple(k.strip() for k in args.label_set.split(",") if k.strip())
         self.rows = rcr.read_audit(args.audit)
         self.labels = load_labels(args.labels)
         self.queue = build_queue(self.rows, self.labels, args.queue, args.relabel)
@@ -417,10 +415,20 @@ def make_handler(state):
             values = parse_qs(urlparse(self.path).query)
             return int(values.get("pos", ["0"])[0])
 
+        def render_page(self):
+            keys = state.label_keys
+            buttons = "\n".join(
+                f'  <button data-label="{k}"><b>{i+1}</b> {k}</button>' for i, k in enumerate(keys))
+            key_map = json.dumps({str(i + 1): k for i, k in enumerate(keys)})
+            key_help = ", ".join(f"<kbd>{i+1}</kbd> {k}" for i, k in enumerate(keys)) + ","
+            return (PAGE.replace("%LABEL_BUTTONS%", buttons)
+                        .replace("%KEY_MAP%", key_map)
+                        .replace("%KEY_HELP%", key_help))
+
         def do_GET(self):
             try:
                 if self.path == "/" or self.path.startswith("/?"):
-                    self.send(200, "text/html; charset=utf-8", PAGE.encode())
+                    self.send(200, "text/html; charset=utf-8", self.render_page().encode())
                 elif self.path.startswith("/api/item"):
                     pos = self.query_pos()
 
@@ -446,7 +454,7 @@ def make_handler(state):
                     label = request.get("label", "")
                     pos = int(request.get("pos", -1))
 
-                    if (label in LABEL_KEYS) and (0 <= pos < len(state.queue)):
+                    if (label in state.label_keys) and (0 <= pos < len(state.queue)):
                         with state.lock:
                             state.apply_label(pos, label)
 

@@ -20,6 +20,7 @@
 
 #include <QDate>
 #include <QDateTime>
+#include <QHash>
 #include <QList>
 #include <QMap>
 #include <QSet>
@@ -33,6 +34,7 @@
 
 #include "meteor.h"
 #include "meteordemodsink.h"
+#include "meteorsatellitematcher.h"
 #include "meteorsettings.h"
 
 class BasebandSampleSink;
@@ -108,6 +110,7 @@ private:
     Meteor* m_meteor;
     SpectrumVis* m_spectrumVis;
     SpectrumVis* m_headSpectrumVis;
+    MeteorSatelliteMatcher *m_satelliteMatcher;
     MessageQueue m_inputMessageQueue;
 
     QComboBox *m_frequencyMode;
@@ -173,6 +176,14 @@ private:
     QDateTime m_lastAutomaticRMOBSaveUtc;
     QSet<MessageQueue *> m_mapMessageQueues;
 
+    struct PendingTargetMatch
+    {
+        MovingTargetMatcher::Match m_adsbMatch;
+        QString m_rfClassification;
+    };
+
+    QHash<quint64, PendingTargetMatch> m_pendingTargetMatches;
+
     struct DetectionOverlay
     {
         quint64 m_id;
@@ -215,6 +226,11 @@ private:
     void clearAntennaPatternsFromMap();
     void addDetection(const MeteorDemodSink::MsgMeteorDetected& detection);
     void addSatelliteDetection(const MeteorDemodSink::MsgSatelliteDetected& detection);
+    void applySatelliteTargetMatch(
+        quint64 overlayId,
+        const MovingTargetMatcher::Match& match,
+        int catalogSize,
+        const QString& status);
     void addCameraDetection(const Meteor::MsgCameraMeteorDetected& detection);
     void updateCounters();
     void updateHistogram();

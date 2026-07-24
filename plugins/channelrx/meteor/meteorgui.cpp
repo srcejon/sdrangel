@@ -73,6 +73,7 @@
 
 #include "meteorgui.h"
 #include "meteormapgeometry.h"
+#include "meteorsatellitematcher.h"
 #include "movingtargetmatcher.h"
 #include "rmobreport.h"
 #include "ui_meteorgui.h"
@@ -357,6 +358,7 @@ MeteorGUI::MeteorGUI(PluginAPI* pluginAPI, DeviceUISet *deviceUISet, BasebandSam
     m_meteor(reinterpret_cast<Meteor*>(rxChannel)),
     m_spectrumVis(nullptr),
     m_headSpectrumVis(nullptr),
+    m_satelliteMatcher(nullptr),
     m_hourlyChart(nullptr),
     m_totalCount(0),
     m_highlightAllDetectionOverlays(true),
@@ -377,6 +379,12 @@ MeteorGUI::MeteorGUI(PluginAPI* pluginAPI, DeviceUISet *deviceUISet, BasebandSam
     m_meteor->setMessageQueueToGUI(getInputMessageQueue());
     m_spectrumVis = m_meteor->getSpectrumVis();
     m_headSpectrumVis = m_meteor->getHeadSpectrumVis();
+    m_satelliteMatcher = new MeteorSatelliteMatcher(this);
+    connect(
+        m_satelliteMatcher,
+        &MeteorSatelliteMatcher::matchReady,
+        this,
+        &MeteorGUI::applySatelliteTargetMatch);
 
     setupSpectrum();
 
@@ -417,6 +425,8 @@ MeteorGUI::MeteorGUI(PluginAPI* pluginAPI, DeviceUISet *deviceUISet, BasebandSam
 
 MeteorGUI::~MeteorGUI()
 {
+    delete m_satelliteMatcher;
+    m_satelliteMatcher = nullptr;
     clearAntennaPatternsFromMap();
     saveAutomaticRMOBReports();
     disconnect(&MainCore::instance()->getMasterTimer(), SIGNAL(timeout()), this, SLOT(tick()));
@@ -687,7 +697,7 @@ void MeteorGUI::setupUi(RollupContents *rollupContents)
         "Average Doppler drift rate across the sweep in hertz per second.",
         "Conservative RF-only classification from endpoint speed, Doppler rate, sweep excursion and track duration.",
         "Heuristic RF-only satellite evidence score from 0 to 100; this is not a calibrated probability.",
-        "Strong, unambiguous moving-target correlation. ADS-B aircraft are supported; the matcher is source-neutral for future TLE states.",
+        "Strong, unambiguous moving-target correlation using fresh ADS-B aircraft states and the worker-thread CelesTrak active TLE catalog.",
         "Doppler endpoint match score from 0 to 100. A match requires at least 60 and an 8 point lead over the next target.",
         "Root-mean-square residual between observed and predicted start/end Doppler offsets in hertz.",
         "Meteor channel detector sample rate in hertz"
@@ -1693,7 +1703,7 @@ void MeteorGUI::on_clearDetections_clicked()
     m_hourlyCounts.clear();
     m_hourlyData.clear();
     m_detectionOverlays.clear();
-    m_nextDetectionOverlayId = 1;
+    m_pendingTargetMatches.clear();
     invalidateDetectionOverlayWindows();
     m_detectionsTable->setRowCount(0);
     m_satellitesTable->setRowCount(0);
@@ -2273,6 +2283,9 @@ void MeteorGUI::addSatelliteDetection(const MeteorDemodSink::MsgSatelliteDetecte
         / std::max(0.001, detection.m_durationS);
     const qint64 referenceFrequency = rmobReportFrequency();
     MovingTargetMatcher::Match targetMatch;
+    MovingTargetMatcher::Observation observation;
+    QString rfClassification = QStringLiteral("Uncertain");
+    bool validObservation = false;
     if (referenceFrequency > 0)
     {
         const double radialSpeedKPH = Astronomy::dopplerToVelocity(
@@ -2294,7 +2307,7 @@ void MeteorGUI::addSatelliteDetection(const MeteorDemodSink::MsgSatelliteDetecte
             driftRateHzPerS,
             detection.m_frequencyDrift,
             detection.m_durationS);
-        MovingTargetMatcher::Observation observation;
+        rfClassification = classification.m_classification;
         observation.m_startDateTimeUtc = sampleTimeUtc;
         observation.m_durationS = detection.m_durationS;
         observation.m_centerFrequencyOffsetHz = detection.m_centerFrequency;
@@ -2311,6 +2324,7 @@ void MeteorGUI::addSatelliteDetection(const MeteorDemodSink::MsgSatelliteDetecte
             m_settings.m_receiverLongitude,
             0.0
         };
+        validObservation = true;
         targetMatch = MovingTargetMatcher::match(
             observation,
             collectADSBTargets(sampleTimeUtc.addMSecs(
@@ -2319,7 +2333,7 @@ void MeteorGUI::addSatelliteDetection(const MeteorDemodSink::MsgSatelliteDetecte
         m_satellitesTable->setItem(row, 10, makeTableItem(QString::number(maximumRadialSpeedKPH, 'f', 1), maximumRadialSpeedKPH));
         m_satellitesTable->setItem(row, 12, makeTableItem(targetMatch.m_matched
             ? QStringLiteral("Aircraft (ADS-B)")
-            : classification.m_classification));
+            : rfClassification));
         m_satellitesTable->setItem(row, 13, makeTableItem(
             QString::number(classification.m_satelliteScorePercent, 'f', 1),
             classification.m_satelliteScorePercent));
@@ -2362,7 +2376,133 @@ void MeteorGUI::addSatelliteDetection(const MeteorDemodSink::MsgSatelliteDetecte
         : makeTableItem(QString()));
     m_satellitesTable->setItem(row, 17, makeTableItem(QString::number(detection.m_sampleRate), detection.m_sampleRate));
     m_satellitesTable->setSortingEnabled(sortingEnabled);
+
+    if (validObservation && m_satelliteMatcher)
+    {
+        m_pendingTargetMatches.insert(overlayId, {targetMatch, rfClassification});
+        MeteorSatelliteMatcher::Geometry geometry;
+        geometry.m_transmitterBeam = {
+            m_settings.m_transmitterAzimuth,
+            m_settings.m_transmitterElevation,
+            m_settings.m_transmitterBeamwidth,
+            m_settings.m_transmitterHPBW
+        };
+        geometry.m_receiverBeam = {
+            m_settings.m_antennaAzimuth,
+            m_settings.m_antennaElevation,
+            m_settings.m_antennaBeamwidth,
+            m_settings.m_antennaBeamwidth
+        };
+        if (!targetMatch.m_matched) {
+            matchItem->setText(QStringLiteral("Searching TLE catalog..."));
+        }
+        m_satelliteMatcher->requestMatch(overlayId, observation, geometry);
+    }
+
     updateSpectrumViews();
+}
+
+void MeteorGUI::applySatelliteTargetMatch(
+    quint64 overlayId,
+    const MovingTargetMatcher::Match& satelliteMatch,
+    int catalogSize,
+    const QString& status)
+{
+    auto pending = m_pendingTargetMatches.find(overlayId);
+
+    if (pending == m_pendingTargetMatches.end()) {
+        return;
+    }
+
+    const PendingTargetMatch pendingMatch = pending.value();
+    m_pendingTargetMatches.erase(pending);
+    const MovingTargetMatcher::Match combinedMatch = MovingTargetMatcher::combine(
+        pendingMatch.m_adsbMatch,
+        satelliteMatch);
+    int row = -1;
+
+    for (int candidateRow = 0; candidateRow < m_satellitesTable->rowCount(); ++candidateRow)
+    {
+        QTableWidgetItem *timeItem = m_satellitesTable->item(candidateRow, 0);
+        if (timeItem
+            && (timeItem->data(DetectionOverlayIdRole).toULongLong() == overlayId))
+        {
+            row = candidateRow;
+            break;
+        }
+    }
+
+    if (row < 0) {
+        return;
+    }
+
+    const bool sortingEnabled = m_satellitesTable->isSortingEnabled();
+    m_satellitesTable->setSortingEnabled(false);
+    QTableWidgetItem *classificationItem = m_satellitesTable->item(row, 12);
+    QTableWidgetItem *matchItem = m_satellitesTable->item(row, 14);
+
+    if (!classificationItem)
+    {
+        classificationItem = makeTableItem(QString());
+        m_satellitesTable->setItem(row, 12, classificationItem);
+    }
+
+    if (!matchItem)
+    {
+        matchItem = makeTableItem(QString());
+        m_satellitesTable->setItem(row, 14, matchItem);
+    }
+
+    if (combinedMatch.m_matched)
+    {
+        classificationItem->setText(combinedMatch.m_source == QStringLiteral("TLE")
+            ? QStringLiteral("Satellite (TLE)")
+            : QStringLiteral("Aircraft (ADS-B)"));
+        matchItem->setText(movingTargetLabel(combinedMatch));
+    }
+    else
+    {
+        classificationItem->setText(pendingMatch.m_rfClassification);
+        matchItem->setText(combinedMatch.m_ambiguous
+            ? QStringLiteral("Ambiguous moving target")
+            : QString());
+    }
+
+    if (combinedMatch.m_hasCandidate)
+    {
+        matchItem->setToolTip(tr(
+            "Best %1 candidate: %2\n"
+            "Predicted start/end: %3 / %4 Hz\n"
+            "Center/drift residual: %5 / %6 Hz\n"
+            "State age: %7 s\n"
+            "TLE catalog: %8 objects (%9)")
+            .arg(combinedMatch.m_source, movingTargetLabel(combinedMatch))
+            .arg(combinedMatch.m_prediction.m_startFrequencyOffsetHz, 0, 'f', 1)
+            .arg(combinedMatch.m_prediction.m_endFrequencyOffsetHz, 0, 'f', 1)
+            .arg(combinedMatch.m_centerResidualHz, 0, 'f', 1)
+            .arg(combinedMatch.m_driftResidualHz, 0, 'f', 1)
+            .arg(combinedMatch.m_stateAgeS, 0, 'f', 1)
+            .arg(catalogSize)
+            .arg(status));
+    }
+    else
+    {
+        matchItem->setToolTip(tr("No moving-target match. TLE catalog: %1 objects (%2)")
+            .arg(catalogSize)
+            .arg(status));
+    }
+
+    m_satellitesTable->setItem(row, 15, combinedMatch.m_hasCandidate
+        ? makeTableItem(
+            QString::number(combinedMatch.m_scorePercent, 'f', 1),
+            combinedMatch.m_scorePercent)
+        : makeTableItem(QString()));
+    m_satellitesTable->setItem(row, 16, combinedMatch.m_hasCandidate
+        ? makeTableItem(
+            QString::number(combinedMatch.m_endpointResidualRMSHz, 'f', 1),
+            combinedMatch.m_endpointResidualRMSHz)
+        : makeTableItem(QString()));
+    m_satellitesTable->setSortingEnabled(sortingEnabled);
 }
 
 void MeteorGUI::addCameraDetection(const Meteor::MsgCameraMeteorDetected& detection)
@@ -2881,6 +3021,10 @@ void MeteorGUI::deleteSelectedTableRows(QTableWidget *table, bool updateMeteorCo
 
     if (!idsToDelete.isEmpty())
     {
+        for (quint64 id : idsToDelete) {
+            m_pendingTargetMatches.remove(id);
+        }
+
         for (int i = m_detectionOverlays.size() - 1; i >= 0; i--)
         {
             if (idsToDelete.contains(m_detectionOverlays[i].m_id)) {

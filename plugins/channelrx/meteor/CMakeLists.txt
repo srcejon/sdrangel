@@ -10,6 +10,7 @@ set(meteor_SOURCES
     meteorsettings.cpp
     meteormapgeometry.cpp
     movingtargetmatcher.cpp
+    meteorsatellitematcher.cpp
     meteorbaseband.cpp
     meteordemodsink.cpp
     meteorblobdetector.cpp
@@ -23,6 +24,7 @@ set(meteor_HEADERS
     meteorsettings.h
     meteormapgeometry.h
     movingtargetmatcher.h
+    meteorsatellitematcher.h
     meteorbaseband.h
     meteordemodsink.h
     meteorblobdetector.h
@@ -65,10 +67,20 @@ endif()
 
 target_link_libraries(${TARGET_NAME} PRIVATE
     Qt::Core
+    Qt::Network
     ${TARGET_LIB}
     sdrbase
     ${TARGET_LIB_GUI}
 )
+
+if(SGP4_FOUND)
+    target_include_directories(${TARGET_NAME} PRIVATE ${SGP4_INCLUDE_DIR})
+    target_compile_definitions(${TARGET_NAME} PRIVATE METEOR_HAS_SGP4)
+    target_link_libraries(${TARGET_NAME} PRIVATE ${SGP4_LIBRARIES})
+    if(SGP4_EXTERNAL)
+        add_dependencies(${TARGET_NAME} sgp4)
+    endif()
+endif()
 
 install(TARGETS ${TARGET_NAME} DESTINATION ${INSTALL_FOLDER})
 

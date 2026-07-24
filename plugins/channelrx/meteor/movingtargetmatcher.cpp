@@ -275,3 +275,31 @@ MovingTargetMatcher::Match MovingTargetMatcher::match(
 
     return bestMatch;
 }
+
+MovingTargetMatcher::Match MovingTargetMatcher::combine(
+    const Match& first,
+    const Match& second,
+    const Tunables& tunables)
+{
+    if (!first.m_hasCandidate) {
+        return second;
+    }
+
+    if (!second.m_hasCandidate) {
+        return first;
+    }
+
+    const Match& winner = first.m_scorePercent >= second.m_scorePercent ? first : second;
+    const Match& runnerUp = first.m_scorePercent >= second.m_scorePercent ? second : first;
+    Match combined = winner;
+    combined.m_secondBestScorePercent = std::max(
+        winner.m_secondBestScorePercent,
+        runnerUp.m_scorePercent);
+    const double scoreMarginPercent = combined.m_scorePercent
+        - combined.m_secondBestScorePercent;
+    combined.m_ambiguous = (combined.m_secondBestScorePercent > 0.0)
+        && (scoreMarginPercent < tunables.m_minimumScoreMarginPercent);
+    combined.m_matched = (combined.m_scorePercent >= tunables.m_minimumMatchScorePercent)
+        && !combined.m_ambiguous;
+    return combined;
+}

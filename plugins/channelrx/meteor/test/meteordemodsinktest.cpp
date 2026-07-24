@@ -246,6 +246,38 @@ namespace {
             return false;
         }
 
+        MovingTargetMatcher::Match adsbMatch = match;
+        adsbMatch.m_source = QStringLiteral("ADS-B");
+        adsbMatch.m_scorePercent = 82.0;
+        adsbMatch.m_secondBestScorePercent = 20.0;
+        MovingTargetMatcher::Match tleMatch = match;
+        tleMatch.m_source = QStringLiteral("TLE");
+        tleMatch.m_scorePercent = 87.0;
+        tleMatch.m_secondBestScorePercent = 30.0;
+        const MovingTargetMatcher::Match combinedAmbiguous =
+            MovingTargetMatcher::combine(adsbMatch, tleMatch);
+
+        if (!combinedAmbiguous.m_ambiguous
+            || combinedAmbiguous.m_matched
+            || (combinedAmbiguous.m_source != QStringLiteral("TLE"))
+            || (combinedAmbiguous.m_secondBestScorePercent != adsbMatch.m_scorePercent))
+        {
+            errorStream << "Moving-target matcher test: cross-source ambiguity was not retained\n";
+            return false;
+        }
+
+        adsbMatch.m_scorePercent = 70.0;
+        const MovingTargetMatcher::Match combinedMatch =
+            MovingTargetMatcher::combine(adsbMatch, tleMatch);
+
+        if (!combinedMatch.m_matched
+            || combinedMatch.m_ambiguous
+            || (combinedMatch.m_source != QStringLiteral("TLE")))
+        {
+            errorStream << "Moving-target matcher test: stronger TLE target was not selected\n";
+            return false;
+        }
+
         return true;
     }
 

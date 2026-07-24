@@ -97,6 +97,10 @@ public:
         const Observation& observation,
         const QVector<TargetState>& targets,
         const Tunables& tunables = Tunables());
+    static Match combine(
+        const Match& first,
+        const Match& second,
+        const Tunables& tunables = Tunables());
 };
 
 inline MovingTargetMatcher::Tunables::Tunables() = default;

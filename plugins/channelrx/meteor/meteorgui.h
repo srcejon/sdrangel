@@ -226,6 +226,7 @@ private:
     void clearAntennaPatternsFromMap();
     void addDetection(const MeteorDemodSink::MsgMeteorDetected& detection);
     void addSatelliteDetection(const MeteorDemodSink::MsgSatelliteDetected& detection);
+    QDateTime movingTargetObservationDateTimeUtc(const QDateTime& displayTimeUtc) const;
     void applySatelliteTargetMatch(
         quint64 overlayId,
         const MovingTargetMatcher::Match& match,

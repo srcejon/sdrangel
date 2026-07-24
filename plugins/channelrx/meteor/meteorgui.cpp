@@ -2198,6 +2198,7 @@ void MeteorGUI::addSatelliteDetection(const MeteorDemodSink::MsgSatelliteDetecte
     const QDateTime displayTimeUtc = detection.m_displayDateTimeUtc.isValid()
         ? detection.m_displayDateTimeUtc
         : sampleTimeUtc;
+    const QDateTime observationTimeUtc = movingTargetObservationDateTimeUtc(displayTimeUtc);
     const QDateTime displayLocalTime = displayTimeUtc.toLocalTime();
     const double peakPowerDB = 10.0 * std::log10(std::max(1e-20, detection.m_peakPower));
     const double backgroundPowerDB = 10.0 * std::log10(std::max(1e-20, detection.m_backgroundPower));
@@ -2308,7 +2309,7 @@ void MeteorGUI::addSatelliteDetection(const MeteorDemodSink::MsgSatelliteDetecte
             detection.m_frequencyDrift,
             detection.m_durationS);
         rfClassification = classification.m_classification;
-        observation.m_startDateTimeUtc = sampleTimeUtc;
+        observation.m_startDateTimeUtc = observationTimeUtc;
         observation.m_durationS = detection.m_durationS;
         observation.m_centerFrequencyOffsetHz = detection.m_centerFrequency;
         observation.m_frequencyDriftHz = detection.m_frequencyDrift;
@@ -2327,7 +2328,7 @@ void MeteorGUI::addSatelliteDetection(const MeteorDemodSink::MsgSatelliteDetecte
         validObservation = true;
         targetMatch = MovingTargetMatcher::match(
             observation,
-            collectADSBTargets(sampleTimeUtc.addMSecs(
+            collectADSBTargets(observationTimeUtc.addMSecs(
                 (qint64) std::llround(detection.m_durationS * 500.0))));
         m_satellitesTable->setItem(row, 9, makeTableItem(QString::number(radialSpeedKPH, 'f', 1), radialSpeedKPH));
         m_satellitesTable->setItem(row, 10, makeTableItem(QString::number(maximumRadialSpeedKPH, 'f', 1), maximumRadialSpeedKPH));
@@ -2400,6 +2401,67 @@ void MeteorGUI::addSatelliteDetection(const MeteorDemodSink::MsgSatelliteDetecte
     }
 
     updateSpectrumViews();
+}
+
+QDateTime MeteorGUI::movingTargetObservationDateTimeUtc(const QDateTime& displayTimeUtc) const
+{
+    const QDateTime systemTimeUtc = displayTimeUtc.isValid()
+        ? displayTimeUtc.toUTC()
+        : QDateTime::currentDateTimeUtc();
+
+    if (!m_deviceUISet || !m_deviceUISet->m_deviceAPI) {
+        return systemTimeUtc;
+    }
+
+    const DeviceAPI *deviceAPI = m_deviceUISet->m_deviceAPI;
+    const QString hardwareId = deviceAPI->getHardwareId();
+
+    if ((hardwareId != QStringLiteral("FileInput"))
+        && (hardwareId != QStringLiteral("SigMFFileInput")))
+    {
+        return systemTimeUtc;
+    }
+
+    const unsigned int deviceSetIndex = (unsigned int) deviceAPI->getDeviceSetIndex();
+    const qint64 queryStartMSecs = QDateTime::currentMSecsSinceEpoch();
+    QString absoluteTimeText;
+
+    if (!ChannelWebAPIUtils::getDeviceReportValue(
+            deviceSetIndex,
+            QStringLiteral("absoluteTime"),
+            absoluteTimeText))
+    {
+        return systemTimeUtc;
+    }
+
+    const qint64 queryEndMSecs = QDateTime::currentMSecsSinceEpoch();
+    QDateTime playbackTime = QDateTime::fromString(
+        absoluteTimeText,
+        QStringLiteral("yyyy-MM-dd HH:mm:ss.zzz"));
+
+    if (!playbackTime.isValid()) {
+        playbackTime = QDateTime::fromString(absoluteTimeText, Qt::ISODateWithMs);
+    }
+
+    if (!playbackTime.isValid()) {
+        return systemTimeUtc;
+    }
+
+    int accelerationFactor = 1;
+    ChannelWebAPIUtils::getDeviceSetting(
+        deviceSetIndex,
+        QStringLiteral("accelerationFactor"),
+        accelerationFactor);
+    accelerationFactor = std::max(1, accelerationFactor);
+
+    const qint64 queryTimeMSecs = queryStartMSecs
+        + (queryEndMSecs - queryStartMSecs) / 2;
+    const qint64 detectionAgeMSecs = systemTimeUtc.msecsTo(
+        QDateTime::fromMSecsSinceEpoch(queryTimeMSecs, Qt::UTC));
+    const qint64 playbackAgeMSecs = (qint64) std::llround(
+        (double) detectionAgeMSecs * (double) accelerationFactor);
+
+    return playbackTime.toUTC().addMSecs(-playbackAgeMSecs);
 }
 
 void MeteorGUI::applySatelliteTargetMatch(

@@ -31,7 +31,6 @@
 #include <QObject>
 #include <QGeoPositionInfo>
 #include <QGeoPositionInfoSource>
-#include <QImage>
 
 #include "export.h"
 #include "settings/mainsettings.h"
@@ -868,29 +867,6 @@ public:
             m_swgSkyMapTarget(swgSkyMapTarget)
         { }
     };
-
-     class SDRBASE_API MsgImage : public Message {
-         MESSAGE_CLASS_DECLARATION
-
-     public:
-         const QObject *getPipeSource() const { return m_pipeSource; }
-         const QImage &getImage() const { return m_image; }
-
-         static MsgImage* create(const QObject *pipeSource, const QImage& image)
-         {
-             return new MsgImage(pipeSource, image);
-         }
-
-     private:
-         const QObject *m_pipeSource;
-         QImage m_image;
-
-         MsgImage(const QObject *pipeSource, const QImage& image) :
-             Message(),
-             m_pipeSource(pipeSource),
-             m_image(image)
-         { }
-     };
 
      class SDRBASE_API MsgEvent : public Message {
          MESSAGE_CLASS_DECLARATION

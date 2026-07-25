@@ -91,6 +91,7 @@ set(sdrgui_SOURCES
     gui/spectrummarkersdialog.cpp
     gui/spectrummeasurementsdialog.cpp
     gui/spectrummeasurements.cpp
+    gui/spectrumdisplayregistry.cpp
     gui/tablecolorchooser.cpp
     gui/tabletapandhold.cpp
     gui/tickedslider.cpp
@@ -226,6 +227,7 @@ set(sdrgui_HEADERS
     gui/spectrummarkersdialog.h
     gui/spectrummeasurementsdialog.h
     gui/spectrummeasurements.h
+    gui/spectrumdisplayregistry.h
     gui/tablecolorchooser.h
     gui/tabletapandhold.h
     gui/tickedslider.h

@@ -76,6 +76,7 @@ class SDRangelSplash;
 class QMenuBar;
 class Workspace;
 class MainWindow;
+class SpectrumDisplayRegistry;
 
 // Would preferablly have these FSM classes as nested classes of MainWindow
 // However, as they inherit from QObject, they should have Q_OBJECT macro which isn't supported for nested classes
@@ -290,6 +291,7 @@ public:
 	MessageQueue* getInputMessageQueue() { return &m_inputMessageQueue; }
     const PluginManager *getPluginManager() const { return m_pluginManager; }
     std::vector<DeviceUISet*>& getDeviceUISets() { return m_deviceUIs; }
+    SpectrumDisplayRegistry *getSpectrumDisplayRegistry() const { return m_spectrumDisplayRegistry; }
     void commandKeysConnect(const QObject *object, const char *slot);
     void commandKeysDisconnect(const QObject *object, const char *slot) const;
     int getNumberOfWorkspaces() const { return m_workspaces.size(); }
@@ -317,6 +319,7 @@ private:
     Workspace *m_currentWorkspace;
 	MessageQueue m_inputMessageQueue;
     MainCore *m_mainCore;
+    SpectrumDisplayRegistry *m_spectrumDisplayRegistry;
 	std::vector<DeviceUISet*> m_deviceUIs;
     std::vector<FeatureUISet*> m_featureUIs;
 	QList<DeviceWidgetTabData> m_deviceWidgetTabs;

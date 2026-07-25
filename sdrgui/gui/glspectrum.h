@@ -114,7 +114,10 @@ public:
     void setCalibrationInterpMode(SpectrumSettings::CalibrationInterpolationMode mode) { m_spectrum->setCalibrationInterpMode(mode); }
     void setIsDeviceSpectrum(bool isDeviceSpectrum) { m_spectrum->setIsDeviceSpectrum(isDeviceSpectrum); }
     bool isDeviceSpectrum() const { return m_spectrum->isDeviceSpectrum(); }
-    void setPipeProducer(QObject* pipeProducer) { m_spectrum->setPipeProducer(pipeProducer); }
+    void setDisplaySource(QObject *owner, const QString& role, const QString& title)
+    {
+        m_spectrum->setDisplaySource(owner, role, title);
+    }
     void setFrequencyZooming(float frequencyZoomFactor, float frequencyZoomPos) { m_spectrum->setFrequencyZooming(frequencyZoomFactor, frequencyZoomPos); }
     void setScrolling(bool enabled, int length) { m_spectrum->setScrolling(enabled, length); }
     void setWaterfallTimeFormat(SpectrumSettings::WaterfallTimeUnits waterfallTimeUnits, const QString& format) { m_spectrum->setWaterfallTimeFormat(waterfallTimeUnits, format); }

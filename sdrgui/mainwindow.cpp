@@ -120,6 +120,7 @@
 
 #include "gui/accessiblevaluedial.h"
 #include "gui/accessiblevaluedialz.h"
+#include "gui/spectrumdisplayregistry.h"
 
 MainWindow *MainWindow::m_instance = nullptr;
 
@@ -128,6 +129,7 @@ MainWindow::MainWindow(qtwebapp::LoggerWithFile *logger, const MainParser& parse
 	// ui(new Ui::MainWindow),
     m_currentWorkspace(nullptr),
     m_mainCore(MainCore::instance()),
+    m_spectrumDisplayRegistry(new SpectrumDisplayRegistry(this)),
 	m_dspEngine(DSPEngine::instance()),
 	m_lastEngineState(DeviceAPI::StNotStarted),
     m_dateTimeWidget(nullptr),
@@ -382,8 +384,8 @@ void AddSampleSourceFSM::addDevice()
     m_deviceAPI = new DeviceAPI(DeviceAPI::StreamSingleRx, m_deviceSetIndex, m_dspDeviceSourceEngine, nullptr, nullptr);
 
     m_deviceUISet->m_deviceAPI = m_deviceAPI;
-    m_deviceUISet->m_spectrum->setPipeProducer(m_deviceAPI);
     deviceSet->m_deviceAPI = m_deviceAPI;
+    m_deviceUISet->m_spectrum->setDisplaySource(m_deviceAPI, QStringLiteral("main"), tr("Main spectrum"));
 
     QList<QString> channelNames;
     m_mainWindow->m_pluginManager->listRxChannels(channelNames);
@@ -498,8 +500,8 @@ void AddSampleSinkFSM::addDevice()
     m_deviceAPI = new DeviceAPI(DeviceAPI::StreamSingleTx, m_deviceSetIndex, nullptr, m_dspDeviceSinkEngine, nullptr);
 
     m_deviceUISet->m_deviceAPI = m_deviceAPI;
-    m_deviceUISet->m_spectrum->setPipeProducer(m_deviceAPI);
     deviceSet->m_deviceAPI = m_deviceAPI;
+    m_deviceUISet->m_spectrum->setDisplaySource(m_deviceAPI, QStringLiteral("main"), tr("Main spectrum"));
 
     QList<QString> channelNames;
     m_mainWindow->m_pluginManager->listTxChannels(channelNames);
@@ -615,8 +617,8 @@ void AddSampleMIMOFSM::addDevice()
     m_deviceAPI = new DeviceAPI(DeviceAPI::StreamMIMO, m_deviceSetIndex, nullptr, nullptr, m_dspDeviceMIMOEngine);
 
     m_deviceUISet->m_deviceAPI = m_deviceAPI;
-    m_deviceUISet->m_spectrum->setPipeProducer(m_deviceAPI);
     deviceSet->m_deviceAPI = m_deviceAPI;
+    m_deviceUISet->m_spectrum->setDisplaySource(m_deviceAPI, QStringLiteral("main"), tr("Main spectrum"));
 
     QList<QString> mimoChannelNames;
     m_mainWindow->m_pluginManager->listMIMOChannels(mimoChannelNames);

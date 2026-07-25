@@ -20,7 +20,6 @@
 #define INCLUDE_FEATURE_CAMERAWORKER_H_
 
 #include <QObject>
-#include <QHash>
 #include <QSize>
 #include <QSet>
 #include <QTimer>
@@ -39,7 +38,6 @@
 
 #include "util/message.h"
 #include "util/messagequeue.h"
-#include "availabledevicehandler.h"
 #include "cameraalpacacontroller.h"
 #include "cameraasicontroller.h"
 #include "camerainfo.h"
@@ -51,7 +49,6 @@
 class QNetworkAccessManager;
 class QNetworkReply;
 class QUrl;
-class CameraPostProcessor;
 class CameraFramePreprocessor;
 class CameraFinder;
 
@@ -500,27 +497,6 @@ public:
         {}
     };
 
-    // Sent when the set of available spectrum-view devices changes
-    class MsgReportAvailableDevices : public Message {
-        MESSAGE_CLASS_DECLARATION
-
-    public:
-        const QStringList& getDeviceLongIds() const { return m_deviceLongIds; }
-
-        static MsgReportAvailableDevices* create(const QStringList& deviceLongIds)
-        {
-            return new MsgReportAvailableDevices(deviceLongIds);
-        }
-
-    private:
-        QStringList m_deviceLongIds;
-
-        MsgReportAvailableDevices(const QStringList& deviceLongIds) :
-            Message(),
-            m_deviceLongIds(deviceLongIds)
-        { }
-    };
-
     class MsgReportAutoExposureGain : public Message {
         MESSAGE_CLASS_DECLARATION
 
@@ -638,7 +614,6 @@ public:
     void setMessageQueueToGUI(MessageQueue *messageQueue);
     void setMessageQueueToFeature(MessageQueue *messageQueue) { m_msgQueueToFeature = messageQueue; }
     void setFramePreprocessor(CameraFramePreprocessor *framePreprocessor) { m_framePreprocessor = framePreprocessor; }
-    void setPostProcessorInputMessageQueue(MessageQueue *messageQueue) { m_postProcessorInputMessageQueue = messageQueue; }
     void setRecorderInputMessageQueue(MessageQueue *messageQueue) { m_qtAudio.setRecordingMessageQueue(messageQueue); }
 
 private:
@@ -646,11 +621,8 @@ private:
     MessageQueue *m_msgQueueToGUI;
     MessageQueue *m_msgQueueToFeature;
     CameraFramePreprocessor *m_framePreprocessor;
-    MessageQueue *m_postProcessorInputMessageQueue;
     QRecursiveMutex m_mutex;
     CameraSettings m_settings;
-    AvailableDeviceHandler m_availableDeviceHandler;
-    AvailableDeviceList m_availableDevices;
     QSet<QString> m_reportedFeatureErrorKeys;
     bool m_capturing;
     quint64 m_captureEpoch;
@@ -686,7 +658,6 @@ private:
     // outlive the playback controller.
     CameraMediaPlaybackController m_playback;
     QTimer m_statusTimer;   // polls camerastate + ccdtemperature
-    QHash<const QObject*, QString> m_spectrumPipeSourceIds; ///< Cached spectrum-view pipe source to device ID map
 #ifdef ASICAMERA_FOUND
     CameraAsiController m_asi;
     QElapsedTimer m_asiVideoCadenceTimer;
@@ -695,7 +666,6 @@ private:
 
     bool handleMessage(const Message& cmd);
     void applySettings(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force = false);
-    void reportAvailableDevicesToGUI() const;
     void reportErrorToFeature(const QString& errorKey, const QString& title, const QString& errorMessage);
     bool isHdrBracketingActive() const;
     void resetHdrBracketState();
@@ -766,11 +736,8 @@ private:
 
 private slots:
     void handleInputMessages();
-    void handleDeviceMessageQueue(MessageQueue* messageQueue);
     void captureTick();
     void statusTick();
-    void onAvailableDevicesChanged(const QStringList& renameFrom, const QStringList& renameTo,
-                                   const QStringList& removed, const QStringList& added);
     // Outbound media-playback reports/errors from CameraMediaPlaybackController.
     void onPlaybackReport(qint64 positionMs, qint64 durationMs, bool playing, bool open);
     void onPlaybackError(const QString& errorKey, const QString& title, const QString& errorMessage);

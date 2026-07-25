@@ -834,15 +834,15 @@ bool CameraPostProcessor::handleMessage(const Message& cmd)
     else if (MsgSpectrumFrame::match(cmd))
     {
         MsgSpectrumFrame& frameMsg = (MsgSpectrumFrame&) cmd;
-        if (frameMsg.getDeviceId().isEmpty() && frameMsg.getImage().isNull()) {
+        if (frameMsg.getSourceId().isEmpty() && frameMsg.getImage().isNull()) {
             m_spectrumViewImages.clear();
         } else if (frameMsg.getImage().isNull()) {
-            m_spectrumViewImages.remove(frameMsg.getDeviceId());
+            m_spectrumViewImages.remove(frameMsg.getSourceId());
         } else {
-            m_spectrumViewImages.insert(frameMsg.getDeviceId(), frameMsg.getImage());
+            m_spectrumViewImages.insert(frameMsg.getSourceId(), frameMsg.getImage());
         }
 
-        if (!m_lastFrame.m_image.isNull())
+        if (!m_captureActive && !m_lastFrame.m_image.isNull())
         {
             m_lastFrame.m_manualPreviewFrame = true;
             QVector<PreviewTextLabel> previewTextLabels;
@@ -1752,11 +1752,11 @@ void CameraPostProcessor::applySpectrumOverlay(QImage& image) const
 
     for (const CameraSettings::SpectrumOverlay& overlay : m_settings.m_spectrumOverlays)
     {
-        if (!overlay.m_enabled || overlay.m_device.isEmpty()) {
+        if (!overlay.m_enabled || overlay.m_source.isEmpty()) {
             continue;
         }
 
-        const QImage spectrumImage = m_spectrumViewImages.value(overlay.m_device);
+        const QImage spectrumImage = m_spectrumViewImages.value(overlay.m_source);
         if (spectrumImage.isNull()) {
             continue;
         }
@@ -1877,11 +1877,11 @@ QVector<CameraPostProcessor::WindowOverlayFrame> CameraPostProcessor::currentIma
 
     for (const CameraSettings::SpectrumOverlay& overlay : m_settings.m_spectrumOverlays)
     {
-        if (!overlay.m_enabled || overlay.m_device.isEmpty()) {
+        if (!overlay.m_enabled || overlay.m_source.isEmpty()) {
             continue;
         }
 
-        const QImage spectrumImage = m_spectrumViewImages.value(overlay.m_device);
+        const QImage spectrumImage = m_spectrumViewImages.value(overlay.m_source);
         if (spectrumImage.isNull()) {
             continue;
         }
@@ -2658,7 +2658,7 @@ QImage CameraPostProcessor::applyPostProcessing(
     bool needsSpectrumOverlay = false;
     for (const CameraSettings::SpectrumOverlay& overlay : m_settings.m_spectrumOverlays)
     {
-        if (overlay.m_enabled && !overlay.m_device.isEmpty() && !m_spectrumViewImages.value(overlay.m_device).isNull())
+        if (overlay.m_enabled && !overlay.m_source.isEmpty() && !m_spectrumViewImages.value(overlay.m_source).isNull())
         {
             needsSpectrumOverlay = true;
             break;

@@ -486,6 +486,8 @@ void MeteorGUI::setupUi(RollupContents *rollupContents)
     m_spectrumGUI = ui->spectrumGUI;
     m_headGLSpectrum = ui->headGLSpectrum;
     m_headSpectrumGUI = ui->headSpectrumGUI;
+    m_glSpectrum->setDisplaySource(m_meteor, QStringLiteral("meteor-trail"), tr("Trail spectrum"));
+    m_headGLSpectrum->setDisplaySource(m_meteor, QStringLiteral("meteor-head"), tr("Head spectrum"));
 
     m_frequencyMode->addItem("df");
     m_frequencyMode->addItem("f");

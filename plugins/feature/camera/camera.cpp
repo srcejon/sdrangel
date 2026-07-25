@@ -145,7 +145,6 @@ Camera::Camera(WebAPIAdapterInterface *webAPIAdapterInterface) :
     m_worker->setMessageQueueToGUI(getMessageQueueToGUI());
     m_worker->setMessageQueueToFeature(getInputMessageQueue());
     m_worker->setFramePreprocessor(getFramePreprocessor());
-    m_worker->setPostProcessorInputMessageQueue(getPostProcessorInputMessageQueue());
     m_worker->setRecorderInputMessageQueue(getRecorderInputMessageQueue());
     m_workerThread->start();
     m_worker->getInputMessageQueue()->push(Camera::MsgConfigureCamera::create(m_settings, QList<QString>(), true));
@@ -517,6 +516,13 @@ void Camera::requestPreRecordPreview(qint64 offsetMs)
 {
     if (m_recorder) {
         m_recorder->getInputMessageQueue()->push(CameraRecorder::MsgRequestPreRecordPreview::create(offsetMs));
+    }
+}
+
+void Camera::submitSpectrumOverlayFrame(const QString& sourceId, const QImage& image)
+{
+    if (m_postProcessor) {
+        m_postProcessor->getInputMessageQueue()->push(CameraPostProcessor::MsgSpectrumFrame::create(sourceId, image));
     }
 }
 

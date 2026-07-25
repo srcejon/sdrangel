@@ -84,20 +84,20 @@ public:
 
     public:
         const QImage& getImage() const { return m_image; }
-        const QString& getDeviceId() const { return m_deviceId; }
+        const QString& getSourceId() const { return m_sourceId; }
 
-        static MsgSpectrumFrame* create(const QString& deviceId, const QImage& image)
+        static MsgSpectrumFrame* create(const QString& sourceId, const QImage& image)
         {
-            return new MsgSpectrumFrame(deviceId, image);
+            return new MsgSpectrumFrame(sourceId, image);
         }
 
     private:
-        QString m_deviceId;
+        QString m_sourceId;
         QImage m_image;
 
-        MsgSpectrumFrame(const QString& deviceId, const QImage& image) :
+        MsgSpectrumFrame(const QString& sourceId, const QImage& image) :
             Message(),
-            m_deviceId(deviceId),
+            m_sourceId(sourceId),
             m_image(image)
         { }
     };

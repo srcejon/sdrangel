@@ -30,7 +30,6 @@
 #include <QNetworkAccessManager>
 #include <QRegularExpression>
 
-#include "maincore.h"
 #include "util/profiler.h"
 #include "camera.h"
 #include "cameraimageutils.h"
@@ -38,7 +37,6 @@
 #include "cameraasicontroller.h"
 #include "camerafinder.h"
 #include "cameraframepreprocessor.h"
-#include "camerapostprocessor.h"
 #include "cameraworker.h"
 
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgStartStop, Message)
@@ -52,7 +50,6 @@ MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportAlpacaCameraInfo, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportAsiCameraInfo, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportAlpacaFilterWheelInfo, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportAlpacaStatus, Message)
-MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportAvailableDevices, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportAutoExposureGain, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReportAutoFocus, Message)
 
@@ -88,8 +85,6 @@ CameraWorker::CameraWorker() :
     m_msgQueueToGUI(nullptr),
     m_msgQueueToFeature(nullptr),
     m_framePreprocessor(nullptr),
-    m_postProcessorInputMessageQueue(nullptr),
-    m_availableDeviceHandler({}, QStringList{"spectrumview"}),
     m_capturing(false),
     m_captureEpoch(0),
     m_captureTimer(this),
@@ -134,34 +129,12 @@ CameraWorker::CameraWorker() :
     QObject::connect(&m_playback, &CameraMediaPlaybackController::error,
         this, &CameraWorker::onPlaybackError);
 
-    QObject::connect(
-        &m_availableDeviceHandler,
-        &AvailableDeviceHandler::messageEnqueued,
-        this,
-        &CameraWorker::handleDeviceMessageQueue);
-    QObject::connect(
-        &m_availableDeviceHandler,
-        &AvailableDeviceHandler::devicesChanged,
-        this,
-        &CameraWorker::onAvailableDevicesChanged);
-    m_availableDeviceHandler.scanAvailableDevices();
-
 }
 
 CameraWorker::~CameraWorker()
 {
     stopWork();
     m_inputMessageQueue.clear();
-    QObject::disconnect(
-        &m_availableDeviceHandler,
-        &AvailableDeviceHandler::messageEnqueued,
-        this,
-        &CameraWorker::handleDeviceMessageQueue);
-    QObject::disconnect(
-        &m_availableDeviceHandler,
-        &AvailableDeviceHandler::devicesChanged,
-        this,
-        &CameraWorker::onAvailableDevicesChanged);
     delete m_networkManager;
     m_networkManager = nullptr;
 }
@@ -176,9 +149,6 @@ void CameraWorker::startWork()
         m_networkManager = new QNetworkAccessManager(this);
     }
 
-    // Notify GUI of already-known spectrum-view devices
-    reportAvailableDevicesToGUI();
-
     // Handle any messages already on the queue
     handleInputMessages();
 }
@@ -191,7 +161,6 @@ void CameraWorker::setMessageQueueToGUI(MessageQueue *messageQueue)
         m_cameraFinder->setMessageQueueToGUI(messageQueue);
     }
 
-    reportAvailableDevicesToGUI();
 }
 
 void CameraWorker::stopWork()
@@ -248,62 +217,6 @@ void CameraWorker::handleInputMessages()
             delete message;
         }
     }
-}
-
-void CameraWorker::handleDeviceMessageQueue(MessageQueue* messageQueue)
-{
-    Message* message;
-
-    while ((message = messageQueue->pop()) != nullptr)
-    {
-        if (handleMessage(*message)) {
-            delete message;
-        }
-    }
-}
-
-void CameraWorker::onAvailableDevicesChanged(const QStringList& renameFrom, const QStringList& renameTo,
-                                              const QStringList& removed, const QStringList& added)
-{
-    (void) renameFrom;
-    (void) renameTo;
-    (void) removed;
-    (void) added;
-
-    // Re-resolve selected spectrum view pipe sources in case the device list changed
-    m_spectrumPipeSourceIds.clear();
-    QSet<QString> selectedSpectrumDevices;
-    for (const CameraSettings::SpectrumOverlay& overlay : m_settings.m_spectrumOverlays)
-    {
-        if (overlay.m_enabled && !overlay.m_device.isEmpty()) {
-            selectedSpectrumDevices.insert(overlay.m_device);
-        }
-    }
-    const AvailableDeviceList& devices = m_availableDeviceHandler.getAvailableDeviceList();
-    for (const auto& device : devices)
-    {
-        if (selectedSpectrumDevices.contains(device.getLongId())) {
-            m_spectrumPipeSourceIds.insert(device.m_object, device.getLongId());
-        }
-    }
-
-    reportAvailableDevicesToGUI();
-}
-
-void CameraWorker::reportAvailableDevicesToGUI() const
-{
-    if (!m_msgQueueToGUI) {
-        return;
-    }
-
-    const AvailableDeviceList& devices = m_availableDeviceHandler.getAvailableDeviceList();
-    QStringList longIds;
-    longIds.reserve(devices.size());
-    for (const auto& device : devices) {
-        longIds.append(device.getLongId());
-    }
-
-    m_msgQueueToGUI->push(MsgReportAvailableDevices::create(longIds));
 }
 
 void CameraWorker::reportErrorToFeature(const QString& errorKey, const QString& title, const QString& errorMessage)
@@ -1069,16 +982,6 @@ bool CameraWorker::handleMessage(const Message& cmd)
         }
         return true;
     }
-    else if (MainCore::MsgImage::match(cmd))
-    {
-        MainCore::MsgImage& imgMsg = (MainCore::MsgImage&) cmd;
-        const QString deviceId = m_spectrumPipeSourceIds.value(imgMsg.getPipeSource());
-        if (!deviceId.isEmpty() && m_postProcessorInputMessageQueue) {
-            m_postProcessorInputMessageQueue->push(CameraPostProcessor::MsgSpectrumFrame::create(deviceId, imgMsg.getImage()));
-        }
-        return true;
-    }
-
     return false;
 }
 
@@ -1316,30 +1219,6 @@ void CameraWorker::applySettings(const CameraSettings& settings, const QList<QSt
         asiCloseCamera();
     }
 #endif
-
-    // Resolve the device object pointers when spectrum overlay settings change
-    if (force || settingsKeys.contains("spectrumOverlays") || settingsKeys.contains("spectrumDevice"))
-    {
-        m_spectrumPipeSourceIds.clear();
-        QSet<QString> selectedSpectrumDevices;
-        for (const CameraSettings::SpectrumOverlay& overlay : m_settings.m_spectrumOverlays)
-        {
-            if (overlay.m_enabled && !overlay.m_device.isEmpty()) {
-                selectedSpectrumDevices.insert(overlay.m_device);
-            }
-        }
-        const AvailableDeviceList& devices = m_availableDeviceHandler.getAvailableDeviceList();
-        for (const auto& device : devices)
-        {
-            if (selectedSpectrumDevices.contains(device.getLongId())) {
-                m_spectrumPipeSourceIds.insert(device.m_object, device.getLongId());
-            }
-        }
-        // When the selected devices change, clear cached images to avoid showing stale overlays
-        if (m_postProcessorInputMessageQueue) {
-            m_postProcessorInputMessageQueue->push(CameraPostProcessor::MsgSpectrumFrame::create(QString(), QImage()));
-        }
-    }
 
     if (recapture) {
         startCapture();

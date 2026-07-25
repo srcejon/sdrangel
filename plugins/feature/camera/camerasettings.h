@@ -304,10 +304,11 @@ struct CameraSettings
     struct SpectrumOverlay
     {
         bool m_enabled = true;
-        QString m_device;
+        QString m_source;
         int m_offsetX = 0;
         int m_offsetY = 0;
         double m_scale = 1.0;
+        double m_captureFps = 2.0;
     };
 
     enum FovMode

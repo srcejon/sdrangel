@@ -39,8 +39,10 @@
 #include <QPanGesture>
 #include <QPinchGesture>
 #include "maincore.h"
+#include "mainwindow.h"
 #include "dsp/spectrumvis.h"
 #include "gui/glspectrumview.h"
+#include "gui/spectrumdisplayregistry.h"
 #include "gui/spectrummeasurements.h"
 #include "settings/mainsettings.h"
 #include "util/messagequeue.h"
@@ -5573,7 +5575,6 @@ void GLSpectrumView::tick()
         m_displayChanged = false;
         update();
 
-        sendDisplayToPipe();
     }
 }
 
@@ -6138,31 +6139,14 @@ void GLSpectrumView::getDisplayedSpectrumCopy(std::vector<Real>& copy, bool zoom
     }
 }
 
-// Set the object (tpyically DeviceAPI) that will be the source of messages sent via "spectrumview" pipe
-void GLSpectrumView::setPipeProducer(QObject* pipeProducer)
+void GLSpectrumView::setDisplaySource(QObject *owner, const QString& role, const QString& title)
 {
-    m_pipeProducer = pipeProducer;
-}
-
-void GLSpectrumView::sendDisplayToPipe()
-{
-    if (m_pipeProducer)
+    if (MainWindow *mainWindow = MainWindow::getInstance())
     {
-        QList<ObjectPipe*> messagePipes;
-        MainCore::instance()->getMessagePipes().getMessagePipes(m_pipeProducer, "spectrumview", messagePipes);
-
-        if (!messagePipes.isEmpty())
-        {
-            const QPixmap pixmap = grab();
-            QImage image = pixmap.toImage();
-            image.setDevicePixelRatio(pixmap.devicePixelRatio());
-
-            for (const auto& pipe : messagePipes)
-            {
-                MessageQueue *messageQueue = qobject_cast<MessageQueue*>(pipe->m_element);
-                MainCore::MsgImage *msg = MainCore::MsgImage::create(m_pipeProducer, image);
-                messageQueue->push(msg);
-            }
+        SpectrumDisplayRegistry *registry = mainWindow->getSpectrumDisplayRegistry();
+        registry->unregisterSource(this);
+        if (owner) {
+            registry->registerSource(owner, role, title, this);
         }
     }
 }

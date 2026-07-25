@@ -68,6 +68,7 @@ class CameraHistogramDialog;
 class CameraOpticalSpectrumDialog;
 class ButtonSwitch;
 class Message;
+class SpectrumDisplayRegistry;
 class QLabel;
 class QButtonGroup;
 class QCheckBox;
@@ -308,9 +309,15 @@ private:
     QPushButton *m_windowOverlayUpButton = nullptr;
     QPushButton *m_windowOverlayDownButton = nullptr;
     QTimer m_windowOverlayCaptureTimer;
+    QTimer m_spectrumOverlayCaptureTimer;
     bool m_updatingSpectrumOverlaysTable = false;
     bool m_updatingWindowOverlaysTable = false;
-    QStringList m_spectrumOverlayDeviceIds;
+    SpectrumDisplayRegistry *m_spectrumDisplayRegistry = nullptr;
+    QStringList m_spectrumOverlaySourceIds;
+    QHash<QString, QString> m_spectrumOverlaySourceNames;
+    QHash<quint64, QString> m_pendingSpectrumOverlayRequests;
+    QSet<QString> m_pendingSpectrumOverlaySources;
+    QHash<QString, qint64> m_spectrumOverlayLastRequestMs;
     QVector<qint64> m_windowOverlayLastCaptureMs;
     QVector<CameraPostProcessor::WindowOverlayFrame> m_windowOverlayCapturedFrames;
     bool m_alpacaHasNamedGains;   // true if gains list has named entries
@@ -501,6 +508,10 @@ private:
     void createWindowOverlaysTab();
     void updateSpectrumOverlaysTable();
     void updateSpectrumOverlayControls();
+    void updateSpectrumOverlaySources(const QStringList& renameFrom = {}, const QStringList& renameTo = {});
+    void updateSpectrumOverlayCaptureTimer();
+    void captureSpectrumOverlays(bool force = false);
+    void handleSpectrumOverlayImageReady(quint64 requestId, const QString& sourceId, const QImage& image);
     void applySpectrumOverlaysFromTable();
     void updateWindowOverlaysTable();
     void updateWindowOverlayControls();

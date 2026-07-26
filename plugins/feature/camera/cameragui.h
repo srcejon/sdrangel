@@ -28,6 +28,7 @@
 #include <QGraphicsPixmapItem>
 #include <QNetworkReply>
 #include <QPair>
+#include <QPointF>
 #include <QSet>
 #include <QSize>
 #include <QTimer>
@@ -350,6 +351,12 @@ private:
     CameraDrawing m_pendingDrawing;
     DrawingTool m_drawingTool = DrawingToolSelect;
     bool m_drawingDragging = false;
+    bool m_drawingMoveDragging = false;
+    bool m_drawingMoveChanged = false;
+    int m_drawingMoveIndex = -1;
+    QPointF m_drawingMoveStartPoint;
+    CameraDrawing m_drawingMoveOriginal;
+    CameraDrawing m_drawingMoveCurrent;
     bool m_drawingOverlayDirty = true;
     QSize m_drawingOverlayImageSize;
     QList<QList<CameraDrawing>> m_drawingUndoStack;

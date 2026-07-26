@@ -834,15 +834,23 @@ bool CameraPostProcessor::handleMessage(const Message& cmd)
     else if (MsgSpectrumFrame::match(cmd))
     {
         MsgSpectrumFrame& frameMsg = (MsgSpectrumFrame&) cmd;
+        bool overlayAvailabilityChanged = false;
+
         if (frameMsg.getSourceId().isEmpty() && frameMsg.getImage().isNull()) {
+            overlayAvailabilityChanged = !m_spectrumViewImages.isEmpty();
             m_spectrumViewImages.clear();
         } else if (frameMsg.getImage().isNull()) {
+            overlayAvailabilityChanged = m_spectrumViewImages.contains(frameMsg.getSourceId());
             m_spectrumViewImages.remove(frameMsg.getSourceId());
         } else {
+            overlayAvailabilityChanged = !m_spectrumViewImages.contains(frameMsg.getSourceId());
             m_spectrumViewImages.insert(frameMsg.getSourceId(), frameMsg.getImage());
         }
 
-        if (!m_captureActive && !m_lastFrame.m_image.isNull())
+        // Regular spectrum refreshes are composed with the next captured frame.
+        // Re-render immediately while paused, or when a selected source first
+        // appears/disappears, without adding post-processing work at spectrum FPS.
+        if ((!m_captureActive || overlayAvailabilityChanged) && !m_lastFrame.m_image.isNull())
         {
             m_lastFrame.m_manualPreviewFrame = true;
             QVector<PreviewTextLabel> previewTextLabels;
@@ -1051,8 +1059,28 @@ void CameraPostProcessor::applySettings(const CameraSettings& settings, const QL
         m_trackedObjectHeatMapSkipSeed = false;
     }
 
-    if (force || settingsKeys.contains("spectrumOverlays") || settingsKeys.contains("spectrumDevice")) {
-        m_spectrumViewImages.clear();
+    if (force || settingsKeys.contains("spectrumOverlays") || settingsKeys.contains("spectrumDevice"))
+    {
+        QSet<QString> selectedSources;
+        for (const CameraSettings::SpectrumOverlay& overlay : m_settings.m_spectrumOverlays)
+        {
+            if (overlay.m_enabled && !overlay.m_source.isEmpty()) {
+                selectedSources.insert(overlay.m_source);
+            }
+        }
+
+        // Keep cached images for unchanged sources so position/scale edits can
+        // redraw the current camera frame immediately. Only stale sources need
+        // to be discarded.
+        auto imageIt = m_spectrumViewImages.begin();
+        while (imageIt != m_spectrumViewImages.end())
+        {
+            if (!selectedSources.contains(imageIt.key())) {
+                imageIt = m_spectrumViewImages.erase(imageIt);
+            } else {
+                ++imageIt;
+            }
+        }
     }
 
     if (force || settingsKeys.contains("windowOverlays")) {

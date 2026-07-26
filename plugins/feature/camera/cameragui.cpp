@@ -171,6 +171,14 @@ public:
         setZValue(2.2);
     }
 
+    void setDrawing(const CameraDrawing& drawing, const QSize& imageSize)
+    {
+        prepareGeometryChange();
+        m_drawing = drawing;
+        m_imageSize = imageSize;
+        update();
+    }
+
     QRectF boundingRect() const override
     {
         return CameraDrawingRenderer::bounds(m_drawing, m_imageSize);
@@ -3394,6 +3402,136 @@ bool CameraGUI::handleDrawingEvent(QEvent *event)
 {
     if (!m_settings.m_drawingsEnabled || m_lastImage.isNull() || (m_previewDrawMode != PreviewDrawModeNone)) {
         return false;
+    }
+
+    if ((event->type() == QEvent::MouseButtonPress) && (m_drawingTool == DrawingToolSelect))
+    {
+        const QMouseEvent *mouseEvent = static_cast<QMouseEvent*>(event);
+        if (mouseEvent->button() != Qt::LeftButton) {
+            return false;
+        }
+
+        QGraphicsItem *selectedItem = nullptr;
+        const QPointF scenePoint = ui->imageView->mapToScene(mouseEvent->pos());
+        const QList<QGraphicsItem*> items = m_imageScene->items(
+            scenePoint,
+            Qt::IntersectsItemShape,
+            Qt::DescendingOrder);
+        for (QGraphicsItem *item : items)
+        {
+            if (m_drawingOverlayItems.contains(item))
+            {
+                selectedItem = item;
+                break;
+            }
+        }
+
+        if (mouseEvent->modifiers() & Qt::ControlModifier)
+        {
+            if (selectedItem) {
+                selectedItem->setSelected(!selectedItem->isSelected());
+            }
+            return true;
+        }
+
+        m_imageScene->clearSelection();
+        if (!selectedItem) {
+            return true;
+        }
+
+        const int drawingIndex = selectedItem->data(0).toInt();
+        if ((drawingIndex < 0) || (drawingIndex >= m_settings.m_drawings.size())) {
+            return true;
+        }
+
+        selectedItem->setSelected(true);
+        m_drawingMoveDragging = true;
+        m_drawingMoveChanged = false;
+        m_drawingMoveIndex = drawingIndex;
+        m_drawingMoveOriginal = m_settings.m_drawings.at(drawingIndex);
+        m_drawingMoveCurrent = m_drawingMoveOriginal;
+        m_drawingMoveStartPoint = QPointF(
+            qBound(0.0, scenePoint.x() / std::max(1, m_lastImage.width()), 1.0),
+            qBound(0.0, scenePoint.y() / std::max(1, m_lastImage.height()), 1.0));
+        ui->imageView->viewport()->setCursor(Qt::ClosedHandCursor);
+        return true;
+    }
+
+    if ((event->type() == QEvent::MouseMove) && m_drawingMoveDragging)
+    {
+        const QMouseEvent *mouseEvent = static_cast<QMouseEvent*>(event);
+        const QPointF scenePoint = ui->imageView->mapToScene(mouseEvent->pos());
+        const QPointF currentPoint(
+            qBound(0.0, scenePoint.x() / std::max(1, m_lastImage.width()), 1.0),
+            qBound(0.0, scenePoint.y() / std::max(1, m_lastImage.height()), 1.0));
+        QPointF delta = currentPoint - m_drawingMoveStartPoint;
+
+        if (!m_drawingMoveOriginal.m_points.isEmpty())
+        {
+            double minimumX = 1.0;
+            double maximumX = 0.0;
+            double minimumY = 1.0;
+            double maximumY = 0.0;
+            for (const QPointF& point : m_drawingMoveOriginal.m_points)
+            {
+                minimumX = std::min(minimumX, point.x());
+                maximumX = std::max(maximumX, point.x());
+                minimumY = std::min(minimumY, point.y());
+                maximumY = std::max(maximumY, point.y());
+            }
+            delta.setX(qBound(-minimumX, delta.x(), 1.0 - maximumX));
+            delta.setY(qBound(-minimumY, delta.y(), 1.0 - maximumY));
+        }
+
+        m_drawingMoveCurrent = m_drawingMoveOriginal;
+        for (QPointF& point : m_drawingMoveCurrent.m_points) {
+            point += delta;
+        }
+        m_drawingMoveChanged = !qFuzzyIsNull(delta.x()) || !qFuzzyIsNull(delta.y());
+
+        if ((m_drawingMoveIndex >= 0) && (m_drawingMoveIndex < m_drawingOverlayItems.size()))
+        {
+            if (auto *item = dynamic_cast<CameraDrawingGraphicsItem*>(
+                    m_drawingOverlayItems.at(m_drawingMoveIndex))) {
+                item->setDrawing(m_drawingMoveCurrent, m_lastImage.size());
+            }
+        }
+        return true;
+    }
+
+    if ((event->type() == QEvent::MouseButtonRelease) && m_drawingMoveDragging)
+    {
+        const QMouseEvent *mouseEvent = static_cast<QMouseEvent*>(event);
+        if (mouseEvent->button() != Qt::LeftButton) {
+            return false;
+        }
+
+        const int drawingIndex = m_drawingMoveIndex;
+        const bool commitMove = m_drawingMoveChanged
+            && (drawingIndex >= 0)
+            && (drawingIndex < m_settings.m_drawings.size());
+        m_drawingMoveDragging = false;
+        m_drawingMoveChanged = false;
+        m_drawingMoveIndex = -1;
+        ui->imageView->viewport()->unsetCursor();
+
+        if (commitMove)
+        {
+            pushDrawingUndoState();
+            m_settings.m_drawings[drawingIndex] = m_drawingMoveCurrent;
+            applyDrawings();
+            if (drawingIndex < m_drawingOverlayItems.size()) {
+                m_drawingOverlayItems.at(drawingIndex)->setSelected(true);
+            }
+        }
+        else if ((drawingIndex >= 0) && (drawingIndex < m_drawingOverlayItems.size()))
+        {
+            if (auto *item = dynamic_cast<CameraDrawingGraphicsItem*>(
+                    m_drawingOverlayItems.at(drawingIndex))) {
+                item->setDrawing(m_drawingMoveOriginal, m_lastImage.size());
+            }
+        }
+        return true;
     }
 
     if ((event->type() == QEvent::MouseButtonPress) && (m_drawingTool != DrawingToolSelect))

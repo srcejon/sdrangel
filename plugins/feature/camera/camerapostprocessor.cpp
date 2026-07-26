@@ -981,6 +981,7 @@ void CameraPostProcessor::applySettings(const CameraSettings& settings, const QL
         "overlayTextFontFamily", "overlayTextFontScale", "overlayTextPosX", "overlayTextPosY",
         "overlayFontFamily", "overlayFontScale",
         "motionBoxColor", "starColor", "showStarDetectionBoxes",
+        "cloudShowOverlay", "cloudColor",
         "plateSolveLabelMode", "plateSolveLabelHideSyntheticNames", "yoloEnabled",
         "overlaySpectrum", "spectrumDevice", "spectrumOffsetX", "spectrumOffsetY", "spectrumScale", "spectrumOverlays", "windowOverlays",
         "drawingsEnabled", "drawingLineWidth", "drawingStrokeColor", "drawingFillEnabled", "drawingFillColor",

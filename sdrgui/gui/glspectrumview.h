@@ -32,6 +32,7 @@
 #include <QOpenGLVertexArrayObject>
 #include <QMatrix4x4>
 #include <QPoint>
+#include <QRect>
 #include <QOpenGLWidget>
 #include <QOpenGLDebugLogger>
 #include <QScrollBar>
@@ -287,6 +288,11 @@ public:
     double waterfallTimePerPixel() const;
     double waterfallFrequencyPerPixel();
     void drawWaterfallOverlayBox(float x1, float y1, float x2, float y2, const QColor& color, float alpha = 1.0f);
+    void drawWaterfallOverlayText(
+        const QString& text,
+        const QRect& rect,
+        const QColor& color,
+        const QColor& backgroundColor = QColor(0, 0, 0, 190));
 
     QString formatTick(double value) const override;
 

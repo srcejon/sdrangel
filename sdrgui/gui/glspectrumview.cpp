@@ -3507,6 +3507,62 @@ void GLSpectrumView::drawWaterfallOverlayBox(float x1, float y1, float x2, float
     m_glShaderSimple.drawContour(m_glWaterfallBoxMatrix, glColor, vertices, 4);
 }
 
+void GLSpectrumView::drawWaterfallOverlayText(
+    const QString& text,
+    const QRect& rect,
+    const QColor& color,
+    const QColor& backgroundColor)
+{
+    if ((m_waterfallHeight <= 0) || !m_displayWaterfall || text.isEmpty()
+        || rect.isEmpty() || (width() <= 0) || (height() <= 0))
+    {
+        return;
+    }
+
+    const QRect clippedRect = rect.intersected(QRect(0, 0, width(), height()));
+
+    if (clippedRect.isEmpty()) {
+        return;
+    }
+
+    QPixmap labelPixmap(clippedRect.size());
+    labelPixmap.fill(Qt::transparent);
+
+    QPainter painter(&labelPixmap);
+    painter.setRenderHints(QPainter::Antialiasing | QPainter::TextAntialiasing, false);
+    painter.fillRect(labelPixmap.rect(), backgroundColor);
+    painter.setPen(color);
+    painter.setFont(font());
+    painter.drawText(labelPixmap.rect(), Qt::AlignCenter, text);
+    painter.end();
+
+    m_glShaderTextOverlay.initTexture(labelPixmap.toImage());
+
+    GLfloat vtx1[] = {
+        0, 1,
+        1, 1,
+        1, 0,
+        0, 0
+    };
+    GLfloat tex1[] = {
+        0, 1,
+        1, 1,
+        1, 0,
+        0, 0
+    };
+
+    const float rectX = clippedRect.x() / (float) width();
+    const float rectY = clippedRect.y() / (float) height();
+    const float rectW = clippedRect.width() / (float) width();
+    const float rectH = clippedRect.height() / (float) height();
+
+    QMatrix4x4 mat;
+    mat.setToIdentity();
+    mat.translate(-1.0f + 2.0f * rectX, 1.0f - 2.0f * rectY);
+    mat.scale(2.0f * rectW, -2.0f * rectH);
+    m_glShaderTextOverlay.drawSurface(mat, tex1, vtx1, 4);
+}
+
 void GLSpectrumView::setTimeScaleRange()
 {
     if (m_waterfallTimeUnits != SpectrumSettings::TimeOffset)

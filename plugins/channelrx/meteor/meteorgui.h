@@ -152,18 +152,10 @@ private:
     GLSpectrumGUI *m_spectrumGUI;
     GLSpectrum *m_headGLSpectrum;
     GLSpectrumGUI *m_headSpectrumGUI;
-    QVector<QLabel *> m_detectionOverlayLabels;
-    QVector<QLabel *> m_headDetectionOverlayLabels;
 
     int m_totalCount;
     bool m_highlightAllDetectionOverlays;
     quint64 m_nextDetectionOverlayId;
-    bool m_detectionOverlayWindowValid;
-    QDateTime m_detectionOverlayWindowStartUtc;
-    QDateTime m_detectionOverlayWindowEndUtc;
-    bool m_headDetectionOverlayWindowValid;
-    QDateTime m_headDetectionOverlayWindowStartUtc;
-    QDateTime m_headDetectionOverlayWindowEndUtc;
     QMap<QDate, QVector<int> > m_hourlyCounts;
     QMap<QDate, QVector<bool> > m_hourlyData;
     QSet<QDate> m_dirtyRMOBMonths;
@@ -246,14 +238,7 @@ private:
     QString rmobReceiverName() const;
     void drawDetectionOverlays(
         GLSpectrumView *spectrumView,
-        SpectrumVis *spectrumVis,
-        QVector<QLabel *>& overlayLabels,
-        bool& overlayWindowValid,
-        QDateTime& overlayWindowStartUtc,
-        QDateTime& overlayWindowEndUtc);
-    void hideDetectionOverlayLabels();
-    static void hideDetectionOverlayLabels(QVector<QLabel *>& overlayLabels);
-    void invalidateDetectionOverlayWindows();
+        SpectrumVis *spectrumVis);
     void updateSpectrumViews();
     void scrollSpectrumViewsToUTC(const QDateTime& dateTimeUtc);
     QString detectionOverlayLabel(const DetectionOverlay& detection) const;

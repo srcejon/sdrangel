@@ -78,6 +78,29 @@ constexpr float moonlitStructureFillDensity = 0.045f;
 // exceeds this; pastel overcast regions measure 4-8%, genuinely clear regions under 0.5%
 constexpr float moonlitStructureRegionDensity = 0.02f;
 constexpr double moonlitStructureBrightness = 0.5;
+// The day structure vote runs only when the bluest part of the bright sky is itself this
+// whitish - i.e. the frame holds no genuinely blue sky to lose, so flipping whole lumpy
+// regions to cloud cannot swallow a clear gap. A clear or partly clear day sits well below it.
+//
+// This is an absolute red/blue ratio, deliberately NOT a fraction of the user's day cloud
+// threshold. Scaling it with that setting coupled two unrelated decisions: lowering the day
+// threshold (the right move on a camera whose cloud is bluer than the 0.85 default assumes)
+// also lowered this gate, which silently switched the whole-region flip on and made a partly
+// cloudy sky read as overcast. Keeping it fixed leaves the threshold doing one predictable
+// job - how white a pixel must be to count as cloud - and leaves this gate answering the
+// separate question of whether any clear sky remains.
+constexpr double dayOvercastRatioGate = 0.612;
+// Near-saturated pixels are exempt from the day texture veto: sunlit cloud tops saturate and
+// carry hard bright edges the fine-detail measure reads as texture, while the roofs and
+// foliage the veto exists to reject are far darker than a sunlit cloud top.
+constexpr int daySaturatedCloud = 230;
+// Clear-sky colour profile: rings of constant distance from the sky centre (constant
+// elevation on an all-sky lens), and the percentile within a ring taken as the clear sky.
+// The percentile is low so the profile stays on the clear sky even when much of a ring is
+// clouded; the ring count is a compromise between following the horizon ramp and keeping
+// enough samples per ring to be robust.
+constexpr int kDayProfileRings = 24;
+constexpr double kDayProfilePercentile = 0.25;
 // Dark night: pixels below this brightness are border or foreground, not sky, and are kept
 // out of the local background average so the dark fisheye surround cannot bleed into it
 constexpr int darkSkyFloor = 12;
@@ -99,6 +122,19 @@ constexpr double sunDayElevation = -4.0;
 // cloud sheet merely touching the glare cannot be swallowed whole, and a small disc at the
 // body position is always excluded from evaluation (the body itself is neither clear nor cloud).
 constexpr int sunMoonGlareFloor = 200;        // 0..255: minimum peak brightness to treat the body as visible glare
+// When the sky immediately around the body (inside the max disc, outside the seed) is itself
+// this fraction flagged as cloud, the body is behind an overcast sheet, not glinting through
+// clear sky: its bloom is indistinguishable from the surrounding cloud, so removing it would
+// punch a spurious clear hole. Keep the cloud in that case.
+constexpr double sunMoonOvercastFraction = 0.80;
+// A flagged region lying wholly inside the body's disc is treated as glare debris (a flare
+// ghost, or a bloom fragment the morphology detached) only while it is small compared with
+// the disc. The disc can be tens of degrees across, and without this bound a whole cumulus
+// mass that happens to sit near the sun is deleted as "debris".
+constexpr double sunMoonDebrisMaxDiscFraction = 0.05;
+// How much whiter than this frame's own clear blue the ring of sky around the body must be
+// before the body counts as embedded in cloud rather than glinting through clear sky
+constexpr double sunMoonEmbeddedRatioMargin = 0.10;
 constexpr double sunMoonMinRadiusDeg = 1.5;   // always exclude this disc at the body position from evaluation
 constexpr double sunMoonSeedFraction = 0.25;  // seed search radius as a fraction of the max radius (absorbs pose error)
 
@@ -431,6 +467,7 @@ bool CameraCloudDetector::cloudSettingsChanged(const QList<QString>& settingsKey
         || settingsKeys.contains("plateSolveDateTimeUtc")
         || settingsKeys.contains("cloudEdgeMarginPercent")
         || settingsKeys.contains("cloudMinElevation")
+        || settingsKeys.contains("cloudDayRelativeMargin")
         || settingsKeys.contains("cloudMaskSunMoon")
         || settingsKeys.contains("cloudSunMoonRadiusDeg")
         || settingsKeys.contains("cloudStarSense")
@@ -824,7 +861,7 @@ bool CameraCloudDetector::resolveNightMode(const cv::Mat& medianGray, const cv::
 // and counting the removal as clear sky biased measured coverage down on sunlit cloud (a field
 // case lost a whole flagged cloud sheet around the sun to the removal and read 5 % on an
 // overcast sky). Runs after classification and morphology, before coverage is measured.
-void CameraCloudDetector::applySunMoonMask(cv::Mat& mask, cv::Mat& evaluationMask, const cv::Mat& gray, const cv::Rect& roi, const QSize& imageSize, const CameraPipelineImageTransform& imageTransform, const QDateTime& captureDateTime) const
+void CameraCloudDetector::applySunMoonMask(cv::Mat& mask, cv::Mat& evaluationMask, const cv::Mat& gray, const cv::Mat& workBgr, const cv::Rect& roi, const QSize& imageSize, const CameraPipelineImageTransform& imageTransform, const QDateTime& captureDateTime) const
 {
     if (!m_settings.m_cloudMaskSunMoon || (m_settings.m_cloudSunMoonRadiusDeg <= 0.0)) {
         return;
@@ -847,6 +884,25 @@ void CameraCloudDetector::applySunMoonMask(cv::Mat& mask, cv::Mat& evaluationMas
     const double maxRadiusDeg = m_settings.m_cloudSunMoonRadiusDeg;
     const double scaleX = static_cast<double>(evaluationMask.cols) / roi.width;
     const double scaleY = static_cast<double>(evaluationMask.rows) / roi.height;
+
+    // This frame's own clear blue, for the embedded-in-cloud test below
+    cv::Mat redF, blueF;
+    bool haveColour = false;
+    float clearAnchorRatio = 0.0f;
+    if (!workBgr.empty() && (workBgr.channels() == 3) && (workBgr.size() == gray.size()))
+    {
+        std::vector<cv::Mat> channels;
+        cv::split(workBgr, channels);
+        channels[0].convertTo(blueF, CV_32F);
+        channels[2].convertTo(redF, CV_32F);
+        cv::Mat brightSky;
+        cv::bitwise_and(evaluationMask, gray >= dayMinBrightness, brightSky);
+        if (cv::countNonZero(brightSky) > 0)
+        {
+            clearAnchorRatio = maskedRatioPercentile(redF, blueF, brightSky, moonlitClearSkyFraction);
+            haveColour = true;
+        }
+    }
 
     const auto maskBody = [&](const AzAlt& body)
     {
@@ -910,6 +966,30 @@ void CameraCloudDetector::applySunMoonMask(cv::Mat& mask, cv::Mat& evaluationMas
             return;
         }
 
+        // Is the body embedded in cloud rather than glinting through clear sky? Compare the
+        // ring of sky around it against this frame's own clear blue: a ring markedly whiter
+        // than the clear sky is cloud, and then the body's bloom cannot be told apart from
+        // the cloud it sits in, so removing anything would punch a clear hole in real cloud.
+        // This reads the image rather than the mask, so it still decides correctly when the
+        // classifier has under-detected the very cloud in question - which is exactly the
+        // situation on a bright cumulus sky, where the colour test only catches the whitest
+        // fragments and the body's disc covers the rest.
+        if (haveColour)
+        {
+            cv::Mat ring = cv::Mat::zeros(window.size(), CV_8UC1);
+            cv::circle(ring, centreInWindow, maxRadiusPx, cv::Scalar(255), cv::FILLED);
+            cv::circle(ring, centreInWindow, seedRadiusPx, cv::Scalar(0), cv::FILLED);
+            cv::bitwise_and(ring, evaluationMask(window), ring);
+            cv::bitwise_and(ring, gray(window) >= dayMinBrightness, ring);
+            if (cv::countNonZero(ring) > 0)
+            {
+                const float ringRatio = maskedRatioPercentile(redF(window), blueF(window), ring, 0.5);
+                if (ringRatio > clearAnchorRatio + sunMoonEmbeddedRatioMargin) {
+                    return;
+                }
+            }
+        }
+
         // Delete the connected components of the final cloud mask that belong to the glare -
         // the classifier's own false positive, sized exactly to the bloom. Two kinds qualify:
         // components touching the seed (the bloom itself), and components lying entirely
@@ -922,15 +1002,42 @@ void CameraCloudDetector::applySunMoonMask(cv::Mat& mask, cv::Mat& evaluationMas
         cv::Mat discMask = cv::Mat::zeros(window.size(), CV_8UC1);
         cv::circle(discMask, centreInWindow, maxRadiusPx, cv::Scalar(255), cv::FILLED);
 
+        // If the sky around the body (inside the disc, outside the seed) is itself mostly
+        // flagged cloud, the body is behind an overcast sheet rather than glinting through
+        // clear sky. Its bloom cannot be told from the surrounding cloud, and trimming the
+        // disc would punch a spurious clear hole in the overcast - so keep the cloud (the
+        // body's own min-disc is already excluded above).
+        cv::Mat annulus;
+        cv::subtract(discMask, seedMask, annulus);
+        const int annulusArea = cv::countNonZero(annulus);
+        if (annulusArea > 0)
+        {
+            cv::Mat flaggedAnnulus;
+            cv::bitwise_and(mask(window), annulus, flaggedAnnulus);
+            if (cv::countNonZero(flaggedAnnulus) >= sunMoonOvercastFraction * annulusArea) {
+                return;
+            }
+        }
+
         cv::Mat labels;
         const int labelCount = cv::connectedComponents(mask(window), labels, 8);
         std::vector<uchar> touchesSeed(static_cast<size_t>(labelCount), 0);
         std::vector<uchar> leavesDisc(static_cast<size_t>(labelCount), 0);
+        // A glare bloom is a contained blob around the body; a flagged region that runs out
+        // of the analysed window is a cloud sheet that merely happens to lie over the body,
+        // so it must not be trimmed at all. Window edges that sit on the image edge do not
+        // count - there the region is cut by the frame, not by leaving the body's disc.
+        std::vector<uchar> escapesWindow(static_cast<size_t>(labelCount), 0);
+        const bool openTop = window.y > 0;
+        const bool openBottom = (window.y + window.height) < gray.rows;
+        const bool openLeft = window.x > 0;
+        const bool openRight = (window.x + window.width) < gray.cols;
         for (int row = 0; row < labels.rows; ++row)
         {
             const int *labelLine = labels.ptr<int>(row);
             const uchar *seedLine = seedMask.ptr<uchar>(row);
             const uchar *discLine = discMask.ptr<uchar>(row);
+            const bool edgeRow = (openTop && (row == 0)) || (openBottom && (row == labels.rows - 1));
             for (int col = 0; col < labels.cols; ++col)
             {
                 if (labelLine[col] > 0)
@@ -941,9 +1048,26 @@ void CameraCloudDetector::applySunMoonMask(cv::Mat& mask, cv::Mat& evaluationMas
                     if (!discLine[col]) {
                         leavesDisc[static_cast<size_t>(labelLine[col])] = 1;
                     }
+                    if (edgeRow || (openLeft && (col == 0)) || (openRight && (col == labels.cols - 1))) {
+                        escapesWindow[static_cast<size_t>(labelLine[col])] = 1;
+                    }
                 }
             }
         }
+
+        // Component areas, for the debris size bound below
+        std::vector<int> componentArea(static_cast<size_t>(labelCount), 0);
+        for (int row = 0; row < labels.rows; ++row)
+        {
+            const int *labelLine = labels.ptr<int>(row);
+            for (int col = 0; col < labels.cols; ++col)
+            {
+                if (labelLine[col] > 0) {
+                    ++componentArea[static_cast<size_t>(labelLine[col])];
+                }
+            }
+        }
+        const int discArea = std::max(1, cv::countNonZero(discMask));
 
         cv::Mat removal = cv::Mat::zeros(window.size(), CV_8UC1);
         for (int row = 0; row < labels.rows; ++row)
@@ -957,10 +1081,14 @@ void CameraCloudDetector::applySunMoonMask(cv::Mat& mask, cv::Mat& evaluationMas
                 if (label <= 0) {
                     continue;
                 }
-                // Seed-touching blobs are trimmed within the disc; blobs wholly inside the
-                // disc are glare debris and removed outright
-                if ((touchesSeed[static_cast<size_t>(label)] && discLine[col])
-                    || !leavesDisc[static_cast<size_t>(label)]) {
+                // Seed-touching blobs are trimmed within the disc, unless they escape the
+                // window entirely (a cloud sheet over the body, not its bloom); blobs wholly
+                // inside the disc are glare debris and removed outright
+                const bool bloomLike = touchesSeed[static_cast<size_t>(label)]
+                    && !escapesWindow[static_cast<size_t>(label)];
+                const bool debrisLike = !leavesDisc[static_cast<size_t>(label)]
+                    && (componentArea[static_cast<size_t>(label)] <= discArea * sunMoonDebrisMaxDiscFraction);
+                if ((bloomLike && discLine[col]) || debrisLike) {
                     removalLine[col] = 255;
                 }
             }
@@ -1037,6 +1165,68 @@ CameraCloudDetector::BodyVisibility CameraCloudDetector::sunVisibility(const cv:
     double peak = 0.0;
     cv::minMaxLoc(gray(window), nullptr, &peak, nullptr, nullptr, seedMask);
     return (peak >= sunMoonGlareFloor) ? BodyVisibility::Visible : BodyVisibility::Obscured;
+}
+
+// Excludes the non-illuminated surround - the dark region connected to the frame border -
+// from evaluation. On a fisheye the image circle fills only part of the frame, and letterbox
+// bars pad scaled output; that black is not sky, yet it otherwise dilutes the coverage
+// denominator (a fully overcast fisheye reading only ~40 %) and drags down the sky median the
+// brightness floors key on. Only border-connected dark is removed, so interior foreground and
+// dark cloud are kept, and the removal is skipped when it would take essentially the whole
+// frame - a uniformly dark night, where the dark region IS the sky.
+void CameraCloudDetector::excludeSurround(cv::Mat& evaluationMask, const cv::Mat& gray)
+{
+    cv::Mat dark;
+    cv::compare(gray, darkSkyFloor, dark, cv::CMP_LT);
+    cv::bitwise_and(dark, evaluationMask, dark);
+    if (cv::countNonZero(dark) == 0) {
+        return;
+    }
+
+    cv::Mat labels;
+    const int labelCount = cv::connectedComponents(dark, labels, 8);
+    if (labelCount <= 1) {
+        return;
+    }
+
+    // A dark component is surround if it reaches the frame border
+    std::vector<uchar> touchesBorder(static_cast<size_t>(labelCount), 0);
+    const auto markRow = [&](int row) {
+        const int *line = labels.ptr<int>(row);
+        for (int col = 0; col < labels.cols; ++col) {
+            if (line[col] > 0) { touchesBorder[static_cast<size_t>(line[col])] = 1; }
+        }
+    };
+    markRow(0);
+    markRow(labels.rows - 1);
+    for (int row = 0; row < labels.rows; ++row)
+    {
+        const int *line = labels.ptr<int>(row);
+        if (line[0] > 0) { touchesBorder[static_cast<size_t>(line[0])] = 1; }
+        if (line[labels.cols - 1] > 0) { touchesBorder[static_cast<size_t>(line[labels.cols - 1])] = 1; }
+    }
+
+    cv::Mat surround = cv::Mat::zeros(gray.size(), CV_8UC1);
+    for (int row = 0; row < labels.rows; ++row)
+    {
+        const int *labelLine = labels.ptr<int>(row);
+        uchar *surroundLine = surround.ptr<uchar>(row);
+        for (int col = 0; col < labels.cols; ++col)
+        {
+            if ((labelLine[col] > 0) && touchesBorder[static_cast<size_t>(labelLine[col])]) {
+                surroundLine[col] = 255;
+            }
+        }
+    }
+
+    // Would removing it leave almost nothing? Then this is not a fisheye surround but a
+    // genuinely dark frame - leave the evaluation mask untouched.
+    cv::Mat remaining;
+    cv::bitwise_and(evaluationMask, ~surround, remaining);
+    if (cv::countNonZero(remaining) < (gray.rows * gray.cols) / 50) {
+        return;
+    }
+    evaluationMask = remaining;
 }
 
 // Optional sky-elevation floor: excludes sky below the configured elevation from
@@ -1727,6 +1917,270 @@ cv::Mat CameraCloudDetector::structureContrastMask(const cv::Mat& gray, const cv
     return mask;
 }
 
+// Flags day cloud that is whiter than the clear sky AT ITS OWN ELEVATION. Clear sky is not
+// one colour across an all-sky frame: it whitens steadily toward the horizon as the line of
+// sight crosses more atmosphere, so a single global red/blue threshold has to be set high
+// enough for the pale horizon and then misses the grey cloud higher up - which is why a
+// broken cumulus sky can read as almost clear. The expected clear-sky ratio is measured
+// instead as a robust radial profile (a low percentile per ring of constant radius from the
+// sky centre) and cloud is what stands a margin above the profile at its own radius. The low
+// percentile keeps the profile on the clear sky even when much of a ring is clouded; when a
+// ring is entirely clouded the profile follows the cloud and that ring simply contributes
+// nothing, which is the safe failure - the absolute threshold and the overcast structure
+// vote still cover the fully overcast case.
+cv::Mat CameraCloudDetector::dayRelativeCloudMask(const cv::Mat& red, const cv::Mat& blue, const cv::Mat& evaluationMask, double margin)
+{
+    cv::Mat flagged = cv::Mat::zeros(evaluationMask.size(), CV_8UC1);
+    if (margin <= 0.0) {
+        return flagged;
+    }
+
+    const cv::Moments moments = cv::moments(evaluationMask, true);
+    if (moments.m00 <= 0.0) {
+        return flagged;
+    }
+    const double centreX = moments.m10 / moments.m00;
+    const double centreY = moments.m01 / moments.m00;
+
+    // Radius of each evaluated pixel, and the largest of them, so the rings span the sky
+    cv::Mat radius(evaluationMask.size(), CV_32F, cv::Scalar(0.0f));
+    double maxRadius = 0.0;
+    for (int row = 0; row < evaluationMask.rows; ++row)
+    {
+        const uchar *maskLine = evaluationMask.ptr<uchar>(row);
+        float *radiusLine = radius.ptr<float>(row);
+        const double dy = row - centreY;
+        for (int col = 0; col < evaluationMask.cols; ++col)
+        {
+            const double dx = col - centreX;
+            const double r = std::sqrt(dx * dx + dy * dy);
+            radiusLine[col] = static_cast<float>(r);
+            if (maskLine[col] && (r > maxRadius)) {
+                maxRadius = r;
+            }
+        }
+    }
+    if (maxRadius <= 0.0) {
+        return flagged;
+    }
+
+    // Gather the ratio of every evaluated pixel into its ring
+    std::vector<std::vector<float>> ringSamples(kDayProfileRings);
+    const double ringScale = kDayProfileRings / maxRadius;
+    for (int row = 0; row < evaluationMask.rows; ++row)
+    {
+        const uchar *maskLine = evaluationMask.ptr<uchar>(row);
+        const float *radiusLine = radius.ptr<float>(row);
+        const float *redLine = red.ptr<float>(row);
+        const float *blueLine = blue.ptr<float>(row);
+        for (int col = 0; col < evaluationMask.cols; ++col)
+        {
+            if (!maskLine[col]) {
+                continue;
+            }
+            const int ring = std::clamp(static_cast<int>(radiusLine[col] * ringScale), 0, kDayProfileRings - 1);
+            ringSamples[static_cast<size_t>(ring)].push_back(redLine[col] / (blueLine[col] + 1.0f));
+        }
+    }
+
+    // Clear-sky ratio per ring, with empty rings carried from their neighbours
+    std::vector<float> profile(kDayProfileRings, 0.0f);
+    std::vector<uchar> haveRing(kDayProfileRings, 0);
+    for (int ring = 0; ring < kDayProfileRings; ++ring)
+    {
+        std::vector<float>& samples = ringSamples[static_cast<size_t>(ring)];
+        if (samples.size() < 50) {
+            continue;
+        }
+        const size_t index = static_cast<size_t>(kDayProfilePercentile * (samples.size() - 1));
+        std::nth_element(samples.begin(), samples.begin() + index, samples.end());
+        profile[static_cast<size_t>(ring)] = samples[index];
+        haveRing[static_cast<size_t>(ring)] = 1;
+    }
+    int filled = 0;
+    for (int ring = 0; ring < kDayProfileRings; ++ring) {
+        filled += haveRing[static_cast<size_t>(ring)] ? 1 : 0;
+    }
+    if (filled < 2) {
+        return flagged;
+    }
+    for (int ring = 0; ring < kDayProfileRings; ++ring)
+    {
+        if (haveRing[static_cast<size_t>(ring)]) {
+            continue;
+        }
+        int nearest = -1;
+        for (int other = 0; other < kDayProfileRings; ++other)
+        {
+            if (haveRing[static_cast<size_t>(other)]
+                && ((nearest < 0) || (std::abs(other - ring) < std::abs(nearest - ring)))) {
+                nearest = other;
+            }
+        }
+        profile[static_cast<size_t>(ring)] = profile[static_cast<size_t>(nearest)];
+    }
+
+    // Smooth the profile so ring boundaries do not print themselves onto the mask
+    std::vector<float> smoothed(profile);
+    for (int ring = 0; ring < kDayProfileRings; ++ring)
+    {
+        float sum = 0.0f;
+        int count = 0;
+        for (int offset = -2; offset <= 2; ++offset)
+        {
+            const int other = std::clamp(ring + offset, 0, kDayProfileRings - 1);
+            sum += profile[static_cast<size_t>(other)];
+            ++count;
+        }
+        smoothed[static_cast<size_t>(ring)] = sum / std::max(1, count);
+    }
+
+    for (int row = 0; row < evaluationMask.rows; ++row)
+    {
+        const uchar *maskLine = evaluationMask.ptr<uchar>(row);
+        const float *radiusLine = radius.ptr<float>(row);
+        const float *redLine = red.ptr<float>(row);
+        const float *blueLine = blue.ptr<float>(row);
+        uchar *flaggedLine = flagged.ptr<uchar>(row);
+        for (int col = 0; col < evaluationMask.cols; ++col)
+        {
+            if (!maskLine[col]) {
+                continue;
+            }
+            const int ring = std::clamp(static_cast<int>(radiusLine[col] * ringScale), 0, kDayProfileRings - 1);
+            const float ratio = redLine[col] / (blueLine[col] + 1.0f);
+            if (ratio - smoothed[static_cast<size_t>(ring)] >= static_cast<float>(margin)) {
+                flaggedLine[col] = 255;
+            }
+        }
+    }
+    return flagged;
+}
+
+// Structure (band-pass local-contrast) vote, shared by the moonlit-night and day paths: on a
+// pale overcast sky the colour anchor sits inside the palest cloud, so bluish-white cloud that
+// is itself the bluest thing in frame reads as clear. Such banks are lumpy where clear sky is
+// smooth, a separation colour cannot express. skyMedian sets the brightness floor below which
+// textured foreground cannot vote.
+//
+// Each connected unflagged sky region is judged as a whole and flipped to cloud when its
+// interior is lumpy; a clear gap between clouds has a smooth interior and survives. The caller
+// is responsible for only invoking this where there is no clear sky to lose - the region flip
+// is powerful enough to swallow the blue gaps of a partly cloudy sky.
+void CameraCloudDetector::applyStructureVote(cv::Mat& mask, const cv::Mat& gray, const cv::Mat& evaluationMask, int skyMedian) const
+{
+    // Structure cue: on a fully overcast pastel sky the colour anchor inevitably sits
+    // inside the palest cloud, so bluish-white cloud within the margin of it reads as
+    // clear - colour cannot flag cloud that is itself the bluest thing in frame. But
+    // such cloud banks are lumpy where clear sky is smooth: a band-pass local contrast
+    // fires on 10-25% of the pixels inside a cloud bank versus under ~3% of genuinely
+    // clear sky (measured), a separation that exists at region level where no per-pixel
+    // threshold works. So judge each connected unflagged sky region as a whole: erode
+    // away its boundary strip (band-pass bleed from adjacent colour-detected cloud
+    // edges lives there), measure the detection density over the interior, and flip
+    // the entire region to cloud when its interior is lumpy. A clear gap between
+    // clouds - whatever its size - has a smooth interior and survives.
+    cv::Mat structureMask = structureContrastMask(gray, evaluationMask, true, nullptr);
+    // Moonlit/twilight cloud is bright; dim textured foreground (roofs, aerials, trees
+    // above the dark floor) also carries band-pass structure but must not vote
+    const int structureBrightness = static_cast<int>(std::lround(moonlitStructureBrightness * skyMedian));
+    cv::bitwise_and(structureMask, gray >= structureBrightness, structureMask);
+    // Nor may the bright vignette/glow arc that hugs the image-circle rim: it is a
+    // textbook band-pass lump, but unlike a cloud bank it borders near-dark pixels
+    // (the dim fisheye surround), so require clearance from anything near-dark
+    cv::Mat notDark;
+    cv::compare(gray, 2 * darkSkyFloor, notDark, cv::CMP_GE);
+    cv::Mat distToDark;
+    cv::distanceTransform(notDark, distToDark, cv::DIST_L2, 5);
+    cv::Mat darkClearance = distToDark >= static_cast<float>(m_settings.m_cloudBackgroundBlur);
+    cv::bitwise_and(structureMask, darkClearance, structureMask);
+    cv::Mat skyMask8;
+    cv::bitwise_and(gray >= darkSkyFloor, evaluationMask, skyMask8);
+    cv::Mat notCloud;
+    cv::bitwise_and(skyMask8, ~mask, notCloud);
+
+    // Only detections in the interior of the unflagged area vote: the strip along the
+    // colour-detected cloud boundary carries band-pass bleed from the cloud side, and
+    // detections inside already-flagged cloud say nothing about the unflagged sky (and
+    // counting them would fill in every clear gap between clouds).
+    const int boundaryStrip = std::max(2, m_settings.m_cloudBackgroundBlur / 4) + 2;
+    const cv::Mat erodeKernel = cv::getStructuringElement(cv::MORPH_ELLIPSE,
+        cv::Size(2 * boundaryStrip + 1, 2 * boundaryStrip + 1));
+    cv::Mat interior;
+    cv::erode(notCloud, interior, erodeKernel, cv::Point(-1, -1), 1, cv::BORDER_CONSTANT, cv::Scalar(0));
+    cv::Mat interiorSpecks;
+    cv::bitwise_and(structureMask, interior, interiorSpecks);
+
+    cv::Mat speckF, interiorF;
+    interiorSpecks.convertTo(speckF, CV_32F, 1.0 / 255.0);
+    interior.convertTo(interiorF, CV_32F, 1.0 / 255.0);
+    const cv::Size voteKernel(2 * m_settings.m_cloudBackgroundBlur + 1, 2 * m_settings.m_cloudBackgroundBlur + 1);
+    cv::Mat speckSum, interiorSum;
+    cv::boxFilter(speckF, speckSum, -1, voteKernel);
+    cv::boxFilter(interiorF, interiorSum, -1, voteKernel);
+    cv::Mat safeInteriorSum, speckDensity;
+    cv::max(interiorSum, 0.05, safeInteriorSum);
+    cv::divide(speckSum, safeInteriorSum, speckDensity);
+
+    cv::Mat fill = speckDensity > moonlitStructureFillDensity;
+    cv::bitwise_and(fill, notCloud, fill);
+    cv::bitwise_or(mask, fill, mask);
+
+    // Region vote: the windowed fill cannot reach unflagged cloud near the frame edge,
+    // where the dark-clearance gate silences the specks. But such cloud is connected to
+    // the lumpy interior it surrounds, so judge each connected unflagged region as a
+    // whole too: gated speck densities measure 4-8% inside pastel overcast regions and
+    // under 0.5% in genuinely clear ones (dark starfields and blue gaps measure zero),
+    // so a uniformly lumpy region flips wholesale, edge to edge.
+    cv::Mat labels;
+    const int labelCount = cv::connectedComponents(notCloud, labels, 8);
+    if (labelCount > 1)
+    {
+        std::vector<int> interiorArea(static_cast<size_t>(labelCount), 0);
+        std::vector<int> interiorHits(static_cast<size_t>(labelCount), 0);
+        for (int row = 0; row < labels.rows; ++row)
+        {
+            const int *labelLine = labels.ptr<int>(row);
+            const uchar *interiorLine = interior.ptr<uchar>(row);
+            const uchar *speckLine = interiorSpecks.ptr<uchar>(row);
+            for (int col = 0; col < labels.cols; ++col)
+            {
+                if ((labelLine[col] > 0) && interiorLine[col])
+                {
+                    ++interiorArea[static_cast<size_t>(labelLine[col])];
+                    if (speckLine[col]) {
+                        ++interiorHits[static_cast<size_t>(labelLine[col])];
+                    }
+                }
+            }
+        }
+
+        std::vector<uchar> lumpy(static_cast<size_t>(labelCount), 0);
+        for (int label = 1; label < labelCount; ++label)
+        {
+            // Regions with next to no interior are boundary slivers; leave them alone
+            if (interiorArea[static_cast<size_t>(label)] >= 50)
+            {
+                const float density = static_cast<float>(interiorHits[static_cast<size_t>(label)])
+                    / static_cast<float>(interiorArea[static_cast<size_t>(label)]);
+                lumpy[static_cast<size_t>(label)] = density > moonlitStructureRegionDensity;
+            }
+        }
+
+        for (int row = 0; row < labels.rows; ++row)
+        {
+            const int *labelLine = labels.ptr<int>(row);
+            uchar *maskLine = mask.ptr<uchar>(row);
+            for (int col = 0; col < labels.cols; ++col)
+            {
+                if ((labelLine[col] > 0) && lumpy[static_cast<size_t>(labelLine[col])]) {
+                    maskLine[col] = 255;
+                }
+            }
+        }
+    }
+}
+
 void CameraCloudDetector::applyCloudDetection(const cv::Mat& workBgr, const cv::Mat& rawGray, const cv::Mat& gray, const cv::Rect& roi, const cv::Rect& contentRect, const QSize& imageSize, const CameraPipelineImageTransform& imageTransform, const QDateTime& captureDateTime, const CloudStarSense& starSense, CameraPipelineCloud& cloud, cv::Mat* debugMask)
 {
     PROFILER_START();
@@ -1867,6 +2321,10 @@ void CameraCloudDetector::applyCloudDetection(const cv::Mat& workBgr, const cv::
         }
     }
 
+    // The dark fisheye/letterbox surround is not sky: remove it before the sky-median and
+    // day/night decision, which it otherwise biases, and before coverage is measured
+    excludeSurround(evaluationMask, gray);
+
     const bool night = resolveNightMode(gray, evaluationMask, captureDateTime);
 
     cv::Mat mask;
@@ -1911,116 +2369,7 @@ void CameraCloudDetector::applyCloudDetection(const cv::Mat& workBgr, const cv::
         cv::bitwise_or(ratioMask, brightCloudMask, ratioMask);
         cv::bitwise_and(ratioMask, brightMask, mask);
 
-        // Structure cue: on a fully overcast pastel sky the colour anchor inevitably sits
-        // inside the palest cloud, so bluish-white cloud within the margin of it reads as
-        // clear - colour cannot flag cloud that is itself the bluest thing in frame. But
-        // such cloud banks are lumpy where clear sky is smooth: a band-pass local contrast
-        // fires on 10-25% of the pixels inside a cloud bank versus under ~3% of genuinely
-        // clear sky (measured), a separation that exists at region level where no per-pixel
-        // threshold works. So judge each connected unflagged sky region as a whole: erode
-        // away its boundary strip (band-pass bleed from adjacent colour-detected cloud
-        // edges lives there), measure the detection density over the interior, and flip
-        // the entire region to cloud when its interior is lumpy. A clear gap between
-        // clouds - whatever its size - has a smooth interior and survives.
-        cv::Mat structureMask = structureContrastMask(gray, evaluationMask, true, nullptr);
-        // Moonlit/twilight cloud is bright; dim textured foreground (roofs, aerials, trees
-        // above the dark floor) also carries band-pass structure but must not vote
-        const int structureBrightness = static_cast<int>(std::lround(moonlitStructureBrightness * nightSkyMedian));
-        cv::bitwise_and(structureMask, gray >= structureBrightness, structureMask);
-        // Nor may the bright vignette/glow arc that hugs the image-circle rim: it is a
-        // textbook band-pass lump, but unlike a cloud bank it borders near-dark pixels
-        // (the dim fisheye surround), so require clearance from anything near-dark
-        cv::Mat notDark;
-        cv::compare(gray, 2 * darkSkyFloor, notDark, cv::CMP_GE);
-        cv::Mat distToDark;
-        cv::distanceTransform(notDark, distToDark, cv::DIST_L2, 5);
-        cv::Mat darkClearance = distToDark >= static_cast<float>(m_settings.m_cloudBackgroundBlur);
-        cv::bitwise_and(structureMask, darkClearance, structureMask);
-        cv::Mat skyMask8;
-        cv::bitwise_and(gray >= darkSkyFloor, evaluationMask, skyMask8);
-        cv::Mat notCloud;
-        cv::bitwise_and(skyMask8, ~mask, notCloud);
-
-        // Only detections in the interior of the unflagged area vote: the strip along the
-        // colour-detected cloud boundary carries band-pass bleed from the cloud side, and
-        // detections inside already-flagged cloud say nothing about the unflagged sky (and
-        // counting them would fill in every clear gap between clouds).
-        const int boundaryStrip = std::max(2, m_settings.m_cloudBackgroundBlur / 4) + 2;
-        const cv::Mat erodeKernel = cv::getStructuringElement(cv::MORPH_ELLIPSE,
-            cv::Size(2 * boundaryStrip + 1, 2 * boundaryStrip + 1));
-        cv::Mat interior;
-        cv::erode(notCloud, interior, erodeKernel, cv::Point(-1, -1), 1, cv::BORDER_CONSTANT, cv::Scalar(0));
-        cv::Mat interiorSpecks;
-        cv::bitwise_and(structureMask, interior, interiorSpecks);
-
-        cv::Mat speckF, interiorF;
-        interiorSpecks.convertTo(speckF, CV_32F, 1.0 / 255.0);
-        interior.convertTo(interiorF, CV_32F, 1.0 / 255.0);
-        const cv::Size voteKernel(2 * m_settings.m_cloudBackgroundBlur + 1, 2 * m_settings.m_cloudBackgroundBlur + 1);
-        cv::Mat speckSum, interiorSum;
-        cv::boxFilter(speckF, speckSum, -1, voteKernel);
-        cv::boxFilter(interiorF, interiorSum, -1, voteKernel);
-        cv::Mat safeInteriorSum, speckDensity;
-        cv::max(interiorSum, 0.05, safeInteriorSum);
-        cv::divide(speckSum, safeInteriorSum, speckDensity);
-
-        cv::Mat fill = speckDensity > moonlitStructureFillDensity;
-        cv::bitwise_and(fill, notCloud, fill);
-        cv::bitwise_or(mask, fill, mask);
-
-        // Region vote: the windowed fill cannot reach unflagged cloud near the frame edge,
-        // where the dark-clearance gate silences the specks. But such cloud is connected to
-        // the lumpy interior it surrounds, so judge each connected unflagged region as a
-        // whole too: gated speck densities measure 4-8% inside pastel overcast regions and
-        // under 0.5% in genuinely clear ones (dark starfields and blue gaps measure zero),
-        // so a uniformly lumpy region flips wholesale, edge to edge.
-        cv::Mat labels;
-        const int labelCount = cv::connectedComponents(notCloud, labels, 8);
-        if (labelCount > 1)
-        {
-            std::vector<int> interiorArea(static_cast<size_t>(labelCount), 0);
-            std::vector<int> interiorHits(static_cast<size_t>(labelCount), 0);
-            for (int row = 0; row < labels.rows; ++row)
-            {
-                const int *labelLine = labels.ptr<int>(row);
-                const uchar *interiorLine = interior.ptr<uchar>(row);
-                const uchar *speckLine = interiorSpecks.ptr<uchar>(row);
-                for (int col = 0; col < labels.cols; ++col)
-                {
-                    if ((labelLine[col] > 0) && interiorLine[col])
-                    {
-                        ++interiorArea[static_cast<size_t>(labelLine[col])];
-                        if (speckLine[col]) {
-                            ++interiorHits[static_cast<size_t>(labelLine[col])];
-                        }
-                    }
-                }
-            }
-
-            std::vector<uchar> lumpy(static_cast<size_t>(labelCount), 0);
-            for (int label = 1; label < labelCount; ++label)
-            {
-                // Regions with next to no interior are boundary slivers; leave them alone
-                if (interiorArea[static_cast<size_t>(label)] >= 50)
-                {
-                    const float density = static_cast<float>(interiorHits[static_cast<size_t>(label)])
-                        / static_cast<float>(interiorArea[static_cast<size_t>(label)]);
-                    lumpy[static_cast<size_t>(label)] = density > moonlitStructureRegionDensity;
-                }
-            }
-
-            for (int row = 0; row < labels.rows; ++row)
-            {
-                const int *labelLine = labels.ptr<int>(row);
-                uchar *maskLine = mask.ptr<uchar>(row);
-                for (int col = 0; col < labels.cols; ++col)
-                {
-                    if ((labelLine[col] > 0) && lumpy[static_cast<size_t>(labelLine[col])]) {
-                        maskLine[col] = 255;
-                    }
-                }
-            }
-        }
+        applyStructureVote(mask, gray, evaluationMask, nightSkyMedian);
     }
     else if (night)
     {
@@ -2052,9 +2401,6 @@ void CameraCloudDetector::applyCloudDetection(const cv::Mat& workBgr, const cv::
             ratio.convertTo(*debugMask, CV_8U, 128.0);
         }
 
-        cv::Mat ratioMask;
-        cv::compare(red, (blue + 1.0f) * m_settings.m_cloudDayThreshold, ratioMask, cv::CMP_GE);
-
         // Dark regions must not classify as cloud, whatever their colour balance: lens
         // vignette, borders and shadowed structures are neutral and smooth, so they pass
         // the ratio and texture tests. By day cloud is at least comparably bright to the
@@ -2062,14 +2408,60 @@ void CameraCloudDetector::applyCloudDetection(const cv::Mat& workBgr, const cv::
         const int daySkyLevel = maskedPercentile(gray, evaluationMask, 0.5);
         const int brightnessFloor = std::max(dayMinBrightness, daySkyLevel / 2);
         const cv::Mat brightMask = gray >= brightnessFloor;
-        cv::bitwise_and(ratioMask, brightMask, mask);
 
         // Grey/white but finely textured regions (roofs, trees, buildings) are not cloud.
         // Day path only: at night the fine-detail measure is dominated by sensor noise.
+        // Near-saturated pixels are exempt: those are sunlit cloud tops, whose hard bright
+        // edges read as texture, not roofs or trees.
+        cv::Mat plausible = brightMask;
         if (m_settings.m_cloudTextureThreshold > 0)
         {
-            const cv::Mat smoothMask = textureEnergy < m_settings.m_cloudTextureThreshold;
-            cv::bitwise_and(mask, smoothMask, mask);
+            cv::Mat smoothMask = textureEnergy < m_settings.m_cloudTextureThreshold;
+            cv::Mat saturated;
+            cv::compare(gray, daySaturatedCloud, saturated, cv::CMP_GE);
+            cv::bitwise_or(smoothMask, saturated, smoothMask);
+            cv::Mat gated;
+            cv::bitwise_and(brightMask, smoothMask, gated);
+            plausible = gated;
+        }
+
+        cv::Mat ratioMask;
+        cv::compare(red, (blue + 1.0f) * m_settings.m_cloudDayThreshold, ratioMask, cv::CMP_GE);
+        cv::bitwise_and(ratioMask, plausible, mask);
+
+        // Overcast bluish-grey cloud shares the clear sky's red/blue ratio on this kind of
+        // camera and so escapes the colour test, exactly as pastel moonlit cloud does. When
+        // the sky offers no genuine blue - the bluest quartile of the bright sky is itself
+        // close to the cloud threshold - run the same structure vote: it flips lumpy overcast
+        // and leaves a smooth clear-blue sky (whose bluest quartile sits well below the gate)
+        // untouched, so a clear or partly clear day never triggers it. The vote judges the
+        // absolute-threshold mask, before the relative detections below are added: it counts
+        // structure in what the colour test left unflagged, and detections placed there first
+        // would consume the very evidence it weighs.
+        // Overcast bluish-grey cloud shares the clear sky's red/blue ratio on this kind of
+        // camera and so escapes the colour tests, exactly as pastel moonlit cloud does. When
+        // the sky offers no genuine blue - the bluest quartile of the bright sky is itself
+        // close to the cloud threshold - run the structure vote: it flips lumpy overcast and
+        // leaves a smooth clear-blue sky (whose bluest quartile sits well below the gate)
+        // untouched, so a clear or partly clear day never triggers it. The vote judges the
+        // absolute-threshold mask, before the relative detections below are added: it counts
+        // structure in what the colour test left unflagged, and detections placed there first
+        // would consume the very evidence it weighs.
+        cv::Mat brightSky;
+        cv::bitwise_and(brightMask, evaluationMask, brightSky);
+        const float clearSkyRatio = maskedRatioPercentile(red, blue, brightSky, moonlitClearSkyFraction);
+        if (clearSkyRatio >= dayOvercastRatioGate) {
+            applyStructureVote(mask, gray, evaluationMask, daySkyLevel);
+        }
+
+        // Grey cloud that never reaches the absolute threshold, but stands out against the
+        // clear sky at its own elevation, is cloud too - without this a broken cumulus sky
+        // reads as almost clear, since only the brightest sunlit tops pass the fixed bar.
+        if (m_settings.m_cloudDayRelativeMargin > 0.0)
+        {
+            cv::Mat relative = dayRelativeCloudMask(red, blue, evaluationMask, m_settings.m_cloudDayRelativeMargin);
+            cv::bitwise_and(relative, plausible, relative);
+            cv::bitwise_or(mask, relative, mask);
         }
     }
 
@@ -2106,7 +2498,7 @@ void CameraCloudDetector::applyCloudDetection(const cv::Mat& workBgr, const cv::
     // Remove the sun/moon glare bloom from the final mask: the flagged blob at the projected
     // body position is the classifier seeing the body, not cloud. Runs on the final mask so
     // the removal is sized exactly to what was flagged, whatever the gain and exposure.
-    applySunMoonMask(mask, evaluationMask, gray, roi, imageSize, imageTransform, captureDateTime);
+    applySunMoonMask(mask, evaluationMask, gray, workBgr, roi, imageSize, imageTransform, captureDateTime);
 
     // Night only: by day no stars are detectable, and a bright structure crossing a patch
     // could fake a "visible star" and veto genuine cloud. After the veto has cleared what

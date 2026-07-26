@@ -296,7 +296,7 @@ private:
     [[nodiscard]] bool resolveNightMode(const cv::Mat& medianGray, const cv::Mat& evaluationMask, const QDateTime& captureDateTime);
     void prepareWorkImages(const QImage& image, const cv::Rect& roi, cv::Mat& workBgr, cv::Mat& rawGray, cv::Mat& gray) const;
     void applyCloudDetection(const cv::Mat& workBgr, const cv::Mat& rawGray, const cv::Mat& gray, const cv::Rect& roi, const cv::Rect& contentRect, const QSize& imageSize, const CameraPipelineImageTransform& imageTransform, const QDateTime& captureDateTime, const CloudStarSense& starSense, CameraPipelineCloud& cloud, cv::Mat* debugMask);
-    void applySunMoonMask(cv::Mat& mask, cv::Mat& evaluationMask, const cv::Mat& gray, const cv::Rect& roi, const QSize& imageSize, const CameraPipelineImageTransform& imageTransform, const QDateTime& captureDateTime) const;
+    void applySunMoonMask(cv::Mat& mask, cv::Mat& evaluationMask, const cv::Mat& gray, const cv::Mat& workBgr, const cv::Rect& roi, const QSize& imageSize, const CameraPipelineImageTransform& imageTransform, const QDateTime& captureDateTime) const;
     cv::Mat structureContrastMask(const cv::Mat& gray, const cv::Mat& evaluationMask, bool requirePixelContrast, cv::Mat* debugMask) const;
     [[nodiscard]] CloudStarSense senseStarVisibility(const CameraPipelineFramePtr& frame, const QSize& imageSize) const;
     // fullResBgr, when non-empty, supplies the pixels instead of the frame: the GPU path
@@ -305,10 +305,13 @@ private:
                                 const cv::Mat& fullResBgr = cv::Mat());
     [[nodiscard]] const QVector<CameraPlateSolver::BrightStar>& sensedStarCatalog() const;
     void applyStarVisibilityVeto(cv::Mat& mask, const CloudStarSense& starSense, const cv::Rect& roi) const;
+    void applyStructureVote(cv::Mat& mask, const cv::Mat& gray, const cv::Mat& evaluationMask, int skyMedian) const;
+    [[nodiscard]] static cv::Mat dayRelativeCloudMask(const cv::Mat& red, const cv::Mat& blue, const cv::Mat& evaluationMask, double margin);
     void applyStarBlankCue(cv::Mat& mask, const cv::Mat& evaluationMask, const CloudStarSense& starSense, const cv::Rect& roi, const QSize& imageSize, const QDateTime& observationTime) const;
     void recordStarVisibility(const CloudStarSense& starSense, const QDateTime& observationTime);
     [[nodiscard]] BodyVisibility sunVisibility(const cv::Mat& gray, const cv::Rect& roi, const QSize& imageSize, const CameraPipelineImageTransform& imageTransform, const QDateTime& captureDateTime) const;
     void applyMinElevationMask(cv::Mat& evaluationMask, const cv::Rect& roi, const QSize& imageSize, const CameraPipelineImageTransform& imageTransform);
+    static void excludeSurround(cv::Mat& evaluationMask, const cv::Mat& gray);
     void renderDebugView(const CameraPipelineFramePtr& frame, const cv::Size& frameCvSize, const cv::Rect& roi);
     void saveTestCaseBundle(const CameraPipelineFramePtr& frame);
     void invalidateCache();

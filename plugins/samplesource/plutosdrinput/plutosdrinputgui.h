@@ -74,6 +74,7 @@ private:
     void sendSettings(bool forceSettings = false);
     void blockApplySettings(bool block);
     void updateSampleRateAndFrequency();
+    void refreshGainLimits();
     void setFIRBWLimits();
     void setSampleRateLimits();
     void updateFrequencyLimits();

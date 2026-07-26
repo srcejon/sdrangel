@@ -314,11 +314,14 @@ struct Aircraft {
         m_longitude(0),
         m_radius(0.0f),
         m_altitude(0),
+        m_pressureAltitude(0),
         m_onSurface(false),
         m_altitudeGNSS(false),
         m_heading(0),
         m_track(0),
         m_verticalRate(0),
+        m_squawk(0),
+        m_range(0.0f),
         m_azimuth(0),
         m_elevation(0),
         m_selAltitude(0),
@@ -378,6 +381,7 @@ struct Aircraft {
         m_isTarget(false),
         m_isHighlighted(false),
         m_showAll(false),
+        m_lastColor(-1),
         m_aircraftInfo(nullptr),
         m_modelAltitudeOffset(0.0f),
         m_labelAltitudeOffset(5.0f),
@@ -388,6 +392,8 @@ struct Aircraft {
         m_flaps(0.0),
         m_rotorStarted(false),
         m_engineStarted(false),
+        m_prevTrack(0),
+        m_trackWhenHeadingSet(0.0f),
         m_pitchEst(0.0),
         m_rollEst(0.0),
         m_notified(false)
@@ -716,7 +722,7 @@ public:
         }
     }
 
-    const ADSBDemodSettings *m_settings;
+    const ADSBDemodSettings *m_settings = nullptr;
 
 private:
     QList<Aircraft *> m_aircrafts;
@@ -1148,6 +1154,10 @@ class ADSBDemodGUI : public ChannelGUI {
         Airspace m_airspace;
 
         Interogator() :
+            m_minLatitude(std::numeric_limits<Real>::max()),
+            m_maxLatitude(std::numeric_limits<Real>::lowest()),
+            m_minLongitude(std::numeric_limits<Real>::max()),
+            m_maxLongitude(std::numeric_limits<Real>::lowest()),
             m_valid(false)
         {
         }

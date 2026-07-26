@@ -71,7 +71,7 @@ QByteArray PlutoSDRInputSettings::serialize() const
     s.writeBool(10, m_lpfFIREnable);
     s.writeU32(11, m_lpfFIRBW);
     s.writeU64(12, m_devSampleRate);
-    s.writeU32(13, m_gain);
+    s.writeS32(13, m_gain);
     s.writeS32(14, (int) m_antennaPath);
     s.writeS32(15, (int) m_gainMode);
     s.writeBool(16, m_transverterMode);
@@ -125,7 +125,7 @@ bool PlutoSDRInputSettings::deserialize(const QByteArray& data)
         d.readBool(10, &m_lpfFIREnable, false);
         d.readU32(11, &m_lpfFIRBW, 500000U);
         d.readU64(12, &m_devSampleRate, 1536000U);
-        d.readU32(13, &m_gain, 40);
+        d.readS32(13, &m_gain, 40);
         d.readS32(14, &intval, 0);
         if ((intval >= 0) && (intval < (int) RFPATH_END)) {
             m_antennaPath = (RFPath) intval;

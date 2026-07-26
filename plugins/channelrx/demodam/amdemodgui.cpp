@@ -699,17 +699,22 @@ void AMDemodGUI::applySnap()
 
     qint64 frequency = m_deviceCenterFrequency + m_settings.m_inputFrequencyOffset;
 
+    // Snap to nearest centre frequency
     if (m_settings.m_frequencyMode == AMDemodSettings::MediumWave)
     {
-        frequency = (frequency / 1000) * 1000;
+        const int spacing = 1000;
+        frequency = ((frequency + (spacing / 2)) / spacing) * spacing;
     }
     else if (m_settings.m_frequencyMode == AMDemodSettings::Airband25k)
     {
-        frequency = (frequency / 25000) * 25000;
+        const int spacing = 25000;
+        frequency = ((frequency + (spacing / 2)) / spacing) * spacing;
     }
     else if (m_settings.m_frequencyMode == AMDemodSettings::Airband8K)
     {
-        frequency = std::round((frequency / 8333) * 8333.33333333);
+        const double spacing = 25000.0 / 3.0; // 8.333kHz
+        double t = std::trunc((frequency + (spacing / 2.0)) / spacing);
+        frequency = static_cast<qint64>(std::round(t * spacing));
     }
 
     m_settings.m_inputFrequencyOffset = frequency - m_deviceCenterFrequency;

@@ -416,7 +416,7 @@ int AaroniaRTSAInput::webapiReportGet(
 {
     (void) errorMessage;
 	response.setAaroniaRtsaReport(new SWGSDRangel::SWGAaroniaRTSAReport());
-	response.getAirspyHfReport()->init();
+	response.getAaroniaRtsaReport()->init();
     webapiFormatDeviceReport(response);
     return 200;
 }

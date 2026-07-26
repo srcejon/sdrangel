@@ -16,6 +16,7 @@
 ///////////////////////////////////////////////////////////////////////////////////
 
 #include <stdio.h>
+#include <algorithm>
 
 #include <QTime>
 #include <QDebug>
@@ -200,8 +201,8 @@ void WDSPRxSink::processOneSample(const Complex &ci, QList<ObjectPipe*>& dataPip
         {
             const double& dr = m_rxa->get_outbuff()[2*i+1];
             const double& di = m_rxa->get_outbuff()[2*i];
-            qint16 zr = dr * 32768.0;
-            qint16 zi = di * 32768.0;
+            qint16 zr = (qint16) std::clamp(dr * 32768.0, -32768.0, 32767.0);
+            qint16 zi = (qint16) std::clamp(di * 32768.0, -32768.0, 32767.0);
 
             if (!dataPipes.empty())
             {
@@ -781,6 +782,7 @@ void WDSPRxSink::applySettings(const QStringList& settingsKeys, const WDSPRxSett
         else
         {
             m_rxa->agc->setMode(0);
+            m_rxa->agc->setFixed(0.0);
         }
     }
 

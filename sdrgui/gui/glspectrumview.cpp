@@ -178,7 +178,7 @@ GLSpectrumView::GLSpectrumView(QWidget* parent) :
     int multisamples = MainCore::instance()->getSettings().getMultisampling();
     if (multisamples > 0)
     {
-        QSurfaceFormat format;
+        QSurfaceFormat format = QSurfaceFormat::defaultFormat();
         format.setSamples(multisamples);
         setFormat(format);
     }

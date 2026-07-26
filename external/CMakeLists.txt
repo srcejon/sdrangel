@@ -14,14 +14,14 @@ set(MBELIB_TAG "lib")
 set(SERIALDV_TAG "v1.1.5")
 set(DSDCC_TAG "v1.9.6")
 set(LIMESUITE_TAG 524cd2e548b11084e6f739b2dfe0f958c2e30354)
-set(BLADERF_TAG "2024.05")
+set(BLADERF_TAG "2025.10")
 if (WIN32)
     # Using old version of libiio on windows, as we get unresolved symbols in dll: serial_create_context_from_uri
     set(LIBIIO_TAG 826563e41b5ce9890b75506f672017de8d76d52d)
 else()
     set(LIBIIO_TAG "v0.26")
 endif()
-set(AIRSPYHF_TAG "87cf12a30f3a0f10f313aab8e54999ca69b753af")
+set(AIRSPYHF_TAG "9b7ef82cf37e732b9d2b2adbdd9d9ce8fee446ca")
 set(PERSEUS_TAG afefa23e3140ac79d845acb68cf0beeb86d09028)
 set(MIRISDR_TAG "v2.0.0")
 set(LIBSIGMF_TAG "new-namespaces")
@@ -300,10 +300,16 @@ if (NOT ZLIB_FOUND AND NOT USE_PRECOMPILED_LIBS)
 endif (NOT ZLIB_FOUND AND NOT USE_PRECOMPILED_LIBS)
 
 if (NOT FAAD_FOUND AND NOT USE_PRECOMPILED_LIBS)
+    # faad2 2.8.8 is the last version SourceForge ever hosted, and it predates the 2.9.0 fix
+    # for a heap overflow in excluded_channels() (knik0/faad2@942c3e0a: unbounded exclude_mask
+    # write in the DRC parser). Later releases only live on GitHub; 2.11.0 added CMake support,
+    # so build it like opus above. FAAD_BUILD_CLI=OFF skips the faad frontend executable --
+    # only libfaad is used.
     ExternalProject_Add(faad
-            URL https://downloads.sourceforge.net/project/faac/faad2-src/faad2-2.8.0/faad2-2.8.8.tar.gz
+            GIT_REPOSITORY https://github.com/knik0/faad2.git
+            GIT_TAG 2.11.2
             PREFIX "${EXTERNAL_BUILD_LIBRARIES}/faad"
-            CONFIGURE_COMMAND <SOURCE_DIR>/configure --prefix=<INSTALL_DIR>
+            CMAKE_ARGS ${COMMON_CMAKE_ARGS} -DBUILD_SHARED_LIBS=ON -DFAAD_BUILD_CLI=OFF -DCMAKE_INSTALL_PREFIX=<INSTALL_DIR>
             TEST_COMMAND ""
             )
     ExternalProject_Get_Property(faad source_dir binary_dir install_dir)
@@ -795,7 +801,7 @@ if ((LINUX OR APPLE) AND (NOT LIBSIGMF_FOUND OR LIBSIGMF_EXTERNAL))
     set(LIBSIGMF_INCLUDE_DIR "${install_dir}/include" CACHE INTERNAL "")
     if (APPLE)
         install(FILES "${LIBSIGMF_LIBRARIES}" DESTINATION "${INSTALL_LIB_DIR}")
-        set(MACOS_EXTERNAL_LIBS_FIXUP "${MACOS_EXTERNAL_LIBS_FIXUP};${binary_dir}/")
+        set(MACOS_EXTERNAL_LIBS_FIXUP "${MACOS_EXTERNAL_LIBS_FIXUP};${EXTERNAL_BUILD_LIBRARIES}/lib")
     endif ()
 endif ((LINUX OR APPLE) AND (NOT LIBSIGMF_FOUND OR LIBSIGMF_EXTERNAL))
 
@@ -919,7 +925,7 @@ if(ENABLE_CHANNELRX_REMOTETCPSINK)
             -DINSTALL_MANPAGES=OFF
             -DBUILD_SHARED_LIBS=ON
             -DWITH_FORTIFY_SOURCE=OFF
-            -DWITH_STACK_PROTECTOR=PFF
+            -DWITH_STACK_PROTECTOR=OFF
             -DBUILD_PROGRAMS=OFF
             -DBUILD_TESTING=OFF
             -DBUILD_EXAMPLES=OFF

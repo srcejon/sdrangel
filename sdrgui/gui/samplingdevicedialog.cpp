@@ -91,7 +91,8 @@ void SamplingDeviceDialog::displayDevices()
                     samplingDevice = DeviceEnumerator::instance()->getMIMOSamplingDevice(coreDeviceIndex);
                 }
 
-                if (samplingDevice && samplingDevice->claimed >= 0) {
+                if (samplingDevice && samplingDevice->claimed >= 0 &&
+                        samplingDevice->type != PluginInterface::SamplingDevice::BuiltInDevice) {
                     QStandardItem *item = model->item(idx);
                     if (item) {
                         // Deactivate to block selection clicks

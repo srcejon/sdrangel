@@ -70,6 +70,8 @@ PlutoSDRInputGui::PlutoSDRInputGui(DeviceUISet *deviceUISet, QWidget* parent) :
     ((PlutoSDRInput *) m_sampleSource)->getbbLPRange(minLimit, maxLimit);
     ui->lpf->setValueRange(5, minLimit/1000, maxLimit/1000);
 
+    refreshGainLimits();
+
     ui->lpFIR->setColorMapper(ColorMapper(ColorMapper::GrayYellow));
     ui->lpFIR->setValueRange(5, 1U, 56000U); // will be dynamically recalculated
 
@@ -390,6 +392,22 @@ void PlutoSDRInputGui::displaySampleRate()
     ui->sampleRate->blockSignals(false);
 }
 
+void PlutoSDRInputGui::refreshGainLimits()
+{
+    qint64 minGain, stepGain, maxGain;
+    ((PlutoSDRInput *) m_sampleSource)->getGainRange(minGain, stepGain, maxGain);
+
+    // Only update the gui when necessary, avoid unnecessary widget updates
+    if (ui->gain->minimum() != minGain ||
+        ui->gain->maximum() != maxGain ||
+        ui->gain->singleStep() != stepGain)
+    {
+        ui->gain->setMinimum(minGain);
+        ui->gain->setMaximum(maxGain);
+        ui->gain->setSingleStep(stepGain);
+    }
+}
+
 void PlutoSDRInputGui::displayFcTooltip()
 {
     int32_t fShift = DeviceSampleSource::calculateFrequencyShift(
@@ -600,6 +618,7 @@ void PlutoSDRInputGui::updateSampleRateAndFrequency()
 {
     m_deviceUISet->getSpectrum()->setSampleRate(m_sampleRate);
     m_deviceUISet->getSpectrum()->setCenterFrequency(m_deviceCenterFrequency);
+    refreshGainLimits();
     displaySampleRate();
 }
 

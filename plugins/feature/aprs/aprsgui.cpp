@@ -175,9 +175,9 @@ bool APRSGUI::handleMessage(const Message& message)
     {
         MainCore::MsgPacket& report = (MainCore::MsgPacket&) message;
         AX25Packet ax25;
-        APRSPacket *aprs = new APRSPacket();
         if (ax25.decode(report.getPacket()))
         {
+            APRSPacket* aprs = new APRSPacket();
             if (aprs->decode(ax25))
             {
                 aprs->m_dateTime = report.getDateTime();
@@ -407,6 +407,8 @@ bool APRSGUI::handleMessage(const Message& message)
             {
                 qDebug() << "APRSGUI::handleMessage: Failed to decode as APRS";
                 qDebug() << "From:" << ax25.m_from << "To:" << ax25.m_to << "Via:" << ax25.m_via << "Type:" << ax25.m_type << "PID:" << ax25.m_pid << "Data:" << QString::fromLatin1(ax25.m_data);
+                delete aprs;
+                aprs = nullptr;
             }
         }
         else
@@ -595,6 +597,8 @@ APRSGUI::~APRSGUI()
         itr.next();
         removeFromMap(itr.key());
     }
+    qDeleteAll(m_stations);
+    m_stations.clear();
     delete ui;
 }
 

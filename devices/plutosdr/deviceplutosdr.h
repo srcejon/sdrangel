@@ -54,6 +54,8 @@ public:
     static const uint32_t bbLPTxHighLimitFreq;  //!< Analog base band Tx high pass filter lower frequency limit (Hz)
     static const float firBWLowLimitFactor;  //!< Factor by which the FIR working sample rate is multiplied to yield bandwidth lower limit
     static const float firBWHighLimitFactor; //!< Factor by which the FIR working sample rate is multiplied to yield bandwidth higher limit
+    static const int32_t rxMinGain;          //!< Min gain (Steps or dB)
+    static const int32_t rxMaxGain;          //!< Max gain (Steps or dB)
 protected:
     DevicePlutoSDR();
     ~DevicePlutoSDR();

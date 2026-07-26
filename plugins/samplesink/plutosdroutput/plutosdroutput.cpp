@@ -272,6 +272,11 @@ bool PlutoSDROutput::openDevice()
 
         DeviceAPI *sourceBuddy = m_deviceAPI->getSourceBuddies()[0];
         DevicePlutoSDRShared* buddySharedPtr = (DevicePlutoSDRShared*) sourceBuddy->getBuddySharedPtr();
+        if (!buddySharedPtr)
+        {
+            qCritical("PlutoSDROutput::openDevice: Rx buddy has no shared data");
+            return false;
+        }
         m_deviceShared.m_deviceParams = buddySharedPtr->m_deviceParams;
 
         if (m_deviceShared.m_deviceParams == 0)
@@ -358,6 +363,8 @@ void PlutoSDROutput::closeDevice()
         delete m_deviceShared.m_deviceParams;
         m_deviceShared.m_deviceParams = 0;
     }
+
+    m_open = false;
 }
 
 void PlutoSDROutput::suspendBuddies()
@@ -369,7 +376,7 @@ void PlutoSDROutput::suspendBuddies()
         DeviceAPI *buddy = m_deviceAPI->getSourceBuddies()[i];
         DevicePlutoSDRShared *buddyShared = (DevicePlutoSDRShared *) buddy->getBuddySharedPtr();
 
-        if (buddyShared->m_thread) {
+        if (buddyShared && buddyShared->m_thread) {
             buddyShared->m_thread->stopWork();
         }
     }
@@ -384,7 +391,7 @@ void PlutoSDROutput::resumeBuddies()
         DeviceAPI *buddy = m_deviceAPI->getSourceBuddies()[i];
         DevicePlutoSDRShared *buddyShared = (DevicePlutoSDRShared *) buddy->getBuddySharedPtr();
 
-        if (buddyShared->m_thread) {
+        if (buddyShared && buddyShared->m_thread) {
             buddyShared->m_thread->startWork();
         }
     }
@@ -432,6 +439,12 @@ bool PlutoSDROutput::applySettings(const PlutoSDROutputSettings& settings, const
         for (; itSink != sourceBuddies.end(); ++itSink)
         {
             DevicePlutoSDRShared *buddySharedPtr = (DevicePlutoSDRShared *) (*itSink)->getBuddySharedPtr();
+
+            if (!buddySharedPtr)
+            {
+                qWarning("PlutoSDROutput::applySettings: source buddy has no shared data");
+                continue;
+            }
 
             if (buddySharedPtr->m_thread) {
                 buddySharedPtr->m_thread->stopWork();
@@ -571,7 +584,7 @@ bool PlutoSDROutput::applySettings(const PlutoSDROutputSettings& settings, const
         {
             DevicePlutoSDRShared *buddySharedPtr = (DevicePlutoSDRShared *) (*itSource)->getBuddySharedPtr();
 
-            if (buddySharedPtr->m_threadWasRunning) {
+            if (buddySharedPtr && buddySharedPtr->m_threadWasRunning) {
                 buddySharedPtr->m_thread->startWork();
             }
         }

@@ -1424,27 +1424,46 @@ void RadioAstronomyGUI::recalibrate()
 // Calculate Trx using Y-factor method
 void RadioAstronomyGUI::calcCalTrx()
 {
-    if ((m_calHot && m_calCold) && (m_calHot->m_fftSize == m_calCold->m_fftSize))
-    {
-        // y=Ph/Pc
-        double sumH = 0.0;
-        double sumC = 0.0;
-        for (int i = 0; i < m_calHot->m_fftSize; i++)
-        {
-            sumH += m_calHot->m_fftData[i];
-            sumC += m_calCold->m_fftData[i];
-        }
-        double y = sumH/sumC;
-        // Use y to calculate Trx, which should be the same for both calibration points
-        double Trx = (m_settings.m_tCalHot - (m_settings.m_tCalCold * y)) / (y - 1.0);
-        ui->calYFactor->setText(QString::number(y, 'f', 2));
-        ui->calTrx->setText(QString::number(Trx, 'f', 1));
-    }
-    else
-    {
+    auto clearCalibration = [this]() {
         ui->calYFactor->setText("");
         ui->calTrx->setText("");
+    };
+
+    if (!m_calHot || !m_calCold || (m_calHot->m_fftSize != m_calCold->m_fftSize))
+    {
+        clearCalibration();
+        return;
     }
+
+    // y=Ph/Pc
+    double sumH = 0.0;
+    double sumC = 0.0;
+    for (int i = 0; i < m_calHot->m_fftSize; i++)
+    {
+        sumH += m_calHot->m_fftData[i];
+        sumC += m_calCold->m_fftData[i];
+    }
+
+    if (sumC == 0.0)
+    {
+        clearCalibration();
+        return;
+    }
+
+    double y = sumH/sumC;
+
+    // The Y-factor method is undefined when hot and cold measurements have the same power
+    // (y == 1). Use qFuzzyCompare to account for floating-point rounding near unity.
+    if (qFuzzyCompare(y, 1.0))
+    {
+        clearCalibration();
+        return;
+    }
+
+    // Use y to calculate Trx, which should be the same for both calibration points.
+    double Trx = (m_settings.m_tCalHot - (m_settings.m_tCalCold * y)) / (y - 1.0);
+    ui->calYFactor->setText(QString::number(y, 'f', 2));
+    ui->calTrx->setText(QString::number(Trx, 'f', 1));
 }
 
 // Estimate spillover temperature (This is typically very Az/El dependent as ground noise will vary)
@@ -2042,31 +2061,32 @@ void RadioAstronomyGUI::onMenuDialogCalled(const QPoint &p)
 
         dialog.move(p);
         new DialogPositioner(&dialog, false);
-        dialog.exec();
-
-        m_settings.m_rgbColor = m_channelMarker.getColor().rgb();
-        m_settings.m_title = m_channelMarker.getTitle();
-        m_settings.m_useReverseAPI = dialog.useReverseAPI();
-        m_settings.m_reverseAPIAddress = dialog.getReverseAPIAddress();
-        m_settings.m_reverseAPIPort = dialog.getReverseAPIPort();
-        m_settings.m_reverseAPIDeviceIndex = dialog.getReverseAPIDeviceIndex();
-        m_settings.m_reverseAPIChannelIndex = dialog.getReverseAPIChannelIndex();
-
-        setWindowTitle(m_settings.m_title);
-        setTitle(m_channelMarker.getTitle());
-        setTitleColor(m_settings.m_rgbColor);
-
-        if (m_deviceUISet->m_deviceMIMOEngine)
+        if (dialog.exec() == QDialog::Accepted)
         {
-            m_settings.m_streamIndex = dialog.getSelectedStreamIndex();
-            m_channelMarker.clearStreamIndexes();
-            m_channelMarker.addStreamIndex(m_settings.m_streamIndex);
-            updateIndexLabel();
-        }
+            m_settings.m_rgbColor = m_channelMarker.getColor().rgb();
+            m_settings.m_title = m_channelMarker.getTitle();
+            m_settings.m_useReverseAPI = dialog.useReverseAPI();
+            m_settings.m_reverseAPIAddress = dialog.getReverseAPIAddress();
+            m_settings.m_reverseAPIPort = dialog.getReverseAPIPort();
+            m_settings.m_reverseAPIDeviceIndex = dialog.getReverseAPIDeviceIndex();
+            m_settings.m_reverseAPIChannelIndex = dialog.getReverseAPIChannelIndex();
 
-        applySettings(QStringList({"title", "rgbColor", "useReverseAPI", "reverseAPIAddress",
-                                    "reverseAPIPort", "reverseAPIDeviceIndex", "reverseAPIChannelIndex",
-                                    "streamIndex"}));
+            setWindowTitle(m_settings.m_title);
+            setTitle(m_channelMarker.getTitle());
+            setTitleColor(m_settings.m_rgbColor);
+
+            if (m_deviceUISet->m_deviceMIMOEngine)
+            {
+                m_settings.m_streamIndex = dialog.getSelectedStreamIndex();
+                m_channelMarker.clearStreamIndexes();
+                m_channelMarker.addStreamIndex(m_settings.m_streamIndex);
+                updateIndexLabel();
+            }
+
+            applySettings(QStringList({"title", "rgbColor", "useReverseAPI", "reverseAPIAddress",
+                                        "reverseAPIPort", "reverseAPIDeviceIndex", "reverseAPIChannelIndex",
+                                        "streamIndex"}));
+        }
     }
 
     resetContextMenuType();
@@ -3236,6 +3256,14 @@ void RadioAstronomyGUI::update2DSettingsFromSweep()
         float sweep1Start, sweep1Stop;
         sweep1Start = m_settings.m_sweep1Start;
         sweep1Stop = m_settings.m_sweep1Stop;
+
+        if (qFuzzyIsNull(m_settings.m_sweep1Step) || qFuzzyIsNull(m_settings.m_sweep2Step))
+        {
+            ui->power2DWidth->setValue(0);
+            ui->power2DHeight->setValue(0);
+            return;
+        }
+
         // Handle azimuth/l sweep through 0. E.g. 340deg -> 20deg with +vs step, or 20deg -> 340deg with -ve step
         if ((m_settings.m_sweep1Stop < m_settings.m_sweep1Start) && (m_settings.m_sweep1Step > 0)) {
             sweep1Stop = m_settings.m_sweep1Stop + 360.0;
@@ -3365,6 +3393,9 @@ void RadioAstronomyGUI::update2DImage(FFTMeasurement* fft, bool skipCalcs)
                 intensity = fft->m_tSys;
                 break;
             default:
+                qWarning() << "Unexpected power unit:" << m_settings.m_powerYUnits
+                     << "Falling back to totalPowerdBFS";
+                intensity = fft->m_totalPowerdBFS;
                 break;
             }
 
@@ -5769,7 +5800,9 @@ void RadioAstronomyGUI::spectrumSeries_clicked(const QPointF &point)
             m_spectrumM1Valid = true;
             ui->spectrumMarkerTable->item(SPECTRUM_MARKER_ROW_M1, SPECTRUM_MARKER_COL_FREQ)->setData(Qt::DisplayRole, m_spectrumM1X);
             ui->spectrumMarkerTable->item(SPECTRUM_MARKER_ROW_M1, SPECTRUM_MARKER_COL_VALUE)->setData(Qt::DisplayRole, m_spectrumM1Y);
-            calcVrAndDistanceToPeak(m_spectrumM1X*1e6, fft, SPECTRUM_MARKER_ROW_M1);
+            if (fft) {
+                calcVrAndDistanceToPeak(m_spectrumM1X*1e6, fft, SPECTRUM_MARKER_ROW_M1);
+            }
         }
         else if (selection == "M2")
         {
@@ -5778,7 +5811,9 @@ void RadioAstronomyGUI::spectrumSeries_clicked(const QPointF &point)
             m_spectrumM2Valid = true;
             ui->spectrumMarkerTable->item(SPECTRUM_MARKER_ROW_M2, SPECTRUM_MARKER_COL_FREQ)->setData(Qt::DisplayRole, m_spectrumM2X);
             ui->spectrumMarkerTable->item(SPECTRUM_MARKER_ROW_M2, SPECTRUM_MARKER_COL_VALUE)->setData(Qt::DisplayRole, m_spectrumM2Y);
-            calcVrAndDistanceToPeak(m_spectrumM2X*1e6, fft, SPECTRUM_MARKER_ROW_M2);
+            if (fft) {
+                calcVrAndDistanceToPeak(m_spectrumM2X*1e6, fft, SPECTRUM_MARKER_ROW_M2);
+            }
         }
         calcSpectrumMarkerDelta();
 
@@ -6328,6 +6363,31 @@ void RadioAstronomyGUI::on_startStop_clicked(bool checked)
 {
     if (checked)
     {
+        QString errorMessage;
+        if (qFuzzyIsNull(m_settings.m_sweep1Step) && qFuzzyIsNull(m_settings.m_sweep2Step))
+        {
+            errorMessage = tr("Azimuth and elevation sweep steps cannot be zero.");
+        }
+        else if (qFuzzyIsNull(m_settings.m_sweep1Step))
+        {
+            errorMessage = tr("Azimuth sweep step cannot be zero.");
+        }
+        else if (qFuzzyIsNull(m_settings.m_sweep2Step))
+        {
+            errorMessage = tr("Elevation sweep step cannot be zero.");
+        }
+        if (!errorMessage.isEmpty())
+        {
+            QMessageBox::warning(this,
+                tr("Invalid Sweep Configuration"),
+                errorMessage);
+
+            ui->startStop->blockSignals(true);
+            ui->startStop->setChecked(false);
+            ui->startStop->blockSignals(false);
+            return;
+        }
+
         ui->startStop->setStyleSheet("QToolButton { background-color : green; }");
         applySettings(QStringList("startStop"));
         if (m_settings.m_power2DLinkSweep)

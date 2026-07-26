@@ -282,6 +282,11 @@ bool PlutoSDRInput::openDevice()
 
         DeviceAPI *sinkBuddy = m_deviceAPI->getSinkBuddies()[0];
         DevicePlutoSDRShared* buddySharedPtr = (DevicePlutoSDRShared*) sinkBuddy->getBuddySharedPtr();
+        if (!buddySharedPtr)
+        {
+            qCritical("PlutoSDRInput::openDevice: Tx buddy has no shared data");
+            return false;
+        }
         m_deviceShared.m_deviceParams = buddySharedPtr->m_deviceParams;
 
         if (m_deviceShared.m_deviceParams == 0)
@@ -368,6 +373,8 @@ void PlutoSDRInput::closeDevice()
         delete m_deviceShared.m_deviceParams;
         m_deviceShared.m_deviceParams = 0;
     }
+
+    m_open = false;
 }
 
 void PlutoSDRInput::suspendBuddies()
@@ -379,7 +386,7 @@ void PlutoSDRInput::suspendBuddies()
         DeviceAPI *buddy = m_deviceAPI->getSinkBuddies()[i];
         DevicePlutoSDRShared *buddyShared = (DevicePlutoSDRShared *) buddy->getBuddySharedPtr();
 
-        if (buddyShared->m_thread) {
+        if (buddyShared && buddyShared->m_thread) {
             buddyShared->m_thread->stopWork();
         }
     }
@@ -394,7 +401,7 @@ void PlutoSDRInput::resumeBuddies()
         DeviceAPI *buddy = m_deviceAPI->getSinkBuddies()[i];
         DevicePlutoSDRShared *buddyShared = (DevicePlutoSDRShared *) buddy->getBuddySharedPtr();
 
-        if (buddyShared->m_thread) {
+        if (buddyShared && buddyShared->m_thread) {
             buddyShared->m_thread->startWork();
         }
     }
@@ -443,6 +450,12 @@ bool PlutoSDRInput::applySettings(const PlutoSDRInputSettings& settings, const Q
         for (; itSink != sinkBuddies.end(); ++itSink)
         {
             DevicePlutoSDRShared *buddySharedPtr = (DevicePlutoSDRShared *) (*itSink)->getBuddySharedPtr();
+
+            if (!buddySharedPtr)
+            {
+                qWarning("PlutoSDRInput::applySettings: sink buddy has no shared data");
+                continue;
+            }
 
             if (buddySharedPtr->m_thread) {
                 buddySharedPtr->m_thread->stopWork();
@@ -624,7 +637,7 @@ bool PlutoSDRInput::applySettings(const PlutoSDRInputSettings& settings, const Q
         {
             DevicePlutoSDRShared *buddySharedPtr = (DevicePlutoSDRShared *) (*itSink)->getBuddySharedPtr();
 
-            if (buddySharedPtr->m_threadWasRunning) {
+            if (buddySharedPtr && buddySharedPtr->m_threadWasRunning) {
                 buddySharedPtr->m_thread->startWork();
             }
         }
@@ -719,6 +732,19 @@ void PlutoSDRInput::getbbLPRange(quint32& minLimit, quint32& maxLimit)
     plutoBox->getbbLPRxRange(min, max);
     minLimit = min;
     maxLimit = max;
+}
+
+void PlutoSDRInput::getGainRange(qint64& minGain, qint64& stepGain, qint64& maxGain)
+{
+    if (!m_open)
+    {
+        qDebug("PlutoSDRInput::getGainRange: device not open");
+        return;
+    }
+
+    DevicePlutoSDRBox *plutoBox = m_deviceShared.m_deviceParams->getBox();
+
+    plutoBox->getGainRange(minGain, stepGain, maxGain);
 }
 
 void PlutoSDRInput::getGain(int& gaindB)

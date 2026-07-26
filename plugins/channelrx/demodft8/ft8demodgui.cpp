@@ -453,7 +453,7 @@ void FT8DemodGUI::on_applyBandPreset_clicked()
     int bandPresetIndex = ui->bandPreset->currentIndex();
     int channelShift = m_settings.getBandPresets(m_settings.m_decoderMode)[bandPresetIndex].m_channelOffset; // kHz
     int baseFrequency = m_settings.getBandPresets(m_settings.m_decoderMode)[bandPresetIndex].m_baseFrequency; // kHz
-    quint64 deviceFrequency = (baseFrequency - channelShift)*1000; // Hz
+    quint64 deviceFrequency = static_cast<quint64>(baseFrequency - channelShift) * 1000; // Hz
     m_ft8Demod->setDeviceCenterFrequency(deviceFrequency, m_settings.m_streamIndex);
 
     if (channelShift * 1000 != m_settings.m_inputFrequencyOffset)

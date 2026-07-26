@@ -119,6 +119,7 @@ public:
     bool getRxGain(int& gaindB, unsigned int chan);
     bool getRxRSSI(std::string& rssiStr, unsigned int chan);
     bool getTxRSSI(std::string& rssiStr, unsigned int chan);
+    void getGainRange(qint64& minGain, qint64& stepGain, qint64& maxGain);
     void getRxLORange(uint64_t& minLimit, uint64_t& maxLimit);
     void getTxLORange(uint64_t& minLimit, uint64_t& maxLimit);
     void getbbLPRxRange(uint32_t& minLimit, uint32_t& maxLimit);

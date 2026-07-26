@@ -304,8 +304,10 @@ bool VORModel::findIntersection(float &lat, float &lon)
 {
     if (m_vors.count() > 2)
     {
-        float lat1, lon1, bearing1, valid1 = false;
-        float lat2, lon2, bearing2, valid2 = false;
+        float lat1 = 0.0f, lon1 = 0.0f, bearing1 = 0.0f;
+        bool valid1 = false;
+        float lat2 = 0.0f, lon2 = 0.0f, bearing2 = 0.0f;
+        bool valid2 = false;
 
         for (int i = 0; i < m_vors.count(); i++)
         {

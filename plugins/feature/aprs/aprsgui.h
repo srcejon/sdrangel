@@ -60,6 +60,12 @@ public:
     {
     }
 
+    ~APRSStation()
+    {
+        qDeleteAll(m_packets);
+        m_packets.clear();
+    }
+
     void addPacket(APRSPacket *packet)
     {
         m_packets.append(packet);

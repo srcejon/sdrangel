@@ -142,6 +142,7 @@ public:
     void getRSSI(std::string& rssiStr);
     void getLORange(qint64& minLimit, qint64& maxLimit);
     void getbbLPRange(quint32& minLimit, quint32& maxLimit);
+    void getGainRange(qint64& minGain, qint64& stepGain, qint64& maxGain);
     void getGain(int& gainStr);
     bool fetchTemperature();
     float getTemperature();

@@ -2350,7 +2350,7 @@ void MeshtasticDemodGUI::setDechirpInspectionMode(bool enabled)
     {
         m_dechirpSelectedMessageKey.clear();
 
-        if (m_spectrumVis && ui && ui->glSpectrum)
+        if (m_spectrumVis && ui->glSpectrum)
         {
             m_spectrumVis->setGLSpectrum(ui->glSpectrum);
 

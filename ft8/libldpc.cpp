@@ -35,7 +35,8 @@
 
 #include <stdio.h>
 #include <math.h>
-#include <stdlib.h>
+#include <cstring>
+#include <vector>
 #include "arrays.h"
 #include "libldpc.h"
 
@@ -371,19 +372,8 @@ void LDPC::ft8_crc(int msg1[], int msglen, int out[14])
     // with leading 1 bit.
     int div[] = {1, 1, 0, 0, 1, 1, 1, 0, 1, 0, 1, 0, 1, 1, 1};
     // append 14 zeros.
-    int *msg = (int *)malloc(sizeof(int) * (msglen + 14));
-
-    for (int i = 0; i < msglen + 14; i++)
-    {
-        if (i < msglen)
-        {
-            msg[i] = msg1[i];
-        }
-        else
-        {
-            msg[i] = 0;
-        }
-    }
+    std::vector<int> msg(msglen + 14);
+    std::memcpy(msg.data(), msg1, msglen * sizeof(int));
 
     for (int i = 0; i < msglen; i++)
     {
@@ -400,8 +390,6 @@ void LDPC::ft8_crc(int msg1[], int msglen, int out[14])
     {
         out[i] = msg[msglen + i];
     }
-
-    free(msg);
 }
 
 // rows is 91, cols is 174.

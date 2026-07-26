@@ -39,6 +39,8 @@ const QMap<QString, QString> WebAPIUtils::m_channelURIToSettingsKey = {
     {"sdrangel.channel.chirpchatdemod", "ChirpChatDemodSettings"},
     {"sdrangel.channel.meshtasticdemod", "ChirpChatDemodSettings"}, // alias: Meshtastic uses ChirpChatDemodSettings schema
     {"sdrangel.channel.modchirpchat", "ChirpChatModSettings"},
+    {"sdrangel.channel.meshcoredemod", "MeshcoreDemodSettings"},
+    {"sdrangel.channeltx.modmeshcore", "MeshcoreModSettings"},
     {"sdrangel.channel.demodatv", "ATVDemodSettings"},
     {"sdrangel.channel.demoddatv", "DATVDemodSettings"},
     {"sdrangel.channel.dabdemod", "DABDemodSettings"},
@@ -165,6 +167,8 @@ const QMap<QString, QString> WebAPIUtils::m_channelTypeToSettingsKey = {
     {"ChirpChatDemod", "ChirpChatDemodSettings"},
     {"MeshtasticDemod", "ChirpChatDemodSettings"}, // alias: Meshtastic uses ChirpChatDemodSettings schema
     {"ChirpChatMod", "ChirpChatModSettings"},
+    {"MeshcoreDemod", "MeshcoreDemodSettings"},
+    {"MeshcoreMod", "MeshcoreModSettings"},
     {"ChannelPower", "ChannelPowerSettings"},
     {"DATVDemod", "DATVDemodSettings"},
     {"DATVMod", "DATVModSettings"},

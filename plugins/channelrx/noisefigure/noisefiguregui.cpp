@@ -102,7 +102,7 @@ void NoiseFigureGUI::plotChart()
 
     // Create reference data series
     QLineSeries *ref = nullptr;
-    if ((m_refData.size() > 0) && (ui->chartSelect->currentIndex() < m_refCols-1)) {
+    if ((m_refData.size() > 0) && (m_refCols > 0) && (ui->chartSelect->currentIndex() < m_refCols-1)) {
         ref = new QLineSeries();
         for (int i = 0; i < m_refData.size() / m_refCols; i++) {
             ref->append(m_refData[i*m_refCols], m_refData[i*m_refCols+ui->chartSelect->currentIndex()+1]);

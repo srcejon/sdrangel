@@ -4855,6 +4855,11 @@ bool WebAPIRequestMapper::getChannelActions(
             channelActions->setIeee802154ModActions(new SWGSDRangel::SWGIEEE_802_15_4_ModActions());
             channelActions->getIeee802154ModActions()->fromJsonObject(actionsJsonObject);
         }
+        else if (channelActionsKey == "MeshcoreModActions")
+        {
+            channelActions->setMeshcoreModActions(new SWGSDRangel::SWGMeshcoreModActions());
+            channelActions->getMeshcoreModActions()->fromJsonObject(actionsJsonObject);
+        }
         else if (channelActionsKey == "RadioAstronomyActions")
         {
             channelActions->setRadioAstronomyActions(new SWGSDRangel::SWGRadioAstronomyActions());

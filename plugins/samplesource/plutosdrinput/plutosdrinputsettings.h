@@ -77,7 +77,7 @@ struct PlutoSDRInputSettings {
     bool    m_hwIQCorrection;  //!< Hardware IQ correction
     quint32 m_log2Decim;
     quint32 m_lpfBW;           //!< analog lowpass filter bandwidth (Hz)
-    quint32 m_gain;            //!< "hardware" gain
+    qint32 m_gain;             //!< "hardware" gain
     RFPath  m_antennaPath;
     GainMode m_gainMode;
     bool m_transverterMode;

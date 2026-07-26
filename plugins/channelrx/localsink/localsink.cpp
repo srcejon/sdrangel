@@ -819,7 +819,7 @@ void LocalSink::updateDeviceSetList()
     LocalSinkSettings settings = m_settings;
     int newIndexInList;
 
-    if (it != deviceSets.begin())
+    if (!m_localInputDeviceIndexes.empty()) // there are some local input devices
     {
         if (m_settings.m_localDeviceIndex < 0) {
             newIndexInList = 0;

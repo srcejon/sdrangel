@@ -237,6 +237,7 @@
 #include "SWGMapSettings.h"
 #include "SWGMeshcoreDemodReport.h"
 #include "SWGMeshcoreDemodSettings.h"
+#include "SWGMeshcoreModActions.h"
 #include "SWGMeshcoreModReport.h"
 #include "SWGMeshcoreModSettings.h"
 #include "SWGMeshtasticDemodReport.h"
@@ -1567,6 +1568,11 @@ namespace SWGSDRangel {
     }
     if(QString("SWGMeteorSettings").compare(type) == 0) {
       SWGMeteorSettings *obj = new SWGMeteorSettings();
+      obj->init();
+      return obj;
+    }
+    if(QString("SWGMeshcoreModActions").compare(type) == 0) {
+      SWGMeshcoreModActions *obj = new SWGMeshcoreModActions();
       obj->init();
       return obj;
     }

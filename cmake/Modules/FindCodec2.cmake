@@ -1,11 +1,29 @@
+# If CODEC2_DIR is specified, treat it as an explicit user override and
+# search that installation directly. Otherwise use pkg-config to verify
+# the minimum supported codec2 version before locating the headers and
+# library.
+
 if (NOT CODEC2_FOUND)
-    INCLUDE(FindPkgConfig)
-    PKG_CHECK_MODULES(PC_CODEC2 "codec2")
+    if (CODEC2_DIR)
+        message(STATUS "Using CODEC2_DIR: ${CODEC2_DIR}")
+    else()
+        find_package(PkgConfig QUIET)
+        if(NOT PKG_CONFIG_FOUND)
+            message(STATUS "codec2 support disabled: pkg-config is required to verify codec2 version.")
+            return()
+        endif()
+
+        pkg_check_modules(PC_CODEC2 QUIET codec2>=1.1.1)
+        if(NOT PC_CODEC2_FOUND)
+            message(STATUS "codec2 support disabled: codec2 >= 1.1.1 was not found.")
+            return()
+        endif()
+    endif()
 
     FIND_PATH(CODEC2_INCLUDE_DIR
         NAMES codec2/codec2.h
         HINTS ${CODEC2_DIR}/include
-              ${PC_CODEC2_INCLUDE_DIR}
+              ${PC_CODEC2_INCLUDE_DIRS}
               ${CMAKE_INSTALL_PREFIX}/include
         PATHS /usr/local/include
               /usr/include
@@ -15,7 +33,7 @@ if (NOT CODEC2_FOUND)
         NAMES codec2 libcodec2
         HINTS ${CODEC2_DIR}/lib
               ${CODEC2_DIR}/lib64
-              ${PC_CODEC2_LIBDIR}
+              ${PC_CODEC2_LIBRARY_DIRS}
               ${CMAKE_INSTALL_PREFIX}/lib
               ${CMAKE_INSTALL_PREFIX}/lib64
         PATHS /usr/local/lib

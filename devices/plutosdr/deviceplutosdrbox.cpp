@@ -887,6 +887,28 @@ bool DevicePlutoSDRBox::getTxRSSI(std::string& rssiStr, unsigned int chan)
     return get_param(DEVICE_PHY, buff, rssiStr);
 }
 
+void DevicePlutoSDRBox::getGainRange(qint64& minGain, qint64& stepGain, qint64& maxGain)
+{
+    std::string rangeStr;
+
+    char buff[50];
+    snprintf(buff, sizeof(buff), "in_voltage0_hardwaregain_available");
+    if (get_param(DEVICE_PHY, buff, rangeStr) && (rangeStr.size() > 2))
+    {
+        // _available is always [min step max]
+        std::istringstream in(rangeStr.substr(1, rangeStr.size()-2));
+        in >> minGain;
+        in >> stepGain;
+        in >> maxGain;
+    }
+    else
+    {
+        minGain  = DevicePlutoSDR::rxMinGain;
+        stepGain = 1;
+        maxGain  = DevicePlutoSDR::rxMaxGain;
+    }
+}
+
 void DevicePlutoSDRBox::getRxLORange(uint64_t& minLimit, uint64_t& maxLimit)
 {
     // values are returned in Hz

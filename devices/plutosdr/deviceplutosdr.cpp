@@ -32,6 +32,8 @@ const uint32_t DevicePlutoSDR::bbLPRxLowLimitFreq  =   200000U; // 200 kHz
 const uint32_t DevicePlutoSDR::bbLPRxHighLimitFreq = 14000000U; // 14 MHz
 const uint32_t DevicePlutoSDR::bbLPTxLowLimitFreq  =   625000U; // 625 kHz
 const uint32_t DevicePlutoSDR::bbLPTxHighLimitFreq = 16000000U; // 16 MHz
+const int32_t DevicePlutoSDR::rxMinGain = 0;                    //  0 dB
+const int32_t DevicePlutoSDR::rxMaxGain = 77;                   // 77 dB
 
 const float DevicePlutoSDR::firBWLowLimitFactor  = 0.05f;
 const float DevicePlutoSDR::firBWHighLimitFactor = 0.9f;

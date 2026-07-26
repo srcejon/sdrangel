@@ -3,6 +3,7 @@ set(meteor_demod_sink_test_SOURCES
     ../meteorsettings.cpp
     ../meteormapgeometry.cpp
     ../movingtargetmatcher.cpp
+    ../meteorsatellitematcher.cpp
     ../meteordemodsink.cpp
     ../meteorblobdetector.cpp
     ../meteorbaseband.cpp
@@ -13,6 +14,7 @@ set(meteor_demod_sink_test_HEADERS
     ../meteorsettings.h
     ../meteormapgeometry.h
     ../movingtargetmatcher.h
+    ../meteorsatellitematcher.h
     ../meteordemodsink.h
     ../meteorblobdetector.h
     ../meteorbaseband.h
@@ -42,6 +44,7 @@ target_compile_definitions(meteor_demod_sink_test PRIVATE
 target_link_libraries(meteor_demod_sink_test PRIVATE
     Qt::Core
     Qt::Gui
+    Qt::Network
     sdrbase
 )
 

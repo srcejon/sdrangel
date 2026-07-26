@@ -45,6 +45,7 @@
 #include "meteorbaseband.h"
 #include "meteordemodsink.h"
 #include "meteormapgeometry.h"
+#include "meteorsatellitematcher.h"
 #include "meteorsettings.h"
 #include "movingtargetmatcher.h"
 #include "rmobreport.h"
@@ -275,6 +276,83 @@ namespace {
             || (combinedMatch.m_source != QStringLiteral("TLE")))
         {
             errorStream << "Moving-target matcher test: stronger TLE target was not selected\n";
+            return false;
+        }
+
+        return true;
+    }
+
+    bool runMoonTargetMatcherTests(QTextStream& errorStream)
+    {
+        MovingTargetMatcher::Observation observation;
+        observation.m_durationS = 3.0;
+        observation.m_frequencySpanHz = 100.0;
+        observation.m_referenceFrequencyHz = 143050000.0;
+        observation.m_transmitter = {50.0535, 19.8235, 0.0};
+        observation.m_receiver = observation.m_transmitter;
+
+        MeteorSatelliteMatcher::Geometry broadGeometry;
+        broadGeometry.m_transmitterBeam = {0.0, 0.0, 360.0, 180.0};
+        broadGeometry.m_receiverBeam = broadGeometry.m_transmitterBeam;
+        MeteorSatelliteMatcher::MoonPrediction broadPrediction;
+        const QDateTime searchStart(
+            QDate(2026, 7, 22),
+            QTime(0, 0),
+            Qt::UTC);
+
+        for (int hour = 0; hour < 48; ++hour)
+        {
+            observation.m_startDateTimeUtc = searchStart.addSecs(hour * 3600);
+            broadPrediction = MeteorSatelliteMatcher::predictMoon(
+                observation,
+                broadGeometry);
+
+            if (broadPrediction.m_possible) {
+                break;
+            }
+        }
+
+        if (!broadPrediction.m_possible
+            || !broadPrediction.m_match.m_hasCandidate
+            || !broadPrediction.m_match.m_prediction.m_valid)
+        {
+            errorStream << "Moon matcher test: visible Moon produced no Doppler prediction\n";
+            return false;
+        }
+
+        observation.m_centerFrequencyOffsetHz =
+            broadPrediction.m_match.m_prediction.m_centerFrequencyOffsetHz;
+        observation.m_frequencyDriftHz =
+            broadPrediction.m_match.m_prediction.m_frequencyDriftHz;
+        broadPrediction = MeteorSatelliteMatcher::predictMoon(
+            observation,
+            broadGeometry);
+
+        if (!broadPrediction.m_match.m_matched
+            || (broadPrediction.m_match.m_source != QStringLiteral("Moon"))
+            || (broadPrediction.m_match.m_endpointResidualRMSHz > 1e-6))
+        {
+            errorStream << "Moon matcher test: exact lunar Doppler was not matched\n";
+            return false;
+        }
+
+        MeteorSatelliteMatcher::Geometry mispointedGeometry = broadGeometry;
+        mispointedGeometry.m_receiverBeam = {
+            std::remainder(
+                broadPrediction.m_receiverAzimuthDegrees + 180.0,
+                360.0),
+            broadPrediction.m_receiverElevationDegrees,
+            2.0,
+            2.0
+        };
+        const MeteorSatelliteMatcher::MoonPrediction rejectedPrediction =
+            MeteorSatelliteMatcher::predictMoon(
+                observation,
+                mispointedGeometry);
+
+        if (rejectedPrediction.m_possible)
+        {
+            errorStream << "Moon matcher test: mispointed receiver beam accepted the Moon\n";
             return false;
         }
 
@@ -1371,6 +1449,7 @@ int main(int argc, char *argv[])
     if (!runMeteorSettingsTests(err)
         || !runMeteorMapGeometryTests(err)
         || !runMovingTargetMatcherTests(err)
+        || !runMoonTargetMatcherTests(err)
         || !runRMOBReportTests(err))
     {
         return 2;

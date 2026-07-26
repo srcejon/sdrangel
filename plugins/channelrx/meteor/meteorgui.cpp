@@ -639,7 +639,7 @@ void MeteorGUI::setupUi(RollupContents *rollupContents)
     m_detectionsTable->setSortingEnabled(true);
     m_detectionsTable->setMinimumHeight(120);
 
-    m_satellitesTable->setColumnCount(18);
+    m_satellitesTable->setColumnCount(21);
     QStringList satelliteHeaders = detectionHeaders.mid(0, 9);
     satelliteHeaders.append("Radial (kph)");
     satelliteHeaders.append("Max radial (kph)");
@@ -649,6 +649,9 @@ void MeteorGUI::setupUi(RollupContents *rollupContents)
     satelliteHeaders.append("Target match");
     satelliteHeaders.append("Match score (%)");
     satelliteHeaders.append("Residual (Hz)");
+    satelliteHeaders.append("Moon possible");
+    satelliteHeaders.append("Moon Doppler (Hz)");
+    satelliteHeaders.append("Moon drift (Hz)");
     satelliteHeaders.append(detectionHeaders[9]);
     const QStringList satelliteHeaderTooltips = {
         "Local date and time when the Doppler sweep started",
@@ -665,9 +668,12 @@ void MeteorGUI::setupUi(RollupContents *rollupContents)
         "Average Doppler drift rate across the sweep in hertz per second.",
         "Conservative RF-only classification from endpoint speed, Doppler rate, sweep excursion and track duration.",
         "Heuristic RF-only satellite evidence score from 0 to 100; this is not a calibrated probability.",
-        "Strong, unambiguous moving-target correlation using fresh ADS-B aircraft states and the worker-thread CelesTrak active TLE catalog.",
+        "Strong, unambiguous moving-target correlation using fresh ADS-B aircraft states, the worker-thread CelesTrak active TLE catalog, and the lunar ephemeris.",
         "Doppler endpoint match score from 0 to 100. A match requires at least 60 and an 8 point lead over the next target.",
         "Root-mean-square residual between observed and predicted start/end Doppler offsets in hertz.",
+        "Whether the Moon is above both horizons and lies inside both configured transmitter and receiver antenna beams at the detection time.",
+        "Expected bistatic center Doppler offset in hertz for a reflection from the Moon.",
+        "Expected change in bistatic Doppler offset across the detection duration for a reflection from the Moon.",
         "Meteor channel detector sample rate in hertz"
     };
 
@@ -2237,7 +2243,13 @@ void MeteorGUI::addSatelliteDetection(const MeteorDemodSink::MsgSatelliteDetecte
     m_satellitesTable->setItem(row, 16, targetMatch.m_hasCandidate
         ? makeTableItem(QString::number(targetMatch.m_endpointResidualRMSHz, 'f', 1), targetMatch.m_endpointResidualRMSHz)
         : makeTableItem(QString()));
-    m_satellitesTable->setItem(row, 17, makeTableItem(QString::number(detection.m_sampleRate), detection.m_sampleRate));
+    m_satellitesTable->setItem(row, 17, makeTableItem(
+        validObservation && m_satelliteMatcher
+            ? QStringLiteral("Checking...")
+            : QStringLiteral("Unavailable")));
+    m_satellitesTable->setItem(row, 18, makeTableItem(QString()));
+    m_satellitesTable->setItem(row, 19, makeTableItem(QString()));
+    m_satellitesTable->setItem(row, 20, makeTableItem(QString::number(detection.m_sampleRate), detection.m_sampleRate));
     m_satellitesTable->setSortingEnabled(sortingEnabled);
 
     if (validObservation && m_satelliteMatcher)
@@ -2329,6 +2341,7 @@ QDateTime MeteorGUI::movingTargetObservationDateTimeUtc(const QDateTime& display
 void MeteorGUI::applySatelliteTargetMatch(
     quint64 overlayId,
     const MovingTargetMatcher::Match& satelliteMatch,
+    const MeteorSatelliteMatcher::MoonPrediction& moonPrediction,
     int catalogSize,
     const QString& status)
 {
@@ -2379,9 +2392,13 @@ void MeteorGUI::applySatelliteTargetMatch(
 
     if (combinedMatch.m_matched)
     {
-        classificationItem->setText(combinedMatch.m_source == QStringLiteral("TLE")
-            ? QStringLiteral("Satellite (TLE)")
-            : QStringLiteral("Aircraft (ADS-B)"));
+        if (combinedMatch.m_source == QStringLiteral("TLE")) {
+            classificationItem->setText(QStringLiteral("Satellite (TLE)"));
+        } else if (combinedMatch.m_source == QStringLiteral("Moon")) {
+            classificationItem->setText(QStringLiteral("Moon"));
+        } else {
+            classificationItem->setText(QStringLiteral("Aircraft (ADS-B)"));
+        }
         matchItem->setText(movingTargetLabel(combinedMatch));
     }
     else
@@ -2426,6 +2443,39 @@ void MeteorGUI::applySatelliteTargetMatch(
             QString::number(combinedMatch.m_endpointResidualRMSHz, 'f', 1),
             combinedMatch.m_endpointResidualRMSHz)
         : makeTableItem(QString()));
+    QTableWidgetItem *moonPossibleItem = makeTableItem(
+        moonPrediction.m_possible ? QStringLiteral("Yes") : QStringLiteral("No"),
+        moonPrediction.m_possible ? 1 : 0);
+    moonPossibleItem->setToolTip(tr(
+        "Moon direction at detection midpoint:\n"
+        "TX azimuth/elevation: %1 / %2 degrees\n"
+        "RX azimuth/elevation: %3 / %4 degrees")
+        .arg(moonPrediction.m_transmitterAzimuthDegrees, 0, 'f', 1)
+        .arg(moonPrediction.m_transmitterElevationDegrees, 0, 'f', 1)
+        .arg(moonPrediction.m_receiverAzimuthDegrees, 0, 'f', 1)
+        .arg(moonPrediction.m_receiverElevationDegrees, 0, 'f', 1));
+    m_satellitesTable->setItem(row, 17, moonPossibleItem);
+
+    if (moonPrediction.m_possible && moonPrediction.m_match.m_prediction.m_valid)
+    {
+        const MovingTargetMatcher::Prediction& prediction =
+            moonPrediction.m_match.m_prediction;
+        QTableWidgetItem *moonDopplerItem = makeTableItem(
+            QString::number(prediction.m_centerFrequencyOffsetHz, 'f', 1),
+            prediction.m_centerFrequencyOffsetHz);
+        moonDopplerItem->setToolTip(tr("Expected Moon start/end Doppler: %1 / %2 Hz")
+            .arg(prediction.m_startFrequencyOffsetHz, 0, 'f', 1)
+            .arg(prediction.m_endFrequencyOffsetHz, 0, 'f', 1));
+        m_satellitesTable->setItem(row, 18, moonDopplerItem);
+        m_satellitesTable->setItem(row, 19, makeTableItem(
+            QString::number(prediction.m_frequencyDriftHz, 'f', 1),
+            prediction.m_frequencyDriftHz));
+    }
+    else
+    {
+        m_satellitesTable->setItem(row, 18, makeTableItem(QString()));
+        m_satellitesTable->setItem(row, 19, makeTableItem(QString()));
+    }
     m_satellitesTable->setSortingEnabled(sortingEnabled);
 }
 

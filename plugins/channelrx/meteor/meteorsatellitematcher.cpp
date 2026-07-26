@@ -34,6 +34,7 @@
 #include <QUrl>
 
 #include "util/csv.h"
+#include "util/astronomy.h"
 
 #ifdef METEOR_HAS_SGP4
 #include <CoordGeodetic.h>
@@ -75,6 +76,128 @@ namespace {
             return {m_x * scalar, m_y * scalar, m_z * scalar};
         }
     };
+
+    void ecefToENU(
+        const Vector3& vector,
+        const MovingTargetMatcher::Site& origin,
+        double& east,
+        double& north,
+        double& up);
+
+    bool ecefToGeodetic(const Vector3& position, MovingTargetMatcher::Site& site)
+    {
+        const double longitude = std::atan2(position.m_y, position.m_x);
+        const double horizontalRadius = std::hypot(position.m_x, position.m_y);
+
+        if (!(horizontalRadius > 1.0) || !std::isfinite(position.m_z)) {
+            return false;
+        }
+
+        double latitude = std::atan2(
+            position.m_z,
+            horizontalRadius * (1.0 - WGS84EccentricitySquared));
+        double altitudeM = 0.0;
+
+        for (int iteration = 0; iteration < 6; ++iteration)
+        {
+            const double sinLatitude = std::sin(latitude);
+            const double primeVerticalRadius = WGS84SemiMajorAxisM
+                / std::sqrt(1.0 - WGS84EccentricitySquared
+                    * sinLatitude * sinLatitude);
+            altitudeM = horizontalRadius / std::cos(latitude)
+                - primeVerticalRadius;
+            latitude = std::atan2(
+                position.m_z,
+                horizontalRadius * (1.0
+                    - WGS84EccentricitySquared * primeVerticalRadius
+                        / (primeVerticalRadius + altitudeM)));
+        }
+
+        site = {
+            latitude * 180.0 / Pi,
+            longitude * 180.0 / Pi,
+            altitudeM
+        };
+        return std::isfinite(site.m_latitudeDegrees)
+            && std::isfinite(site.m_longitudeDegrees)
+            && std::isfinite(site.m_altitudeM);
+    }
+
+    bool moonECEFAtTime(const QDateTime& dateTimeUtc, Vector3& position)
+    {
+        if (!dateTimeUtc.isValid()) {
+            return false;
+        }
+
+        AzAlt topocentric;
+        RADec topocentricRD;
+        RADec geocentricRD;
+        double distanceM = 0.0;
+        Astronomy::moonPosition(
+            topocentric,
+            topocentricRD,
+            0.0,
+            0.0,
+            dateTimeUtc,
+            geocentricRD,
+            distanceM);
+
+        if (!(distanceM > WGS84SemiMajorAxisM)
+            || !std::isfinite(geocentricRD.ra)
+            || !std::isfinite(geocentricRD.dec))
+        {
+            return false;
+        }
+
+        const double latitude = geocentricRD.dec * Pi / 180.0;
+        const double earthFixedLongitude = std::remainder(
+            geocentricRD.ra * 15.0
+                - Astronomy::localSiderealTime(dateTimeUtc, 0.0),
+            360.0) * Pi / 180.0;
+        const double cosLatitude = std::cos(latitude);
+        position = {
+            distanceM * cosLatitude * std::cos(earthFixedLongitude),
+            distanceM * cosLatitude * std::sin(earthFixedLongitude),
+            distanceM * std::sin(latitude)
+        };
+        return true;
+    }
+
+    bool moonTargetState(
+        const QDateTime& dateTimeUtc,
+        MovingTargetMatcher::TargetState& state,
+        Vector3& targetPosition)
+    {
+        constexpr double VelocityDeltaS = 5.0;
+        Vector3 beforePosition;
+        Vector3 afterPosition;
+
+        if (!moonECEFAtTime(dateTimeUtc, targetPosition)
+            || !moonECEFAtTime(
+                dateTimeUtc.addMSecs((qint64) std::llround(-VelocityDeltaS * 1000.0)),
+                beforePosition)
+            || !moonECEFAtTime(
+                dateTimeUtc.addMSecs((qint64) std::llround(VelocityDeltaS * 1000.0)),
+                afterPosition)
+            || !ecefToGeodetic(targetPosition, state.m_position))
+        {
+            return false;
+        }
+
+        state.m_source = QStringLiteral("Moon");
+        state.m_id = QStringLiteral("Moon");
+        state.m_label = QStringLiteral("Moon");
+        state.m_dateTimeUtc = dateTimeUtc;
+        const Vector3 velocityECEF = (afterPosition - beforePosition)
+            * (1.0 / (2.0 * VelocityDeltaS));
+        ecefToENU(
+            velocityECEF,
+            state.m_position,
+            state.m_eastVelocityMPS,
+            state.m_northVelocityMPS,
+            state.m_upVelocityMPS);
+        return true;
+    }
 
     Vector3 geodeticToECEF(const MovingTargetMatcher::Site& site)
     {
@@ -187,6 +310,58 @@ namespace {
     }
 }
 
+MeteorSatelliteMatcher::MoonPrediction MeteorSatelliteMatcher::predictMoon(
+    const MovingTargetMatcher::Observation& observation,
+    const Geometry& geometry)
+{
+    MoonPrediction result;
+
+    if (!observation.m_startDateTimeUtc.isValid()
+        || !(observation.m_durationS > 0.0)
+        || !(observation.m_referenceFrequencyHz > 0.0))
+    {
+        return result;
+    }
+
+    const QDateTime centerTimeUtc = observation.m_startDateTimeUtc.addMSecs(
+        (qint64) std::llround(observation.m_durationS * 500.0));
+    MovingTargetMatcher::TargetState moonState;
+    Vector3 moonPosition;
+
+    if (!moonTargetState(centerTimeUtc, moonState, moonPosition)
+        || !siteLookAngles(
+            observation.m_transmitter,
+            moonPosition,
+            result.m_transmitterAzimuthDegrees,
+            result.m_transmitterElevationDegrees)
+        || !siteLookAngles(
+            observation.m_receiver,
+            moonPosition,
+            result.m_receiverAzimuthDegrees,
+            result.m_receiverElevationDegrees))
+    {
+        return result;
+    }
+
+    result.m_possible =
+        (result.m_transmitterElevationDegrees >= MinimumElevationDegrees)
+        && (result.m_receiverElevationDegrees >= MinimumElevationDegrees)
+        && insideBeam(
+            result.m_transmitterAzimuthDegrees,
+            result.m_transmitterElevationDegrees,
+            geometry.m_transmitterBeam)
+        && insideBeam(
+            result.m_receiverAzimuthDegrees,
+            result.m_receiverElevationDegrees,
+            geometry.m_receiverBeam);
+
+    if (result.m_possible) {
+        result.m_match = MovingTargetMatcher::match(observation, {moonState});
+    }
+
+    return result;
+}
+
 class MeteorSatelliteMatcherWorker : public QObject
 {
 public:
@@ -285,6 +460,9 @@ public:
         const MeteorSatelliteMatcher::Geometry& geometry)
     {
         MovingTargetMatcher::Match match;
+        const MeteorSatelliteMatcher::MoonPrediction moonPrediction =
+            MeteorSatelliteMatcher::predictMoon(observation, geometry);
+        match = moonPrediction.m_match;
 
 #ifdef METEOR_HAS_SGP4
         if (m_catalog.empty())
@@ -302,7 +480,9 @@ public:
                 (qint64) std::llround(observation.m_durationS * 500.0));
             const QVector<MovingTargetMatcher::TargetState>& states =
                 statesForTime(centerTimeUtc, observation, geometry);
-            match = MovingTargetMatcher::match(observation, states);
+            match = MovingTargetMatcher::combine(
+                match,
+                MovingTargetMatcher::match(observation, states));
         }
 #endif
 
@@ -311,9 +491,14 @@ public:
         const QString status = m_status;
         QMetaObject::invokeMethod(
             m_owner,
-            [owner, requestId, match, catalogSize, status]() {
+            [owner, requestId, match, moonPrediction, catalogSize, status]() {
                 if (owner) {
-                    owner->deliverMatch(requestId, match, catalogSize, status);
+                    owner->deliverMatch(
+                        requestId,
+                        match,
+                        moonPrediction,
+                        catalogSize,
+                        status);
                 }
             },
             Qt::QueuedConnection);
@@ -654,17 +839,28 @@ private:
     {
         const std::vector<PendingRequest> pendingRequests = std::move(m_pendingRequests);
         m_pendingRequests.clear();
-        const MovingTargetMatcher::Match noMatch;
 
         for (const PendingRequest& request : pendingRequests)
         {
+            const MeteorSatelliteMatcher::MoonPrediction moonPrediction =
+                MeteorSatelliteMatcher::predictMoon(
+                    request.m_observation,
+                    request.m_geometry);
             QPointer<MeteorSatelliteMatcher> owner(m_owner);
             const QString status = m_status;
             QMetaObject::invokeMethod(
                 m_owner,
-                [owner, requestId = request.m_requestId, noMatch, status]() {
+                [owner,
+                    requestId = request.m_requestId,
+                    moonPrediction,
+                    status]() {
                     if (owner) {
-                        owner->deliverMatch(requestId, noMatch, 0, status);
+                        owner->deliverMatch(
+                            requestId,
+                            moonPrediction.m_match,
+                            moonPrediction,
+                            0,
+                            status);
                     }
                 },
                 Qt::QueuedConnection);
@@ -882,10 +1078,11 @@ void MeteorSatelliteMatcher::refreshCatalog()
 void MeteorSatelliteMatcher::deliverMatch(
     quint64 requestId,
     const MovingTargetMatcher::Match& match,
+    const MoonPrediction& moonPrediction,
     int catalogSize,
     const QString& status)
 {
-    emit matchReady(requestId, match, catalogSize, status);
+    emit matchReady(requestId, match, moonPrediction, catalogSize, status);
 }
 
 void MeteorSatelliteMatcher::deliverCatalogStatus(int catalogSize, const QString& status)

@@ -60,6 +60,14 @@ public:
     static void sunPosition(AzAlt& aa, RADec& rd, double latitude, double longitude, QDateTime dt);
     static double moonDays(QDateTime dt);
     static void moonPosition(AzAlt& aa, RADec& rd, double latitude, double longitude, QDateTime dt);
+    static void moonPosition(
+        AzAlt& aa,
+        RADec& rd,
+        double latitude,
+        double longitude,
+        QDateTime dt,
+        RADec& geocentricRD,
+        double& geocentricDistanceM);
 
     static double refractionSaemundsson(double alt, double pressure, double temperature);
     static double refractionPAL(double alt, double pressure, double temperature, double humidity, double frequency, double latitude, double heightAboveSeaLevel, double temperatureLapseRate);

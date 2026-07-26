@@ -35,9 +35,22 @@ public:
         Beam m_receiverBeam;
     };
 
+    struct MoonPrediction
+    {
+        bool m_possible = false;
+        double m_transmitterAzimuthDegrees = 0.0;
+        double m_transmitterElevationDegrees = 0.0;
+        double m_receiverAzimuthDegrees = 0.0;
+        double m_receiverElevationDegrees = 0.0;
+        MovingTargetMatcher::Match m_match;
+    };
+
     explicit MeteorSatelliteMatcher(QObject *parent = nullptr);
     ~MeteorSatelliteMatcher() override;
 
+    static MoonPrediction predictMoon(
+        const MovingTargetMatcher::Observation& observation,
+        const Geometry& geometry);
     void requestMatch(
         quint64 requestId,
         const MovingTargetMatcher::Observation& observation,
@@ -48,6 +61,7 @@ signals:
     void matchReady(
         quint64 requestId,
         const MovingTargetMatcher::Match& match,
+        const MoonPrediction& moonPrediction,
         int catalogSize,
         const QString& status);
     void catalogStatusChanged(int catalogSize, const QString& status);
@@ -58,6 +72,7 @@ private:
     void deliverMatch(
         quint64 requestId,
         const MovingTargetMatcher::Match& match,
+        const MoonPrediction& moonPrediction,
         int catalogSize,
         const QString& status);
     void deliverCatalogStatus(int catalogSize, const QString& status);

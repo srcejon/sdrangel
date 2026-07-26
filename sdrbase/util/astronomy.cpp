@@ -536,6 +536,27 @@ double Astronomy::moonDays(QDateTime dt)
 // Accurate to 4 arcminute
 void Astronomy::moonPosition(AzAlt& aa, RADec& rd, double latitude, double longitude, QDateTime dt)
 {
+    RADec geocentricRD;
+    double geocentricDistanceM;
+    moonPosition(
+        aa,
+        rd,
+        latitude,
+        longitude,
+        dt,
+        geocentricRD,
+        geocentricDistanceM);
+}
+
+void Astronomy::moonPosition(
+    AzAlt& aa,
+    RADec& rd,
+    double latitude,
+    double longitude,
+    QDateTime dt,
+    RADec& geocentricRD,
+    double& geocentricDistanceM)
+{
     double d = moonDays(dt);
 
     double ecl = Units::degreesToRadians(23.4393 - 3.563E-7 * d); // Obliquity of the ecliptic - tilt of Earth's axis of rotation
@@ -624,6 +645,8 @@ void Astronomy::moonPosition(AzAlt& aa, RADec& rd, double latitude, double longi
 
     rd.ra = modulo(Units::radiansToDegrees(ra), 360.0) / (360.0/24.0); // Convert to hours
     rd.dec = Units::radiansToDegrees(dec); // Convert to degrees
+    geocentricRD = rd;
+    geocentricDistanceM = rm * 6378137.0;
 
     // Convert from geocentric to topocentric
     double mpar = asin(1/rm);
@@ -3900,4 +3923,3 @@ static int eraEpv00(double date1, double date2,
 /* Finished. */
 
 }
-

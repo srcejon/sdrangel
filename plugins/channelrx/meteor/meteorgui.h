@@ -217,6 +217,7 @@ private:
     void applySatelliteTargetMatch(
         quint64 overlayId,
         const MovingTargetMatcher::Match& match,
+        const MeteorSatelliteMatcher::MoonPrediction& moonPrediction,
         int catalogSize,
         const QString& status);
     void addCameraDetection(const Meteor::MsgCameraMeteorDetected& detection);

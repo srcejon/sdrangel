@@ -1047,7 +1047,7 @@ void MeteorGUI::setupSpectrum()
             spectrumGUI->findChild<QComboBox *>("fps")->setCurrentIndex(fpsIndex);
         }
 
-        glSpectrum->setCenterFrequency(0);
+        glSpectrum->setCenterFrequency(m_settings.m_frequency);
         glSpectrum->setSampleRate(m_settings.m_channelSampleRate);
         glSpectrum->setLsbDisplay(false);
 
@@ -1926,6 +1926,8 @@ void MeteorGUI::calcOffset()
 void MeteorGUI::updateAbsoluteCenterFrequency()
 {
     setStatusFrequency(m_settings.m_frequency);
+    m_glSpectrum->setCenterFrequency(m_settings.m_frequency);
+    m_headGLSpectrum->setCenterFrequency(m_settings.m_frequency);
 
     if (   (m_basebandSampleRate > 1)
         && (   (m_settings.m_inputFrequencyOffset >= m_basebandSampleRate / 2)
@@ -1941,9 +1943,9 @@ void MeteorGUI::updateVisualSampleRate()
     m_glSpectrum->setSampleRate(m_settings.m_channelSampleRate);
     m_headGLSpectrum->setSampleRate(m_settings.m_channelSampleRate);
 
-    DSPSignalNotification *msg = new DSPSignalNotification(m_settings.m_channelSampleRate, 0);
+    DSPSignalNotification *msg = new DSPSignalNotification(m_settings.m_channelSampleRate, m_settings.m_frequency);
     m_spectrumVis->getInputMessageQueue()->push(msg);
-    msg = new DSPSignalNotification(m_settings.m_channelSampleRate, 0);
+    msg = new DSPSignalNotification(m_settings.m_channelSampleRate, m_settings.m_frequency);
     m_headSpectrumVis->getInputMessageQueue()->push(msg);
 }
 
@@ -3095,8 +3097,10 @@ void MeteorGUI::drawDetectionOverlays(
             float xMin = 0.0f;
             float xMax = 0.0f;
 
-            if (!spectrumView->waterfallFrequencyToX(detection.m_centerFrequency - halfBandwidth, xMin)
-                || !spectrumView->waterfallFrequencyToX(detection.m_centerFrequency + halfBandwidth, xMax))
+            const double displayCenterFrequency = (double) m_settings.m_frequency + detection.m_centerFrequency;
+
+            if (!spectrumView->waterfallFrequencyToX(displayCenterFrequency - halfBandwidth, xMin)
+                || !spectrumView->waterfallFrequencyToX(displayCenterFrequency + halfBandwidth, xMax))
             {
                 continue;
             }
@@ -3162,7 +3166,7 @@ void MeteorGUI::drawDetectionOverlays(
 
     for (const LabelOverlay& overlay : labelOverlays)
     {
-        const double frequency = overlay.m_detection->m_centerFrequency;
+        const double frequency = (double) m_settings.m_frequency + overlay.m_detection->m_centerFrequency;
         float x = 0.0f;
         float xPlus = 0.0f;
         float xMinus = 0.0f;

@@ -100,6 +100,23 @@ namespace {
     // report times: bound how far those may sit from the position epoch, or the
     // extrapolation direction can be tens of seconds staler than the position.
     constexpr double MaximumADSBFieldSkewS = 15.0;
+    constexpr int ManualTransmitterPresetIndex = 0;
+
+    struct TransmitterPreset
+    {
+        const char *m_name;
+        qint64 m_frequencyHz;
+        double m_latitudeDegrees;
+        double m_longitudeDegrees;
+    };
+
+    constexpr TransmitterPreset TransmitterPresets[] = {
+        {"GRAVES", 143050000, 47.3480, 5.5151},
+        {"BRAMS",   49970000, 50.0972, 4.5847},
+        {"GB3MBA",  50408000, 53.1139, 1.2224}
+    };
+    constexpr int TransmitterPresetCount =
+        (int) (sizeof(TransmitterPresets) / sizeof(TransmitterPresets[0]));
 
     struct SweepClassification
     {
@@ -603,6 +620,7 @@ void MeteorGUI::setupUi(RollupContents *rollupContents)
     m_highlightAllDetections = ui->highlightAllDetections;
     m_detectionBoxPadding = ui->detectionBoxPadding;
     m_detectionLabels = ui->detectionLabels;
+    m_transmitterPreset = ui->transmitterPreset;
     m_transmitterLatitude = ui->transmitterLatitude;
     m_transmitterLongitude = ui->transmitterLongitude;
     m_transmitterAzimuth = ui->transmitterAzimuth;
@@ -659,6 +677,13 @@ void MeteorGUI::setupUi(RollupContents *rollupContents)
 
     m_detectionLabels->addItems(QStringList({"None", "Top", "Right"}));
     m_detectionLabels->setToolTip("Display peak power and duration labels on waterfall detection boxes");
+
+    m_transmitterPreset->addItem(tr("Manual"));
+    for (const TransmitterPreset& preset : TransmitterPresets) {
+        m_transmitterPreset->addItem(QString::fromLatin1(preset.m_name));
+    }
+    m_transmitterPreset->setToolTip(
+        tr("Select a known radar transmitter to set its frequency and position, or Manual to enter custom settings"));
 
     m_transmitterLatitude->setDecimals(6);
     m_transmitterLatitude->setRange(-90.0, 90.0);
@@ -1357,6 +1382,7 @@ void MeteorGUI::channelMarkerChangedByCursor()
     m_deltaFrequency->blockSignals(false);
 
     updateAbsoluteCenterFrequency();
+    updateTransmitterPresetSelection();
     applySettings({"frequency", "inputFrequencyOffset"});
 }
 
@@ -1383,6 +1409,7 @@ void MeteorGUI::on_deltaFrequency_changed(qint64 value)
     m_channelMarker.setCenterFrequency(offset);
     m_settings.m_inputFrequencyOffset = m_channelMarker.getCenterFrequency();
     updateAbsoluteCenterFrequency();
+    updateTransmitterPresetSelection();
     applySettings({"frequency", "inputFrequencyOffset"});
 }
 
@@ -1481,9 +1508,56 @@ void MeteorGUI::on_detectionLabels_currentIndexChanged(int index)
     updateSpectrumViews();
 }
 
+void MeteorGUI::on_transmitterPreset_currentIndexChanged(int index)
+{
+    const bool manual = index == ManualTransmitterPresetIndex;
+    m_transmitterLatitude->setEnabled(manual);
+    m_transmitterLongitude->setEnabled(manual);
+
+    const int presetIndex = index - 1;
+
+    if (manual
+        || (presetIndex < 0)
+        || (presetIndex >= TransmitterPresetCount))
+    {
+        return;
+    }
+
+    const TransmitterPreset& preset = TransmitterPresets[presetIndex];
+    const qint64 requestedOffset = preset.m_frequencyHz - m_deviceCenterFrequency;
+    m_settings.m_frequencyMode = MeteorSettings::Absolute;
+    m_settings.m_frequency = preset.m_frequencyHz;
+    m_channelMarker.setCenterFrequency(requestedOffset);
+    m_settings.m_inputFrequencyOffset = m_channelMarker.getCenterFrequency();
+    m_settings.m_transmitterLatitude = preset.m_latitudeDegrees;
+    m_settings.m_transmitterLongitude = preset.m_longitudeDegrees;
+
+    const QSignalBlocker frequencyModeBlocker(m_frequencyMode);
+    const QSignalBlocker deltaFrequencyBlocker(m_deltaFrequency);
+    const QSignalBlocker transmitterLatitudeBlocker(m_transmitterLatitude);
+    const QSignalBlocker transmitterLongitudeBlocker(m_transmitterLongitude);
+    m_frequencyMode->setCurrentIndex((int) MeteorSettings::Absolute);
+    m_deltaFrequency->setValueRange(true, 11, 0, 99999999999, 0);
+    m_deltaFrequency->setValue(m_settings.m_frequency);
+    m_deltaUnits->setText("Hz");
+    m_transmitterLatitude->setValue(m_settings.m_transmitterLatitude);
+    m_transmitterLongitude->setValue(m_settings.m_transmitterLongitude);
+
+    updateAbsoluteCenterFrequency();
+    updateAntennaPatternsOnMap(true);
+    applySettings({
+        "frequencyMode",
+        "frequency",
+        "inputFrequencyOffset",
+        "transmitterLatitude",
+        "transmitterLongitude"
+    });
+}
+
 void MeteorGUI::on_transmitterLatitude_valueChanged(double value)
 {
     m_settings.m_transmitterLatitude = value;
+    updateTransmitterPresetSelection();
     applySetting("transmitterLatitude");
     updateAntennaPatternsOnMap(true);
 }
@@ -1491,6 +1565,7 @@ void MeteorGUI::on_transmitterLatitude_valueChanged(double value)
 void MeteorGUI::on_transmitterLongitude_valueChanged(double value)
 {
     m_settings.m_transmitterLongitude = value;
+    updateTransmitterPresetSelection();
     applySetting("transmitterLongitude");
     updateAntennaPatternsOnMap(true);
 }
@@ -1993,6 +2068,7 @@ void MeteorGUI::displaySettings()
     const QSignalBlocker blobSensitivityBlocker(m_blobSensitivity);
     const QSignalBlocker detectionBoxPaddingBlocker(m_detectionBoxPadding);
     const QSignalBlocker detectionLabelsBlocker(m_detectionLabels);
+    const QSignalBlocker transmitterPresetBlocker(m_transmitterPreset);
     const QSignalBlocker transmitterLatitudeBlocker(m_transmitterLatitude);
     const QSignalBlocker transmitterLongitudeBlocker(m_transmitterLongitude);
     const QSignalBlocker transmitterAzimuthBlocker(m_transmitterAzimuth);
@@ -2025,6 +2101,7 @@ void MeteorGUI::displaySettings()
     m_transmitterElevation->setValue(m_settings.m_transmitterElevation);
     m_transmitterBeamwidth->setValue(m_settings.m_transmitterBeamwidth);
     m_transmitterHPBW->setValue(m_settings.m_transmitterHPBW);
+    updateTransmitterPresetSelection();
     m_receiverLatitude->setValue(m_settings.m_receiverLatitude);
     m_receiverLongitude->setValue(m_settings.m_receiverLongitude);
     m_antennaAzimuth->setValue(m_settings.m_antennaAzimuth);
@@ -2056,6 +2133,7 @@ void MeteorGUI::makeUIConnections()
     QObject::connect(m_headSpectrumEnabled, &ButtonSwitch::toggled, this, &MeteorGUI::on_headSpectrumEnabled_toggled);
     QObject::connect(m_detectionBoxPadding, QOverload<int>::of(&QSpinBox::valueChanged), this, &MeteorGUI::on_detectionBoxPadding_valueChanged);
     QObject::connect(m_detectionLabels, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &MeteorGUI::on_detectionLabels_currentIndexChanged);
+    QObject::connect(m_transmitterPreset, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &MeteorGUI::on_transmitterPreset_currentIndexChanged);
     QObject::connect(m_transmitterLatitude, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &MeteorGUI::on_transmitterLatitude_valueChanged);
     QObject::connect(m_transmitterLongitude, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &MeteorGUI::on_transmitterLongitude_valueChanged);
     QObject::connect(m_transmitterAzimuth, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &MeteorGUI::on_transmitterAzimuth_valueChanged);
@@ -2102,6 +2180,31 @@ void MeteorGUI::calcOffset()
         updateAbsoluteCenterFrequency();
         applySetting("inputFrequencyOffset");
     }
+
+    updateTransmitterPresetSelection();
+}
+
+void MeteorGUI::updateTransmitterPresetSelection()
+{
+    int selectedIndex = ManualTransmitterPresetIndex;
+
+    for (int index = 0; index < TransmitterPresetCount; ++index)
+    {
+        const TransmitterPreset& preset = TransmitterPresets[index];
+
+        if ((m_settings.m_frequency == preset.m_frequencyHz)
+            && (std::fabs(m_settings.m_transmitterLatitude - preset.m_latitudeDegrees) < 1.0e-6)
+            && (std::fabs(m_settings.m_transmitterLongitude - preset.m_longitudeDegrees) < 1.0e-6))
+        {
+            selectedIndex = index + 1;
+            break;
+        }
+    }
+
+    const QSignalBlocker blocker(m_transmitterPreset);
+    m_transmitterPreset->setCurrentIndex(selectedIndex);
+    m_transmitterLatitude->setEnabled(selectedIndex == ManualTransmitterPresetIndex);
+    m_transmitterLongitude->setEnabled(selectedIndex == ManualTransmitterPresetIndex);
 }
 
 void MeteorGUI::updateAbsoluteCenterFrequency()

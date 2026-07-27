@@ -121,6 +121,7 @@ private:
     ButtonSwitch *m_highlightAllDetections;
     QSpinBox *m_detectionBoxPadding;
     QComboBox *m_detectionLabels;
+    QComboBox *m_transmitterPreset;
     QDoubleSpinBox *m_transmitterLatitude;
     QDoubleSpinBox *m_transmitterLongitude;
     QDoubleSpinBox *m_transmitterAzimuth;
@@ -226,6 +227,7 @@ private:
     void calcOffset();
     void updateAbsoluteCenterFrequency();
     void updateVisualSampleRate();
+    void updateTransmitterPresetSelection();
     void populateRotatorCombo();
     void updateAntennaPointingControls();
     void initializeReceiverPosition();
@@ -295,6 +297,7 @@ private slots:
     void on_headSpectrumEnabled_toggled(bool checked);
     void on_detectionBoxPadding_valueChanged(int value);
     void on_detectionLabels_currentIndexChanged(int index);
+    void on_transmitterPreset_currentIndexChanged(int index);
     void on_transmitterLatitude_valueChanged(double value);
     void on_transmitterLongitude_valueChanged(double value);
     void on_transmitterAzimuth_valueChanged(double value);

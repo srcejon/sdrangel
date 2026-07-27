@@ -352,64 +352,74 @@
        <string>TX</string>
       </property>
       <layout class="QGridLayout" name="gridLayout_2">
-       <item row="0" column="2">
+       <item row="0" column="0">
+        <widget class="QLabel" name="transmitterPresetLabel">
+         <property name="text">
+          <string>Transmitter</string>
+         </property>
+        </widget>
+       </item>
+       <item row="0" column="1" colspan="3">
+        <widget class="QComboBox" name="transmitterPreset"/>
+       </item>
+       <item row="1" column="2">
         <widget class="QLabel" name="transmitterLongitudeLabel">
          <property name="text">
           <string>Longitude</string>
          </property>
         </widget>
        </item>
-       <item row="0" column="0">
+       <item row="1" column="0">
         <widget class="QLabel" name="transmitterLatitudeLabel">
          <property name="text">
-          <string>Laitude</string>
+          <string>Latitude</string>
          </property>
         </widget>
        </item>
-       <item row="0" column="3">
+       <item row="1" column="3">
         <widget class="QDoubleSpinBox" name="transmitterLongitude"/>
        </item>
-       <item row="0" column="1">
+       <item row="1" column="1">
         <widget class="QDoubleSpinBox" name="transmitterLatitude"/>
        </item>
-       <item row="1" column="3">
+       <item row="2" column="3">
         <widget class="QDoubleSpinBox" name="transmitterElevation"/>
        </item>
-       <item row="1" column="2">
+       <item row="2" column="2">
         <widget class="QLabel" name="transmitterElevationLabel">
          <property name="text">
           <string>Elevation</string>
          </property>
         </widget>
        </item>
-       <item row="1" column="1">
+       <item row="2" column="1">
         <widget class="QDoubleSpinBox" name="transmitterAzimuth"/>
        </item>
-       <item row="1" column="0">
+       <item row="2" column="0">
         <widget class="QLabel" name="transmitterAzimuthLabel">
          <property name="text">
           <string>Azimuth</string>
          </property>
         </widget>
        </item>
-       <item row="2" column="0">
+       <item row="3" column="0">
         <widget class="QLabel" name="transmitterHPBWLabel">
          <property name="text">
           <string>Tx El BW</string>
          </property>
         </widget>
        </item>
-       <item row="2" column="1">
+       <item row="3" column="1">
         <widget class="QDoubleSpinBox" name="transmitterHPBW"/>
        </item>
-       <item row="2" column="2">
+       <item row="3" column="2">
         <widget class="QLabel" name="transmitterBeamwidthLabel">
          <property name="text">
           <string>Tx Az BW</string>
          </property>
         </widget>
        </item>
-       <item row="2" column="3">
+       <item row="3" column="3">
         <widget class="QDoubleSpinBox" name="transmitterBeamwidth"/>
        </item>
       </layout>

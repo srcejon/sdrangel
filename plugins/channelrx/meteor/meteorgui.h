@@ -157,7 +157,25 @@ private:
     int m_totalCount;
     bool m_highlightAllDetectionOverlays;
     quint64 m_nextDetectionOverlayId;
+
+    struct ADSBMatchingStatistics
+    {
+        QDateTime m_referenceDateTimeUtc;
+        int m_channelEntries = 0;
+        int m_reportingChannelEntries = 0;
+        int m_unavailableChannelEntries = 0;
+        int m_reportedAircraftEntries = 0;
+        int m_invalidKinematicsEntries = 0;
+        int m_missingDirectionEntries = 0;
+        int m_invalidTimestampEntries = 0;
+        int m_staleEntries = 0;
+        int m_inconsistentTimestampEntries = 0;
+        int m_duplicateEntries = 0;
+        int m_candidateEntries = 0;
+    };
+
     MeteorSatelliteMatcher::CatalogStatistics m_satelliteStatistics;
+    ADSBMatchingStatistics m_adsbStatistics;
     bool m_satelliteStatisticsDialogRequested = false;
     QMap<QDate, QVector<int> > m_hourlyCounts;
     QMap<QDate, QVector<bool> > m_hourlyData;
@@ -214,6 +232,9 @@ private:
     void syncFromSelectedRotator();
     void updateAntennaPatternsOnMap(bool force = false);
     void clearAntennaPatternsFromMap();
+    QVector<MovingTargetMatcher::TargetState> collectADSBTargets(
+        const QDateTime& detectionTimeUtc,
+        ADSBMatchingStatistics *statistics = nullptr) const;
     void addDetection(const MeteorDemodSink::MsgMeteorDetected& detection);
     void addSatelliteDetection(const MeteorDemodSink::MsgSatelliteDetected& detection);
     QDateTime movingTargetObservationDateTimeUtc(const QDateTime& displayTimeUtc) const;

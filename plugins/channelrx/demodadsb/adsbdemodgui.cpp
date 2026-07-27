@@ -3661,7 +3661,7 @@ void ADSBDemodGUI::decodeCommB(const QByteArray data, const QDateTime dateTime, 
     // All IFR aircraft should support ELS (Elementary Surveillance) which includes BDS 1,0 1,7 2,0 3,0
     // Large aircraft are also required to support EHS (Enhanced Surveillance) which adds BDS 4,0 5,0 6,0
     // There is also MRAR (Meteorological Routine Air Report) BDS 4,4 4,5, but only a small % of aircraft support this
-    // See: https://www.icao.int/APAC/Documents/edocs/Mode%20S%20DAPs%20Implementation%20and%20Operations%20Guidance%20Document3.0.pdf
+    // See: https://www.icao.int/sites/default/files/sp-files/APAC/Documents/edocs/Mode%20S%20DAPs%20Implementation%20and%20Operations%20Guidance%20Document3.0.pdf
 
     // I've implemented a few extra BDSes, but these are rarely seen.
     // Figure 2 in "Mode S Transponder Comm-B Capabilities in Current Operational Aircraft" gives a breakdown of what capabilities are reported by BDS 1,7:

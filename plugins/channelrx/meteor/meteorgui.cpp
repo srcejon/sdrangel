@@ -668,7 +668,7 @@ void MeteorGUI::setupUi(RollupContents *rollupContents)
         "Average Doppler drift rate across the sweep in hertz per second.",
         "Conservative RF-only classification from endpoint speed, Doppler rate, sweep excursion and track duration.",
         "Heuristic RF-only satellite evidence score from 0 to 100; this is not a calibrated probability.",
-        "Strong, unambiguous moving-target correlation using fresh ADS-B aircraft states, the worker-thread CelesTrak active TLE catalog, and the lunar ephemeris.",
+        "Strong, unambiguous moving-target correlation using fresh ADS-B aircraft states, the worker-thread CelesTrak active and supplemental orbital-element catalog, and the lunar ephemeris.",
         "Doppler endpoint match score from 0 to 100. A match requires at least 60 and an 8 point lead over the next target.",
         "Root-mean-square residual between observed and predicted start/end Doppler offsets in hertz.",
         "Whether the Moon is above both horizons and lies inside both configured transmitter and receiver antenna beams at the detection time.",
@@ -2269,7 +2269,7 @@ void MeteorGUI::addSatelliteDetection(const MeteorDemodSink::MsgSatelliteDetecte
             m_settings.m_antennaBeamwidth
         };
         if (!targetMatch.m_matched) {
-            matchItem->setText(QStringLiteral("Searching TLE catalog..."));
+            matchItem->setText(QStringLiteral("Searching orbital catalog..."));
         }
         m_satelliteMatcher->requestMatch(overlayId, observation, geometry);
     }
@@ -2416,7 +2416,7 @@ void MeteorGUI::applySatelliteTargetMatch(
             "Predicted start/end: %3 / %4 Hz\n"
             "Center/drift residual: %5 / %6 Hz\n"
             "State age: %7 s\n"
-            "TLE catalog: %8 objects (%9)")
+            "CelesTrak catalog: %8 objects (%9)")
             .arg(combinedMatch.m_source, movingTargetLabel(combinedMatch))
             .arg(combinedMatch.m_prediction.m_startFrequencyOffsetHz, 0, 'f', 1)
             .arg(combinedMatch.m_prediction.m_endFrequencyOffsetHz, 0, 'f', 1)
@@ -2428,7 +2428,7 @@ void MeteorGUI::applySatelliteTargetMatch(
     }
     else
     {
-        matchItem->setToolTip(tr("No moving-target match. TLE catalog: %1 objects (%2)")
+        matchItem->setToolTip(tr("No moving-target match. CelesTrak catalog: %1 objects (%2)")
             .arg(catalogSize)
             .arg(status));
     }

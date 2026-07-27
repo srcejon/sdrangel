@@ -57,8 +57,86 @@ namespace {
     constexpr qint64 SnapshotIntervalMS = 5000;
     constexpr int MaximumSnapshotCount = 8;
     constexpr double MinimumElevationDegrees = -1.0;
-    const char * const ActiveCatalogUrl =
-        "https://celestrak.org/NORAD/elements/gp.php?GROUP=active&FORMAT=CSV";
+
+    enum class CatalogFileKind
+    {
+        Satcat,
+        ActiveGP,
+        SupplementalGP
+    };
+
+    struct CatalogDownloadSource
+    {
+        const char *m_url;
+        const char *m_cacheName;
+        CatalogFileKind m_kind;
+        int m_minimumEntries;
+    };
+
+    const CatalogDownloadSource CatalogDownloadSources[] {
+        {
+            "https://celestrak.org/pub/satcat.csv",
+            "celestrak-satcat.csv",
+            CatalogFileKind::Satcat,
+            10000
+        },
+        {
+            "https://celestrak.org/NORAD/elements/gp.php?GROUP=active&FORMAT=CSV",
+            "celestrak-active.csv",
+            CatalogFileKind::ActiveGP,
+            1000
+        },
+        {
+            "https://celestrak.org/NORAD/elements/gp.php?GROUP=visual&FORMAT=CSV",
+            "celestrak-visual.csv",
+            CatalogFileKind::SupplementalGP,
+            50
+        },
+        {
+            "https://celestrak.org/NORAD/elements/gp.php?GROUP=analyst&FORMAT=CSV",
+            "celestrak-analyst.csv",
+            CatalogFileKind::SupplementalGP,
+            100
+        },
+        {
+            "https://celestrak.org/NORAD/elements/gp.php?GROUP=last-30-days&FORMAT=CSV",
+            "celestrak-last-30-days.csv",
+            CatalogFileKind::SupplementalGP,
+            10
+        },
+        {
+            "https://celestrak.org/NORAD/elements/gp.php?SPECIAL=GPZ-PLUS&FORMAT=CSV",
+            "celestrak-gpz-plus.csv",
+            CatalogFileKind::SupplementalGP,
+            100
+        },
+        {
+            "https://celestrak.org/NORAD/elements/gp.php?SPECIAL=DECAYING&FORMAT=CSV",
+            "celestrak-decaying.csv",
+            CatalogFileKind::SupplementalGP,
+            1
+        },
+        {
+            "https://celestrak.org/NORAD/elements/gp.php?GROUP=fengyun-1c-debris&FORMAT=CSV",
+            "celestrak-fengyun-1c-debris.csv",
+            CatalogFileKind::SupplementalGP,
+            100
+        },
+        {
+            "https://celestrak.org/NORAD/elements/gp.php?GROUP=iridium-33-debris&FORMAT=CSV",
+            "celestrak-iridium-33-debris.csv",
+            CatalogFileKind::SupplementalGP,
+            50
+        },
+        {
+            "https://celestrak.org/NORAD/elements/gp.php?GROUP=cosmos-2251-debris&FORMAT=CSV",
+            "celestrak-cosmos-2251-debris.csv",
+            CatalogFileKind::SupplementalGP,
+            100
+        }
+    };
+    constexpr int CatalogDownloadSourceCount =
+        sizeof(CatalogDownloadSources) / sizeof(CatalogDownloadSources[0]);
 
     struct Vector3
     {
@@ -384,8 +462,8 @@ public:
             QStandardPaths::AppDataLocation) + QStringLiteral("/meteor");
         QDir directory;
         directory.mkpath(directoryPath);
-        m_catalogFileName = directoryPath + QStringLiteral("/celestrak-active.csv");
-        loadCatalogFile();
+        m_catalogDirectory = directoryPath;
+        loadCatalogFiles();
         refreshCatalogIfNeeded();
 #else
         deliverCatalogStatus(QStringLiteral("Satellite matching unavailable: SGP4 was not found"));
@@ -400,57 +478,9 @@ public:
         }
 
         m_downloadInProgress = true;
-        QNetworkRequest request(QUrl(QString::fromLatin1(ActiveCatalogUrl)));
-        request.setHeader(
-            QNetworkRequest::UserAgentHeader,
-            QStringLiteral("SDRangel Meteor satellite matcher"));
-        request.setAttribute(
-            QNetworkRequest::RedirectPolicyAttribute,
-            QNetworkRequest::NoLessSafeRedirectPolicy);
-        // A stalled connection must not wedge m_downloadInProgress until restart: the
-        // finished signal always fires once the transfer timeout elapses.
-        request.setTransferTimeout(2 * 60 * 1000);
-        QNetworkReply *reply = m_networkManager->get(request);
-        connect(reply, &QNetworkReply::finished, this, [this, reply]() {
-            m_downloadInProgress = false;
-            const QByteArray data = reply->readAll();
-            const QString error = reply->error() == QNetworkReply::NoError
-                ? QString()
-                : reply->errorString();
-            reply->deleteLater();
-
-            if (!error.isEmpty())
-            {
-                m_status = QStringLiteral("TLE update failed: %1").arg(error);
-                deliverCatalogStatus(m_status);
-                completePendingRequestsWithoutMatch();
-                return;
-            }
-
-            std::vector<CatalogEntry> catalog;
-            QString parseError;
-
-            if (!parseCatalog(data, catalog, parseError))
-            {
-                m_status = QStringLiteral("TLE update rejected: %1").arg(parseError);
-                deliverCatalogStatus(m_status);
-                completePendingRequestsWithoutMatch();
-                return;
-            }
-
-            QSaveFile file(m_catalogFileName);
-            if (file.open(QIODevice::WriteOnly)
-                && (file.write(data) == data.size())
-                && file.commit())
-            {
-                installCatalog(std::move(catalog));
-            }
-            else
-            {
-                m_status = QStringLiteral("TLE catalog could not be cached");
-                installCatalog(std::move(catalog));
-            }
-        });
+        m_downloadSourceIndex = 0;
+        m_refreshWarnings.clear();
+        downloadNextCatalogSource();
 #endif
     }
 
@@ -506,11 +536,20 @@ public:
 
 private:
 #ifdef METEOR_HAS_SGP4
+    struct CatalogMetadata
+    {
+        QString m_name;
+        QString m_objectType;
+        bool m_onOrbit = true;
+    };
+
     struct CatalogEntry
     {
         QString m_name;
         QString m_noradId;
+        QString m_objectType;
         QDateTime m_epochUtc;
+        bool m_fromActiveCatalog = false;
         std::unique_ptr<libsgp4::SGP4> m_propagator;
     };
 
@@ -520,6 +559,103 @@ private:
         MovingTargetMatcher::Observation m_observation;
         MeteorSatelliteMatcher::Geometry m_geometry;
     };
+
+    QString catalogFileName(const CatalogDownloadSource& source) const
+    {
+        return m_catalogDirectory + QChar('/') + QString::fromLatin1(source.m_cacheName);
+    }
+
+    void downloadNextCatalogSource()
+    {
+        if (m_downloadSourceIndex >= CatalogDownloadSourceCount)
+        {
+            m_downloadInProgress = false;
+
+            if (!loadCatalogFiles())
+            {
+                m_status = m_catalog.empty()
+                    ? QStringLiteral("No usable satellite orbital elements are available")
+                    : QStringLiteral("Satellite catalog refresh failed; using cached elements");
+                if (!m_refreshWarnings.isEmpty()) {
+                    m_status += QStringLiteral(" (%1)").arg(m_refreshWarnings.join(QStringLiteral("; ")));
+                }
+                deliverCatalogStatus(m_status);
+                if (m_catalog.empty()) {
+                    completePendingRequestsWithoutMatch();
+                }
+            }
+            return;
+        }
+
+        const CatalogDownloadSource source =
+            CatalogDownloadSources[m_downloadSourceIndex];
+        QNetworkRequest request(QUrl(QString::fromLatin1(source.m_url)));
+        request.setHeader(
+            QNetworkRequest::UserAgentHeader,
+            QStringLiteral("SDRangel Meteor satellite matcher"));
+        request.setAttribute(
+            QNetworkRequest::RedirectPolicyAttribute,
+            QNetworkRequest::NoLessSafeRedirectPolicy);
+        // A stalled connection must not wedge the refresh until restart.
+        request.setTransferTimeout(2 * 60 * 1000);
+        QNetworkReply *reply = m_networkManager->get(request);
+        connect(reply, &QNetworkReply::finished, this, [this, reply, source]() {
+            const QByteArray data = reply->readAll();
+            QString error = reply->error() == QNetworkReply::NoError
+                ? QString()
+                : reply->errorString();
+            reply->deleteLater();
+
+            if (error.isEmpty())
+            {
+                if (source.m_kind == CatalogFileKind::Satcat)
+                {
+                    QHash<QString, CatalogMetadata> metadata;
+                    int onOrbitCount = 0;
+                    if (!parseSatcat(data, metadata, onOrbitCount, error)) {
+                        error.prepend(QStringLiteral("invalid SATCAT: "));
+                    }
+                }
+                else
+                {
+                    std::vector<CatalogEntry> catalog;
+                    const QHash<QString, CatalogMetadata> metadata;
+                    if (!parseCatalog(
+                            data,
+                            catalog,
+                            metadata,
+                            source.m_kind == CatalogFileKind::ActiveGP,
+                            source.m_minimumEntries,
+                            error))
+                    {
+                        error.prepend(QStringLiteral("invalid GP data: "));
+                    }
+                }
+            }
+
+            if (error.isEmpty())
+            {
+                QSaveFile file(catalogFileName(source));
+                if (!file.open(QIODevice::WriteOnly)
+                    || (file.write(data) != data.size())
+                    || !file.commit())
+                {
+                    error = QStringLiteral("could not cache %1")
+                        .arg(QString::fromLatin1(source.m_cacheName));
+                }
+            }
+
+            if (!error.isEmpty())
+            {
+                m_refreshWarnings.append(
+                    QStringLiteral("%1: %2")
+                        .arg(QString::fromLatin1(source.m_cacheName), error));
+            }
+
+            ++m_downloadSourceIndex;
+            downloadNextCatalogSource();
+        });
+    }
 
     static libsgp4::DateTime toSGP4DateTime(const QDateTime& dateTime)
     {
@@ -655,9 +791,78 @@ private:
         return true;
     }
 
+    static bool parseSatcat(
+        const QByteArray& data,
+        QHash<QString, CatalogMetadata>& metadata,
+        int& onOrbitCount,
+        QString& error)
+    {
+        QBuffer buffer;
+        buffer.setData(data);
+        if (!buffer.open(QIODevice::ReadOnly))
+        {
+            error = QStringLiteral("catalog buffer could not be opened");
+            return false;
+        }
+
+        QTextStream stream(&buffer);
+        const QStringList requiredColumns {
+            QStringLiteral("OBJECT_NAME"),
+            QStringLiteral("NORAD_CAT_ID"),
+            QStringLiteral("OBJECT_TYPE"),
+            QStringLiteral("DECAY_DATE")
+        };
+        const QHash<QString, int> columns = CSV::readHeader(
+            stream,
+            requiredColumns,
+            error);
+        if (!error.isEmpty()) {
+            return false;
+        }
+
+        metadata.clear();
+        metadata.reserve(70000);
+        onOrbitCount = 0;
+        QStringList row;
+
+        while (CSV::readRow(stream, &row))
+        {
+            auto field = [&columns, &row](const QString& name) {
+                const int index = columns.value(name, -1);
+                return (index >= 0) && (index < row.size())
+                    ? row[index].trimmed()
+                    : QString();
+            };
+            const QString noradId = field(QStringLiteral("NORAD_CAT_ID"));
+            if (noradId.isEmpty()) {
+                continue;
+            }
+
+            CatalogMetadata entry;
+            entry.m_name = field(QStringLiteral("OBJECT_NAME"));
+            entry.m_objectType = field(QStringLiteral("OBJECT_TYPE"));
+            entry.m_onOrbit = field(QStringLiteral("DECAY_DATE")).isEmpty();
+            if (entry.m_onOrbit) {
+                ++onOrbitCount;
+            }
+            metadata.insert(noradId, entry);
+        }
+
+        if (metadata.size() < 10000)
+        {
+            error = QStringLiteral("only %1 SATCAT entries were found").arg(metadata.size());
+            return false;
+        }
+
+        return true;
+    }
+
     static bool parseCatalog(
         const QByteArray& data,
         std::vector<CatalogEntry>& catalog,
+        const QHash<QString, CatalogMetadata>& metadata,
+        bool fromActiveCatalog,
+        int minimumEntries,
         QString& error)
     {
         QBuffer buffer;
@@ -732,6 +937,29 @@ private:
                 epochUtc = epochUtc.toUTC();
             }
 
+            const QString noradId = field(QStringLiteral("NORAD_CAT_ID"));
+            const auto metadataEntry = metadata.constFind(noradId);
+            if (noradId.isEmpty()
+                || ((metadataEntry != metadata.cend()) && !metadataEntry->m_onOrbit))
+            {
+                continue;
+            }
+
+            QString name = field(QStringLiteral("OBJECT_NAME"));
+            QString objectType;
+            if (metadataEntry != metadata.cend())
+            {
+                if (!metadataEntry->m_name.isEmpty()) {
+                    name = metadataEntry->m_name;
+                }
+                objectType = metadataEntry->m_objectType;
+            }
+            if (!objectType.isEmpty()
+                && (objectType != QStringLiteral("PAY")))
+            {
+                name += QStringLiteral(" [%1]").arg(objectType);
+            }
+
             QString line1;
             QString line2;
             if (!meanMotionOK
@@ -761,8 +989,6 @@ private:
 
             try
             {
-                const QString noradId = field(QStringLiteral("NORAD_CAT_ID"));
-                const QString name = field(QStringLiteral("OBJECT_NAME"));
                 std::unique_ptr<libsgp4::Tle> tle(new libsgp4::Tle(
                     name.toStdString(),
                     line1.toStdString(),
@@ -772,16 +998,18 @@ private:
                 entry.m_name = name.isEmpty()
                     ? QStringLiteral("NORAD %1").arg(noradId)
                     : name;
+                entry.m_objectType = objectType;
                 entry.m_epochUtc = epochUtc;
+                entry.m_fromActiveCatalog = fromActiveCatalog;
                 entry.m_propagator.reset(new libsgp4::SGP4(*tle));
                 catalog.push_back(std::move(entry));
             }
             catch (const std::exception&) {
-                // A bad element must not prevent the rest of the active catalog loading.
+                // A bad element must not prevent the rest of the public catalog loading.
             }
         }
 
-        if (catalog.size() < 100)
+        if ((int) catalog.size() < minimumEntries)
         {
             error = QStringLiteral("only %1 valid elements were found").arg(catalog.size());
             return false;
@@ -790,32 +1018,148 @@ private:
         return true;
     }
 
-    void loadCatalogFile()
+    static void mergeCatalog(
+        std::vector<CatalogEntry>& catalog,
+        std::vector<CatalogEntry>&& additions,
+        QHash<QString, int>& indices)
     {
-        QFile file(m_catalogFileName);
+        for (CatalogEntry& addition : additions)
+        {
+            const auto existingIndex = indices.constFind(addition.m_noradId);
+            if (existingIndex == indices.cend())
+            {
+                indices.insert(addition.m_noradId, (int) catalog.size());
+                catalog.push_back(std::move(addition));
+                continue;
+            }
 
-        if (!file.open(QIODevice::ReadOnly)) {
-            return;
-        }
-
-        std::vector<CatalogEntry> catalog;
-        QString error;
-
-        if (parseCatalog(file.readAll(), catalog, error)) {
-            installCatalog(std::move(catalog));
-        } else {
-            m_status = QStringLiteral("Cached TLE catalog rejected: %1").arg(error);
+            CatalogEntry& existing = catalog[*existingIndex];
+            const bool fromActiveCatalog =
+                existing.m_fromActiveCatalog || addition.m_fromActiveCatalog;
+            if (addition.m_epochUtc > existing.m_epochUtc)
+            {
+                if (addition.m_objectType.isEmpty()) {
+                    addition.m_objectType = existing.m_objectType;
+                }
+                addition.m_fromActiveCatalog = fromActiveCatalog;
+                existing = std::move(addition);
+            }
+            else
+            {
+                existing.m_fromActiveCatalog = fromActiveCatalog;
+                if (existing.m_objectType.isEmpty()) {
+                    existing.m_objectType = addition.m_objectType;
+                }
+            }
         }
     }
 
-    void installCatalog(std::vector<CatalogEntry>&& catalog)
+    bool loadCatalogFiles()
+    {
+        QHash<QString, CatalogMetadata> metadata;
+        int onOrbitCount = 0;
+        QStringList warnings;
+        const CatalogDownloadSource& satcatSource = CatalogDownloadSources[0];
+        QFile satcatFile(catalogFileName(satcatSource));
+
+        if (satcatFile.open(QIODevice::ReadOnly))
+        {
+            QString error;
+            if (!parseSatcat(
+                    satcatFile.readAll(),
+                    metadata,
+                    onOrbitCount,
+                    error))
+            {
+                warnings.append(QStringLiteral("SATCAT: %1").arg(error));
+                metadata.clear();
+                onOrbitCount = 0;
+            }
+        }
+        else {
+            warnings.append(QStringLiteral("SATCAT cache is unavailable"));
+        }
+
+        std::vector<CatalogEntry> catalog;
+        catalog.reserve(22000);
+        QHash<QString, int> indices;
+        indices.reserve(22000);
+
+        for (int sourceIndex = 1;
+            sourceIndex < CatalogDownloadSourceCount;
+            ++sourceIndex)
+        {
+            const CatalogDownloadSource& source =
+                CatalogDownloadSources[sourceIndex];
+            QFile file(catalogFileName(source));
+            if (!file.open(QIODevice::ReadOnly))
+            {
+                warnings.append(QStringLiteral("%1 is unavailable")
+                    .arg(QString::fromLatin1(source.m_cacheName)));
+                continue;
+            }
+
+            std::vector<CatalogEntry> additions;
+            QString error;
+            if (!parseCatalog(
+                    file.readAll(),
+                    additions,
+                    metadata,
+                    source.m_kind == CatalogFileKind::ActiveGP,
+                    source.m_minimumEntries,
+                    error))
+            {
+                warnings.append(QStringLiteral("%1: %2")
+                    .arg(QString::fromLatin1(source.m_cacheName), error));
+                continue;
+            }
+            mergeCatalog(catalog, std::move(additions), indices);
+        }
+
+        if (catalog.empty()) {
+            return false;
+        }
+
+        int activeCount = 0;
+        for (const CatalogEntry& entry : catalog) {
+            if (entry.m_fromActiveCatalog) {
+                ++activeCount;
+            }
+        }
+        warnings.append(m_refreshWarnings);
+        installCatalog(
+            std::move(catalog),
+            activeCount,
+            onOrbitCount,
+            warnings);
+        return true;
+    }
+
+    void installCatalog(
+        std::vector<CatalogEntry>&& catalog,
+        int activeCount,
+        int onOrbitCount,
+        const QStringList& warnings)
     {
         m_catalog = std::move(catalog);
         m_snapshots.clear();
         m_snapshotOrder.clear();
-        m_status = QStringLiteral("%1 active TLEs loaded").arg(m_catalog.size());
+        const int supplementalCount = (int) m_catalog.size() - activeCount;
+        m_status = QStringLiteral(
+            "%1 orbital elements loaded (%2 active, %3 supplemental)")
+                .arg(m_catalog.size())
+                .arg(activeCount)
+                .arg(supplementalCount);
+        if (onOrbitCount > 0) {
+            m_status += QStringLiteral("; SATCAT has %1 on-orbit objects")
+                .arg(onOrbitCount);
+        }
+        if (!warnings.isEmpty()) {
+            m_status += QStringLiteral("; %1 source warning(s)").arg(warnings.size());
+        }
         deliverCatalogStatus(m_status);
-        const std::vector<PendingRequest> pendingRequests = std::move(m_pendingRequests);
+        const std::vector<PendingRequest> pendingRequests =
+            std::move(m_pendingRequests);
         m_pendingRequests.clear();
         for (const PendingRequest& request : pendingRequests) {
             requestMatch(request.m_requestId, request.m_observation, request.m_geometry);
@@ -824,11 +1168,19 @@ private:
 
     void refreshCatalogIfNeeded()
     {
-        const QFileInfo fileInfo(m_catalogFileName);
-        const bool stale = m_catalog.empty()
-            || !fileInfo.exists()
-            || (fileInfo.lastModified().toUTC().secsTo(QDateTime::currentDateTimeUtc())
-                >= CatalogMaximumAgeS);
+        bool stale = m_catalog.empty();
+        const QDateTime nowUtc = QDateTime::currentDateTimeUtc();
+
+        for (int sourceIndex = 0;
+            !stale && (sourceIndex < CatalogDownloadSourceCount);
+            ++sourceIndex)
+        {
+            const QFileInfo fileInfo(catalogFileName(
+                CatalogDownloadSources[sourceIndex]));
+            stale = !fileInfo.exists()
+                || (fileInfo.lastModified().toUTC().secsTo(nowUtc)
+                    >= CatalogMaximumAgeS);
+        }
 
         if (stale) {
             refreshCatalog();
@@ -998,9 +1350,11 @@ private:
     MeteorSatelliteMatcher *m_owner;
     QNetworkAccessManager *m_networkManager = nullptr;
     QTimer *m_refreshTimer = nullptr;
-    QString m_catalogFileName;
-    QString m_status = QStringLiteral("TLE catalog is loading");
+    QString m_catalogDirectory;
+    QString m_status = QStringLiteral("Orbital catalog is loading");
+    QStringList m_refreshWarnings;
     bool m_downloadInProgress = false;
+    int m_downloadSourceIndex = 0;
 #ifdef METEOR_HAS_SGP4
     std::vector<CatalogEntry> m_catalog;
     std::vector<PendingRequest> m_pendingRequests;

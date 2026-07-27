@@ -251,7 +251,9 @@ namespace {
 
         const double scoreMarginPercent = match.m_scorePercent
             - match.m_secondBestScorePercent;
-        match.m_ambiguous = (match.m_secondBestScorePercent > 0.0)
+        match.m_ambiguous =
+            (match.m_scorePercent >= tunables.m_minimumMatchScorePercent)
+            && (match.m_secondBestScorePercent > 0.0)
             && (scoreMarginPercent < tunables.m_minimumScoreMarginPercent);
         match.m_matched = (match.m_scorePercent >= tunables.m_minimumMatchScorePercent)
             && !match.m_ambiguous;

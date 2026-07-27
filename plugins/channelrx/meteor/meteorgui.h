@@ -143,6 +143,7 @@ private:
     QPushButton *m_clearDetections;
     QTableWidget *m_detectionsTable;
     QTableWidget *m_satellitesTable;
+    QToolButton *m_satelliteCatalogInfo;
     QTableWidget *m_colorgrammeTable;
     QChartView *m_hourlyChartView;
     QChart *m_hourlyChart;
@@ -156,6 +157,8 @@ private:
     int m_totalCount;
     bool m_highlightAllDetectionOverlays;
     quint64 m_nextDetectionOverlayId;
+    MeteorSatelliteMatcher::CatalogStatistics m_satelliteStatistics;
+    bool m_satelliteStatisticsDialogRequested = false;
     QMap<QDate, QVector<int> > m_hourlyCounts;
     QMap<QDate, QVector<bool> > m_hourlyData;
     QSet<QDate> m_dirtyRMOBMonths;
@@ -217,9 +220,11 @@ private:
     void applySatelliteTargetMatch(
         quint64 overlayId,
         const MovingTargetMatcher::Match& match,
-        const MeteorSatelliteMatcher::MoonPrediction& moonPrediction,
-        int catalogSize,
-        const QString& status);
+        const MeteorSatelliteMatcher::MoonPrediction& moonPrediction);
+    void handleSatelliteStatistics(
+        const MeteorSatelliteMatcher::CatalogStatistics& statistics);
+    void showSatelliteStatisticsDialog(
+        const MeteorSatelliteMatcher::CatalogStatistics& statistics);
     void addCameraDetection(const Meteor::MsgCameraMeteorDetected& detection);
     void updateCounters();
     void updateHistogram();
@@ -287,6 +292,7 @@ private slots:
     void on_clearDetections_clicked();
     void on_detectionsTable_itemSelectionChanged();
     void on_satellitesTable_itemSelectionChanged();
+    void on_satelliteCatalogInfo_clicked();
     void on_detectionsTable_customContextMenuRequested(const QPoint& pos);
     void on_satellitesTable_customContextMenuRequested(const QPoint& pos);
     void on_detectionsTableHeader_customContextMenuRequested(const QPoint& pos);

@@ -9,7 +9,9 @@
 #ifndef INCLUDE_METEORSATELLITEMATCHER_H
 #define INCLUDE_METEORSATELLITEMATCHER_H
 
+#include <QDateTime>
 #include <QObject>
+#include <QStringList>
 
 #include "movingtargetmatcher.h"
 
@@ -33,6 +35,34 @@ public:
     {
         Beam m_transmitterBeam;
         Beam m_receiverBeam;
+        double m_maximumAltitudeM = 0.0;
+    };
+
+    struct CatalogStatistics
+    {
+        QString m_status = QStringLiteral("Orbital catalog is loading");
+        QDateTime m_loadedDateTimeUtc;
+        int m_catalogEntries = 0;
+        int m_activeCatalogEntries = 0;
+        int m_supplementalCatalogEntries = 0;
+        int m_payloadEntries = 0;
+        int m_rocketBodyEntries = 0;
+        int m_debrisEntries = 0;
+        int m_otherEntries = 0;
+        int m_satcatOnOrbitEntries = 0;
+        QStringList m_sourceWarnings;
+
+        bool m_snapshotValid = false;
+        QDateTime m_snapshotDateTimeUtc;
+        double m_maximumAltitudeKM = 0.0;
+        int m_staleElementEntries = 0;
+        int m_propagationFailureEntries = 0;
+        int m_aboveMaximumAltitudeEntries = 0;
+        int m_belowTransmitterHorizonEntries = 0;
+        int m_belowReceiverHorizonEntries = 0;
+        int m_outsideTransmitterBeamEntries = 0;
+        int m_outsideReceiverBeamEntries = 0;
+        int m_candidateEntries = 0;
     };
 
     struct MoonPrediction
@@ -55,16 +85,15 @@ public:
         quint64 requestId,
         const MovingTargetMatcher::Observation& observation,
         const Geometry& geometry);
+    void requestStatistics();
     void refreshCatalog();
 
 signals:
     void matchReady(
         quint64 requestId,
         const MovingTargetMatcher::Match& match,
-        const MoonPrediction& moonPrediction,
-        int catalogSize,
-        const QString& status);
-    void catalogStatusChanged(int catalogSize, const QString& status);
+        const MoonPrediction& moonPrediction);
+    void statisticsReady(const CatalogStatistics& statistics);
 
 private:
     friend class MeteorSatelliteMatcherWorker;
@@ -72,10 +101,8 @@ private:
     void deliverMatch(
         quint64 requestId,
         const MovingTargetMatcher::Match& match,
-        const MoonPrediction& moonPrediction,
-        int catalogSize,
-        const QString& status);
-    void deliverCatalogStatus(int catalogSize, const QString& status);
+        const MoonPrediction& moonPrediction);
+    void deliverStatistics(const CatalogStatistics& statistics);
 
     QThread *m_thread;
     MeteorSatelliteMatcherWorker *m_worker;

@@ -625,6 +625,43 @@
          <number>2</number>
         </property>
         <item>
+         <layout class="QHBoxLayout" name="satellitesToolsLayout">
+          <item>
+           <spacer name="satellitesToolsSpacer">
+            <property name="orientation">
+             <enum>Qt::Horizontal</enum>
+            </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>40</width>
+              <height>20</height>
+             </size>
+            </property>
+           </spacer>
+          </item>
+          <item>
+           <widget class="QToolButton" name="satelliteCatalogInfo">
+            <property name="maximumSize">
+             <size>
+              <width>28</width>
+              <height>28</height>
+             </size>
+            </property>
+            <property name="toolTip">
+             <string>Show satellite catalog and tracking statistics</string>
+            </property>
+            <property name="text">
+             <string>...</string>
+            </property>
+            <property name="icon">
+             <iconset resource="../../../sdrgui/resources/res.qrc">
+              <normaloff>:/info.png</normaloff>:/info.png</iconset>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+        <item>
          <widget class="QTableWidget" name="satellitesTable">
           <property name="minimumSize">
            <size>

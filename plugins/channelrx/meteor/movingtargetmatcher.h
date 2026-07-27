@@ -59,6 +59,19 @@ public:
         double m_frequencyDriftHz = 0.0;
     };
 
+    struct Candidate
+    {
+        QString m_source;
+        QString m_id;
+        QString m_label;
+        double m_scorePercent = 0.0;
+        double m_endpointResidualRMSHz = 0.0;
+        double m_centerResidualHz = 0.0;
+        double m_driftResidualHz = 0.0;
+        double m_stateAgeS = 0.0;
+        Prediction m_prediction;
+    };
+
     struct Match
     {
         bool m_hasCandidate = false;
@@ -74,6 +87,7 @@ public:
         double m_driftResidualHz = 0.0;
         double m_stateAgeS = 0.0;
         Prediction m_prediction;
+        QVector<Candidate> m_alternatives;
     };
 
     struct Tunables

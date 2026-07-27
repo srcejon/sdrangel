@@ -274,15 +274,70 @@ namespace {
         return targets;
     }
 
-    QString movingTargetLabel(const MovingTargetMatcher::Match& match)
+    QString movingTargetLabel(
+        const QString& source,
+        const QString& id,
+        const QString& label)
     {
-        QString identity = match.m_label;
+        QString identity = label;
 
-        if (!match.m_id.isEmpty() && (match.m_id != identity)) {
-            identity += QStringLiteral(" [%1]").arg(match.m_id);
+        if (!id.isEmpty() && (id != identity)) {
+            identity += QStringLiteral(" [%1]").arg(id);
         }
 
-        return QStringLiteral("%1: %2").arg(match.m_source, identity);
+        return QStringLiteral("%1: %2").arg(source, identity);
+    }
+
+    QString movingTargetLabel(const MovingTargetMatcher::Match& match)
+    {
+        return movingTargetLabel(match.m_source, match.m_id, match.m_label);
+    }
+
+    QString movingTargetLabel(const MovingTargetMatcher::Candidate& candidate)
+    {
+        return movingTargetLabel(
+            candidate.m_source,
+            candidate.m_id,
+            candidate.m_label);
+    }
+
+    QString ambiguousMovingTargetSummary(const MovingTargetMatcher::Match& match)
+    {
+        QStringList candidates {
+            QStringLiteral("%1 (%2%)")
+                .arg(movingTargetLabel(match))
+                .arg(match.m_scorePercent, 0, 'f', 1)
+        };
+        for (const MovingTargetMatcher::Candidate& candidate : match.m_alternatives)
+        {
+            candidates.append(QStringLiteral("%1 (%2%)")
+                .arg(movingTargetLabel(candidate))
+                .arg(candidate.m_scorePercent, 0, 'f', 1));
+        }
+        return QStringLiteral("Ambiguous: %1").arg(
+            candidates.join(QStringLiteral(" | ")));
+    }
+
+    QString movingTargetAlternativesToolTip(const MovingTargetMatcher::Match& match)
+    {
+        if (match.m_alternatives.isEmpty()) {
+            return QString();
+        }
+
+        QStringList lines {QStringLiteral("Likely alternatives:")};
+        int rank = 2;
+        for (const MovingTargetMatcher::Candidate& candidate : match.m_alternatives)
+        {
+            lines.append(QStringLiteral(
+                "%1. %2 - score %3%, endpoint RMS %4 Hz, center/drift residual %5 / %6 Hz")
+                .arg(rank++)
+                .arg(movingTargetLabel(candidate))
+                .arg(candidate.m_scorePercent, 0, 'f', 1)
+                .arg(candidate.m_endpointResidualRMSHz, 0, 'f', 1)
+                .arg(candidate.m_centerResidualHz, 0, 'f', 1)
+                .arg(candidate.m_driftResidualHz, 0, 'f', 1));
+        }
+        return lines.join(QChar('\n'));
     }
 
     class NumericTableWidgetItem : public QTableWidgetItem
@@ -2218,22 +2273,29 @@ void MeteorGUI::addSatelliteDetection(const MeteorDemodSink::MsgSatelliteDetecte
     QTableWidgetItem *matchItem = makeTableItem(targetMatch.m_matched
         ? movingTargetLabel(targetMatch)
         : (targetMatch.m_ambiguous
-            ? QStringLiteral("Ambiguous ADS-B")
+            ? ambiguousMovingTargetSummary(targetMatch)
             : QString()));
 
     if (targetMatch.m_hasCandidate)
     {
-        matchItem->setToolTip(tr(
-            "Best %1 candidate: %2\n"
+        QString toolTip = tr(
+            "Best candidate: %1\n"
+            "Score: %2%\n"
             "Predicted start/end: %3 / %4 Hz\n"
             "Center/drift residual: %5 / %6 Hz\n"
             "State age: %7 s")
-            .arg(targetMatch.m_source, movingTargetLabel(targetMatch))
+            .arg(movingTargetLabel(targetMatch))
+            .arg(targetMatch.m_scorePercent, 0, 'f', 1)
             .arg(targetMatch.m_prediction.m_startFrequencyOffsetHz, 0, 'f', 1)
             .arg(targetMatch.m_prediction.m_endFrequencyOffsetHz, 0, 'f', 1)
             .arg(targetMatch.m_centerResidualHz, 0, 'f', 1)
             .arg(targetMatch.m_driftResidualHz, 0, 'f', 1)
-            .arg(targetMatch.m_stateAgeS, 0, 'f', 1));
+            .arg(targetMatch.m_stateAgeS, 0, 'f', 1);
+        const QString alternatives = movingTargetAlternativesToolTip(targetMatch);
+        if (!alternatives.isEmpty()) {
+            toolTip += QChar('\n') + alternatives;
+        }
+        matchItem->setToolTip(toolTip);
     }
 
     m_satellitesTable->setItem(row, 14, matchItem);
@@ -2405,26 +2467,33 @@ void MeteorGUI::applySatelliteTargetMatch(
     {
         classificationItem->setText(pendingMatch.m_rfClassification);
         matchItem->setText(combinedMatch.m_ambiguous
-            ? QStringLiteral("Ambiguous moving target")
+            ? ambiguousMovingTargetSummary(combinedMatch)
             : QString());
     }
 
     if (combinedMatch.m_hasCandidate)
     {
-        matchItem->setToolTip(tr(
-            "Best %1 candidate: %2\n"
+        QString toolTip = tr(
+            "Best candidate: %1\n"
+            "Score: %2%\n"
             "Predicted start/end: %3 / %4 Hz\n"
             "Center/drift residual: %5 / %6 Hz\n"
             "State age: %7 s\n"
             "CelesTrak catalog: %8 objects (%9)")
-            .arg(combinedMatch.m_source, movingTargetLabel(combinedMatch))
+            .arg(movingTargetLabel(combinedMatch))
+            .arg(combinedMatch.m_scorePercent, 0, 'f', 1)
             .arg(combinedMatch.m_prediction.m_startFrequencyOffsetHz, 0, 'f', 1)
             .arg(combinedMatch.m_prediction.m_endFrequencyOffsetHz, 0, 'f', 1)
             .arg(combinedMatch.m_centerResidualHz, 0, 'f', 1)
             .arg(combinedMatch.m_driftResidualHz, 0, 'f', 1)
             .arg(combinedMatch.m_stateAgeS, 0, 'f', 1)
             .arg(catalogSize)
-            .arg(status));
+            .arg(status);
+        const QString alternatives = movingTargetAlternativesToolTip(combinedMatch);
+        if (!alternatives.isEmpty()) {
+            toolTip += QChar('\n') + alternatives;
+        }
+        matchItem->setToolTip(toolTip);
     }
     else
     {

@@ -225,13 +225,30 @@ namespace {
 
         MovingTargetMatcher::TargetState duplicateTarget = expectedTarget;
         duplicateTarget.m_id = QStringLiteral("ABC124");
+        MovingTargetMatcher::TargetState duplicateTarget2 = expectedTarget;
+        duplicateTarget2.m_id = QStringLiteral("ABC125");
+        MovingTargetMatcher::TargetState duplicateTarget3 = expectedTarget;
+        duplicateTarget3.m_id = QStringLiteral("ABC126");
+        MovingTargetMatcher::TargetState duplicateTarget4 = expectedTarget;
+        duplicateTarget4.m_id = QStringLiteral("ABC127");
         const MovingTargetMatcher::Match ambiguousMatch = MovingTargetMatcher::match(
             observation,
-            {expectedTarget, duplicateTarget});
+            {
+                expectedTarget,
+                duplicateTarget,
+                duplicateTarget2,
+                duplicateTarget3,
+                duplicateTarget4
+            });
 
-        if (!ambiguousMatch.m_ambiguous || ambiguousMatch.m_matched)
+        if (!ambiguousMatch.m_ambiguous
+            || ambiguousMatch.m_matched
+            || (ambiguousMatch.m_alternatives.size() != 3)
+            || (ambiguousMatch.m_alternatives[0].m_id != duplicateTarget.m_id)
+            || (ambiguousMatch.m_alternatives[1].m_id != duplicateTarget2.m_id)
+            || (ambiguousMatch.m_alternatives[2].m_id != duplicateTarget3.m_id))
         {
-            errorStream << "Moving-target matcher test: indistinguishable targets were not ambiguous\n";
+            errorStream << "Moving-target matcher test: ambiguous alternatives were not retained\n";
             return false;
         }
 
@@ -261,7 +278,10 @@ namespace {
         if (!combinedAmbiguous.m_ambiguous
             || combinedAmbiguous.m_matched
             || (combinedAmbiguous.m_source != QStringLiteral("TLE"))
-            || (combinedAmbiguous.m_secondBestScorePercent != adsbMatch.m_scorePercent))
+            || (combinedAmbiguous.m_secondBestScorePercent != adsbMatch.m_scorePercent)
+            || combinedAmbiguous.m_alternatives.isEmpty()
+            || (combinedAmbiguous.m_alternatives.first().m_source
+                != QStringLiteral("ADS-B")))
         {
             errorStream << "Moving-target matcher test: cross-source ambiguity was not retained\n";
             return false;
@@ -273,7 +293,8 @@ namespace {
 
         if (!combinedMatch.m_matched
             || combinedMatch.m_ambiguous
-            || (combinedMatch.m_source != QStringLiteral("TLE")))
+            || (combinedMatch.m_source != QStringLiteral("TLE"))
+            || !combinedMatch.m_alternatives.isEmpty())
         {
             errorStream << "Moving-target matcher test: stronger TLE target was not selected\n";
             return false;

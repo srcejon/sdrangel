@@ -18,6 +18,7 @@ namespace {
     constexpr double SpeedOfLightMPS = 299792458.0;
     constexpr double WGS84SemiMajorAxisM = 6378137.0;
     constexpr double WGS84EccentricitySquared = 6.69437999014e-3;
+    constexpr int MaximumAlternativeCount = 3;
 
     struct Vector3
     {
@@ -142,6 +143,119 @@ namespace {
     {
         return (double) from.msecsTo(to) / 1000.0;
     }
+
+    bool sameCandidate(
+        const MovingTargetMatcher::Candidate& first,
+        const MovingTargetMatcher::Candidate& second)
+    {
+        return (first.m_source == second.m_source)
+            && (first.m_id == second.m_id)
+            && (first.m_label == second.m_label);
+    }
+
+    void insertRankedCandidate(
+        QVector<MovingTargetMatcher::Candidate>& candidates,
+        const MovingTargetMatcher::Candidate& candidate)
+    {
+        if (!std::isfinite(candidate.m_scorePercent)) {
+            return;
+        }
+
+        for (int index = 0; index < candidates.size(); ++index)
+        {
+            if (!sameCandidate(candidates[index], candidate)) {
+                continue;
+            }
+
+            if (candidates[index].m_scorePercent >= candidate.m_scorePercent) {
+                return;
+            }
+
+            candidates.removeAt(index);
+            break;
+        }
+
+        int insertionIndex = 0;
+        while ((insertionIndex < candidates.size())
+            && (candidates[insertionIndex].m_scorePercent >= candidate.m_scorePercent))
+        {
+            ++insertionIndex;
+        }
+        candidates.insert(insertionIndex, candidate);
+
+        const int maximumCandidateCount = MaximumAlternativeCount + 1;
+        if (candidates.size() > maximumCandidateCount) {
+            candidates.resize(maximumCandidateCount);
+        }
+    }
+
+    MovingTargetMatcher::Candidate candidateFromMatch(
+        const MovingTargetMatcher::Match& match)
+    {
+        MovingTargetMatcher::Candidate candidate;
+        candidate.m_source = match.m_source;
+        candidate.m_id = match.m_id;
+        candidate.m_label = match.m_label;
+        candidate.m_scorePercent = match.m_scorePercent;
+        candidate.m_endpointResidualRMSHz = match.m_endpointResidualRMSHz;
+        candidate.m_centerResidualHz = match.m_centerResidualHz;
+        candidate.m_driftResidualHz = match.m_driftResidualHz;
+        candidate.m_stateAgeS = match.m_stateAgeS;
+        candidate.m_prediction = match.m_prediction;
+        return candidate;
+    }
+
+    void setBestCandidate(
+        MovingTargetMatcher::Match& match,
+        const MovingTargetMatcher::Candidate& candidate)
+    {
+        match.m_hasCandidate = true;
+        match.m_source = candidate.m_source;
+        match.m_id = candidate.m_id;
+        match.m_label = candidate.m_label;
+        match.m_scorePercent = candidate.m_scorePercent;
+        match.m_endpointResidualRMSHz = candidate.m_endpointResidualRMSHz;
+        match.m_centerResidualHz = candidate.m_centerResidualHz;
+        match.m_driftResidualHz = candidate.m_driftResidualHz;
+        match.m_stateAgeS = candidate.m_stateAgeS;
+        match.m_prediction = candidate.m_prediction;
+    }
+
+    void finalizeMatch(
+        MovingTargetMatcher::Match& match,
+        const QVector<MovingTargetMatcher::Candidate>& rankedCandidates,
+        const MovingTargetMatcher::Tunables& tunables)
+    {
+        if (rankedCandidates.isEmpty()) {
+            return;
+        }
+
+        setBestCandidate(match, rankedCandidates.first());
+        match.m_secondBestScorePercent = rankedCandidates.size() > 1
+            ? rankedCandidates[1].m_scorePercent
+            : 0.0;
+        match.m_alternatives.clear();
+
+        for (int index = 1;
+            (index < rankedCandidates.size())
+                && (match.m_alternatives.size() < MaximumAlternativeCount);
+            ++index)
+        {
+            if ((match.m_scorePercent - rankedCandidates[index].m_scorePercent)
+                >= tunables.m_minimumScoreMarginPercent)
+            {
+                break;
+            }
+            match.m_alternatives.append(rankedCandidates[index]);
+        }
+
+        const double scoreMarginPercent = match.m_scorePercent
+            - match.m_secondBestScorePercent;
+        match.m_ambiguous = (match.m_secondBestScorePercent > 0.0)
+            && (scoreMarginPercent < tunables.m_minimumScoreMarginPercent);
+        match.m_matched = (match.m_scorePercent >= tunables.m_minimumMatchScorePercent)
+            && !match.m_ambiguous;
+    }
 }
 
 MovingTargetMatcher::Prediction MovingTargetMatcher::predict(
@@ -201,6 +315,8 @@ MovingTargetMatcher::Match MovingTargetMatcher::match(
     const Tunables& tunables)
 {
     Match bestMatch;
+    QVector<Candidate> rankedCandidates;
+    rankedCandidates.reserve(MaximumAlternativeCount + 1);
     const QDateTime centerDateTimeUtc = observation.m_startDateTimeUtc.addMSecs(
         (qint64) std::llround(observation.m_durationS * 500.0));
     const double observedStartFrequencyHz = observation.m_centerFrequencyOffsetHz
@@ -242,37 +358,20 @@ MovingTargetMatcher::Match MovingTargetMatcher::match(
         const double endpointResidualRMSHz = std::sqrt(
             0.5 * (startResidualHz * startResidualHz + endResidualHz * endResidualHz));
 
-        if (!bestMatch.m_hasCandidate || (scorePercent > bestMatch.m_scorePercent))
-        {
-            bestMatch.m_secondBestScorePercent = bestMatch.m_hasCandidate
-                ? bestMatch.m_scorePercent
-                : 0.0;
-            bestMatch.m_hasCandidate = true;
-            bestMatch.m_source = target.m_source;
-            bestMatch.m_id = target.m_id;
-            bestMatch.m_label = target.m_label;
-            bestMatch.m_scorePercent = scorePercent;
-            bestMatch.m_endpointResidualRMSHz = endpointResidualRMSHz;
-            bestMatch.m_centerResidualHz = centerResidualHz;
-            bestMatch.m_driftResidualHz = driftResidualHz;
-            bestMatch.m_stateAgeS = stateAgeS;
-            bestMatch.m_prediction = prediction;
-        }
-        else if (scorePercent > bestMatch.m_secondBestScorePercent) {
-            bestMatch.m_secondBestScorePercent = scorePercent;
-        }
+        Candidate candidate;
+        candidate.m_source = target.m_source;
+        candidate.m_id = target.m_id;
+        candidate.m_label = target.m_label;
+        candidate.m_scorePercent = scorePercent;
+        candidate.m_endpointResidualRMSHz = endpointResidualRMSHz;
+        candidate.m_centerResidualHz = centerResidualHz;
+        candidate.m_driftResidualHz = driftResidualHz;
+        candidate.m_stateAgeS = stateAgeS;
+        candidate.m_prediction = prediction;
+        insertRankedCandidate(rankedCandidates, candidate);
     }
 
-    if (bestMatch.m_hasCandidate)
-    {
-        const double scoreMarginPercent = bestMatch.m_scorePercent
-            - bestMatch.m_secondBestScorePercent;
-        bestMatch.m_ambiguous = (bestMatch.m_secondBestScorePercent > 0.0)
-            && (scoreMarginPercent < tunables.m_minimumScoreMarginPercent);
-        bestMatch.m_matched = (bestMatch.m_scorePercent >= tunables.m_minimumMatchScorePercent)
-            && !bestMatch.m_ambiguous;
-    }
-
+    finalizeMatch(bestMatch, rankedCandidates, tunables);
     return bestMatch;
 }
 
@@ -289,17 +388,18 @@ MovingTargetMatcher::Match MovingTargetMatcher::combine(
         return first;
     }
 
-    const Match& winner = first.m_scorePercent >= second.m_scorePercent ? first : second;
-    const Match& runnerUp = first.m_scorePercent >= second.m_scorePercent ? second : first;
-    Match combined = winner;
-    combined.m_secondBestScorePercent = std::max(
-        winner.m_secondBestScorePercent,
-        runnerUp.m_scorePercent);
-    const double scoreMarginPercent = combined.m_scorePercent
-        - combined.m_secondBestScorePercent;
-    combined.m_ambiguous = (combined.m_secondBestScorePercent > 0.0)
-        && (scoreMarginPercent < tunables.m_minimumScoreMarginPercent);
-    combined.m_matched = (combined.m_scorePercent >= tunables.m_minimumMatchScorePercent)
-        && !combined.m_ambiguous;
+    QVector<Candidate> rankedCandidates;
+    rankedCandidates.reserve(2 * (MaximumAlternativeCount + 1));
+    insertRankedCandidate(rankedCandidates, candidateFromMatch(first));
+    for (const Candidate& candidate : first.m_alternatives) {
+        insertRankedCandidate(rankedCandidates, candidate);
+    }
+    insertRankedCandidate(rankedCandidates, candidateFromMatch(second));
+    for (const Candidate& candidate : second.m_alternatives) {
+        insertRankedCandidate(rankedCandidates, candidate);
+    }
+
+    Match combined;
+    finalizeMatch(combined, rankedCandidates, tunables);
     return combined;
 }

@@ -87,6 +87,14 @@ struct RadioTimeTransmitter {
     int m_power;            // In kW
 };
 
+struct RadarTransmitter {
+    QString m_callsign;
+    int m_frequency;        // In Hz
+    float m_latitude;       // In degrees
+    float m_longitude;      // In degrees
+    int m_power;            // In kW
+};
+
 struct IonosondeStation {
     QString m_name;
     float m_latitude;       // In degrees
@@ -311,6 +319,7 @@ private:
     static const QList<RadioTimeTransmitter> m_radioTimeTransmitters;
     static const QList<RadioTimeTransmitter> m_natTransmitters;
     static const QList<RadioTimeTransmitter> m_vlfTransmitters;
+    static const QList<RadarTransmitter> m_radarTransmitters;
 
     enum NASARow {
         NASA_TITLE,

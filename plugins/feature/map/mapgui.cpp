@@ -605,26 +605,35 @@ void MapGUI::addRadioTimeTransmitters()
     }
 }
 
+const QList<RadarTransmitter> MapGUI::m_radarTransmitters = {
+    {"GRAVES", 143050000, 47.3480f, 5.5151f, 10000},    // France
+    {"BRAMS",  49970000, 50.0972f, 4.5847f, 130},       // Belgium
+    {"GB3MBA", 50408000, 53.1139f, -1.2224f, 100}        // UK
+};
+
 void MapGUI::addRadar()
 {
-    SWGSDRangel::SWGMapItem radarMapItem;
-    radarMapItem.setName(new QString("GRAVES"));
-    radarMapItem.setLatitude(47.3480);
-    radarMapItem.setLongitude(5.5151);
-    radarMapItem.setAltitude(0.0);
-    radarMapItem.setImage(new QString("antenna.png"));
-    radarMapItem.setImageRotation(0);
-    QString text = QString("Radar\nCallsign: %1\nFrequency: %2 MHz")
-                            .arg("GRAVES")
-                            .arg("143.050");
-    radarMapItem.setText(new QString(text));
-    radarMapItem.setModel(new QString("antenna.glb"));
-    radarMapItem.setFixedPosition(true);
-    radarMapItem.setOrientation(0);
-    radarMapItem.setLabel(new QString("GRAVES"));
-    radarMapItem.setLabelAltitudeOffset(4.5);
-    radarMapItem.setAltitudeReference(1);
-    update(m_map, &radarMapItem, "Radar");
+    for (int i = 0; i < m_radarTransmitters.size(); i++)
+    {
+        SWGSDRangel::SWGMapItem radarMapItem;
+        radarMapItem.setName(new QString(m_radarTransmitters[i].m_callsign));
+        radarMapItem.setLatitude(m_radarTransmitters[i].m_latitude);
+        radarMapItem.setLongitude(m_radarTransmitters[i].m_longitude);
+        radarMapItem.setAltitude(0.0);
+        radarMapItem.setImage(new QString("antenna.png"));
+        radarMapItem.setImageRotation(0);
+        QString text = QString("Radar\nCallsign: %1\nFrequency: %2 MHz")
+            .arg(m_radarTransmitters[i].m_callsign)
+            .arg(QString("%1").arg(m_radarTransmitters[i].m_frequency / 1e6, 0, 'f', 3));
+        radarMapItem.setText(new QString(text));
+        radarMapItem.setModel(new QString("antenna.glb"));
+        radarMapItem.setFixedPosition(true);
+        radarMapItem.setOrientation(0);
+        radarMapItem.setLabel(new QString(m_radarTransmitters[i].m_callsign));
+        radarMapItem.setLabelAltitudeOffset(4.5);
+        radarMapItem.setAltitudeReference(1);
+        update(m_map, &radarMapItem, "Radar");
+    }
 }
 
 QString MapGUI::formatFrequency(qint64 frequency) const

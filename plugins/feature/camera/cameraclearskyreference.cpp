@@ -73,6 +73,11 @@ constexpr double kAbstainMedianDev = 0.35;
 
 // Below this luminance the red/blue ratio is quantisation noise and only brightness is used
 constexpr int kDarkPixel = 24;
+// Below this a pixel is not sky at any hour - the unlit fisheye surround, letterbox bars,
+// a black roof silhouette. The same level the detector's surround exclusion uses, so an
+// anchor measured over the pixels above it does not depend on whether that exclusion has
+// already run on the region being measured.
+constexpr int kNotSkyPixel = 12;
 
 // Auto-learning gates
 constexpr float kAutoLearnMaxCoverageNight = 5.0f; // a camera's static quirks may measure a few percent; genuine overcast is far above
@@ -600,17 +605,23 @@ void CameraClearSkyReference::buildMaps(bool dayAnchors, const cv::Mat& gray, co
     // (fisheye surround, roofs, trees on a camera with no exclusions configured): the
     // plain median collapses to the dark side and stores a meaningless anchor (observed:
     // a dusk Day slot stored anchor 1.0). Day sky is bright by definition, so anchor on
-    // the non-dark pixels; at night the dark sky IS the signal and the overall median
-    // remains the right measure.
-    cv::Mat dayAnchorRegion;
-    if (dayAnchors)
-    {
-        cv::bitwise_and(anchorRegion, grayRef >= kDarkPixel, dayAnchorRegion);
-        if (cv::countNonZero(dayAnchorRegion) == 0) {
-            dayAnchorRegion = anchorRegion;
-        }
+    // the non-dark pixels; at night the dark sky IS the signal, so only the near-black
+    // that is not sky at all is dropped.
+    //
+    // Dropping it matters, and not only for robustness: a manual Save ref captures before
+    // the surround exclusion (the learned-foreground silhouettes are found by looking for
+    // dark regions in the reference, so it has to record them), while every frame the
+    // reference is later compared against has the surround already removed. An anchor that
+    // counted those black pixels would therefore differ systematically between the two
+    // sides of the comparison - by a quarter of the frame on an all-sky camera - and that
+    // difference feeds both the guard deciding whether the slot may be used at all and the
+    // scale the deviations are measured in. Anchoring on real sky makes it invariant.
+    cv::Mat anchorPixels;
+    cv::bitwise_and(anchorRegion, grayRef >= (dayAnchors ? kDarkPixel : kNotSkyPixel), anchorPixels);
+    if (cv::countNonZero(anchorPixels) == 0) {
+        anchorPixels = anchorRegion;
     }
-    brightnessAnchorOut = std::max(1, maskedPercentile8U(grayRef, dayAnchors ? dayAnchorRegion : anchorRegion, 0.5));
+    brightnessAnchorOut = std::max(1, maskedPercentile8U(grayRef, anchorPixels, 0.5));
 
     cv::Mat grayF;
     grayRef.convertTo(grayF, CV_32F);
@@ -1186,24 +1197,18 @@ QImage CameraClearSkyReference::foregroundPreview() const
 
 QString CameraClearSkyReference::statusSummary(int activeSlot) const
 {
+    // Deliberately short: with 23 sky-state slots, naming every filled one produced a line
+    // wide enough to stretch the settings dialog. The viewer lists them all anyway, one row
+    // per slot, so the label only reports the count and the slot in use right now.
     int filled = 0;
-    QStringList names;
-    for (int slot = 0; slot < kSlotCount; ++slot)
-    {
-        if (m_slots[slot].valid())
-        {
-            ++filled;
-            names.append(slotName(slot));
-        }
+    for (int slot = 0; slot < kSlotCount; ++slot) {
+        filled += m_slots[slot].valid() ? 1 : 0;
     }
 
     QString summary = QStringLiteral("%1/%2 refs").arg(filled).arg(kSlotCount);
-    if (!names.isEmpty()) {
-        summary += QStringLiteral(" (%1)").arg(names.join(QStringLiteral(", ")));
-    }
     if ((activeSlot >= 0) && (activeSlot < kSlotCount))
     {
-        summary += QStringLiteral(" - current: %1%2")
+        summary += QStringLiteral(" - now: %1%2")
             .arg(slotName(activeSlot))
             .arg(m_slots[activeSlot].valid() ? QStringLiteral(" ✓") : QStringLiteral(" ✗"));
     }

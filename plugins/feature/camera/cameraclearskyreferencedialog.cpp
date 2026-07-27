@@ -151,6 +151,11 @@ void CameraClearSkyReferenceDialog::refresh()
     m_grid->addWidget(imageLabel(foreground, this), row, 1);
     ++row;
 
+    // The detail the settings-tab label deliberately omits lives here
+    setWindowTitle(filled > 0
+        ? tr("Clear-sky references - %1 of %2 sky states saved").arg(filled).arg(CameraClearSkyReference::kSlotCount)
+        : tr("Clear-sky references - none saved yet"));
+
     if (filled == 0)
     {
         QLabel *none = new QLabel(tr("No references saved for this camera yet. Enable 'Clear-sky ref' and press 'Save ref' on a cloud-free sky, or enable 'Auto learn ref'."));

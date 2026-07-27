@@ -251,12 +251,23 @@ private:
     cv::Rect m_elevationMaskRoi;
     cv::Size m_elevationMaskWorkSize;
     QSize m_elevationMaskImageSize;
+    // Output scaling can move the content inside a frame of unchanged size, which changes
+    // where every elevation lands: part of the cached mask's geometry, not incidental to it
+    CameraPipelineImageTransform m_elevationMaskTransform;
     // When each predicted star was last actually detected, keyed by catalog index. The
     // star-blank cue only trusts the DISAPPEARANCE of a recently seen star: on real frames
     // most predicted stars fail detection even under a clear sky (twilight, faintness,
     // lens softness), so absence alone is meaningless. Cleared with the cache, so a pose
     // or settings change never carries sightings across geometries.
     QHash<int, QDateTime> m_starLastVisible;
+    // Reported once per cache generation, per body: a sun/moon mask that cannot find its
+    // body is a silent no-op otherwise, and the usual cause (an uncalibrated lens pose) is
+    // invisible. Kept per body so a sun report does not swallow the moon's.
+    mutable bool m_sunProjectionReported = false;
+    mutable bool m_moonProjectionReported = false;
+    // Reported once while it lasts: an evaluated region too small to measure produces no
+    // cloud result at all, which is otherwise indistinguishable from detection being idle
+    bool m_noSkyReported = false;
     // The bright-star catalog filtered to the sensing magnitude. The plate solver caches
     // the catalog itself, but hands out a freshly built vector of every entry (order 1e5)
     // on each call, of which star sensing wants a few hundred. Rebuilt when the magnitude
@@ -306,7 +317,8 @@ private:
     [[nodiscard]] const QVector<CameraPlateSolver::BrightStar>& sensedStarCatalog() const;
     void applyStarVisibilityVeto(cv::Mat& mask, const CloudStarSense& starSense, const cv::Rect& roi) const;
     void applyStructureVote(cv::Mat& mask, const cv::Mat& gray, const cv::Mat& evaluationMask, int skyMedian) const;
-    [[nodiscard]] static cv::Mat dayRelativeCloudMask(const cv::Mat& red, const cv::Mat& blue, const cv::Mat& evaluationMask, double margin);
+    [[nodiscard]] static cv::Mat dayRelativeCloudMask(const cv::Mat& red, const cv::Mat& blue, const cv::Mat& evaluationMask,
+                                                      const cv::Mat& sampleMask, double margin);
     void applyStarBlankCue(cv::Mat& mask, const cv::Mat& evaluationMask, const CloudStarSense& starSense, const cv::Rect& roi, const QSize& imageSize, const QDateTime& observationTime) const;
     void recordStarVisibility(const CloudStarSense& starSense, const QDateTime& observationTime);
     [[nodiscard]] BodyVisibility sunVisibility(const cv::Mat& gray, const cv::Rect& roi, const QSize& imageSize, const CameraPipelineImageTransform& imageTransform, const QDateTime& captureDateTime) const;

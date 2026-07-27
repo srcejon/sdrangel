@@ -128,7 +128,6 @@ private:
     struct PendingDisappearState
     {
         QDateTime m_firstMissing;
-        QDateTime m_deadline;
     };
 
     Camera *m_camera;

@@ -22,6 +22,7 @@
 #include <memory>
 
 #include <QColor>
+#include <QDateTime>
 #include <QHash>
 #include <QImage>
 #include <QGraphicsScene>
@@ -237,6 +238,7 @@ private:
     quint64 m_captureEpoch = 0;
     bool m_displayedMotionEventActive = false;
     QSet<QString> m_displayedObjectEventClasses;
+    QHash<QString, QDateTime> m_displayedObjectMissingSince;
     QSet<QString> m_displayedTrackedObjectsInView;
     QTimer m_updateTimer;
     bool m_updatingMotionExclusionRectsTable = false;
@@ -967,6 +969,7 @@ private slots:
     void on_yoloTargetCombo_currentIndexChanged(int index);
     void on_yoloConfSpin_valueChanged(double value);
     void on_yoloNmsSpin_valueChanged(double value);
+    void on_yoloDisappearDebounceSpin_valueChanged(double value);
     void on_yoloInferenceModeCombo_currentIndexChanged(int index);
     void on_yoloTileOverlapSpin_valueChanged(int value);
     void on_yoloIgnoredClassNamesEdit_textChanged();

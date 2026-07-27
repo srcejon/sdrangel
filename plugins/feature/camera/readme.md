@@ -952,6 +952,10 @@ Sets the percentage overlap between adjacent YOLO tiles.
 
 Object class names to ignore, one per line. Matching detections are not drawn or recorded in the object history.
 
+<h4>10. Disappear debounce</h4>
+
+Sets how long an object class must remain undetected before its history entry is closed and a lost event is emitted. A class that reappears during this interval remains part of the same detection.
+
 On the Motion Detection sub-tab:
 
 ![Motion Detection tab](../../../doc/img/Camera_plugin_motion_detection_tab.png)

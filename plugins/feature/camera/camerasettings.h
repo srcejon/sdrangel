@@ -817,6 +817,7 @@ struct CameraSettings
     QString m_yoloLabelsPath;    ///< Path to a plain-text file with one class name per line (optional)
     double m_yoloConfThreshold;  ///< Minimum confidence to keep a detection: 0.0..1.0
     double m_yoloNmsThreshold;   ///< IoU threshold for non-maximum suppression: 0.0..1.0
+    double m_yoloDisappearDebounce; ///< Seconds a class must remain absent before it is reported as disappeared: 0.0..60.0
     QColor m_yoloBoxColor;       ///< Bounding-box colour when no per-class colour is available
     QString m_yoloLabelFontFamily; ///< Font family for object detection labels
     double m_yoloLabelFontScale; ///< Font point size for object detection labels

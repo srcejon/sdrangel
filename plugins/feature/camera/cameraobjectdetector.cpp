@@ -1869,7 +1869,6 @@ void CameraObjectDetector::processObjectDetections(const QVector<CameraPipelineD
         {
             PendingDisappearState state;
             state.m_firstMissing = now;
-            state.m_deadline = now;
             m_pendingDisappearStates.insert(className, state);
         }
     }
@@ -1884,7 +1883,8 @@ void CameraObjectDetector::processObjectDetections(const QVector<CameraPipelineD
             continue;
         }
 
-        if (it.value().m_deadline <= now)
+        const qint64 debounceMs = qRound64(m_settings.m_yoloDisappearDebounce * 1000.0);
+        if (it.value().m_firstMissing.msecsTo(now) >= debounceMs)
         {
             m_detectedObjectClasses.remove(it.key());
             auto activeHistoryIt = m_activeObjectDetectionHistory.find(it.key());

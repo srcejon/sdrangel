@@ -639,6 +639,7 @@ bool CameraGUI::handleMessage(const Message& message)
         }
         m_displayedMotionEventActive = false;
         m_displayedObjectEventClasses.clear();
+        m_displayedObjectMissingSince.clear();
         m_displayedTrackedObjectsInView.clear();
         discardQueuedReportFrames(*getInputMessageQueue(), false);
         updateVideoFileControls();
@@ -2698,6 +2699,7 @@ void CameraGUI::displaySettings()
     }
     settingsUI()->yoloConfSpin->setValue(m_settings.m_yoloConfThreshold);
     settingsUI()->yoloNmsSpin->setValue(m_settings.m_yoloNmsThreshold);
+    settingsUI()->yoloDisappearDebounceSpin->setValue(m_settings.m_yoloDisappearDebounce);
     settingsUI()->yoloTargetCombo->setCurrentIndex((int) m_settings.m_yoloDnnTarget);
     settingsUI()->yoloInferenceModeCombo->setCurrentIndex(static_cast<int>(m_settings.m_yoloInferenceMode));
     settingsUI()->yoloTileOverlapSpin->setValue(m_settings.m_yoloTileOverlapPercent);
@@ -2982,6 +2984,7 @@ void CameraGUI::sendDisplayedFrameEvents(const QVector<QRect>& motionBoxes, cons
     };
 
     QVector<PendingEvent> pendingEvents;
+    const QDateTime eventTime = captureDateTime.isValid() ? captureDateTime : QDateTime::currentDateTime();
     const bool motionDetected = !motionBoxes.isEmpty();
     if (motionDetected != m_displayedMotionEventActive)
     {
@@ -3045,6 +3048,8 @@ void CameraGUI::sendDisplayedFrameEvents(const QVector<QRect>& motionBoxes, cons
 
     for (const QString& className : displayedObjectClasses)
     {
+        m_displayedObjectMissingSince.remove(className);
+
         if (!m_displayedObjectEventClasses.contains(className))
         {
             const QRect box = displayedObjectBoxes.value(className);
@@ -3083,17 +3088,33 @@ void CameraGUI::sendDisplayedFrameEvents(const QVector<QRect>& motionBoxes, cons
         }
     }
 
+    QSet<QString> debouncedObjectClasses = displayedObjectClasses;
+    const qint64 disappearDebounceMs = qRound64(m_settings.m_yoloDisappearDebounce * 1000.0);
     for (const QString& className : m_displayedObjectEventClasses)
     {
-        if (!displayedObjectClasses.contains(className))
+        if (displayedObjectClasses.contains(className)) {
+            continue;
+        }
+
+        auto missingIt = m_displayedObjectMissingSince.find(className);
+        if (missingIt == m_displayedObjectMissingSince.end()) {
+            missingIt = m_displayedObjectMissingSince.insert(className, eventTime);
+        }
+
+        if (missingIt.value().msecsTo(eventTime) >= disappearDebounceMs)
         {
             pendingEvents.append({
                 MainCore::MsgEvent::EventType::CameraObjectLostEvent,
                 QStringLiteral("name=%1").arg(className)
             });
+            m_displayedObjectMissingSince.erase(missingIt);
+        }
+        else
+        {
+            debouncedObjectClasses.insert(className);
         }
     }
-    m_displayedObjectEventClasses = displayedObjectClasses;
+    m_displayedObjectEventClasses = debouncedObjectClasses;
 
     QRectF detectionRoi;
     if (imageSize.isValid())
@@ -3159,7 +3180,6 @@ void CameraGUI::sendDisplayedFrameEvents(const QVector<QRect>& motionBoxes, cons
         return;
     }
 
-    const QDateTime eventTime = captureDateTime.isValid() ? captureDateTime : QDateTime::currentDateTime();
     for (const PendingEvent& event : pendingEvents)
     {
         for (const ObjectPipe *pipe : eventPipes)
@@ -4224,6 +4244,7 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->yoloTargetCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_yoloTargetCombo_currentIndexChanged);
     QObject::connect(settingsUI()->yoloConfSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_yoloConfSpin_valueChanged);
     QObject::connect(settingsUI()->yoloNmsSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_yoloNmsSpin_valueChanged);
+    QObject::connect(settingsUI()->yoloDisappearDebounceSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_yoloDisappearDebounceSpin_valueChanged);
     QObject::connect(settingsUI()->yoloInferenceModeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_yoloInferenceModeCombo_currentIndexChanged);
     QObject::connect(settingsUI()->yoloTileOverlapSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_yoloTileOverlapSpin_valueChanged);
     QObject::connect(settingsUI()->yoloIgnoredClassNamesEdit, &QPlainTextEdit::textChanged, this, &CameraGUI::on_yoloIgnoredClassNamesEdit_textChanged);
@@ -11263,6 +11284,7 @@ void CameraGUI::on_detectionResetDefaultsButton_clicked()
     m_settings.m_motionBoxColor = defaults.m_motionBoxColor;
     m_settings.m_minContourArea = defaults.m_minContourArea;
     m_settings.m_motionExclusionRects = defaults.m_motionExclusionRects;
+    m_settings.m_yoloDisappearDebounce = defaults.m_yoloDisappearDebounce;
     m_settings.m_yoloIgnoredClassNames = defaults.m_yoloIgnoredClassNames;
 
     m_settings.m_starDetect = defaults.m_starDetect;
@@ -11324,6 +11346,7 @@ void CameraGUI::on_detectionResetDefaultsButton_clicked()
         "minContourArea",
         "showMotionExclusionRects",
         "motionExclusionRects",
+        "yoloDisappearDebounce",
         "yoloIgnoredClassNames",
         "starDetect",
         "starThreshold",
@@ -12399,6 +12422,12 @@ void CameraGUI::on_yoloNmsSpin_valueChanged(double value)
 {
     m_settings.m_yoloNmsThreshold = value;
     applySetting("yoloNmsThreshold");
+}
+
+void CameraGUI::on_yoloDisappearDebounceSpin_valueChanged(double value)
+{
+    m_settings.m_yoloDisappearDebounce = value;
+    applySetting("yoloDisappearDebounce");
 }
 
 void CameraGUI::on_yoloInferenceModeCombo_currentIndexChanged(int index)

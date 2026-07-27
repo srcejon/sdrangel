@@ -708,6 +708,7 @@ void CameraSettings::resetToDefaults()
     m_yoloLabelsPath.clear();
     m_yoloConfThreshold = 0.5;
     m_yoloNmsThreshold = 0.45;
+    m_yoloDisappearDebounce = 1.0;
     m_yoloBoxColor = Qt::green;
     m_yoloLabelFontFamily.clear();
     m_yoloLabelFontScale = 12.0;
@@ -907,6 +908,7 @@ QByteArray CameraSettings::serialize() const
     s.writeString(164, m_yoloLabelsPath);
     s.writeDouble(165, m_yoloConfThreshold);
     s.writeDouble(166, m_yoloNmsThreshold);
+    s.writeDouble(368, m_yoloDisappearDebounce);
     s.writeU32(167, m_yoloBoxColor.rgba());
     s.writeS32(169, m_yoloDnnTarget);
     s.writeS32(170, m_audioPreviewVolume);
@@ -1617,8 +1619,10 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readString(164, &m_yoloLabelsPath, "");
         d.readDouble(165, &m_yoloConfThreshold, 0.5);
         d.readDouble(166, &m_yoloNmsThreshold, 0.45);
+        d.readDouble(368, &m_yoloDisappearDebounce, 1.0);
         m_yoloConfThreshold = qBound(m_minNormalized, m_yoloConfThreshold, m_maxNormalized);
         m_yoloNmsThreshold = qBound(m_minNormalized, m_yoloNmsThreshold, m_maxNormalized);
+        m_yoloDisappearDebounce = qBound(0.0, m_yoloDisappearDebounce, 60.0);
         uint32_t yoloBoxColorRgba = QColor(Qt::green).rgba();
         d.readU32(167, &yoloBoxColorRgba, QColor(Qt::green).rgba());
         m_yoloBoxColor = QColor::fromRgba(yoloBoxColorRgba);
@@ -3028,6 +3032,9 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     if (settingsKeys.contains("yoloNmsThreshold")) {
         m_yoloNmsThreshold = qBound(m_minNormalized, settings.m_yoloNmsThreshold, m_maxNormalized);
     }
+    if (settingsKeys.contains("yoloDisappearDebounce")) {
+        m_yoloDisappearDebounce = qBound(0.0, settings.m_yoloDisappearDebounce, 60.0);
+    }
     if (settingsKeys.contains("yoloBoxColor")) {
         m_yoloBoxColor = settings.m_yoloBoxColor;
     }
@@ -4103,6 +4110,9 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("yoloNmsThreshold") || force) {
         ostr << " m_yoloNmsThreshold: " << m_yoloNmsThreshold;
+    }
+    if (settingsKeys.contains("yoloDisappearDebounce") || force) {
+        ostr << " m_yoloDisappearDebounce: " << m_yoloDisappearDebounce;
     }
     if (settingsKeys.contains("yoloBoxColor") || force) {
         ostr << " m_yoloBoxColor: " << m_yoloBoxColor.name().toStdString();

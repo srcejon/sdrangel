@@ -108,12 +108,16 @@ namespace {
         qint64 m_frequencyHz;
         double m_latitudeDegrees;
         double m_longitudeDegrees;
+        bool m_hasBeamSettings;
+        float m_elevationDegrees;
+        float m_azimuthBeamwidthDegrees;
+        float m_elevationBeamwidthDegrees;
     };
 
     constexpr TransmitterPreset TransmitterPresets[] = {
-        {"GRAVES", 143050000, 47.3480, 5.5151},
-        {"BRAMS",   49970000, 50.0972, 4.5847},
-        {"GB3MBA",  50408000, 53.1139, 1.2224}
+        {"GRAVES", 143050000, 47.3480, 5.5151, false, 0.0f,   0.0f,   0.0f},
+        {"BRAMS",   49970000, 50.0972, 4.5847, true, 90.0f,  64.0f,  64.0f},
+        {"GB3MBA",  50408000, 53.1139, 1.2224, true, 90.0f, 100.0f, 100.0f}
     };
     constexpr int TransmitterPresetCount =
         (int) (sizeof(TransmitterPresets) / sizeof(TransmitterPresets[0]));
@@ -1531,27 +1535,46 @@ void MeteorGUI::on_transmitterPreset_currentIndexChanged(int index)
     m_settings.m_inputFrequencyOffset = m_channelMarker.getCenterFrequency();
     m_settings.m_transmitterLatitude = preset.m_latitudeDegrees;
     m_settings.m_transmitterLongitude = preset.m_longitudeDegrees;
+    QStringList settingsKeys {
+        "frequencyMode",
+        "frequency",
+        "inputFrequencyOffset",
+        "transmitterLatitude",
+        "transmitterLongitude"
+    };
+
+    if (preset.m_hasBeamSettings)
+    {
+        m_settings.m_transmitterElevation = preset.m_elevationDegrees;
+        m_settings.m_transmitterBeamwidth = preset.m_azimuthBeamwidthDegrees;
+        m_settings.m_transmitterHPBW = preset.m_elevationBeamwidthDegrees;
+        settingsKeys.append({
+            "transmitterElevation",
+            "transmitterBeamwidth",
+            "transmitterHPBW"
+        });
+    }
 
     const QSignalBlocker frequencyModeBlocker(m_frequencyMode);
     const QSignalBlocker deltaFrequencyBlocker(m_deltaFrequency);
     const QSignalBlocker transmitterLatitudeBlocker(m_transmitterLatitude);
     const QSignalBlocker transmitterLongitudeBlocker(m_transmitterLongitude);
+    const QSignalBlocker transmitterElevationBlocker(m_transmitterElevation);
+    const QSignalBlocker transmitterBeamwidthBlocker(m_transmitterBeamwidth);
+    const QSignalBlocker transmitterHPBWBlocker(m_transmitterHPBW);
     m_frequencyMode->setCurrentIndex((int) MeteorSettings::Absolute);
     m_deltaFrequency->setValueRange(true, 11, 0, 99999999999, 0);
     m_deltaFrequency->setValue(m_settings.m_frequency);
     m_deltaUnits->setText("Hz");
     m_transmitterLatitude->setValue(m_settings.m_transmitterLatitude);
     m_transmitterLongitude->setValue(m_settings.m_transmitterLongitude);
+    m_transmitterElevation->setValue(m_settings.m_transmitterElevation);
+    m_transmitterBeamwidth->setValue(m_settings.m_transmitterBeamwidth);
+    m_transmitterHPBW->setValue(m_settings.m_transmitterHPBW);
 
     updateAbsoluteCenterFrequency();
     updateAntennaPatternsOnMap(true);
-    applySettings({
-        "frequencyMode",
-        "frequency",
-        "inputFrequencyOffset",
-        "transmitterLatitude",
-        "transmitterLongitude"
-    });
+    applySettings(settingsKeys);
 }
 
 void MeteorGUI::on_transmitterLatitude_valueChanged(double value)

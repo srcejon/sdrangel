@@ -2654,9 +2654,12 @@ void CameraGUI::displaySettings()
     updateColorButton(settingsUI()->overlayTextColorButton, m_settings.m_overlayTextColor);
     updateColorButton(settingsUI()->motionBoxColorButton, m_settings.m_motionBoxColor);
     updateColorButton(settingsUI()->cloudColorButton, m_settings.m_cloudColor);
-    ui->spectrumOverlayButton->setChecked(std::any_of(m_settings.m_spectrumOverlays.cbegin(), m_settings.m_spectrumOverlays.cend(), [](const CameraSettings::SpectrumOverlay& overlay) {
-        return overlay.m_enabled && !overlay.m_source.isEmpty();
-    }));
+    {
+        const QSignalBlocker blocker(ui->spectrumOverlayButton);
+        ui->spectrumOverlayButton->setChecked(std::any_of(m_settings.m_spectrumOverlays.cbegin(), m_settings.m_spectrumOverlays.cend(), [](const CameraSettings::SpectrumOverlay& overlay) {
+            return overlay.m_enabled && !overlay.m_source.isEmpty();
+        }));
+    }
     {
         const QSignalBlocker blocker(ui->windowOverlayButton);
         ui->windowOverlayButton->setChecked(std::any_of(m_settings.m_windowOverlays.cbegin(), m_settings.m_windowOverlays.cend(), [](const CameraSettings::WindowOverlay& overlay) {

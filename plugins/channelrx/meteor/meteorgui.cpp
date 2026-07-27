@@ -20,6 +20,8 @@
 
 #include <QComboBox>
 #include <QDateTime>
+#include <QDialog>
+#include <QDialogButtonBox>
 #include <QDir>
 #include <QDoubleSpinBox>
 #include <QFile>
@@ -39,6 +41,8 @@
 #include <QTableWidgetItem>
 #include <QTextStream>
 #include <QToolButton>
+#include <QTreeWidget>
+#include <QVBoxLayout>
 
 #include "SWGMapCoordinate.h"
 #include "SWGMapItem.h"
@@ -438,6 +442,11 @@ MeteorGUI::MeteorGUI(PluginAPI* pluginAPI, DeviceUISet *deviceUISet, BasebandSam
         &MeteorSatelliteMatcher::matchReady,
         this,
         &MeteorGUI::applySatelliteTargetMatch);
+    connect(
+        m_satelliteMatcher,
+        &MeteorSatelliteMatcher::statisticsReady,
+        this,
+        &MeteorGUI::handleSatelliteStatistics);
 
     setupSpectrum();
 
@@ -523,6 +532,7 @@ void MeteorGUI::setupUi(RollupContents *rollupContents)
     m_clearDetections = ui->clearDetections;
     m_detectionsTable = ui->detectionsTable;
     m_satellitesTable = ui->satellitesTable;
+    m_satelliteCatalogInfo = ui->satelliteCatalogInfo;
     m_colorgrammeTable = ui->colorgrammeTable;
     m_hourlyChartView = ui->hourlyChartView;
     m_trailSpectrumEnabled = ui->trailSpectrumEnabled;
@@ -625,7 +635,8 @@ void MeteorGUI::setupUi(RollupContents *rollupContents)
     m_mapMaxAltitude->setRange(1.0, 50000.0);
     m_mapMaxAltitude->setSingleStep(100.0);
     m_mapMaxAltitude->setSuffix(" km");
-    m_mapMaxAltitude->setToolTip("Altitude at which the antenna half-power beam footprints are projected");
+    m_mapMaxAltitude->setToolTip(
+        "Maximum altitude for satellite matching and antenna beam volumes");
     populateRotatorCombo();
 
     m_saveDetections->setIcon(QIcon(":/save.png"));
@@ -638,6 +649,8 @@ void MeteorGUI::setupUi(RollupContents *rollupContents)
     m_clearDetections->setIcon(QIcon(":/bin.png"));
     m_clearDetections->setToolTip("Clear detections");
     m_clearDetections->setMaximumWidth(28);
+    m_satelliteCatalogInfo->setToolTip(
+        "Show satellite catalog and tracking statistics");
 
     m_trailSpectrumEnabled->setChecked(true);
     m_trailSpectrumEnabled->setToolTip("Enable the trail-echo spectrum");
@@ -646,13 +659,12 @@ void MeteorGUI::setupUi(RollupContents *rollupContents)
     ui->detectionsSpectrumSplitter->setStretchFactor(0, 1);
     ui->detectionsSpectrumSplitter->setStretchFactor(1, 2);
 
-    m_detectionsTable->setColumnCount(12);
+    m_detectionsTable->setColumnCount(11);
     const QStringList detectionHeaders = {
         "Time (local)",
         "Peak (dB)",
         "BG (dB)",
         "Total (dB)",
-        "Amp",
         "Duration (ms)",
         "Center (Hz)",
         "Span (Hz)",
@@ -666,7 +678,6 @@ void MeteorGUI::setupUi(RollupContents *rollupContents)
         "Peak signal power during the detection in dB",
         "Estimated background power level at detection time in dB",
         "Integrated meteor signal power across the detection in dB",
-        "Peak linear signal amplitude during the detection",
         "Detected pulse duration in milliseconds",
         "Estimated center frequency of the pulse relative to channel center in hertz",
         "Estimated frequency span across the pulse in hertz",
@@ -694,8 +705,8 @@ void MeteorGUI::setupUi(RollupContents *rollupContents)
     m_detectionsTable->setSortingEnabled(true);
     m_detectionsTable->setMinimumHeight(120);
 
-    m_satellitesTable->setColumnCount(21);
-    QStringList satelliteHeaders = detectionHeaders.mid(0, 9);
+    m_satellitesTable->setColumnCount(20);
+    QStringList satelliteHeaders = detectionHeaders.mid(0, 8);
     satelliteHeaders.append("Radial (kph)");
     satelliteHeaders.append("Max radial (kph)");
     satelliteHeaders.append("Drift rate (Hz/s)");
@@ -707,13 +718,12 @@ void MeteorGUI::setupUi(RollupContents *rollupContents)
     satelliteHeaders.append("Moon possible");
     satelliteHeaders.append("Moon Doppler (Hz)");
     satelliteHeaders.append("Moon drift (Hz)");
-    satelliteHeaders.append(detectionHeaders[9]);
+    satelliteHeaders.append(detectionHeaders[8]);
     const QStringList satelliteHeaderTooltips = {
         "Local date and time when the Doppler sweep started",
         "Peak signal power during the sweep in dB",
         "Estimated background power level at detection time in dB",
         "Integrated sweep signal power across the detection in dB",
-        "Peak linear signal amplitude during the sweep",
         "Tracked sweep duration in milliseconds",
         "Robust center frequency of the sweep relative to channel center in hertz",
         "Tracked frequency span across the sweep in hertz",
@@ -1652,6 +1662,20 @@ void MeteorGUI::on_detectionsTable_itemSelectionChanged()
     handleDetectionTableSelectionChanged(m_detectionsTable);
 }
 
+void MeteorGUI::on_satelliteCatalogInfo_clicked()
+{
+    if (!m_satelliteMatcher)
+    {
+        showSatelliteStatisticsDialog(m_satelliteStatistics);
+        return;
+    }
+
+    m_satelliteStatisticsDialogRequested = true;
+    m_satelliteCatalogInfo->setEnabled(false);
+    m_satelliteCatalogInfo->setToolTip(tr("Loading satellite tracking statistics..."));
+    m_satelliteMatcher->requestStatistics();
+}
+
 void MeteorGUI::on_satellitesTable_itemSelectionChanged()
 {
     handleDetectionTableSelectionChanged(m_satellitesTable);
@@ -1955,6 +1979,7 @@ void MeteorGUI::makeUIConnections()
     QObject::connect(m_saveDetections, &QPushButton::clicked, this, &MeteorGUI::on_saveDetections_clicked);
     QObject::connect(m_saveColorgramme, &QPushButton::clicked, this, &MeteorGUI::on_saveColorgramme_clicked);
     QObject::connect(m_clearDetections, &QPushButton::clicked, this, &MeteorGUI::on_clearDetections_clicked);
+    QObject::connect(m_satelliteCatalogInfo, &QToolButton::clicked, this, &MeteorGUI::on_satelliteCatalogInfo_clicked);
     QObject::connect(m_detectionsTable, &QTableWidget::itemSelectionChanged, this, &MeteorGUI::on_detectionsTable_itemSelectionChanged);
     QObject::connect(m_detectionsTable, &QTableWidget::customContextMenuRequested, this, &MeteorGUI::on_detectionsTable_customContextMenuRequested);
     QObject::connect(m_satellitesTable, &QTableWidget::itemSelectionChanged, this, &MeteorGUI::on_satellitesTable_itemSelectionChanged);
@@ -2094,18 +2119,17 @@ void MeteorGUI::addDetection(const MeteorDemodSink::MsgMeteorDetected& detection
     m_detectionsTable->setItem(row, 1, makeTableItem(QString::number(detection.getPeakPowerDB(), 'f', 1), detection.getPeakPowerDB()));
     m_detectionsTable->setItem(row, 2, makeTableItem(QString::number(detection.getBackgroundPowerDB(), 'f', 1), detection.getBackgroundPowerDB()));
     m_detectionsTable->setItem(row, 3, makeTableItem(QString::number(detection.getTotalPowerDB(), 'f', 1), detection.getTotalPowerDB()));
-    m_detectionsTable->setItem(row, 4, makeTableItem(QString::number(detection.getPeakAmplitude(), 'f', 4), detection.getPeakAmplitude()));
     QTableWidgetItem *durationItem = makeTableItem(QString::number(detection.getDurationS() * 1000.0, 'f', 1), detection.getDurationS());
     if (detection.getTruncated()) {
         durationItem->setToolTip(tr("Detection duration was clipped to the configured maximum."));
     }
-    m_detectionsTable->setItem(row, 5, durationItem);
-    m_detectionsTable->setItem(row, 6, makeTableItem(QString::number(detection.getCenterFrequency(), 'f', 1), detection.getCenterFrequency()));
-    m_detectionsTable->setItem(row, 7, makeTableItem(QString::number(detection.getFrequencySpan(), 'f', 1), detection.getFrequencySpan()));
-    m_detectionsTable->setItem(row, 8, makeTableItem(QString::number(detection.getFrequencyDrift(), 'f', 1), detection.getFrequencyDrift()));
-    m_detectionsTable->setItem(row, 9, makeTableItem(QString::number(detection.getSampleRate()), detection.getSampleRate()));
+    m_detectionsTable->setItem(row, 4, durationItem);
+    m_detectionsTable->setItem(row, 5, makeTableItem(QString::number(detection.getCenterFrequency(), 'f', 1), detection.getCenterFrequency()));
+    m_detectionsTable->setItem(row, 6, makeTableItem(QString::number(detection.getFrequencySpan(), 'f', 1), detection.getFrequencySpan()));
+    m_detectionsTable->setItem(row, 7, makeTableItem(QString::number(detection.getFrequencyDrift(), 'f', 1), detection.getFrequencyDrift()));
+    m_detectionsTable->setItem(row, 8, makeTableItem(QString::number(detection.getSampleRate()), detection.getSampleRate()));
+    m_detectionsTable->setItem(row, 9, makeTableItem(QString()));
     m_detectionsTable->setItem(row, 10, makeTableItem(QString()));
-    m_detectionsTable->setItem(row, 11, makeTableItem(QString()));
     m_detectionsTable->setSortingEnabled(sortingEnabled);
 
     updateCounters();
@@ -2126,7 +2150,6 @@ void MeteorGUI::addSatelliteDetection(const MeteorDemodSink::MsgSatelliteDetecte
     const double peakPowerDB = 10.0 * std::log10(std::max(1e-20, detection.m_peakPower));
     const double backgroundPowerDB = 10.0 * std::log10(std::max(1e-20, detection.m_backgroundPower));
     const double totalPowerDB = 10.0 * std::log10(std::max(1e-20, detection.m_totalPower));
-    const double peakAmplitude = std::sqrt(std::max(0.0, detection.m_peakPower));
     const quint64 displaySampleCount = detection.m_displayEndSample >= detection.m_displayStartSample
         ? detection.m_displayEndSample - detection.m_displayStartSample + 1
         : 1;
@@ -2192,17 +2215,16 @@ void MeteorGUI::addSatelliteDetection(const MeteorDemodSink::MsgSatelliteDetecte
     m_satellitesTable->setItem(row, 1, makeTableItem(QString::number(peakPowerDB, 'f', 1), peakPowerDB));
     m_satellitesTable->setItem(row, 2, makeTableItem(QString::number(backgroundPowerDB, 'f', 1), backgroundPowerDB));
     m_satellitesTable->setItem(row, 3, makeTableItem(QString::number(totalPowerDB, 'f', 1), totalPowerDB));
-    m_satellitesTable->setItem(row, 4, makeTableItem(QString::number(peakAmplitude, 'f', 4), peakAmplitude));
     QTableWidgetItem *durationItem = makeTableItem(
         QString::number(detection.m_durationS * 1000.0, 'f', 1),
         detection.m_durationS);
     if (detection.m_truncated) {
         durationItem->setToolTip(tr("Satellite sweep duration was clipped to the configured maximum."));
     }
-    m_satellitesTable->setItem(row, 5, durationItem);
-    m_satellitesTable->setItem(row, 6, makeTableItem(QString::number(detection.m_centerFrequency, 'f', 1), detection.m_centerFrequency));
-    m_satellitesTable->setItem(row, 7, makeTableItem(QString::number(detection.m_frequencySpan, 'f', 1), detection.m_frequencySpan));
-    m_satellitesTable->setItem(row, 8, makeTableItem(QString::number(detection.m_frequencyDrift, 'f', 1), detection.m_frequencyDrift));
+    m_satellitesTable->setItem(row, 4, durationItem);
+    m_satellitesTable->setItem(row, 5, makeTableItem(QString::number(detection.m_centerFrequency, 'f', 1), detection.m_centerFrequency));
+    m_satellitesTable->setItem(row, 6, makeTableItem(QString::number(detection.m_frequencySpan, 'f', 1), detection.m_frequencySpan));
+    m_satellitesTable->setItem(row, 7, makeTableItem(QString::number(detection.m_frequencyDrift, 'f', 1), detection.m_frequencyDrift));
     const double driftRateHzPerS = detection.m_frequencyDrift
         / std::max(0.001, detection.m_durationS);
     const qint64 referenceFrequency = rmobReportFrequency();
@@ -2253,28 +2275,30 @@ void MeteorGUI::addSatelliteDetection(const MeteorDemodSink::MsgSatelliteDetecte
             observation,
             collectADSBTargets(observationTimeUtc.addMSecs(
                 (qint64) std::llround(detection.m_durationS * 500.0))));
-        m_satellitesTable->setItem(row, 9, makeTableItem(QString::number(radialSpeedKPH, 'f', 1), radialSpeedKPH));
-        m_satellitesTable->setItem(row, 10, makeTableItem(QString::number(maximumRadialSpeedKPH, 'f', 1), maximumRadialSpeedKPH));
-        m_satellitesTable->setItem(row, 12, makeTableItem(targetMatch.m_matched
+        m_satellitesTable->setItem(row, 8, makeTableItem(QString::number(radialSpeedKPH, 'f', 1), radialSpeedKPH));
+        m_satellitesTable->setItem(row, 9, makeTableItem(QString::number(maximumRadialSpeedKPH, 'f', 1), maximumRadialSpeedKPH));
+        m_satellitesTable->setItem(row, 11, makeTableItem(targetMatch.m_matched
             ? QStringLiteral("Aircraft (ADS-B)")
             : rfClassification));
-        m_satellitesTable->setItem(row, 13, makeTableItem(
+        m_satellitesTable->setItem(row, 12, makeTableItem(
             QString::number(classification.m_satelliteScorePercent, 'f', 1),
             classification.m_satelliteScorePercent));
     }
     else
     {
+        m_satellitesTable->setItem(row, 8, makeTableItem(QString()));
         m_satellitesTable->setItem(row, 9, makeTableItem(QString()));
-        m_satellitesTable->setItem(row, 10, makeTableItem(QString()));
-        m_satellitesTable->setItem(row, 12, makeTableItem(QStringLiteral("Uncertain")));
-        m_satellitesTable->setItem(row, 13, makeTableItem(QString()));
+        m_satellitesTable->setItem(row, 11, makeTableItem(QStringLiteral("Uncertain")));
+        m_satellitesTable->setItem(row, 12, makeTableItem(QString()));
     }
-    m_satellitesTable->setItem(row, 11, makeTableItem(QString::number(driftRateHzPerS, 'f', 1), driftRateHzPerS));
+    m_satellitesTable->setItem(row, 10, makeTableItem(QString::number(driftRateHzPerS, 'f', 1), driftRateHzPerS));
     QTableWidgetItem *matchItem = makeTableItem(targetMatch.m_matched
         ? movingTargetLabel(targetMatch)
         : (targetMatch.m_ambiguous
             ? ambiguousMovingTargetSummary(targetMatch)
-            : QString()));
+            : (targetMatch.m_hasCandidate
+                ? QStringLiteral("No match")
+                : QString())));
 
     if (targetMatch.m_hasCandidate)
     {
@@ -2298,20 +2322,20 @@ void MeteorGUI::addSatelliteDetection(const MeteorDemodSink::MsgSatelliteDetecte
         matchItem->setToolTip(toolTip);
     }
 
-    m_satellitesTable->setItem(row, 14, matchItem);
-    m_satellitesTable->setItem(row, 15, targetMatch.m_hasCandidate
+    m_satellitesTable->setItem(row, 13, matchItem);
+    m_satellitesTable->setItem(row, 14, targetMatch.m_hasCandidate
         ? makeTableItem(QString::number(targetMatch.m_scorePercent, 'f', 1), targetMatch.m_scorePercent)
         : makeTableItem(QString()));
-    m_satellitesTable->setItem(row, 16, targetMatch.m_hasCandidate
+    m_satellitesTable->setItem(row, 15, targetMatch.m_hasCandidate
         ? makeTableItem(QString::number(targetMatch.m_endpointResidualRMSHz, 'f', 1), targetMatch.m_endpointResidualRMSHz)
         : makeTableItem(QString()));
-    m_satellitesTable->setItem(row, 17, makeTableItem(
+    m_satellitesTable->setItem(row, 16, makeTableItem(
         validObservation && m_satelliteMatcher
             ? QStringLiteral("Checking...")
             : QStringLiteral("Unavailable")));
+    m_satellitesTable->setItem(row, 17, makeTableItem(QString()));
     m_satellitesTable->setItem(row, 18, makeTableItem(QString()));
-    m_satellitesTable->setItem(row, 19, makeTableItem(QString()));
-    m_satellitesTable->setItem(row, 20, makeTableItem(QString::number(detection.m_sampleRate), detection.m_sampleRate));
+    m_satellitesTable->setItem(row, 19, makeTableItem(QString::number(detection.m_sampleRate), detection.m_sampleRate));
     m_satellitesTable->setSortingEnabled(sortingEnabled);
 
     if (validObservation && m_satelliteMatcher)
@@ -2330,6 +2354,8 @@ void MeteorGUI::addSatelliteDetection(const MeteorDemodSink::MsgSatelliteDetecte
             m_settings.m_antennaBeamwidth,
             m_settings.m_antennaBeamwidth
         };
+        geometry.m_maximumAltitudeM =
+            m_settings.m_mapMaxAltitudeKM * 1000.0;
         if (!targetMatch.m_matched) {
             matchItem->setText(QStringLiteral("Searching orbital catalog..."));
         }
@@ -2403,9 +2429,7 @@ QDateTime MeteorGUI::movingTargetObservationDateTimeUtc(const QDateTime& display
 void MeteorGUI::applySatelliteTargetMatch(
     quint64 overlayId,
     const MovingTargetMatcher::Match& satelliteMatch,
-    const MeteorSatelliteMatcher::MoonPrediction& moonPrediction,
-    int catalogSize,
-    const QString& status)
+    const MeteorSatelliteMatcher::MoonPrediction& moonPrediction)
 {
     auto pending = m_pendingTargetMatches.find(overlayId);
 
@@ -2437,19 +2461,19 @@ void MeteorGUI::applySatelliteTargetMatch(
 
     const bool sortingEnabled = m_satellitesTable->isSortingEnabled();
     m_satellitesTable->setSortingEnabled(false);
-    QTableWidgetItem *classificationItem = m_satellitesTable->item(row, 12);
-    QTableWidgetItem *matchItem = m_satellitesTable->item(row, 14);
+    QTableWidgetItem *classificationItem = m_satellitesTable->item(row, 11);
+    QTableWidgetItem *matchItem = m_satellitesTable->item(row, 13);
 
     if (!classificationItem)
     {
         classificationItem = makeTableItem(QString());
-        m_satellitesTable->setItem(row, 12, classificationItem);
+        m_satellitesTable->setItem(row, 11, classificationItem);
     }
 
     if (!matchItem)
     {
         matchItem = makeTableItem(QString());
-        m_satellitesTable->setItem(row, 14, matchItem);
+        m_satellitesTable->setItem(row, 13, matchItem);
     }
 
     if (combinedMatch.m_matched)
@@ -2468,7 +2492,7 @@ void MeteorGUI::applySatelliteTargetMatch(
         classificationItem->setText(pendingMatch.m_rfClassification);
         matchItem->setText(combinedMatch.m_ambiguous
             ? ambiguousMovingTargetSummary(combinedMatch)
-            : QString());
+            : QStringLiteral("No match"));
     }
 
     if (combinedMatch.m_hasCandidate)
@@ -2478,17 +2502,14 @@ void MeteorGUI::applySatelliteTargetMatch(
             "Score: %2%\n"
             "Predicted start/end: %3 / %4 Hz\n"
             "Center/drift residual: %5 / %6 Hz\n"
-            "State age: %7 s\n"
-            "CelesTrak catalog: %8 objects (%9)")
+            "State age: %7 s")
             .arg(movingTargetLabel(combinedMatch))
             .arg(combinedMatch.m_scorePercent, 0, 'f', 1)
             .arg(combinedMatch.m_prediction.m_startFrequencyOffsetHz, 0, 'f', 1)
             .arg(combinedMatch.m_prediction.m_endFrequencyOffsetHz, 0, 'f', 1)
             .arg(combinedMatch.m_centerResidualHz, 0, 'f', 1)
             .arg(combinedMatch.m_driftResidualHz, 0, 'f', 1)
-            .arg(combinedMatch.m_stateAgeS, 0, 'f', 1)
-            .arg(catalogSize)
-            .arg(status);
+            .arg(combinedMatch.m_stateAgeS, 0, 'f', 1);
         const QString alternatives = movingTargetAlternativesToolTip(combinedMatch);
         if (!alternatives.isEmpty()) {
             toolTip += QChar('\n') + alternatives;
@@ -2497,17 +2518,15 @@ void MeteorGUI::applySatelliteTargetMatch(
     }
     else
     {
-        matchItem->setToolTip(tr("No moving-target match. CelesTrak catalog: %1 objects (%2)")
-            .arg(catalogSize)
-            .arg(status));
+        matchItem->setToolTip(tr("No moving-target candidate matched this sweep."));
     }
 
-    m_satellitesTable->setItem(row, 15, combinedMatch.m_hasCandidate
+    m_satellitesTable->setItem(row, 14, combinedMatch.m_hasCandidate
         ? makeTableItem(
             QString::number(combinedMatch.m_scorePercent, 'f', 1),
             combinedMatch.m_scorePercent)
         : makeTableItem(QString()));
-    m_satellitesTable->setItem(row, 16, combinedMatch.m_hasCandidate
+    m_satellitesTable->setItem(row, 15, combinedMatch.m_hasCandidate
         ? makeTableItem(
             QString::number(combinedMatch.m_endpointResidualRMSHz, 'f', 1),
             combinedMatch.m_endpointResidualRMSHz)
@@ -2523,7 +2542,7 @@ void MeteorGUI::applySatelliteTargetMatch(
         .arg(moonPrediction.m_transmitterElevationDegrees, 0, 'f', 1)
         .arg(moonPrediction.m_receiverAzimuthDegrees, 0, 'f', 1)
         .arg(moonPrediction.m_receiverElevationDegrees, 0, 'f', 1));
-    m_satellitesTable->setItem(row, 17, moonPossibleItem);
+    m_satellitesTable->setItem(row, 16, moonPossibleItem);
 
     if (moonPrediction.m_possible && moonPrediction.m_match.m_prediction.m_valid)
     {
@@ -2535,17 +2554,134 @@ void MeteorGUI::applySatelliteTargetMatch(
         moonDopplerItem->setToolTip(tr("Expected Moon start/end Doppler: %1 / %2 Hz")
             .arg(prediction.m_startFrequencyOffsetHz, 0, 'f', 1)
             .arg(prediction.m_endFrequencyOffsetHz, 0, 'f', 1));
-        m_satellitesTable->setItem(row, 18, moonDopplerItem);
-        m_satellitesTable->setItem(row, 19, makeTableItem(
+        m_satellitesTable->setItem(row, 17, moonDopplerItem);
+        m_satellitesTable->setItem(row, 18, makeTableItem(
             QString::number(prediction.m_frequencyDriftHz, 'f', 1),
             prediction.m_frequencyDriftHz));
     }
     else
     {
+        m_satellitesTable->setItem(row, 17, makeTableItem(QString()));
         m_satellitesTable->setItem(row, 18, makeTableItem(QString()));
-        m_satellitesTable->setItem(row, 19, makeTableItem(QString()));
     }
     m_satellitesTable->setSortingEnabled(sortingEnabled);
+}
+
+void MeteorGUI::handleSatelliteStatistics(
+    const MeteorSatelliteMatcher::CatalogStatistics& statistics)
+{
+    m_satelliteStatistics = statistics;
+    m_satelliteCatalogInfo->setEnabled(true);
+    m_satelliteCatalogInfo->setToolTip(
+        tr("Show satellite catalog and tracking statistics"));
+
+    if (m_satelliteStatisticsDialogRequested)
+    {
+        m_satelliteStatisticsDialogRequested = false;
+        showSatelliteStatisticsDialog(statistics);
+    }
+}
+
+void MeteorGUI::showSatelliteStatisticsDialog(
+    const MeteorSatelliteMatcher::CatalogStatistics& statistics)
+{
+    QDialog dialog(this);
+    dialog.setWindowTitle(tr("Satellite tracking statistics"));
+    QVBoxLayout *layout = new QVBoxLayout(&dialog);
+    QLabel *statusLabel = new QLabel(statistics.m_status, &dialog);
+    statusLabel->setWordWrap(true);
+    layout->addWidget(statusLabel);
+
+    QTreeWidget *tree = new QTreeWidget(&dialog);
+    tree->setColumnCount(2);
+    tree->setHeaderLabels({tr("Statistic"), tr("Value")});
+    tree->setAlternatingRowColors(true);
+    tree->setRootIsDecorated(true);
+    tree->header()->setSectionResizeMode(0, QHeaderView::Stretch);
+    tree->header()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
+    layout->addWidget(tree);
+
+    auto addSection = [tree](const QString& title) {
+        QTreeWidgetItem *item = new QTreeWidgetItem(tree, {title});
+        QFont font = item->font(0);
+        font.setBold(true);
+        item->setFont(0, font);
+        item->setExpanded(true);
+        return item;
+    };
+    auto addValue = [](QTreeWidgetItem *parent, const QString& name, const QString& value) {
+        QTreeWidgetItem *item = new QTreeWidgetItem(parent, {name, value});
+        item->setTextAlignment(1, Qt::AlignRight | Qt::AlignVCenter);
+    };
+    auto addCount = [&addValue](QTreeWidgetItem *parent, const QString& name, int value) {
+        addValue(parent, name, QString::number(value));
+    };
+
+    QTreeWidgetItem *catalog = addSection(tr("Orbital catalog"));
+    addCount(catalog, tr("Loaded orbital elements"), statistics.m_catalogEntries);
+    addCount(catalog, tr("From active GP set"), statistics.m_activeCatalogEntries);
+    addCount(catalog, tr("Supplemental only"), statistics.m_supplementalCatalogEntries);
+    addCount(catalog, tr("SATCAT objects currently on orbit"), statistics.m_satcatOnOrbitEntries);
+    addValue(
+        catalog,
+        tr("Catalog loaded"),
+        statistics.m_loadedDateTimeUtc.isValid()
+            ? statistics.m_loadedDateTimeUtc.toLocalTime().toString(Qt::ISODate)
+            : tr("Not yet loaded"));
+
+    QTreeWidgetItem *types = addSection(tr("Loaded object types"));
+    addCount(types, tr("Payloads"), statistics.m_payloadEntries);
+    addCount(types, tr("Rocket bodies"), statistics.m_rocketBodyEntries);
+    addCount(types, tr("Debris"), statistics.m_debrisEntries);
+    addCount(types, tr("Other or unknown"), statistics.m_otherEntries);
+
+    QTreeWidgetItem *filtering = addSection(tr("Latest matching snapshot"));
+    if (statistics.m_snapshotValid)
+    {
+        addValue(
+            filtering,
+            tr("Snapshot time"),
+            statistics.m_snapshotDateTimeUtc.toLocalTime().toString(Qt::ISODateWithMs));
+        addValue(
+            filtering,
+            tr("Maximum altitude"),
+            tr("%1 km").arg(statistics.m_maximumAltitudeKM, 0, 'f', 0));
+        addCount(filtering, tr("Rejected: orbital elements older than 14 days"), statistics.m_staleElementEntries);
+        addCount(filtering, tr("Rejected: propagation or geometry failure"), statistics.m_propagationFailureEntries);
+        addCount(filtering, tr("Rejected: above maximum altitude"), statistics.m_aboveMaximumAltitudeEntries);
+        addCount(filtering, tr("Rejected: below transmitter horizon"), statistics.m_belowTransmitterHorizonEntries);
+        addCount(filtering, tr("Rejected: below receiver horizon"), statistics.m_belowReceiverHorizonEntries);
+        addCount(filtering, tr("Rejected: outside transmitter beam"), statistics.m_outsideTransmitterBeamEntries);
+        addCount(filtering, tr("Rejected: outside receiver beam"), statistics.m_outsideReceiverBeamEntries);
+        addCount(filtering, tr("Used as matcher candidates"), statistics.m_candidateEntries);
+    }
+    else {
+        addValue(filtering, tr("Status"), tr("No detection has requested an orbital snapshot yet"));
+    }
+
+    if (!statistics.m_sourceWarnings.isEmpty())
+    {
+        QTreeWidgetItem *warnings = addSection(tr("Catalog source warnings"));
+        for (const QString& warning : statistics.m_sourceWarnings) {
+            new QTreeWidgetItem(warnings, {warning});
+        }
+    }
+
+    QLabel *noteLabel = new QLabel(
+        tr("Snapshot rejection counts are exclusive: each catalog object is counted "
+           "against the first filter that excludes it."),
+        &dialog);
+    noteLabel->setWordWrap(true);
+    layout->addWidget(noteLabel);
+
+    QDialogButtonBox *buttons = new QDialogButtonBox(
+        QDialogButtonBox::Close,
+        Qt::Horizontal,
+        &dialog);
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    layout->addWidget(buttons);
+    dialog.resize(680, 560);
+    dialog.exec();
 }
 
 void MeteorGUI::addCameraDetection(const Meteor::MsgCameraMeteorDetected& detection)
@@ -2567,16 +2703,15 @@ void MeteorGUI::addCameraDetection(const Meteor::MsgCameraMeteorDetected& detect
     m_detectionsTable->setItem(row, 1, makeTableItem(QString()));
     m_detectionsTable->setItem(row, 2, makeTableItem(QString()));
     m_detectionsTable->setItem(row, 3, makeTableItem(QString()));
-    m_detectionsTable->setItem(row, 4, makeTableItem(QString()));
-    m_detectionsTable->setItem(row, 5, makeTableItem(QString::number(detection.getDurationS() * 1000.0, 'f', 1), detection.getDurationS()));
+    m_detectionsTable->setItem(row, 4, makeTableItem(QString::number(detection.getDurationS() * 1000.0, 'f', 1), detection.getDurationS()));
+    m_detectionsTable->setItem(row, 5, makeTableItem(QString()));
     m_detectionsTable->setItem(row, 6, makeTableItem(QString()));
     m_detectionsTable->setItem(row, 7, makeTableItem(QString()));
     m_detectionsTable->setItem(row, 8, makeTableItem(QString()));
-    m_detectionsTable->setItem(row, 9, makeTableItem(QString()));
-    m_detectionsTable->setItem(row, 10, detection.hasMagnitude()
+    m_detectionsTable->setItem(row, 9, detection.hasMagnitude()
         ? makeTableItem(QString::number(detection.getMagnitude(), 'f', 2), detection.getMagnitude())
         : makeTableItem(QString()));
-    m_detectionsTable->setItem(row, 11, detection.hasFlux()
+    m_detectionsTable->setItem(row, 10, detection.hasFlux()
         ? makeTableItem(QString::number(detection.getFlux(), 'g', 6), detection.getFlux())
         : makeTableItem(QString()));
     m_detectionsTable->setSortingEnabled(sortingEnabled);

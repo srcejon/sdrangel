@@ -370,7 +370,7 @@ namespace {
         const MeteorSatelliteMatcher::Beam& tx = geometry.m_transmitterBeam;
         const MeteorSatelliteMatcher::Beam& rx = geometry.m_receiverBeam;
         return QStringLiteral(
-            "%1,%2,%3;%4,%5,%6;%7,%8,%9,%10;%11,%12,%13,%14")
+            "%1,%2,%3;%4,%5,%6;%7,%8,%9,%10;%11,%12,%13,%14;%15")
             .arg(observation.m_transmitter.m_latitudeDegrees, 0, 'f', 6)
             .arg(observation.m_transmitter.m_longitudeDegrees, 0, 'f', 6)
             .arg(observation.m_transmitter.m_altitudeM, 0, 'f', 1)
@@ -384,7 +384,8 @@ namespace {
             .arg(rx.m_azimuthDegrees, 0, 'f', 2)
             .arg(rx.m_elevationDegrees, 0, 'f', 2)
             .arg(rx.m_horizontalBeamwidthDegrees, 0, 'f', 2)
-            .arg(rx.m_verticalBeamwidthDegrees, 0, 'f', 2);
+            .arg(rx.m_verticalBeamwidthDegrees, 0, 'f', 2)
+            .arg(geometry.m_maximumAltitudeM, 0, 'f', 1);
     }
 }
 
@@ -466,7 +467,8 @@ public:
         loadCatalogFiles();
         refreshCatalogIfNeeded();
 #else
-        deliverCatalogStatus(QStringLiteral("Satellite matching unavailable: SGP4 was not found"));
+        m_status = QStringLiteral("Satellite matching unavailable: SGP4 was not found");
+        deliverStatistics();
 #endif
     }
 
@@ -517,21 +519,22 @@ public:
 #endif
 
         QPointer<MeteorSatelliteMatcher> owner(m_owner);
-        const int catalogSize = (int) m_catalog.size();
-        const QString status = m_status;
         QMetaObject::invokeMethod(
             m_owner,
-            [owner, requestId, match, moonPrediction, catalogSize, status]() {
+            [owner, requestId, match, moonPrediction]() {
                 if (owner) {
                     owner->deliverMatch(
                         requestId,
                         match,
-                        moonPrediction,
-                        catalogSize,
-                        status);
+                        moonPrediction);
                 }
             },
             Qt::QueuedConnection);
+    }
+
+    void requestStatistics()
+    {
+        deliverStatistics();
     }
 
 private:
@@ -560,6 +563,12 @@ private:
         MeteorSatelliteMatcher::Geometry m_geometry;
     };
 
+    struct Snapshot
+    {
+        QVector<MovingTargetMatcher::TargetState> m_states;
+        MeteorSatelliteMatcher::CatalogStatistics m_statistics;
+    };
+
     QString catalogFileName(const CatalogDownloadSource& source) const
     {
         return m_catalogDirectory + QChar('/') + QString::fromLatin1(source.m_cacheName);
@@ -579,7 +588,7 @@ private:
                 if (!m_refreshWarnings.isEmpty()) {
                     m_status += QStringLiteral(" (%1)").arg(m_refreshWarnings.join(QStringLiteral("; ")));
                 }
-                deliverCatalogStatus(m_status);
+                deliverStatistics();
                 if (m_catalog.empty()) {
                     completePendingRequestsWithoutMatch();
                 }
@@ -1157,7 +1166,31 @@ private:
         if (!warnings.isEmpty()) {
             m_status += QStringLiteral("; %1 source warning(s)").arg(warnings.size());
         }
-        deliverCatalogStatus(m_status);
+
+        MeteorSatelliteMatcher::CatalogStatistics statistics;
+        statistics.m_status = m_status;
+        statistics.m_loadedDateTimeUtc = QDateTime::currentDateTimeUtc();
+        statistics.m_catalogEntries = (int) m_catalog.size();
+        statistics.m_activeCatalogEntries = activeCount;
+        statistics.m_supplementalCatalogEntries = supplementalCount;
+        statistics.m_satcatOnOrbitEntries = onOrbitCount;
+        statistics.m_sourceWarnings = warnings;
+
+        for (const CatalogEntry& entry : m_catalog)
+        {
+            if (entry.m_objectType == QStringLiteral("PAY")) {
+                ++statistics.m_payloadEntries;
+            } else if (entry.m_objectType == QStringLiteral("R/B")) {
+                ++statistics.m_rocketBodyEntries;
+            } else if (entry.m_objectType == QStringLiteral("DEB")) {
+                ++statistics.m_debrisEntries;
+            } else {
+                ++statistics.m_otherEntries;
+            }
+        }
+
+        m_statistics = statistics;
+        deliverStatistics();
         const std::vector<PendingRequest> pendingRequests =
             std::move(m_pendingRequests);
         m_pendingRequests.clear();
@@ -1199,27 +1232,23 @@ private:
                     request.m_observation,
                     request.m_geometry);
             QPointer<MeteorSatelliteMatcher> owner(m_owner);
-            const QString status = m_status;
             QMetaObject::invokeMethod(
                 m_owner,
                 [owner,
                     requestId = request.m_requestId,
-                    moonPrediction,
-                    status]() {
+                    moonPrediction]() {
                     if (owner) {
                         owner->deliverMatch(
                             requestId,
                             moonPrediction.m_match,
-                            moonPrediction,
-                            0,
-                            status);
+                            moonPrediction);
                     }
                 },
                 Qt::QueuedConnection);
         }
     }
 
-    QVector<MovingTargetMatcher::TargetState>& statesForTime(
+    const QVector<MovingTargetMatcher::TargetState>& statesForTime(
         const QDateTime& centerTimeUtc,
         const MovingTargetMatcher::Observation& observation,
         const MeteorSatelliteMatcher::Geometry& geometry)
@@ -1237,20 +1266,38 @@ private:
         const qint64 bucketMSecs = (centerMSecs / SnapshotIntervalMS) * SnapshotIntervalMS;
         auto existing = m_snapshots.find(bucketMSecs);
 
-        if (existing != m_snapshots.end()) {
-            return existing.value();
+        if (existing != m_snapshots.end())
+        {
+            m_statistics = existing->m_statistics;
+            return existing->m_states;
         }
 
         const QDateTime snapshotTimeUtc = QDateTime::fromMSecsSinceEpoch(
             bucketMSecs,
             Qt::UTC);
-        QVector<MovingTargetMatcher::TargetState> states;
+        Snapshot snapshot;
+        QVector<MovingTargetMatcher::TargetState>& states = snapshot.m_states;
         states.reserve((int) std::min<size_t>(m_catalog.size(), 1024));
+        snapshot.m_statistics = m_statistics;
+        snapshot.m_statistics.m_snapshotValid = true;
+        snapshot.m_statistics.m_snapshotDateTimeUtc = snapshotTimeUtc;
+        snapshot.m_statistics.m_maximumAltitudeKM =
+            geometry.m_maximumAltitudeM / 1000.0;
+        snapshot.m_statistics.m_staleElementEntries = 0;
+        snapshot.m_statistics.m_propagationFailureEntries = 0;
+        snapshot.m_statistics.m_aboveMaximumAltitudeEntries = 0;
+        snapshot.m_statistics.m_belowTransmitterHorizonEntries = 0;
+        snapshot.m_statistics.m_belowReceiverHorizonEntries = 0;
+        snapshot.m_statistics.m_outsideTransmitterBeamEntries = 0;
+        snapshot.m_statistics.m_outsideReceiverBeamEntries = 0;
+        snapshot.m_statistics.m_candidateEntries = 0;
         const libsgp4::DateTime sgp4Time = toSGP4DateTime(snapshotTimeUtc);
 
         for (CatalogEntry& entry : m_catalog)
         {
-            if (std::llabs(entry.m_epochUtc.secsTo(snapshotTimeUtc)) > TLEMaximumAgeS) {
+            if (std::llabs(entry.m_epochUtc.secsTo(snapshotTimeUtc)) > TLEMaximumAgeS)
+            {
+                ++snapshot.m_statistics.m_staleElementEntries;
                 continue;
             }
 
@@ -1268,6 +1315,14 @@ private:
                     libsgp4::Util::RadiansToDegrees(geo.longitude),
                     geo.altitude * 1000.0
                 };
+
+                if ((geometry.m_maximumAltitudeM > 0.0)
+                    && (state.m_position.m_altitudeM > geometry.m_maximumAltitudeM))
+                {
+                    ++snapshot.m_statistics.m_aboveMaximumAltitudeEntries;
+                    continue;
+                }
+
                 const Vector3 targetPosition = geodeticToECEF(state.m_position);
                 double txAzimuth;
                 double txElevation;
@@ -1278,17 +1333,44 @@ private:
                         observation.m_transmitter,
                         targetPosition,
                         txAzimuth,
-                        txElevation)
-                    || !siteLookAngles(
+                        txElevation))
+                {
+                    ++snapshot.m_statistics.m_propagationFailureEntries;
+                    continue;
+                }
+                if (!siteLookAngles(
                         observation.m_receiver,
                         targetPosition,
                         rxAzimuth,
-                        rxElevation)
-                    || (txElevation < MinimumElevationDegrees)
-                    || (rxElevation < MinimumElevationDegrees)
-                    || !insideBeam(txAzimuth, txElevation, geometry.m_transmitterBeam)
-                    || !insideBeam(rxAzimuth, rxElevation, geometry.m_receiverBeam))
+                        rxElevation))
                 {
+                    ++snapshot.m_statistics.m_propagationFailureEntries;
+                    continue;
+                }
+                if (txElevation < MinimumElevationDegrees)
+                {
+                    ++snapshot.m_statistics.m_belowTransmitterHorizonEntries;
+                    continue;
+                }
+                if (rxElevation < MinimumElevationDegrees)
+                {
+                    ++snapshot.m_statistics.m_belowReceiverHorizonEntries;
+                    continue;
+                }
+                if (!insideBeam(
+                        txAzimuth,
+                        txElevation,
+                        geometry.m_transmitterBeam))
+                {
+                    ++snapshot.m_statistics.m_outsideTransmitterBeamEntries;
+                    continue;
+                }
+                if (!insideBeam(
+                        rxAzimuth,
+                        rxElevation,
+                        geometry.m_receiverBeam))
+                {
+                    ++snapshot.m_statistics.m_outsideReceiverBeamEntries;
                     continue;
                 }
 
@@ -1317,31 +1399,41 @@ private:
                     state.m_northVelocityMPS,
                     state.m_upVelocityMPS);
                 states.append(state);
+                ++snapshot.m_statistics.m_candidateEntries;
             }
             catch (const std::exception&) {
                 // Decayed and malformed objects are expected in large public catalogs.
+                ++snapshot.m_statistics.m_propagationFailureEntries;
             }
         }
 
+        m_statistics = snapshot.m_statistics;
         if (m_snapshotOrder.size() >= MaximumSnapshotCount)
         {
             m_snapshots.remove(m_snapshotOrder.front());
             m_snapshotOrder.pop_front();
         }
         m_snapshotOrder.append(bucketMSecs);
-        return m_snapshots.insert(bucketMSecs, states).value();
+        return m_snapshots.insert(bucketMSecs, snapshot).value().m_states;
     }
 #endif
 
-    void deliverCatalogStatus(const QString& status)
+    void deliverStatistics()
     {
         QPointer<MeteorSatelliteMatcher> owner(m_owner);
-        const int catalogSize = (int) m_catalog.size();
+        MeteorSatelliteMatcher::CatalogStatistics statistics = m_statistics;
+        statistics.m_status = m_status;
+        for (const QString& warning : m_refreshWarnings)
+        {
+            if (!statistics.m_sourceWarnings.contains(warning)) {
+                statistics.m_sourceWarnings.append(warning);
+            }
+        }
         QMetaObject::invokeMethod(
             m_owner,
-            [owner, catalogSize, status]() {
+            [owner, statistics]() {
                 if (owner) {
-                    owner->deliverCatalogStatus(catalogSize, status);
+                    owner->deliverStatistics(statistics);
                 }
             },
             Qt::QueuedConnection);
@@ -1352,13 +1444,14 @@ private:
     QTimer *m_refreshTimer = nullptr;
     QString m_catalogDirectory;
     QString m_status = QStringLiteral("Orbital catalog is loading");
+    MeteorSatelliteMatcher::CatalogStatistics m_statistics;
     QStringList m_refreshWarnings;
     bool m_downloadInProgress = false;
     int m_downloadSourceIndex = 0;
 #ifdef METEOR_HAS_SGP4
     std::vector<CatalogEntry> m_catalog;
     std::vector<PendingRequest> m_pendingRequests;
-    QHash<qint64, QVector<MovingTargetMatcher::TargetState>> m_snapshots;
+    QHash<qint64, Snapshot> m_snapshots;
     QList<qint64> m_snapshotOrder;
     QString m_geometryKey;
 #else
@@ -1429,17 +1522,31 @@ void MeteorSatelliteMatcher::refreshCatalog()
         Qt::QueuedConnection);
 }
 
+void MeteorSatelliteMatcher::requestStatistics()
+{
+    if (!m_worker || !m_thread->isRunning()) {
+        return;
+    }
+
+    MeteorSatelliteMatcherWorker *worker = m_worker;
+    QMetaObject::invokeMethod(
+        worker,
+        [worker]() {
+            worker->requestStatistics();
+        },
+        Qt::QueuedConnection);
+}
+
 void MeteorSatelliteMatcher::deliverMatch(
     quint64 requestId,
     const MovingTargetMatcher::Match& match,
-    const MoonPrediction& moonPrediction,
-    int catalogSize,
-    const QString& status)
+    const MoonPrediction& moonPrediction)
 {
-    emit matchReady(requestId, match, moonPrediction, catalogSize, status);
+    emit matchReady(requestId, match, moonPrediction);
 }
 
-void MeteorSatelliteMatcher::deliverCatalogStatus(int catalogSize, const QString& status)
+void MeteorSatelliteMatcher::deliverStatistics(
+    const CatalogStatistics& statistics)
 {
-    emit catalogStatusChanged(catalogSize, status);
+    emit statisticsReady(statistics);
 }

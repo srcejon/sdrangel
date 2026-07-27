@@ -70,6 +70,7 @@ namespace {
         expected.m_rotator = QStringLiteral("2:3");
         expected.m_showAntennaPatterns = true;
         expected.m_mapMaxAltitudeKM = 750.0f;
+        expected.m_detectionsTableColumnHidden = (1u << 2) | (1u << 9);
 
         MeteorSettings actual;
 
@@ -85,7 +86,9 @@ namespace {
             || (actual.m_antennaBeamwidth != expected.m_antennaBeamwidth)
             || (actual.m_rotator != expected.m_rotator)
             || (actual.m_showAntennaPatterns != expected.m_showAntennaPatterns)
-            || (actual.m_mapMaxAltitudeKM != expected.m_mapMaxAltitudeKM))
+            || (actual.m_mapMaxAltitudeKM != expected.m_mapMaxAltitudeKM)
+            || (actual.m_detectionsTableColumnHidden
+                != expected.m_detectionsTableColumnHidden))
         {
             errorStream << "Meteor settings test: geometry settings did not round-trip\n";
             return false;
@@ -297,6 +300,20 @@ namespace {
             || !combinedMatch.m_alternatives.isEmpty())
         {
             errorStream << "Moving-target matcher test: stronger TLE target was not selected\n";
+            return false;
+        }
+
+        adsbMatch.m_scorePercent = 0.03;
+        tleMatch.m_scorePercent = 0.04;
+        const MovingTargetMatcher::Match poorMatch =
+            MovingTargetMatcher::combine(adsbMatch, tleMatch);
+
+        if (!poorMatch.m_hasCandidate
+            || poorMatch.m_matched
+            || poorMatch.m_ambiguous
+            || (poorMatch.m_source != QStringLiteral("TLE")))
+        {
+            errorStream << "Moving-target matcher test: poor candidates were reported as ambiguous\n";
             return false;
         }
 

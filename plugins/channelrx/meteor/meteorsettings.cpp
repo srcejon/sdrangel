@@ -69,7 +69,7 @@ void MeteorSettings::resetToDefaults()
 
 QByteArray MeteorSettings::serialize() const
 {
-    SimpleSerializer s(1);
+    SimpleSerializer s(2);
 
     s.writeS32(1, m_inputFrequencyOffset);
     s.writeS32(2, (int) m_frequencyMode);
@@ -134,7 +134,7 @@ bool MeteorSettings::deserialize(const QByteArray& data)
         return false;
     }
 
-    if (d.getVersion() == 1)
+    if ((d.getVersion() == 1) || (d.getVersion() == 2))
     {
         QByteArray bytetmp;
 
@@ -151,6 +151,13 @@ bool MeteorSettings::deserialize(const QByteArray& data)
         d.readS32(8, &m_maxDurationMS, 20000);
         m_maxDurationMS = std::clamp(m_maxDurationMS, 1, 60000);
         d.readU32(10, &m_detectionsTableColumnHidden, 0);
+        if (d.getVersion() == 1)
+        {
+            // Version 2 removed the Amp column at index 4.
+            m_detectionsTableColumnHidden =
+                (m_detectionsTableColumnHidden & 0x0fu)
+                | ((m_detectionsTableColumnHidden & 0xffffffe0u) >> 1);
+        }
         d.readS32(11, &m_detectionBoxPaddingPixels, 4);
         d.readS32(12, (int *) &m_detectionLabelMode, (int) DetectionLabelNone);
         m_detectionLabelMode = (DetectionLabelMode) std::clamp(

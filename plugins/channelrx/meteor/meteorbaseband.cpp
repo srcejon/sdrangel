@@ -105,6 +105,9 @@ void MeteorBaseband::stopWork()
         this,
         &MeteorBaseband::handleData
     );
+    // Deliberate stop = end of stream: emit whatever is still buffered, including
+    // retiring active sweeps (a meteor that ended just before stop is otherwise lost).
+    m_sink.flushPendingPulse(true);
     m_running = false;
 }
 
@@ -169,7 +172,7 @@ void MeteorBaseband::handleInactivity()
         return;
     }
 
-    if (m_sink.flushPendingPulse())
+    if (m_sink.flushPendingPulse(false))
     {
         qDebug() << "MeteorBaseband::handleInactivity: flushed pending detector state after"
                  << m_lastDataTimer.elapsed() << "ms without samples";

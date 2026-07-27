@@ -64,6 +64,11 @@ namespace {
     // that produced the sweep is not culled while actually inside the beam mid-sweep.
     // The exact per-endpoint scoring afterwards decides for real.
     constexpr double SnapshotCullMarginDegrees = 10.0;
+    // The maximum-altitude setting doubles as the map projection altitude, where values
+    // like 100 km (the meteor ablation region) are natural; below any real satellite
+    // orbit it cannot be a meaningful matcher cull, so treat it as display-only rather
+    // than silently discarding the whole catalog.
+    constexpr double MinimumAltitudeCullM = 300000.0;
 
     enum class CatalogFileKind
     {
@@ -1510,7 +1515,7 @@ private:
                     geo.altitude * 1000.0
                 };
 
-                if ((geometry.m_maximumAltitudeM > 0.0)
+                if ((geometry.m_maximumAltitudeM >= MinimumAltitudeCullM)
                     && (position.m_altitudeM > geometry.m_maximumAltitudeM))
                 {
                     ++snapshot.m_statistics.m_aboveMaximumAltitudeEntries;

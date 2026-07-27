@@ -17,6 +17,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 
 #include <QComboBox>
 #include <QDateTime>
@@ -100,6 +101,12 @@ namespace {
     // report times: bound how far those may sit from the position epoch, or the
     // extrapolation direction can be tens of seconds staler than the position.
     constexpr double MaximumADSBFieldSkewS = 15.0;
+    // Geometric-elevation floor for the aircraft horizon gate. Slightly below zero
+    // (matching the satellite matcher's horizon gate) because k=4/3 refraction and
+    // real site altitudes extend the radio horizon past geometric 0 - and the
+    // 370-450 km annulus that allowance covers is where long-range forward-scatter
+    // aircraft sweeps originate. The Doppler scorer arbitrates afterwards.
+    constexpr double MinimumAircraftElevationDegrees = -1.0;
     constexpr int ManualTransmitterPresetIndex = 0;
 
     struct TransmitterPreset
@@ -109,15 +116,24 @@ namespace {
         double m_latitudeDegrees;
         double m_longitudeDegrees;
         bool m_hasBeamSettings;
+        float m_azimuthDegrees;
         float m_elevationDegrees;
         float m_azimuthBeamwidthDegrees;
         float m_elevationBeamwidthDegrees;
     };
 
+    // A zenith-pointing beam constrains elevation only: in the az/el box beam test
+    // every azimuth intersects the cone, so the azimuth width must be 360, not the
+    // antenna's physical H-plane width (which would wrongly cull most of the sky
+    // ring around the zenith).
     constexpr TransmitterPreset TransmitterPresets[] = {
-        {"GRAVES", 143050000, 47.3480, 5.5151, false, 0.0f,   0.0f,   0.0f},
-        {"BRAMS",   49970000, 50.0972, 4.5847, true, 90.0f,  64.0f,  64.0f},
-        {"GB3MBA",  50408000, 53.1139, 1.2224, true, 90.0f, 100.0f, 100.0f}
+        {"GRAVES", 143050000, 47.3480, 5.5151, true,
+            MeteorSettings::m_gravesAzimuth,
+            MeteorSettings::m_gravesElevation,
+            MeteorSettings::m_gravesBeamwidth,
+            MeteorSettings::m_gravesHPBW},
+        {"BRAMS",   49970000, 50.0972,  4.5847, true, 0.0f, 90.0f, 360.0f,  64.0f},
+        {"GB3MBA",  50408000, 53.1139, -1.2224, true, 0.0f, 90.0f, 360.0f, 100.0f}
     };
     constexpr int TransmitterPresetCount =
         (int) (sizeof(TransmitterPresets) / sizeof(TransmitterPresets[0]));
@@ -428,7 +444,7 @@ QVector<MovingTargetMatcher::TargetState> MeteorGUI::collectADSBTargets(
                     ++localStatistics.m_invalidKinematicsEntries;
                     continue;
                 }
-                if (receiverElevationDegrees < 0.0)
+                if (receiverElevationDegrees < MinimumAircraftElevationDegrees)
                 {
                     ++localStatistics.m_belowReceiverHorizonEntries;
                     continue;
@@ -442,7 +458,7 @@ QVector<MovingTargetMatcher::TargetState> MeteorGUI::collectADSBTargets(
                     ++localStatistics.m_invalidKinematicsEntries;
                     continue;
                 }
-                if (transmitterElevationDegrees < 0.0)
+                if (transmitterElevationDegrees < MinimumAircraftElevationDegrees)
                 {
                     ++localStatistics.m_belowTransmitterHorizonEntries;
                     continue;
@@ -1407,7 +1423,12 @@ void MeteorGUI::on_deltaFrequency_changed(qint64 value)
     else
     {
         m_settings.m_frequency = value;
-        offset = m_settings.m_frequency - m_deviceCenterFrequency;
+        // ChannelMarker holds an int: clamp so an absolute frequency far from the
+        // device centre cannot wrap into garbage tuning (out-of-band status reports it).
+        offset = std::clamp<qint64>(
+            m_settings.m_frequency - m_deviceCenterFrequency,
+            std::numeric_limits<int>::min(),
+            std::numeric_limits<int>::max());
     }
 
     m_channelMarker.setCenterFrequency(offset);
@@ -1528,7 +1549,13 @@ void MeteorGUI::on_transmitterPreset_currentIndexChanged(int index)
     }
 
     const TransmitterPreset& preset = TransmitterPresets[presetIndex];
-    const qint64 requestedOffset = preset.m_frequencyHz - m_deviceCenterFrequency;
+    // ChannelMarker holds an int: clamp so a preset far from the device centre
+    // (e.g. 143 MHz while tuned at 5.8 GHz) cannot wrap into garbage tuning; the
+    // out-of-band status text reports the mismatch.
+    const qint64 requestedOffset = std::clamp<qint64>(
+        preset.m_frequencyHz - m_deviceCenterFrequency,
+        std::numeric_limits<int>::min(),
+        std::numeric_limits<int>::max());
     m_settings.m_frequencyMode = MeteorSettings::Absolute;
     m_settings.m_frequency = preset.m_frequencyHz;
     m_channelMarker.setCenterFrequency(requestedOffset);
@@ -1545,10 +1572,12 @@ void MeteorGUI::on_transmitterPreset_currentIndexChanged(int index)
 
     if (preset.m_hasBeamSettings)
     {
+        m_settings.m_transmitterAzimuth = preset.m_azimuthDegrees;
         m_settings.m_transmitterElevation = preset.m_elevationDegrees;
         m_settings.m_transmitterBeamwidth = preset.m_azimuthBeamwidthDegrees;
         m_settings.m_transmitterHPBW = preset.m_elevationBeamwidthDegrees;
         settingsKeys.append({
+            "transmitterAzimuth",
             "transmitterElevation",
             "transmitterBeamwidth",
             "transmitterHPBW"
@@ -1559,6 +1588,7 @@ void MeteorGUI::on_transmitterPreset_currentIndexChanged(int index)
     const QSignalBlocker deltaFrequencyBlocker(m_deltaFrequency);
     const QSignalBlocker transmitterLatitudeBlocker(m_transmitterLatitude);
     const QSignalBlocker transmitterLongitudeBlocker(m_transmitterLongitude);
+    const QSignalBlocker transmitterAzimuthBlocker(m_transmitterAzimuth);
     const QSignalBlocker transmitterElevationBlocker(m_transmitterElevation);
     const QSignalBlocker transmitterBeamwidthBlocker(m_transmitterBeamwidth);
     const QSignalBlocker transmitterHPBWBlocker(m_transmitterHPBW);
@@ -1568,6 +1598,7 @@ void MeteorGUI::on_transmitterPreset_currentIndexChanged(int index)
     m_deltaUnits->setText("Hz");
     m_transmitterLatitude->setValue(m_settings.m_transmitterLatitude);
     m_transmitterLongitude->setValue(m_settings.m_transmitterLongitude);
+    m_transmitterAzimuth->setValue(m_settings.m_transmitterAzimuth);
     m_transmitterElevation->setValue(m_settings.m_transmitterElevation);
     m_transmitterBeamwidth->setValue(m_settings.m_transmitterBeamwidth);
     m_transmitterHPBW->setValue(m_settings.m_transmitterHPBW);
@@ -2194,10 +2225,19 @@ void MeteorGUI::calcOffset()
     if (m_settings.m_frequencyMode == MeteorSettings::Offset)
     {
         m_deltaFrequency->setValueRange(false, 7, -m_basebandSampleRate/2, m_basebandSampleRate/2);
+        // A device retune changes the absolute frequency the fixed offset lands on:
+        // track it, or the status bar / spectrum scales / preset auto-match show the
+        // pre-retune (initially zero) absolute frequency until the dial is touched.
+        m_settings.m_frequency = m_deviceCenterFrequency + m_settings.m_inputFrequencyOffset;
+        updateAbsoluteCenterFrequency();
+        applySetting("frequency");
     }
     else
     {
-        qint64 offset = m_settings.m_frequency - m_deviceCenterFrequency;
+        const qint64 offset = std::clamp<qint64>(
+            m_settings.m_frequency - m_deviceCenterFrequency,
+            std::numeric_limits<int>::min(),
+            std::numeric_limits<int>::max());
         m_channelMarker.setCenterFrequency(offset);
         m_settings.m_inputFrequencyOffset = m_channelMarker.getCenterFrequency();
         updateAbsoluteCenterFrequency();

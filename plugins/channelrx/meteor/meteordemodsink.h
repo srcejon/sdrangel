@@ -209,7 +209,12 @@ public:
     ~MeteorDemodSink();
 
     virtual void feed(const SampleVector::const_iterator& begin, const SampleVector::const_iterator& end);
-    bool flushPendingPulse();
+    bool flushPendingPulse(bool finalizeSweeps);
+    bool overlapsRecentDetection(
+        quint64 startSample,
+        quint64 endSample,
+        double lowFrequency,
+        double highFrequency) const;
 
     void setSpectrumSink(SpectrumVis* spectrumSink) { m_spectrumSink = spectrumSink; }
     void setSecondarySpectrumSink(SpectrumVis* spectrumSink) { m_secondarySpectrumSink = spectrumSink; }

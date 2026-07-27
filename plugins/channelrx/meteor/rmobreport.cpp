@@ -92,6 +92,17 @@ bool RMOBReport::load(
 
         if (hasData)
         {
+            const auto previous = loadedData.m_hourlyCounts.constFind(date);
+
+            // A duplicate row for the same day (hand-edited or merged file) replaces
+            // the earlier one; drop its contribution or the total inflates.
+            if (previous != loadedData.m_hourlyCounts.cend())
+            {
+                for (const int previousCount : previous.value()) {
+                    loadedData.m_totalCount -= std::max(0, previousCount);
+                }
+            }
+
             loadedData.m_hourlyCounts[date] = counts;
             loadedData.m_hourlyData[date] = present;
         }

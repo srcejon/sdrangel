@@ -100,7 +100,10 @@ MeteorDemodSink::~MeteorDemodSink()
 void MeteorDemodSink::setDetectorTunables(const DetectorTunables& tunables)
 {
     m_detectorTunables = tunables;
-    configureBlobDetector();
+    // Through the spectral configuration (which itself reconfigures the blob
+    // detector), so harness overrides of the STFT frame/hop tunables take effect
+    // rather than silently reusing the previous front-end geometry.
+    configureSpectralDetector();
 }
 
 void MeteorDemodSink::feed(const SampleVector::const_iterator& begin, const SampleVector::const_iterator& end)
@@ -135,7 +138,7 @@ void MeteorDemodSink::feed(const SampleVector::const_iterator& begin, const Samp
     }
 }
 
-bool MeteorDemodSink::flushPendingPulse()
+bool MeteorDemodSink::flushPendingPulse(bool finalizeSweeps)
 {
     // Only claim work was done if the detector analysed something new or an unfinished
     // sweep was retired — otherwise an idle source logs a spurious "flushed" message on
@@ -143,6 +146,15 @@ bool MeteorDemodSink::flushPendingPulse()
     const bool flushedDetector = m_blobDetector.flush();
 
     drainBlobDetections();
+
+    if (!finalizeSweeps) {
+        // Inactivity tick: the stream may resume (the detector keeps its window for
+        // exactly that reason). Keep active sweeps alive too, or a >=2 s data stall
+        // mid-pass emits a half-pass row now and a second row for the same pass after
+        // resume. Sweeps retire through the normal stale path once data flows again,
+        // or here when the stream really ends (stop / teardown).
+        return flushedDetector;
+    }
 
     const bool hadActiveSweeps = !m_activeSweeps.empty();
 
@@ -288,14 +300,23 @@ void MeteorDemodSink::drainBlobDetections()
     std::vector<MeteorBlobDetector::Blob> blobs = m_blobDetector.takeBlobs();
     // Within one chunk blobs come out in raster (frequency) order; sweep consolidation needs
     // fragments in time order, so sort each batch by start sample before routing.
-    std::sort(blobs.begin(), blobs.end(),
+    std::stable_sort(blobs.begin(), blobs.end(),
               [](const MeteorBlobDetector::Blob& a, const MeteorBlobDetector::Blob& b) {
                   return a.m_startSample < b.m_startSample;
               });
     for (const MeteorBlobDetector::Blob& blob : blobs)
     {
         if (blob.m_sweepRejected) {
-            addSweepFragment(blob);          // stitch into a consolidated Doppler sweep
+            // A blob can re-emit grown: if it was already reported as a METEOR and the
+            // grown version now classifies as a sweep, a second (satellite) row for the
+            // same event must not appear. The meteor row stands.
+            if (!overlapsRecentDetection(
+                    blob.m_startSample,
+                    blob.m_endSample,
+                    blob.m_f0,
+                    blob.m_f1)) {
+                addSweepFragment(blob);      // stitch into a consolidated Doppler sweep
+            }
         } else if (absorbedByActiveSweep(blob)) {
             // on an established sweep's line — part of the sweep, not a meteor
         } else {
@@ -349,24 +370,23 @@ void MeteorDemodSink::addSweepFragment(const MeteorBlobDetector::Blob& blob)
     const double maxGapS = m_detectorTunables.m_blob.m_sweepLinkMaxGapS;
     const double tolHz = m_detectorTunables.m_blob.m_sweepLinkTolHz;
 
-    // Retire sweeps that this (time-ordered) fragment is already too far past to continue.
-    for (size_t i = 0; i < m_activeSweeps.size();)
-    {
-        const double gapS = (double) ((blob.m_startSample > m_activeSweeps[i].m_endSample)
-            ? (blob.m_startSample - m_activeSweeps[i].m_endSample) : 0) / (double) sampleRate;
-        if (gapS > maxGapS) {
-            retireSweepAt(i);
-        } else {
-            i++;
-        }
-    }
-
     // Find the active sweep whose drift line best predicts this fragment's centre frequency.
+    // The gap test is non-destructive: retirement is finalizeStaleSweeps' job (driven by the
+    // live edge with the full settle margin). Retiring here, keyed to an arbitrary incoming
+    // fragment's start, prematurely killed sweeps that a later long fragment - emitted later
+    // because emission is END-ordered - would have continued, splitting one pass into two rows.
     int best = -1;
     double bestErr = tolHz;
     for (size_t i = 0; i < m_activeSweeps.size(); i++)
     {
         const ActiveSweep& s = m_activeSweeps[i];
+        const double gapS = (double) ((blob.m_startSample > s.m_endSample)
+            ? (blob.m_startSample - s.m_endSample) : 0) / (double) sampleRate;
+
+        if (gapS > maxGapS) {
+            continue;   // too old to continue, but not ours to retire
+        }
+
         double predF;
         if (s.m_nPts >= 2)
         {
@@ -385,6 +405,20 @@ void MeteorDemodSink::addSweepFragment(const MeteorBlobDetector::Blob& blob)
         }
         const double err = std::fabs(fc - predF);
         if (err <= bestErr) { bestErr = err; best = (int) i; }
+    }
+
+    if (best >= 0)
+    {
+        const ActiveSweep& matched = m_activeSweeps[best];
+
+        // A stride re-analysis can re-emit a fragment the sweep already contains (the
+        // rolling median shifted and the group grew elsewhere). Nothing new to add —
+        // merging again would double-count its power into the line fit and totals.
+        if ((blob.m_startSample >= matched.m_startSample)
+            && (blob.m_endSample <= matched.m_endSample))
+        {
+            return;
+        }
     }
 
     if (best < 0)
@@ -465,7 +499,15 @@ bool MeteorDemodSink::absorbedByActiveSweep(const MeteorBlobDetector::Blob& blob
     if (best < 0) {
         return false;
     }
-    mergeSweepFragment(m_activeSweeps[best], blob);
+
+    // Still absorbed (not a meteor), but a re-emitted copy the sweep already spans
+    // must not double-count its power into the sweep.
+    if ((blob.m_startSample < m_activeSweeps[best].m_startSample)
+        || (blob.m_endSample > m_activeSweeps[best].m_endSample))
+    {
+        mergeSweepFragment(m_activeSweeps[best], blob);
+    }
+
     return true;
 }
 
@@ -520,6 +562,14 @@ void MeteorDemodSink::extendSweepWithSegment(const MeteorBlobDetector::SweepSegm
     if (best < 0) {
         return;
     }
+
+    // Re-emitted segments the sweep already spans add nothing (and would double-count).
+    if ((seg.m_startSample >= m_activeSweeps[best].m_startSample)
+        && (seg.m_endSample <= m_activeSweeps[best].m_endSample))
+    {
+        return;
+    }
+
     MeteorBlobDetector::Blob fb;   // adapt the segment to the fragment-merge signature
     fb.m_t0 = seg.m_t0; fb.m_t1 = seg.m_t1;
     fb.m_f0 = seg.m_f0; fb.m_f1 = seg.m_f1;
@@ -676,6 +726,11 @@ void MeteorDemodSink::walkSweepAlongDashes(ActiveSweep& sweep)
     const double maxWalkS = m_detectorTunables.m_blob.m_dashWalkMaxS;
 
     std::vector<char> used(m_faintDashes.size(), 0);
+    // A dash whose midpoint lies inside the sweep's own span was either already merged
+    // live (strong segment) or is interior detail - re-adding its power double-counts.
+    // Span captured before walking: dashes claimed by the walk sit outside it.
+    const double spanT0 = sweep.m_t0;
+    const double spanT1 = sweep.m_t1;
 
     auto walk = [&](bool backward)
     {
@@ -693,6 +748,11 @@ void MeteorDemodSink::walkSweepAlongDashes(ActiveSweep& sweep)
                 }
                 const MeteorBlobDetector::SweepSegment& d = m_faintDashes[k];
                 const double tc = 0.5 * (d.m_t0 + d.m_t1);
+
+                if ((tc >= spanT0) && (tc <= spanT1)) {
+                    continue;
+                }
+
                 const double gap = backward ? (edgeT - d.m_t1) : (d.m_t0 - edgeT);
                 if ((gap < -0.3) || (gap > bestGap)) {
                     continue;
@@ -830,32 +890,48 @@ void MeteorDemodSink::emitBlobDetection(const MeteorBlobDetector::Blob& blob)
     // (measured: 138 such pairs in one overnight recording were being swallowed).
     {
         const double halfSpan = 0.5 * std::max(0.0, report.m_frequencySpan);
-        const double lowF = report.m_centerFrequency - halfSpan;
-        const double highF = report.m_centerFrequency + halfSpan;
-        for (const DetectionRange& range : m_recentDetectionRanges)
-        {
-            const bool timeOverlap = (report.m_endSample >= range.m_startSample)
-                && (report.m_startSample <= range.m_endSample);
-            if (!timeOverlap) {
-                continue;
-            }
-            const quint64 overlapLen = std::min(report.m_endSample, range.m_endSample)
-                - std::max(report.m_startSample, range.m_startSample) + 1;
-            const quint64 shorter = std::max<quint64>(1, std::min(
-                report.m_endSample - report.m_startSample + 1,
-                range.m_endSample - range.m_startSample + 1));
-            const double overlapW = std::min(highF, range.m_highFrequency)
-                - std::max(lowF, range.m_lowFrequency);
-            const double minW = std::max(1.0, std::min(highF - lowF,
-                range.m_highFrequency - range.m_lowFrequency));
-            if (((double) overlapLen >= 0.5 * (double) shorter)
-                && (overlapW >= m_detectorTunables.m_duplicate.m_duplicateFrequencyOverlapFraction * minW)) {
-                return;   // same event re-reported
-            }
+
+        if (overlapsRecentDetection(
+                report.m_startSample,
+                report.m_endSample,
+                report.m_centerFrequency - halfSpan,
+                report.m_centerFrequency + halfSpan)) {
+            return;   // same event re-reported
         }
     }
 
     emitDetectionReport(report, "blob-detector");
+}
+
+bool MeteorDemodSink::overlapsRecentDetection(
+    quint64 startSample,
+    quint64 endSample,
+    double lowFrequency,
+    double highFrequency) const
+{
+    for (const DetectionRange& range : m_recentDetectionRanges)
+    {
+        const bool timeOverlap = (endSample >= range.m_startSample)
+            && (startSample <= range.m_endSample);
+        if (!timeOverlap) {
+            continue;
+        }
+        const quint64 overlapLen = std::min(endSample, range.m_endSample)
+            - std::max(startSample, range.m_startSample) + 1;
+        const quint64 shorter = std::max<quint64>(1, std::min(
+            endSample - startSample + 1,
+            range.m_endSample - range.m_startSample + 1));
+        const double overlapW = std::min(highFrequency, range.m_highFrequency)
+            - std::max(lowFrequency, range.m_lowFrequency);
+        const double minW = std::max(1.0, std::min(highFrequency - lowFrequency,
+            range.m_highFrequency - range.m_lowFrequency));
+        if (((double) overlapLen >= 0.5 * (double) shorter)
+            && (overlapW >= m_detectorTunables.m_duplicate.m_duplicateFrequencyOverlapFraction * minW)) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 void MeteorDemodSink::rememberDetection(quint64 startSample, quint64 endSample, double centerFrequency, double frequencySpan)

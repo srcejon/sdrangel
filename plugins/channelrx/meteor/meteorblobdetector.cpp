@@ -486,7 +486,7 @@ void MeteorBlobDetector::processChunk(long long emitThroughAbs)
             tv.reserve(wcols); fv.reserve(wcols);
             for (int c = 0; c < wcols; c++) {
                 if (cnt[c] > 0) {
-                    const int yi = (int) std::lround(sumY[c] / cnt[c]);
+                    const int yi = (int) (long) std::rint(sumY[c] / cnt[c]);
                     tv.push_back((double) c * m_cfg.m_dt);
                     fv.push_back(m_cfg.m_fMinHz + yi * m_cfg.m_binHz);
                 }
@@ -582,7 +582,7 @@ void MeteorBlobDetector::processChunk(long long emitThroughAbs)
             std::vector<double> tv, fv;
             for (int c = 0; c < wcols; c++) {
                 if (cnt[c] > 0) {
-                    const int yi = (int) std::lround(sumY[c] / cnt[c]);
+                    const int yi = (int) (long) std::rint(sumY[c] / cnt[c]);
                     tv.push_back((double) c * m_cfg.m_dt);
                     fv.push_back(m_cfg.m_fMinHz + yi * m_cfg.m_binHz);
                 }

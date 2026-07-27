@@ -172,6 +172,13 @@ bool Meteor::handleMessage(const Message& cmd)
         m_centerFrequency = notif.getCenterFrequency();
         qDebug() << "Meteor::handleMessage: DSPSignalNotification";
 
+        // In Offset mode a device retune moves the absolute frequency the fixed offset
+        // lands on: track it so the serialized/webapi frequency stays truthful (the GUI
+        // mirrors this in calcOffset).
+        if (m_settings.m_frequencyMode == MeteorSettings::Offset) {
+            m_settings.m_frequency = m_centerFrequency + m_settings.m_inputFrequencyOffset;
+        }
+
         m_basebandSink->getInputMessageQueue()->push(new DSPSignalNotification(notif));
 
         if (getMessageQueueToGUI()) {

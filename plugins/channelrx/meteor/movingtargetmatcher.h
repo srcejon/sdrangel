@@ -36,6 +36,10 @@ public:
         double m_eastVelocityMPS = 0.0;
         double m_northVelocityMPS = 0.0;
         double m_upVelocityMPS = 0.0;
+        // The velocity direction is inferred rather than measured over ground (ADS-B
+        // heading standing in for track): the score is down-weighted so such a state
+        // can still match but loses ties against measured-direction candidates.
+        bool m_approximateDirection = false;
     };
 
     struct Observation
@@ -106,10 +110,26 @@ public:
         Tunables();
     };
 
+    // A candidate whose Doppler prediction was computed externally at the exact
+    // observation epochs (e.g. per-endpoint SGP4 propagation), bypassing the
+    // constant-velocity extrapolation in predict().
+    struct PredictedCandidate
+    {
+        QString m_source;
+        QString m_id;
+        QString m_label;
+        double m_stateAgeS = 0.0;
+        Prediction m_prediction;
+    };
+
     static Prediction predict(const Observation& observation, const TargetState& target);
     static Match match(
         const Observation& observation,
         const QVector<TargetState>& targets,
+        const Tunables& tunables = Tunables());
+    static Match matchPredictions(
+        const Observation& observation,
+        const QVector<PredictedCandidate>& candidates,
         const Tunables& tunables = Tunables());
     static Match combine(
         const Match& first,

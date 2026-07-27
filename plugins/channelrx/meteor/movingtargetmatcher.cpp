@@ -311,6 +311,74 @@ MovingTargetMatcher::Prediction MovingTargetMatcher::predict(
     return prediction;
 }
 
+namespace {
+    struct ObservationScales
+    {
+        double m_centerScaleHz = 1.0;
+        double m_driftScaleHz = 1.0;
+        double m_observedStartFrequencyHz = 0.0;
+        double m_observedEndFrequencyHz = 0.0;
+    };
+
+    ObservationScales makeObservationScales(
+        const MovingTargetMatcher::Observation& observation,
+        const MovingTargetMatcher::Tunables& tunables)
+    {
+        ObservationScales scales;
+        scales.m_observedStartFrequencyHz = observation.m_centerFrequencyOffsetHz
+            - 0.5 * observation.m_frequencyDriftHz;
+        scales.m_observedEndFrequencyHz = observation.m_centerFrequencyOffsetHz
+            + 0.5 * observation.m_frequencyDriftHz;
+        scales.m_centerScaleHz = std::max(
+            tunables.m_minimumCenterScaleHz,
+            std::fabs(observation.m_frequencySpanHz) * tunables.m_centerSpanScale);
+        scales.m_driftScaleHz = std::max(
+            tunables.m_minimumDriftScaleHz,
+            std::fabs(observation.m_frequencyDriftHz) * tunables.m_driftScale);
+        return scales;
+    }
+
+    constexpr double ApproximateDirectionScoreFactor = 0.85;
+
+    MovingTargetMatcher::Candidate scoreCandidate(
+        const MovingTargetMatcher::Observation& observation,
+        const ObservationScales& scales,
+        const QString& source,
+        const QString& id,
+        const QString& label,
+        double stateAgeS,
+        const MovingTargetMatcher::Prediction& prediction,
+        double scoreFactor)
+    {
+        const double centerResidualHz = observation.m_centerFrequencyOffsetHz
+            - prediction.m_centerFrequencyOffsetHz;
+        const double driftResidualHz = observation.m_frequencyDriftHz
+            - prediction.m_frequencyDriftHz;
+        const double normalizedSquared =
+            std::pow(centerResidualHz / scales.m_centerScaleHz, 2.0)
+            + std::pow(driftResidualHz / scales.m_driftScaleHz, 2.0);
+        const double scorePercent = 100.0 * scoreFactor * std::exp(-0.5 * normalizedSquared);
+        const double startResidualHz = scales.m_observedStartFrequencyHz
+            - prediction.m_startFrequencyOffsetHz;
+        const double endResidualHz = scales.m_observedEndFrequencyHz
+            - prediction.m_endFrequencyOffsetHz;
+        const double endpointResidualRMSHz = std::sqrt(
+            0.5 * (startResidualHz * startResidualHz + endResidualHz * endResidualHz));
+
+        MovingTargetMatcher::Candidate candidate;
+        candidate.m_source = source;
+        candidate.m_id = id;
+        candidate.m_label = label;
+        candidate.m_scorePercent = scorePercent;
+        candidate.m_endpointResidualRMSHz = endpointResidualRMSHz;
+        candidate.m_centerResidualHz = centerResidualHz;
+        candidate.m_driftResidualHz = driftResidualHz;
+        candidate.m_stateAgeS = stateAgeS;
+        candidate.m_prediction = prediction;
+        return candidate;
+    }
+}
+
 MovingTargetMatcher::Match MovingTargetMatcher::match(
     const Observation& observation,
     const QVector<TargetState>& targets,
@@ -321,16 +389,7 @@ MovingTargetMatcher::Match MovingTargetMatcher::match(
     rankedCandidates.reserve(MaximumAlternativeCount + 1);
     const QDateTime centerDateTimeUtc = observation.m_startDateTimeUtc.addMSecs(
         (qint64) std::llround(observation.m_durationS * 500.0));
-    const double observedStartFrequencyHz = observation.m_centerFrequencyOffsetHz
-        - 0.5 * observation.m_frequencyDriftHz;
-    const double observedEndFrequencyHz = observation.m_centerFrequencyOffsetHz
-        + 0.5 * observation.m_frequencyDriftHz;
-    const double centerScaleHz = std::max(
-        tunables.m_minimumCenterScaleHz,
-        std::fabs(observation.m_frequencySpanHz) * tunables.m_centerSpanScale);
-    const double driftScaleHz = std::max(
-        tunables.m_minimumDriftScaleHz,
-        std::fabs(observation.m_frequencyDriftHz) * tunables.m_driftScale);
+    const ObservationScales scales = makeObservationScales(observation, tunables);
 
     for (const TargetState& target : targets)
     {
@@ -346,31 +405,48 @@ MovingTargetMatcher::Match MovingTargetMatcher::match(
             continue;
         }
 
-        const double centerResidualHz = observation.m_centerFrequencyOffsetHz
-            - prediction.m_centerFrequencyOffsetHz;
-        const double driftResidualHz = observation.m_frequencyDriftHz
-            - prediction.m_frequencyDriftHz;
-        const double normalizedSquared = std::pow(centerResidualHz / centerScaleHz, 2.0)
-            + std::pow(driftResidualHz / driftScaleHz, 2.0);
-        const double scorePercent = 100.0 * std::exp(-0.5 * normalizedSquared);
-        const double startResidualHz = observedStartFrequencyHz
-            - prediction.m_startFrequencyOffsetHz;
-        const double endResidualHz = observedEndFrequencyHz
-            - prediction.m_endFrequencyOffsetHz;
-        const double endpointResidualRMSHz = std::sqrt(
-            0.5 * (startResidualHz * startResidualHz + endResidualHz * endResidualHz));
+        insertRankedCandidate(rankedCandidates, scoreCandidate(
+            observation,
+            scales,
+            target.m_source,
+            target.m_id,
+            target.m_label,
+            stateAgeS,
+            prediction,
+            target.m_approximateDirection ? ApproximateDirectionScoreFactor : 1.0));
+    }
 
-        Candidate candidate;
-        candidate.m_source = target.m_source;
-        candidate.m_id = target.m_id;
-        candidate.m_label = target.m_label;
-        candidate.m_scorePercent = scorePercent;
-        candidate.m_endpointResidualRMSHz = endpointResidualRMSHz;
-        candidate.m_centerResidualHz = centerResidualHz;
-        candidate.m_driftResidualHz = driftResidualHz;
-        candidate.m_stateAgeS = stateAgeS;
-        candidate.m_prediction = prediction;
-        insertRankedCandidate(rankedCandidates, candidate);
+    finalizeMatch(bestMatch, rankedCandidates, tunables);
+    return bestMatch;
+}
+
+MovingTargetMatcher::Match MovingTargetMatcher::matchPredictions(
+    const Observation& observation,
+    const QVector<PredictedCandidate>& candidates,
+    const Tunables& tunables)
+{
+    Match bestMatch;
+    QVector<Candidate> rankedCandidates;
+    rankedCandidates.reserve(MaximumAlternativeCount + 1);
+    const ObservationScales scales = makeObservationScales(observation, tunables);
+
+    // No state-age gate here: each prediction was evaluated at the observation's own
+    // epochs, so there is no extrapolation age to bound.
+    for (const PredictedCandidate& candidate : candidates)
+    {
+        if (!candidate.m_prediction.m_valid) {
+            continue;
+        }
+
+        insertRankedCandidate(rankedCandidates, scoreCandidate(
+            observation,
+            scales,
+            candidate.m_source,
+            candidate.m_id,
+            candidate.m_label,
+            candidate.m_stateAgeS,
+            candidate.m_prediction,
+            1.0));
     }
 
     finalizeMatch(bestMatch, rankedCandidates, tunables);

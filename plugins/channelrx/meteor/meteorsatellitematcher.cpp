@@ -9,6 +9,7 @@
 #include "meteorsatellitematcher.h"
 
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <cstdlib>
 #include <memory>
@@ -52,11 +53,17 @@ namespace {
     constexpr double Pi = 3.14159265358979323846;
     constexpr double WGS84SemiMajorAxisM = 6378137.0;
     constexpr double WGS84EccentricitySquared = 6.69437999014e-3;
+    constexpr double SpeedOfLightMPS = 299792458.0;
     constexpr qint64 CatalogMaximumAgeS = 24 * 60 * 60;
     constexpr qint64 TLEMaximumAgeS = 14 * 24 * 60 * 60;
     constexpr qint64 SnapshotIntervalMS = 5000;
     constexpr int MaximumSnapshotCount = 8;
     constexpr double MinimumElevationDegrees = -1.0;
+    // Snapshot culling is evaluated at a bucketed instant with zero-margin beam edges,
+    // but a LEO target moves up to ~1 deg/s: pad the horizon/beam tests so the object
+    // that produced the sweep is not culled while actually inside the beam mid-sweep.
+    // The exact per-endpoint scoring afterwards decides for real.
+    constexpr double SnapshotCullMarginDegrees = 10.0;
 
     enum class CatalogFileKind
     {
@@ -154,6 +161,39 @@ namespace {
             return {m_x * scalar, m_y * scalar, m_z * scalar};
         }
     };
+
+    double dot(const Vector3& left, const Vector3& right)
+    {
+        return left.m_x * right.m_x + left.m_y * right.m_y + left.m_z * right.m_z;
+    }
+
+    double length(const Vector3& vector)
+    {
+        return std::sqrt(dot(vector, vector));
+    }
+
+    // Same convention as MovingTargetMatcher: shortening TX-target-RX path -> positive
+    // received-frequency offset.
+    double bistaticDopplerOffset(
+        const Vector3& targetPosition,
+        const Vector3& targetVelocity,
+        const Vector3& transmitterPosition,
+        const Vector3& receiverPosition,
+        double referenceFrequencyHz)
+    {
+        const Vector3 transmitterToTarget = targetPosition - transmitterPosition;
+        const Vector3 receiverToTarget = targetPosition - receiverPosition;
+        const double transmitterRange = length(transmitterToTarget);
+        const double receiverRange = length(receiverToTarget);
+
+        if ((transmitterRange < 1.0) || (receiverRange < 1.0)) {
+            return std::numeric_limits<double>::quiet_NaN();
+        }
+
+        const double pathRateMPS = dot(targetVelocity, transmitterToTarget) / transmitterRange
+            + dot(targetVelocity, receiverToTarget) / receiverRange;
+        return -referenceFrequencyHz * pathRateMPS / SpeedOfLightMPS;
+    }
 
     void ecefToENU(
         const Vector3& vector,
@@ -352,14 +392,15 @@ namespace {
     bool insideBeam(
         double azimuthDegrees,
         double elevationDegrees,
-        const MeteorSatelliteMatcher::Beam& beam)
+        const MeteorSatelliteMatcher::Beam& beam,
+        double marginDegrees = 0.0)
     {
         const bool horizontalOK = !(beam.m_horizontalBeamwidthDegrees > 0.0)
             || (wrappedAngleDifference(azimuthDegrees, beam.m_azimuthDegrees)
-                <= beam.m_horizontalBeamwidthDegrees * 0.5);
+                <= beam.m_horizontalBeamwidthDegrees * 0.5 + marginDegrees);
         const bool verticalOK = !(beam.m_verticalBeamwidthDegrees > 0.0)
             || (std::fabs(elevationDegrees - beam.m_elevationDegrees)
-                <= beam.m_verticalBeamwidthDegrees * 0.5);
+                <= beam.m_verticalBeamwidthDegrees * 0.5 + marginDegrees);
         return horizontalOK && verticalOK;
     }
 
@@ -472,18 +513,48 @@ public:
 #endif
     }
 
-    void refreshCatalog()
+    void refreshCatalog(bool forceAll = true)
     {
 #ifdef METEOR_HAS_SGP4
-        if (m_downloadInProgress || !m_networkManager) {
+        if (m_downloadInProgress || !m_networkManager || m_stopRequested.load()) {
+            return;
+        }
+
+        // Download only the sources whose cache is actually stale: one permanently
+        // failing source must not force a full ten-source re-download of everything
+        // (CelesTrak rate-limits abusive clients) at every start and refresh tick.
+        const QDateTime nowUtc = QDateTime::currentDateTimeUtc();
+        m_downloadQueue.clear();
+
+        for (int sourceIndex = 0; sourceIndex < CatalogDownloadSourceCount; ++sourceIndex)
+        {
+            const QFileInfo fileInfo(catalogFileName(
+                CatalogDownloadSources[sourceIndex]));
+            const bool stale = !fileInfo.exists()
+                || (fileInfo.lastModified().toUTC().secsTo(nowUtc) >= CatalogMaximumAgeS);
+
+            if (forceAll || stale) {
+                m_downloadQueue.append(sourceIndex);
+            }
+        }
+
+        if (m_downloadQueue.isEmpty()) {
             return;
         }
 
         m_downloadInProgress = true;
-        m_downloadSourceIndex = 0;
+        m_downloadQueuePos = 0;
         m_refreshWarnings.clear();
         downloadNextCatalogSource();
 #endif
+    }
+
+    // Called directly from the GUI thread during teardown: the worker checks this in
+    // its long loops so channel close is not blocked behind a catalog parse or a full
+    // snapshot propagation pass.
+    void requestStop()
+    {
+        m_stopRequested.store(true);
     }
 
     void requestMatch(
@@ -491,6 +562,10 @@ public:
         const MovingTargetMatcher::Observation& observation,
         const MeteorSatelliteMatcher::Geometry& geometry)
     {
+        if (m_stopRequested.load()) {
+            return;
+        }
+
         MovingTargetMatcher::Match match;
         const MeteorSatelliteMatcher::MoonPrediction moonPrediction =
             MeteorSatelliteMatcher::predictMoon(observation, geometry);
@@ -510,11 +585,22 @@ public:
         {
             const QDateTime centerTimeUtc = observation.m_startDateTimeUtc.addMSecs(
                 (qint64) std::llround(observation.m_durationS * 500.0));
-            const QVector<MovingTargetMatcher::TargetState>& states =
-                statesForTime(centerTimeUtc, observation, geometry);
+            const Snapshot& snapshot = candidatesForTime(centerTimeUtc, observation, geometry);
+            QVector<MovingTargetMatcher::PredictedCandidate> candidates;
+            candidates.reserve(snapshot.m_candidateIndices.size());
+
+            for (int catalogIndex : snapshot.m_candidateIndices)
+            {
+                MovingTargetMatcher::PredictedCandidate candidate;
+
+                if (predictCatalogEntry(m_catalog[catalogIndex], observation, candidate)) {
+                    candidates.append(candidate);
+                }
+            }
+
             match = MovingTargetMatcher::combine(
                 match,
-                MovingTargetMatcher::match(observation, states));
+                MovingTargetMatcher::matchPredictions(observation, candidates));
         }
 #endif
 
@@ -565,7 +651,10 @@ private:
 
     struct Snapshot
     {
-        QVector<MovingTargetMatcher::TargetState> m_states;
+        // Indices into m_catalog of the entries passing the (margin-padded) geometric
+        // culling at the snapshot instant; the per-request exact endpoint propagation
+        // works from these. Valid until the next installCatalog (which clears snapshots).
+        QVector<int> m_candidateIndices;
         MeteorSatelliteMatcher::CatalogStatistics m_statistics;
     };
 
@@ -576,7 +665,13 @@ private:
 
     void downloadNextCatalogSource()
     {
-        if (m_downloadSourceIndex >= CatalogDownloadSourceCount)
+        if (m_stopRequested.load())
+        {
+            m_downloadInProgress = false;
+            return;
+        }
+
+        if (m_downloadQueuePos >= m_downloadQueue.size())
         {
             m_downloadInProgress = false;
 
@@ -597,11 +692,20 @@ private:
         }
 
         const CatalogDownloadSource source =
-            CatalogDownloadSources[m_downloadSourceIndex];
+            CatalogDownloadSources[m_downloadQueue[m_downloadQueuePos]];
         QNetworkRequest request(QUrl(QString::fromLatin1(source.m_url)));
         request.setHeader(
             QNetworkRequest::UserAgentHeader,
             QStringLiteral("SDRangel Meteor satellite matcher"));
+        const QFileInfo cachedInfo(catalogFileName(source));
+
+        // CelesTrak asks clients to cache: let the server answer 304 when unchanged.
+        if (cachedInfo.exists()) {
+            request.setHeader(
+                QNetworkRequest::IfModifiedSinceHeader,
+                cachedInfo.lastModified());
+        }
+
         request.setAttribute(
             QNetworkRequest::RedirectPolicyAttribute,
             QNetworkRequest::NoLessSafeRedirectPolicy);
@@ -610,47 +714,54 @@ private:
         QNetworkReply *reply = m_networkManager->get(request);
         connect(reply, &QNetworkReply::finished, this, [this, reply, source]() {
             const QByteArray data = reply->readAll();
+            const int httpStatus = reply->attribute(
+                QNetworkRequest::HttpStatusCodeAttribute).toInt();
             QString error = reply->error() == QNetworkReply::NoError
                 ? QString()
                 : reply->errorString();
             reply->deleteLater();
 
-            if (error.isEmpty())
+            if (m_stopRequested.load())
             {
-                if (source.m_kind == CatalogFileKind::Satcat)
-                {
-                    QHash<QString, CatalogMetadata> metadata;
-                    int onOrbitCount = 0;
-                    if (!parseSatcat(data, metadata, onOrbitCount, error)) {
-                        error.prepend(QStringLiteral("invalid SATCAT: "));
-                    }
-                }
-                else
-                {
-                    std::vector<CatalogEntry> catalog;
-                    const QHash<QString, CatalogMetadata> metadata;
-                    if (!parseCatalog(
-                            data,
-                            catalog,
-                            metadata,
-                            source.m_kind == CatalogFileKind::ActiveGP,
-                            source.m_minimumEntries,
-                            error))
-                    {
-                        error.prepend(QStringLiteral("invalid GP data: "));
-                    }
-                }
+                m_downloadInProgress = false;
+                return;
             }
 
-            if (error.isEmpty())
+            if (error.isEmpty() && (httpStatus == 304))
             {
-                QSaveFile file(catalogFileName(source));
-                if (!file.open(QIODevice::WriteOnly)
-                    || (file.write(data) != data.size())
-                    || !file.commit())
+                // Not modified: keep the cache and refresh its timestamp so the
+                // staleness check does not re-request it before the next full period.
+                QFile cachedFile(catalogFileName(source));
+                if (cachedFile.open(QIODevice::ReadWrite))
                 {
-                    error = QStringLiteral("could not cache %1")
-                        .arg(QString::fromLatin1(source.m_cacheName));
+                    cachedFile.setFileTime(
+                        QDateTime::currentDateTimeUtc(),
+                        QFileDevice::FileModificationTime);
+                }
+            }
+            else
+            {
+                if (error.isEmpty()
+                    && !validateCatalogData(
+                        data,
+                        source.m_kind,
+                        source.m_minimumEntries,
+                        &m_stopRequested,
+                        error))
+                {
+                    error.prepend(QStringLiteral("invalid catalog data: "));
+                }
+
+                if (error.isEmpty())
+                {
+                    QSaveFile file(catalogFileName(source));
+                    if (!file.open(QIODevice::WriteOnly)
+                        || (file.write(data) != data.size())
+                        || !file.commit())
+                    {
+                        error = QStringLiteral("could not cache %1")
+                            .arg(QString::fromLatin1(source.m_cacheName));
+                    }
                 }
             }
 
@@ -661,9 +772,62 @@ private:
                         .arg(QString::fromLatin1(source.m_cacheName), error));
             }
 
-            ++m_downloadSourceIndex;
+            ++m_downloadQueuePos;
             downloadNextCatalogSource();
         });
+    }
+
+    // Structural validation only (header + row count): the full parse - including
+    // ~15k SGP4 propagator constructions - happens exactly once, in loadCatalogFiles.
+    static bool validateCatalogData(
+        const QByteArray& data,
+        CatalogFileKind kind,
+        int minimumEntries,
+        const std::atomic<bool> *cancel,
+        QString& error)
+    {
+        QBuffer buffer;
+        buffer.setData(data);
+
+        if (!buffer.open(QIODevice::ReadOnly))
+        {
+            error = QStringLiteral("catalog buffer could not be opened");
+            return false;
+        }
+
+        QTextStream stream(&buffer);
+        CSV::readHeader(
+            stream,
+            kind == CatalogFileKind::Satcat
+                ? satcatRequiredColumns()
+                : catalogRequiredColumns(),
+            error);
+
+        if (!error.isEmpty()) {
+            return false;
+        }
+
+        int rowCount = 0;
+        QStringList row;
+
+        while (CSV::readRow(stream, &row))
+        {
+            ++rowCount;
+
+            if (cancel && ((rowCount & 1023) == 0) && cancel->load())
+            {
+                error = QStringLiteral("cancelled");
+                return false;
+            }
+        }
+
+        if (rowCount < minimumEntries)
+        {
+            error = QStringLiteral("only %1 rows were found").arg(rowCount);
+            return false;
+        }
+
+        return true;
     }
 
     static libsgp4::DateTime toSGP4DateTime(const QDateTime& dateTime)
@@ -800,10 +964,41 @@ private:
         return true;
     }
 
+    static const QStringList& satcatRequiredColumns()
+    {
+        static const QStringList columns {
+            QStringLiteral("OBJECT_NAME"),
+            QStringLiteral("NORAD_CAT_ID"),
+            QStringLiteral("OBJECT_TYPE"),
+            QStringLiteral("DECAY_DATE")
+        };
+        return columns;
+    }
+
+    static const QStringList& catalogRequiredColumns()
+    {
+        static const QStringList columns {
+            QStringLiteral("OBJECT_NAME"),
+            QStringLiteral("EPOCH"),
+            QStringLiteral("MEAN_MOTION"),
+            QStringLiteral("ECCENTRICITY"),
+            QStringLiteral("INCLINATION"),
+            QStringLiteral("RA_OF_ASC_NODE"),
+            QStringLiteral("ARG_OF_PERICENTER"),
+            QStringLiteral("MEAN_ANOMALY"),
+            QStringLiteral("NORAD_CAT_ID"),
+            QStringLiteral("REV_AT_EPOCH"),
+            QStringLiteral("BSTAR")
+        };
+        return columns;
+    }
+
     static bool parseSatcat(
         const QByteArray& data,
         QHash<QString, CatalogMetadata>& metadata,
         int& onOrbitCount,
+        int minimumEntries,
+        const std::atomic<bool> *cancel,
         QString& error)
     {
         QBuffer buffer;
@@ -815,15 +1010,9 @@ private:
         }
 
         QTextStream stream(&buffer);
-        const QStringList requiredColumns {
-            QStringLiteral("OBJECT_NAME"),
-            QStringLiteral("NORAD_CAT_ID"),
-            QStringLiteral("OBJECT_TYPE"),
-            QStringLiteral("DECAY_DATE")
-        };
         const QHash<QString, int> columns = CSV::readHeader(
             stream,
-            requiredColumns,
+            satcatRequiredColumns(),
             error);
         if (!error.isEmpty()) {
             return false;
@@ -833,9 +1022,16 @@ private:
         metadata.reserve(70000);
         onOrbitCount = 0;
         QStringList row;
+        int rowCount = 0;
 
         while (CSV::readRow(stream, &row))
         {
+            if (cancel && ((++rowCount & 1023) == 0) && cancel->load())
+            {
+                error = QStringLiteral("cancelled");
+                return false;
+            }
+
             auto field = [&columns, &row](const QString& name) {
                 const int index = columns.value(name, -1);
                 return (index >= 0) && (index < row.size())
@@ -857,7 +1053,7 @@ private:
             metadata.insert(noradId, entry);
         }
 
-        if (metadata.size() < 10000)
+        if (metadata.size() < minimumEntries)
         {
             error = QStringLiteral("only %1 SATCAT entries were found").arg(metadata.size());
             return false;
@@ -872,6 +1068,7 @@ private:
         const QHash<QString, CatalogMetadata>& metadata,
         bool fromActiveCatalog,
         int minimumEntries,
+        const std::atomic<bool> *cancel,
         QString& error)
     {
         QBuffer buffer;
@@ -883,22 +1080,9 @@ private:
         }
 
         QTextStream stream(&buffer);
-        const QStringList requiredColumns {
-            QStringLiteral("OBJECT_NAME"),
-            QStringLiteral("EPOCH"),
-            QStringLiteral("MEAN_MOTION"),
-            QStringLiteral("ECCENTRICITY"),
-            QStringLiteral("INCLINATION"),
-            QStringLiteral("RA_OF_ASC_NODE"),
-            QStringLiteral("ARG_OF_PERICENTER"),
-            QStringLiteral("MEAN_ANOMALY"),
-            QStringLiteral("NORAD_CAT_ID"),
-            QStringLiteral("REV_AT_EPOCH"),
-            QStringLiteral("BSTAR")
-        };
         const QHash<QString, int> columns = CSV::readHeader(
             stream,
-            requiredColumns,
+            catalogRequiredColumns(),
             error);
         if (!error.isEmpty()) {
             return false;
@@ -907,9 +1091,17 @@ private:
         catalog.reserve(12000);
         QStringList row;
         int syntheticId = 0;
+        int identifiedRows = 0;
+        int rowCount = 0;
 
         while (CSV::readRow(stream, &row))
         {
+            if (cancel && ((++rowCount & 1023) == 0) && cancel->load())
+            {
+                error = QStringLiteral("cancelled");
+                return false;
+            }
+
             auto field = [&columns, &row](const QString& name) {
                 const int index = columns.value(name, -1);
                 return (index >= 0) && (index < row.size())
@@ -947,10 +1139,18 @@ private:
             }
 
             const QString noradId = field(QStringLiteral("NORAD_CAT_ID"));
+
+            if (noradId.isEmpty()) {
+                continue;
+            }
+
+            // The minimum-entry sanity gate counts identified rows BEFORE the decayed
+            // filter, so a small group whose members have mostly decayed still counts
+            // as a well-formed file (matching what download validation accepted).
+            ++identifiedRows;
             const auto metadataEntry = metadata.constFind(noradId);
-            if (noradId.isEmpty()
-                || ((metadataEntry != metadata.cend()) && !metadataEntry->m_onOrbit))
-            {
+
+            if ((metadataEntry != metadata.cend()) && !metadataEntry->m_onOrbit) {
                 continue;
             }
 
@@ -1018,9 +1218,9 @@ private:
             }
         }
 
-        if ((int) catalog.size() < minimumEntries)
+        if (identifiedRows < minimumEntries)
         {
-            error = QStringLiteral("only %1 valid elements were found").arg(catalog.size());
+            error = QStringLiteral("only %1 identified rows were found").arg(identifiedRows);
             return false;
         }
 
@@ -1078,6 +1278,8 @@ private:
                     satcatFile.readAll(),
                     metadata,
                     onOrbitCount,
+                    satcatSource.m_minimumEntries,
+                    &m_stopRequested,
                     error))
             {
                 warnings.append(QStringLiteral("SATCAT: %1").arg(error));
@@ -1098,6 +1300,10 @@ private:
             sourceIndex < CatalogDownloadSourceCount;
             ++sourceIndex)
         {
+            if (m_stopRequested.load()) {
+                return false;
+            }
+
             const CatalogDownloadSource& source =
                 CatalogDownloadSources[sourceIndex];
             QFile file(catalogFileName(source));
@@ -1116,6 +1322,7 @@ private:
                     metadata,
                     source.m_kind == CatalogFileKind::ActiveGP,
                     source.m_minimumEntries,
+                    &m_stopRequested,
                     error))
             {
                 warnings.append(QStringLiteral("%1: %2")
@@ -1201,23 +1408,9 @@ private:
 
     void refreshCatalogIfNeeded()
     {
-        bool stale = m_catalog.empty();
-        const QDateTime nowUtc = QDateTime::currentDateTimeUtc();
-
-        for (int sourceIndex = 0;
-            !stale && (sourceIndex < CatalogDownloadSourceCount);
-            ++sourceIndex)
-        {
-            const QFileInfo fileInfo(catalogFileName(
-                CatalogDownloadSources[sourceIndex]));
-            stale = !fileInfo.exists()
-                || (fileInfo.lastModified().toUTC().secsTo(nowUtc)
-                    >= CatalogMaximumAgeS);
-        }
-
-        if (stale) {
-            refreshCatalog();
-        }
+        // With no usable catalog every source is worth (re)fetching; otherwise only
+        // the stale ones are queued (no-op when everything is fresh).
+        refreshCatalog(m_catalog.empty());
     }
 
     void completePendingRequestsWithoutMatch()
@@ -1248,7 +1441,7 @@ private:
         }
     }
 
-    const QVector<MovingTargetMatcher::TargetState>& statesForTime(
+    const Snapshot& candidatesForTime(
         const QDateTime& centerTimeUtc,
         const MovingTargetMatcher::Observation& observation,
         const MeteorSatelliteMatcher::Geometry& geometry)
@@ -1269,15 +1462,15 @@ private:
         if (existing != m_snapshots.end())
         {
             m_statistics = existing->m_statistics;
-            return existing->m_states;
+            return existing.value();
         }
 
         const QDateTime snapshotTimeUtc = QDateTime::fromMSecsSinceEpoch(
             bucketMSecs,
             Qt::UTC);
         Snapshot snapshot;
-        QVector<MovingTargetMatcher::TargetState>& states = snapshot.m_states;
-        states.reserve((int) std::min<size_t>(m_catalog.size(), 1024));
+        QVector<int>& candidateIndices = snapshot.m_candidateIndices;
+        candidateIndices.reserve((int) std::min<size_t>(m_catalog.size(), 1024));
         snapshot.m_statistics = m_statistics;
         snapshot.m_statistics.m_snapshotValid = true;
         snapshot.m_statistics.m_snapshotDateTimeUtc = snapshotTimeUtc;
@@ -1293,8 +1486,14 @@ private:
         snapshot.m_statistics.m_candidateEntries = 0;
         const libsgp4::DateTime sgp4Time = toSGP4DateTime(snapshotTimeUtc);
 
-        for (CatalogEntry& entry : m_catalog)
+        for (int catalogIndex = 0; catalogIndex < (int) m_catalog.size(); ++catalogIndex)
         {
+            if (m_stopRequested.load(std::memory_order_relaxed)) {
+                break;
+            }
+
+            CatalogEntry& entry = m_catalog[catalogIndex];
+
             if (std::llabs(entry.m_epochUtc.secsTo(snapshotTimeUtc)) > TLEMaximumAgeS)
             {
                 ++snapshot.m_statistics.m_staleElementEntries;
@@ -1305,25 +1504,20 @@ private:
             {
                 const libsgp4::Eci eci = entry.m_propagator->FindPosition(sgp4Time);
                 const libsgp4::CoordGeodetic geo = eci.ToGeodetic();
-                MovingTargetMatcher::TargetState state;
-                state.m_source = QStringLiteral("TLE");
-                state.m_id = entry.m_noradId;
-                state.m_label = entry.m_name;
-                state.m_dateTimeUtc = snapshotTimeUtc;
-                state.m_position = {
+                const MovingTargetMatcher::Site position {
                     libsgp4::Util::RadiansToDegrees(geo.latitude),
                     libsgp4::Util::RadiansToDegrees(geo.longitude),
                     geo.altitude * 1000.0
                 };
 
                 if ((geometry.m_maximumAltitudeM > 0.0)
-                    && (state.m_position.m_altitudeM > geometry.m_maximumAltitudeM))
+                    && (position.m_altitudeM > geometry.m_maximumAltitudeM))
                 {
                     ++snapshot.m_statistics.m_aboveMaximumAltitudeEntries;
                     continue;
                 }
 
-                const Vector3 targetPosition = geodeticToECEF(state.m_position);
+                const Vector3 targetPosition = geodeticToECEF(position);
                 double txAzimuth;
                 double txElevation;
                 double rxAzimuth;
@@ -1347,12 +1541,12 @@ private:
                     ++snapshot.m_statistics.m_propagationFailureEntries;
                     continue;
                 }
-                if (txElevation < MinimumElevationDegrees)
+                if (txElevation < MinimumElevationDegrees - SnapshotCullMarginDegrees)
                 {
                     ++snapshot.m_statistics.m_belowTransmitterHorizonEntries;
                     continue;
                 }
-                if (rxElevation < MinimumElevationDegrees)
+                if (rxElevation < MinimumElevationDegrees - SnapshotCullMarginDegrees)
                 {
                     ++snapshot.m_statistics.m_belowReceiverHorizonEntries;
                     continue;
@@ -1360,7 +1554,8 @@ private:
                 if (!insideBeam(
                         txAzimuth,
                         txElevation,
-                        geometry.m_transmitterBeam))
+                        geometry.m_transmitterBeam,
+                        SnapshotCullMarginDegrees))
                 {
                     ++snapshot.m_statistics.m_outsideTransmitterBeamEntries;
                     continue;
@@ -1368,37 +1563,14 @@ private:
                 if (!insideBeam(
                         rxAzimuth,
                         rxElevation,
-                        geometry.m_receiverBeam))
+                        geometry.m_receiverBeam,
+                        SnapshotCullMarginDegrees))
                 {
                     ++snapshot.m_statistics.m_outsideReceiverBeamEntries;
                     continue;
                 }
 
-                const double velocityDeltaS = 0.5;
-                const libsgp4::CoordGeodetic beforeGeo = entry.m_propagator->FindPosition(
-                    sgp4Time.AddSeconds(-velocityDeltaS)).ToGeodetic();
-                const libsgp4::CoordGeodetic afterGeo = entry.m_propagator->FindPosition(
-                    sgp4Time.AddSeconds(velocityDeltaS)).ToGeodetic();
-                const MovingTargetMatcher::Site beforeSite {
-                    libsgp4::Util::RadiansToDegrees(beforeGeo.latitude),
-                    libsgp4::Util::RadiansToDegrees(beforeGeo.longitude),
-                    beforeGeo.altitude * 1000.0
-                };
-                const MovingTargetMatcher::Site afterSite {
-                    libsgp4::Util::RadiansToDegrees(afterGeo.latitude),
-                    libsgp4::Util::RadiansToDegrees(afterGeo.longitude),
-                    afterGeo.altitude * 1000.0
-                };
-                const Vector3 velocityECEF =
-                    (geodeticToECEF(afterSite) - geodeticToECEF(beforeSite))
-                    * (1.0 / (2.0 * velocityDeltaS));
-                ecefToENU(
-                    velocityECEF,
-                    state.m_position,
-                    state.m_eastVelocityMPS,
-                    state.m_northVelocityMPS,
-                    state.m_upVelocityMPS);
-                states.append(state);
+                candidateIndices.append(catalogIndex);
                 ++snapshot.m_statistics.m_candidateEntries;
             }
             catch (const std::exception&) {
@@ -1414,7 +1586,75 @@ private:
             m_snapshotOrder.pop_front();
         }
         m_snapshotOrder.append(bucketMSecs);
-        return m_snapshots.insert(bucketMSecs, snapshot).value().m_states;
+        return m_snapshots.insert(bucketMSecs, snapshot).value();
+    }
+
+    // Exact per-endpoint evaluation: SGP4 position AND velocity at the sweep's own
+    // start/end epochs. A single constant-velocity extrapolation misses the orbital
+    // acceleration along the lines of sight (up to ~8 Hz/s of drift at 143 MHz for
+    // LEO), which is comparable to the matcher's drift tolerance floor.
+    bool predictCatalogEntry(
+        CatalogEntry& entry,
+        const MovingTargetMatcher::Observation& observation,
+        MovingTargetMatcher::PredictedCandidate& candidate)
+    {
+        constexpr double velocityDeltaS = 0.5;
+        const Vector3 transmitterPosition = geodeticToECEF(observation.m_transmitter);
+        const Vector3 receiverPosition = geodeticToECEF(observation.m_receiver);
+        const QDateTime endpointTimesUtc[2] = {
+            observation.m_startDateTimeUtc,
+            observation.m_startDateTimeUtc.addMSecs(
+                (qint64) std::llround(observation.m_durationS * 1000.0))
+        };
+        double offsetsHz[2];
+
+        try
+        {
+            for (int endpoint = 0; endpoint < 2; ++endpoint)
+            {
+                const libsgp4::DateTime sgp4Time = toSGP4DateTime(endpointTimesUtc[endpoint]);
+                auto ecefAt = [&entry](const libsgp4::DateTime& when) {
+                    const libsgp4::CoordGeodetic geo =
+                        entry.m_propagator->FindPosition(when).ToGeodetic();
+                    const MovingTargetMatcher::Site site {
+                        libsgp4::Util::RadiansToDegrees(geo.latitude),
+                        libsgp4::Util::RadiansToDegrees(geo.longitude),
+                        geo.altitude * 1000.0
+                    };
+                    return geodeticToECEF(site);
+                };
+                const Vector3 position = ecefAt(sgp4Time);
+                const Vector3 velocity =
+                    (ecefAt(sgp4Time.AddSeconds(velocityDeltaS))
+                        - ecefAt(sgp4Time.AddSeconds(-velocityDeltaS)))
+                    * (1.0 / (2.0 * velocityDeltaS));
+                offsetsHz[endpoint] = bistaticDopplerOffset(
+                    position,
+                    velocity,
+                    transmitterPosition,
+                    receiverPosition,
+                    observation.m_referenceFrequencyHz);
+
+                if (!std::isfinite(offsetsHz[endpoint])) {
+                    return false;
+                }
+            }
+        }
+        catch (const std::exception&) {
+            return false;
+        }
+
+        candidate.m_source = QStringLiteral("TLE");
+        candidate.m_id = entry.m_noradId;
+        candidate.m_label = entry.m_name;
+        candidate.m_stateAgeS = 0.0;
+        candidate.m_prediction.m_startFrequencyOffsetHz = offsetsHz[0];
+        candidate.m_prediction.m_endFrequencyOffsetHz = offsetsHz[1];
+        candidate.m_prediction.m_centerFrequencyOffsetHz =
+            0.5 * (offsetsHz[0] + offsetsHz[1]);
+        candidate.m_prediction.m_frequencyDriftHz = offsetsHz[1] - offsetsHz[0];
+        candidate.m_prediction.m_valid = true;
+        return true;
     }
 #endif
 
@@ -1447,7 +1687,9 @@ private:
     MeteorSatelliteMatcher::CatalogStatistics m_statistics;
     QStringList m_refreshWarnings;
     bool m_downloadInProgress = false;
-    int m_downloadSourceIndex = 0;
+    QVector<int> m_downloadQueue;
+    int m_downloadQueuePos = 0;
+    std::atomic<bool> m_stopRequested {false};
 #ifdef METEOR_HAS_SGP4
     std::vector<CatalogEntry> m_catalog;
     std::vector<PendingRequest> m_pendingRequests;
@@ -1474,19 +1716,18 @@ MeteorSatelliteMatcher::MeteorSatelliteMatcher(QObject *parent) :
 
 MeteorSatelliteMatcher::~MeteorSatelliteMatcher()
 {
-    if (m_worker && m_thread->isRunning())
-    {
-        MeteorSatelliteMatcherWorker *worker = m_worker;
-        QMetaObject::invokeMethod(
-            worker,
-            [worker]() {
-                delete worker;
-            },
-            Qt::BlockingQueuedConnection);
-        m_worker = nullptr;
-        m_thread->quit();
-        m_thread->wait();
+    // Stop flag first so a long parse or snapshot pass bails out promptly, then stop
+    // the event loop; remaining queued work is discarded with the worker. Deleting the
+    // worker (and its network manager/timer children) from this thread is safe once
+    // its thread has finished.
+    if (m_worker) {
+        m_worker->requestStop();
     }
+
+    m_thread->quit();
+    m_thread->wait();
+    delete m_worker;
+    m_worker = nullptr;
 }
 
 void MeteorSatelliteMatcher::requestMatch(
@@ -1517,7 +1758,7 @@ void MeteorSatelliteMatcher::refreshCatalog()
     QMetaObject::invokeMethod(
         worker,
         [worker]() {
-            worker->refreshCatalog();
+            worker->refreshCatalog(true);
         },
         Qt::QueuedConnection);
 }

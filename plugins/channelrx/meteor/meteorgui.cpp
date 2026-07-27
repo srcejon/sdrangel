@@ -50,12 +50,14 @@
 #include "SWGADSBDemodAircraftState.h"
 #include "SWGADSBDemodReport.h"
 #include "SWGChannelReport.h"
+#include "SWGDeviceReport.h"
 
 #include "channel/channelapi.h"
 #include "device/deviceuiset.h"
 #include "device/deviceapi.h"
 #include "device/deviceset.h"
 #include "channel/channelwebapiutils.h"
+#include "webapi/webapiutils.h"
 #include "dsp/dspcommands.h"
 #include "dsp/spectrumsettings.h"
 #include "feature/feature.h"
@@ -94,6 +96,10 @@ namespace {
     constexpr int MeteorHeadFFTOverlap = 96;
     constexpr qint64 AutomaticRMOBSaveIntervalS = 60;
     constexpr double MaximumADSBStateAgeS = 45.0;
+    // The velocity vector is built from ground speed + track sampled at their own
+    // report times: bound how far those may sit from the position epoch, or the
+    // extrapolation direction can be tens of seconds staler than the position.
+    constexpr double MaximumADSBFieldSkewS = 15.0;
 
     struct SweepClassification
     {
@@ -210,10 +216,19 @@ namespace {
                         ? aircraft->getTrackDateTime()
                         : aircraft->getHeadingDateTime());
 
+                    const auto consistentWithPosition = [&positionTimeUtc](const QDateTime& fieldTimeUtc) {
+                        return fieldTimeUtc.isValid()
+                            && (std::fabs((double) positionTimeUtc.msecsTo(fieldTimeUtc) / 1000.0)
+                                <= MaximumADSBFieldSkewS);
+                    };
+
                     if (!isFreshForDetection(positionTimeUtc, detectionTimeUtc)
                         || !isFreshForDetection(altitudeTimeUtc, detectionTimeUtc)
                         || !isFreshForDetection(speedTimeUtc, detectionTimeUtc)
-                        || !isFreshForDetection(directionTimeUtc, detectionTimeUtc))
+                        || !isFreshForDetection(directionTimeUtc, detectionTimeUtc)
+                        || !consistentWithPosition(altitudeTimeUtc)
+                        || !consistentWithPosition(speedTimeUtc)
+                        || !consistentWithPosition(directionTimeUtc))
                     {
                         continue;
                     }
@@ -254,8 +269,10 @@ namespace {
                         && isFreshForDetection(
                             parseUtcDateTime(aircraft->getVerticalRateDateTime()),
                             detectionTimeUtc)
+                        && consistentWithPosition(parseUtcDateTime(aircraft->getVerticalRateDateTime()))
                         ? Units::feetPerMinToMetresPerSecond((float) aircraft->getVerticalRate())
                         : 0.0;
+                    target.m_approximateDirection = !trackValid;
 
                     const auto existing = targetsByICAO.constFind(identity);
 
@@ -2386,24 +2403,50 @@ QDateTime MeteorGUI::movingTargetObservationDateTimeUtc(const QDateTime& display
 
     const unsigned int deviceSetIndex = (unsigned int) deviceAPI->getDeviceSetIndex();
     const qint64 queryStartMSecs = QDateTime::currentMSecsSinceEpoch();
+    QDateTime playbackTime;
     QString absoluteTimeText;
 
-    if (!ChannelWebAPIUtils::getDeviceReportValue(
+    // FileInput reports "absoluteTime" as a local-time string; SigMF FileInput reports
+    // "absoluteTimeMs" as milliseconds since the epoch. Accept either.
+    if (ChannelWebAPIUtils::getDeviceReportValue(
             deviceSetIndex,
             QStringLiteral("absoluteTime"),
             absoluteTimeText))
     {
-        return systemTimeUtc;
+        playbackTime = QDateTime::fromString(
+            absoluteTimeText,
+            QStringLiteral("yyyy-MM-dd HH:mm:ss.zzz"));
+
+        if (!playbackTime.isValid()) {
+            playbackTime = QDateTime::fromString(absoluteTimeText, Qt::ISODateWithMs);
+        }
+    }
+
+    if (!playbackTime.isValid())
+    {
+        SWGSDRangel::SWGDeviceReport deviceReport;
+
+        if (ChannelWebAPIUtils::getDeviceReport(deviceSetIndex, deviceReport))
+        {
+            QJsonObject *reportJson = deviceReport.asJsonObject();
+            double absoluteTimeMs = 0.0;
+
+            if (WebAPIUtils::getSubObjectDouble(
+                    *reportJson,
+                    QStringLiteral("absoluteTimeMs"),
+                    absoluteTimeMs)
+                && (absoluteTimeMs > 0.0))
+            {
+                playbackTime = QDateTime::fromMSecsSinceEpoch(
+                    (qint64) std::llround(absoluteTimeMs),
+                    Qt::UTC);
+            }
+
+            delete reportJson;
+        }
     }
 
     const qint64 queryEndMSecs = QDateTime::currentMSecsSinceEpoch();
-    QDateTime playbackTime = QDateTime::fromString(
-        absoluteTimeText,
-        QStringLiteral("yyyy-MM-dd HH:mm:ss.zzz"));
-
-    if (!playbackTime.isValid()) {
-        playbackTime = QDateTime::fromString(absoluteTimeText, Qt::ISODateWithMs);
-    }
 
     if (!playbackTime.isValid()) {
         return systemTimeUtc;

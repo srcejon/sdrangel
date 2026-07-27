@@ -48,6 +48,8 @@ SWGChannelActions::SWGChannelActions() {
     m_freq_scanner_actions_isSet = false;
     ieee_802_15_4_mod_actions = nullptr;
     m_ieee_802_15_4_mod_actions_isSet = false;
+    meshcore_mod_actions = nullptr;
+    m_meshcore_mod_actions_isSet = false;
     packet_mod_actions = nullptr;
     m_packet_mod_actions_isSet = false;
     psk31_mod_actions = nullptr;
@@ -86,6 +88,8 @@ SWGChannelActions::init() {
     m_freq_scanner_actions_isSet = false;
     ieee_802_15_4_mod_actions = new SWGIEEE_802_15_4_ModActions();
     m_ieee_802_15_4_mod_actions_isSet = false;
+    meshcore_mod_actions = new SWGMeshcoreModActions();
+    m_meshcore_mod_actions_isSet = false;
     packet_mod_actions = new SWGPacketModActions();
     m_packet_mod_actions_isSet = false;
     psk31_mod_actions = new SWGPSK31ModActions();
@@ -123,6 +127,9 @@ SWGChannelActions::cleanup() {
     }
     if(ieee_802_15_4_mod_actions != nullptr) { 
         delete ieee_802_15_4_mod_actions;
+    }
+    if(meshcore_mod_actions != nullptr) { 
+        delete meshcore_mod_actions;
     }
     if(packet_mod_actions != nullptr) { 
         delete packet_mod_actions;
@@ -171,6 +178,8 @@ SWGChannelActions::fromJsonObject(QJsonObject &pJson) {
     ::SWGSDRangel::setValue(&freq_scanner_actions, pJson["FreqScannerActions"], "SWGFreqScannerActions", "SWGFreqScannerActions");
     
     ::SWGSDRangel::setValue(&ieee_802_15_4_mod_actions, pJson["IEEE_802_15_4_ModActions"], "SWGIEEE_802_15_4_ModActions", "SWGIEEE_802_15_4_ModActions");
+    
+    ::SWGSDRangel::setValue(&meshcore_mod_actions, pJson["MeshcoreModActions"], "SWGMeshcoreModActions", "SWGMeshcoreModActions");
     
     ::SWGSDRangel::setValue(&packet_mod_actions, pJson["PacketModActions"], "SWGPacketModActions", "SWGPacketModActions");
     
@@ -227,6 +236,9 @@ SWGChannelActions::asJsonObject() {
     }
     if((ieee_802_15_4_mod_actions != nullptr) && (ieee_802_15_4_mod_actions->isSet())){
         toJsonValue(QString("IEEE_802_15_4_ModActions"), ieee_802_15_4_mod_actions, obj, QString("SWGIEEE_802_15_4_ModActions"));
+    }
+    if((meshcore_mod_actions != nullptr) && (meshcore_mod_actions->isSet())){
+        toJsonValue(QString("MeshcoreModActions"), meshcore_mod_actions, obj, QString("SWGMeshcoreModActions"));
     }
     if((packet_mod_actions != nullptr) && (packet_mod_actions->isSet())){
         toJsonValue(QString("PacketModActions"), packet_mod_actions, obj, QString("SWGPacketModActions"));
@@ -347,6 +359,16 @@ SWGChannelActions::setIeee802154ModActions(SWGIEEE_802_15_4_ModActions* ieee_802
     this->m_ieee_802_15_4_mod_actions_isSet = true;
 }
 
+SWGMeshcoreModActions*
+SWGChannelActions::getMeshcoreModActions() {
+    return meshcore_mod_actions;
+}
+void
+SWGChannelActions::setMeshcoreModActions(SWGMeshcoreModActions* meshcore_mod_actions) {
+    this->meshcore_mod_actions = meshcore_mod_actions;
+    this->m_meshcore_mod_actions_isSet = true;
+}
+
 SWGPacketModActions*
 SWGChannelActions::getPacketModActions() {
     return packet_mod_actions;
@@ -430,6 +452,9 @@ SWGChannelActions::isSet(){
             isObjectUpdated = true; break;
         }
         if(ieee_802_15_4_mod_actions && ieee_802_15_4_mod_actions->isSet()){
+            isObjectUpdated = true; break;
+        }
+        if(meshcore_mod_actions && meshcore_mod_actions->isSet()){
             isObjectUpdated = true; break;
         }
         if(packet_mod_actions && packet_mod_actions->isSet()){

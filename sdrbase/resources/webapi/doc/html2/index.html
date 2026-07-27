@@ -4784,6 +4784,11 @@ margin-bottom: 20px;
       "format" : "double",
       "description" : "Exclude a margin this percentage of the frame in from the sky-region edge (fisheye rim / vignette / foreground); 0 disables: 0 to 25"
     },
+    "cloudDayRelativeMargin" : {
+      "type" : "number",
+      "format" : "double",
+      "description" : "Day path: how much whiter (red/blue ratio) than the clear sky at the same elevation counts as cloud; 0 disables: 0 to 1"
+    },
     "cloudMinElevation" : {
       "type" : "number",
       "format" : "double",
@@ -5227,6 +5232,9 @@ margin-bottom: 20px;
     },
     "IEEE_802_15_4_ModActions" : {
       "$ref" : "#/definitions/IEEE_802_15_4_ModActions"
+    },
+    "MeshcoreModActions" : {
+      "$ref" : "#/definitions/MeshcoreModActions"
     },
     "PacketModActions" : {
       "$ref" : "#/definitions/PacketModActions"
@@ -12902,6 +12910,15 @@ margin-bottom: 20px;
     }
   },
   "description" : "MeshcoreDemod"
+};
+            defs.MeshcoreModActions = {
+  "properties" : {
+    "sendNow" : {
+      "type" : "integer",
+      "description" : "Send packet immediately\n  * 0 - Do nothing\n  * 1 - Send packet\n"
+    }
+  },
+  "description" : "MeshcoreMod"
 };
             defs.MeshcoreModReport = {
   "properties" : {
@@ -62979,7 +62996,7 @@ except ApiException as e:
           </div>
           <div id="generator">
             <div class="content">
-              Generated 2026-07-22T19:14:31.228+02:00
+              Generated 2026-07-27T16:57:13.133+02:00
             </div>
           </div>
       </div>

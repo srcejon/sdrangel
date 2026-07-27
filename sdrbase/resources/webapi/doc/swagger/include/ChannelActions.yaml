@@ -29,6 +29,8 @@ ChannelActions:
       $ref: "/doc/swagger/include/FreqScanner.yaml#/FreqScannerActions"
     IEEE_802_15_4_ModActions:
       $ref: "/doc/swagger/include/IEEE_802_15_4_Mod.yaml#/IEEE_802_15_4_ModActions"
+    MeshcoreModActions:
+      $ref: "/doc/swagger/include/MeshcoreMod.yaml#/MeshcoreModActions"
     PacketModActions:
       $ref: "/doc/swagger/include/PacketMod.yaml#/PacketModActions"
     PSK31ModActions:

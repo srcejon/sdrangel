@@ -126,3 +126,13 @@ MeshcoreModReport:
         Boolean - modulator is active (playing) including idle time
           * 0 - Modulator not active
           * 1 - Modulator active
+
+MeshcoreModActions:
+  description: MeshcoreMod
+  properties:
+    sendNow:
+      type: integer
+      description: >
+        Send packet immediately
+          * 0 - Do nothing
+          * 1 - Send packet

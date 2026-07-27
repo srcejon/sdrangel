@@ -1536,6 +1536,11 @@ namespace SWGSDRangel {
       obj->init();
       return obj;
     }
+    if(QString("SWGMeshcoreModActions").compare(type) == 0) {
+      SWGMeshcoreModActions *obj = new SWGMeshcoreModActions();
+      obj->init();
+      return obj;
+    }
     if(QString("SWGMeshcoreModReport").compare(type) == 0) {
       SWGMeshcoreModReport *obj = new SWGMeshcoreModReport();
       obj->init();
@@ -1568,11 +1573,6 @@ namespace SWGSDRangel {
     }
     if(QString("SWGMeteorSettings").compare(type) == 0) {
       SWGMeteorSettings *obj = new SWGMeteorSettings();
-      obj->init();
-      return obj;
-    }
-    if(QString("SWGMeshcoreModActions").compare(type) == 0) {
-      SWGMeshcoreModActions *obj = new SWGMeshcoreModActions();
       obj->init();
       return obj;
     }

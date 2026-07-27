@@ -504,6 +504,8 @@ SWGCameraSettings::SWGCameraSettings() {
     m_cloud_event_threshold_isSet = false;
     cloud_edge_margin_percent = 0.0;
     m_cloud_edge_margin_percent_isSet = false;
+    cloud_day_relative_margin = 0.0;
+    m_cloud_day_relative_margin_isSet = false;
     cloud_min_elevation = 0.0;
     m_cloud_min_elevation_isSet = false;
     cloud_mask_sun_moon = 0;
@@ -1146,6 +1148,8 @@ SWGCameraSettings::init() {
     m_cloud_event_threshold_isSet = false;
     cloud_edge_margin_percent = 0.0;
     m_cloud_edge_margin_percent_isSet = false;
+    cloud_day_relative_margin = 0.0;
+    m_cloud_day_relative_margin_isSet = false;
     cloud_min_elevation = 0.0;
     m_cloud_min_elevation_isSet = false;
     cloud_mask_sun_moon = 0;
@@ -1596,6 +1600,7 @@ SWGCameraSettings::cleanup() {
         }
         delete motion_exclusion_rects;
     }
+
 
 
 
@@ -2203,6 +2208,8 @@ SWGCameraSettings::fromJsonObject(QJsonObject &pJson) {
     ::SWGSDRangel::setValue(&cloud_event_threshold, pJson["cloudEventThreshold"], "double", "");
     
     ::SWGSDRangel::setValue(&cloud_edge_margin_percent, pJson["cloudEdgeMarginPercent"], "double", "");
+    
+    ::SWGSDRangel::setValue(&cloud_day_relative_margin, pJson["cloudDayRelativeMargin"], "double", "");
     
     ::SWGSDRangel::setValue(&cloud_min_elevation, pJson["cloudMinElevation"], "double", "");
     
@@ -3091,6 +3098,9 @@ SWGCameraSettings::asJsonObject() {
     }
     if(m_cloud_edge_margin_percent_isSet){
         obj->insert("cloudEdgeMarginPercent", QJsonValue(cloud_edge_margin_percent));
+    }
+    if(m_cloud_day_relative_margin_isSet){
+        obj->insert("cloudDayRelativeMargin", QJsonValue(cloud_day_relative_margin));
     }
     if(m_cloud_min_elevation_isSet){
         obj->insert("cloudMinElevation", QJsonValue(cloud_min_elevation));
@@ -5714,6 +5724,16 @@ SWGCameraSettings::setCloudEdgeMarginPercent(double cloud_edge_margin_percent) {
 }
 
 double
+SWGCameraSettings::getCloudDayRelativeMargin() {
+    return cloud_day_relative_margin;
+}
+void
+SWGCameraSettings::setCloudDayRelativeMargin(double cloud_day_relative_margin) {
+    this->cloud_day_relative_margin = cloud_day_relative_margin;
+    this->m_cloud_day_relative_margin_isSet = true;
+}
+
+double
 SWGCameraSettings::getCloudMinElevation() {
     return cloud_min_elevation;
 }
@@ -7223,6 +7243,9 @@ SWGCameraSettings::isSet(){
             isObjectUpdated = true; break;
         }
         if(m_cloud_edge_margin_percent_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_cloud_day_relative_margin_isSet){
             isObjectUpdated = true; break;
         }
         if(m_cloud_min_elevation_isSet){

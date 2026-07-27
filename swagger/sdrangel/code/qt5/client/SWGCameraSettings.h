@@ -759,6 +759,9 @@ public:
     double getCloudEdgeMarginPercent();
     void setCloudEdgeMarginPercent(double cloud_edge_margin_percent);
 
+    double getCloudDayRelativeMargin();
+    void setCloudDayRelativeMargin(double cloud_day_relative_margin);
+
     double getCloudMinElevation();
     void setCloudMinElevation(double cloud_min_elevation);
 
@@ -1713,6 +1716,9 @@ private:
 
     double cloud_edge_margin_percent;
     bool m_cloud_edge_margin_percent_isSet;
+
+    double cloud_day_relative_margin;
+    bool m_cloud_day_relative_margin_isSet;
 
     double cloud_min_elevation;
     bool m_cloud_min_elevation_isSet;

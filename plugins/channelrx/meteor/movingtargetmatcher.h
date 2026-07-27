@@ -122,6 +122,10 @@ public:
         Prediction m_prediction;
     };
 
+    static double elevationDegrees(
+        const Site& observer,
+        const TargetState& target,
+        const QDateTime& dateTimeUtc);
     static Prediction predict(const Observation& observation, const TargetState& target);
     static Match match(
         const Observation& observation,

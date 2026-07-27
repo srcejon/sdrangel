@@ -197,6 +197,26 @@ namespace {
         expectedTarget.m_northVelocityMPS = 45.0;
         expectedTarget.m_upVelocityMPS = 2.0;
 
+        MovingTargetMatcher::TargetState horizonTarget;
+        horizonTarget.m_dateTimeUtc = observation.m_startDateTimeUtc;
+        horizonTarget.m_position = {0.0, 3.0, 11582.4};
+        const MovingTargetMatcher::Site horizonObserver {0.0, 0.0, 0.0};
+        const double aboveHorizonDegrees = MovingTargetMatcher::elevationDegrees(
+            horizonObserver,
+            horizonTarget,
+            observation.m_startDateTimeUtc);
+        horizonTarget.m_position.m_longitudeDegrees = 9.0;
+        const double belowHorizonDegrees = MovingTargetMatcher::elevationDegrees(
+            horizonObserver,
+            horizonTarget,
+            observation.m_startDateTimeUtc);
+
+        if (!(aboveHorizonDegrees > 0.0) || !(belowHorizonDegrees < 0.0))
+        {
+            errorStream << "Moving-target matcher test: aircraft horizon geometry is incorrect\n";
+            return false;
+        }
+
         const MovingTargetMatcher::Prediction expectedPrediction =
             MovingTargetMatcher::predict(observation, expectedTarget);
 

@@ -250,6 +250,16 @@ QVector<MovingTargetMatcher::TargetState> MeteorGUI::collectADSBTargets(
     localStatistics.m_referenceDateTimeUtc = detectionTimeUtc;
     QHash<QString, MovingTargetMatcher::TargetState> targetsByICAO;
     const std::vector<DeviceSet *>& deviceSets = MainCore::instance()->getDeviceSets();
+    const MovingTargetMatcher::Site receiver {
+        m_settings.m_receiverLatitude,
+        m_settings.m_receiverLongitude,
+        0.0
+    };
+    const MovingTargetMatcher::Site transmitter {
+        m_settings.m_transmitterLatitude,
+        m_settings.m_transmitterLongitude,
+        0.0
+    };
 
     for (size_t deviceIndex = 0; deviceIndex < deviceSets.size(); ++deviceIndex)
     {
@@ -389,6 +399,33 @@ QVector<MovingTargetMatcher::TargetState> MeteorGUI::collectADSBTargets(
                     ? Units::feetPerMinToMetresPerSecond((float) aircraft->getVerticalRate())
                     : 0.0;
                 target.m_approximateDirection = !trackValid;
+                const double receiverElevationDegrees =
+                    MovingTargetMatcher::elevationDegrees(receiver, target, detectionTimeUtc);
+
+                if (!std::isfinite(receiverElevationDegrees))
+                {
+                    ++localStatistics.m_invalidKinematicsEntries;
+                    continue;
+                }
+                if (receiverElevationDegrees < 0.0)
+                {
+                    ++localStatistics.m_belowReceiverHorizonEntries;
+                    continue;
+                }
+
+                const double transmitterElevationDegrees =
+                    MovingTargetMatcher::elevationDegrees(transmitter, target, detectionTimeUtc);
+
+                if (!std::isfinite(transmitterElevationDegrees))
+                {
+                    ++localStatistics.m_invalidKinematicsEntries;
+                    continue;
+                }
+                if (transmitterElevationDegrees < 0.0)
+                {
+                    ++localStatistics.m_belowTransmitterHorizonEntries;
+                    continue;
+                }
 
                 const auto existing = targetsByICAO.constFind(identity);
 
@@ -2760,6 +2797,14 @@ void MeteorGUI::showSatelliteStatisticsDialog(
         tr("Rejected: field timestamps differ by over %1 seconds").arg(
             MaximumADSBFieldSkewS, 0, 'f', 0),
         m_adsbStatistics.m_inconsistentTimestampEntries);
+    addCount(
+        adsb,
+        tr("Rejected: below receiver horizon"),
+        m_adsbStatistics.m_belowReceiverHorizonEntries);
+    addCount(
+        adsb,
+        tr("Rejected: below transmitter horizon"),
+        m_adsbStatistics.m_belowTransmitterHorizonEntries);
     addCount(adsb, tr("Duplicate identities merged"), m_adsbStatistics.m_duplicateEntries);
     addCount(adsb, tr("Used as matcher candidates"), m_adsbStatistics.m_candidateEntries);
 

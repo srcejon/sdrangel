@@ -170,6 +170,8 @@ private:
         int m_invalidTimestampEntries = 0;
         int m_staleEntries = 0;
         int m_inconsistentTimestampEntries = 0;
+        int m_belowReceiverHorizonEntries = 0;
+        int m_belowTransmitterHorizonEntries = 0;
         int m_duplicateEntries = 0;
         int m_candidateEntries = 0;
     };

@@ -260,6 +260,36 @@ namespace {
     }
 }
 
+double MovingTargetMatcher::elevationDegrees(
+    const Site& observer,
+    const TargetState& target,
+    const QDateTime& dateTimeUtc)
+{
+    if (!dateTimeUtc.isValid() || !finiteSite(observer) || !finiteTarget(target)) {
+        return std::numeric_limits<double>::quiet_NaN();
+    }
+
+    const Vector3 observerPosition = geodeticToECEF(observer);
+    const Vector3 targetPosition = geodeticToECEF(target.m_position)
+        + enuVelocityToECEF(target) * secondsBetween(target.m_dateTimeUtc, dateTimeUtc);
+    const Vector3 lineOfSight = targetPosition - observerPosition;
+    const double range = length(lineOfSight);
+
+    if (!(range > 1.0)) {
+        return std::numeric_limits<double>::quiet_NaN();
+    }
+
+    const double latitude = observer.m_latitudeDegrees * Pi / 180.0;
+    const double longitude = observer.m_longitudeDegrees * Pi / 180.0;
+    const Vector3 up {
+        std::cos(latitude) * std::cos(longitude),
+        std::cos(latitude) * std::sin(longitude),
+        std::sin(latitude)
+    };
+    const double normalizedUp = std::clamp(dot(lineOfSight, up) / range, -1.0, 1.0);
+    return std::asin(normalizedUp) * 180.0 / Pi;
+}
+
 MovingTargetMatcher::Prediction MovingTargetMatcher::predict(
     const Observation& observation,
     const TargetState& target)

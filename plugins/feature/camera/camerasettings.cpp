@@ -602,6 +602,7 @@ void CameraSettings::resetToDefaults()
     m_cloudMotionOverlapThreshold = 0.6;
     m_cloudEventThreshold = 80.0;
     m_cloudEdgeMarginPercent = 0.0;
+    m_cloudDayRelativeMargin = 0.10;
     m_cloudMinElevation = 0.0;
     m_cloudMaskSunMoon = false;
     m_cloudSunMoonRadiusDeg = 20.0;
@@ -1048,6 +1049,7 @@ QByteArray CameraSettings::serialize() const
     s.writeBool(306, m_cloudAutoReference);
     s.writeBool(364, m_cloudUseDetectionRoi);
     s.writeDouble(365, m_cloudMinElevation);
+    s.writeDouble(369, m_cloudDayRelativeMargin);
     s.writeString(366, m_yoloLabelFontFamily);
     s.writeDouble(367, m_yoloLabelFontScale);
     s.writeS32(307, static_cast<qint32>(m_yoloInferenceMode));
@@ -1475,6 +1477,8 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readBool(364, &m_cloudUseDetectionRoi, true);
         d.readDouble(365, &m_cloudMinElevation, 0.0);
         m_cloudMinElevation = qBound(0.0, m_cloudMinElevation, 90.0);
+        d.readDouble(369, &m_cloudDayRelativeMargin, 0.10);
+        m_cloudDayRelativeMargin = qBound(0.0, m_cloudDayRelativeMargin, 1.0);
         d.readBool(308, &m_playbackProjectionEnabled, false);
         d.readS32(309, &m_playbackProjectionX, 0);
         d.readS32(310, &m_playbackProjectionY, 0);
@@ -2658,6 +2662,9 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     if (settingsKeys.contains("cloudMinElevation")) {
         m_cloudMinElevation = qBound(0.0, settings.m_cloudMinElevation, 90.0);
     }
+    if (settingsKeys.contains("cloudDayRelativeMargin")) {
+        m_cloudDayRelativeMargin = qBound(0.0, settings.m_cloudDayRelativeMargin, 1.0);
+    }
     if (settingsKeys.contains("cloudMaskSunMoon")) {
         m_cloudMaskSunMoon = settings.m_cloudMaskSunMoon;
     }
@@ -3792,6 +3799,9 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("cloudMinElevation") || force) {
         ostr << " m_cloudMinElevation: " << m_cloudMinElevation;
+    }
+    if (settingsKeys.contains("cloudDayRelativeMargin") || force) {
+        ostr << " m_cloudDayRelativeMargin: " << m_cloudDayRelativeMargin;
     }
     if (settingsKeys.contains("cloudMaskSunMoon") || force) {
         ostr << " m_cloudMaskSunMoon: " << m_cloudMaskSunMoon;

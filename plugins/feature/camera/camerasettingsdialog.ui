@@ -7013,6 +7013,29 @@ car</string>
              </property>
             </widget>
            </item>
+           <item row="12" column="2">
+            <widget class="QLabel" name="cloudDayRelativeMarginLabel">
+             <property name="text">
+              <string>Grey cloud margin</string>
+             </property>
+            </widget>
+           </item>
+           <item row="12" column="3">
+            <widget class="QDoubleSpinBox" name="cloudDayRelativeMarginSpin">
+             <property name="toolTip">
+              <string>Day path: how much whiter (red/blue ratio) than the clear sky at the same elevation a region must be to count as cloud. Catches grey cloud that never reaches the absolute Day threshold. Lower values detect fainter grey cloud but may flag the naturally pale sky near the horizon. 0 disables</string>
+             </property>
+             <property name="decimals">
+              <number>2</number>
+             </property>
+             <property name="maximum">
+              <double>1.000000000000000</double>
+             </property>
+             <property name="singleStep">
+              <double>0.010000000000000</double>
+             </property>
+            </widget>
+           </item>
            <item row="13" column="0">
             <widget class="QPushButton" name="cloudSaveReferenceButton">
              <property name="toolTip">
@@ -7046,7 +7069,16 @@ car</string>
            <item row="14" column="0" colspan="4">
             <widget class="QLabel" name="cloudReferenceStatusLabel">
              <property name="toolTip">
-              <string>Clear-sky reference store status: how many sky states have a saved reference</string>
+              <string>Clear-sky reference store status: how many sky states have a saved reference, and which is in use for the current frame. Press View to list them all</string>
+             </property>
+             <property name="sizePolicy">
+              <sizepolicy hsizetype="Ignored" vsizetype="Preferred">
+               <horstretch>0</horstretch>
+               <verstretch>0</verstretch>
+              </sizepolicy>
+             </property>
+             <property name="wordWrap">
+              <bool>true</bool>
              </property>
              <property name="text">
               <string>-</string>

@@ -182,6 +182,7 @@ private slots:
     void satTable_sectionMoved(int logicalIndex, int oldVisualIndex, int newVisualIndex);
     void satTable_sectionResized(int logicalIndex, int oldSize, int newSize);
     void on_satTableHeader_sortIndicatorChanged(int logicalIndex, Qt::SortOrder order);
+    void satTableMenu(QPoint pos);
     void columnSelectMenu(QPoint pos);
     void columnSelectMenuChecked(bool checked = false);
     void on_deviceFeatureSelect_currentIndexChanged(int index);

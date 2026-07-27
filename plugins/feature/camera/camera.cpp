@@ -1314,6 +1314,7 @@ void Camera::webapiFormatFeatureSettings(
     swg->setCloudEventThreshold(settings.m_cloudEventThreshold);
     swg->setCloudEdgeMarginPercent(settings.m_cloudEdgeMarginPercent);
     swg->setCloudMinElevation(settings.m_cloudMinElevation);
+    swg->setCloudDayRelativeMargin(settings.m_cloudDayRelativeMargin);
     swg->setCloudMaskSunMoon(settings.m_cloudMaskSunMoon ? 1 : 0);
     swg->setCloudSunMoonRadiusDeg(settings.m_cloudSunMoonRadiusDeg);
     swg->setCloudStarSense(settings.m_cloudStarSense ? 1 : 0);
@@ -2169,6 +2170,9 @@ void Camera::webapiUpdateFeatureSettings(
     }
     if (featureSettingsKeys.contains("cloudMinElevation")) {
         settings.m_cloudMinElevation = qBound(0.0, swg->getCloudMinElevation(), 90.0);
+    }
+    if (featureSettingsKeys.contains("cloudDayRelativeMargin")) {
+        settings.m_cloudDayRelativeMargin = qBound(0.0, swg->getCloudDayRelativeMargin(), 1.0);
     }
     if (featureSettingsKeys.contains("cloudMaskSunMoon")) {
         settings.m_cloudMaskSunMoon = swg->getCloudMaskSunMoon() != 0;

@@ -21,6 +21,7 @@
 #include <limits>
 #include <QAbstractTableModel>
 #include <QHeaderView>
+#include <QItemSelectionModel>
 #include <QMessageBox>
 #include <QLineEdit>
 #include <QSignalBlocker>
@@ -831,7 +832,7 @@ SatelliteTrackerGUI::SatelliteTrackerGUI(PluginAPI* pluginAPI, FeatureUISet *fea
     m_satTableProxy->setDynamicSortFilter(true);
     ui->satTable->setModel(m_satTableProxy);
     ui->satTable->setSelectionBehavior(QAbstractItemView::SelectRows);
-    ui->satTable->setSelectionMode(QAbstractItemView::SingleSelection);
+    ui->satTable->setSelectionMode(QAbstractItemView::ExtendedSelection);
     // Allow user to reorder columns
     ui->satTable->horizontalHeader()->setSectionsMovable(true);
     // Allow user to sort table by clicking on headers
@@ -848,6 +849,8 @@ SatelliteTrackerGUI::SatelliteTrackerGUI(PluginAPI* pluginAPI, FeatureUISet *fea
 
     ui->satTable->horizontalHeader()->setContextMenuPolicy(Qt::CustomContextMenu);
     connect(ui->satTable->horizontalHeader(), SIGNAL(customContextMenuRequested(QPoint)), SLOT(columnSelectMenu(QPoint)));
+    ui->satTable->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(ui->satTable, SIGNAL(customContextMenuRequested(QPoint)), SLOT(satTableMenu(QPoint)));
     // Get signals when columns change
     connect(ui->satTable->horizontalHeader(), SIGNAL(sectionMoved(int, int, int)), SLOT(satTable_sectionMoved(int, int, int)));
     connect(ui->satTable->horizontalHeader(), SIGNAL(sectionResized(int, int, int)), SLOT(satTable_sectionResized(int, int, int)));
@@ -1945,6 +1948,72 @@ void SatelliteTrackerGUI::satTable_sectionResized(int logicalIndex, int oldSize,
 {
     (void) oldSize;
     m_settings.m_columnSizes[logicalIndex] = newSize;
+}
+
+void SatelliteTrackerGUI::satTableMenu(QPoint pos)
+{
+    QModelIndex index = ui->satTable->indexAt(pos);
+    QString targetSatellite;
+
+    if (index.isValid() && !ui->satTable->selectionModel()->isSelected(index))
+    {
+        ui->satTable->selectionModel()->select(
+            index,
+            QItemSelectionModel::ClearAndSelect | QItemSelectionModel::Rows
+        );
+        ui->satTable->setCurrentIndex(index);
+    }
+
+    if (index.isValid())
+    {
+        const QModelIndex sourceIndex = m_satTableProxy->mapToSource(index);
+        targetSatellite = m_satTableModel->satelliteNameAt(sourceIndex.row());
+    }
+
+    QList<QString> selectedSatellites;
+    QSet<QString> selectedSatelliteSet;
+    const QModelIndexList selectedRows = ui->satTable->selectionModel()->selectedRows();
+
+    for (const QModelIndex& selectedRow : selectedRows)
+    {
+        const QModelIndex sourceIndex = m_satTableProxy->mapToSource(selectedRow);
+        const QString satellite = m_satTableModel->satelliteNameAt(sourceIndex.row());
+
+        if (!satellite.isEmpty() && !selectedSatelliteSet.contains(satellite))
+        {
+            selectedSatelliteSet.insert(satellite);
+            selectedSatellites.append(satellite);
+        }
+    }
+
+    if (targetSatellite.isEmpty() && (selectedSatellites.size() == 1)) {
+        targetSatellite = selectedSatellites[0];
+    }
+
+    QMenu menu(this);
+    QAction *setTargetAction = menu.addAction("Set as target");
+    setTargetAction->setEnabled(!targetSatellite.isEmpty());
+    menu.addSeparator();
+    QAction *deleteAction = menu.addAction("Delete");
+    deleteAction->setEnabled(!selectedSatellites.isEmpty());
+    QAction *selectedAction = menu.exec(ui->satTable->viewport()->mapToGlobal(pos));
+
+    if (selectedAction == setTargetAction)
+    {
+        setTarget(targetSatellite);
+        return;
+    }
+
+    if (selectedAction == deleteAction)
+    {
+        for (const QString& satellite : selectedSatellites) {
+            m_settings.m_satellites.removeAll(satellite);
+        }
+
+        updateSelectedSats();
+        m_settingsKeys.append("satellites");
+        applySettings();
+    }
 }
 
 // Right click in table header - show column select menu

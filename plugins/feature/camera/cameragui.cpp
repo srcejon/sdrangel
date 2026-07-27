@@ -2591,6 +2591,7 @@ void CameraGUI::displaySettings()
     settingsUI()->cloudStarSenseMagSpin->setValue(m_settings.m_cloudStarSenseMagnitude);
     settingsUI()->cloudUseReferenceCheck->setChecked(m_settings.m_cloudUseReference);
     settingsUI()->cloudUseRoiCheck->setChecked(m_settings.m_cloudUseDetectionRoi);
+    settingsUI()->cloudDayRelativeMarginSpin->setValue(m_settings.m_cloudDayRelativeMargin);
     settingsUI()->cloudAutoReferenceCheck->setChecked(m_settings.m_cloudAutoReference);
     if (!m_clearSkyReferenceSummary.isEmpty()) {
         settingsUI()->cloudReferenceStatusLabel->setText(m_clearSkyReferenceSummary);
@@ -4186,6 +4187,7 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->cloudStarSenseMagSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_cloudStarSenseMagSpin_valueChanged);
     QObject::connect(settingsUI()->cloudUseReferenceCheck, &QCheckBox::toggled, this, &CameraGUI::on_cloudUseReferenceCheck_toggled);
     QObject::connect(settingsUI()->cloudUseRoiCheck, &QCheckBox::toggled, this, &CameraGUI::on_cloudUseRoiCheck_toggled);
+    QObject::connect(settingsUI()->cloudDayRelativeMarginSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_cloudDayRelativeMarginSpin_valueChanged);
     QObject::connect(settingsUI()->cloudAutoReferenceCheck, &QCheckBox::toggled, this, &CameraGUI::on_cloudAutoReferenceCheck_toggled);
     QObject::connect(settingsUI()->cloudSaveReferenceButton, &QPushButton::clicked, this, &CameraGUI::on_cloudSaveReferenceButton_clicked);
     QObject::connect(settingsUI()->cloudViewReferenceButton, &QPushButton::clicked, this, &CameraGUI::on_cloudViewReferenceButton_clicked);
@@ -11610,6 +11612,12 @@ void CameraGUI::on_cloudUseRoiCheck_toggled(bool checked)
 {
     m_settings.m_cloudUseDetectionRoi = checked;
     applySetting("cloudUseDetectionRoi");
+}
+
+void CameraGUI::on_cloudDayRelativeMarginSpin_valueChanged(double value)
+{
+    m_settings.m_cloudDayRelativeMargin = value;
+    applySetting("cloudDayRelativeMargin");
 }
 
 void CameraGUI::on_cloudAutoReferenceCheck_toggled(bool checked)

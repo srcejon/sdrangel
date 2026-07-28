@@ -672,11 +672,14 @@ void CameraStarDetector::processNewFrame(const CameraPipelineFramePtr& frame)
         CameraSettings solveSettings = CameraImageUtils::projectionSettingsForFrame(m_settings, *frame);
         solveSettings.m_lensMirror = false; // input already flipped above
         const QSize solveImageSize = frame->opticalImageSize();
+        QElapsedTimer solveTimer;
+        solveTimer.start();
         const CameraPlateSolveResult plateSolveResult = m_plateSolver.solve(
             solveSettings,
             solveImageSize,
             frame->m_captureDateTime,
             solveDetections);
+        frame->m_plateSolve.m_solveTimeMs = static_cast<float>(solveTimer.elapsed());
         reportPlateSolveStatus(false);
 
         if (solveInOpticalCoordinates)

@@ -253,6 +253,7 @@ private:
     int m_lastPlateSolveOutlierStars = 0;
     double m_lastPlateSolveRmsError = 0.0;
     double m_lastPlateSolveMaxError = 0.0;
+    double m_lastPlateSolveTimeMs = 0.0;
     double m_lastPlateSolveAzimuth = 0.0;
     double m_lastPlateSolveElevation = 0.0;
     double m_lastPlateSolveRoll = 0.0;

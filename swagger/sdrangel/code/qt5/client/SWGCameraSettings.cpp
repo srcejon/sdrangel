@@ -374,6 +374,14 @@ SWGCameraSettings::SWGCameraSettings() {
     m_constellation_color_isSet = false;
     constellation_overlay = 0;
     m_constellation_overlay_isSet = false;
+    messier = 0;
+    m_messier_isSet = false;
+    messier_color = 0;
+    m_messier_color_isSet = false;
+    messier_max_magnitude = 0.0;
+    m_messier_max_magnitude_isSet = false;
+    messier_detect = 0;
+    m_messier_detect_isSet = false;
     track_objects = 0;
     m_track_objects_isSet = false;
     track_object_min_elevation = 0.0;
@@ -1020,6 +1028,14 @@ SWGCameraSettings::init() {
     m_constellation_color_isSet = false;
     constellation_overlay = 0;
     m_constellation_overlay_isSet = false;
+    messier = 0;
+    m_messier_isSet = false;
+    messier_color = 0;
+    m_messier_color_isSet = false;
+    messier_max_magnitude = 0.0;
+    m_messier_max_magnitude_isSet = false;
+    messier_detect = 0;
+    m_messier_detect_isSet = false;
     track_objects = 0;
     m_track_objects_isSet = false;
     track_object_min_elevation = 0.0;
@@ -1532,6 +1548,10 @@ SWGCameraSettings::cleanup() {
     if(date_time_format != nullptr) { 
         delete date_time_format;
     }
+
+
+
+
 
 
 
@@ -2083,6 +2103,14 @@ SWGCameraSettings::fromJsonObject(QJsonObject &pJson) {
     ::SWGSDRangel::setValue(&constellation_color, pJson["constellationColor"], "qint32", "");
     
     ::SWGSDRangel::setValue(&constellation_overlay, pJson["constellationOverlay"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&messier, pJson["messier"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&messier_color, pJson["messierColor"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&messier_max_magnitude, pJson["messierMaxMagnitude"], "double", "");
+    
+    ::SWGSDRangel::setValue(&messier_detect, pJson["messierDetect"], "qint32", "");
     
     ::SWGSDRangel::setValue(&track_objects, pJson["trackObjects"], "qint32", "");
     
@@ -2910,6 +2938,18 @@ SWGCameraSettings::asJsonObject() {
     }
     if(m_constellation_overlay_isSet){
         obj->insert("constellationOverlay", QJsonValue(constellation_overlay));
+    }
+    if(m_messier_isSet){
+        obj->insert("messier", QJsonValue(messier));
+    }
+    if(m_messier_color_isSet){
+        obj->insert("messierColor", QJsonValue(messier_color));
+    }
+    if(m_messier_max_magnitude_isSet){
+        obj->insert("messierMaxMagnitude", QJsonValue(messier_max_magnitude));
+    }
+    if(m_messier_detect_isSet){
+        obj->insert("messierDetect", QJsonValue(messier_detect));
     }
     if(m_track_objects_isSet){
         obj->insert("trackObjects", QJsonValue(track_objects));
@@ -5084,6 +5124,46 @@ SWGCameraSettings::setConstellationOverlay(qint32 constellation_overlay) {
 }
 
 qint32
+SWGCameraSettings::getMessier() {
+    return messier;
+}
+void
+SWGCameraSettings::setMessier(qint32 messier) {
+    this->messier = messier;
+    this->m_messier_isSet = true;
+}
+
+qint32
+SWGCameraSettings::getMessierColor() {
+    return messier_color;
+}
+void
+SWGCameraSettings::setMessierColor(qint32 messier_color) {
+    this->messier_color = messier_color;
+    this->m_messier_color_isSet = true;
+}
+
+double
+SWGCameraSettings::getMessierMaxMagnitude() {
+    return messier_max_magnitude;
+}
+void
+SWGCameraSettings::setMessierMaxMagnitude(double messier_max_magnitude) {
+    this->messier_max_magnitude = messier_max_magnitude;
+    this->m_messier_max_magnitude_isSet = true;
+}
+
+qint32
+SWGCameraSettings::getMessierDetect() {
+    return messier_detect;
+}
+void
+SWGCameraSettings::setMessierDetect(qint32 messier_detect) {
+    this->messier_detect = messier_detect;
+    this->m_messier_detect_isSet = true;
+}
+
+qint32
 SWGCameraSettings::getTrackObjects() {
     return track_objects;
 }
@@ -7068,6 +7148,18 @@ SWGCameraSettings::isSet(){
             isObjectUpdated = true; break;
         }
         if(m_constellation_overlay_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_messier_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_messier_color_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_messier_max_magnitude_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_messier_detect_isSet){
             isObjectUpdated = true; break;
         }
         if(m_track_objects_isSet){

@@ -635,6 +635,19 @@ CameraSettings:
           * 1 - Orion
           * 2 - Crux
       type: integer
+    messier:
+      description: "Draw Messier object overlay (1 for yes, 0 for no)"
+      type: integer
+    messierColor:
+      description: "Messier overlay colour as 0xRRGGBB integer"
+      type: integer
+    messierMaxMagnitude:
+      description: "Only overlay Messier objects at least this bright (visual magnitude; 10.5 shows all 110)"
+      type: number
+      format: double
+    messierDetect:
+      description: "Photometrically check each Messier position and dim objects not detected in the frame (1 for yes, 0 for no)"
+      type: integer
     trackObjects:
       description: "Draw tracked object overlay (1 for yes, 0 for no)"
       type: integer

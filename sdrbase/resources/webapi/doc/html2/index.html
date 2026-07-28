@@ -4506,6 +4506,23 @@ margin-bottom: 20px;
       "type" : "integer",
       "description" : "Constellation overlay\n  * 0 - Ursa Major\n  * 1 - Orion\n  * 2 - Crux\n"
     },
+    "messier" : {
+      "type" : "integer",
+      "description" : "Draw Messier object overlay (1 for yes, 0 for no)"
+    },
+    "messierColor" : {
+      "type" : "integer",
+      "description" : "Messier overlay colour as 0xRRGGBB integer"
+    },
+    "messierMaxMagnitude" : {
+      "type" : "number",
+      "format" : "double",
+      "description" : "Only overlay Messier objects at least this bright (visual magnitude; 10.5 shows all 110)"
+    },
+    "messierDetect" : {
+      "type" : "integer",
+      "description" : "Photometrically check each Messier position and dim objects not detected in the frame (1 for yes, 0 for no)"
+    },
     "trackObjects" : {
       "type" : "integer",
       "description" : "Draw tracked object overlay (1 for yes, 0 for no)"
@@ -62990,7 +63007,7 @@ except ApiException as e:
           </div>
           <div id="generator">
             <div class="content">
-              Generated 2026-07-28T03:33:19.360+02:00
+              Generated 2026-07-28T17:09:15.704+02:00
             </div>
           </div>
       </div>

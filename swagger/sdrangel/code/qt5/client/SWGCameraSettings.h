@@ -564,6 +564,18 @@ public:
     qint32 getConstellationOverlay();
     void setConstellationOverlay(qint32 constellation_overlay);
 
+    qint32 getMessier();
+    void setMessier(qint32 messier);
+
+    qint32 getMessierColor();
+    void setMessierColor(qint32 messier_color);
+
+    double getMessierMaxMagnitude();
+    void setMessierMaxMagnitude(double messier_max_magnitude);
+
+    qint32 getMessierDetect();
+    void setMessierDetect(qint32 messier_detect);
+
     qint32 getTrackObjects();
     void setTrackObjects(qint32 track_objects);
 
@@ -1524,6 +1536,18 @@ private:
 
     qint32 constellation_overlay;
     bool m_constellation_overlay_isSet;
+
+    qint32 messier;
+    bool m_messier_isSet;
+
+    qint32 messier_color;
+    bool m_messier_color_isSet;
+
+    double messier_max_magnitude;
+    bool m_messier_max_magnitude_isSet;
+
+    qint32 messier_detect;
+    bool m_messier_detect_isSet;
 
     qint32 track_objects;
     bool m_track_objects_isSet;

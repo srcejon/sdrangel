@@ -58,6 +58,7 @@
 #include "SWGADSBDemodReport.h"
 #include "SWGChannelReport.h"
 #include "SWGDeviceReport.h"
+#include "SWGRemoteTCPInputReport.h"
 
 #include "channel/channelapi.h"
 #include "device/deviceuiset.h"
@@ -2691,28 +2692,21 @@ bool MeteorGUI::remoteTCPInputTransportLatencySeconds(
         return false;
     }
 
-    QJsonObject *reportJson = deviceReport.asJsonObject();
-    double timingAvailable = 0.0;
-    double latencyUsecs = 0.0;
-    const bool valid = WebAPIUtils::getSubObjectDouble(
-            *reportJson,
-            QStringLiteral("timingAvailable"),
-            timingAvailable)
-        && (timingAvailable != 0.0)
-        && WebAPIUtils::getSubObjectDouble(
-            *reportJson,
-            QStringLiteral("transportLatencyUs"),
-            latencyUsecs)
-        && std::isfinite(latencyUsecs)
-        && (latencyUsecs >= 0.0)
-        && (latencyUsecs <= 60.0 * 1000000.0);
-    delete reportJson;
+    SWGSDRangel::SWGRemoteTCPInputReport *report =
+        deviceReport.getRemoteTcpInputReport();
+    const qint64 latencyUsecs = report
+        ? report->getTransportLatencyUs()
+        : 0;
+    const bool valid = report
+        && (report->getTimingAvailable() != 0)
+        && (latencyUsecs >= 0)
+        && (latencyUsecs <= 60LL * 1000000LL);
 
     if (!valid) {
         return false;
     }
 
-    latencySeconds = latencyUsecs / 1000000.0;
+    latencySeconds = (double) latencyUsecs / 1000000.0;
     return true;
 }
 

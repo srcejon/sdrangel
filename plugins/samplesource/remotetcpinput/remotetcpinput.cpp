@@ -19,9 +19,6 @@
 
 #include <string.h>
 #include <errno.h>
-#include <type_traits>
-#include <utility>
-
 #include <QDebug>
 #include <QNetworkReply>
 #include <QBuffer>
@@ -47,37 +44,6 @@ MESSAGE_CLASS_DEFINITION(RemoteTCPInput::MsgSendMessage, Message)
 MESSAGE_CLASS_DEFINITION(RemoteTCPInput::MsgReportPosition, Message)
 MESSAGE_CLASS_DEFINITION(RemoteTCPInput::MsgReportDirection, Message)
 MESSAGE_CLASS_DEFINITION(RemoteTCPInput::MsgReportTiming, Message)
-
-namespace {
-    template<typename T, typename = void>
-    struct HasRemoteTimingReportSetters : std::false_type {};
-
-    template<typename T>
-    struct HasRemoteTimingReportSetters<T, std::void_t<
-        decltype(std::declval<T&>().setTimingAvailable(0)),
-        decltype(std::declval<T&>().setRemoteFirstSampleTimeUs(qint64{})),
-        decltype(std::declval<T&>().setTransportLatencyUs(qint64{})),
-        decltype(std::declval<T&>().setTimingUncertaintyUs(qint64{}))
-    >> : std::true_type {};
-
-    template<typename T>
-    void setRemoteTimingReport(
-        T *report,
-        bool available,
-        qint64 remoteFirstSampleTimeUsecs,
-        qint64 transportLatencyUsecs,
-        qint64 uncertaintyUsecs)
-    {
-        if constexpr (HasRemoteTimingReportSetters<T>::value)
-        {
-            report->setTimingAvailable(available ? 1 : 0);
-            report->setRemoteFirstSampleTimeUs(
-                remoteFirstSampleTimeUsecs);
-            report->setTransportLatencyUs(transportLatencyUsecs);
-            report->setTimingUncertaintyUs(uncertaintyUsecs);
-        }
-    }
-}
 
 RemoteTCPInput::RemoteTCPInput(DeviceAPI *deviceAPI) :
     m_deviceAPI(deviceAPI),
@@ -600,16 +566,16 @@ int RemoteTCPInput::webapiReportGet(
 
 void RemoteTCPInput::webapiFormatDeviceReport(SWGSDRangel::SWGDeviceReport& response)
 {
-    response.getRemoteTcpInputReport()->setSampleRate(m_settings.m_channelSampleRate);
-    response.getRemoteTcpInputReport()->setLatitude(m_latitude);
-    response.getRemoteTcpInputReport()->setLongitude(m_longitude);
-    response.getRemoteTcpInputReport()->setAltitude(m_altitude);
-    setRemoteTimingReport(
-        response.getRemoteTcpInputReport(),
-        m_timingAvailable,
-        m_remoteFirstSampleTimeUsecs,
-        m_transportLatencyUsecs,
-        m_timingUncertaintyUsecs);
+    SWGSDRangel::SWGRemoteTCPInputReport *report =
+        response.getRemoteTcpInputReport();
+    report->setSampleRate(m_settings.m_channelSampleRate);
+    report->setLatitude(m_latitude);
+    report->setLongitude(m_longitude);
+    report->setAltitude(m_altitude);
+    report->setTimingAvailable(m_timingAvailable ? 1 : 0);
+    report->setRemoteFirstSampleTimeUs(m_remoteFirstSampleTimeUsecs);
+    report->setTransportLatencyUs(m_transportLatencyUsecs);
+    report->setTimingUncertaintyUs(m_timingUncertaintyUsecs);
 }
 
 void RemoteTCPInput::webapiReverseSendSettings(const QList<QString>& deviceSettingsKeys, const RemoteTCPInputSettings& settings, bool force)

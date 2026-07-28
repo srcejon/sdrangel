@@ -2939,7 +2939,7 @@ void CameraPostProcessor::applyConstellationOverlay(const CameraPipelineFrame& f
     PROFILER_STOP(__FUNCTION__);
 }
 
-void CameraPostProcessor::applyMessierOverlay(const CameraPipelineFrame& frame, QImage& image) const
+void CameraPostProcessor::applyMessierOverlay(const CameraPipelineFrame& frame, QImage& image, bool drawLabels, QVector<PreviewTextLabel> *previewTextLabels) const
 {
     PROFILER_START();
 
@@ -3180,13 +3180,29 @@ void CameraPostProcessor::applyMessierOverlay(const CameraPipelineFrame& frame, 
                 break;
             }
         }
-        drawOutlinedLabel(
-            painter,
-            image.rect(),
-            labelAnchor,
-            label,
-            drawColor,
-            fontMetrics);
+        // Same dual path as the star/grid overlays: paint the label into the image when baking,
+        // otherwise emit a PreviewTextLabel that the GUI renders as a vector graphics item over
+        // the pixmap — crisp at any zoom instead of pixellating with the frame.
+        if (drawLabels)
+        {
+            drawOutlinedLabel(
+                painter,
+                image.rect(),
+                labelAnchor,
+                label,
+                drawColor,
+                fontMetrics);
+        }
+        else
+        {
+            appendOutlinedPreviewTextLabel(
+                previewTextLabels,
+                label,
+                labelAnchor,
+                drawColor,
+                font.family(),
+                font.pointSizeF());
+        }
         occupiedLabelRects.append(estimateOutlinedLabelRect(labelAnchor, label, fontMetrics));
     }
 
@@ -3584,7 +3600,7 @@ QImage CameraPostProcessor::applyPostProcessing(
         applyConstellationOverlay(frame, result);
     }
     if (m_settings.m_messier) {
-        applyMessierOverlay(frame, result);
+        applyMessierOverlay(frame, result, drawPreviewText, previewTextLabels);
     }
     if (m_settings.m_trackObjects) {
         applyTrackedObjectOverlay(frame, result, drawPreviewText, previewTextLabels, trackedObjects);

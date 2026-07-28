@@ -537,6 +537,9 @@ void CameraSettings::resetToDefaults()
     m_constellation  = false;
     m_constellationColor = QColor(255, 255, 120);
     m_constellationOverlay = ConstellationOverlayUrsaMajor;
+    m_messier = false;
+    m_messierColor = QColor(120, 200, 255);
+    m_messierMaxMagnitude = 10.5;
     m_trackObjects = false;
     m_trackObjectTrails = false;
     m_trackObjectHeatMap = false;
@@ -902,6 +905,9 @@ QByteArray CameraSettings::serialize() const
     s.writeBool(153, m_constellation);
     s.writeU32(154, m_constellationColor.rgba());
     s.writeS32(155, static_cast<qint32>(m_constellationOverlay));
+    s.writeBool(372, m_messier);
+    s.writeU32(373, m_messierColor.rgba());
+    s.writeDouble(374, m_messierMaxMagnitude);
     s.writeBool(156, m_trackObjects);
     s.writeDouble(157, m_trackObjectMinElevation);
     s.writeU32(158, m_trackObjectColor.rgba());
@@ -1587,6 +1593,11 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readU32(154, &constellationColorRgba, QColor(255, 255, 120).rgba());
         m_constellationColor = QColor::fromRgba(constellationColorRgba);
         d.readS32(155, reinterpret_cast<qint32*>(&m_constellationOverlay), static_cast<qint32>(ConstellationOverlayUrsaMajor));
+        d.readBool(372, &m_messier, false);
+        uint32_t messierColorRgba = QColor(120, 200, 255).rgba();
+        d.readU32(373, &messierColorRgba, QColor(120, 200, 255).rgba());
+        m_messierColor = QColor::fromRgba(messierColorRgba);
+        d.readDouble(374, &m_messierMaxMagnitude, 10.5);
         d.readBool(156, &m_trackObjects, false);
         d.readBool(238, &m_trackObjectTrails, false);
         d.readBool(239, &m_trackObjectHeatMap, false);
@@ -2973,6 +2984,15 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     if (settingsKeys.contains("constellationOverlay")) {
         m_constellationOverlay = settings.m_constellationOverlay;
     }
+    if (settingsKeys.contains("messier")) {
+        m_messier = settings.m_messier;
+    }
+    if (settingsKeys.contains("messierColor")) {
+        m_messierColor = settings.m_messierColor;
+    }
+    if (settingsKeys.contains("messierMaxMagnitude")) {
+        m_messierMaxMagnitude = settings.m_messierMaxMagnitude;
+    }
     if (settingsKeys.contains("trackObjects")) {
         m_trackObjects = settings.m_trackObjects;
     }
@@ -4060,6 +4080,15 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("constellationOverlay") || force) {
         ostr << " m_constellationOverlay: " << static_cast<int>(m_constellationOverlay);
+    }
+    if (settingsKeys.contains("messier") || force) {
+        ostr << " m_messier: " << m_messier;
+    }
+    if (settingsKeys.contains("messierColor") || force) {
+        ostr << " m_messierColor: " << m_messierColor.name().toStdString();
+    }
+    if (settingsKeys.contains("messierMaxMagnitude") || force) {
+        ostr << " m_messierMaxMagnitude: " << m_messierMaxMagnitude;
     }
     if (settingsKeys.contains("trackObjects") || force) {
         ostr << " m_trackObjects: " << m_trackObjects;

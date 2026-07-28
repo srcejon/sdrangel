@@ -506,6 +506,7 @@ private:
     [[nodiscard]] static cv::Mat wrapRgb888Image(const QImage& image);
     void applySkyGridOverlay(const CameraPipelineFrame& frame, QImage& image, bool drawLabels, QVector<PreviewTextLabel> *previewTextLabels) const;
     void applyConstellationOverlay(const CameraPipelineFrame& frame, QImage& image) const;
+    void applyMessierOverlay(const CameraPipelineFrame& frame, QImage& image) const;
     void applyTrackedObjectOverlay(const CameraPipelineFrame& frame, QImage& image, bool drawLabels, QVector<PreviewTextLabel> *previewTextLabels, QVector<CameraPipelineTrackedObject> *trackedObjects = nullptr);
     void applyDateTimeOverlay(QImage& image, bool drawLabel, QVector<PreviewTextLabel> *previewTextLabels) const;
     void applyTextOverlay(QImage& image, QTextDocument& overlayTextDocument) const;

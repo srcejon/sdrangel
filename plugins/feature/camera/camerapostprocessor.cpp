@@ -341,6 +341,135 @@ const std::array<EquatorialStar, 4> kCruxStars = {{
     {187.791667, -57.113333}  // Delta Crucis
 }};
 
+// Messier catalogue for the deep-sky overlay. J2000 positions in degrees (accurate to ~1
+// arcminute — ample for labelling; precession since J2000 is also ~arcminute-level), visual
+// magnitude, apparent major axis in arcminutes, and a type code used to style the marker:
+// G galaxy, C globular cluster, O open cluster, N diffuse nebula, P planetary nebula,
+// S supernova remnant, A asterism/double/star cloud. Common name may be empty.
+struct MessierObject
+{
+    const char* designation;
+    const char* commonName;
+    double raDegrees;
+    double decDegrees;
+    double magnitude;
+    double majorAxisArcmin;
+    char type;
+};
+
+const std::array<MessierObject, 110> kMessierObjects = {{
+    {"M1",   "Crab Nebula",            83.633,  22.015,  8.4,   6.0, 'S'},
+    {"M2",   "",                      323.363,  -0.823,  6.5,  16.0, 'C'},
+    {"M3",   "",                      205.548,  28.377,  6.2,  18.0, 'C'},
+    {"M4",   "",                      245.897, -26.526,  5.9,  26.0, 'C'},
+    {"M5",   "",                      229.638,   2.081,  6.7,  20.0, 'C'},
+    {"M6",   "Butterfly Cluster",     265.083, -32.217,  4.2,  25.0, 'O'},
+    {"M7",   "Ptolemy Cluster",       268.463, -34.793,  3.3,  80.0, 'O'},
+    {"M8",   "Lagoon Nebula",         270.921, -24.380,  6.0,  90.0, 'N'},
+    {"M9",   "",                      259.799, -18.516,  8.4,   9.3, 'C'},
+    {"M10",  "",                      254.288,  -4.100,  6.4,  15.0, 'C'},
+    {"M11",  "Wild Duck Cluster",     282.771,  -6.270,  6.3,  14.0, 'O'},
+    {"M12",  "",                      251.809,  -1.949,  7.7,  14.5, 'C'},
+    {"M13",  "Hercules Cluster",      250.421,  36.460,  5.8,  20.0, 'C'},
+    {"M14",  "",                      264.401,  -3.246,  8.3,  11.0, 'C'},
+    {"M15",  "",                      322.493,  12.167,  6.2,  12.3, 'C'},
+    {"M16",  "Eagle Nebula",          274.700, -13.807,  6.4,  35.0, 'N'},
+    {"M17",  "Omega Nebula",          275.196, -16.172,  6.0,  46.0, 'N'},
+    {"M18",  "",                      274.999, -17.101,  7.5,   9.0, 'O'},
+    {"M19",  "",                      255.657, -26.268,  7.5,  17.0, 'C'},
+    {"M20",  "Trifid Nebula",         270.630, -22.972,  6.3,  28.0, 'N'},
+    {"M21",  "",                      270.898, -22.505,  6.5,  13.0, 'O'},
+    {"M22",  "Sagittarius Cluster",   279.100, -23.905,  5.1,  32.0, 'C'},
+    {"M23",  "",                      269.267, -18.985,  6.9,  27.0, 'O'},
+    {"M24",  "Sagittarius Star Cloud",274.200, -18.550,  4.6,  90.0, 'A'},
+    {"M25",  "",                      277.937, -19.113,  6.5,  32.0, 'O'},
+    {"M26",  "",                      281.325,  -9.383,  8.0,  15.0, 'O'},
+    {"M27",  "Dumbbell Nebula",       299.902,  22.721,  7.5,   8.0, 'P'},
+    {"M28",  "",                      276.137, -24.870,  7.7,  11.2, 'C'},
+    {"M29",  "",                      305.983,  38.523,  7.1,   7.0, 'O'},
+    {"M30",  "",                      325.092, -23.180,  7.7,  11.0, 'C'},
+    {"M31",  "Andromeda Galaxy",       10.685,  41.269,  3.4, 190.0, 'G'},
+    {"M32",  "",                       10.674,  40.865,  8.1,   8.7, 'G'},
+    {"M33",  "Triangulum Galaxy",      23.462,  30.660,  5.7,  71.0, 'G'},
+    {"M34",  "",                       40.500,  42.762,  5.5,  35.0, 'O'},
+    {"M35",  "",                       92.225,  24.333,  5.3,  28.0, 'O'},
+    {"M36",  "",                       84.083,  34.135,  6.3,  12.0, 'O'},
+    {"M37",  "",                       88.075,  32.545,  6.2,  24.0, 'O'},
+    {"M38",  "",                       82.167,  35.855,  7.4,  21.0, 'O'},
+    {"M39",  "",                      322.950,  48.433,  4.6,  32.0, 'O'},
+    {"M40",  "Winnecke 4",            185.552,  58.083,  9.7,   0.8, 'A'},
+    {"M41",  "",                      101.500, -20.757,  4.5,  38.0, 'O'},
+    {"M42",  "Orion Nebula",           83.822,  -5.391,  4.0,  85.0, 'N'},
+    {"M43",  "De Mairan's Nebula",     83.883,  -5.267,  9.0,  20.0, 'N'},
+    {"M44",  "Beehive Cluster",       130.100,  19.667,  3.1,  95.0, 'O'},
+    {"M45",  "Pleiades",               56.871,  24.105,  1.6, 110.0, 'O'},
+    {"M46",  "",                      115.442, -14.810,  6.1,  27.0, 'O'},
+    {"M47",  "",                      114.150, -14.483,  4.4,  30.0, 'O'},
+    {"M48",  "",                      123.429,  -5.750,  5.8,  54.0, 'O'},
+    {"M49",  "",                      187.445,   8.000,  8.4,  10.2, 'G'},
+    {"M50",  "",                      105.698,  -8.337,  5.9,  16.0, 'O'},
+    {"M51",  "Whirlpool Galaxy",      202.470,  47.195,  8.4,  11.2, 'G'},
+    {"M52",  "",                      351.200,  61.593,  6.9,  13.0, 'O'},
+    {"M53",  "",                      198.230,  18.169,  7.6,  13.0, 'C'},
+    {"M54",  "",                      283.764, -30.480,  7.6,  12.0, 'C'},
+    {"M55",  "",                      294.999, -30.965,  6.3,  19.0, 'C'},
+    {"M56",  "",                      289.148,  30.184,  8.3,   8.8, 'C'},
+    {"M57",  "Ring Nebula",           283.396,  33.029,  8.8,   1.4, 'P'},
+    {"M58",  "",                      189.431,  11.818,  9.7,   5.9, 'G'},
+    {"M59",  "",                      190.510,  11.647,  9.6,   5.4, 'G'},
+    {"M60",  "",                      190.917,  11.552,  8.8,   7.4, 'G'},
+    {"M61",  "",                      185.479,   4.474,  9.7,   6.5, 'G'},
+    {"M62",  "",                      255.303, -30.114,  6.5,  15.0, 'C'},
+    {"M63",  "Sunflower Galaxy",      198.956,  42.029,  8.6,  12.6, 'G'},
+    {"M64",  "Black Eye Galaxy",      194.183,  21.683,  8.5,  10.7, 'G'},
+    {"M65",  "",                      169.733,  13.092,  9.3,   8.7, 'G'},
+    {"M66",  "",                      170.063,  12.992,  8.9,   9.1, 'G'},
+    {"M67",  "",                      132.846,  11.814,  6.1,  30.0, 'O'},
+    {"M68",  "",                      189.867, -26.744,  7.8,  11.0, 'C'},
+    {"M69",  "",                      277.846, -32.348,  7.6,   9.8, 'C'},
+    {"M70",  "",                      280.803, -32.292,  7.9,   8.0, 'C'},
+    {"M71",  "",                      298.444,  18.779,  8.2,   7.2, 'C'},
+    {"M72",  "",                      313.365, -12.537,  9.3,   6.6, 'C'},
+    {"M73",  "",                      314.750, -12.633,  8.9,   2.8, 'A'},
+    {"M74",  "Phantom Galaxy",         24.174,  15.783,  9.4,  10.5, 'G'},
+    {"M75",  "",                      301.520, -21.922,  8.5,   6.8, 'C'},
+    {"M76",  "Little Dumbbell",        25.582,  51.575, 10.1,   2.7, 'P'},
+    {"M77",  "Cetus A",                40.670,  -0.013,  8.9,   7.1, 'G'},
+    {"M78",  "",                       86.691,   0.079,  8.3,   8.0, 'N'},
+    {"M79",  "",                       81.046, -24.524,  7.7,   8.7, 'C'},
+    {"M80",  "",                      244.260, -22.976,  7.3,  10.0, 'C'},
+    {"M81",  "Bode's Galaxy",         148.888,  69.065,  6.9,  26.9, 'G'},
+    {"M82",  "Cigar Galaxy",          148.968,  69.680,  8.4,  11.2, 'G'},
+    {"M83",  "Southern Pinwheel",     204.254, -29.866,  7.5,  12.9, 'G'},
+    {"M84",  "",                      186.266,  12.887,  9.1,   6.5, 'G'},
+    {"M85",  "",                      186.350,  18.191,  9.1,   7.1, 'G'},
+    {"M86",  "",                      186.549,  12.946,  8.9,   8.9, 'G'},
+    {"M87",  "Virgo A",               187.706,  12.391,  8.6,   8.3, 'G'},
+    {"M88",  "",                      187.997,  14.420,  9.6,   6.9, 'G'},
+    {"M89",  "",                      188.916,  12.556,  9.8,   5.1, 'G'},
+    {"M90",  "",                      189.208,  13.163,  9.5,   9.5, 'G'},
+    {"M91",  "",                      188.860,  14.496, 10.2,   5.4, 'G'},
+    {"M92",  "",                      259.281,  43.136,  6.3,  14.0, 'C'},
+    {"M93",  "",                      116.125, -23.857,  6.0,  22.0, 'O'},
+    {"M94",  "",                      192.721,  41.120,  8.2,  11.2, 'G'},
+    {"M95",  "",                      160.990,  11.704,  9.7,   7.4, 'G'},
+    {"M96",  "",                      161.690,  11.820,  9.2,   7.6, 'G'},
+    {"M97",  "Owl Nebula",            168.699,  55.019,  9.9,   3.4, 'P'},
+    {"M98",  "",                      183.451,  14.900, 10.1,   9.8, 'G'},
+    {"M99",  "",                      184.707,  14.417,  9.9,   5.4, 'G'},
+    {"M100", "",                      185.729,  15.822,  9.3,   7.4, 'G'},
+    {"M101", "Pinwheel Galaxy",       210.802,  54.349,  7.9,  28.8, 'G'},
+    {"M102", "Spindle Galaxy",        226.623,  55.763,  9.9,   4.7, 'G'},
+    {"M103", "",                       23.325,  60.658,  7.4,   6.0, 'O'},
+    {"M104", "Sombrero Galaxy",       189.998, -11.623,  8.0,   8.7, 'G'},
+    {"M105", "",                      161.956,  12.582,  9.3,   5.4, 'G'},
+    {"M106", "",                      184.740,  47.304,  8.4,  18.6, 'G'},
+    {"M107", "",                      248.133, -13.054,  7.9,  13.0, 'C'},
+    {"M108", "Surfboard Galaxy",      167.879,  55.674, 10.0,   8.7, 'G'},
+    {"M109", "",                      179.400,  53.375,  9.8,   7.6, 'G'},
+    {"M110", "",                       10.092,  41.685,  8.1,  22.0, 'G'}
+}};
+
 static double normalizeDegrees(double value)
 {
     value = std::fmod(value, 360.0);
@@ -975,6 +1104,7 @@ void CameraPostProcessor::applySettings(const CameraSettings& settings, const QL
         "equatorialGrid", "equatorialGridColor",
         "altAzGrid", "altAzGridColor",
         "constellation", "constellationColor", "constellationOverlay",
+        "messier", "messierColor", "messierMaxMagnitude",
         "trackObjects", "trackObjectTrails", "trackObjectHeatMap", "trackObjectMinElevation", "trackObjectMaxRangeKm", "trackObjectLabelDisplay", "trackObjectLabelDetectionRadius", "trackObjectColor", "trackObjectFontFamily", "trackObjectFontScale",
         "gridLabelFontFamily", "gridLabelFontScale",
         "overlayText", "overlayTextString", "overlayTextColor",
@@ -2378,6 +2508,118 @@ void CameraPostProcessor::applyConstellationOverlay(const CameraPipelineFrame& f
     PROFILER_STOP(__FUNCTION__);
 }
 
+void CameraPostProcessor::applyMessierOverlay(const CameraPipelineFrame& frame, QImage& image) const
+{
+    PROFILER_START();
+
+    const CameraSettings settings = CameraImageUtils::projectionSettingsForFrame(m_settings, frame);
+
+    if (!m_settings.m_messier) {
+        return;
+    }
+
+    const SkyProjector projector = SkyProjector::create(settings, image.size(), frame.m_imageTransform);
+    if (!projector.valid) {
+        return;
+    }
+
+    const QDateTime utcDateTime = plateSolveOverlayDateTime(m_settings, m_captureDateTime).toUTC();
+
+    QPainter painter(&image);
+    painter.setRenderHint(QPainter::Antialiasing);
+    painter.setRenderHint(QPainter::TextAntialiasing);
+    painter.setClipRect(image.rect());
+    QFont font;
+    if (!m_settings.m_gridLabelFontFamily.isEmpty()) {
+        font.setFamily(m_settings.m_gridLabelFontFamily);
+    }
+    font.setPointSizeF(m_settings.m_gridLabelFontScale);
+    painter.setFont(font);
+    const QFontMetrics fontMetrics(font);
+
+    for (const MessierObject& object : kMessierObjects)
+    {
+        if (object.magnitude > m_settings.m_messierMaxMagnitude) {
+            continue;
+        }
+
+        double azimuth = 0.0;
+        double elevation = 0.0;
+        QPointF point;
+        if (!equatorialToAltAz(
+                object.raDegrees,
+                object.decDegrees,
+                settings.m_latitude,
+                settings.m_longitude,
+                utcDateTime,
+                azimuth,
+                elevation)
+            || (elevation < 0.0)
+            || !projector.projectAltAz(azimuth, elevation, point))
+        {
+            continue;
+        }
+
+        const QPoint centerPoint(static_cast<int>(std::lround(point.x())), static_cast<int>(std::lround(point.y())));
+        if (!image.rect().adjusted(0, 0, -1, -1).contains(centerPoint)) {
+            continue;
+        }
+
+        // Marker radius = the object's true angular extent at the LOCAL plate scale: project a
+        // second point offset by the object's angular radius in elevation and measure the pixel
+        // distance. This is correct across fisheye distortion and narrow fields alike, so M31
+        // gets its real 3-degree footprint on an all-sky frame and a compact planetary stays a
+        // small circle in a telescope field.
+        const double radiusDegrees = std::max(object.majorAxisArcmin, 2.0) * 0.5 / 60.0;
+        double radiusPixels = 6.0;
+        QPointF edgePoint;
+        const double probeElevation = (elevation > 89.0) ? (elevation - radiusDegrees) : (elevation + radiusDegrees);
+        if (projector.projectAltAz(azimuth, probeElevation, edgePoint))
+        {
+            const double measured = std::hypot(edgePoint.x() - point.x(), edgePoint.y() - point.y());
+            if (std::isfinite(measured) && (measured > 0.5)) {
+                radiusPixels = std::max(measured, 3.0);
+            }
+        }
+        radiusPixels = std::min(radiusPixels, 0.5 * static_cast<double>(std::max(image.width(), image.height())));
+
+        // Marker style by object class: solid outline for concentrated objects (galaxies,
+        // nebulae, remnants), dashed for loose stellar groupings (open/globular clusters,
+        // asterisms) whose "edge" is soft.
+        QPen pen(m_settings.m_messierColor, 1.0);
+        switch (object.type)
+        {
+        case 'O':
+        case 'C':
+        case 'A':
+            pen.setStyle(Qt::DashLine);
+            break;
+        default:
+            pen.setStyle(Qt::SolidLine);
+            break;
+        }
+        painter.setPen(pen);
+        painter.setBrush(Qt::NoBrush);
+        painter.drawEllipse(point, radiusPixels, radiusPixels);
+
+        QString label = QString::fromLatin1(object.designation);
+        if (object.commonName && object.commonName[0]) {
+            label += QLatin1Char('\n') + QString::fromLatin1(object.commonName);
+        }
+        // Anchor the label at the marker's upper-right edge so it clears the circle.
+        const double labelOffset = radiusPixels * 0.70710678;
+        drawOutlinedLabel(
+            painter,
+            image.rect(),
+            point + QPointF(labelOffset, -labelOffset),
+            label,
+            m_settings.m_messierColor,
+            fontMetrics);
+    }
+
+    PROFILER_STOP(__FUNCTION__);
+}
+
 void CameraPostProcessor::applyTrackedObjectOverlay(const CameraPipelineFrame& frame, QImage& image, bool drawLabels, QVector<PreviewTextLabel> *previewTextLabels, QVector<CameraPipelineTrackedObject> *trackedObjects)
 {
     PROFILER_START();
@@ -2767,6 +3009,9 @@ QImage CameraPostProcessor::applyPostProcessing(
     }
     if (m_settings.m_constellation) {
         applyConstellationOverlay(frame, result);
+    }
+    if (m_settings.m_messier) {
+        applyMessierOverlay(frame, result);
     }
     if (m_settings.m_trackObjects) {
         applyTrackedObjectOverlay(frame, result, drawPreviewText, previewTextLabels, trackedObjects);

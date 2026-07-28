@@ -639,6 +639,9 @@ struct CameraSettings
     bool m_constellation;    ///< Draw the selected constellation stars as projected boxes
     QColor m_constellationColor; ///< Colour for constellation star boxes
     ConstellationOverlay m_constellationOverlay; ///< Which constellation's major stars to project
+    bool m_messier;          ///< Overlay Messier objects (marker at true angular size + name label) using the current pointing/solve
+    QColor m_messierColor;   ///< Colour for Messier object markers and labels
+    double m_messierMaxMagnitude; ///< Only overlay Messier objects at least this bright (visual magnitude)
     bool m_trackObjects;      ///< Draw ADS-B / satellite tracked object overlay
     bool m_trackObjectTrails; ///< Draw recent tracks for ADS-B / satellite tracked objects
     bool m_trackObjectHeatMap; ///< Draw a heat map from recent tracked object positions

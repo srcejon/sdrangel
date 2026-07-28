@@ -839,6 +839,9 @@ private slots:
     void on_constellationCheck_toggled(bool checked);
     void on_constellationOverlayCombo_currentIndexChanged(int index);
     void on_constellationColorButton_clicked();
+    void on_messierCheck_toggled(bool checked);
+    void on_messierColorButton_clicked();
+    void on_messierMaxMagnitudeSpin_valueChanged(double value);
     void on_trackObjectsCheck_toggled(bool checked);
     void on_trackObjectTrailsCheck_toggled(bool checked);
     void on_trackObjectHeatMapCheck_toggled(bool checked);

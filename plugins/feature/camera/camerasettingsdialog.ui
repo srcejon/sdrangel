@@ -6389,6 +6389,64 @@ car</string>
             </widget>
            </item>
            <item>
+            <widget class="QGroupBox" name="messierGroup">
+             <property name="title">
+              <string>Messier objects</string>
+             </property>
+             <layout class="QGridLayout" name="messierGridLayout">
+              <item row="0" column="0">
+               <widget class="QCheckBox" name="messierCheck">
+                <property name="toolTip">
+                 <string>Overlay Messier objects (marker at true angular size plus name) using the current pointing or plate solve</string>
+                </property>
+                <property name="text">
+                 <string>Show Messier objects</string>
+                </property>
+               </widget>
+              </item>
+              <item row="0" column="2">
+               <widget class="QToolButton" name="messierColorButton">
+                <property name="toolTip">
+                 <string>Select Messier overlay colour</string>
+                </property>
+                <property name="text">
+                 <string/>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="0">
+               <widget class="QLabel" name="messierMaxMagnitudeLabel">
+                <property name="text">
+                 <string>Max magnitude</string>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="1">
+               <widget class="QDoubleSpinBox" name="messierMaxMagnitudeSpin">
+                <property name="toolTip">
+                 <string>Only overlay Messier objects at least this bright (10.5 shows all 110)</string>
+                </property>
+                <property name="decimals">
+                 <number>1</number>
+                </property>
+                <property name="minimum">
+                 <double>0.000000000000000</double>
+                </property>
+                <property name="maximum">
+                 <double>12.000000000000000</double>
+                </property>
+                <property name="singleStep">
+                 <double>0.500000000000000</double>
+                </property>
+                <property name="value">
+                 <double>10.500000000000000</double>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </widget>
+           </item>
+           <item>
             <spacer name="verticalSpacer_11">
              <property name="orientation">
               <enum>Qt::Orientation::Vertical</enum>

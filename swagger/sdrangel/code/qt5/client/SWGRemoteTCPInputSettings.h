@@ -102,8 +102,8 @@ public:
     qint32 getOverrideRemoteSettings();
     void setOverrideRemoteSettings(qint32 override_remote_settings);
 
-    qint32 getPreFill();
-    void setPreFill(qint32 pre_fill);
+    float getPreFill();
+    void setPreFill(float pre_fill);
 
     QString* getProtocol();
     void setProtocol(QString* protocol);
@@ -184,7 +184,7 @@ private:
     qint32 override_remote_settings;
     bool m_override_remote_settings_isSet;
 
-    qint32 pre_fill;
+    float pre_fill;
     bool m_pre_fill_isSet;
 
     QString* protocol;

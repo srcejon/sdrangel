@@ -68,7 +68,7 @@ SWGRemoteTCPInputSettings::SWGRemoteTCPInputSettings() {
     m_data_port_isSet = false;
     override_remote_settings = 0;
     m_override_remote_settings_isSet = false;
-    pre_fill = 0;
+    pre_fill = 0.0f;
     m_pre_fill_isSet = false;
     protocol = nullptr;
     m_protocol_isSet = false;
@@ -128,7 +128,7 @@ SWGRemoteTCPInputSettings::init() {
     m_data_port_isSet = false;
     override_remote_settings = 0;
     m_override_remote_settings_isSet = false;
-    pre_fill = 0;
+    pre_fill = 0.0f;
     m_pre_fill_isSet = false;
     protocol = new QString("");
     m_protocol_isSet = false;
@@ -231,7 +231,7 @@ SWGRemoteTCPInputSettings::fromJsonObject(QJsonObject &pJson) {
     
     ::SWGSDRangel::setValue(&override_remote_settings, pJson["overrideRemoteSettings"], "qint32", "");
     
-    ::SWGSDRangel::setValue(&pre_fill, pJson["preFill"], "qint32", "");
+    ::SWGSDRangel::setValue(&pre_fill, pJson["preFill"], "float", "");
     
     ::SWGSDRangel::setValue(&protocol, pJson["protocol"], "QString", "QString");
     
@@ -541,12 +541,12 @@ SWGRemoteTCPInputSettings::setOverrideRemoteSettings(qint32 override_remote_sett
     this->m_override_remote_settings_isSet = true;
 }
 
-qint32
+float
 SWGRemoteTCPInputSettings::getPreFill() {
     return pre_fill;
 }
 void
-SWGRemoteTCPInputSettings::setPreFill(qint32 pre_fill) {
+SWGRemoteTCPInputSettings::setPreFill(float pre_fill) {
     this->pre_fill = pre_fill;
     this->m_pre_fill_isSet = true;
 }

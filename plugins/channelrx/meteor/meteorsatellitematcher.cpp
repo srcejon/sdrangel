@@ -60,6 +60,7 @@ namespace {
     constexpr double WGS84SemiMajorAxisM = 6378137.0;
     constexpr double WGS84EccentricitySquared = 6.69437999014e-3;
     constexpr double SpeedOfLightMPS = 299792458.0;
+    constexpr qint64 CelesTrakMinimumDownloadIntervalS = 2 * 60 * 60;
     constexpr qint64 CatalogMaximumAgeS = 24 * 60 * 60;
     constexpr qint64 TLEMaximumAgeS = 14 * 24 * 60 * 60;
     constexpr qint64 SnapshotIntervalMS = 5000;
@@ -682,10 +683,20 @@ public:
         {
             const QFileInfo fileInfo(catalogFileName(
                 CatalogDownloadSources[sourceIndex]));
+            const qint64 cacheAgeS = fileInfo.exists()
+                ? fileInfo.lastModified().toUTC().secsTo(nowUtc)
+                : -1;
+            // CelesTrak rejects another request for the same file within two
+            // hours of a successful download. This server-side limit also
+            // applies to explicit refreshes, so a force request may bypass the
+            // normal one-day freshness policy but never this cooldown.
+            const bool downloadCooldownActive =
+                fileInfo.exists()
+                && (cacheAgeS < CelesTrakMinimumDownloadIntervalS);
             const bool stale = !fileInfo.exists()
-                || (fileInfo.lastModified().toUTC().secsTo(nowUtc) >= CatalogMaximumAgeS);
+                || (cacheAgeS >= CatalogMaximumAgeS);
 
-            if (forceAll || stale) {
+            if (!downloadCooldownActive && (forceAll || stale)) {
                 m_downloadQueue.append(sourceIndex);
             }
         }

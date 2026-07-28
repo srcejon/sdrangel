@@ -19,8 +19,10 @@
 #include <cmath>
 #include <limits>
 
+#include <QBrush>
 #include <QComboBox>
 #include <QCheckBox>
+#include <QColor>
 #include <QDateTime>
 #include <QDialog>
 #include <QDialogButtonBox>
@@ -2922,6 +2924,7 @@ void MeteorGUI::showSatelliteStatisticsDialog(
     auto addValue = [](QTreeWidgetItem *parent, const QString& name, const QString& value) {
         QTreeWidgetItem *item = new QTreeWidgetItem(parent, {name, value});
         item->setTextAlignment(1, Qt::AlignRight | Qt::AlignVCenter);
+        return item;
     };
     auto addCount = [&addValue](QTreeWidgetItem *parent, const QString& name, int value) {
         addValue(parent, name, QString::number(value));
@@ -2990,6 +2993,7 @@ void MeteorGUI::showSatelliteStatisticsDialog(
             tr("%1 ms").arg(statistics.m_clockRoundTripMS, 0, 'f', 0));
 
         QString assessment;
+        bool assessmentNotAcceptable = false;
         if (absoluteErrorMS + statistics.m_clockUncertaintyMS
             <= statistics.m_acceptableClockErrorMS)
         {
@@ -3001,13 +3005,25 @@ void MeteorGUI::showSatelliteStatisticsDialog(
         {
             assessment = tr("Not acceptable (limit +/- %1 ms)")
                 .arg(statistics.m_acceptableClockErrorMS, 0, 'f', 0);
+            assessmentNotAcceptable = true;
         }
         else
         {
             assessment = tr("Inconclusive near the +/- %1 ms limit")
                 .arg(statistics.m_acceptableClockErrorMS, 0, 'f', 0);
         }
-        addValue(clock, tr("Assessment"), assessment);
+        QTreeWidgetItem *assessmentItem =
+            addValue(clock, tr("Assessment"), assessment);
+        if (assessmentNotAcceptable)
+        {
+            const QBrush background(QColor(180, 32, 32));
+            const QBrush foreground(Qt::white);
+            for (int column = 0; column < tree->columnCount(); ++column)
+            {
+                assessmentItem->setBackground(column, background);
+                assessmentItem->setForeground(column, foreground);
+            }
+        }
     }
     else
     {

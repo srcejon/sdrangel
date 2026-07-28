@@ -219,6 +219,53 @@ public:
 		{ }
 	};
 
+    class MsgReportTiming : public Message {
+        MESSAGE_CLASS_DECLARATION
+
+    public:
+        bool getAvailable() const { return m_available; }
+        qint64 getRemoteFirstSampleTimeUsecs() const {
+            return m_remoteFirstSampleTimeUsecs;
+        }
+        qint64 getTransportLatencyUsecs() const {
+            return m_transportLatencyUsecs;
+        }
+        qint64 getUncertaintyUsecs() const {
+            return m_uncertaintyUsecs;
+        }
+
+        static MsgReportTiming* create(
+            bool available,
+            qint64 remoteFirstSampleTimeUsecs,
+            qint64 transportLatencyUsecs,
+            qint64 uncertaintyUsecs)
+        {
+            return new MsgReportTiming(
+                available,
+                remoteFirstSampleTimeUsecs,
+                transportLatencyUsecs,
+                uncertaintyUsecs);
+        }
+
+    private:
+        bool m_available;
+        qint64 m_remoteFirstSampleTimeUsecs;
+        qint64 m_transportLatencyUsecs;
+        qint64 m_uncertaintyUsecs;
+
+        MsgReportTiming(
+            bool available,
+            qint64 remoteFirstSampleTimeUsecs,
+            qint64 transportLatencyUsecs,
+            qint64 uncertaintyUsecs) :
+            Message(),
+            m_available(available),
+            m_remoteFirstSampleTimeUsecs(remoteFirstSampleTimeUsecs),
+            m_transportLatencyUsecs(transportLatencyUsecs),
+            m_uncertaintyUsecs(uncertaintyUsecs)
+        {}
+    };
+
     RemoteTCPInput(DeviceAPI *deviceAPI);
     virtual ~RemoteTCPInput();
     virtual void destroy();
@@ -298,6 +345,10 @@ private:
     bool m_isotropic;   // Direction of remote anntenna
     float m_azimuth;
     float m_elevation;
+    bool m_timingAvailable;
+    qint64 m_remoteFirstSampleTimeUsecs;
+    qint64 m_transportLatencyUsecs;
+    qint64 m_timingUncertaintyUsecs;
 
     void applySettings(const RemoteTCPInputSettings& settings, const QList<QString>& settingsKeys, bool force = false);
     void webapiFormatDeviceReport(SWGSDRangel::SWGDeviceReport& response);

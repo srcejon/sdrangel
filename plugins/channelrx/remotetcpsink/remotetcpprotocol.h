@@ -122,6 +122,9 @@ public:
     static const int m_rtl0MetaDataSize = 12;
     static const int m_rsp0MetaDataSize = 45;
     static const int m_sdraMetaDataSize = 128;
+    static const quint32 m_sdraProtocolRevision = 2;
+    static const int m_firstSampleTimeOffset = 72;
+    static const int m_clockUncertaintyOffset = 80;
 
     static void encodeInt16(quint8 *p, qint16 data)
     {

@@ -16,6 +16,8 @@
 // along with this program. If not, see <http://www.gnu.org/licenses/>.          //
 ///////////////////////////////////////////////////////////////////////////////////
 
+#include <cmath>
+
 #include <QMutexLocker>
 #include <QThread>
 #include <QSslConfiguration>
@@ -25,6 +27,7 @@
 #include "channel/channelwebapiutils.h"
 #include "device/deviceapi.h"
 #include "maincore.h"
+#include "util/systemclockoffset.h"
 
 #include "remotetcpsinksink.h"
 #include "remotetcpsink.h"
@@ -73,6 +76,8 @@ RemoteTCPSinkSink::RemoteTCPSinkSink() :
     m_rfBW(0),
     m_gain(),
     m_timer(this),
+    m_clockOffset(new SystemClockOffset(this)),
+    m_nextSampleTimeUsecs(0),
     m_azimuth(std::numeric_limits<float>::quiet_NaN()),
     m_elevation(std::numeric_limits<float>::quiet_NaN())
 {
@@ -122,6 +127,7 @@ void RemoteTCPSinkSink::started()
     startServer();
     disconnect(thread(), SIGNAL(started()), this, SLOT(started()));
     m_timer.start();
+    m_clockOffset->start();
 }
 
 void RemoteTCPSinkSink::finished()
@@ -130,11 +136,40 @@ void RemoteTCPSinkSink::finished()
     stopServer();
     disconnect(thread(), SIGNAL(finished()), this, SLOT(finished()));
     m_timer.stop();
+    m_clockOffset->stop();
     m_running = false;
 }
 
 void RemoteTCPSinkSink::init()
 {
+}
+
+bool RemoteTCPSinkSink::getCorrectedTimestamp(
+    qint64 localEpochUsecs,
+    qint64& correctedEpochUsecs,
+    qint64& uncertaintyUsecs) const
+{
+    correctedEpochUsecs = localEpochUsecs;
+    const SystemClockOffset::Measurement& measurement =
+        m_clockOffset->measurement();
+
+    if (!measurement.correctedEpochUsecs(
+            localEpochUsecs,
+            correctedEpochUsecs))
+    {
+        uncertaintyUsecs = 0;
+        return false;
+    }
+
+    uncertaintyUsecs = (qint64) std::llround(
+        measurement.m_uncertaintyMS * 1000.0);
+    return true;
+}
+
+void RemoteTCPSinkSink::setNextSampleTime(qint64 localEpochUsecs)
+{
+    QMutexLocker mutexLocker(&m_mutex);
+    m_nextSampleTimeUsecs = localEpochUsecs;
 }
 
 void RemoteTCPSinkSink::feed(const SampleVector::const_iterator& begin, const SampleVector::const_iterator& end)
@@ -1043,9 +1078,27 @@ void RemoteTCPSinkSink::acceptConnection(Socket *client)
         RemoteTCPProtocol::encodeUInt32(&metaData[48], m_settings.m_gain);
         RemoteTCPProtocol::encodeUInt32(&metaData[52], m_settings.m_channelSampleRate);
         RemoteTCPProtocol::encodeUInt32(&metaData[56], m_settings.m_sampleBits);
-        RemoteTCPProtocol::encodeUInt32(&metaData[60], 1); // Protocol revision. 0=64 byte meta data, 1=128 byte meta data
+        RemoteTCPProtocol::encodeUInt32(
+            &metaData[60],
+            RemoteTCPProtocol::m_sdraProtocolRevision);
         RemoteTCPProtocol::encodeFloat(&metaData[64], m_settings.m_squelch);
         RemoteTCPProtocol::encodeFloat(&metaData[68], m_settings.m_squelchGate);
+        qint64 correctedSampleTimeUsecs = 0;
+        qint64 clockUncertaintyUsecs = 0;
+
+        if ((m_nextSampleTimeUsecs > 0)
+            && getCorrectedTimestamp(
+                m_nextSampleTimeUsecs,
+                correctedSampleTimeUsecs,
+                clockUncertaintyUsecs))
+        {
+            RemoteTCPProtocol::encodeUInt64(
+                &metaData[RemoteTCPProtocol::m_firstSampleTimeOffset],
+                (quint64) correctedSampleTimeUsecs);
+            RemoteTCPProtocol::encodeUInt64(
+                &metaData[RemoteTCPProtocol::m_clockUncertaintyOffset],
+                (quint64) std::max<qint64>(0, clockUncertaintyUsecs));
+        }
         // Send API port? Not accessible via MainCore
 
         client->write((const char *)metaData, sizeof(metaData));

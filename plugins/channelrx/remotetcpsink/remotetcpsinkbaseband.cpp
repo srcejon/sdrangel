@@ -17,15 +17,23 @@
 // along with this program. If not, see <http://www.gnu.org/licenses/>.          //
 ///////////////////////////////////////////////////////////////////////////////////
 
+#include <cmath>
+
+#include <QDateTime>
 #include <QDebug>
 
 #include "dsp/downchannelizer.h"
 #include "dsp/dspcommands.h"
+#include "maincore.h"
 
 #include "remotetcpsinkbaseband.h"
 #include "remotetcpsink.h"
 
-RemoteTCPSinkBaseband::RemoteTCPSinkBaseband()
+RemoteTCPSinkBaseband::RemoteTCPSinkBaseband() :
+    m_running(false),
+    m_basebandSampleRate(48000),
+    m_nextSampleTimeUsecs(0),
+    m_haveSampleTime(false)
 {
     qDebug("RemoteTCPSinkBaseband::RemoteTCPSinkBaseband");
     m_sampleFifo.setSize(SampleSinkFifo::getSizePolicy(48000));
@@ -45,6 +53,9 @@ void RemoteTCPSinkBaseband::reset()
     QMutexLocker mutexLocker(&m_mutex);
     m_inputMessageQueue.clear();
     m_sampleFifo.reset();
+    m_nextSampleTimeUsecs = 0;
+    m_haveSampleTime = false;
+    m_sink.setNextSampleTime(0);
     m_sink.init();
 }
 
@@ -56,6 +67,13 @@ void RemoteTCPSinkBaseband::startWork()
         &SampleSinkFifo::dataReady,
         this,
         &RemoteTCPSinkBaseband::handleData,
+        Qt::QueuedConnection
+    );
+    QObject::connect(
+        &m_sampleFifo,
+        &SampleSinkFifo::written,
+        this,
+        &RemoteTCPSinkBaseband::handleSamplesWritten,
         Qt::QueuedConnection
     );
     connect(&m_inputMessageQueue, SIGNAL(messageEnqueued()), this, SLOT(handleInputMessages()));
@@ -73,6 +91,12 @@ void RemoteTCPSinkBaseband::stopWork()
         &SampleSinkFifo::dataReady,
         this,
         &RemoteTCPSinkBaseband::handleData
+    );
+    QObject::disconnect(
+        &m_sampleFifo,
+        &SampleSinkFifo::written,
+        this,
+        &RemoteTCPSinkBaseband::handleSamplesWritten
     );
     m_running = false;
 }
@@ -107,6 +131,31 @@ void RemoteTCPSinkBaseband::handleData()
 
         m_sampleFifo.readCommit((unsigned int) count);
     }
+}
+
+void RemoteTCPSinkBaseband::handleSamplesWritten(
+    int samples,
+    qint64 elapsedNsecs)
+{
+    if ((samples <= 0) || (m_basebandSampleRate <= 0)) {
+        return;
+    }
+
+    if (!m_haveSampleTime)
+    {
+        const qint64 nowElapsedNsecs =
+            MainCore::instance()->getElapsedNsecs();
+        const qint64 nowEpochUsecs =
+            QDateTime::currentMSecsSinceEpoch() * 1000;
+        m_nextSampleTimeUsecs = nowEpochUsecs
+            - ((nowElapsedNsecs - elapsedNsecs) / 1000);
+        m_haveSampleTime = true;
+    }
+
+    m_nextSampleTimeUsecs += (qint64) std::llround(
+        (double) samples * 1000000.0
+        / (double) m_basebandSampleRate);
+    m_sink.setNextSampleTime(m_nextSampleTimeUsecs);
 }
 
 void RemoteTCPSinkBaseband::handleInputMessages()
@@ -184,6 +233,14 @@ int RemoteTCPSinkBaseband::getChannelSampleRate() const
 
 void RemoteTCPSinkBaseband::setBasebandSampleRate(int sampleRate)
 {
+    if (sampleRate != m_basebandSampleRate)
+    {
+        m_basebandSampleRate = sampleRate;
+        m_nextSampleTimeUsecs = 0;
+        m_haveSampleTime = false;
+        m_sink.setNextSampleTime(0);
+    }
+
     m_channelizer->setBasebandSampleRate(sampleRate);
     m_sink.applyChannelSettings(m_channelizer->getChannelSampleRate(), m_channelizer->getChannelFrequencyOffset());
 }

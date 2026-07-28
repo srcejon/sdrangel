@@ -281,6 +281,7 @@ set(sdrbase_SOURCES
     util/stix.cpp
     util/stringlist.cpp
     util/rtty.cpp
+    util/systemclockoffset.cpp
     util/uid.cpp
     util/units.cpp
     util/timeutil.cpp
@@ -551,6 +552,7 @@ set(sdrbase_HEADERS
     util/spyserverlist.h
     util/stix.h
     util/stringlist.h
+    util/systemclockoffset.h
     util/uid.h
     util/units.h
     util/timeutil.h

@@ -2670,6 +2670,52 @@ bool MeteorGUI::remoteTCPInputPreFillSeconds(double& preFillSeconds) const
     return true;
 }
 
+bool MeteorGUI::remoteTCPInputTransportLatencySeconds(
+    double& latencySeconds) const
+{
+    latencySeconds = 0.0;
+
+    if (!m_deviceUISet || !m_deviceUISet->m_deviceAPI
+        || (m_deviceUISet->m_deviceAPI->getHardwareId()
+            != QStringLiteral("RemoteTCPInput")))
+    {
+        return false;
+    }
+
+    SWGSDRangel::SWGDeviceReport deviceReport;
+    if (!ChannelWebAPIUtils::getDeviceReport(
+            (unsigned int)
+                m_deviceUISet->m_deviceAPI->getDeviceSetIndex(),
+            deviceReport))
+    {
+        return false;
+    }
+
+    QJsonObject *reportJson = deviceReport.asJsonObject();
+    double timingAvailable = 0.0;
+    double latencyUsecs = 0.0;
+    const bool valid = WebAPIUtils::getSubObjectDouble(
+            *reportJson,
+            QStringLiteral("timingAvailable"),
+            timingAvailable)
+        && (timingAvailable != 0.0)
+        && WebAPIUtils::getSubObjectDouble(
+            *reportJson,
+            QStringLiteral("transportLatencyUs"),
+            latencyUsecs)
+        && std::isfinite(latencyUsecs)
+        && (latencyUsecs >= 0.0)
+        && (latencyUsecs <= 60.0 * 1000000.0);
+    delete reportJson;
+
+    if (!valid) {
+        return false;
+    }
+
+    latencySeconds = latencyUsecs / 1000000.0;
+    return true;
+}
+
 QDateTime MeteorGUI::movingTargetObservationDateTimeUtc(const QDateTime& displayTimeUtc) const
 {
     const QDateTime systemTimeUtc = displayTimeUtc.isValid()
@@ -2686,13 +2732,14 @@ QDateTime MeteorGUI::movingTargetObservationDateTimeUtc(const QDateTime& display
     if (hardwareId == QStringLiteral("RemoteTCPInput"))
     {
         double preFillSeconds = 0.0;
-        if (remoteTCPInputPreFillSeconds(preFillSeconds))
-        {
-            return systemTimeUtc.addMSecs(
-                -(qint64) std::llround(preFillSeconds * 1000.0));
-        }
+        double transportLatencySeconds = 0.0;
+        remoteTCPInputPreFillSeconds(preFillSeconds);
+        remoteTCPInputTransportLatencySeconds(
+            transportLatencySeconds);
 
-        return systemTimeUtc;
+        return systemTimeUtc.addMSecs(
+            -(qint64) std::llround(
+                (preFillSeconds + transportLatencySeconds) * 1000.0));
     }
 
     if ((hardwareId != QStringLiteral("FileInput"))

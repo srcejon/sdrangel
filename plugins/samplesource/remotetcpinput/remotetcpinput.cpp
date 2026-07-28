@@ -19,6 +19,8 @@
 
 #include <string.h>
 #include <errno.h>
+#include <type_traits>
+#include <utility>
 
 #include <QDebug>
 #include <QNetworkReply>
@@ -44,6 +46,38 @@ MESSAGE_CLASS_DEFINITION(RemoteTCPInput::MsgSaveReplay, Message)
 MESSAGE_CLASS_DEFINITION(RemoteTCPInput::MsgSendMessage, Message)
 MESSAGE_CLASS_DEFINITION(RemoteTCPInput::MsgReportPosition, Message)
 MESSAGE_CLASS_DEFINITION(RemoteTCPInput::MsgReportDirection, Message)
+MESSAGE_CLASS_DEFINITION(RemoteTCPInput::MsgReportTiming, Message)
+
+namespace {
+    template<typename T, typename = void>
+    struct HasRemoteTimingReportSetters : std::false_type {};
+
+    template<typename T>
+    struct HasRemoteTimingReportSetters<T, std::void_t<
+        decltype(std::declval<T&>().setTimingAvailable(0)),
+        decltype(std::declval<T&>().setRemoteFirstSampleTimeUs(qint64{})),
+        decltype(std::declval<T&>().setTransportLatencyUs(qint64{})),
+        decltype(std::declval<T&>().setTimingUncertaintyUs(qint64{}))
+    >> : std::true_type {};
+
+    template<typename T>
+    void setRemoteTimingReport(
+        T *report,
+        bool available,
+        qint64 remoteFirstSampleTimeUsecs,
+        qint64 transportLatencyUsecs,
+        qint64 uncertaintyUsecs)
+    {
+        if constexpr (HasRemoteTimingReportSetters<T>::value)
+        {
+            report->setTimingAvailable(available ? 1 : 0);
+            report->setRemoteFirstSampleTimeUs(
+                remoteFirstSampleTimeUsecs);
+            report->setTransportLatencyUs(transportLatencyUsecs);
+            report->setTimingUncertaintyUs(uncertaintyUsecs);
+        }
+    }
+}
 
 RemoteTCPInput::RemoteTCPInput(DeviceAPI *deviceAPI) :
     m_deviceAPI(deviceAPI),
@@ -56,7 +90,11 @@ RemoteTCPInput::RemoteTCPInput(DeviceAPI *deviceAPI) :
     m_altitude(std::numeric_limits<float>::quiet_NaN()),
     m_isotropic(false),
     m_azimuth(std::numeric_limits<float>::quiet_NaN()),
-    m_elevation(std::numeric_limits<float>::quiet_NaN())
+    m_elevation(std::numeric_limits<float>::quiet_NaN()),
+    m_timingAvailable(false),
+    m_remoteFirstSampleTimeUsecs(0),
+    m_transportLatencyUsecs(0),
+    m_timingUncertaintyUsecs(0)
 {
     m_sampleFifo.setLabel(m_deviceDescription);
     m_sampleFifo.setSize(48000 * 8);
@@ -269,6 +307,19 @@ bool RemoteTCPInput::handleMessage(const Message& message)
 
         emit directionChanged(m_isotropic, m_azimuth, m_elevation);
 
+        return true;
+    }
+    else if (MsgReportTiming::match(message))
+    {
+        const MsgReportTiming& report =
+            (const MsgReportTiming&) message;
+        m_timingAvailable = report.getAvailable();
+        m_remoteFirstSampleTimeUsecs =
+            report.getRemoteFirstSampleTimeUsecs();
+        m_transportLatencyUsecs =
+            report.getTransportLatencyUsecs();
+        m_timingUncertaintyUsecs =
+            report.getUncertaintyUsecs();
         return true;
     }
     else
@@ -553,6 +604,12 @@ void RemoteTCPInput::webapiFormatDeviceReport(SWGSDRangel::SWGDeviceReport& resp
     response.getRemoteTcpInputReport()->setLatitude(m_latitude);
     response.getRemoteTcpInputReport()->setLongitude(m_longitude);
     response.getRemoteTcpInputReport()->setAltitude(m_altitude);
+    setRemoteTimingReport(
+        response.getRemoteTcpInputReport(),
+        m_timingAvailable,
+        m_remoteFirstSampleTimeUsecs,
+        m_transportLatencyUsecs,
+        m_timingUncertaintyUsecs);
 }
 
 void RemoteTCPInput::webapiReverseSendSettings(const QList<QString>& deviceSettingsKeys, const RemoteTCPInputSettings& settings, bool force)

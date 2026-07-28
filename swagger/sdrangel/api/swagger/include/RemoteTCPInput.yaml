@@ -74,3 +74,18 @@ RemoteTCPInputReport:
     altitude:
       type: number
       format: float
+    timingAvailable:
+      description: 1 when corrected remote sample timing is available
+      type: integer
+    remoteFirstSampleTimeUs:
+      description: Corrected UTC epoch time of the first network sample in microseconds
+      type: integer
+      format: int64
+    transportLatencyUs:
+      description: Estimated remote device/channel and network latency in microseconds
+      type: integer
+      format: int64
+    timingUncertaintyUs:
+      description: Combined remote and local clock measurement uncertainty in microseconds
+      type: integer
+      format: int64

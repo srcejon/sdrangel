@@ -17,11 +17,15 @@
 // along with this program. If not, see <http://www.gnu.org/licenses/>.          //
 ///////////////////////////////////////////////////////////////////////////////////
 
+#include <algorithm>
+#include <cmath>
+
 #include <QDebug>
 #include <cstring>
 
 #include "device/deviceapi.h"
 #include "util/message.h"
+#include "util/systemclockoffset.h"
 #include "maincore.h"
 
 #include "remotetcpinputtcphandler.h"
@@ -46,6 +50,7 @@ RemoteTCPInputTCPHandler::RemoteTCPInputTCPHandler(SampleSinkFifo *sampleFifo, D
     m_fillBuffer(true),
     m_timer(this),
     m_reconnectTimer(this),
+    m_clockOffset(new SystemClockOffset(this)),
     m_sdra(false),
     m_converterBuffer(nullptr),
     m_converterBufferNbSamples(0),
@@ -55,6 +60,9 @@ RemoteTCPInputTCPHandler::RemoteTCPInputTCPHandler(SampleSinkFifo *sampleFifo, D
     m_decoder(nullptr),
     m_zOutBuf(m_zBufSize, '\0'),
     m_blacklisted(false),
+    m_remoteFirstSampleTimeUsecs(0),
+    m_localFirstPayloadReceiveTimeUsecs(0),
+    m_remoteClockUncertaintyUsecs(0),
     m_magsq(0.0f),
     m_magsqSum(0.0f),
     m_magsqPeak(0.0f),
@@ -65,6 +73,13 @@ RemoteTCPInputTCPHandler::RemoteTCPInputTCPHandler(SampleSinkFifo *sampleFifo, D
     m_timer.setInterval(50); // Previously 125, but this results in an obviously slow spectrum refresh rate
     connect(&m_reconnectTimer, SIGNAL(timeout()), this, SLOT(reconnect()));
     m_reconnectTimer.setSingleShot(true);
+    connect(
+        m_clockOffset,
+        &SystemClockOffset::measurementUpdated,
+        this,
+        [this](const SystemClockOffset::Measurement&) {
+            updateTimingReport();
+        });
 
     // Initialise zlib decompressor
     m_zStream.zalloc = nullptr;
@@ -92,6 +107,9 @@ void RemoteTCPInputTCPHandler::reset()
     QMutexLocker mutexLocker(&m_mutex);
     m_inputMessageQueue.clear();
     m_blacklisted = false;
+    m_remoteFirstSampleTimeUsecs = 0;
+    m_localFirstPayloadReceiveTimeUsecs = 0;
+    m_remoteClockUncertaintyUsecs = 0;
 }
 
 // start() is called from DSPDeviceSourceEngine thread
@@ -127,6 +145,7 @@ void RemoteTCPInputTCPHandler::started()
 
     // Don't connectToHost until we get settings
     connect(&m_timer, SIGNAL(timeout()), this, SLOT(processData()));
+    m_clockOffset->start();
 
     disconnect(thread(), SIGNAL(started()), this, SLOT(started()));
 }
@@ -136,6 +155,7 @@ void RemoteTCPInputTCPHandler::finished()
     qDebug("RemoteTCPInputTCPHandler::finished");
     QMutexLocker mutexLocker(&m_mutex);
     m_timer.stop();
+    m_clockOffset->stop();
     disconnect(&m_timer, SIGNAL(timeout()), this, SLOT(processData()));
     //disconnectFromHost();
     cleanup();
@@ -148,6 +168,10 @@ void RemoteTCPInputTCPHandler::connectToHost(const QString& address, quint16 por
     qDebug("RemoteTCPInputTCPHandler::connectToHost: connect to %s %s:%d", protocol.toStdString().c_str(), address.toStdString().c_str(), port);
     m_fillBuffer = true;
     m_readMetaData = false;
+    m_remoteFirstSampleTimeUsecs = 0;
+    m_localFirstPayloadReceiveTimeUsecs = 0;
+    m_remoteClockUncertaintyUsecs = 0;
+    updateTimingReport();
     if (protocol == "SDRangel wss")
     {
 #ifndef QT_NO_OPENSSL
@@ -1151,6 +1175,20 @@ void RemoteTCPInputTCPHandler::dataReadyRead()
         processSpyServerMetaData();
     }
 
+    if (m_readMetaData
+        && (m_remoteFirstSampleTimeUsecs > 0)
+        && (m_localFirstPayloadReceiveTimeUsecs == 0)
+        && m_dataSocket
+        && (m_dataSocket->bytesAvailable() > 0))
+    {
+        // Timestamp the first stream payload, not just the metadata header.
+        // This keeps the intentional RemoteTCPInput pre-fill out of the
+        // transport estimate while including server and network buffering.
+        m_localFirstPayloadReceiveTimeUsecs =
+            QDateTime::currentMSecsSinceEpoch() * 1000;
+        updateTimingReport();
+    }
+
     if (m_readMetaData && !m_iqOnly) {
         processCommands();
     }
@@ -1197,6 +1235,23 @@ void RemoteTCPInputTCPHandler::processMetaData()
                 m_device = (RemoteTCPProtocol::Device)RemoteTCPProtocol::extractUInt32(&metaData[4]);
                 quint32 protocolRevision = RemoteTCPProtocol::extractUInt32(&metaData[60]);
                 quint32 flags = RemoteTCPProtocol::extractUInt32(&metaData[20]);
+                if (protocolRevision >= 2)
+                {
+                    m_remoteFirstSampleTimeUsecs = (qint64)
+                        RemoteTCPProtocol::extractUInt64(
+                            &metaData[RemoteTCPProtocol::m_firstSampleTimeOffset]);
+                    m_remoteClockUncertaintyUsecs = (qint64)
+                        RemoteTCPProtocol::extractUInt64(
+                            &metaData[RemoteTCPProtocol::m_clockUncertaintyOffset]);
+                    m_localFirstPayloadReceiveTimeUsecs = 0;
+                }
+                else
+                {
+                    m_remoteFirstSampleTimeUsecs = 0;
+                    m_remoteClockUncertaintyUsecs = 0;
+                    m_localFirstPayloadReceiveTimeUsecs = 0;
+                }
+                updateTimingReport();
                 if (protocolRevision >= 1)
                 {
                     m_iqOnly = !(bool) ((flags >> 7) & 1);
@@ -1312,6 +1367,41 @@ void RemoteTCPInputTCPHandler::processMetaData()
         }
         m_readMetaData = true;
     }
+}
+
+void RemoteTCPInputTCPHandler::updateTimingReport()
+{
+    if (!m_messageQueueToInput) {
+        return;
+    }
+
+    qint64 correctedReceiveTimeUsecs = 0;
+    qint64 latencyUsecs = 0;
+    qint64 uncertaintyUsecs = 0;
+    bool available = false;
+    const SystemClockOffset::Measurement& measurement =
+        m_clockOffset->measurement();
+
+    if ((m_remoteFirstSampleTimeUsecs > 0)
+        && (m_localFirstPayloadReceiveTimeUsecs > 0)
+        && measurement.correctedEpochUsecs(
+            m_localFirstPayloadReceiveTimeUsecs,
+            correctedReceiveTimeUsecs))
+    {
+        latencyUsecs = correctedReceiveTimeUsecs
+            - m_remoteFirstSampleTimeUsecs;
+        uncertaintyUsecs = m_remoteClockUncertaintyUsecs
+            + (qint64) std::llround(
+                std::max(0.0, measurement.m_uncertaintyMS) * 1000.0);
+        available = true;
+    }
+
+    m_messageQueueToInput->push(
+        RemoteTCPInput::MsgReportTiming::create(
+            available,
+            m_remoteFirstSampleTimeUsecs,
+            latencyUsecs,
+            uncertaintyUsecs));
 }
 
 void RemoteTCPInputTCPHandler::processSpyServerMetaData()

@@ -41,6 +41,7 @@
 class SampleSinkFifo;
 class MessageQueue;
 class DeviceAPI;
+class SystemClockOffset;
 
 class FIFO {
 public:
@@ -218,6 +219,7 @@ private:
     bool m_fillBuffer;
     QTimer m_timer;
     QTimer m_reconnectTimer;
+    SystemClockOffset *m_clockOffset;
     QDateTime m_prevDateTime;
     bool m_sdra;
     bool m_spyServer;
@@ -251,6 +253,9 @@ private:
     static const int m_zBufSize = 32768+128; //
 
     bool m_blacklisted;
+    qint64 m_remoteFirstSampleTimeUsecs;
+    qint64 m_localFirstPayloadReceiveTimeUsecs;
+    qint64 m_remoteClockUncertaintyUsecs;
 
     double m_magsq;
 	double m_magsqSum;
@@ -303,6 +308,7 @@ private:
     void processDecompressedZlibData(const char *inBuf, int nbSamples);
     void calcPower(const Sample *iq, int nbSamples);
     void sendSettings(const RemoteTCPInputSettings& settings, const QStringList& settingsKeys);
+    void updateTimingReport();
 
 private slots:
     void started();

@@ -43,6 +43,7 @@
 #include "util/socket.h"
 
 class DeviceSampleSource;
+class SystemClockOffset;
 
 class RemoteTCPSinkSink : public QObject, public ChannelSampleSink {
     Q_OBJECT
@@ -71,6 +72,11 @@ public:
     FLAC__StreamEncoderWriteStatus flacWrite(const FLAC__StreamEncoder *encoder, const FLAC__byte buffer[], size_t bytes, uint32_t samples, uint32_t currentFrame);
 
     bool getSquelchOpen() const { return m_squelchOpen; }
+    bool getCorrectedTimestamp(
+        qint64 localEpochUsecs,
+        qint64& correctedEpochUsecs,
+        qint64& uncertaintyUsecs) const;
+    void setNextSampleTime(qint64 localEpochUsecs);
 
     void getMagSqLevels(double& avg, double& peak, int& nbSamples)
     {
@@ -191,6 +197,8 @@ private:
     qint32 m_rfBW;
     qint32 m_gain[4];
     QTimer m_timer;
+    SystemClockOffset *m_clockOffset;
+    qint64 m_nextSampleTimeUsecs;
 
     // Rotator setttings
     double m_azimuth;

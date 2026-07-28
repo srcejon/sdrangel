@@ -59,6 +59,9 @@ public:
 private:
     bool m_running;
     SampleSinkFifo m_sampleFifo;
+    int m_basebandSampleRate;
+    qint64 m_nextSampleTimeUsecs;
+    bool m_haveSampleTime;
     DownChannelizer *m_channelizer;
     RemoteTCPSinkSink m_sink;
     MessageQueue m_inputMessageQueue; //!< Queue for asynchronous inbound communication
@@ -71,6 +74,7 @@ private:
 private slots:
     void handleInputMessages();
     void handleData(); //!< Handle data when samples have to be processed
+    void handleSamplesWritten(int samples, qint64 elapsedNsecs);
 };
 
 

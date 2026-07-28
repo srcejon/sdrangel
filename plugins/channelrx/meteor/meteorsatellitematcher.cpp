@@ -19,11 +19,9 @@
 #include <QDateTime>
 #include <QDebug>
 #include <QDir>
-#include <QElapsedTimer>
 #include <QFile>
 #include <QFileInfo>
 #include <QHash>
-#include <QLocale>
 #include <QMetaObject>
 #include <QNetworkAccessManager>
 #include <QNetworkCookie>
@@ -37,12 +35,12 @@
 #include <QTextStream>
 #include <QThread>
 #include <QTimer>
-#include <QUdpSocket>
 #include <QUrl>
 #include <QUrlQuery>
 
-#include "util/csv.h"
 #include "util/astronomy.h"
+#include "util/csv.h"
+#include "util/systemclockoffset.h"
 
 #ifdef METEOR_HAS_SGP4
 #include <CoordGeodetic.h>
@@ -78,195 +76,12 @@ namespace {
     // than silently discarding the whole catalog.
     constexpr double MinimumAltitudeCullM = 300000.0;
     constexpr int SpaceTrackMinimumEntries = 10000;
-    constexpr qint64 ClockCheckIntervalMS = 30 * 60 * 1000;
-    constexpr qint64 ClockCheckTimeoutMS = 10 * 1000;
-    constexpr qint64 ClockDateHeaderHalfResolutionMS = 500;
-    constexpr int ClockNtpPort = 123;
-    constexpr int ClockNtpProbeCount = 5;
-    constexpr int ClockNtpProbeIntervalMS = 100;
-    constexpr int ClockNtpProbeTimeoutMS = 1000;
-    constexpr int ClockNtpConnectTimeoutMS = 2000;
-    constexpr int ClockNtpInitialFailureLimit = 2;
-    constexpr qint64 NtpUnixEpochOffsetS = 2208988800LL;
-    constexpr double AcceptableClockErrorMS = 1000.0;
-    constexpr char ClockNtpHost[] = "time.cloudflare.com";
-    constexpr char ClockHttpTimeSourceUrl[] =
-        "https://www.google.com/generate_204";
     constexpr char SpaceTrackLoginUrl[] =
         "https://www.space-track.org/ajaxauth/login";
     constexpr char SpaceTrackCatalogUrl[] =
         "https://www.space-track.org/basicspacedata/query/class/gp/"
         "EPOCH/%3Enow-30/orderby/NORAD_CAT_ID,EPOCH/format/3le";
     constexpr char SpaceTrackCacheName[] = "space-track-gp.3le";
-
-    QDateTime parseHttpDate(const QByteArray& dateHeader)
-    {
-        const QString dateText = QString::fromLatin1(dateHeader).trimmed();
-        QDateTime dateTime = QDateTime::fromString(dateText, Qt::RFC2822Date);
-
-        if (dateTime.isValid()) {
-            return dateTime.toUTC();
-        }
-
-        // HTTP-date uses IMF-fixdate, but recipients should also accept the two
-        // obsolete forms. Parse them explicitly because Qt's RFC 2822 parser
-        // does not consistently accept the named GMT zone.
-        static const QStringList formats {
-            QStringLiteral("ddd, dd MMM yyyy HH:mm:ss 'GMT'"),
-            QStringLiteral("dddd, dd-MMM-yy HH:mm:ss 'GMT'"),
-            QStringLiteral("ddd MMM d HH:mm:ss yyyy")
-        };
-
-        for (const QString& format : formats)
-        {
-            dateTime = QLocale::c().toDateTime(dateText, format);
-
-            if (dateTime.isValid()) {
-                return QDateTime(dateTime.date(), dateTime.time(), Qt::UTC);
-            }
-        }
-
-        return {};
-    }
-
-    quint32 readUnsignedBigEndian32(const char *data)
-    {
-        const auto bytes = reinterpret_cast<const unsigned char *>(data);
-        return (quint32(bytes[0]) << 24)
-            | (quint32(bytes[1]) << 16)
-            | (quint32(bytes[2]) << 8)
-            | quint32(bytes[3]);
-    }
-
-    void writeUnsignedBigEndian32(char *data, quint32 value)
-    {
-        auto bytes = reinterpret_cast<unsigned char *>(data);
-        bytes[0] = (unsigned char) (value >> 24);
-        bytes[1] = (unsigned char) (value >> 16);
-        bytes[2] = (unsigned char) (value >> 8);
-        bytes[3] = (unsigned char) value;
-    }
-
-    QByteArray ntpTimestamp(double unixTimeMS)
-    {
-        QByteArray timestamp(8, '\0');
-        const double unixTimeS = unixTimeMS / 1000.0;
-        const qint64 wholeUnixSeconds = (qint64) std::floor(unixTimeS);
-        const double fractionalSecond = unixTimeS - wholeUnixSeconds;
-        const quint64 ntpSeconds =
-            quint64(wholeUnixSeconds + NtpUnixEpochOffsetS);
-        const quint32 ntpFraction = (quint32) std::llround(
-            fractionalSecond * 4294967296.0);
-        writeUnsignedBigEndian32(timestamp.data(), (quint32) ntpSeconds);
-        writeUnsignedBigEndian32(timestamp.data() + 4, ntpFraction);
-        return timestamp;
-    }
-
-    double ntpTimestampToUnixMS(
-        const char *data,
-        double referenceUnixTimeMS)
-    {
-        const quint32 rawSeconds = readUnsignedBigEndian32(data);
-        const quint32 fraction = readUnsignedBigEndian32(data + 4);
-        const qint64 referenceNtpSeconds =
-            (qint64) std::floor(referenceUnixTimeMS / 1000.0)
-            + NtpUnixEpochOffsetS;
-        qint64 seconds = (referenceNtpSeconds & ~0xffffffffLL) | rawSeconds;
-
-        // Unfold the 32-bit NTP era nearest the local reference time.
-        if (seconds - referenceNtpSeconds > 0x80000000LL) {
-            seconds -= 0x100000000LL;
-        } else if (referenceNtpSeconds - seconds > 0x80000000LL) {
-            seconds += 0x100000000LL;
-        }
-
-        return (double) (seconds - NtpUnixEpochOffsetS) * 1000.0
-            + (double) fraction * (1000.0 / 4294967296.0);
-    }
-
-    struct ClockNtpSample
-    {
-        double m_localClockErrorMS = 0.0;
-        double m_networkDelayMS = 0.0;
-        double m_roundTripMS = 0.0;
-        double m_rootDispersionMS = 0.0;
-    };
-
-    bool parseNtpReply(
-        const QByteArray& reply,
-        const QByteArray& expectedOriginateTimestamp,
-        double localSendTimeMS,
-        double localReceiveTimeMS,
-        ClockNtpSample& sample,
-        QString& error)
-    {
-        if (reply.size() < 48)
-        {
-            error = QStringLiteral("short SNTP response");
-            return false;
-        }
-
-        const unsigned char flags = (unsigned char) reply[0];
-        const int leapIndicator = flags >> 6;
-        const int version = (flags >> 3) & 0x7;
-        const int mode = flags & 0x7;
-        const int stratum = (unsigned char) reply[1];
-
-        if ((leapIndicator == 3) || (version < 3) || (mode != 4)
-            || (stratum < 1) || (stratum > 15))
-        {
-            error = QStringLiteral("invalid SNTP server response");
-            return false;
-        }
-
-        if (reply.mid(24, 8) != expectedOriginateTimestamp)
-        {
-            error = QStringLiteral("SNTP response did not match the request");
-            return false;
-        }
-
-        const QByteArray receiveTimestamp = reply.mid(32, 8);
-        const QByteArray transmitTimestamp = reply.mid(40, 8);
-        if ((receiveTimestamp == QByteArray(8, '\0'))
-            || (transmitTimestamp == QByteArray(8, '\0')))
-        {
-            error = QStringLiteral("SNTP response omitted server timestamps");
-            return false;
-        }
-
-        const double serverReceiveTimeMS = ntpTimestampToUnixMS(
-            reply.constData() + 32,
-            localReceiveTimeMS);
-        const double serverTransmitTimeMS = ntpTimestampToUnixMS(
-            reply.constData() + 40,
-            localReceiveTimeMS);
-        const double serverProcessingMS =
-            serverTransmitTimeMS - serverReceiveTimeMS;
-        const double localRoundTripMS =
-            localReceiveTimeMS - localSendTimeMS;
-
-        if (!std::isfinite(serverReceiveTimeMS)
-            || !std::isfinite(serverTransmitTimeMS)
-            || (serverProcessingMS < -1.0)
-            || (localRoundTripMS < 0.0))
-        {
-            error = QStringLiteral("SNTP response timestamps were inconsistent");
-            return false;
-        }
-
-        const double serverMinusLocalMS =
-            ((serverReceiveTimeMS - localSendTimeMS)
-                + (serverTransmitTimeMS - localReceiveTimeMS))
-            * 0.5;
-        sample.m_localClockErrorMS = -serverMinusLocalMS;
-        sample.m_networkDelayMS = std::max(
-            0.0,
-            localRoundTripMS - serverProcessingMS);
-        sample.m_rootDispersionMS =
-            (double) readUnsignedBigEndian32(reply.constData() + 8)
-            * (1000.0 / 65536.0);
-        return true;
-    }
 
     class MeteorNetworkCookieJar : public QNetworkCookieJar
     {
@@ -745,6 +560,17 @@ public:
 
     void start()
     {
+        m_clockOffset = new SystemClockOffset(this);
+        connect(
+            m_clockOffset,
+            &SystemClockOffset::measurementUpdated,
+            this,
+            [this](const SystemClockOffset::Measurement& measurement) {
+                m_clockMeasurement = measurement;
+                deliverStatistics();
+            });
+        m_clockOffset->start();
+
 #ifdef METEOR_HAS_SGP4
         m_networkManager = new QNetworkAccessManager(this);
         m_cookieJar = new MeteorNetworkCookieJar(m_networkManager);
@@ -755,18 +581,6 @@ public:
             refreshCatalogIfNeeded();
         });
         m_refreshTimer->start();
-        m_clockCheckTimer = new QTimer(this);
-        m_clockCheckTimer->setInterval(ClockCheckIntervalMS);
-        connect(m_clockCheckTimer, &QTimer::timeout, this, [this]() {
-            startClockCheck();
-        });
-        m_clockCheckTimer->start();
-        m_clockNtpTimeoutTimer = new QTimer(this);
-        m_clockNtpTimeoutTimer->setSingleShot(true);
-        connect(m_clockNtpTimeoutTimer, &QTimer::timeout, this, [this]() {
-            handleNtpProbeTimeout();
-        });
-        startClockCheck();
 
         const QString directoryPath = QStandardPaths::writableLocation(
             QStandardPaths::AppDataLocation) + QStringLiteral("/meteor");
@@ -940,371 +754,13 @@ public:
 
     void requestStatistics()
     {
-        const QDateTime nowUtc = QDateTime::currentDateTimeUtc();
-        if (!m_clockCheckInProgress
-            && (!m_clockCheckDateTimeUtc.isValid()
-                || (m_clockCheckDateTimeUtc.msecsTo(nowUtc) >= ClockCheckIntervalMS))) {
-            startClockCheck();
+        if (m_clockOffset) {
+            m_clockOffset->checkIfStale();
         }
         deliverStatistics();
     }
 
 private:
-    void startClockCheck()
-    {
-        if (!m_networkManager || m_clockCheckInProgress || m_stopRequested.load()) {
-            return;
-        }
-
-        m_clockCheckInProgress = true;
-        m_clockCheckAvailable = false;
-        m_clockCheckError.clear();
-        m_clockTimeSource = QStringLiteral("SNTP: %1").arg(
-            QString::fromLatin1(ClockNtpHost));
-        startNtpClockCheck();
-        deliverStatistics();
-    }
-
-    void startNtpClockCheck()
-    {
-        cleanupNtpClockCheck();
-        m_clockNtpAttempts = 0;
-        m_clockNtpConsecutiveFailures = 0;
-        m_clockNtpConnecting = true;
-        m_clockNtpLastError.clear();
-        m_clockNtpSamples.clear();
-        m_clockNtpSocket = new QUdpSocket(this);
-
-        connect(m_clockNtpSocket, &QUdpSocket::connected, this, [this]() {
-            if (!m_clockCheckInProgress || !m_clockNtpSocket) {
-                return;
-            }
-
-            m_clockNtpTimeoutTimer->stop();
-            m_clockNtpConnecting = false;
-            sendNtpProbe();
-        });
-        connect(m_clockNtpSocket, &QUdpSocket::readyRead, this, [this]() {
-            processNtpReplies();
-        });
-        connect(
-            m_clockNtpSocket,
-            &QUdpSocket::errorOccurred,
-            this,
-            [this](QAbstractSocket::SocketError) {
-                if (!m_clockCheckInProgress || !m_clockNtpSocket) {
-                    return;
-                }
-
-                finishNtpClockCheck(m_clockNtpSocket->errorString());
-            });
-
-        m_clockNtpSocket->connectToHost(
-            QString::fromLatin1(ClockNtpHost),
-            ClockNtpPort);
-        m_clockNtpTimeoutTimer->start(ClockNtpConnectTimeoutMS);
-    }
-
-    void cleanupNtpClockCheck()
-    {
-        if (m_clockNtpTimeoutTimer) {
-            m_clockNtpTimeoutTimer->stop();
-        }
-
-        if (m_clockNtpSocket)
-        {
-            m_clockNtpSocket->disconnect(this);
-            m_clockNtpSocket->abort();
-            m_clockNtpSocket->deleteLater();
-            m_clockNtpSocket = nullptr;
-        }
-
-        m_clockNtpConnecting = false;
-        m_clockNtpProbePending = false;
-    }
-
-    void sendNtpProbe()
-    {
-        if (!m_clockCheckInProgress || !m_clockNtpSocket
-            || m_stopRequested.load())
-        {
-            return;
-        }
-
-        ++m_clockNtpAttempts;
-        QByteArray packet(48, '\0');
-        packet[0] = 0x23; // LI = 0, version = 4, client mode.
-        m_clockNtpLocalSendTimeMS =
-            (double) QDateTime::currentMSecsSinceEpoch();
-        m_clockNtpTransmitTimestamp = ntpTimestamp(
-            m_clockNtpLocalSendTimeMS);
-        std::copy(
-            m_clockNtpTransmitTimestamp.cbegin(),
-            m_clockNtpTransmitTimestamp.cend(),
-            packet.begin() + 40);
-        m_clockNtpElapsed.start();
-
-        if (m_clockNtpSocket->write(packet) != packet.size())
-        {
-            m_clockNtpProbePending = false;
-            m_clockNtpLastError = m_clockNtpSocket->errorString();
-            ++m_clockNtpConsecutiveFailures;
-            scheduleNextNtpProbe();
-            return;
-        }
-
-        m_clockNtpProbePending = true;
-        m_clockNtpTimeoutTimer->start(ClockNtpProbeTimeoutMS);
-    }
-
-    void scheduleNextNtpProbe()
-    {
-        if (!m_clockCheckInProgress || !m_clockNtpSocket) {
-            return;
-        }
-
-        if (m_clockNtpAttempts >= ClockNtpProbeCount)
-        {
-            finishNtpClockCheck(m_clockNtpLastError);
-            return;
-        }
-
-        QUdpSocket *socket = m_clockNtpSocket;
-        QTimer::singleShot(
-            ClockNtpProbeIntervalMS,
-            this,
-            [this, socket]() {
-                if (m_clockNtpSocket == socket) {
-                    sendNtpProbe();
-                }
-            });
-    }
-
-    void processNtpReplies()
-    {
-        if (!m_clockCheckInProgress || !m_clockNtpSocket) {
-            return;
-        }
-
-        while (m_clockNtpSocket->hasPendingDatagrams())
-        {
-            QByteArray reply;
-            reply.resize((int) m_clockNtpSocket->pendingDatagramSize());
-            if (m_clockNtpSocket->readDatagram(
-                    reply.data(),
-                    reply.size()) < 0)
-            {
-                continue;
-            }
-
-            if (!m_clockNtpProbePending) {
-                continue;
-            }
-
-            ClockNtpSample sample;
-            QString error;
-            const double localReceiveTimeMS =
-                (double) QDateTime::currentMSecsSinceEpoch();
-            if (!parseNtpReply(
-                    reply,
-                    m_clockNtpTransmitTimestamp,
-                    m_clockNtpLocalSendTimeMS,
-                    localReceiveTimeMS,
-                    sample,
-                    error))
-            {
-                m_clockNtpLastError = error;
-                continue;
-            }
-
-            m_clockNtpTimeoutTimer->stop();
-            m_clockNtpProbePending = false;
-            sample.m_roundTripMS =
-                (double) m_clockNtpElapsed.nsecsElapsed() / 1000000.0;
-            m_clockNtpSamples.push_back(sample);
-            m_clockNtpConsecutiveFailures = 0;
-            m_clockNtpLastError.clear();
-            scheduleNextNtpProbe();
-            return;
-        }
-    }
-
-    void handleNtpProbeTimeout()
-    {
-        if (!m_clockCheckInProgress || !m_clockNtpSocket) {
-            return;
-        }
-
-        if (m_clockNtpConnecting)
-        {
-            finishNtpClockCheck(QStringLiteral("SNTP connection timed out"));
-            return;
-        }
-
-        m_clockNtpProbePending = false;
-        ++m_clockNtpConsecutiveFailures;
-        m_clockNtpLastError = QStringLiteral("SNTP request timed out");
-        if (m_clockNtpSamples.empty()
-            && (m_clockNtpConsecutiveFailures
-                >= ClockNtpInitialFailureLimit))
-        {
-            finishNtpClockCheck(m_clockNtpLastError);
-            return;
-        }
-
-        scheduleNextNtpProbe();
-    }
-
-    void finishNtpClockCheck(const QString& error)
-    {
-        cleanupNtpClockCheck();
-
-        if (m_clockNtpSamples.empty())
-        {
-            startHttpClockCheck(
-                error.isEmpty()
-                    ? QStringLiteral("SNTP did not return a usable response")
-                    : error);
-            return;
-        }
-
-        std::sort(
-            m_clockNtpSamples.begin(),
-            m_clockNtpSamples.end(),
-            [](const ClockNtpSample& left, const ClockNtpSample& right) {
-                return left.m_networkDelayMS < right.m_networkDelayMS;
-            });
-        const int selectedCount = std::min<int>(
-            3,
-            (int) m_clockNtpSamples.size());
-        std::vector<double> selectedErrors;
-        selectedErrors.reserve(selectedCount);
-        double rootDispersionMS = 0.0;
-
-        for (int i = 0; i < selectedCount; ++i)
-        {
-            selectedErrors.push_back(
-                m_clockNtpSamples[i].m_localClockErrorMS);
-            rootDispersionMS = std::max(
-                rootDispersionMS,
-                m_clockNtpSamples[i].m_rootDispersionMS);
-        }
-
-        std::sort(selectedErrors.begin(), selectedErrors.end());
-        const int middle = selectedCount / 2;
-        m_localClockErrorMS = (selectedCount % 2)
-            ? selectedErrors[middle]
-            : 0.5 * (selectedErrors[middle - 1] + selectedErrors[middle]);
-        double sampleSpreadMS = 0.0;
-        for (double sampleErrorMS : selectedErrors) {
-            sampleSpreadMS = std::max(
-                sampleSpreadMS,
-                std::abs(sampleErrorMS - m_localClockErrorMS));
-        }
-
-        const ClockNtpSample& bestSample = m_clockNtpSamples.front();
-        m_clockRoundTripMS = bestSample.m_roundTripMS;
-        m_clockUncertaintyMS = std::max(
-            1.0,
-            0.5 * bestSample.m_networkDelayMS
-                + sampleSpreadMS
-                + rootDispersionMS);
-        m_clockCheckDateTimeUtc = QDateTime::currentDateTimeUtc();
-        m_clockCheckAvailable = true;
-        m_clockCheckInProgress = false;
-        m_clockCheckError.clear();
-        deliverStatistics();
-    }
-
-    void startHttpClockCheck(const QString& ntpError)
-    {
-        const QDateTime localStartUtc = QDateTime::currentDateTimeUtc();
-        const auto elapsed = std::make_shared<QElapsedTimer>();
-        elapsed->start();
-        m_clockTimeSource = QStringLiteral("HTTPS fallback: %1").arg(
-            QString::fromLatin1(ClockHttpTimeSourceUrl));
-
-        QUrl clockUrl(QString::fromLatin1(ClockHttpTimeSourceUrl));
-        QUrlQuery clockQuery;
-        clockQuery.addQueryItem(
-            QStringLiteral("sdrangel-clock-check"),
-            QString::number(localStartUtc.toMSecsSinceEpoch()));
-        clockUrl.setQuery(clockQuery);
-        QNetworkRequest request(clockUrl);
-        request.setHeader(
-            QNetworkRequest::UserAgentHeader,
-            QStringLiteral("SDRangel Meteor clock check"));
-        request.setRawHeader("Cache-Control", "no-cache");
-        request.setAttribute(
-            QNetworkRequest::RedirectPolicyAttribute,
-            QNetworkRequest::NoLessSafeRedirectPolicy);
-        request.setAttribute(
-            QNetworkRequest::CacheLoadControlAttribute,
-            QNetworkRequest::AlwaysNetwork);
-        request.setTransferTimeout(ClockCheckTimeoutMS);
-
-        QNetworkReply *reply = m_networkManager->head(request);
-        connect(reply, &QNetworkReply::finished, this, [this, reply, localStartUtc, elapsed, ntpError]() {
-            const qint64 roundTripMS = elapsed->elapsed();
-            const int httpStatus = reply->attribute(
-                QNetworkRequest::HttpStatusCodeAttribute).toInt();
-            const QNetworkReply::NetworkError networkError = reply->error();
-            const QString networkErrorText = reply->errorString();
-            const QByteArray dateHeader = reply->rawHeader("Date");
-            reply->deleteLater();
-
-            m_clockCheckInProgress = false;
-            m_clockCheckDateTimeUtc = QDateTime::currentDateTimeUtc();
-            m_clockRoundTripMS = (double) roundTripMS;
-            m_clockUncertaintyMS =
-                0.5 * (double) roundTripMS + ClockDateHeaderHalfResolutionMS;
-            m_clockCheckAvailable = false;
-
-            if (m_stopRequested.load()) {
-                return;
-            }
-
-            if ((networkError != QNetworkReply::NoError)
-                || (httpStatus < 200)
-                || (httpStatus >= 400))
-            {
-                const QString httpError = networkError != QNetworkReply::NoError
-                    ? networkErrorText
-                    : QStringLiteral("time request returned HTTP %1").arg(httpStatus);
-                m_clockCheckError = QStringLiteral(
-                    "SNTP failed (%1); HTTPS fallback failed (%2)")
-                        .arg(ntpError, httpError);
-            }
-            else
-            {
-                const QDateTime internetTimeUtc = parseHttpDate(dateHeader);
-                if (!internetTimeUtc.isValid())
-                {
-                    const QString httpError = dateHeader.isEmpty()
-                        ? QStringLiteral("time response did not contain a Date header")
-                        : QStringLiteral("time response contained an invalid Date header");
-                    m_clockCheckError = QStringLiteral(
-                        "SNTP failed (%1); HTTPS fallback failed (%2)")
-                            .arg(ntpError, httpError);
-                }
-                else
-                {
-                    const QDateTime localMidpointUtc = localStartUtc.addMSecs(
-                        roundTripMS / 2);
-                    // HTTP Date has whole-second precision and is normally truncated.
-                    // Compare against the centre of that represented one-second interval.
-                    m_localClockErrorMS = (double)
-                        internetTimeUtc.addMSecs(ClockDateHeaderHalfResolutionMS)
-                            .msecsTo(localMidpointUtc);
-                    m_clockCheckAvailable = true;
-                    m_clockCheckError.clear();
-                }
-            }
-
-            deliverStatistics();
-        });
-    }
-
 #ifdef METEOR_HAS_SGP4
     struct CatalogMetadata
     {
@@ -2884,15 +2340,20 @@ private:
         QPointer<MeteorSatelliteMatcher> owner(m_owner);
         MeteorSatelliteMatcher::CatalogStatistics statistics = m_statistics;
         statistics.m_status = m_status;
-        statistics.m_clockCheckPending = m_clockCheckInProgress;
-        statistics.m_clockCheckAvailable = m_clockCheckAvailable;
-        statistics.m_clockCheckDateTimeUtc = m_clockCheckDateTimeUtc;
-        statistics.m_clockTimeSource = m_clockTimeSource;
-        statistics.m_clockCheckError = m_clockCheckError;
-        statistics.m_localClockErrorMS = m_localClockErrorMS;
-        statistics.m_clockUncertaintyMS = m_clockUncertaintyMS;
-        statistics.m_clockRoundTripMS = m_clockRoundTripMS;
-        statistics.m_acceptableClockErrorMS = AcceptableClockErrorMS;
+        statistics.m_clockCheckPending = m_clockMeasurement.m_pending;
+        statistics.m_clockCheckAvailable = m_clockMeasurement.m_available;
+        statistics.m_clockCheckDateTimeUtc =
+            m_clockMeasurement.m_dateTimeUtc;
+        statistics.m_clockTimeSource = m_clockMeasurement.m_timeSource;
+        statistics.m_clockCheckError = m_clockMeasurement.m_error;
+        statistics.m_localClockErrorMS =
+            m_clockMeasurement.m_localClockErrorMS;
+        statistics.m_clockUncertaintyMS =
+            m_clockMeasurement.m_uncertaintyMS;
+        statistics.m_clockRoundTripMS =
+            m_clockMeasurement.m_roundTripMS;
+        statistics.m_acceptableClockErrorMS =
+            SystemClockOffset::DefaultAcceptableClockErrorMS;
 #ifdef METEOR_HAS_SGP4
         statistics.m_spaceTrackConfigured =
             !m_spaceTrackUsername.isEmpty() && !m_spaceTrackPassword.isEmpty();
@@ -2923,18 +2384,8 @@ private:
     QNetworkAccessManager *m_networkManager = nullptr;
     MeteorNetworkCookieJar *m_cookieJar = nullptr;
     QTimer *m_refreshTimer = nullptr;
-    QTimer *m_clockCheckTimer = nullptr;
-    QTimer *m_clockNtpTimeoutTimer = nullptr;
-    QUdpSocket *m_clockNtpSocket = nullptr;
-    QElapsedTimer m_clockNtpElapsed;
-    QByteArray m_clockNtpTransmitTimestamp;
-    double m_clockNtpLocalSendTimeMS = 0.0;
-    int m_clockNtpAttempts = 0;
-    int m_clockNtpConsecutiveFailures = 0;
-    bool m_clockNtpConnecting = false;
-    bool m_clockNtpProbePending = false;
-    QString m_clockNtpLastError;
-    std::vector<ClockNtpSample> m_clockNtpSamples;
+    SystemClockOffset *m_clockOffset = nullptr;
+    SystemClockOffset::Measurement m_clockMeasurement;
     QString m_catalogDirectory;
     QString m_status = QStringLiteral("Orbital catalog is loading");
     MeteorSatelliteMatcher::CatalogStatistics m_statistics;
@@ -2944,14 +2395,6 @@ private:
     bool m_downloadInProgress = false;
     bool m_spaceTrackDownloadPending = false;
     bool m_spaceTrackRefreshRequested = false;
-    bool m_clockCheckInProgress = false;
-    bool m_clockCheckAvailable = false;
-    QDateTime m_clockCheckDateTimeUtc;
-    QString m_clockTimeSource;
-    QString m_clockCheckError;
-    double m_localClockErrorMS = 0.0;
-    double m_clockUncertaintyMS = 0.0;
-    double m_clockRoundTripMS = 0.0;
     QVector<int> m_downloadQueue;
     int m_downloadQueuePos = 0;
     std::atomic<bool> m_stopRequested {false};

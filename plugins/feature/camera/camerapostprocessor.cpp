@@ -535,6 +535,58 @@ static QString formatRightAscensionDegrees(double value)
     return QStringLiteral("%1h").arg(hours, 2, 10, QLatin1Char('0'));
 }
 
+// Decimals needed for a grid label to distinguish adjacent lines at the given
+// spacing: whole degrees at >= 1 deg, one decimal for 0.5/0.1 deg, two for 0.25.
+static int gridSpacingDecimals(double spacingDegrees)
+{
+    if (spacingDegrees >= 1.0) {
+        return 0;
+    }
+    const double tenths = spacingDegrees * 10.0;
+    return (std::abs(tenths - std::round(tenths)) < 1e-9) ? 1 : 2;
+}
+
+static QString formatSignedDegrees(double value, int decimals)
+{
+    if (decimals <= 0) {
+        return formatSignedDegrees(value);
+    }
+    return QStringLiteral("%1%2°").arg(value >= 0.0 ? "+" : "").arg(value, 0, 'f', decimals);
+}
+
+static QString formatAzimuthDegrees(double value, int decimals)
+{
+    if (decimals <= 0) {
+        return formatAzimuthDegrees(value);
+    }
+    return QStringLiteral("%1°").arg(normalizeDegrees(value), 0, 'f', decimals);
+}
+
+// RA labels keep the whole-hour convention at the legacy 15 deg spacing and
+// extend it with minutes (and seconds when the spacing is not a whole number
+// of RA minutes, e.g. 0.1 deg = 24 s) for the adaptive narrow-field spacings.
+static QString formatRightAscensionDegrees(double value, double spacingDegrees)
+{
+    if (spacingDegrees >= 15.0) {
+        return formatRightAscensionDegrees(value);
+    }
+    int totalSeconds = qRound(normalizeDegrees(value) * 240.0) % 86400; // 240 s of RA per degree
+    if (totalSeconds < 0) {
+        totalSeconds += 86400;
+    }
+    const int hours = totalSeconds / 3600;
+    const int minutes = (totalSeconds / 60) % 60;
+    const int seconds = totalSeconds % 60;
+    const bool wholeMinutes = std::abs(std::remainder(spacingDegrees * 240.0, 60.0)) < 1e-6;
+    if (wholeMinutes && (seconds == 0)) {
+        return QStringLiteral("%1h%2m").arg(hours, 2, 10, QLatin1Char('0')).arg(minutes, 2, 10, QLatin1Char('0'));
+    }
+    return QStringLiteral("%1h%2m%3s")
+        .arg(hours, 2, 10, QLatin1Char('0'))
+        .arg(minutes, 2, 10, QLatin1Char('0'))
+        .arg(seconds, 2, 10, QLatin1Char('0'));
+}
+
 static QString formatSolvedStarLabel(const CameraSettings& settings, const CameraPipelineStarDetection& detection)
 {
     if (!detection.m_solved || settings.m_plateSolveLabelMode == CameraSettings::PlateSolveLabelNone || detection.m_label.isEmpty()) {
@@ -2222,6 +2274,166 @@ QString CameraPostProcessor::expandOverlayTextTemplate(const CameraSettings& set
     return overlayText;
 }
 
+// ---------------------------------------------------------------------------
+// Adaptive grid spacing for narrow (telescope) fields of view.
+//
+// The legacy grid uses fixed spacing (10 deg parallels / 15 deg meridians),
+// which leaves a ~1 deg telescope frame with no line crossing it at all. Below
+// kAdaptiveSkyGridFovDegrees the spacing is instead chosen from a ladder so
+// that roughly 3-8 lines cross the field, and — critically for performance —
+// only lines and samples inside a window around the boresight are traversed:
+// a full-sky sweep at 0.25 deg spacing would be millions of projections per
+// overlay render. At or above the threshold the legacy full-sky loops run
+// unchanged so wide-field output is identical.
+// ---------------------------------------------------------------------------
+
+static constexpr double kAdaptiveSkyGridFovDegrees = 40.0;
+static constexpr double kSkyGridSpacingLadder[] = {15.0, 10.0, 5.0, 2.0, 1.0, 0.5, 0.25, 0.1};
+static constexpr int kSkyGridSpacingLadderSize = sizeof(kSkyGridSpacingLadder) / sizeof(kSkyGridSpacingLadder[0]);
+
+// Largest ladder spacing that still puts at least ~3 lines across the field.
+static double adaptiveSkyGridSpacing(double fovDegrees)
+{
+    for (double spacing : kSkyGridSpacingLadder)
+    {
+        if (spacing <= fovDegrees / 3.0) {
+            return spacing;
+        }
+    }
+    return kSkyGridSpacingLadder[kSkyGridSpacingLadderSize - 1];
+}
+
+static double coarserSkyGridSpacing(double spacing)
+{
+    double previous = kSkyGridSpacingLadder[0];
+    for (double candidate : kSkyGridSpacingLadder)
+    {
+        if (candidate <= spacing) {
+            return previous;
+        }
+        previous = candidate;
+    }
+    return previous;
+}
+
+// The window of grid lines to draw around the boresight. "Parallel" is the
+// dec/alt coordinate (lines of constant parallel run along RA/az); "meridian"
+// is the RA/az coordinate. Meridian spacing widens by 1/cos(parallel) so the
+// on-sky separation between meridian lines stays comparable to the parallel
+// spacing as the lines converge towards the pole.
+struct SkyGridWindow
+{
+    double m_parallelSpacing;
+    double m_meridianSpacing;
+    double m_parallelMin;
+    double m_parallelMax;
+    double m_meridianCenter;
+    double m_meridianHalfWidth;   // >= 180 -> full circle
+    double m_parallelSampleStep;  // step along constant-meridian lines
+    double m_meridianSampleStep;  // step along constant-parallel lines
+
+    bool fullCircle() const { return m_meridianHalfWidth >= 180.0 - 1e-9; }
+    double meridianBegin() const { return fullCircle() ? 0.0 : m_meridianCenter - m_meridianHalfWidth; }
+    double meridianEnd() const { return fullCircle() ? 360.0 : m_meridianCenter + m_meridianHalfWidth; }
+};
+
+static SkyGridWindow makeSkyGridWindow(double fovDegrees, double meridianCenterDegrees, double parallelCenterDegrees)
+{
+    SkyGridWindow window;
+
+    // Near a pole the 1/cos meridian fan gets dense and the boresight window
+    // approximation degrades, so back off one ladder step and widen the window.
+    const bool nearPole = (std::abs(parallelCenterDegrees) + fovDegrees) > 85.0;
+    double spacing = adaptiveSkyGridSpacing(fovDegrees);
+    double margin = fovDegrees; // full-FoV margin absorbs boresight/epoch approximations
+    if (nearPole)
+    {
+        spacing = coarserSkyGridSpacing(spacing);
+        margin = 1.5 * fovDegrees;
+    }
+
+    window.m_parallelSpacing = spacing;
+    window.m_parallelSampleStep = spacing / 8.0;
+    window.m_parallelMin = std::max(parallelCenterDegrees - margin, -89.95);
+    window.m_parallelMax = std::min(parallelCenterDegrees + margin, 89.95);
+
+    // Convergence factor from the window edge closest to the pole, so the
+    // meridian window is wide enough across the whole parallel range.
+    const double maxAbsParallel = std::min(std::max(std::abs(window.m_parallelMin), std::abs(window.m_parallelMax)), 89.95);
+    const double cosParallel = std::max(std::cos(skyDegToRad(maxAbsParallel)), 1e-3);
+    const bool poleInWindow = (std::abs(parallelCenterDegrees) + margin) >= 89.95;
+    window.m_meridianSpacing = adaptiveSkyGridSpacing(std::min(fovDegrees / cosParallel, 360.0));
+    window.m_meridianSampleStep = window.m_meridianSpacing / 8.0;
+    window.m_meridianCenter = meridianCenterDegrees;
+    window.m_meridianHalfWidth = poleInWindow ? 180.0 : std::min(margin / cosParallel, 180.0);
+
+    return window;
+}
+
+// Boresight J2000 RA/Dec used to centre the adaptive equatorial window. Only
+// needs to be approximate (the window carries a full-FoV margin), but
+// Astronomy::precess is cheap, so the of-date pointing is precessed back to
+// J2000 to match the J2000 line coordinates fed through equatorialToAltAz.
+static void boresightRaDecJ2000(
+    const CameraSettings& settings,
+    const QDateTime& utcDateTime,
+    double& raDegrees,
+    double& decDegrees)
+{
+    AzAlt azAlt;
+    azAlt.az = settings.m_azimuth;
+    azAlt.alt = settings.m_elevation;
+    const RADec ofDate = Astronomy::azAltToRaDec(azAlt, settings.m_latitude, settings.m_longitude, utcDateTime);
+    const RADec j2000 = Astronomy::precess(ofDate, Astronomy::julianDate(utcDateTime), Astronomy::jd_j2000());
+    raDegrees = j2000.ra * 15.0; // RADec.ra is in hours
+    decDegrees = j2000.dec;
+}
+
+// Sample one grid line over [begin, end] at the given step, joining
+// consecutive projectable samples — the same polyline rule as the legacy loops.
+template <typename SampleFn>
+static void drawSampledGridLine(QPainter& painter, double maxSegment, double begin, double end, double step, SampleFn&& sample)
+{
+    bool havePrevious = false;
+    QPointF previousPoint;
+    for (double value = begin; value <= end + step * 0.5; value += step)
+    {
+        QPointF point;
+        const bool ok = sample(value, point);
+        if (ok && havePrevious && QLineF(previousPoint, point).length() <= maxSegment) {
+            painter.drawLine(previousPoint, point);
+        }
+        previousPoint = point;
+        havePrevious = ok;
+    }
+}
+
+// Draw the adaptive line set for one grid. project(meridian, parallel, point)
+// maps grid coordinates (RA/az, dec/alt) to image coordinates.
+template <typename ProjectFn>
+static void renderAdaptiveSkyGridLines(QPainter& painter, double maxSegment, const SkyGridWindow& window, ProjectFn&& project)
+{
+    const double meridianBegin = window.meridianBegin();
+    const double meridianEnd = window.meridianEnd();
+
+    const double firstParallel = std::ceil(window.m_parallelMin / window.m_parallelSpacing) * window.m_parallelSpacing;
+    for (double parallel = firstParallel; parallel <= window.m_parallelMax + 1e-9; parallel += window.m_parallelSpacing)
+    {
+        drawSampledGridLine(painter, maxSegment, meridianBegin, meridianEnd, window.m_meridianSampleStep,
+            [&](double meridian, QPointF& point) { return project(meridian, parallel, point); });
+    }
+
+    const double firstMeridian = window.fullCircle()
+        ? 0.0
+        : std::ceil(meridianBegin / window.m_meridianSpacing) * window.m_meridianSpacing;
+    const double lastMeridian = window.fullCircle() ? 360.0 - window.m_meridianSpacing : meridianEnd;
+    for (double meridian = firstMeridian; meridian <= lastMeridian + 1e-9; meridian += window.m_meridianSpacing)
+    {
+        drawSampledGridLine(painter, maxSegment, window.m_parallelMin, window.m_parallelMax, window.m_parallelSampleStep,
+            [&](double parallel, QPointF& point) { return project(meridian, parallel, point); });
+    }
+}
+
 // Render only the grid LINES into a transparent overlay. This is the expensive
 // part (thousands of antialiased trig-projected segments) and is cached by
 // applySkyGridOverlay; the result is re-composited each frame until an input
@@ -2239,10 +2451,22 @@ static void renderSkyGridLines(
     painter.setClipRect(overlay.rect());
     const double maxSegment = std::hypot(static_cast<double>(overlay.width()), static_cast<double>(overlay.height())) * 2.0;
 
+    const bool narrowField = settings.m_fov < kAdaptiveSkyGridFovDegrees;
+
     if (drawAltAz)
     {
         painter.setPen(QPen(settings.m_altAzGridColor, 1.0));
 
+        if (narrowField)
+        {
+            const SkyGridWindow window = makeSkyGridWindow(settings.m_fov, settings.m_azimuth, settings.m_elevation);
+            renderAdaptiveSkyGridLines(painter, maxSegment, window,
+                [&](double azimuth, double altitude, QPointF& point) {
+                    return projector.projectAltAz(azimuth, altitude, point);
+                });
+        }
+        else
+        {
         for (int altitude = -80; altitude <= 80; altitude += 10)
         {
             bool havePrevious = false;
@@ -2274,12 +2498,36 @@ static void renderSkyGridLines(
                 havePrevious = ok;
             }
         }
+        }
     }
 
     if (drawEquatorial)
     {
         painter.setPen(QPen(settings.m_equatorialGridColor, 1.0));
 
+        if (narrowField)
+        {
+            double boresightRa = 0.0;
+            double boresightDec = 0.0;
+            boresightRaDecJ2000(settings, utcDateTime, boresightRa, boresightDec);
+            const SkyGridWindow window = makeSkyGridWindow(settings.m_fov, boresightRa, boresightDec);
+            renderAdaptiveSkyGridLines(painter, maxSegment, window,
+                [&](double rightAscension, double declination, QPointF& point) {
+                    double azimuth = 0.0;
+                    double elevation = 0.0;
+                    return equatorialToAltAz(
+                        rightAscension,
+                        declination,
+                        settings.m_latitude,
+                        settings.m_longitude,
+                        utcDateTime,
+                        azimuth,
+                        elevation)
+                        && projector.projectAltAz(azimuth, elevation, point);
+                });
+        }
+        else
+        {
         for (int declination = -80; declination <= 80; declination += 10)
         {
             bool havePrevious = false;
@@ -2333,6 +2581,7 @@ static void renderSkyGridLines(
                 havePrevious = ok;
             }
         }
+        }
     }
 }
 
@@ -2352,8 +2601,59 @@ static void renderSkyGridLabels(
     const QFont& font,
     const QFontMetrics& fontMetrics)
 {
+    const bool narrowField = settings.m_fov < kAdaptiveSkyGridFovDegrees;
+
     if (drawAltAz)
     {
+        if (narrowField)
+        {
+            const SkyGridWindow window = makeSkyGridWindow(settings.m_fov, settings.m_azimuth, settings.m_elevation);
+            const int parallelDecimals = gridSpacingDecimals(window.m_parallelSpacing);
+            const int meridianDecimals = gridSpacingDecimals(window.m_meridianSpacing);
+
+            const double firstParallel = std::ceil(window.m_parallelMin / window.m_parallelSpacing) * window.m_parallelSpacing;
+            for (double altitude = firstParallel; altitude <= window.m_parallelMax + 1e-9; altitude += window.m_parallelSpacing)
+            {
+                QPointF labelPoint;
+                if (projector.projectAltAz(settings.m_azimuth, altitude, labelPoint)) {
+                    const QString label = formatSignedDegrees(altitude, parallelDecimals);
+                    if (drawLabels) {
+                        drawOutlinedLabel(painter, imageRect, labelPoint, label, settings.m_altAzGridColor, fontMetrics);
+                    } else {
+                        appendOutlinedPreviewTextLabel(previewTextLabels, label, labelPoint, settings.m_altAzGridColor, font.family(), font.pointSizeF());
+                    }
+                }
+            }
+
+            const double firstMeridian = window.fullCircle()
+                ? 0.0
+                : std::ceil(window.meridianBegin() / window.m_meridianSpacing) * window.m_meridianSpacing;
+            const double lastMeridian = window.fullCircle() ? 360.0 - window.m_meridianSpacing : window.meridianEnd();
+            for (double azimuth = firstMeridian; azimuth <= lastMeridian + 1e-9; azimuth += window.m_meridianSpacing)
+            {
+                QPointF labelPoint;
+                bool foundLabelPoint = false;
+                for (double altitude = window.m_parallelMin; altitude <= window.m_parallelMax + 1e-9; altitude += window.m_parallelSampleStep)
+                {
+                    if (projector.projectAltAz(azimuth, altitude, labelPoint))
+                    {
+                        foundLabelPoint = true;
+                        break;
+                    }
+                }
+
+                if (foundLabelPoint) {
+                    const QString label = formatAzimuthDegrees(azimuth, meridianDecimals);
+                    if (drawLabels) {
+                        drawOutlinedLabel(painter, imageRect, labelPoint, label, settings.m_altAzGridColor, fontMetrics);
+                    } else {
+                        appendOutlinedPreviewTextLabel(previewTextLabels, label, labelPoint, settings.m_altAzGridColor, font.family(), font.pointSizeF());
+                    }
+                }
+            }
+        }
+        else
+        {
         for (int altitude = -80; altitude <= 80; altitude += 10)
         {
             QPointF labelPoint;
@@ -2389,10 +2689,86 @@ static void renderSkyGridLabels(
                 }
             }
         }
+        }
     }
 
     if (drawEquatorial)
     {
+        if (narrowField)
+        {
+            double boresightRa = 0.0;
+            double boresightDec = 0.0;
+            boresightRaDecJ2000(settings, utcDateTime, boresightRa, boresightDec);
+            const SkyGridWindow window = makeSkyGridWindow(settings.m_fov, boresightRa, boresightDec);
+            const int parallelDecimals = gridSpacingDecimals(window.m_parallelSpacing);
+
+            // Declination labels along the boresight meridian (the legacy code
+            // uses the local sidereal meridian, which is off-frame for a
+            // telescope field).
+            const double firstParallel = std::ceil(window.m_parallelMin / window.m_parallelSpacing) * window.m_parallelSpacing;
+            for (double declination = firstParallel; declination <= window.m_parallelMax + 1e-9; declination += window.m_parallelSpacing)
+            {
+                double labelAzimuth = 0.0;
+                double labelElevation = 0.0;
+                QPointF labelPoint;
+                if (equatorialToAltAz(
+                        boresightRa,
+                        declination,
+                        settings.m_latitude,
+                        settings.m_longitude,
+                        utcDateTime,
+                        labelAzimuth,
+                        labelElevation)
+                    && projector.projectAltAz(labelAzimuth, labelElevation, labelPoint))
+                {
+                    const QString label = formatSignedDegrees(declination, parallelDecimals);
+                    if (drawLabels) {
+                        drawOutlinedLabel(painter, imageRect, labelPoint, label, settings.m_equatorialGridColor, fontMetrics);
+                    } else {
+                        appendOutlinedPreviewTextLabel(previewTextLabels, label, labelPoint, settings.m_equatorialGridColor, font.family(), font.pointSizeF());
+                    }
+                }
+            }
+
+            const double firstMeridian = window.fullCircle()
+                ? 0.0
+                : std::ceil(window.meridianBegin() / window.m_meridianSpacing) * window.m_meridianSpacing;
+            const double lastMeridian = window.fullCircle() ? 360.0 - window.m_meridianSpacing : window.meridianEnd();
+            for (double rightAscension = firstMeridian; rightAscension <= lastMeridian + 1e-9; rightAscension += window.m_meridianSpacing)
+            {
+                double labelAzimuth = 0.0;
+                double labelElevation = 0.0;
+                QPointF labelPoint;
+                bool foundLabelPoint = false;
+                for (double declination = window.m_parallelMin; declination <= window.m_parallelMax + 1e-9; declination += window.m_parallelSampleStep)
+                {
+                    if (equatorialToAltAz(
+                            rightAscension,
+                            declination,
+                            settings.m_latitude,
+                            settings.m_longitude,
+                            utcDateTime,
+                            labelAzimuth,
+                            labelElevation)
+                        && projector.projectAltAz(labelAzimuth, labelElevation, labelPoint))
+                    {
+                        foundLabelPoint = true;
+                        break;
+                    }
+                }
+
+                if (foundLabelPoint) {
+                    const QString label = formatRightAscensionDegrees(rightAscension, window.m_meridianSpacing);
+                    if (drawLabels) {
+                        drawOutlinedLabel(painter, imageRect, labelPoint, label, settings.m_equatorialGridColor, fontMetrics);
+                    } else {
+                        appendOutlinedPreviewTextLabel(previewTextLabels, label, labelPoint, settings.m_equatorialGridColor, font.family(), font.pointSizeF());
+                    }
+                }
+            }
+        }
+        else
+        {
         for (int declination = -80; declination <= 80; declination += 10)
         {
             double labelAzimuth = 0.0;
@@ -2439,6 +2815,7 @@ static void renderSkyGridLabels(
                     appendOutlinedPreviewTextLabel(previewTextLabels, label, labelPoint, settings.m_equatorialGridColor, font.family(), font.pointSizeF());
                 }
             }
+        }
         }
     }
 }

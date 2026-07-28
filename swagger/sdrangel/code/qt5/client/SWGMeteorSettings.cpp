@@ -36,16 +36,10 @@ SWGMeteorSettings::SWGMeteorSettings() {
     m_frequency_isSet = false;
     channel_sample_rate = 0;
     m_channel_sample_rate_isSet = false;
-    power_lpf_cutoff = 0.0f;
-    m_power_lpf_cutoff_isSet = false;
-    detection_threshold_db = 0.0f;
-    m_detection_threshold_db_isSet = false;
-    min_duration_ms = 0;
-    m_min_duration_ms_isSet = false;
+    blob_sensitivity = 0.0f;
+    m_blob_sensitivity_isSet = false;
     max_duration_ms = 0;
     m_max_duration_ms_isSet = false;
-    max_frequency_drift = 0.0f;
-    m_max_frequency_drift_isSet = false;
     detections_table_column_hidden = 0;
     m_detections_table_column_hidden_isSet = false;
     detection_box_padding_pixels = 0;
@@ -68,6 +62,8 @@ SWGMeteorSettings::SWGMeteorSettings() {
     m_receiver_latitude_isSet = false;
     receiver_longitude = 0.0;
     m_receiver_longitude_isSet = false;
+    receiver_position_set = 0;
+    m_receiver_position_set_isSet = false;
     antenna_azimuth = 0.0f;
     m_antenna_azimuth_isSet = false;
     antenna_elevation = 0.0f;
@@ -94,6 +90,8 @@ SWGMeteorSettings::SWGMeteorSettings() {
     m_channel_marker_isSet = false;
     spectrum_gui = nullptr;
     m_spectrum_gui_isSet = false;
+    head_spectrum_gui = nullptr;
+    m_head_spectrum_gui_isSet = false;
     rollup_state = nullptr;
     m_rollup_state_isSet = false;
 }
@@ -112,16 +110,10 @@ SWGMeteorSettings::init() {
     m_frequency_isSet = false;
     channel_sample_rate = 0;
     m_channel_sample_rate_isSet = false;
-    power_lpf_cutoff = 0.0f;
-    m_power_lpf_cutoff_isSet = false;
-    detection_threshold_db = 0.0f;
-    m_detection_threshold_db_isSet = false;
-    min_duration_ms = 0;
-    m_min_duration_ms_isSet = false;
+    blob_sensitivity = 0.0f;
+    m_blob_sensitivity_isSet = false;
     max_duration_ms = 0;
     m_max_duration_ms_isSet = false;
-    max_frequency_drift = 0.0f;
-    m_max_frequency_drift_isSet = false;
     detections_table_column_hidden = 0;
     m_detections_table_column_hidden_isSet = false;
     detection_box_padding_pixels = 0;
@@ -144,6 +136,8 @@ SWGMeteorSettings::init() {
     m_receiver_latitude_isSet = false;
     receiver_longitude = 0.0;
     m_receiver_longitude_isSet = false;
+    receiver_position_set = 0;
+    m_receiver_position_set_isSet = false;
     antenna_azimuth = 0.0f;
     m_antenna_azimuth_isSet = false;
     antenna_elevation = 0.0f;
@@ -170,14 +164,14 @@ SWGMeteorSettings::init() {
     m_channel_marker_isSet = false;
     spectrum_gui = new SWGGLSpectrum();
     m_spectrum_gui_isSet = false;
+    head_spectrum_gui = new SWGGLSpectrum();
+    m_head_spectrum_gui_isSet = false;
     rollup_state = new SWGRollupState();
     m_rollup_state_isSet = false;
 }
 
 void
 SWGMeteorSettings::cleanup() {
-
-
 
 
 
@@ -217,6 +211,9 @@ SWGMeteorSettings::cleanup() {
     if(spectrum_gui != nullptr) { 
         delete spectrum_gui;
     }
+    if(head_spectrum_gui != nullptr) { 
+        delete head_spectrum_gui;
+    }
     if(rollup_state != nullptr) { 
         delete rollup_state;
     }
@@ -241,15 +238,9 @@ SWGMeteorSettings::fromJsonObject(QJsonObject &pJson) {
     
     ::SWGSDRangel::setValue(&channel_sample_rate, pJson["channelSampleRate"], "qint32", "");
     
-    ::SWGSDRangel::setValue(&power_lpf_cutoff, pJson["powerLPFCutoff"], "float", "");
-    
-    ::SWGSDRangel::setValue(&detection_threshold_db, pJson["detectionThresholdDB"], "float", "");
-    
-    ::SWGSDRangel::setValue(&min_duration_ms, pJson["minDurationMS"], "qint32", "");
+    ::SWGSDRangel::setValue(&blob_sensitivity, pJson["blobSensitivity"], "float", "");
     
     ::SWGSDRangel::setValue(&max_duration_ms, pJson["maxDurationMS"], "qint32", "");
-    
-    ::SWGSDRangel::setValue(&max_frequency_drift, pJson["maxFrequencyDrift"], "float", "");
     
     ::SWGSDRangel::setValue(&detections_table_column_hidden, pJson["detectionsTableColumnHidden"], "qint32", "");
     
@@ -272,6 +263,8 @@ SWGMeteorSettings::fromJsonObject(QJsonObject &pJson) {
     ::SWGSDRangel::setValue(&receiver_latitude, pJson["receiverLatitude"], "double", "");
     
     ::SWGSDRangel::setValue(&receiver_longitude, pJson["receiverLongitude"], "double", "");
+    
+    ::SWGSDRangel::setValue(&receiver_position_set, pJson["receiverPositionSet"], "qint32", "");
     
     ::SWGSDRangel::setValue(&antenna_azimuth, pJson["antennaAzimuth"], "float", "");
     
@@ -298,6 +291,8 @@ SWGMeteorSettings::fromJsonObject(QJsonObject &pJson) {
     ::SWGSDRangel::setValue(&channel_marker, pJson["channelMarker"], "SWGChannelMarker", "SWGChannelMarker");
     
     ::SWGSDRangel::setValue(&spectrum_gui, pJson["spectrumGUI"], "SWGGLSpectrum", "SWGGLSpectrum");
+    
+    ::SWGSDRangel::setValue(&head_spectrum_gui, pJson["headSpectrumGUI"], "SWGGLSpectrum", "SWGGLSpectrum");
     
     ::SWGSDRangel::setValue(&rollup_state, pJson["rollupState"], "SWGRollupState", "SWGRollupState");
     
@@ -329,20 +324,11 @@ SWGMeteorSettings::asJsonObject() {
     if(m_channel_sample_rate_isSet){
         obj->insert("channelSampleRate", QJsonValue(channel_sample_rate));
     }
-    if(m_power_lpf_cutoff_isSet){
-        obj->insert("powerLPFCutoff", QJsonValue(power_lpf_cutoff));
-    }
-    if(m_detection_threshold_db_isSet){
-        obj->insert("detectionThresholdDB", QJsonValue(detection_threshold_db));
-    }
-    if(m_min_duration_ms_isSet){
-        obj->insert("minDurationMS", QJsonValue(min_duration_ms));
+    if(m_blob_sensitivity_isSet){
+        obj->insert("blobSensitivity", QJsonValue(blob_sensitivity));
     }
     if(m_max_duration_ms_isSet){
         obj->insert("maxDurationMS", QJsonValue(max_duration_ms));
-    }
-    if(m_max_frequency_drift_isSet){
-        obj->insert("maxFrequencyDrift", QJsonValue(max_frequency_drift));
     }
     if(m_detections_table_column_hidden_isSet){
         obj->insert("detectionsTableColumnHidden", QJsonValue(detections_table_column_hidden));
@@ -376,6 +362,9 @@ SWGMeteorSettings::asJsonObject() {
     }
     if(m_receiver_longitude_isSet){
         obj->insert("receiverLongitude", QJsonValue(receiver_longitude));
+    }
+    if(m_receiver_position_set_isSet){
+        obj->insert("receiverPositionSet", QJsonValue(receiver_position_set));
     }
     if(m_antenna_azimuth_isSet){
         obj->insert("antennaAzimuth", QJsonValue(antenna_azimuth));
@@ -415,6 +404,9 @@ SWGMeteorSettings::asJsonObject() {
     }
     if((spectrum_gui != nullptr) && (spectrum_gui->isSet())){
         toJsonValue(QString("spectrumGUI"), spectrum_gui, obj, QString("SWGGLSpectrum"));
+    }
+    if((head_spectrum_gui != nullptr) && (head_spectrum_gui->isSet())){
+        toJsonValue(QString("headSpectrumGUI"), head_spectrum_gui, obj, QString("SWGGLSpectrum"));
     }
     if((rollup_state != nullptr) && (rollup_state->isSet())){
         toJsonValue(QString("rollupState"), rollup_state, obj, QString("SWGRollupState"));
@@ -464,33 +456,13 @@ SWGMeteorSettings::setChannelSampleRate(qint32 channel_sample_rate) {
 }
 
 float
-SWGMeteorSettings::getPowerLpfCutoff() {
-    return power_lpf_cutoff;
+SWGMeteorSettings::getBlobSensitivity() {
+    return blob_sensitivity;
 }
 void
-SWGMeteorSettings::setPowerLpfCutoff(float power_lpf_cutoff) {
-    this->power_lpf_cutoff = power_lpf_cutoff;
-    this->m_power_lpf_cutoff_isSet = true;
-}
-
-float
-SWGMeteorSettings::getDetectionThresholdDb() {
-    return detection_threshold_db;
-}
-void
-SWGMeteorSettings::setDetectionThresholdDb(float detection_threshold_db) {
-    this->detection_threshold_db = detection_threshold_db;
-    this->m_detection_threshold_db_isSet = true;
-}
-
-qint32
-SWGMeteorSettings::getMinDurationMs() {
-    return min_duration_ms;
-}
-void
-SWGMeteorSettings::setMinDurationMs(qint32 min_duration_ms) {
-    this->min_duration_ms = min_duration_ms;
-    this->m_min_duration_ms_isSet = true;
+SWGMeteorSettings::setBlobSensitivity(float blob_sensitivity) {
+    this->blob_sensitivity = blob_sensitivity;
+    this->m_blob_sensitivity_isSet = true;
 }
 
 qint32
@@ -501,16 +473,6 @@ void
 SWGMeteorSettings::setMaxDurationMs(qint32 max_duration_ms) {
     this->max_duration_ms = max_duration_ms;
     this->m_max_duration_ms_isSet = true;
-}
-
-float
-SWGMeteorSettings::getMaxFrequencyDrift() {
-    return max_frequency_drift;
-}
-void
-SWGMeteorSettings::setMaxFrequencyDrift(float max_frequency_drift) {
-    this->max_frequency_drift = max_frequency_drift;
-    this->m_max_frequency_drift_isSet = true;
 }
 
 qint32
@@ -621,6 +583,16 @@ void
 SWGMeteorSettings::setReceiverLongitude(double receiver_longitude) {
     this->receiver_longitude = receiver_longitude;
     this->m_receiver_longitude_isSet = true;
+}
+
+qint32
+SWGMeteorSettings::getReceiverPositionSet() {
+    return receiver_position_set;
+}
+void
+SWGMeteorSettings::setReceiverPositionSet(qint32 receiver_position_set) {
+    this->receiver_position_set = receiver_position_set;
+    this->m_receiver_position_set_isSet = true;
 }
 
 float
@@ -753,6 +725,16 @@ SWGMeteorSettings::setSpectrumGui(SWGGLSpectrum* spectrum_gui) {
     this->m_spectrum_gui_isSet = true;
 }
 
+SWGGLSpectrum*
+SWGMeteorSettings::getHeadSpectrumGui() {
+    return head_spectrum_gui;
+}
+void
+SWGMeteorSettings::setHeadSpectrumGui(SWGGLSpectrum* head_spectrum_gui) {
+    this->head_spectrum_gui = head_spectrum_gui;
+    this->m_head_spectrum_gui_isSet = true;
+}
+
 SWGRollupState*
 SWGMeteorSettings::getRollupState() {
     return rollup_state;
@@ -780,19 +762,10 @@ SWGMeteorSettings::isSet(){
         if(m_channel_sample_rate_isSet){
             isObjectUpdated = true; break;
         }
-        if(m_power_lpf_cutoff_isSet){
-            isObjectUpdated = true; break;
-        }
-        if(m_detection_threshold_db_isSet){
-            isObjectUpdated = true; break;
-        }
-        if(m_min_duration_ms_isSet){
+        if(m_blob_sensitivity_isSet){
             isObjectUpdated = true; break;
         }
         if(m_max_duration_ms_isSet){
-            isObjectUpdated = true; break;
-        }
-        if(m_max_frequency_drift_isSet){
             isObjectUpdated = true; break;
         }
         if(m_detections_table_column_hidden_isSet){
@@ -826,6 +799,9 @@ SWGMeteorSettings::isSet(){
             isObjectUpdated = true; break;
         }
         if(m_receiver_longitude_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_receiver_position_set_isSet){
             isObjectUpdated = true; break;
         }
         if(m_antenna_azimuth_isSet){
@@ -865,6 +841,9 @@ SWGMeteorSettings::isSet(){
             isObjectUpdated = true; break;
         }
         if(spectrum_gui && spectrum_gui->isSet()){
+            isObjectUpdated = true; break;
+        }
+        if(head_spectrum_gui && head_spectrum_gui->isSet()){
             isObjectUpdated = true; break;
         }
         if(rollup_state && rollup_state->isSet()){

@@ -57,20 +57,11 @@ public:
     qint32 getChannelSampleRate();
     void setChannelSampleRate(qint32 channel_sample_rate);
 
-    float getPowerLpfCutoff();
-    void setPowerLpfCutoff(float power_lpf_cutoff);
-
-    float getDetectionThresholdDb();
-    void setDetectionThresholdDb(float detection_threshold_db);
-
-    qint32 getMinDurationMs();
-    void setMinDurationMs(qint32 min_duration_ms);
+    float getBlobSensitivity();
+    void setBlobSensitivity(float blob_sensitivity);
 
     qint32 getMaxDurationMs();
     void setMaxDurationMs(qint32 max_duration_ms);
-
-    float getMaxFrequencyDrift();
-    void setMaxFrequencyDrift(float max_frequency_drift);
 
     qint32 getDetectionsTableColumnHidden();
     void setDetectionsTableColumnHidden(qint32 detections_table_column_hidden);
@@ -104,6 +95,9 @@ public:
 
     double getReceiverLongitude();
     void setReceiverLongitude(double receiver_longitude);
+
+    qint32 getReceiverPositionSet();
+    void setReceiverPositionSet(qint32 receiver_position_set);
 
     float getAntennaAzimuth();
     void setAntennaAzimuth(float antenna_azimuth);
@@ -144,6 +138,9 @@ public:
     SWGGLSpectrum* getSpectrumGui();
     void setSpectrumGui(SWGGLSpectrum* spectrum_gui);
 
+    SWGGLSpectrum* getHeadSpectrumGui();
+    void setHeadSpectrumGui(SWGGLSpectrum* head_spectrum_gui);
+
     SWGRollupState* getRollupState();
     void setRollupState(SWGRollupState* rollup_state);
 
@@ -163,20 +160,11 @@ private:
     qint32 channel_sample_rate;
     bool m_channel_sample_rate_isSet;
 
-    float power_lpf_cutoff;
-    bool m_power_lpf_cutoff_isSet;
-
-    float detection_threshold_db;
-    bool m_detection_threshold_db_isSet;
-
-    qint32 min_duration_ms;
-    bool m_min_duration_ms_isSet;
+    float blob_sensitivity;
+    bool m_blob_sensitivity_isSet;
 
     qint32 max_duration_ms;
     bool m_max_duration_ms_isSet;
-
-    float max_frequency_drift;
-    bool m_max_frequency_drift_isSet;
 
     qint32 detections_table_column_hidden;
     bool m_detections_table_column_hidden_isSet;
@@ -210,6 +198,9 @@ private:
 
     double receiver_longitude;
     bool m_receiver_longitude_isSet;
+
+    qint32 receiver_position_set;
+    bool m_receiver_position_set_isSet;
 
     float antenna_azimuth;
     bool m_antenna_azimuth_isSet;
@@ -249,6 +240,9 @@ private:
 
     SWGGLSpectrum* spectrum_gui;
     bool m_spectrum_gui_isSet;
+
+    SWGGLSpectrum* head_spectrum_gui;
+    bool m_head_spectrum_gui_isSet;
 
     SWGRollupState* rollup_state;
     bool m_rollup_state_isSet;

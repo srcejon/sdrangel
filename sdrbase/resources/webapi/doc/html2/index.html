@@ -4973,6 +4973,11 @@ margin-bottom: 20px;
       "format" : "double",
       "description" : "IoU threshold for non-maximum suppression: 0.0 to 1.0"
     },
+    "yoloDisappearDebounce" : {
+      "type" : "number",
+      "format" : "double",
+      "description" : "Seconds an object class must remain undetected before it is reported as disappeared: 0.0 to 60.0"
+    },
     "yoloBoxColor" : {
       "type" : "integer",
       "description" : "Default bounding box colour as 0xRRGGBB integer (used when no per-class colour is set)"
@@ -13395,38 +13400,18 @@ margin-bottom: 20px;
       "minimum" : 100,
       "maximum" : 3000
     },
-    "powerLPFCutoff" : {
+    "blobSensitivity" : {
       "type" : "number",
       "format" : "float",
-      "description" : "Power envelope low-pass cutoff in Hz",
-      "minimum" : 0.1,
-      "maximum" : 1350.0
-    },
-    "detectionThresholdDB" : {
-      "type" : "number",
-      "format" : "float",
-      "description" : "Detection threshold above background in dB",
-      "minimum" : 1.0,
-      "maximum" : 60.0
-    },
-    "minDurationMS" : {
-      "type" : "integer",
-      "description" : "Minimum meteor detection duration in milliseconds",
-      "minimum" : 1,
-      "maximum" : 10000
+      "description" : "Minimum integrated excess-power score for accepting a meteor blob; lower values are more sensitive",
+      "minimum" : 10.0,
+      "maximum" : 10000.0
     },
     "maxDurationMS" : {
       "type" : "integer",
       "description" : "Maximum meteor detection duration in milliseconds",
       "minimum" : 1,
       "maximum" : 60000
-    },
-    "maxFrequencyDrift" : {
-      "type" : "number",
-      "format" : "float",
-      "description" : "Maximum allowed detection frequency drift in Hz",
-      "minimum" : 0.0,
-      "maximum" : 1500.0
     },
     "detectionsTableColumnHidden" : {
       "type" : "integer",
@@ -13501,6 +13486,12 @@ margin-bottom: 20px;
       "minimum" : -180.0,
       "maximum" : 180.0
     },
+    "receiverPositionSet" : {
+      "type" : "integer",
+      "description" : "Whether the receive antenna position has been explicitly configured",
+      "minimum" : 0,
+      "maximum" : 1
+    },
     "antennaAzimuth" : {
       "type" : "number",
       "format" : "float",
@@ -13563,6 +13554,9 @@ margin-bottom: 20px;
       "$ref" : "#/definitions/ChannelMarker"
     },
     "spectrumGUI" : {
+      "$ref" : "#/definitions/GLSpectrum"
+    },
+    "headSpectrumGUI" : {
       "$ref" : "#/definitions/GLSpectrum"
     },
     "rollupState" : {
@@ -62996,7 +62990,7 @@ except ApiException as e:
           </div>
           <div id="generator">
             <div class="content">
-              Generated 2026-07-27T16:57:13.133+02:00
+              Generated 2026-07-28T03:33:19.360+02:00
             </div>
           </div>
       </div>

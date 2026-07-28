@@ -592,6 +592,8 @@ SWGCameraSettings::SWGCameraSettings() {
     m_yolo_conf_threshold_isSet = false;
     yolo_nms_threshold = 0.0;
     m_yolo_nms_threshold_isSet = false;
+    yolo_disappear_debounce = 0.0;
+    m_yolo_disappear_debounce_isSet = false;
     yolo_box_color = 0;
     m_yolo_box_color_isSet = false;
     yolo_tile_large_images = 0;
@@ -1236,6 +1238,8 @@ SWGCameraSettings::init() {
     m_yolo_conf_threshold_isSet = false;
     yolo_nms_threshold = 0.0;
     m_yolo_nms_threshold_isSet = false;
+    yolo_disappear_debounce = 0.0;
+    m_yolo_disappear_debounce_isSet = false;
     yolo_box_color = 0;
     m_yolo_box_color_isSet = false;
     yolo_tile_large_images = 0;
@@ -1670,6 +1674,7 @@ SWGCameraSettings::cleanup() {
     if(yolo_labels_path != nullptr) { 
         delete yolo_labels_path;
     }
+
 
 
 
@@ -2296,6 +2301,8 @@ SWGCameraSettings::fromJsonObject(QJsonObject &pJson) {
     ::SWGSDRangel::setValue(&yolo_conf_threshold, pJson["yoloConfThreshold"], "double", "");
     
     ::SWGSDRangel::setValue(&yolo_nms_threshold, pJson["yoloNmsThreshold"], "double", "");
+    
+    ::SWGSDRangel::setValue(&yolo_disappear_debounce, pJson["yoloDisappearDebounce"], "double", "");
     
     ::SWGSDRangel::setValue(&yolo_box_color, pJson["yoloBoxColor"], "qint32", "");
     
@@ -3230,6 +3237,9 @@ SWGCameraSettings::asJsonObject() {
     }
     if(m_yolo_nms_threshold_isSet){
         obj->insert("yoloNmsThreshold", QJsonValue(yolo_nms_threshold));
+    }
+    if(m_yolo_disappear_debounce_isSet){
+        obj->insert("yoloDisappearDebounce", QJsonValue(yolo_disappear_debounce));
     }
     if(m_yolo_box_color_isSet){
         obj->insert("yoloBoxColor", QJsonValue(yolo_box_color));
@@ -6163,6 +6173,16 @@ SWGCameraSettings::setYoloNmsThreshold(double yolo_nms_threshold) {
     this->m_yolo_nms_threshold_isSet = true;
 }
 
+double
+SWGCameraSettings::getYoloDisappearDebounce() {
+    return yolo_disappear_debounce;
+}
+void
+SWGCameraSettings::setYoloDisappearDebounce(double yolo_disappear_debounce) {
+    this->yolo_disappear_debounce = yolo_disappear_debounce;
+    this->m_yolo_disappear_debounce_isSet = true;
+}
+
 qint32
 SWGCameraSettings::getYoloBoxColor() {
     return yolo_box_color;
@@ -7375,6 +7395,9 @@ SWGCameraSettings::isSet(){
             isObjectUpdated = true; break;
         }
         if(m_yolo_nms_threshold_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_yolo_disappear_debounce_isSet){
             isObjectUpdated = true; break;
         }
         if(m_yolo_box_color_isSet){

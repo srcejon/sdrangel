@@ -1045,6 +1045,10 @@ CameraSettings:
       description: "IoU threshold for non-maximum suppression: 0.0 to 1.0"
       type: number
       format: double
+    yoloDisappearDebounce:
+      description: "Seconds an object class must remain undetected before it is reported as disappeared: 0.0 to 60.0"
+      type: number
+      format: double
     yoloBoxColor:
       description: "Default bounding box colour as 0xRRGGBB integer (used when no per-class colour is set)"
       type: integer

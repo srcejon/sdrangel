@@ -891,6 +891,9 @@ public:
     double getYoloNmsThreshold();
     void setYoloNmsThreshold(double yolo_nms_threshold);
 
+    double getYoloDisappearDebounce();
+    void setYoloDisappearDebounce(double yolo_disappear_debounce);
+
     qint32 getYoloBoxColor();
     void setYoloBoxColor(qint32 yolo_box_color);
 
@@ -1848,6 +1851,9 @@ private:
 
     double yolo_nms_threshold;
     bool m_yolo_nms_threshold_isSet;
+
+    double yolo_disappear_debounce;
+    bool m_yolo_disappear_debounce_isSet;
 
     qint32 yolo_box_color;
     bool m_yolo_box_color_isSet;

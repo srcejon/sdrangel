@@ -24,6 +24,8 @@
 #include <QHash>
 #include <QMetaObject>
 #include <QNetworkAccessManager>
+#include <QNetworkCookie>
+#include <QNetworkCookieJar>
 #include <QNetworkReply>
 #include <QNetworkRequest>
 #include <QPointer>
@@ -33,6 +35,7 @@
 #include <QThread>
 #include <QTimer>
 #include <QUrl>
+#include <QUrlQuery>
 
 #include "util/csv.h"
 #include "util/astronomy.h"
@@ -69,6 +72,26 @@ namespace {
     // orbit it cannot be a meaningful matcher cull, so treat it as display-only rather
     // than silently discarding the whole catalog.
     constexpr double MinimumAltitudeCullM = 300000.0;
+    constexpr int SpaceTrackMinimumEntries = 10000;
+    constexpr char SpaceTrackLoginUrl[] =
+        "https://www.space-track.org/ajaxauth/login";
+    constexpr char SpaceTrackCatalogUrl[] =
+        "https://www.space-track.org/basicspacedata/query/class/gp/"
+        "EPOCH/%3Enow-30/orderby/NORAD_CAT_ID,EPOCH/format/3le";
+    constexpr char SpaceTrackCacheName[] = "space-track-gp.3le";
+
+    class MeteorNetworkCookieJar : public QNetworkCookieJar
+    {
+    public:
+        explicit MeteorNetworkCookieJar(QObject *parent = nullptr) :
+            QNetworkCookieJar(parent)
+        {}
+
+        void clear()
+        {
+            setAllCookies({});
+        }
+    };
 
     enum class CatalogFileKind
     {
@@ -523,14 +546,21 @@ MeteorSatelliteMatcher::MoonPrediction MeteorSatelliteMatcher::predictMoon(
 class MeteorSatelliteMatcherWorker : public QObject
 {
 public:
-    explicit MeteorSatelliteMatcherWorker(MeteorSatelliteMatcher *owner) :
-        m_owner(owner)
+    explicit MeteorSatelliteMatcherWorker(
+        MeteorSatelliteMatcher *owner,
+        const QString& spaceTrackUsername,
+        const QString& spaceTrackPassword) :
+        m_owner(owner),
+        m_spaceTrackUsername(spaceTrackUsername.trimmed()),
+        m_spaceTrackPassword(spaceTrackPassword)
     {}
 
     void start()
     {
 #ifdef METEOR_HAS_SGP4
         m_networkManager = new QNetworkAccessManager(this);
+        m_cookieJar = new MeteorNetworkCookieJar(m_networkManager);
+        m_networkManager->setCookieJar(m_cookieJar);
         m_refreshTimer = new QTimer(this);
         m_refreshTimer->setInterval(6 * 60 * 60 * 1000);
         connect(m_refreshTimer, &QTimer::timeout, this, [this]() {
@@ -551,7 +581,37 @@ public:
 #endif
     }
 
-    void refreshCatalog(bool forceAll = true)
+    void setSpaceTrackCredentials(
+        const QString& username,
+        const QString& password)
+    {
+#ifdef METEOR_HAS_SGP4
+        m_spaceTrackUsername = username.trimmed();
+        m_spaceTrackPassword = password;
+        m_statistics.m_spaceTrackConfigured =
+            !m_spaceTrackUsername.isEmpty() && !m_spaceTrackPassword.isEmpty();
+
+        if (m_cookieJar) {
+            m_cookieJar->clear();
+        }
+
+        if (m_downloadInProgress)
+        {
+            m_spaceTrackRefreshRequested = true;
+            deliverStatistics();
+            return;
+        }
+
+        refreshCatalog(false, true);
+#else
+        Q_UNUSED(username)
+        Q_UNUSED(password)
+#endif
+    }
+
+    void refreshCatalog(
+        bool forceAll = true,
+        bool forceSpaceTrack = false)
     {
 #ifdef METEOR_HAS_SGP4
         if (m_downloadInProgress || !m_networkManager || m_stopRequested.load()) {
@@ -563,6 +623,14 @@ public:
         // (CelesTrak rate-limits abusive clients) at every start and refresh tick.
         const QDateTime nowUtc = QDateTime::currentDateTimeUtc();
         m_downloadQueue.clear();
+        const QFileInfo spaceTrackCache(spaceTrackCatalogFileName());
+        const bool spaceTrackStale = !spaceTrackCache.exists()
+            || (spaceTrackCache.lastModified().toUTC().secsTo(nowUtc)
+                >= CatalogMaximumAgeS);
+        m_spaceTrackDownloadPending =
+            !m_spaceTrackUsername.isEmpty()
+            && !m_spaceTrackPassword.isEmpty()
+            && (forceAll || forceSpaceTrack || spaceTrackStale);
 
         for (int sourceIndex = 0; sourceIndex < CatalogDownloadSourceCount; ++sourceIndex)
         {
@@ -576,14 +644,18 @@ public:
             }
         }
 
-        if (m_downloadQueue.isEmpty()) {
+        if (!m_spaceTrackDownloadPending && m_downloadQueue.isEmpty()) {
             return;
         }
 
         m_downloadInProgress = true;
         m_downloadQueuePos = 0;
         m_refreshWarnings.clear();
-        downloadNextCatalogSource();
+        if (m_spaceTrackDownloadPending) {
+            authenticateSpaceTrack();
+        } else {
+            downloadNextCatalogSource();
+        }
 #endif
     }
 
@@ -677,6 +749,7 @@ private:
         QString m_objectType;
         QDateTime m_epochUtc;
         bool m_fromActiveCatalog = false;
+        bool m_fromSpaceTrack = false;
         std::unique_ptr<libsgp4::SGP4> m_propagator;
     };
 
@@ -701,6 +774,170 @@ private:
         return m_catalogDirectory + QChar('/') + QString::fromLatin1(source.m_cacheName);
     }
 
+    QString spaceTrackCatalogFileName() const
+    {
+        return m_catalogDirectory + QChar('/')
+            + QString::fromLatin1(SpaceTrackCacheName);
+    }
+
+    void finishCatalogDownloads()
+    {
+        m_downloadInProgress = false;
+
+        if (!loadCatalogFiles())
+        {
+            m_status = m_catalog.empty()
+                ? QStringLiteral("No usable satellite orbital elements are available")
+                : QStringLiteral("Satellite catalog refresh failed; using cached elements");
+            if (!m_refreshWarnings.isEmpty()) {
+                m_status += QStringLiteral(" (%1)")
+                    .arg(m_refreshWarnings.join(QStringLiteral("; ")));
+            }
+            deliverStatistics();
+            if (m_catalog.empty()) {
+                completePendingRequestsWithoutMatch();
+            }
+        }
+
+        if (m_spaceTrackRefreshRequested && !m_stopRequested.load())
+        {
+            m_spaceTrackRefreshRequested = false;
+            QMetaObject::invokeMethod(
+                this,
+                [this]() {
+                    refreshCatalog(false, true);
+                },
+                Qt::QueuedConnection);
+        }
+    }
+
+    void appendSpaceTrackWarning(const QString& error)
+    {
+        m_refreshWarnings.append(
+            QStringLiteral("Space-Track: %1").arg(error));
+    }
+
+    void authenticateSpaceTrack()
+    {
+        if (m_stopRequested.load())
+        {
+            m_downloadInProgress = false;
+            return;
+        }
+
+        QNetworkRequest request(QUrl(QString::fromLatin1(SpaceTrackLoginUrl)));
+        request.setHeader(
+            QNetworkRequest::UserAgentHeader,
+            QStringLiteral("SDRangel Meteor satellite matcher"));
+        request.setHeader(
+            QNetworkRequest::ContentTypeHeader,
+            QStringLiteral("application/x-www-form-urlencoded"));
+        request.setAttribute(
+            QNetworkRequest::RedirectPolicyAttribute,
+            QNetworkRequest::NoLessSafeRedirectPolicy);
+        request.setTransferTimeout(2 * 60 * 1000);
+
+        QUrlQuery form;
+        form.addQueryItem(QStringLiteral("identity"), m_spaceTrackUsername);
+        form.addQueryItem(QStringLiteral("password"), m_spaceTrackPassword);
+        QNetworkReply *reply = m_networkManager->post(
+            request,
+            form.query(QUrl::FullyEncoded).toUtf8());
+        connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+            const int httpStatus = reply->attribute(
+                QNetworkRequest::HttpStatusCodeAttribute).toInt();
+            const QNetworkReply::NetworkError networkError = reply->error();
+            const QString networkErrorText = reply->errorString();
+            reply->readAll();
+            reply->deleteLater();
+            m_spaceTrackDownloadPending = false;
+
+            if (m_stopRequested.load())
+            {
+                m_downloadInProgress = false;
+                return;
+            }
+
+            if ((networkError != QNetworkReply::NoError)
+                || (httpStatus < 200)
+                || (httpStatus >= 300))
+            {
+                appendSpaceTrackWarning(
+                    networkError != QNetworkReply::NoError
+                        ? networkErrorText
+                        : QStringLiteral("login returned HTTP %1").arg(httpStatus));
+                downloadNextCatalogSource();
+                return;
+            }
+
+            downloadSpaceTrackCatalog();
+        });
+    }
+
+    void downloadSpaceTrackCatalog()
+    {
+        QNetworkRequest request(
+            QUrl::fromEncoded(QByteArray(SpaceTrackCatalogUrl)));
+        request.setHeader(
+            QNetworkRequest::UserAgentHeader,
+            QStringLiteral("SDRangel Meteor satellite matcher"));
+        request.setAttribute(
+            QNetworkRequest::RedirectPolicyAttribute,
+            QNetworkRequest::NoLessSafeRedirectPolicy);
+        request.setTransferTimeout(5 * 60 * 1000);
+        QNetworkReply *reply = m_networkManager->get(request);
+        connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+            const QByteArray data = reply->readAll();
+            const int httpStatus = reply->attribute(
+                QNetworkRequest::HttpStatusCodeAttribute).toInt();
+            QString error = reply->error() == QNetworkReply::NoError
+                ? QString()
+                : reply->errorString();
+            reply->deleteLater();
+
+            if (m_stopRequested.load())
+            {
+                m_downloadInProgress = false;
+                return;
+            }
+
+            if (error.isEmpty()
+                && ((httpStatus < 200) || (httpStatus >= 300)))
+            {
+                error = QStringLiteral("catalog request returned HTTP %1")
+                    .arg(httpStatus);
+            }
+
+            if (error.isEmpty()
+                && !validateSpaceTrack3LE(
+                    data,
+                    SpaceTrackMinimumEntries,
+                    &m_stopRequested,
+                    error))
+            {
+                error.prepend(QStringLiteral("invalid catalog data: "));
+            }
+
+            if (error.isEmpty())
+            {
+                QSaveFile file(spaceTrackCatalogFileName());
+                if (!file.open(QIODevice::WriteOnly)
+                    || (file.write(data) != data.size())
+                    || !file.commit())
+                {
+                    error = QStringLiteral("could not cache %1")
+                        .arg(QString::fromLatin1(SpaceTrackCacheName));
+                }
+            }
+
+            if (!error.isEmpty()) {
+                appendSpaceTrackWarning(error);
+            }
+
+            downloadNextCatalogSource();
+        });
+    }
+
     void downloadNextCatalogSource()
     {
         if (m_stopRequested.load())
@@ -711,21 +948,7 @@ private:
 
         if (m_downloadQueuePos >= m_downloadQueue.size())
         {
-            m_downloadInProgress = false;
-
-            if (!loadCatalogFiles())
-            {
-                m_status = m_catalog.empty()
-                    ? QStringLiteral("No usable satellite orbital elements are available")
-                    : QStringLiteral("Satellite catalog refresh failed; using cached elements");
-                if (!m_refreshWarnings.isEmpty()) {
-                    m_status += QStringLiteral(" (%1)").arg(m_refreshWarnings.join(QStringLiteral("; ")));
-                }
-                deliverStatistics();
-                if (m_catalog.empty()) {
-                    completePendingRequestsWithoutMatch();
-                }
-            }
+            finishCatalogDownloads();
             return;
         }
 
@@ -813,6 +1036,94 @@ private:
             ++m_downloadQueuePos;
             downloadNextCatalogSource();
         });
+    }
+
+    static bool validateSpaceTrack3LE(
+        const QByteArray& data,
+        int minimumEntries,
+        const std::atomic<bool> *cancel,
+        QString& error)
+    {
+        QBuffer buffer;
+        buffer.setData(data);
+        if (!buffer.open(QIODevice::ReadOnly))
+        {
+            error = QStringLiteral("catalog buffer could not be opened");
+            return false;
+        }
+
+        QTextStream stream(&buffer);
+        int entryCount = 0;
+        int lineNumber = 0;
+        QString nameLine;
+        QString line1;
+        QString line2;
+
+        while (!stream.atEnd())
+        {
+            const QString line = stream.readLine();
+            ++lineNumber;
+            if (line.trimmed().isEmpty()) {
+                continue;
+            }
+
+            const int position = nameLine.isEmpty()
+                ? 0
+                : (line1.isEmpty() ? 1 : 2);
+            if (position == 0)
+            {
+                if (!line.startsWith(QStringLiteral("0 ")))
+                {
+                    error = QStringLiteral("line %1 is not a 3LE name line")
+                        .arg(lineNumber);
+                    return false;
+                }
+                nameLine = line;
+            }
+            else if (position == 1)
+            {
+                if (!line.startsWith(QStringLiteral("1 ")))
+                {
+                    error = QStringLiteral("line %1 is not TLE line 1")
+                        .arg(lineNumber);
+                    return false;
+                }
+                line1 = line;
+            }
+            else
+            {
+                if (!line.startsWith(QStringLiteral("2 ")))
+                {
+                    error = QStringLiteral("line %1 is not TLE line 2")
+                        .arg(lineNumber);
+                    return false;
+                }
+                line2 = line;
+                ++entryCount;
+                nameLine.clear();
+                line1.clear();
+                line2.clear();
+
+                if (cancel && ((entryCount & 1023) == 0) && cancel->load())
+                {
+                    error = QStringLiteral("cancelled");
+                    return false;
+                }
+            }
+        }
+
+        if (!nameLine.isEmpty() || !line1.isEmpty())
+        {
+            error = QStringLiteral("catalog ends with an incomplete 3LE record");
+            return false;
+        }
+        if (entryCount < minimumEntries)
+        {
+            error = QStringLiteral("only %1 3LE entries were found")
+                .arg(entryCount);
+            return false;
+        }
+        return true;
     }
 
     // Structural validation only (header + row count): the full parse - including
@@ -1029,6 +1340,260 @@ private:
             QStringLiteral("BSTAR")
         };
         return columns;
+    }
+
+    static QString decodeTLECatalogId(const QString& field)
+    {
+        const QString value = field.trimmed().toUpper();
+        bool numericOK = false;
+        const int numericId = value.toInt(&numericOK);
+        if (numericOK) {
+            return QString::number(numericId);
+        }
+
+        if (value.size() != 5) {
+            return QString();
+        }
+
+        // Space-Track Alpha-5 IDs use A-H, J-N and P-Z for the ten-thousands
+        // prefix; I and O are deliberately omitted.
+        static const QString prefixes =
+            QStringLiteral("ABCDEFGHJKLMNPQRSTUVWXYZ");
+        const int prefixIndex = prefixes.indexOf(value.front());
+        bool suffixOK = false;
+        const int suffix = value.mid(1).toInt(&suffixOK);
+        if ((prefixIndex < 0) || !suffixOK) {
+            return QString();
+        }
+        return QString::number((prefixIndex + 10) * 10000 + suffix);
+    }
+
+    static bool parseTLEEpoch(
+        const QString& line1,
+        QDateTime& epochUtc)
+    {
+        if (line1.size() < 32) {
+            return false;
+        }
+
+        bool yearOK = false;
+        bool dayOK = false;
+        const int shortYear = line1.mid(18, 2).toInt(&yearOK);
+        const double epochDay = line1.mid(20, 12).toDouble(&dayOK);
+        const int year = shortYear >= 57 ? 1900 + shortYear : 2000 + shortYear;
+        const int wholeDay = (int) std::floor(epochDay);
+        const QDate firstDay(year, 1, 1);
+        if (!yearOK
+            || !dayOK
+            || !firstDay.isValid()
+            || (wholeDay < 1)
+            || (wholeDay > firstDay.daysInYear()))
+        {
+            return false;
+        }
+
+        const qint64 milliseconds = std::llround(
+            (epochDay - wholeDay) * 86400000.0);
+        epochUtc = QDateTime(
+            firstDay.addDays(wholeDay - 1),
+            QTime(0, 0),
+            Qt::UTC).addMSecs(milliseconds);
+        return epochUtc.isValid();
+    }
+
+    static bool parseTLEExponent(
+        const QString& field,
+        double& value)
+    {
+        const QString fixed = field.rightJustified(8, QChar(' '));
+        if (fixed.size() != 8) {
+            return false;
+        }
+
+        const QChar mantissaSign = fixed[0];
+        const QChar exponentSign = fixed[6];
+        bool mantissaOK = false;
+        bool exponentOK = false;
+        const int mantissa = fixed.mid(1, 5).toInt(&mantissaOK);
+        const int exponent = fixed.mid(7, 1).toInt(&exponentOK);
+        if (!mantissaOK || !exponentOK) {
+            return false;
+        }
+
+        value = mantissa * 1.0e-5
+            * std::pow(10.0, exponentSign == QChar('-') ? -exponent : exponent);
+        if (mantissaSign == QChar('-')) {
+            value = -value;
+        }
+        return std::isfinite(value);
+    }
+
+    static bool parseSpaceTrack3LE(
+        const QByteArray& data,
+        std::vector<CatalogEntry>& catalog,
+        const QHash<QString, CatalogMetadata>& metadata,
+        int minimumEntries,
+        const std::atomic<bool> *cancel,
+        QString& error)
+    {
+        if (!validateSpaceTrack3LE(
+                data,
+                minimumEntries,
+                cancel,
+                error))
+        {
+            return false;
+        }
+
+        QBuffer buffer;
+        buffer.setData(data);
+        if (!buffer.open(QIODevice::ReadOnly))
+        {
+            error = QStringLiteral("catalog buffer could not be opened");
+            return false;
+        }
+
+        QTextStream stream(&buffer);
+        catalog.reserve(32000);
+        int syntheticId = 0;
+        int identifiedRows = 0;
+        while (!stream.atEnd())
+        {
+            QString nameLine = stream.readLine();
+            if (nameLine.trimmed().isEmpty()) {
+                continue;
+            }
+            if (stream.atEnd()) {
+                break;
+            }
+            const QString sourceLine1 = stream.readLine();
+            if (stream.atEnd()) {
+                break;
+            }
+            const QString sourceLine2 = stream.readLine();
+            ++identifiedRows;
+
+            if (cancel
+                && ((identifiedRows & 1023) == 0)
+                && cancel->load())
+            {
+                error = QStringLiteral("cancelled");
+                return false;
+            }
+
+            const QString noradId = decodeTLECatalogId(
+                sourceLine1.mid(2, 5));
+            if (noradId.isEmpty()
+                || (noradId != decodeTLECatalogId(sourceLine2.mid(2, 5))))
+            {
+                continue;
+            }
+
+            const auto metadataEntry = metadata.constFind(noradId);
+            if ((metadataEntry != metadata.cend()) && !metadataEntry->m_onOrbit) {
+                continue;
+            }
+
+            bool meanMotionOK = false;
+            bool inclinationOK = false;
+            bool ascendingNodeOK = false;
+            bool eccentricityOK = false;
+            bool argumentPericenterOK = false;
+            bool meanAnomalyOK = false;
+            bool revolutionOK = false;
+            const double meanMotion =
+                sourceLine2.mid(52, 11).toDouble(&meanMotionOK);
+            const double inclination =
+                sourceLine2.mid(8, 8).toDouble(&inclinationOK);
+            const double ascendingNode =
+                sourceLine2.mid(17, 8).toDouble(&ascendingNodeOK);
+            const double eccentricity =
+                QStringLiteral("0.%1").arg(sourceLine2.mid(26, 7))
+                    .toDouble(&eccentricityOK);
+            const double argumentPericenter =
+                sourceLine2.mid(34, 8).toDouble(&argumentPericenterOK);
+            const double meanAnomaly =
+                sourceLine2.mid(43, 8).toDouble(&meanAnomalyOK);
+            const int revolution =
+                sourceLine2.mid(63, 5).toInt(&revolutionOK);
+            double bstar = 0.0;
+            QDateTime epochUtc;
+            if (!meanMotionOK
+                || !inclinationOK
+                || !ascendingNodeOK
+                || !eccentricityOK
+                || !argumentPericenterOK
+                || !meanAnomalyOK
+                || !revolutionOK
+                || !parseTLEExponent(sourceLine1.mid(53, 8), bstar)
+                || !parseTLEEpoch(sourceLine1, epochUtc))
+            {
+                continue;
+            }
+
+            QString name = nameLine.mid(2).trimmed();
+            QString objectType;
+            if (metadataEntry != metadata.cend())
+            {
+                if (!metadataEntry->m_name.isEmpty()) {
+                    name = metadataEntry->m_name;
+                }
+                objectType = metadataEntry->m_objectType;
+            }
+            if (!objectType.isEmpty()
+                && (objectType != QStringLiteral("PAY")))
+            {
+                name += QStringLiteral(" [%1]").arg(objectType);
+            }
+
+            QString line1;
+            QString line2;
+            if (!makeCompatibilityTLE(
+                    syntheticId++,
+                    epochUtc,
+                    meanMotion,
+                    eccentricity,
+                    inclination,
+                    ascendingNode,
+                    argumentPericenter,
+                    meanAnomaly,
+                    bstar,
+                    revolution,
+                    line1,
+                    line2))
+            {
+                continue;
+            }
+
+            try
+            {
+                std::unique_ptr<libsgp4::Tle> tle(new libsgp4::Tle(
+                    name.toStdString(),
+                    line1.toStdString(),
+                    line2.toStdString()));
+                CatalogEntry entry;
+                entry.m_noradId = noradId;
+                entry.m_name = name.isEmpty()
+                    ? QStringLiteral("NORAD %1").arg(noradId)
+                    : name;
+                entry.m_objectType = objectType;
+                entry.m_epochUtc = epochUtc;
+                entry.m_fromSpaceTrack = true;
+                entry.m_propagator.reset(new libsgp4::SGP4(*tle));
+                catalog.push_back(std::move(entry));
+            }
+            catch (const std::exception&) {
+                // Continue past individual malformed orbital elements.
+            }
+        }
+
+        if (identifiedRows < minimumEntries)
+        {
+            error = QStringLiteral("only %1 identified 3LE entries were found")
+                .arg(identifiedRows);
+            return false;
+        }
+        return true;
     }
 
     static bool parseSatcat(
@@ -1283,17 +1848,21 @@ private:
             CatalogEntry& existing = catalog[*existingIndex];
             const bool fromActiveCatalog =
                 existing.m_fromActiveCatalog || addition.m_fromActiveCatalog;
+            const bool fromSpaceTrack =
+                existing.m_fromSpaceTrack || addition.m_fromSpaceTrack;
             if (addition.m_epochUtc > existing.m_epochUtc)
             {
                 if (addition.m_objectType.isEmpty()) {
                     addition.m_objectType = existing.m_objectType;
                 }
                 addition.m_fromActiveCatalog = fromActiveCatalog;
+                addition.m_fromSpaceTrack = fromSpaceTrack;
                 existing = std::move(addition);
             }
             else
             {
                 existing.m_fromActiveCatalog = fromActiveCatalog;
+                existing.m_fromSpaceTrack = fromSpaceTrack;
                 if (existing.m_objectType.isEmpty()) {
                     existing.m_objectType = addition.m_objectType;
                 }
@@ -1330,9 +1899,37 @@ private:
         }
 
         std::vector<CatalogEntry> catalog;
-        catalog.reserve(22000);
+        catalog.reserve(34000);
         QHash<QString, int> indices;
-        indices.reserve(22000);
+        indices.reserve(34000);
+
+        const QFileInfo spaceTrackInfo(spaceTrackCatalogFileName());
+        if (spaceTrackInfo.exists())
+        {
+            QFile file(spaceTrackInfo.filePath());
+            if (!file.open(QIODevice::ReadOnly))
+            {
+                warnings.append(QStringLiteral("Space-Track cache could not be opened"));
+            }
+            else
+            {
+                std::vector<CatalogEntry> additions;
+                QString error;
+                if (!parseSpaceTrack3LE(
+                        file.readAll(),
+                        additions,
+                        metadata,
+                        SpaceTrackMinimumEntries,
+                        &m_stopRequested,
+                        error))
+                {
+                    warnings.append(QStringLiteral("Space-Track cache: %1").arg(error));
+                }
+                else {
+                    mergeCatalog(catalog, std::move(additions), indices);
+                }
+            }
+        }
 
         for (int sourceIndex = 1;
             sourceIndex < CatalogDownloadSourceCount;
@@ -1375,15 +1972,20 @@ private:
         }
 
         int activeCount = 0;
+        int spaceTrackCount = 0;
         for (const CatalogEntry& entry : catalog) {
             if (entry.m_fromActiveCatalog) {
                 ++activeCount;
+            }
+            if (entry.m_fromSpaceTrack) {
+                ++spaceTrackCount;
             }
         }
         warnings.append(m_refreshWarnings);
         installCatalog(
             std::move(catalog),
             activeCount,
+            spaceTrackCount,
             onOrbitCount,
             warnings);
         return true;
@@ -1392,6 +1994,7 @@ private:
     void installCatalog(
         std::vector<CatalogEntry>&& catalog,
         int activeCount,
+        int spaceTrackCount,
         int onOrbitCount,
         const QStringList& warnings)
     {
@@ -1418,7 +2021,16 @@ private:
         statistics.m_catalogEntries = (int) m_catalog.size();
         statistics.m_activeCatalogEntries = activeCount;
         statistics.m_supplementalCatalogEntries = supplementalCount;
+        statistics.m_spaceTrackCatalogEntries = spaceTrackCount;
         statistics.m_satcatOnOrbitEntries = onOrbitCount;
+        statistics.m_spaceTrackConfigured =
+            !m_spaceTrackUsername.isEmpty() && !m_spaceTrackPassword.isEmpty();
+        const QFileInfo spaceTrackInfo(spaceTrackCatalogFileName());
+        statistics.m_spaceTrackCacheAvailable = spaceTrackInfo.exists();
+        if (spaceTrackInfo.exists()) {
+            statistics.m_spaceTrackCacheDateTimeUtc =
+                spaceTrackInfo.lastModified().toUTC();
+        }
         statistics.m_sourceWarnings = warnings;
 
         for (const CatalogEntry& entry : m_catalog)
@@ -1701,6 +2313,16 @@ private:
         QPointer<MeteorSatelliteMatcher> owner(m_owner);
         MeteorSatelliteMatcher::CatalogStatistics statistics = m_statistics;
         statistics.m_status = m_status;
+#ifdef METEOR_HAS_SGP4
+        statistics.m_spaceTrackConfigured =
+            !m_spaceTrackUsername.isEmpty() && !m_spaceTrackPassword.isEmpty();
+        const QFileInfo spaceTrackInfo(spaceTrackCatalogFileName());
+        statistics.m_spaceTrackCacheAvailable = spaceTrackInfo.exists();
+        if (spaceTrackInfo.exists()) {
+            statistics.m_spaceTrackCacheDateTimeUtc =
+                spaceTrackInfo.lastModified().toUTC();
+        }
+#endif
         for (const QString& warning : m_refreshWarnings)
         {
             if (!statistics.m_sourceWarnings.contains(warning)) {
@@ -1719,12 +2341,17 @@ private:
 
     MeteorSatelliteMatcher *m_owner;
     QNetworkAccessManager *m_networkManager = nullptr;
+    MeteorNetworkCookieJar *m_cookieJar = nullptr;
     QTimer *m_refreshTimer = nullptr;
     QString m_catalogDirectory;
     QString m_status = QStringLiteral("Orbital catalog is loading");
     MeteorSatelliteMatcher::CatalogStatistics m_statistics;
     QStringList m_refreshWarnings;
+    QString m_spaceTrackUsername;
+    QString m_spaceTrackPassword;
     bool m_downloadInProgress = false;
+    bool m_spaceTrackDownloadPending = false;
+    bool m_spaceTrackRefreshRequested = false;
     QVector<int> m_downloadQueue;
     int m_downloadQueuePos = 0;
     std::atomic<bool> m_stopRequested {false};
@@ -1739,10 +2366,16 @@ private:
 #endif
 };
 
-MeteorSatelliteMatcher::MeteorSatelliteMatcher(QObject *parent) :
+MeteorSatelliteMatcher::MeteorSatelliteMatcher(
+    const QString& spaceTrackUsername,
+    const QString& spaceTrackPassword,
+    QObject *parent) :
     QObject(parent),
     m_thread(new QThread(this)),
-    m_worker(new MeteorSatelliteMatcherWorker(this))
+    m_worker(new MeteorSatelliteMatcherWorker(
+        this,
+        spaceTrackUsername,
+        spaceTrackPassword))
 {
     m_thread->setObjectName(QStringLiteral("Meteor satellite matcher"));
     m_worker->moveToThread(m_thread);
@@ -1797,6 +2430,23 @@ void MeteorSatelliteMatcher::refreshCatalog()
         worker,
         [worker]() {
             worker->refreshCatalog(true);
+        },
+        Qt::QueuedConnection);
+}
+
+void MeteorSatelliteMatcher::setSpaceTrackCredentials(
+    const QString& username,
+    const QString& password)
+{
+    if (!m_worker || !m_thread->isRunning()) {
+        return;
+    }
+
+    MeteorSatelliteMatcherWorker *worker = m_worker;
+    QMetaObject::invokeMethod(
+        worker,
+        [worker, username, password]() {
+            worker->setSpaceTrackCredentials(username, password);
         },
         Qt::QueuedConnection);
 }

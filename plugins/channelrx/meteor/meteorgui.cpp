@@ -20,6 +20,7 @@
 #include <limits>
 
 #include <QComboBox>
+#include <QCheckBox>
 #include <QDateTime>
 #include <QDialog>
 #include <QDialogButtonBox>
@@ -27,10 +28,12 @@
 #include <QDoubleSpinBox>
 #include <QFile>
 #include <QFileDialog>
+#include <QFormLayout>
 #include <QFontMetrics>
 #include <QHeaderView>
 #include <QHash>
 #include <QLabel>
+#include <QLineEdit>
 #include <QMenu>
 #include <QMessageBox>
 #include <QPushButton>
@@ -38,6 +41,7 @@
 #include <QSignalBlocker>
 #include <QSpinBox>
 #include <QStandardPaths>
+#include <QSettings>
 #include <QTableWidget>
 #include <QTableWidgetItem>
 #include <QTextStream>
@@ -108,6 +112,9 @@ namespace {
     // aircraft sweeps originate. The Doppler scorer arbitrates afterwards.
     constexpr double MinimumAircraftElevationDegrees = -1.0;
     constexpr int ManualTransmitterPresetIndex = 0;
+    constexpr char SpaceTrackSettingsGroup[] = "Meteor/SpaceTrack";
+    constexpr char SpaceTrackUsernameKey[] = "username";
+    constexpr char SpaceTrackPasswordKey[] = "password";
 
     struct TransmitterPreset
     {
@@ -562,7 +569,17 @@ MeteorGUI::MeteorGUI(PluginAPI* pluginAPI, DeviceUISet *deviceUISet, BasebandSam
     m_meteor->setMessageQueueToGUI(getInputMessageQueue());
     m_spectrumVis = m_meteor->getSpectrumVis();
     m_headSpectrumVis = m_meteor->getHeadSpectrumVis();
-    m_satelliteMatcher = new MeteorSatelliteMatcher(this);
+    QSettings applicationSettings;
+    applicationSettings.beginGroup(QString::fromLatin1(SpaceTrackSettingsGroup));
+    const QString spaceTrackUsername = applicationSettings.value(
+        QString::fromLatin1(SpaceTrackUsernameKey)).toString();
+    const QString spaceTrackPassword = applicationSettings.value(
+        QString::fromLatin1(SpaceTrackPasswordKey)).toString();
+    applicationSettings.endGroup();
+    m_satelliteMatcher = new MeteorSatelliteMatcher(
+        spaceTrackUsername,
+        spaceTrackPassword,
+        this);
     connect(
         m_satelliteMatcher,
         &MeteorSatelliteMatcher::matchReady,
@@ -2913,6 +2930,17 @@ void MeteorGUI::showSatelliteStatisticsDialog(
     addCount(catalog, tr("Loaded orbital elements"), statistics.m_catalogEntries);
     addCount(catalog, tr("From active GP set"), statistics.m_activeCatalogEntries);
     addCount(catalog, tr("Supplemental only"), statistics.m_supplementalCatalogEntries);
+    addCount(catalog, tr("Available from Space-Track"), statistics.m_spaceTrackCatalogEntries);
+    addValue(
+        catalog,
+        tr("Space-Track login"),
+        statistics.m_spaceTrackConfigured ? tr("Configured") : tr("Not configured"));
+    addValue(
+        catalog,
+        tr("Space-Track cache"),
+        statistics.m_spaceTrackCacheAvailable
+            ? statistics.m_spaceTrackCacheDateTimeUtc.toLocalTime().toString(Qt::ISODate)
+            : tr("Not available"));
     addCount(catalog, tr("SATCAT objects currently on orbit"), statistics.m_satcatOnOrbitEntries);
     addValue(
         catalog,
@@ -3013,10 +3041,90 @@ void MeteorGUI::showSatelliteStatisticsDialog(
         QDialogButtonBox::Close,
         Qt::Horizontal,
         &dialog);
+    QPushButton *spaceTrackButton = buttons->addButton(
+        tr("Space-Track Login..."),
+        QDialogButtonBox::ActionRole);
+    connect(spaceTrackButton, &QPushButton::clicked, &dialog, [this, &dialog]() {
+        if (configureSpaceTrackCredentials()) {
+            dialog.accept();
+        }
+    });
     connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
     layout->addWidget(buttons);
     dialog.resize(680, 560);
     dialog.exec();
+}
+
+bool MeteorGUI::configureSpaceTrackCredentials()
+{
+    QSettings applicationSettings;
+    applicationSettings.beginGroup(QString::fromLatin1(SpaceTrackSettingsGroup));
+    const QString savedUsername = applicationSettings.value(
+        QString::fromLatin1(SpaceTrackUsernameKey)).toString();
+    const QString savedPassword = applicationSettings.value(
+        QString::fromLatin1(SpaceTrackPasswordKey)).toString();
+
+    QDialog dialog(this);
+    dialog.setWindowTitle(tr("Space-Track Login"));
+    QVBoxLayout *layout = new QVBoxLayout(&dialog);
+    QFormLayout *form = new QFormLayout();
+    QLineEdit *username = new QLineEdit(savedUsername, &dialog);
+    QLineEdit *password = new QLineEdit(savedPassword, &dialog);
+    password->setEchoMode(QLineEdit::Password);
+    form->addRow(tr("Username"), username);
+    form->addRow(tr("Password"), password);
+    layout->addLayout(form);
+
+    QCheckBox *rememberPassword = new QCheckBox(
+        tr("Store password in local application settings"),
+        &dialog);
+    rememberPassword->setChecked(!savedPassword.isEmpty());
+    layout->addWidget(rememberPassword);
+
+    QLabel *note = new QLabel(
+        tr("Credentials are used only to authenticate catalog downloads from "
+           "space-track.org. They are not included in Meteor presets or WebAPI data."),
+        &dialog);
+    note->setWordWrap(true);
+    layout->addWidget(note);
+
+    QDialogButtonBox *buttons = new QDialogButtonBox(
+        QDialogButtonBox::Save | QDialogButtonBox::Cancel,
+        Qt::Horizontal,
+        &dialog);
+    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    layout->addWidget(buttons);
+
+    if (dialog.exec() != QDialog::Accepted)
+    {
+        applicationSettings.endGroup();
+        return false;
+    }
+
+    const QString enteredUsername = username->text().trimmed();
+    const QString enteredPassword = password->text();
+    applicationSettings.setValue(
+        QString::fromLatin1(SpaceTrackUsernameKey),
+        enteredUsername);
+    if (rememberPassword->isChecked()) {
+        applicationSettings.setValue(
+            QString::fromLatin1(SpaceTrackPasswordKey),
+            enteredPassword);
+    } else {
+        applicationSettings.remove(QString::fromLatin1(SpaceTrackPasswordKey));
+    }
+    applicationSettings.endGroup();
+
+    if (m_satelliteMatcher) {
+        m_satelliteMatcher->setSpaceTrackCredentials(
+            enteredUsername,
+            enteredPassword);
+    }
+    m_satelliteCatalogInfo->setEnabled(false);
+    m_satelliteCatalogInfo->setToolTip(
+        tr("Refreshing authenticated satellite catalog..."));
+    return true;
 }
 
 void MeteorGUI::addCameraDetection(const Meteor::MsgCameraMeteorDetected& detection)

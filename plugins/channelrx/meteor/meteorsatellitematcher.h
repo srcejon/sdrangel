@@ -45,11 +45,15 @@ public:
         int m_catalogEntries = 0;
         int m_activeCatalogEntries = 0;
         int m_supplementalCatalogEntries = 0;
+        int m_spaceTrackCatalogEntries = 0;
         int m_payloadEntries = 0;
         int m_rocketBodyEntries = 0;
         int m_debrisEntries = 0;
         int m_otherEntries = 0;
         int m_satcatOnOrbitEntries = 0;
+        bool m_spaceTrackConfigured = false;
+        bool m_spaceTrackCacheAvailable = false;
+        QDateTime m_spaceTrackCacheDateTimeUtc;
         QStringList m_sourceWarnings;
 
         bool m_snapshotValid = false;
@@ -75,7 +79,10 @@ public:
         MovingTargetMatcher::Match m_match;
     };
 
-    explicit MeteorSatelliteMatcher(QObject *parent = nullptr);
+    explicit MeteorSatelliteMatcher(
+        const QString& spaceTrackUsername = QString(),
+        const QString& spaceTrackPassword = QString(),
+        QObject *parent = nullptr);
     ~MeteorSatelliteMatcher() override;
 
     static bool beamContainsLookDirection(
@@ -92,6 +99,9 @@ public:
         const Geometry& geometry);
     void requestStatistics();
     void refreshCatalog();
+    void setSpaceTrackCredentials(
+        const QString& username,
+        const QString& password);
 
 signals:
     void matchReady(

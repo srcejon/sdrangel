@@ -250,6 +250,7 @@ private:
         const MeteorSatelliteMatcher::CatalogStatistics& statistics);
     void showSatelliteStatisticsDialog(
         const MeteorSatelliteMatcher::CatalogStatistics& statistics);
+    bool configureSpaceTrackCredentials();
     void addCameraDetection(const Meteor::MsgCameraMeteorDetected& detection);
     void updateCounters();
     void updateHistogram();

@@ -642,6 +642,7 @@ struct CameraSettings
     bool m_messier;          ///< Overlay Messier objects (marker at true angular size + name label) using the current pointing/solve
     QColor m_messierColor;   ///< Colour for Messier object markers and labels
     double m_messierMaxMagnitude; ///< Only overlay Messier objects at least this bright (visual magnitude)
+    bool m_messierDetect;    ///< Photometrically check each Messier position (aperture vs local background) and dim objects not detected in the frame
     bool m_trackObjects;      ///< Draw ADS-B / satellite tracked object overlay
     bool m_trackObjectTrails; ///< Draw recent tracks for ADS-B / satellite tracked objects
     bool m_trackObjectHeatMap; ///< Draw a heat map from recent tracked object positions

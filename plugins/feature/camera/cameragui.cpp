@@ -2654,6 +2654,7 @@ void CameraGUI::displaySettings()
     updateColorButton(settingsUI()->constellationColorButton, m_settings.m_constellationColor);
     settingsUI()->messierCheck->setChecked(m_settings.m_messier);
     settingsUI()->messierMaxMagnitudeSpin->setValue(m_settings.m_messierMaxMagnitude);
+    settingsUI()->messierDetectCheck->setChecked(m_settings.m_messierDetect);
     updateColorButton(settingsUI()->messierColorButton, m_settings.m_messierColor);
     updateColorButton(settingsUI()->trackObjectColorButton, m_settings.m_trackObjectColor);
     updateColorButton(settingsUI()->starColorButton, m_settings.m_starColor);
@@ -4121,6 +4122,7 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->messierCheck, &QCheckBox::toggled, this, &CameraGUI::on_messierCheck_toggled);
     QObject::connect(settingsUI()->messierColorButton, &QToolButton::clicked, this, &CameraGUI::on_messierColorButton_clicked);
     QObject::connect(settingsUI()->messierMaxMagnitudeSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_messierMaxMagnitudeSpin_valueChanged);
+    QObject::connect(settingsUI()->messierDetectCheck, &QCheckBox::toggled, this, &CameraGUI::on_messierDetectCheck_toggled);
     QObject::connect(ui->trackObjectsButton, &QToolButton::toggled, this, &CameraGUI::on_trackObjectsCheck_toggled);
     QObject::connect(settingsUI()->trackObjectTrailsCheck, &QCheckBox::toggled, this, &CameraGUI::on_trackObjectTrailsCheck_toggled);
     QObject::connect(settingsUI()->trackObjectHeatMapCheck, &QCheckBox::toggled, this, &CameraGUI::on_trackObjectHeatMapCheck_toggled);
@@ -10862,6 +10864,12 @@ void CameraGUI::on_messierMaxMagnitudeSpin_valueChanged(double value)
 {
     m_settings.m_messierMaxMagnitude = value;
     applySetting("messierMaxMagnitude");
+}
+
+void CameraGUI::on_messierDetectCheck_toggled(bool checked)
+{
+    m_settings.m_messierDetect = checked;
+    applySetting("messierDetect");
 }
 
 void CameraGUI::on_trackObjectsCheck_toggled(bool checked)

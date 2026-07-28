@@ -540,6 +540,7 @@ void CameraSettings::resetToDefaults()
     m_messier = false;
     m_messierColor = QColor(120, 200, 255);
     m_messierMaxMagnitude = 10.5;
+    m_messierDetect = true;
     m_trackObjects = false;
     m_trackObjectTrails = false;
     m_trackObjectHeatMap = false;
@@ -908,6 +909,7 @@ QByteArray CameraSettings::serialize() const
     s.writeBool(372, m_messier);
     s.writeU32(373, m_messierColor.rgba());
     s.writeDouble(374, m_messierMaxMagnitude);
+    s.writeBool(375, m_messierDetect);
     s.writeBool(156, m_trackObjects);
     s.writeDouble(157, m_trackObjectMinElevation);
     s.writeU32(158, m_trackObjectColor.rgba());
@@ -1598,6 +1600,7 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readU32(373, &messierColorRgba, QColor(120, 200, 255).rgba());
         m_messierColor = QColor::fromRgba(messierColorRgba);
         d.readDouble(374, &m_messierMaxMagnitude, 10.5);
+        d.readBool(375, &m_messierDetect, true);
         d.readBool(156, &m_trackObjects, false);
         d.readBool(238, &m_trackObjectTrails, false);
         d.readBool(239, &m_trackObjectHeatMap, false);
@@ -2993,6 +2996,9 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     if (settingsKeys.contains("messierMaxMagnitude")) {
         m_messierMaxMagnitude = settings.m_messierMaxMagnitude;
     }
+    if (settingsKeys.contains("messierDetect")) {
+        m_messierDetect = settings.m_messierDetect;
+    }
     if (settingsKeys.contains("trackObjects")) {
         m_trackObjects = settings.m_trackObjects;
     }
@@ -4089,6 +4095,9 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("messierMaxMagnitude") || force) {
         ostr << " m_messierMaxMagnitude: " << m_messierMaxMagnitude;
+    }
+    if (settingsKeys.contains("messierDetect") || force) {
+        ostr << " m_messierDetect: " << m_messierDetect;
     }
     if (settingsKeys.contains("trackObjects") || force) {
         ostr << " m_trackObjects: " << m_trackObjects;

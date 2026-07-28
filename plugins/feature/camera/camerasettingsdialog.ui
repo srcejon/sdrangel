@@ -6421,6 +6421,19 @@ car</string>
                 </property>
                </widget>
               </item>
+              <item row="2" column="0" colspan="2">
+               <widget class="QCheckBox" name="messierDetectCheck">
+                <property name="toolTip">
+                 <string>Photometrically check each Messier position (aperture vs local background) and dim objects not actually detected in the frame</string>
+                </property>
+                <property name="text">
+                 <string>Dim undetected objects</string>
+                </property>
+                <property name="checked">
+                 <bool>true</bool>
+                </property>
+               </widget>
+              </item>
               <item row="1" column="1">
                <widget class="QDoubleSpinBox" name="messierMaxMagnitudeSpin">
                 <property name="toolTip">

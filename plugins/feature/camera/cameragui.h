@@ -842,6 +842,7 @@ private slots:
     void on_messierCheck_toggled(bool checked);
     void on_messierColorButton_clicked();
     void on_messierMaxMagnitudeSpin_valueChanged(double value);
+    void on_messierDetectCheck_toggled(bool checked);
     void on_trackObjectsCheck_toggled(bool checked);
     void on_trackObjectTrailsCheck_toggled(bool checked);
     void on_trackObjectHeatMapCheck_toggled(bool checked);

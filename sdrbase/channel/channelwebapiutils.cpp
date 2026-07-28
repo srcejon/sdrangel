@@ -1548,6 +1548,24 @@ bool ChannelWebAPIUtils::getDeviceSetting(unsigned int deviceIndex, const QStrin
     }
 }
 
+bool ChannelWebAPIUtils::getDeviceSetting(unsigned int deviceIndex, const QString &setting, double &value)
+{
+    SWGSDRangel::SWGDeviceSettings deviceSettingsResponse;
+    DeviceSet *deviceSet;
+
+    if (getDeviceSettings(deviceIndex, deviceSettingsResponse, deviceSet))
+    {
+        QJsonObject *jsonObj = deviceSettingsResponse.asJsonObject();
+        bool result = WebAPIUtils::getSubObjectDouble(*jsonObj, setting, value);
+        delete jsonObj;
+        return result;
+    }
+    else
+    {
+        return false;
+    }
+}
+
 bool ChannelWebAPIUtils::getDeviceSetting(unsigned int deviceIndex, const QString &setting, QString &value)
 {
     SWGSDRangel::SWGDeviceSettings deviceSettingsResponse;

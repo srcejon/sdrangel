@@ -241,6 +241,7 @@ private:
         ADSBMatchingStatistics *statistics = nullptr) const;
     void addDetection(const MeteorDemodSink::MsgMeteorDetected& detection);
     void addSatelliteDetection(const MeteorDemodSink::MsgSatelliteDetected& detection);
+    bool remoteTCPInputPreFillSeconds(double& preFillSeconds) const;
     QDateTime movingTargetObservationDateTimeUtc(const QDateTime& displayTimeUtc) const;
     void applySatelliteTargetMatch(
         quint64 overlayId,

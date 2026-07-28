@@ -44,7 +44,9 @@ RemoteTCPInputSettings:
     overrideRemoteSettings:
       type: integer
     preFill:
-      type: integer
+      description: Input buffer pre-fill in seconds
+      type: number
+      format: float
     protocol:
       description: (SDRangel or Spy Server)
       type: string

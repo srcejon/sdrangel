@@ -2642,6 +2642,34 @@ void MeteorGUI::addSatelliteDetection(const MeteorDemodSink::MsgSatelliteDetecte
     updateSpectrumViews();
 }
 
+bool MeteorGUI::remoteTCPInputPreFillSeconds(double& preFillSeconds) const
+{
+    preFillSeconds = 0.0;
+
+    if (!m_deviceUISet || !m_deviceUISet->m_deviceAPI
+        || (m_deviceUISet->m_deviceAPI->getHardwareId()
+            != QStringLiteral("RemoteTCPInput")))
+    {
+        return false;
+    }
+
+    double settingSeconds = 0.0;
+    if (!ChannelWebAPIUtils::getDeviceSetting(
+            (unsigned int) m_deviceUISet->m_deviceAPI->getDeviceSetIndex(),
+            QStringLiteral("preFill"),
+            settingSeconds)
+        || !std::isfinite(settingSeconds)
+        || (settingSeconds < 0.0))
+    {
+        return false;
+    }
+
+    // The GUI limits this setting to 10 seconds. Keep a generous upper bound
+    // here so malformed WebAPI data cannot shift orbital propagation by hours.
+    preFillSeconds = std::min(60.0, settingSeconds);
+    return true;
+}
+
 QDateTime MeteorGUI::movingTargetObservationDateTimeUtc(const QDateTime& displayTimeUtc) const
 {
     const QDateTime systemTimeUtc = displayTimeUtc.isValid()
@@ -2654,6 +2682,18 @@ QDateTime MeteorGUI::movingTargetObservationDateTimeUtc(const QDateTime& display
 
     const DeviceAPI *deviceAPI = m_deviceUISet->m_deviceAPI;
     const QString hardwareId = deviceAPI->getHardwareId();
+
+    if (hardwareId == QStringLiteral("RemoteTCPInput"))
+    {
+        double preFillSeconds = 0.0;
+        if (remoteTCPInputPreFillSeconds(preFillSeconds))
+        {
+            return systemTimeUtc.addMSecs(
+                -(qint64) std::llround(preFillSeconds * 1000.0));
+        }
+
+        return systemTimeUtc;
+    }
 
     if ((hardwareId != QStringLiteral("FileInput"))
         && (hardwareId != QStringLiteral("SigMFFileInput")))
@@ -3035,6 +3075,38 @@ void MeteorGUI::showSatelliteStatisticsDialog(
                 : (statistics.m_clockCheckError.isEmpty()
                     ? tr("No measurement available")
                     : tr("Unavailable: %1").arg(statistics.m_clockCheckError)));
+    }
+
+    QTreeWidgetItem *sampleTiming = addSection(tr("Sample timing"));
+    double remotePreFillSeconds = 0.0;
+    if (remoteTCPInputPreFillSeconds(remotePreFillSeconds))
+    {
+        addValue(sampleTiming, tr("Input device"), QStringLiteral("RemoteTCPInput"));
+        addValue(
+            sampleTiming,
+            tr("Applied pre-fill correction"),
+            tr("%1 ms").arg(remotePreFillSeconds * 1000.0, 0, 'f', 0));
+        addValue(
+            sampleTiming,
+            tr("Remaining uncertainty"),
+            tr("Remote USB, server, and transport latency are not measured"));
+    }
+    else
+    {
+        const QString hardwareId =
+            (m_deviceUISet && m_deviceUISet->m_deviceAPI)
+                ? m_deviceUISet->m_deviceAPI->getHardwareId()
+                : QString();
+        addValue(
+            sampleTiming,
+            tr("Input device"),
+            hardwareId.isEmpty() ? tr("Not available") : hardwareId);
+        addValue(
+            sampleTiming,
+            tr("Source latency correction"),
+            hardwareId == QStringLiteral("RemoteTCPInput")
+                ? tr("Unavailable: could not read pre-fill setting")
+                : tr("Not required for this input"));
     }
 
     QTreeWidgetItem *types = addSection(tr("Loaded object types"));

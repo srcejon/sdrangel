@@ -107,6 +107,7 @@ public:
     static bool satelliteAOS(const QString name, bool northToSouthPass, const QString &tle, QDateTime dateTime);
     static bool satelliteLOS(const QString name);
     static bool getDeviceSetting(unsigned int deviceIndex, const QString &setting, int &value);
+    static bool getDeviceSetting(unsigned int deviceIndex, const QString &setting, double &value);
     static bool getDeviceSetting(unsigned int deviceIndex, const QString &setting, QString &value);
     static QUrl buildChannelSettingsURL(
         const QString& reverseAPIAddress,

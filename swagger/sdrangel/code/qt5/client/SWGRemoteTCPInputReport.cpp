@@ -36,6 +36,14 @@ SWGRemoteTCPInputReport::SWGRemoteTCPInputReport() {
     m_longitude_isSet = false;
     altitude = 0.0f;
     m_altitude_isSet = false;
+    timing_available = 0;
+    m_timing_available_isSet = false;
+    remote_first_sample_time_us = 0L;
+    m_remote_first_sample_time_us_isSet = false;
+    transport_latency_us = 0L;
+    m_transport_latency_us_isSet = false;
+    timing_uncertainty_us = 0L;
+    m_timing_uncertainty_us_isSet = false;
 }
 
 SWGRemoteTCPInputReport::~SWGRemoteTCPInputReport() {
@@ -52,10 +60,22 @@ SWGRemoteTCPInputReport::init() {
     m_longitude_isSet = false;
     altitude = 0.0f;
     m_altitude_isSet = false;
+    timing_available = 0;
+    m_timing_available_isSet = false;
+    remote_first_sample_time_us = 0L;
+    m_remote_first_sample_time_us_isSet = false;
+    transport_latency_us = 0L;
+    m_transport_latency_us_isSet = false;
+    timing_uncertainty_us = 0L;
+    m_timing_uncertainty_us_isSet = false;
 }
 
 void
 SWGRemoteTCPInputReport::cleanup() {
+
+
+
+
 
 
 
@@ -80,6 +100,14 @@ SWGRemoteTCPInputReport::fromJsonObject(QJsonObject &pJson) {
     ::SWGSDRangel::setValue(&longitude, pJson["longitude"], "float", "");
     
     ::SWGSDRangel::setValue(&altitude, pJson["altitude"], "float", "");
+    
+    ::SWGSDRangel::setValue(&timing_available, pJson["timingAvailable"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&remote_first_sample_time_us, pJson["remoteFirstSampleTimeUs"], "qint64", "");
+    
+    ::SWGSDRangel::setValue(&transport_latency_us, pJson["transportLatencyUs"], "qint64", "");
+    
+    ::SWGSDRangel::setValue(&timing_uncertainty_us, pJson["timingUncertaintyUs"], "qint64", "");
     
 }
 
@@ -108,6 +136,18 @@ SWGRemoteTCPInputReport::asJsonObject() {
     }
     if(m_altitude_isSet){
         obj->insert("altitude", QJsonValue(altitude));
+    }
+    if(m_timing_available_isSet){
+        obj->insert("timingAvailable", QJsonValue(timing_available));
+    }
+    if(m_remote_first_sample_time_us_isSet){
+        obj->insert("remoteFirstSampleTimeUs", QJsonValue(remote_first_sample_time_us));
+    }
+    if(m_transport_latency_us_isSet){
+        obj->insert("transportLatencyUs", QJsonValue(transport_latency_us));
+    }
+    if(m_timing_uncertainty_us_isSet){
+        obj->insert("timingUncertaintyUs", QJsonValue(timing_uncertainty_us));
     }
 
     return obj;
@@ -153,6 +193,46 @@ SWGRemoteTCPInputReport::setAltitude(float altitude) {
     this->m_altitude_isSet = true;
 }
 
+qint32
+SWGRemoteTCPInputReport::getTimingAvailable() {
+    return timing_available;
+}
+void
+SWGRemoteTCPInputReport::setTimingAvailable(qint32 timing_available) {
+    this->timing_available = timing_available;
+    this->m_timing_available_isSet = true;
+}
+
+qint64
+SWGRemoteTCPInputReport::getRemoteFirstSampleTimeUs() {
+    return remote_first_sample_time_us;
+}
+void
+SWGRemoteTCPInputReport::setRemoteFirstSampleTimeUs(qint64 remote_first_sample_time_us) {
+    this->remote_first_sample_time_us = remote_first_sample_time_us;
+    this->m_remote_first_sample_time_us_isSet = true;
+}
+
+qint64
+SWGRemoteTCPInputReport::getTransportLatencyUs() {
+    return transport_latency_us;
+}
+void
+SWGRemoteTCPInputReport::setTransportLatencyUs(qint64 transport_latency_us) {
+    this->transport_latency_us = transport_latency_us;
+    this->m_transport_latency_us_isSet = true;
+}
+
+qint64
+SWGRemoteTCPInputReport::getTimingUncertaintyUs() {
+    return timing_uncertainty_us;
+}
+void
+SWGRemoteTCPInputReport::setTimingUncertaintyUs(qint64 timing_uncertainty_us) {
+    this->timing_uncertainty_us = timing_uncertainty_us;
+    this->m_timing_uncertainty_us_isSet = true;
+}
+
 
 bool
 SWGRemoteTCPInputReport::isSet(){
@@ -168,6 +248,18 @@ SWGRemoteTCPInputReport::isSet(){
             isObjectUpdated = true; break;
         }
         if(m_altitude_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_timing_available_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_remote_first_sample_time_us_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_transport_latency_us_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_timing_uncertainty_us_isSet){
             isObjectUpdated = true; break;
         }
     }while(false);

@@ -53,6 +53,18 @@ public:
     float getAltitude();
     void setAltitude(float altitude);
 
+    qint32 getTimingAvailable();
+    void setTimingAvailable(qint32 timing_available);
+
+    qint64 getRemoteFirstSampleTimeUs();
+    void setRemoteFirstSampleTimeUs(qint64 remote_first_sample_time_us);
+
+    qint64 getTransportLatencyUs();
+    void setTransportLatencyUs(qint64 transport_latency_us);
+
+    qint64 getTimingUncertaintyUs();
+    void setTimingUncertaintyUs(qint64 timing_uncertainty_us);
+
 
     virtual bool isSet() override;
 
@@ -68,6 +80,18 @@ private:
 
     float altitude;
     bool m_altitude_isSet;
+
+    qint32 timing_available;
+    bool m_timing_available_isSet;
+
+    qint64 remote_first_sample_time_us;
+    bool m_remote_first_sample_time_us_isSet;
+
+    qint64 transport_latency_us;
+    bool m_transport_latency_us_isSet;
+
+    qint64 timing_uncertainty_us;
+    bool m_timing_uncertainty_us_isSet;
 
 };
 

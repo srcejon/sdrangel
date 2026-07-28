@@ -16662,6 +16662,25 @@ margin-bottom: 20px;
     "altitude" : {
       "type" : "number",
       "format" : "float"
+    },
+    "timingAvailable" : {
+      "type" : "integer",
+      "description" : "1 when corrected remote sample timing is available"
+    },
+    "remoteFirstSampleTimeUs" : {
+      "type" : "integer",
+      "format" : "int64",
+      "description" : "Corrected UTC epoch time of the first network sample in microseconds"
+    },
+    "transportLatencyUs" : {
+      "type" : "integer",
+      "format" : "int64",
+      "description" : "Estimated remote device/channel and network latency in microseconds"
+    },
+    "timingUncertaintyUs" : {
+      "type" : "integer",
+      "format" : "int64",
+      "description" : "Combined remote and local clock measurement uncertainty in microseconds"
     }
   },
   "description" : "RemoteTCPInput"
@@ -63009,7 +63028,7 @@ except ApiException as e:
           </div>
           <div id="generator">
             <div class="content">
-              Generated 2026-07-29T00:15:35.108+02:00
+              Generated 2026-07-29T01:39:29.283+02:00
             </div>
           </div>
       </div>

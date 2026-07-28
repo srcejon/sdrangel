@@ -80,9 +80,12 @@ CameraHistogramDialog::CameraHistogramDialog(
     m_useDetectionRoiButton->setToolTip(tr("Compute the histogram using only pixels inside the shared detection RoI"));
     connect(m_useDetectionRoiButton, &ButtonSwitch::toggled, this, &CameraHistogramDialog::useDetectionRoiChanged);
 
-    m_logScaleButton->setText(tr("Log Y"));
+    QIcon histogramScaleIcon;
+    histogramScaleIcon.addFile(QStringLiteral(":/linear.png"), QSize(), QIcon::Normal, QIcon::Off);
+    histogramScaleIcon.addFile(QStringLiteral(":/logarithmic.png"), QSize(), QIcon::Normal, QIcon::On);
+    m_logScaleButton->setIcon(histogramScaleIcon);
     m_logScaleButton->setChecked(logScale);
-    m_logScaleButton->setToolTip(tr("Display pixel counts on a logarithmic vertical axis"));
+    m_logScaleButton->setToolTip(tr("Linear / logarithmic vertical axis"));
     connect(m_logScaleButton, &ButtonSwitch::toggled, this, [this](bool enabled) {
         setLogScale(enabled);
         emit logScaleChanged(enabled);

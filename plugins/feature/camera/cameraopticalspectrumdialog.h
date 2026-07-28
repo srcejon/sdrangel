@@ -207,7 +207,7 @@ private:
     QVector<float> m_displayBlueRaw;
     QPushButton* m_captureResponseButton;
     ButtonSwitch* m_applyResponseCheck;
-    QPushButton* m_responseFileButton;
+    QToolButton* m_responseFileButton;
     QPushButton* m_calibrateButton;
     QVector<QPointF> m_calibrationClicks; ///< x = along-axis image pixel, y = wavelength in nm
     ButtonSwitch* m_zeroOrderAutoCheck;

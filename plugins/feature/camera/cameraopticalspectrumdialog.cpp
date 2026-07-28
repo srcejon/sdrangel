@@ -203,8 +203,11 @@ CameraOpticalSpectrumDialog::CameraOpticalSpectrumDialog(CameraSettings& setting
     m_normalizeCheck->setIcon(QIcon(QStringLiteral(":/camera/icons/normalise.png")));
     m_normalizeCheck->setToolTip(tr("Normalise: scale the displayed profile to a peak of 1.0"));
     m_logCheck = new ButtonSwitch(this);
-    m_logCheck->setIcon(QIcon(QStringLiteral(":/logarithmic.png")));
-    m_logCheck->setToolTip(tr("Plot intensity on a logarithmic axis, keeping faint features legible next to bright ones"));
+    QIcon spectrumScaleIcon;
+    spectrumScaleIcon.addFile(QStringLiteral(":/linear.png"), QSize(), QIcon::Normal, QIcon::Off);
+    spectrumScaleIcon.addFile(QStringLiteral(":/logarithmic.png"), QSize(), QIcon::Normal, QIcon::On);
+    m_logCheck->setIcon(spectrumScaleIcon);
+    m_logCheck->setToolTip(tr("Linear / logarithmic intensity axis"));
     m_identifyCheck = new ButtonSwitch(this);
     m_identifyCheck->setIcon(QIcon(QStringLiteral(":/camera/icons/identify_lines.png")));
     m_identifyCheck->setToolTip(tr("Identify: detect significant emission/absorption features and label those matching known reference lines\n(redshift is applied to source lines). Strong unmatched features are labelled with their wavelength.\nRequires wavelength calibration."));
@@ -413,9 +416,9 @@ CameraOpticalSpectrumDialog::CameraOpticalSpectrumDialog(CameraSettings& setting
         m_settings.m_opticalSpectrumApplyResponse = checked;
         applySettingChanged(QStringLiteral("opticalSpectrumApplyResponse"));
     });
-    m_responseFileButton = new QPushButton(tr("..."), this);
-    m_responseFileButton->setMaximumWidth(28);
-    connect(m_responseFileButton, &QPushButton::clicked, this, [this]() { selectResponseFile(); });
+    m_responseFileButton = new QToolButton(this);
+    m_responseFileButton->setIcon(QIcon(QStringLiteral(":/load.png")));
+    connect(m_responseFileButton, &QToolButton::clicked, this, [this]() { selectResponseFile(); });
     displayLayout->addWidget(m_captureResponseButton);
     displayLayout->addWidget(m_applyResponseCheck);
     displayLayout->addWidget(m_responseFileButton);

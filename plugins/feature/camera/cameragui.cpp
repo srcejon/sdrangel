@@ -2476,6 +2476,11 @@ void CameraGUI::displaySettings()
     settingsUI()->histogramStretchAsinhSpin->setValue(m_settings.m_histogramStretchAsinhStrength);
     settingsUI()->histogramStretchLogSlider->setValue(static_cast<int>(std::lround(m_settings.m_histogramStretchLogStrength * 10.0)));
     settingsUI()->histogramStretchLogSpin->setValue(m_settings.m_histogramStretchLogStrength);
+    if (m_histogramDialog)
+    {
+        m_histogramDialog->setUseDetectionRoi(m_settings.m_histogramUseDetectionRoi);
+        m_histogramDialog->setLogScale(m_settings.m_histogramLogScale);
+    }
     settingsUI()->postProcessGreyscaleCheck->setChecked(m_settings.m_postProcessGreyscale);
     settingsUI()->saturationSlider->setValue(static_cast<int>(m_settings.m_saturation * 100.0));
     settingsUI()->saturationSpin->setValue(m_settings.m_saturation);
@@ -11042,8 +11047,20 @@ void CameraGUI::on_histogramButton_clicked()
 
     if (!m_histogramDialog)
     {
-        m_histogramDialog = new CameraHistogramDialog(m_lastHistogramData, this);
+        m_histogramDialog = new CameraHistogramDialog(
+            m_lastHistogramData,
+            m_settings.m_histogramUseDetectionRoi,
+            m_settings.m_histogramLogScale,
+            this);
         m_histogramDialog->setAttribute(Qt::WA_DeleteOnClose);
+        connect(m_histogramDialog, &CameraHistogramDialog::useDetectionRoiChanged, this, [this](bool enabled) {
+            m_settings.m_histogramUseDetectionRoi = enabled;
+            applySetting("histogramUseDetectionRoi");
+        });
+        connect(m_histogramDialog, &CameraHistogramDialog::logScaleChanged, this, [this](bool enabled) {
+            m_settings.m_histogramLogScale = enabled;
+            applySetting("histogramLogScale");
+        });
         connect(m_histogramDialog, &QObject::destroyed, this, [this]() {
             m_histogramDialog = nullptr;
             if (m_settings.m_histogramVisible)
@@ -12788,11 +12805,11 @@ void CameraGUI::on_cameraSettingsButton_clicked()
 {
     updateCameraSettingsVisibility();
     updateWindowOverlaysTable();
-    m_settingsDialog->shrinkToVisibleContent();
+    m_settingsDialog->fitToAvailableScreen();
     m_settingsDialog->show();
-    m_settingsDialog->shrinkToVisibleContent();
+    m_settingsDialog->fitToAvailableScreen();
     QTimer::singleShot(0, m_settingsDialog, [this]() {
-        m_settingsDialog->shrinkToVisibleContent();
+        m_settingsDialog->fitToAvailableScreen();
     });
     m_settingsDialog->raise();
     m_settingsDialog->activateWindow();

@@ -205,7 +205,8 @@ private:
     [[nodiscard]] CameraHistogramData computeHistogramDataCuda(const CameraPipelineFrame& frame);
     static void fillHistogramBinsFromCudaMat(const cv::Mat& hist, QVector<float>& bins);
 #endif
-    [[nodiscard]] static CameraHistogramData computeHistogramDataCpu(const QImage& image);
+    [[nodiscard]] CameraHistogramData computeHistogramDataCpu(const QImage& image) const;
+    [[nodiscard]] cv::Rect resolveHistogramRoi(const cv::Size& frameSize) const;
     [[nodiscard]] static const QImage& ensureRgb888(const QImage& image, QImage& convertedImage);
     [[nodiscard]] static cv::Mat wrapRgb888Image(const QImage& image);
     [[nodiscard]] static QImage convertBgrToRgbImage(const cv::Mat& bgrMat);

@@ -19,10 +19,13 @@
 #ifndef INCLUDE_FEATURE_CAMERAHISTOGRAMDIALOG_H_
 #define INCLUDE_FEATURE_CAMERAHISTOGRAMDIALOG_H_
 
+#include <array>
+
 #include <QDialog>
 #include <QtCharts/QChart>
 #include <QtCharts/QChartView>
 #include <QtCharts/QLineSeries>
+#include <QtCharts/QLogValueAxis>
 #include <QtCharts/QValueAxis>
 
 #include "camerapipelineframe.h"
@@ -31,6 +34,8 @@
 using namespace QtCharts;
 #endif
 
+class ButtonSwitch;
+
 /**
  * @brief Dialog that displays precomputed per-channel histogram data.
  */
@@ -38,14 +43,30 @@ class CameraHistogramDialog : public QDialog
 {
     Q_OBJECT
 public:
-    explicit CameraHistogramDialog(const CameraHistogramData& histogramData, QWidget* parent = nullptr);
+    explicit CameraHistogramDialog(
+        const CameraHistogramData& histogramData,
+        bool useDetectionRoi,
+        bool logScale,
+        QWidget* parent = nullptr);
     void updateHistogram(const CameraHistogramData& histogramData);
+    void setUseDetectionRoi(bool enabled);
+    void setLogScale(bool enabled);
+
+signals:
+    void useDetectionRoiChanged(bool enabled);
+    void logScaleChanged(bool enabled);
 
 private:
+    CameraHistogramData m_histogramData;
     QChart* m_chart;
     QChartView* m_chartView;
     QValueAxis* m_axisX;
-    QValueAxis* m_axisY;
+    QValueAxis* m_linearAxisY;
+    QLogValueAxis* m_logAxisY;
+    ButtonSwitch* m_useDetectionRoiButton;
+    ButtonSwitch* m_logScaleButton;
+    bool m_logScale;
+    std::array<bool, 3> m_seriesVisible {{true, true, true}};
 };
 
 #endif // INCLUDE_FEATURE_CAMERAHISTOGRAMDIALOG_H_

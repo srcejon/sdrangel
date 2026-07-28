@@ -235,7 +235,15 @@ void CameraImageProcessor::applySettings(const CameraSettings& settings, const Q
     };
     const bool imageProcessingChanged = force || std::any_of(kImageProcessingKeys.cbegin(), kImageProcessingKeys.cend(),
         [&settingsKeys](const QString& k) { return settingsKeys.contains(k); });
-    const bool histogramDataRequested = (force || settingsKeys.contains("histogramVisible")) && settings.m_histogramVisible;
+    const bool detectionRoiChanged = settingsKeys.contains("detectionRoiX")
+        || settingsKeys.contains("detectionRoiY")
+        || settingsKeys.contains("detectionRoiWidth")
+        || settingsKeys.contains("detectionRoiHeight");
+    const bool histogramDataRequested = (force
+        || settingsKeys.contains("histogramVisible")
+        || settingsKeys.contains("histogramUseDetectionRoi")
+        || (settings.m_histogramUseDetectionRoi && detectionRoiChanged))
+        && settings.m_histogramVisible;
     const bool opticalSpectrumDataRequested = (force
         || settingsKeys.contains("opticalSpectrumVisible")
         || settingsKeys.contains("opticalSpectrumApertureRows")
@@ -543,7 +551,7 @@ CameraOpticalSpectrumData CameraImageProcessor::computeOpticalSpectrumData(const
     return spectrumData;
 }
 
-CameraHistogramData CameraImageProcessor::computeHistogramDataCpu(const QImage& image)
+CameraHistogramData CameraImageProcessor::computeHistogramDataCpu(const QImage& image) const
 {
     PROFILER_START();
     CameraHistogramData histogramData;
@@ -556,8 +564,12 @@ CameraHistogramData CameraImageProcessor::computeHistogramDataCpu(const QImage& 
     cv::Mat mat(rgb.height(), rgb.width(), CV_8UC3,
                 const_cast<uchar*>(rgb.bits()),
                 static_cast<size_t>(rgb.bytesPerLine()));
+    const cv::Rect roi = resolveHistogramRoi(mat.size());
+    if (roi.empty()) {
+        return histogramData;
+    }
     cv::Mat bgrMat;
-    cv::cvtColor(mat, bgrMat, cv::COLOR_RGB2BGR);
+    cv::cvtColor(mat(roi), bgrMat, cv::COLOR_RGB2BGR);
 
     std::vector<cv::Mat> channels;
     cv::split(bgrMat, channels);
@@ -582,6 +594,26 @@ CameraHistogramData CameraImageProcessor::computeHistogramDataCpu(const QImage& 
 
     PROFILER_STOP(__FUNCTION__);
     return histogramData;
+}
+
+cv::Rect CameraImageProcessor::resolveHistogramRoi(const cv::Size& frameSize) const
+{
+    if ((frameSize.width <= 0) || (frameSize.height <= 0)) {
+        return cv::Rect();
+    }
+    if (!m_settings.m_histogramUseDetectionRoi) {
+        return cv::Rect(0, 0, frameSize.width, frameSize.height);
+    }
+
+    const int x = qBound(0, m_settings.m_detectionRoiX, frameSize.width - 1);
+    const int y = qBound(0, m_settings.m_detectionRoiY, frameSize.height - 1);
+    const int width = (m_settings.m_detectionRoiWidth <= 0)
+        ? frameSize.width - x
+        : qBound(1, m_settings.m_detectionRoiWidth, frameSize.width - x);
+    const int height = (m_settings.m_detectionRoiHeight <= 0)
+        ? frameSize.height - y
+        : qBound(1, m_settings.m_detectionRoiHeight, frameSize.height - y);
+    return cv::Rect(x, y, width, height);
 }
 
 #ifdef CAMERA_OPENCV_CUDA_IMAGE_PROCESSING
@@ -612,8 +644,13 @@ CameraHistogramData CameraImageProcessor::computeHistogramDataCuda(const CameraP
             cv::cuda::cvtColor(rgbGpu, bgrGpu, cv::COLOR_RGB2BGR, 0, m_cudaStream);
         }
 
+        const cv::Rect roi = resolveHistogramRoi(bgrGpu.size());
+        if (roi.empty()) {
+            return histogramData;
+        }
+
         std::vector<cv::cuda::GpuMat> channels;
-        cv::cuda::split(bgrGpu, channels, m_cudaStream);
+        cv::cuda::split(cv::cuda::GpuMat(bgrGpu, roi), channels, m_cudaStream);
 
         if (channels.size() < 3) {
             return histogramData;

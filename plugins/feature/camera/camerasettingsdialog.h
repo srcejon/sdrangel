@@ -54,8 +54,8 @@ using CameraSettingsValueAxis = QValueAxis;
  * Wraps the generated Ui::CameraSettingsDialog (the large multi-page settings form) and adds
  * QtCharts line charts that plot CCD temperature and cloud coverage over time.
  * appendTemperatureSample() and appendCloudCoverageSample() feed new samples into the charts,
- * clearCameraStatus() resets the status display, and shrinkToVisibleContent() compacts the
- * dialog to its currently visible controls.
+ * clearCameraStatus() resets the status display, and fitToAvailableScreen() ensures the
+ * dialog does not exceed the available screen geometry.
  *
  * \note The owning CameraGUI accesses the underlying UI directly via getUI(); this dialog is a thin
  *       container around that form plus the charts.
@@ -76,7 +76,7 @@ public:
         int historySeconds, int sampleIntervalMs, bool fahrenheit);
     void setThermalUnits(bool fahrenheit);
     void clearCameraStatus();
-    void shrinkToVisibleContent();
+    void fitToAvailableScreen();
 
 protected:
     void showEvent(QShowEvent *event) override;

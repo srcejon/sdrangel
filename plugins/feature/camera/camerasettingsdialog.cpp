@@ -309,7 +309,7 @@ void CameraSettingsDialog::showEvent(QShowEvent *event)
 
 #if defined(Q_OS_ANDROID)
     // Run after Qt has applied the platform window geometry, rather than reporting
-    // the pre-show size used by shrinkToVisibleContent().
+    // the pre-show size used by fitToAvailableScreen().
     QTimer::singleShot(0, this, [this]() {
         logAndroidSizeDiagnostics();
     });
@@ -477,7 +477,7 @@ void CameraSettingsDialog::on_thermalClearChartButton_clicked()
         m_thermalAxisY);
 }
 
-void CameraSettingsDialog::shrinkToVisibleContent()
+void CameraSettingsDialog::fitToAvailableScreen()
 {
     if (layout()) {
         layout()->activate();
@@ -485,21 +485,22 @@ void CameraSettingsDialog::shrinkToVisibleContent()
 
     updateGeometry();
 
-    QSize targetSize = minimumSizeHint();
-    targetSize = targetSize.expandedTo(minimumSize());
-
-    if (QScreen *screen = this->screen() ? this->screen() : QApplication::primaryScreen())
-    {
-        const QRect availableGeometry = screen->availableGeometry();
-        const QSize frameOverhead = frameGeometry().isValid()
-            ? frameGeometry().size() - geometry().size()
-            : QSize();
-        const QSize maximumContentSize = (availableGeometry.size() - frameOverhead - QSize(16, 16))
-            .expandedTo(QSize(320, 240));
-        targetSize = targetSize.boundedTo(maximumContentSize);
+    QScreen *dialogScreen = screen() ? screen() : QApplication::primaryScreen();
+    if (!dialogScreen) {
+        return;
     }
 
-    resize(targetSize);
+    const QRect availableGeometry = dialogScreen->availableGeometry();
+    const QSize frameOverhead = frameGeometry().isValid()
+        ? frameGeometry().size() - geometry().size()
+        : QSize();
+    const QSize maximumContentSize = (availableGeometry.size() - frameOverhead - QSize(16, 16))
+        .expandedTo(QSize(320, 240));
+    const QSize targetSize = size().boundedTo(maximumContentSize);
+
+    if (targetSize != size()) {
+        resize(targetSize);
+    }
 }
 
 void CameraSettingsDialog::on_clearChart_clicked()

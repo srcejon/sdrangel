@@ -45,6 +45,7 @@
 #include <QResizeEvent>
 #include <QSpinBox>
 #include <QTextStream>
+#include <QToolButton>
 #include <QVBoxLayout>
 #include <QtCharts/QLegendMarker>
 
@@ -121,7 +122,7 @@ CameraOpticalSpectrumDialog::CameraOpticalSpectrumDialog(CameraSettings& setting
             m_chartThrottleTimer.start();
         }
     });
-    m_chartView->setToolTip(tr("Drag a rectangle: zoom in (use Zoom out / Reset zoom below).\n"
+    m_chartView->setToolTip(tr("Drag a rectangle: zoom in (use the Zoom out / Reset zoom controls above).\n"
         "Click: place a readout marker showing wavelength, intensity and line measurements (FWHM, equivalent width).\n"
         "Shift+click: snap the marker to the nearest spectral feature.\n"
         "Ctrl+click: place a second marker, showing the differences from the first.\n"
@@ -213,6 +214,16 @@ CameraOpticalSpectrumDialog::CameraOpticalSpectrumDialog(CameraSettings& setting
     m_colourStripCheck = new ButtonSwitch(this);
     m_colourStripCheck->setIcon(QIcon(QStringLiteral(":/camera/icons/wavelength_strip.png")));
     m_colourStripCheck->setToolTip(tr("Wavelength strip: show a strip below the chart with the colour of each wavelength, brightness following the plotted luminance"));
+    m_zoomOutButton = new QToolButton(this);
+    m_zoomOutButton->setIcon(QIcon(QStringLiteral(":/zoomout.png")));
+    m_zoomOutButton->setToolTip(tr("Zoom out one step. Drag a rectangle on the chart to zoom in."));
+    m_zoomOutButton->setEnabled(false);
+    connect(m_zoomOutButton, &QToolButton::clicked, this, [this]() { zoomOut(); });
+    m_zoomResetButton = new QToolButton(this);
+    m_zoomResetButton->setIcon(QIcon(QStringLiteral(":/zoomall.png")));
+    m_zoomResetButton->setToolTip(tr("Restore the full view"));
+    m_zoomResetButton->setEnabled(false);
+    connect(m_zoomResetButton, &QToolButton::clicked, this, [this]() { resetZoom(); });
 
     // Redshift applied to the source reference lines
     m_redshiftSpin = new QDoubleSpinBox(this);
@@ -355,6 +366,8 @@ CameraOpticalSpectrumDialog::CameraOpticalSpectrumDialog(CameraSettings& setting
     extractionLayout->addWidget(m_identifyCheck);
     extractionLayout->addWidget(m_imageStripCheck);
     extractionLayout->addWidget(m_colourStripCheck);
+    extractionLayout->addWidget(m_zoomOutButton);
+    extractionLayout->addWidget(m_zoomResetButton);
     extractionLayout->addStretch();
 
     auto* displayLayout = new QHBoxLayout();
@@ -419,14 +432,6 @@ CameraOpticalSpectrumDialog::CameraOpticalSpectrumDialog(CameraSettings& setting
     m_overlayClearButton->setVisible(false);
     connect(m_overlayClearButton, &QPushButton::clicked, this, [this]() { clearOverlay(); });
     m_overlayLabel = new QLabel(this);
-    m_zoomOutButton = new QPushButton(tr("Zoom out"), this);
-    m_zoomOutButton->setToolTip(tr("Zoom out one step. Drag a rectangle on the chart to zoom in."));
-    m_zoomOutButton->setEnabled(false);
-    connect(m_zoomOutButton, &QPushButton::clicked, this, [this]() { zoomOut(); });
-    m_zoomResetButton = new QPushButton(tr("Reset zoom"), this);
-    m_zoomResetButton->setToolTip(tr("Restore the full view"));
-    m_zoomResetButton->setEnabled(false);
-    connect(m_zoomResetButton, &QPushButton::clicked, this, [this]() { resetZoom(); });
     auto* closeButton = new QPushButton(tr("Close"), this);
     connect(closeButton, &QPushButton::clicked, this, &QDialog::close);
 
@@ -436,8 +441,6 @@ CameraOpticalSpectrumDialog::CameraOpticalSpectrumDialog(CameraSettings& setting
     buttonLayout->addWidget(m_overlayClearButton);
     buttonLayout->addWidget(m_overlayLabel);
     buttonLayout->addStretch();
-    buttonLayout->addWidget(m_zoomOutButton);
-    buttonLayout->addWidget(m_zoomResetButton);
     buttonLayout->addWidget(closeButton);
 
     auto* layout = new QVBoxLayout();

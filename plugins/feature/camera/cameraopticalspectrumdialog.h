@@ -44,6 +44,7 @@ class QNetworkReply;
 class QPushButton;
 class QRubberBand;
 class QSpinBox;
+class QToolButton;
 
 #if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
 using namespace QtCharts;
@@ -224,8 +225,8 @@ private:
     ButtonSwitch* m_imageStripCheck;
     QLabel* m_overlayLabel;
     QPushButton* m_overlayClearButton;
-    QPushButton* m_zoomOutButton = nullptr;
-    QPushButton* m_zoomResetButton = nullptr;
+    QToolButton* m_zoomOutButton = nullptr;
+    QToolButton* m_zoomResetButton = nullptr;
     QDoubleSpinBox* m_redshiftSpin;
     QLabel* m_redshiftVelocityLabel;
     ButtonSwitch* m_luminanceCheck;

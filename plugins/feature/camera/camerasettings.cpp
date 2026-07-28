@@ -507,6 +507,8 @@ void CameraSettings::resetToDefaults()
     m_histogramStretchAsinhStrength = 10.0;
     m_histogramStretchLogStrength = 10.0;
     m_histogramVisible = false;
+    m_histogramUseDetectionRoi = false;
+    m_histogramLogScale = false;
     m_postProcessGreyscale = false;
     m_saturation = 1.0;
     m_gamma = 1.0;
@@ -811,6 +813,8 @@ QByteArray CameraSettings::serialize() const
     s.writeDouble(68, m_histogramStretchGamma);
     s.writeDouble(69, m_histogramStretchAsinhStrength);
     s.writeDouble(70, m_histogramStretchLogStrength);
+    s.writeBool(370, m_histogramUseDetectionRoi);
+    s.writeBool(371, m_histogramLogScale);
     s.writeBool(71, m_postProcessGreyscale);
     s.writeDouble(72, m_saturation);
     s.writeDouble(73, m_gamma);
@@ -1259,6 +1263,8 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readDouble(68, &m_histogramStretchGamma, 1.0);
         d.readDouble(69, &m_histogramStretchAsinhStrength, 10.0);
         d.readDouble(70, &m_histogramStretchLogStrength, 10.0);
+        d.readBool(370, &m_histogramUseDetectionRoi, false);
+        d.readBool(371, &m_histogramLogScale, false);
         d.readBool(71, &m_postProcessGreyscale, false);
         d.readDouble(72, &m_saturation, 1.0);
         d.readDouble(73, &m_gamma, 1.0);
@@ -2453,6 +2459,12 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     if (settingsKeys.contains("histogramVisible")) {
         m_histogramVisible = settings.m_histogramVisible;
     }
+    if (settingsKeys.contains("histogramUseDetectionRoi")) {
+        m_histogramUseDetectionRoi = settings.m_histogramUseDetectionRoi;
+    }
+    if (settingsKeys.contains("histogramLogScale")) {
+        m_histogramLogScale = settings.m_histogramLogScale;
+    }
     if (settingsKeys.contains("postProcessGreyscale")) {
         m_postProcessGreyscale = settings.m_postProcessGreyscale;
     }
@@ -3610,6 +3622,12 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("histogramVisible") || force) {
         ostr << " m_histogramVisible: " << m_histogramVisible;
+    }
+    if (settingsKeys.contains("histogramUseDetectionRoi") || force) {
+        ostr << " m_histogramUseDetectionRoi: " << m_histogramUseDetectionRoi;
+    }
+    if (settingsKeys.contains("histogramLogScale") || force) {
+        ostr << " m_histogramLogScale: " << m_histogramLogScale;
     }
     if (settingsKeys.contains("postProcessGreyscale") || force) {
         ostr << " m_postProcessGreyscale: " << m_postProcessGreyscale;

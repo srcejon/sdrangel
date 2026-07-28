@@ -1104,7 +1104,7 @@ void CameraPostProcessor::applySettings(const CameraSettings& settings, const QL
         "equatorialGrid", "equatorialGridColor",
         "altAzGrid", "altAzGridColor",
         "constellation", "constellationColor", "constellationOverlay",
-        "messier", "messierColor", "messierMaxMagnitude",
+        "messier", "messierColor", "messierMaxMagnitude", "messierDetect",
         "trackObjects", "trackObjectTrails", "trackObjectHeatMap", "trackObjectMinElevation", "trackObjectMaxRangeKm", "trackObjectLabelDisplay", "trackObjectLabelDetectionRadius", "trackObjectColor", "trackObjectFontFamily", "trackObjectFontScale",
         "gridLabelFontFamily", "gridLabelFontScale",
         "overlayText", "overlayTextString", "overlayTextColor",
@@ -2537,6 +2537,54 @@ void CameraPostProcessor::applyMessierOverlay(const CameraPipelineFrame& frame, 
     painter.setFont(font);
     const QFontMetrics fontMetrics(font);
 
+    // Phase 2 (detection): photometry runs against the CLEAN pipeline image when its geometry
+    // matches the overlay canvas — the canvas already carries earlier-stage overlays (grids,
+    // constellations) whose lines would contaminate an aperture, and this function's own markers
+    // must not feed later objects' measurements. On a size mismatch (cropped/scaled result) fall
+    // back to the canvas; the robust background median keeps thin overlay lines second-order.
+    const bool measureDetection = m_settings.m_messierDetect;
+    const QImage& photometrySource =
+        (!frame.m_image.isNull() && (frame.m_image.size() == image.size())) ? frame.m_image : image;
+
+    // Collect luminance samples in the radius band [innerRadius, outerRadius) around a centre,
+    // grid-subsampled so even a 3-degree object costs a bounded number of pixel reads.
+    const auto gatherBandSamples = [&photometrySource](const QPointF& centre,
+                                                       double innerRadius,
+                                                       double outerRadius,
+                                                       QVector<double>& samples) {
+        const double span = 2.0 * outerRadius + 1.0;
+        const int stride = std::max(1, static_cast<int>(std::ceil(span / 40.0))); // <= ~1600 probes
+        const double innerSquared = innerRadius * innerRadius;
+        const double outerSquared = outerRadius * outerRadius;
+        const int x0 = static_cast<int>(std::floor(centre.x() - outerRadius));
+        const int x1 = static_cast<int>(std::ceil(centre.x() + outerRadius));
+        const int y0 = static_cast<int>(std::floor(centre.y() - outerRadius));
+        const int y1 = static_cast<int>(std::ceil(centre.y() + outerRadius));
+        for (int y = y0; y <= y1; y += stride)
+        {
+            if ((y < 0) || (y >= photometrySource.height())) {
+                continue;
+            }
+            for (int x = x0; x <= x1; x += stride)
+            {
+                if ((x < 0) || (x >= photometrySource.width())) {
+                    continue;
+                }
+                const double dx = x - centre.x();
+                const double dy = y - centre.y();
+                const double radiusSquared = dx * dx + dy * dy;
+                if ((radiusSquared < innerSquared) || (radiusSquared >= outerSquared)) {
+                    continue;
+                }
+                samples.append(static_cast<double>(qGray(photometrySource.pixel(x, y))));
+            }
+        }
+    };
+    const auto medianOf = [](QVector<double>& samples) -> double {
+        std::nth_element(samples.begin(), samples.begin() + samples.size() / 2, samples.end());
+        return samples[samples.size() / 2];
+    };
+
     for (const MessierObject& object : kMessierObjects)
     {
         if (object.magnitude > m_settings.m_messierMaxMagnitude) {
@@ -2583,10 +2631,50 @@ void CameraPostProcessor::applyMessierOverlay(const CameraPipelineFrame& frame, 
         }
         radiusPixels = std::min(radiusPixels, 0.5 * static_cast<double>(std::max(image.width(), image.height())));
 
+        // Phase 2: is the object photometrically PRESENT in this frame? Compare the aperture
+        // MEAN (sub-DN sensitive for faint extended flux) against a robust local background
+        // (annulus MEDIAN, sigma from the MAD). Detected when the excess clears both a
+        // significance test and an absolute floor (8-bit quantization). Objects that cannot be
+        // measured (aperture/annulus mostly off-frame) are treated as detected so they are not
+        // dimmed on a technicality.
+        bool detected = true;
+        if (measureDetection)
+        {
+            const double apertureRadius = std::clamp(radiusPixels, 2.0, 120.0);
+            QVector<double> apertureSamples;
+            QVector<double> annulusSamples;
+            gatherBandSamples(point, 0.0, apertureRadius, apertureSamples);
+            gatherBandSamples(point, apertureRadius * 1.5, apertureRadius * 2.2, annulusSamples);
+            if ((apertureSamples.size() >= 8) && (annulusSamples.size() >= 16))
+            {
+                const double backgroundMedian = medianOf(annulusSamples);
+                QVector<double> absoluteDeviations;
+                absoluteDeviations.reserve(annulusSamples.size());
+                for (double sample : annulusSamples) {
+                    absoluteDeviations.append(std::fabs(sample - backgroundMedian));
+                }
+                const double backgroundSigma = std::max(1.4826 * medianOf(absoluteDeviations), 0.5);
+                double apertureSum = 0.0;
+                for (double sample : apertureSamples) {
+                    apertureSum += sample;
+                }
+                const double apertureMean = apertureSum / apertureSamples.size();
+                const double excess = apertureMean - backgroundMedian;
+                const double excessSigma = backgroundSigma / std::sqrt(static_cast<double>(apertureSamples.size()));
+                detected = (excess >= (5.0 * excessSigma)) && (excess >= 0.5);
+            }
+        }
+
         // Marker style by object class: solid outline for concentrated objects (galaxies,
         // nebulae, remnants), dashed for loose stellar groupings (open/globular clusters,
-        // asterisms) whose "edge" is soft.
-        QPen pen(m_settings.m_messierColor, 1.0);
+        // asterisms) whose "edge" is soft. Undetected objects (position known, no photometric
+        // excess in this frame) draw dimmed and thin so labels stay honest about what the
+        // frame actually shows.
+        QColor drawColor = m_settings.m_messierColor;
+        if (!detected) {
+            drawColor.setAlphaF(drawColor.alphaF() * 0.4);
+        }
+        QPen pen(drawColor, detected ? 1.5 : 1.0);
         switch (object.type)
         {
         case 'O':
@@ -2613,7 +2701,7 @@ void CameraPostProcessor::applyMessierOverlay(const CameraPipelineFrame& frame, 
             image.rect(),
             point + QPointF(labelOffset, -labelOffset),
             label,
-            m_settings.m_messierColor,
+            drawColor,
             fontMetrics);
     }
 

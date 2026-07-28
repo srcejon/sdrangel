@@ -2876,7 +2876,8 @@ void MeteorGUI::handleSatelliteStatistics(
     m_satelliteCatalogInfo->setToolTip(
         tr("Show satellite and ADS-B matching statistics"));
 
-    if (m_satelliteStatisticsDialogRequested)
+    if (m_satelliteStatisticsDialogRequested
+        && !statistics.m_clockCheckPending)
     {
         m_satelliteStatisticsDialogRequested = false;
         showSatelliteStatisticsDialog(statistics);
@@ -2948,6 +2949,77 @@ void MeteorGUI::showSatelliteStatisticsDialog(
         statistics.m_loadedDateTimeUtc.isValid()
             ? statistics.m_loadedDateTimeUtc.toLocalTime().toString(Qt::ISODate)
             : tr("Not yet loaded"));
+
+    QTreeWidgetItem *clock = addSection(tr("System clock"));
+    addValue(
+        clock,
+        tr("Internet time source"),
+        statistics.m_clockTimeSource.isEmpty()
+            ? tr("Not configured")
+            : statistics.m_clockTimeSource);
+    addValue(
+        clock,
+        tr("Checked"),
+        statistics.m_clockCheckDateTimeUtc.isValid()
+            ? statistics.m_clockCheckDateTimeUtc.toLocalTime().toString(Qt::ISODateWithMs)
+            : (statistics.m_clockCheckPending ? tr("Checking...") : tr("Not yet checked")));
+    if (statistics.m_clockCheckAvailable)
+    {
+        const double absoluteErrorMS = std::fabs(statistics.m_localClockErrorMS);
+        QString errorDirection;
+        if (absoluteErrorMS < 0.5) {
+            errorDirection = tr("aligned");
+        } else if (statistics.m_localClockErrorMS > 0.0) {
+            errorDirection = tr("local clock fast");
+        } else {
+            errorDirection = tr("local clock slow");
+        }
+        addValue(
+            clock,
+            tr("Estimated local clock error"),
+            tr("%1 ms (%2)")
+                .arg(statistics.m_localClockErrorMS, 0, 'f', 0)
+                .arg(errorDirection));
+        addValue(
+            clock,
+            tr("Measurement uncertainty"),
+            tr("+/- %1 ms").arg(statistics.m_clockUncertaintyMS, 0, 'f', 0));
+        addValue(
+            clock,
+            tr("Network round trip"),
+            tr("%1 ms").arg(statistics.m_clockRoundTripMS, 0, 'f', 0));
+
+        QString assessment;
+        if (absoluteErrorMS + statistics.m_clockUncertaintyMS
+            <= statistics.m_acceptableClockErrorMS)
+        {
+            assessment = tr("Acceptable (within +/- %1 ms)")
+                .arg(statistics.m_acceptableClockErrorMS, 0, 'f', 0);
+        }
+        else if (absoluteErrorMS - statistics.m_clockUncertaintyMS
+            > statistics.m_acceptableClockErrorMS)
+        {
+            assessment = tr("Not acceptable (limit +/- %1 ms)")
+                .arg(statistics.m_acceptableClockErrorMS, 0, 'f', 0);
+        }
+        else
+        {
+            assessment = tr("Inconclusive near the +/- %1 ms limit")
+                .arg(statistics.m_acceptableClockErrorMS, 0, 'f', 0);
+        }
+        addValue(clock, tr("Assessment"), assessment);
+    }
+    else
+    {
+        addValue(
+            clock,
+            tr("Status"),
+            statistics.m_clockCheckPending
+                ? tr("Checking internet time...")
+                : (statistics.m_clockCheckError.isEmpty()
+                    ? tr("No measurement available")
+                    : tr("Unavailable: %1").arg(statistics.m_clockCheckError)));
+    }
 
     QTreeWidgetItem *types = addSection(tr("Loaded object types"));
     addCount(types, tr("Payloads"), statistics.m_payloadEntries);

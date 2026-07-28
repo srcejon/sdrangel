@@ -56,6 +56,8 @@ public:
         double m_trimKeepTime = 0.97;      // energy kept along time (loose: preserve tails)
         double m_trimKeepFreq = 0.90;      // energy kept along frequency (tight: hug the core)
         double m_occLimit = 0.5;           // broadband-impulse gate: reject maxOcc above this
+        double m_distributedImpulseSpanLimit = 0.6; // reject a time column spanning this band fraction
+        int    m_distributedImpulseMinSeedPixels = 16;
         // Peak-brightness gate ("red blob"): a real meteor peaks well above the floor; faint
         // spread noise blobs and weak interference clear the score by area but never get bright.
         double m_minPeakExcessDb = 16.0;
@@ -102,6 +104,7 @@ public:
         double m_score = 0.0;                // integrated excess above growDb (the knob metric)
         double m_peakExcessDb = 0.0;         // brightest pixel's excess over the floor
         double m_maxOcc = 0.0;               // max per-column band occupancy over the blob
+        bool   m_distributedImpulse = false;  // shared a column with a band-spanning impulse
         double m_linR2 = 0.0;                // linearity of the freq-vs-time centroid track
         double m_slopeHzPerS = 0.0;          // drift of that track (Hz/s)
         double m_peakPower = 0.0, m_backgroundPower = 0.0, m_totalPower = 0.0;

@@ -575,6 +575,7 @@ namespace {
             {QStringLiteral("blobTrimKeepTime"), [](Tunables& t) -> auto& { return t.m_blob.m_trimKeepTime; }},
             {QStringLiteral("blobTrimKeepFreq"), [](Tunables& t) -> auto& { return t.m_blob.m_trimKeepFreq; }},
             {QStringLiteral("blobOccLimit"), [](Tunables& t) -> auto& { return t.m_blob.m_occLimit; }},
+            {QStringLiteral("blobDistributedImpulseSpanLimit"), [](Tunables& t) -> auto& { return t.m_blob.m_distributedImpulseSpanLimit; }},
             {QStringLiteral("blobMinPeakExcessDb"), [](Tunables& t) -> auto& { return t.m_blob.m_minPeakExcessDb; }},
             {QStringLiteral("blobSweepMinLinR2"), [](Tunables& t) -> auto& { return t.m_blob.m_sweepMinLinR2; }},
             {QStringLiteral("blobSweepMinAbsSlopeHzPerS"), [](Tunables& t) -> auto& { return t.m_blob.m_sweepMinAbsSlopeHzPerS; }},
@@ -586,6 +587,10 @@ namespace {
             {QStringLiteral("blobSweepLinkTolHz"), [](Tunables& t) -> auto& { return t.m_blob.m_sweepLinkTolHz; }},
             {QStringLiteral("blobSweepLinkMaxGapS"), [](Tunables& t) -> auto& { return t.m_blob.m_sweepLinkMaxGapS; }},
             {QStringLiteral("blobSweepMergeMaxGapS"), [](Tunables& t) -> auto& { return t.m_blob.m_sweepMergeMaxGapS; }},
+            {QStringLiteral("blobProvisionalSweepMinLinR2"), [](Tunables& t) -> auto& { return t.m_blob.m_provisionalSweepMinLinR2; }},
+            {QStringLiteral("blobProvisionalSweepMaxGapS"), [](Tunables& t) -> auto& { return t.m_blob.m_provisionalSweepMaxGapS; }},
+            {QStringLiteral("blobProvisionalSweepHoldS"), [](Tunables& t) -> auto& { return t.m_blob.m_provisionalSweepHoldS; }},
+            {QStringLiteral("blobProvisionalSweepSlopeToleranceFraction"), [](Tunables& t) -> auto& { return t.m_blob.m_provisionalSweepSlopeToleranceFraction; }},
             {QStringLiteral("blobDashWalkStepGapS"), [](Tunables& t) -> auto& { return t.m_blob.m_dashWalkStepGapS; }},
             {QStringLiteral("blobDashWalkMaxS"), [](Tunables& t) -> auto& { return t.m_blob.m_dashWalkMaxS; }},
             {QStringLiteral("blobScoreThreshold"), [](Tunables& t) -> auto& { return t.m_blob.m_scoreThreshold; }},
@@ -597,6 +602,7 @@ namespace {
         static const QMap<QString, std::function<int&(Tunables&)>> intMembers = {
             {QStringLiteral("blobMinPix"), [](Tunables& t) -> auto& { return t.m_blob.m_minPix; }},
             {QStringLiteral("blobCloseFreqBins"), [](Tunables& t) -> auto& { return t.m_blob.m_closeFreqBins; }},
+            {QStringLiteral("blobDistributedImpulseMinSeedPixels"), [](Tunables& t) -> auto& { return t.m_blob.m_distributedImpulseMinSeedPixels; }},
             {QStringLiteral("blobSegMinCols"), [](Tunables& t) -> auto& { return t.m_blob.m_segMinCols; }},
             {QStringLiteral("blobSegMinPix"), [](Tunables& t) -> auto& { return t.m_blob.m_segMinPix; }},
         };

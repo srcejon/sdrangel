@@ -56,6 +56,16 @@ public:
         QDateTime m_spaceTrackCacheDateTimeUtc;
         QStringList m_sourceWarnings;
 
+        bool m_clockCheckPending = false;
+        bool m_clockCheckAvailable = false;
+        QDateTime m_clockCheckDateTimeUtc;
+        QString m_clockTimeSource;
+        QString m_clockCheckError;
+        double m_localClockErrorMS = 0.0;  // positive when the local clock is fast
+        double m_clockUncertaintyMS = 0.0;
+        double m_clockRoundTripMS = 0.0;
+        double m_acceptableClockErrorMS = 1000.0;
+
         bool m_snapshotValid = false;
         QDateTime m_snapshotDateTimeUtc;
         double m_maximumAltitudeKM = 0.0;

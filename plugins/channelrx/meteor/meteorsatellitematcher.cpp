@@ -19,6 +19,7 @@
 #include <QDateTime>
 #include <QDebug>
 #include <QDir>
+#include <QElapsedTimer>
 #include <QFile>
 #include <QFileInfo>
 #include <QHash>
@@ -73,6 +74,12 @@ namespace {
     // than silently discarding the whole catalog.
     constexpr double MinimumAltitudeCullM = 300000.0;
     constexpr int SpaceTrackMinimumEntries = 10000;
+    constexpr qint64 ClockCheckIntervalMS = 30 * 60 * 1000;
+    constexpr qint64 ClockCheckTimeoutMS = 10 * 1000;
+    constexpr qint64 ClockDateHeaderHalfResolutionMS = 500;
+    constexpr double AcceptableClockErrorMS = 1000.0;
+    constexpr char ClockTimeSourceUrl[] =
+        "https://www.google.com/generate_204";
     constexpr char SpaceTrackLoginUrl[] =
         "https://www.space-track.org/ajaxauth/login";
     constexpr char SpaceTrackCatalogUrl[] =
@@ -567,6 +574,13 @@ public:
             refreshCatalogIfNeeded();
         });
         m_refreshTimer->start();
+        m_clockCheckTimer = new QTimer(this);
+        m_clockCheckTimer->setInterval(ClockCheckIntervalMS);
+        connect(m_clockCheckTimer, &QTimer::timeout, this, [this]() {
+            startClockCheck();
+        });
+        m_clockCheckTimer->start();
+        startClockCheck();
 
         const QString directoryPath = QStandardPaths::writableLocation(
             QStandardPaths::AppDataLocation) + QStringLiteral("/meteor");
@@ -730,10 +744,105 @@ public:
 
     void requestStatistics()
     {
+        const QDateTime nowUtc = QDateTime::currentDateTimeUtc();
+        if (!m_clockCheckInProgress
+            && (!m_clockCheckDateTimeUtc.isValid()
+                || (m_clockCheckDateTimeUtc.msecsTo(nowUtc) >= ClockCheckIntervalMS))) {
+            startClockCheck();
+        }
         deliverStatistics();
     }
 
 private:
+    void startClockCheck()
+    {
+        if (!m_networkManager || m_clockCheckInProgress || m_stopRequested.load()) {
+            return;
+        }
+
+        m_clockCheckInProgress = true;
+        m_clockCheckError.clear();
+        const QDateTime localStartUtc = QDateTime::currentDateTimeUtc();
+        const auto elapsed = std::make_shared<QElapsedTimer>();
+        elapsed->start();
+
+        QUrl clockUrl(QString::fromLatin1(ClockTimeSourceUrl));
+        QUrlQuery clockQuery;
+        clockQuery.addQueryItem(
+            QStringLiteral("sdrangel-clock-check"),
+            QString::number(localStartUtc.toMSecsSinceEpoch()));
+        clockUrl.setQuery(clockQuery);
+        QNetworkRequest request(clockUrl);
+        request.setHeader(
+            QNetworkRequest::UserAgentHeader,
+            QStringLiteral("SDRangel Meteor clock check"));
+        request.setRawHeader("Cache-Control", "no-cache");
+        request.setAttribute(
+            QNetworkRequest::RedirectPolicyAttribute,
+            QNetworkRequest::NoLessSafeRedirectPolicy);
+        request.setAttribute(
+            QNetworkRequest::CacheLoadControlAttribute,
+            QNetworkRequest::AlwaysNetwork);
+        request.setTransferTimeout(ClockCheckTimeoutMS);
+
+        QNetworkReply *reply = m_networkManager->head(request);
+        connect(reply, &QNetworkReply::finished, this, [this, reply, localStartUtc, elapsed]() {
+            const qint64 roundTripMS = elapsed->elapsed();
+            const int httpStatus = reply->attribute(
+                QNetworkRequest::HttpStatusCodeAttribute).toInt();
+            const QNetworkReply::NetworkError networkError = reply->error();
+            const QString networkErrorText = reply->errorString();
+            const QByteArray dateHeader = reply->rawHeader("Date");
+            reply->deleteLater();
+
+            m_clockCheckInProgress = false;
+            m_clockCheckDateTimeUtc = QDateTime::currentDateTimeUtc();
+            m_clockRoundTripMS = (double) roundTripMS;
+            m_clockUncertaintyMS =
+                0.5 * (double) roundTripMS + ClockDateHeaderHalfResolutionMS;
+            m_clockCheckAvailable = false;
+
+            if (m_stopRequested.load()) {
+                return;
+            }
+
+            if ((networkError != QNetworkReply::NoError)
+                || (httpStatus < 200)
+                || (httpStatus >= 400))
+            {
+                m_clockCheckError = networkError != QNetworkReply::NoError
+                    ? networkErrorText
+                    : QStringLiteral("time request returned HTTP %1").arg(httpStatus);
+            }
+            else
+            {
+                const QDateTime internetTimeUtc = QDateTime::fromString(
+                    QString::fromLatin1(dateHeader),
+                    Qt::RFC2822Date).toUTC();
+                if (!internetTimeUtc.isValid())
+                {
+                    m_clockCheckError = dateHeader.isEmpty()
+                        ? QStringLiteral("time response did not contain a Date header")
+                        : QStringLiteral("time response contained an invalid Date header");
+                }
+                else
+                {
+                    const QDateTime localMidpointUtc = localStartUtc.addMSecs(
+                        roundTripMS / 2);
+                    // HTTP Date has whole-second precision and is normally truncated.
+                    // Compare against the centre of that represented one-second interval.
+                    m_localClockErrorMS = (double)
+                        internetTimeUtc.addMSecs(ClockDateHeaderHalfResolutionMS)
+                            .msecsTo(localMidpointUtc);
+                    m_clockCheckAvailable = true;
+                    m_clockCheckError.clear();
+                }
+            }
+
+            deliverStatistics();
+        });
+    }
+
 #ifdef METEOR_HAS_SGP4
     struct CatalogMetadata
     {
@@ -2313,6 +2422,16 @@ private:
         QPointer<MeteorSatelliteMatcher> owner(m_owner);
         MeteorSatelliteMatcher::CatalogStatistics statistics = m_statistics;
         statistics.m_status = m_status;
+        statistics.m_clockCheckPending = m_clockCheckInProgress;
+        statistics.m_clockCheckAvailable = m_clockCheckAvailable;
+        statistics.m_clockCheckDateTimeUtc = m_clockCheckDateTimeUtc;
+        statistics.m_clockTimeSource =
+            QString::fromLatin1(ClockTimeSourceUrl);
+        statistics.m_clockCheckError = m_clockCheckError;
+        statistics.m_localClockErrorMS = m_localClockErrorMS;
+        statistics.m_clockUncertaintyMS = m_clockUncertaintyMS;
+        statistics.m_clockRoundTripMS = m_clockRoundTripMS;
+        statistics.m_acceptableClockErrorMS = AcceptableClockErrorMS;
 #ifdef METEOR_HAS_SGP4
         statistics.m_spaceTrackConfigured =
             !m_spaceTrackUsername.isEmpty() && !m_spaceTrackPassword.isEmpty();
@@ -2343,6 +2462,7 @@ private:
     QNetworkAccessManager *m_networkManager = nullptr;
     MeteorNetworkCookieJar *m_cookieJar = nullptr;
     QTimer *m_refreshTimer = nullptr;
+    QTimer *m_clockCheckTimer = nullptr;
     QString m_catalogDirectory;
     QString m_status = QStringLiteral("Orbital catalog is loading");
     MeteorSatelliteMatcher::CatalogStatistics m_statistics;
@@ -2352,6 +2472,13 @@ private:
     bool m_downloadInProgress = false;
     bool m_spaceTrackDownloadPending = false;
     bool m_spaceTrackRefreshRequested = false;
+    bool m_clockCheckInProgress = false;
+    bool m_clockCheckAvailable = false;
+    QDateTime m_clockCheckDateTimeUtc;
+    QString m_clockCheckError;
+    double m_localClockErrorMS = 0.0;
+    double m_clockUncertaintyMS = 0.0;
+    double m_clockRoundTripMS = 0.0;
     QVector<int> m_downloadQueue;
     int m_downloadQueuePos = 0;
     std::atomic<bool> m_stopRequested {false};

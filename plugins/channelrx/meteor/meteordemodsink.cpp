@@ -154,9 +154,10 @@ bool MeteorDemodSink::flushPendingPulse(bool finalizeSweeps)
 
     drainBlobDetections();
 
-    const bool hadActiveSweeps = !m_activeSweeps.empty();
+    const bool hadActiveSweeps = !m_activeSweeps.empty() || !m_pendingMeteorBlobs.empty();
 
     finalizeStaleSweeps(0, true);
+    releasePendingMeteorBlobs(0, true);
     return flushedDetector || hadActiveSweeps;
 }
 
@@ -239,6 +240,8 @@ void MeteorDemodSink::configureBlobDetector()
     cfg.m_trimKeepTime = m_detectorTunables.m_blob.m_trimKeepTime;
     cfg.m_trimKeepFreq = m_detectorTunables.m_blob.m_trimKeepFreq;
     cfg.m_occLimit = m_detectorTunables.m_blob.m_occLimit;
+    cfg.m_distributedImpulseSpanLimit = m_detectorTunables.m_blob.m_distributedImpulseSpanLimit;
+    cfg.m_distributedImpulseMinSeedPixels = m_detectorTunables.m_blob.m_distributedImpulseMinSeedPixels;
     cfg.m_minPeakExcessDb = m_detectorTunables.m_blob.m_minPeakExcessDb;
     cfg.m_sweepMinLinR2 = m_detectorTunables.m_blob.m_sweepMinLinR2;
     cfg.m_sweepMinAbsSlopeHzPerS = m_detectorTunables.m_blob.m_sweepMinAbsSlopeHzPerS;
@@ -299,6 +302,7 @@ void MeteorDemodSink::processBlobDetectorFrame(quint64 frameStartSample)
     m_blobDetector.processFrame(m_blobBinPower, std::vector<double>(), frameCenterSample);
     drainBlobDetections();
     finalizeStaleSweeps(frameCenterSample, false);
+    releasePendingMeteorBlobs(frameCenterSample, false);
 }
 
 void MeteorDemodSink::drainBlobDetections()
@@ -317,7 +321,7 @@ void MeteorDemodSink::drainBlobDetections()
         } else if (absorbedByActiveSweep(blob)) {
             // on an established sweep's line — part of the sweep, not a meteor
         } else {
-            emitBlobDetection(blob);         // accepted meteor
+            queueOrEmitBlobDetection(blob);  // meteor, unless a later sweep claims it
         }
     }
 
@@ -359,6 +363,207 @@ void MeteorDemodSink::drainBlobDetections()
 // Sweep fragments arrive across chunks; stitch collinear ones (a fragment continues an
 // active sweep's extrapolated drift line within a bounded time gap) into a single sweep.
 
+bool MeteorDemodSink::isProvisionalSweepBlob(const MeteorBlobDetector::Blob& blob) const
+{
+    const int sampleRate = std::max(1, m_settings.m_channelSampleRate);
+    const double durationS = blob.m_endSample >= blob.m_startSample
+        ? (double) (blob.m_endSample - blob.m_startSample) / (double) sampleRate : 0.0;
+
+    return blob.m_accepted
+        && (durationS >= m_detectorTunables.m_blob.m_sweepMinDurationS)
+        && (blob.m_linR2 >= m_detectorTunables.m_blob.m_provisionalSweepMinLinR2)
+        && (std::fabs(blob.m_slopeHzPerS)
+            >= m_detectorTunables.m_blob.m_sweepMinAbsSlopeHzPerS);
+}
+
+void MeteorDemodSink::queueOrEmitBlobDetection(const MeteorBlobDetector::Blob& blob)
+{
+    const bool mayBeSweep = isProvisionalSweepBlob(blob);
+    if (!mayBeSweep && m_pendingMeteorBlobs.empty())
+    {
+        emitBlobDetection(blob);
+        return;
+    }
+
+    PendingMeteorBlob pending;
+    pending.m_blob = blob;
+    pending.m_mayBeSweep = mayBeSweep;
+    if (mayBeSweep)
+    {
+        const quint64 holdSamples = (quint64) std::llround(
+            m_detectorTunables.m_blob.m_provisionalSweepHoldS
+            * std::max(1, m_settings.m_channelSampleRate));
+        pending.m_releaseSample = blob.m_endSample
+            <= std::numeric_limits<quint64>::max() - holdSamples
+            ? blob.m_endSample + holdSamples : std::numeric_limits<quint64>::max();
+    }
+    else
+    {
+        // Ready immediately, but kept behind any older unresolved candidate so GUI row
+        // numbers and regression messages remain chronological.
+        pending.m_releaseSample = blob.m_endSample;
+    }
+    m_pendingMeteorBlobs.push_back(std::move(pending));
+    std::stable_sort(
+        m_pendingMeteorBlobs.begin(),
+        m_pendingMeteorBlobs.end(),
+        [](const PendingMeteorBlob& a, const PendingMeteorBlob& b) {
+            return a.m_blob.m_startSample < b.m_blob.m_startSample;
+        });
+    adoptPendingMeteorBlobs();
+}
+
+void MeteorDemodSink::releasePendingMeteorBlobs(quint64 currentSample, bool force)
+{
+    while (!m_pendingMeteorBlobs.empty())
+    {
+        if (!force && (currentSample < m_pendingMeteorBlobs.front().m_releaseSample)) {
+            break;
+        }
+
+        emitBlobDetection(m_pendingMeteorBlobs.front().m_blob);
+        m_pendingMeteorBlobs.erase(m_pendingMeteorBlobs.begin());
+    }
+}
+
+void MeteorDemodSink::accumulateSweepLine(
+    ActiveSweep& sweep,
+    const MeteorBlobDetector::Blob& blob)
+{
+    const int sampleRate = std::max(1, m_settings.m_channelSampleRate);
+    const double tc = 0.5 * (blob.m_t0 + blob.m_t1);
+    const double fc = 0.5 * (blob.m_f0 + blob.m_f1);
+    const double durationS = blob.m_endSample >= blob.m_startSample
+        ? (double) (blob.m_endSample - blob.m_startSample) / (double) sampleRate : 0.0;
+
+    auto addPoint = [&sweep](double t, double f)
+    {
+        sweep.m_sumT += t;
+        sweep.m_sumF += f;
+        sweep.m_sumTT += t * t;
+        sweep.m_sumTF += t * f;
+        sweep.m_nPts++;
+    };
+
+    // Retain the direction contained inside every fragment. Storing only one centre point
+    // made two overlapping fragments look horizontal and could collapse a clear Doppler
+    // sweep's reported drift to zero.
+    if ((durationS > 1e-6) && std::isfinite(blob.m_slopeHzPerS))
+    {
+        const double halfDuration = 0.5 * durationS;
+        addPoint(tc - halfDuration, fc - blob.m_slopeHzPerS * halfDuration);
+        addPoint(tc + halfDuration, fc + blob.m_slopeHzPerS * halfDuration);
+    }
+    else
+    {
+        addPoint(tc, fc);
+    }
+}
+
+bool MeteorDemodSink::fitSweepLine(
+    const ActiveSweep& sweep,
+    double& slope,
+    double& intercept) const
+{
+    if (sweep.m_nPts >= 2)
+    {
+        const double denom = sweep.m_nPts * sweep.m_sumTT
+            - sweep.m_sumT * sweep.m_sumT;
+        if (std::fabs(denom) > 1e-9)
+        {
+            slope = (sweep.m_nPts * sweep.m_sumTF
+                - sweep.m_sumT * sweep.m_sumF) / denom;
+            intercept = (sweep.m_sumF - slope * sweep.m_sumT) / sweep.m_nPts;
+            return std::isfinite(slope) && std::isfinite(intercept);
+        }
+    }
+
+    slope = sweep.m_lastSlope;
+    intercept = sweep.m_lastCentreF - slope * sweep.m_lastCentreT;
+    return std::isfinite(slope) && std::isfinite(intercept);
+}
+
+bool MeteorDemodSink::blobFollowsSweep(
+    const MeteorBlobDetector::Blob& blob,
+    const ActiveSweep& sweep,
+    double& frequencyError) const
+{
+    const int sampleRate = std::max(1, m_settings.m_channelSampleRate);
+    const double afterS = blob.m_startSample > sweep.m_endSample
+        ? (double) (blob.m_startSample - sweep.m_endSample) / sampleRate : 0.0;
+    const double beforeS = blob.m_endSample < sweep.m_startSample
+        ? (double) (sweep.m_startSample - blob.m_endSample) / sampleRate : 0.0;
+    if ((afterS > m_detectorTunables.m_blob.m_provisionalSweepMaxGapS)
+        || (beforeS > m_detectorTunables.m_blob.m_provisionalSweepMaxGapS)) {
+        return false;
+    }
+
+    double slope = 0.0;
+    double intercept = 0.0;
+    if (!fitSweepLine(sweep, slope, intercept)
+        || (slope * blob.m_slopeHzPerS <= 0.0)) {
+        return false;
+    }
+
+    const double slopeTolerance = std::max(
+        30.0,
+        m_detectorTunables.m_blob.m_provisionalSweepSlopeToleranceFraction
+            * std::max(std::fabs(slope), std::fabs(blob.m_slopeHzPerS)));
+    if (std::fabs(slope - blob.m_slopeHzPerS) > slopeTolerance) {
+        return false;
+    }
+
+    const double tc = 0.5 * (blob.m_t0 + blob.m_t1);
+    const double fc = 0.5 * (blob.m_f0 + blob.m_f1);
+    frequencyError = std::fabs(fc - (slope * tc + intercept));
+    return frequencyError <= m_detectorTunables.m_blob.m_sweepLinkTolHz;
+}
+
+void MeteorDemodSink::adoptPendingMeteorBlobs()
+{
+    for (size_t pendingIndex = 0; pendingIndex < m_pendingMeteorBlobs.size();)
+    {
+        if (!m_pendingMeteorBlobs[pendingIndex].m_mayBeSweep)
+        {
+            pendingIndex++;
+            continue;
+        }
+
+        int best = -1;
+        double bestError = std::numeric_limits<double>::max();
+        for (size_t sweepIndex = 0; sweepIndex < m_activeSweeps.size(); sweepIndex++)
+        {
+            double error = 0.0;
+            if (blobFollowsSweep(
+                    m_pendingMeteorBlobs[pendingIndex].m_blob,
+                    m_activeSweeps[sweepIndex],
+                    error)
+                && (error < bestError))
+            {
+                best = (int) sweepIndex;
+                bestError = error;
+            }
+        }
+
+        if (best < 0)
+        {
+            pendingIndex++;
+            continue;
+        }
+
+        qDebug() << "MeteorDemodSink::adoptPendingMeteorBlobs:"
+                 << " merged provisional meteor into sweep"
+                 << " frequencyError:" << bestError
+                 << " slope:" << m_pendingMeteorBlobs[pendingIndex].m_blob.m_slopeHzPerS;
+        mergeSweepFragment(
+            m_activeSweeps[best],
+            m_pendingMeteorBlobs[pendingIndex].m_blob);
+        m_pendingMeteorBlobs.erase(m_pendingMeteorBlobs.begin() + pendingIndex);
+    }
+
+    coalesceActiveSweeps();
+}
+
 void MeteorDemodSink::addSweepFragment(const MeteorBlobDetector::Blob& blob)
 {
     const int sampleRate = std::max(1, m_settings.m_channelSampleRate);
@@ -384,22 +589,12 @@ void MeteorDemodSink::addSweepFragment(const MeteorBlobDetector::Blob& blob)
             continue;   // too old to continue, but not ours to retire
         }
 
-        double predF;
-        if (s.m_nPts >= 2)
-        {
-            const double denom = s.m_nPts * s.m_sumTT - s.m_sumT * s.m_sumT;
-            if (std::fabs(denom) > 1e-9) {
-                const double slope = (s.m_nPts * s.m_sumTF - s.m_sumT * s.m_sumF) / denom;
-                const double intercept = (s.m_sumF - slope * s.m_sumT) / s.m_nPts;
-                predF = slope * tc + intercept;
-            } else {
-                predF = s.m_lastCentreF;
-            }
+        double slope = 0.0;
+        double intercept = 0.0;
+        if (!fitSweepLine(s, slope, intercept)) {
+            continue;
         }
-        else
-        {
-            predF = s.m_lastCentreF + s.m_lastSlope * (tc - s.m_lastCentreT);
-        }
+        const double predF = slope * tc + intercept;
         const double err = std::fabs(fc - predF);
         if (err <= bestErr) { bestErr = err; best = (int) i; }
     }
@@ -427,14 +622,18 @@ void MeteorDemodSink::addSweepFragment(const MeteorBlobDetector::Blob& blob)
         s.m_peakPower = blob.m_peakPower; s.m_totalPower = blob.m_totalPower;
         s.m_backgroundSum = blob.m_backgroundPower;
         s.m_fragCount = 1;
-        s.m_sumT = tc; s.m_sumF = fc; s.m_sumTT = tc * tc; s.m_sumTF = tc * fc; s.m_nPts = 1;
         s.m_lastCentreT = tc; s.m_lastCentreF = fc; s.m_lastSlope = blob.m_slopeHzPerS;
         s.m_lastSample = blob.m_endSample;
+        accumulateSweepLine(s, blob);
         m_activeSweeps.push_back(s);
+        adoptPendingMeteorBlobs();
+        coalesceActiveSweeps();
         return;
     }
 
     mergeSweepFragment(m_activeSweeps[best], blob);
+    adoptPendingMeteorBlobs();
+    coalesceActiveSweeps();
 }
 
 void MeteorDemodSink::mergeSweepFragment(ActiveSweep& s, const MeteorBlobDetector::Blob& blob)
@@ -449,9 +648,91 @@ void MeteorDemodSink::mergeSweepFragment(ActiveSweep& s, const MeteorBlobDetecto
     s.m_totalPower += blob.m_totalPower;
     s.m_backgroundSum += blob.m_backgroundPower;
     s.m_fragCount++;
-    s.m_sumT += tc; s.m_sumF += fc; s.m_sumTT += tc * tc; s.m_sumTF += tc * fc; s.m_nPts++;
-    s.m_lastCentreT = tc; s.m_lastCentreF = fc; s.m_lastSlope = blob.m_slopeHzPerS;
-    s.m_lastSample = blob.m_endSample;
+    accumulateSweepLine(s, blob);
+    if (blob.m_endSample >= s.m_lastSample)
+    {
+        s.m_lastCentreT = tc;
+        s.m_lastCentreF = fc;
+        s.m_lastSlope = blob.m_slopeHzPerS;
+        s.m_lastSample = blob.m_endSample;
+    }
+}
+
+void MeteorDemodSink::coalesceActiveSweeps()
+{
+    const double tolHz = m_detectorTunables.m_blob.m_sweepLinkTolHz;
+    const double slopeFraction =
+        m_detectorTunables.m_blob.m_provisionalSweepSlopeToleranceFraction;
+
+    for (size_t i = 0; i < m_activeSweeps.size(); i++)
+    {
+        for (size_t j = i + 1; j < m_activeSweeps.size();)
+        {
+            ActiveSweep& a = m_activeSweeps[i];
+            ActiveSweep& b = m_activeSweeps[j];
+            const double overlapStart = std::max(a.m_t0, b.m_t0);
+            const double overlapEnd = std::min(a.m_t1, b.m_t1);
+            if (overlapEnd < overlapStart)
+            {
+                j++;
+                continue;
+            }
+
+            double slopeA = 0.0;
+            double interceptA = 0.0;
+            double slopeB = 0.0;
+            double interceptB = 0.0;
+            if (!fitSweepLine(a, slopeA, interceptA)
+                || !fitSweepLine(b, slopeB, interceptB)
+                || (slopeA * slopeB <= 0.0))
+            {
+                j++;
+                continue;
+            }
+
+            const double slopeTolerance = std::max(
+                30.0,
+                slopeFraction * std::max(std::fabs(slopeA), std::fabs(slopeB)));
+            const double compareT = 0.5 * (overlapStart + overlapEnd);
+            if ((std::fabs(slopeA - slopeB) > slopeTolerance)
+                || (std::fabs(
+                    slopeA * compareT + interceptA
+                    - (slopeB * compareT + interceptB)) > tolHz))
+            {
+                j++;
+                continue;
+            }
+
+            a.m_t0 = std::min(a.m_t0, b.m_t0);
+            a.m_t1 = std::max(a.m_t1, b.m_t1);
+            a.m_f0 = std::min(a.m_f0, b.m_f0);
+            a.m_f1 = std::max(a.m_f1, b.m_f1);
+            a.m_startSample = std::min(a.m_startSample, b.m_startSample);
+            a.m_endSample = std::max(a.m_endSample, b.m_endSample);
+            a.m_peakPower = std::max(a.m_peakPower, b.m_peakPower);
+            a.m_totalPower += b.m_totalPower;
+            a.m_backgroundSum += b.m_backgroundSum;
+            a.m_fragCount += b.m_fragCount;
+            a.m_sumT += b.m_sumT;
+            a.m_sumF += b.m_sumF;
+            a.m_sumTT += b.m_sumTT;
+            a.m_sumTF += b.m_sumTF;
+            a.m_nPts += b.m_nPts;
+            if (b.m_lastSample > a.m_lastSample)
+            {
+                a.m_lastCentreT = b.m_lastCentreT;
+                a.m_lastCentreF = b.m_lastCentreF;
+                a.m_lastSlope = b.m_lastSlope;
+                a.m_lastSample = b.m_lastSample;
+            }
+
+            qDebug() << "MeteorDemodSink::coalesceActiveSweeps:"
+                     << " merged overlapping sweep tracks"
+                     << " slopeA:" << slopeA
+                     << " slopeB:" << slopeB;
+            m_activeSweeps.erase(m_activeSweeps.begin() + j);
+        }
+    }
 }
 
 // A blob that is not sweep-shaped on its own but lies ON an established sweep's drift line
@@ -1321,6 +1602,7 @@ void MeteorDemodSink::resetDetector()
     m_recentDetectionRanges.clear();
     m_blobDetector.reset();
     m_activeSweeps.clear();
+    m_pendingMeteorBlobs.clear();
     m_faintDashes.clear();
 }
 
@@ -1370,6 +1652,7 @@ void MeteorDemodSink::applyChannelSettings(int channelSampleRate, int channelFre
         m_spectralFrameBuffer.clear();
         m_blobDetector.reset();
         m_activeSweeps.clear();
+        m_pendingMeteorBlobs.clear();
         m_faintDashes.clear();
         m_recentDetectionRanges.clear();
     }

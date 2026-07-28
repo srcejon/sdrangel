@@ -65,6 +65,8 @@ public:
             double m_trimKeepTime = 0.97;      // energy kept along time (loose: preserve tails)
             double m_trimKeepFreq = 0.90;      // energy kept along frequency (tight: hug the core)
             double m_occLimit = 0.5;
+            double m_distributedImpulseSpanLimit = 0.6;
+            int    m_distributedImpulseMinSeedPixels = 16;
             double m_minPeakExcessDb = 16.0;       // "red blob" gate: reject faint spread noise
             double m_sweepMinLinR2 = 0.9;          // reject linear drifting tracks (satellite sweeps)
             double m_sweepMinAbsSlopeHzPerS = 20.0;
@@ -88,6 +90,14 @@ public:
             // pass (the fast, faint mid-pass of the Doppler S-curve can be invisible for
             // longer than the link gap) are merged instead of reported twice.
             double m_sweepMergeMaxGapS = 30.0;
+            // An accepted blob can be the first, short piece of a broken satellite trace
+            // before a later fragment establishes the sweep. Hold only credible linear,
+            // drifting blobs briefly and adopt them retrospectively when their slope and
+            // extrapolated frequency agree with a sweep.
+            double m_provisionalSweepMinLinR2 = 0.55;
+            double m_provisionalSweepMaxGapS = 15.0;
+            double m_provisionalSweepHoldS = 30.0;
+            double m_provisionalSweepSlopeToleranceFraction = 0.5;
             // Dash-walk box extension: the faint leading/trailing parts of a pass are dashed
             // fragments too short for shape gates; walk the sweep's fitted drift line outward
             // through chained on-line dashes (each step must find one within the step gap).
@@ -258,6 +268,12 @@ private:
         quint64 m_lastSample = 0;
     };
 
+    struct PendingMeteorBlob {
+        MeteorBlobDetector::Blob m_blob;
+        quint64 m_releaseSample = 0;
+        bool m_mayBeSweep = false;
+    };
+
     SpectrumVis* m_spectrumSink;
     SpectrumVis* m_secondarySpectrumSink;
     MessageQueue *m_messageQueueToGUI;
@@ -296,6 +312,7 @@ private:
     std::vector<Real> m_blobWindow;                // Hann over the frame (pre-pad)
     std::vector<double> m_blobBinPower;            // padded magnitude^2 per bin
     std::vector<ActiveSweep> m_activeSweeps;
+    std::vector<PendingMeteorBlob> m_pendingMeteorBlobs;
     std::vector<MeteorBlobDetector::SweepSegment> m_faintDashes;   // relaxed segments for dash-walk
 
     void processOneSample(Complex& ci, bool realSample = true);
@@ -304,10 +321,21 @@ private:
     void processBlobDetectorFrame(quint64 frameStartSample);
     void emitBlobDetection(const MeteorBlobDetector::Blob& blob);
     void drainBlobDetections();
+    void queueOrEmitBlobDetection(const MeteorBlobDetector::Blob& blob);
+    bool isProvisionalSweepBlob(const MeteorBlobDetector::Blob& blob) const;
+    void releasePendingMeteorBlobs(quint64 currentSample, bool force);
+    void adoptPendingMeteorBlobs();
+    bool blobFollowsSweep(
+        const MeteorBlobDetector::Blob& blob,
+        const ActiveSweep& sweep,
+        double& frequencyError) const;
     void addSweepFragment(const MeteorBlobDetector::Blob& blob);
     void extendSweepWithSegment(const MeteorBlobDetector::SweepSegment& seg);
+    void accumulateSweepLine(ActiveSweep& sweep, const MeteorBlobDetector::Blob& blob);
+    bool fitSweepLine(const ActiveSweep& sweep, double& slope, double& intercept) const;
     void mergeSweepFragment(ActiveSweep& sweep, const MeteorBlobDetector::Blob& blob);
     bool absorbedByActiveSweep(const MeteorBlobDetector::Blob& blob);
+    void coalesceActiveSweeps();
     void finalizeStaleSweeps(quint64 currentSample, bool force);
     void retireSweepAt(size_t index);
     bool mergeIntoContinuationSweep(size_t sweepIndex);

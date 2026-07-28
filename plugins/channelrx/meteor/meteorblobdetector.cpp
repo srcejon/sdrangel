@@ -191,16 +191,31 @@ void MeteorBlobDetector::processChunk(long long emitThroughAbs)
     auto EX = [&](int y, int x) -> double { return m_buf[x].m_excess[y]; };
     auto idx = [&](int y, int x) { return (size_t) y * nc + x; };
 
-    // seed mask + per-column occupancy (fraction of the band at seed level)
+    // Seed mask plus whole-frame column metrics. A short broadband disturbance can form
+    // several disconnected narrow components at the same instant; component-local
+    // occupancy cannot identify that they share one band-spanning impulse.
     std::vector<std::uint8_t> seed((size_t) nb * nc, 0);
     std::vector<double> colOcc(nc, 0.0);
+    std::vector<std::uint8_t> colDistributedImpulse(nc, 0);
     for (int x = 0; x < nc; x++)
     {
         int cnt = 0;
+        int ymin = nb;
+        int ymax = -1;
         for (int y = 0; y < nb; y++) {
-            if (EX(y, x) >= m_cfg.m_seedDb) { seed[idx(y, x)] = 1; cnt++; }
+            if (EX(y, x) >= m_cfg.m_seedDb) {
+                seed[idx(y, x)] = 1;
+                cnt++;
+                ymin = std::min(ymin, y);
+                ymax = std::max(ymax, y);
+            }
         }
         colOcc[x] = (double) cnt / nb;
+        const double spanFraction = ymax >= ymin
+            ? (double) (ymax - ymin + 1) / (double) nb : 0.0;
+        colDistributedImpulse[x] =
+            (cnt >= m_cfg.m_distributedImpulseMinSeedPixels)
+            && (spanFraction >= m_cfg.m_distributedImpulseSpanLimit);
     }
 
     // label seed components (8-connectivity, ndimage-compatible raster numbering)
@@ -446,6 +461,7 @@ void MeteorBlobDetector::processChunk(long long emitThroughAbs)
         int ymin = 1 << 30, ymax = -1, xmin = 1 << 30, xmax = -1;
         int yminB = 1 << 30, ymaxB = -1;   // frequency extent of BRIGHT (seed-level) pixels
         double score = 0, peakP = 0, totalP = 0, floorSum = 0, maxOcc = 0, maxEx = -1e30;
+        bool distributedImpulse = false;
         for (const Px& p : pts)
         {
             ymin = std::min(ymin, p.y); ymax = std::max(ymax, p.y);
@@ -461,7 +477,11 @@ void MeteorBlobDetector::processChunk(long long emitThroughAbs)
         {
             std::vector<std::uint8_t> seenCol(nc, 0);
             for (const Px& p : pts) {
-                if (!seenCol[p.x]) { seenCol[p.x] = 1; maxOcc = std::max(maxOcc, colOcc[p.x]); }
+                if (!seenCol[p.x]) {
+                    seenCol[p.x] = 1;
+                    maxOcc = std::max(maxOcc, colOcc[p.x]);
+                    distributedImpulse = distributedImpulse || colDistributedImpulse[p.x];
+                }
             }
         }
         if (ymaxB < 0) { yminB = ymin; ymaxB = ymax; }   // no bright pixels: fall back to full extent
@@ -529,6 +549,7 @@ void MeteorBlobDetector::processChunk(long long emitThroughAbs)
         b.m_score = score;
         b.m_peakExcessDb = maxEx;
         b.m_maxOcc = maxOcc;
+        b.m_distributedImpulse = distributedImpulse;
         b.m_linR2 = linR2;
         b.m_slopeHzPerS = slope;
         b.m_peakPower = peakP;
@@ -536,7 +557,7 @@ void MeteorBlobDetector::processChunk(long long emitThroughAbs)
         b.m_backgroundPower = pts.empty() ? 1e-30 : floorSum / pts.size();
         b.m_sweepRejected = isSweep;
         b.m_accepted = (score >= m_cfg.m_scoreThreshold) && (maxOcc <= m_cfg.m_occLimit)
-                    && (maxEx >= m_cfg.m_minPeakExcessDb) && !isSweep;
+                    && !distributedImpulse && (maxEx >= m_cfg.m_minPeakExcessDb) && !isSweep;
         m_out.push_back(b);
     }
 

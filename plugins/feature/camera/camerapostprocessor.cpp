@@ -667,6 +667,24 @@ static void drawOutlinedLabel(QPainter& painter,
     painter.restore();
 }
 
+// Mirror of drawOutlinedLabel's placement geometry, used to PREDICT the screen rect a label
+// will occupy so labels can dodge each other before anything is painted.
+static QRectF estimateOutlinedLabelRect(const QPointF& point, const QString& text, const QFontMetrics& fontMetrics)
+{
+    const QStringList lines = text.split(QChar('\n'));
+    int textWidth = 0;
+    for (const QString& line : lines) {
+        textWidth = std::max(textWidth, fontMetrics.horizontalAdvance(line));
+    }
+    const int lineCount = lines.size();
+    const QPointF labelPoint = point + QPointF(4.0, -4.0);
+    return QRectF(
+        qRound(labelPoint.x()),
+        qRound(labelPoint.y()) - lineCount * fontMetrics.lineSpacing(),
+        textWidth + 4,
+        lineCount * fontMetrics.lineSpacing() + 2);
+}
+
 static void drawShadowedLabel(QPainter& painter,
                               const QRect& imageRect,
                               const QPointF& point,
@@ -2621,6 +2639,21 @@ void CameraPostProcessor::applyMessierOverlay(const CameraPipelineFrame& frame, 
         return samples[samples.size() / 2];
     };
 
+    // Label collision avoidance: pre-compute the rects the solved-star labels will occupy (the
+    // star overlay draws them at detection.m_center with drawOutlinedLabel's geometry), then place
+    // each Messier label at the first of four corner anchors whose rect is clear — of star labels
+    // and of Messier labels already placed (Virgo-cluster fields put several M objects in one
+    // frame). Rect estimation uses this stage's font metrics; the star stage's font can differ
+    // slightly, which is fine for avoidance purposes.
+    QVector<QRectF> occupiedLabelRects;
+    for (const CameraPipelineStarDetection& detection : frame.m_starDetections)
+    {
+        const QString starLabel = formatSolvedStarLabel(m_settings, detection);
+        if (!starLabel.isEmpty()) {
+            occupiedLabelRects.append(estimateOutlinedLabelRect(detection.m_center, starLabel, fontMetrics));
+        }
+    }
+
     for (const MessierObject& object : kMessierObjects)
     {
         if (object.magnitude > m_settings.m_messierMaxMagnitude) {
@@ -2730,15 +2763,54 @@ void CameraPostProcessor::applyMessierOverlay(const CameraPipelineFrame& frame, 
         if (object.commonName && object.commonName[0]) {
             label += QLatin1Char('\n') + QString::fromLatin1(object.commonName);
         }
-        // Anchor the label at the marker's upper-right edge so it clears the circle.
+        // Place the label at the first clear corner of the marker — upper-right preferred, then
+        // upper-left, lower-right, lower-left — falling back to upper-right when every corner is
+        // contested (dense fields; overlap then matches the old behaviour).
         const double labelOffset = radiusPixels * 0.70710678;
+        int labelWidth = 0;
+        int labelLineCount = 0;
+        for (const QString& line : label.split(QChar('\n')))
+        {
+            labelWidth = std::max(labelWidth, fontMetrics.horizontalAdvance(line));
+            labelLineCount++;
+        }
+        const double labelHeight = labelLineCount * fontMetrics.lineSpacing();
+        const std::array<QPointF, 4> labelAnchors = {{
+            point + QPointF(labelOffset, -labelOffset),
+            point + QPointF(-labelOffset - labelWidth - 8.0, -labelOffset),
+            point + QPointF(labelOffset, labelOffset + labelHeight),
+            point + QPointF(-labelOffset - labelWidth - 8.0, labelOffset + labelHeight)
+        }};
+        QPointF labelAnchor = labelAnchors[0];
+        for (const QPointF& candidate : labelAnchors)
+        {
+            const QRectF candidateRect = estimateOutlinedLabelRect(candidate, label, fontMetrics);
+            if (!image.rect().adjusted(0, 0, -1, -1).intersects(candidateRect.toRect())) {
+                continue; // off-image: drawOutlinedLabel would skip it entirely
+            }
+            bool clear = true;
+            for (const QRectF& occupied : occupiedLabelRects)
+            {
+                if (occupied.intersects(candidateRect))
+                {
+                    clear = false;
+                    break;
+                }
+            }
+            if (clear)
+            {
+                labelAnchor = candidate;
+                break;
+            }
+        }
         drawOutlinedLabel(
             painter,
             image.rect(),
-            point + QPointF(labelOffset, -labelOffset),
+            labelAnchor,
             label,
             drawColor,
             fontMetrics);
+        occupiedLabelRects.append(estimateOutlinedLabelRect(labelAnchor, label, fontMetrics));
     }
 
     PROFILER_STOP(__FUNCTION__);

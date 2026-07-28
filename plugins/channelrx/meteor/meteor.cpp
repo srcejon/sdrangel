@@ -17,7 +17,6 @@
 
 #include <cmath>
 #include <limits>
-#include <type_traits>
 
 #include <QDebug>
 
@@ -28,7 +27,6 @@
 
 #include "device/deviceapi.h"
 #include "dsp/dspcommands.h"
-#include "settings/serializable.h"
 
 #include "meteor.h"
 
@@ -40,118 +38,6 @@ const char * const Meteor::m_channelId = "Meteor";
 
 namespace {
     constexpr int CameraEventExpirySeconds = 10 * 60;
-
-    // Keep the source buildable between editing Meteor.yaml and regenerating Swagger.
-    // Once the generated class exposes these properties, overload resolution selects the
-    // typed implementations automatically.
-    template<typename T>
-    auto formatBlobSensitivity(T *swg, float value, int)
-        -> decltype(swg->setBlobSensitivity(value), void())
-    {
-        swg->setBlobSensitivity(value);
-    }
-
-    template<typename T>
-    void formatBlobSensitivity(T *, float, long)
-    {
-    }
-
-    template<typename T>
-    auto readBlobSensitivity(T *swg, float& value, int)
-        -> decltype(swg->getBlobSensitivity(), bool())
-    {
-        value = swg->getBlobSensitivity();
-        return true;
-    }
-
-    template<typename T>
-    bool readBlobSensitivity(T *, float&, long)
-    {
-        return false;
-    }
-
-    template<typename T>
-    auto formatReceiverPositionSet(T *swg, bool value, int)
-        -> decltype(swg->setReceiverPositionSet((qint32) value), void())
-    {
-        swg->setReceiverPositionSet(value ? 1 : 0);
-    }
-
-    template<typename T>
-    void formatReceiverPositionSet(T *, bool, long)
-    {
-    }
-
-    template<typename T>
-    auto readReceiverPositionSet(T *swg, bool& value, int)
-        -> decltype(swg->getReceiverPositionSet(), bool())
-    {
-        const qint32 apiValue = swg->getReceiverPositionSet();
-        if ((apiValue != 0) && (apiValue != 1)) {
-            return false;
-        }
-        value = apiValue != 0;
-        return true;
-    }
-
-    template<typename T>
-    bool readReceiverPositionSet(T *, bool&, long)
-    {
-        return false;
-    }
-
-    template<typename T>
-    auto formatHeadSpectrum(T *swg, const Serializable *spectrum, int)
-        -> decltype(swg->getHeadSpectrumGui(), swg->setHeadSpectrumGui(nullptr), void())
-    {
-        if (!spectrum) {
-            return;
-        }
-
-        auto *apiSpectrum = swg->getHeadSpectrumGui();
-        if (!apiSpectrum)
-        {
-            using SpectrumType = std::remove_pointer_t<decltype(apiSpectrum)>;
-            apiSpectrum = new SpectrumType();
-            swg->setHeadSpectrumGui(apiSpectrum);
-        }
-        spectrum->formatTo(apiSpectrum);
-    }
-
-    template<typename T>
-    void formatHeadSpectrum(T *, const Serializable *, long)
-    {
-    }
-
-    template<typename T>
-    auto updateHeadSpectrum(
-        T *swg,
-        Serializable *spectrum,
-        const QStringList& keys,
-        QString& errorMessage,
-        int)
-        -> decltype(swg->getHeadSpectrumGui(), bool())
-    {
-        if (!swg->getHeadSpectrumGui())
-        {
-            errorMessage = "headSpectrumGUI must not be null";
-            return false;
-        }
-        spectrum->updateFrom(keys, swg->getHeadSpectrumGui());
-        return true;
-    }
-
-    template<typename T>
-    bool updateHeadSpectrum(
-        T *,
-        Serializable *,
-        const QStringList&,
-        QString& errorMessage,
-        long)
-    {
-        errorMessage = "headSpectrumGUI requires regenerated Swagger files";
-        return false;
-    }
 }
 
 Meteor::Meteor(DeviceAPI *deviceAPI) :
@@ -648,7 +534,7 @@ void Meteor::webapiFormatChannelSettings(
     swg->setFrequencyMode((int) settings.m_frequencyMode);
     swg->setFrequency(settings.m_frequency);
     swg->setChannelSampleRate(settings.m_channelSampleRate);
-    formatBlobSensitivity(swg, settings.m_blobSensitivity, 0);
+    swg->setBlobSensitivity(settings.m_blobSensitivity);
     swg->setMaxDurationMs(settings.m_maxDurationMS);
     swg->setDetectionsTableColumnHidden(settings.m_detectionsTableColumnHidden);
     swg->setDetectionBoxPaddingPixels(settings.m_detectionBoxPaddingPixels);
@@ -661,7 +547,7 @@ void Meteor::webapiFormatChannelSettings(
     swg->setTransmitterHpbw(settings.m_transmitterHPBW);
     swg->setReceiverLatitude(settings.m_receiverLatitude);
     swg->setReceiverLongitude(settings.m_receiverLongitude);
-    formatReceiverPositionSet(swg, settings.m_receiverPositionSet, 0);
+    swg->setReceiverPositionSet(settings.m_receiverPositionSet ? 1 : 0);
     swg->setAntennaAzimuth(settings.m_antennaAzimuth);
     swg->setAntennaElevation(settings.m_antennaElevation);
     swg->setAntennaBeamwidth(settings.m_antennaBeamwidth);
@@ -707,7 +593,17 @@ void Meteor::webapiFormatChannelSettings(
             swg->setSpectrumGui(swgSpectrumGUI);
         }
     }
-    formatHeadSpectrum(swg, settings.m_headSpectrumGUI, 0);
+
+    if (settings.m_headSpectrumGUI)
+    {
+        if (swg->getHeadSpectrumGui()) {
+            settings.m_headSpectrumGUI->formatTo(swg->getHeadSpectrumGui());
+        } else {
+            SWGSDRangel::SWGGLSpectrum *swgHeadSpectrumGUI = new SWGSDRangel::SWGGLSpectrum();
+            settings.m_headSpectrumGUI->formatTo(swgHeadSpectrumGUI);
+            swg->setHeadSpectrumGui(swgHeadSpectrumGUI);
+        }
+    }
 
     if (settings.m_rollupState)
     {
@@ -758,11 +654,8 @@ bool Meteor::webapiUpdateChannelSettings(
     if (channelSettingsKeys.contains("channelSampleRate")) {
         updatedSettings.m_channelSampleRate = swg->getChannelSampleRate();
     }
-    if (channelSettingsKeys.contains("blobSensitivity")
-        && !readBlobSensitivity(swg, updatedSettings.m_blobSensitivity, 0))
-    {
-        errorMessage = "blobSensitivity requires regenerated Swagger files";
-        return false;
+    if (channelSettingsKeys.contains("blobSensitivity")) {
+        updatedSettings.m_blobSensitivity = swg->getBlobSensitivity();
     }
     if (channelSettingsKeys.contains("maxDurationMS")) {
         updatedSettings.m_maxDurationMS = swg->getMaxDurationMs();
@@ -815,11 +708,12 @@ bool Meteor::webapiUpdateChannelSettings(
     }
     if (channelSettingsKeys.contains("receiverPositionSet"))
     {
-        if (!readReceiverPositionSet(swg, updatedSettings.m_receiverPositionSet, 0))
+        if ((swg->getReceiverPositionSet() != 0) && (swg->getReceiverPositionSet() != 1))
         {
-            errorMessage = "receiverPositionSet must be 0 or 1 and requires regenerated Swagger files";
+            errorMessage = "receiverPositionSet must be 0 or 1";
             return false;
         }
+        updatedSettings.m_receiverPositionSet = swg->getReceiverPositionSet() != 0;
     }
     else if (receiverPositionUpdated) {
         updatedSettings.m_receiverPositionSet = true;
@@ -899,6 +793,13 @@ bool Meteor::webapiUpdateChannelSettings(
         errorMessage = "spectrumGUI must not be null";
         return false;
     }
+    if (settings.m_headSpectrumGUI
+        && channelSettingsKeys.contains("headSpectrumGUI")
+        && !swg->getHeadSpectrumGui())
+    {
+        errorMessage = "headSpectrumGUI must not be null";
+        return false;
+    }
     if (settings.m_rollupState && channelSettingsKeys.contains("rollupState") && !swg->getRollupState())
     {
         errorMessage = "rollupState must not be null";
@@ -913,16 +814,8 @@ bool Meteor::webapiUpdateChannelSettings(
     if (settings.m_spectrumGUI && channelSettingsKeys.contains("spectrumGUI")) {
         settings.m_spectrumGUI->updateFrom(channelSettingsKeys, swg->getSpectrumGui());
     }
-    if (settings.m_headSpectrumGUI
-        && channelSettingsKeys.contains("headSpectrumGUI")
-        && !updateHeadSpectrum(
-            swg,
-            settings.m_headSpectrumGUI,
-            channelSettingsKeys,
-            errorMessage,
-            0))
-    {
-        return false;
+    if (settings.m_headSpectrumGUI && channelSettingsKeys.contains("headSpectrumGUI")) {
+        settings.m_headSpectrumGUI->updateFrom(channelSettingsKeys, swg->getHeadSpectrumGui());
     }
     if (settings.m_rollupState && channelSettingsKeys.contains("rollupState")) {
         settings.m_rollupState->updateFrom(channelSettingsKeys, swg->getRollupState());

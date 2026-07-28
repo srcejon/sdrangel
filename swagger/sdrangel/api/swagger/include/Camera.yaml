@@ -634,6 +634,18 @@ CameraSettings:
           * 0 - Ursa Major
           * 1 - Orion
           * 2 - Crux
+          * 3 - Auriga
+          * 4 - Bootes
+          * 5 - Canis Major
+          * 6 - Cassiopeia
+          * 7 - Cygnus
+          * 8 - Gemini
+          * 9 - Leo
+          * 10 - Lyra
+          * 11 - Pegasus
+          * 12 - Sagittarius
+          * 13 - Scorpius
+          * 14 - Taurus
       type: integer
     messier:
       description: "Draw Messier object overlay (1 for yes, 0 for no)"

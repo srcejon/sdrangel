@@ -249,7 +249,19 @@ struct CameraSettings
     {
         ConstellationOverlayUrsaMajor = 0,
         ConstellationOverlayOrion,
-        ConstellationOverlayCrux
+        ConstellationOverlayCrux,
+        ConstellationOverlayAuriga,
+        ConstellationOverlayBootes,
+        ConstellationOverlayCanisMajor,
+        ConstellationOverlayCassiopeia,
+        ConstellationOverlayCygnus,
+        ConstellationOverlayGemini,
+        ConstellationOverlayLeo,
+        ConstellationOverlayLyra,
+        ConstellationOverlayPegasus,
+        ConstellationOverlaySagittarius,
+        ConstellationOverlayScorpius,
+        ConstellationOverlayTaurus
     };
 
     enum PlateSolveApplyMode

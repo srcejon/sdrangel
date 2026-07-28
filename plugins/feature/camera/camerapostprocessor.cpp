@@ -342,6 +342,115 @@ const std::array<EquatorialStar, 4> kCruxStars = {{
     {187.791667, -57.113333}  // Delta Crucis
 }};
 
+const std::array<EquatorialStar, 6> kAurigaStars = {{
+    {79.172333, 45.997991},  // Capella
+    {89.882179, 44.947433},  // Menkalinan
+    {89.930292, 37.212585},  // Mahasim
+    {81.572917, 28.607450},  // Elnath (shared with Taurus)
+    {74.248421, 33.166100},  // Hassaleh
+    {75.492219, 43.823308}   // Almaaz
+}};
+
+const std::array<EquatorialStar, 6> kBootesStars = {{
+    {213.915300, 19.182410}, // Arcturus
+    {221.246763, 27.074222}, // Izar
+    {208.671161, 18.397717}, // Muphrid
+    {218.019466, 38.308253}, // Seginus
+    {225.486510, 40.390567}, // Nekkar
+    {228.875640, 33.314833}  // Delta Bootis
+}};
+
+const std::array<EquatorialStar, 5> kCanisMajorStars = {{
+    {101.287155, -16.716116}, // Sirius
+    {95.674939,  -17.955919}, // Mirzam
+    {107.097850, -26.393200}, // Wezen
+    {104.656453, -28.972086}, // Adhara
+    {111.023760, -29.303106}  // Aludra
+}};
+
+const std::array<EquatorialStar, 5> kCassiopeiaStars = {{
+    {2.294522,  59.149781},  // Caph
+    {10.126838, 56.537331},  // Schedar
+    {14.177077, 60.716745},  // Gamma Cassiopeiae
+    {21.454025, 60.235283},  // Ruchbah
+    {28.598875, 63.670101}   // Segin
+}};
+
+const std::array<EquatorialStar, 5> kCygnusStars = {{
+    {310.357980, 45.280339}, // Deneb
+    {305.557091, 40.256679}, // Sadr
+    {292.680351, 27.959692}, // Albireo
+    {296.243658, 45.130810}, // Delta Cygni
+    {311.552843, 33.970256}  // Gienah
+}};
+
+const std::array<EquatorialStar, 6> kGeminiStars = {{
+    {113.649428, 31.888276}, // Castor
+    {116.328958, 28.026199}, // Pollux
+    {99.427960,  16.399280}, // Alhena
+    {95.740087,  22.513583}, // Tejat
+    {100.983026, 25.131112}, // Mebsuta
+    {110.030749, 21.982316}  // Wasat
+}};
+
+const std::array<EquatorialStar, 7> kLeoStars = {{
+    {152.092962, 11.967209}, // Regulus
+    {177.264910, 14.572058}, // Denebola
+    {154.993144, 19.841489}, // Algieba
+    {168.527089, 20.523718}, // Zosma
+    {146.462814, 23.774253}, // Algenubi
+    {168.560019, 15.429571}, // Chertan
+    {151.833142, 16.762664}  // Eta Leonis
+}};
+
+const std::array<EquatorialStar, 5> kLyraStars = {{
+    {279.234735, 38.783689}, // Vega
+    {282.519978, 33.362667}, // Sheliak
+    {284.735928, 32.689557}, // Sulafat
+    {283.626186, 36.898611}, // Delta2 Lyrae
+    {281.193017, 37.605122}  // Zeta1 Lyrae
+}};
+
+const std::array<EquatorialStar, 5> kPegasusStars = {{
+    {346.190223, 15.205267}, // Markab
+    {345.943572, 28.082789}, // Scheat
+    {3.308963,   15.183594}, // Algenib
+    {2.096916,   29.090431}, // Alpheratz (square corner)
+    {326.046484, 9.875011}   // Enif
+}};
+
+const std::array<EquatorialStar, 8> kSagittariusStars = {{
+    {276.042993, -34.384616}, // Kaus Australis
+    {283.816360, -26.296724}, // Nunki
+    {285.653043, -29.880105}, // Ascella
+    {275.248508, -29.828104}, // Kaus Media
+    {276.992668, -25.421701}, // Kaus Borealis
+    {271.452025, -30.424090}, // Alnasl
+    {286.735115, -27.670417}, // Tau Sagittarii
+    {281.414391, -26.990778}  // Phi Sagittarii
+}};
+
+const std::array<EquatorialStar, 8> kScorpiusStars = {{
+    {247.351915, -26.432003}, // Antares
+    {263.402167, -37.103824}, // Shaula
+    {264.329711, -42.997824}, // Sargas
+    {240.083359, -22.621710}, // Dschubba
+    {241.359300, -19.805453}, // Acrab
+    {239.712976, -26.114108}, // Pi Scorpii
+    {252.540878, -34.293232}, // Epsilon Scorpii
+    {262.690979, -37.295813}  // Lesath
+}};
+
+const std::array<EquatorialStar, 7> kTaurusStars = {{
+    {68.980163, 16.509302},  // Aldebaran
+    {81.572917, 28.607450},  // Elnath
+    {84.411189, 21.142549},  // Tianguan
+    {64.948349, 15.627643},  // Gamma Tauri (Hyades)
+    {67.154163, 19.180435},  // Ain
+    {67.165586, 15.870882},  // Theta2 Tauri
+    {60.170070, 12.490347}   // Lambda Tauri
+}};
+
 // Messier catalogue for the deep-sky overlay. J2000 positions in degrees (accurate to ~1
 // arcminute — ample for labelling; precession since J2000 is also ~arcminute-level), visual
 // magnitude, apparent major axis in arcminutes, and a type code used to style the marker:
@@ -2933,6 +3042,42 @@ void CameraPostProcessor::applyConstellationOverlay(const CameraPipelineFrame& f
         break;
     case CameraSettings::ConstellationOverlayCrux:
         drawConstellationStars(painter, image, projector, utcDateTime, settings, kCruxStars);
+        break;
+    case CameraSettings::ConstellationOverlayAuriga:
+        drawConstellationStars(painter, image, projector, utcDateTime, settings, kAurigaStars);
+        break;
+    case CameraSettings::ConstellationOverlayBootes:
+        drawConstellationStars(painter, image, projector, utcDateTime, settings, kBootesStars);
+        break;
+    case CameraSettings::ConstellationOverlayCanisMajor:
+        drawConstellationStars(painter, image, projector, utcDateTime, settings, kCanisMajorStars);
+        break;
+    case CameraSettings::ConstellationOverlayCassiopeia:
+        drawConstellationStars(painter, image, projector, utcDateTime, settings, kCassiopeiaStars);
+        break;
+    case CameraSettings::ConstellationOverlayCygnus:
+        drawConstellationStars(painter, image, projector, utcDateTime, settings, kCygnusStars);
+        break;
+    case CameraSettings::ConstellationOverlayGemini:
+        drawConstellationStars(painter, image, projector, utcDateTime, settings, kGeminiStars);
+        break;
+    case CameraSettings::ConstellationOverlayLeo:
+        drawConstellationStars(painter, image, projector, utcDateTime, settings, kLeoStars);
+        break;
+    case CameraSettings::ConstellationOverlayLyra:
+        drawConstellationStars(painter, image, projector, utcDateTime, settings, kLyraStars);
+        break;
+    case CameraSettings::ConstellationOverlayPegasus:
+        drawConstellationStars(painter, image, projector, utcDateTime, settings, kPegasusStars);
+        break;
+    case CameraSettings::ConstellationOverlaySagittarius:
+        drawConstellationStars(painter, image, projector, utcDateTime, settings, kSagittariusStars);
+        break;
+    case CameraSettings::ConstellationOverlayScorpius:
+        drawConstellationStars(painter, image, projector, utcDateTime, settings, kScorpiusStars);
+        break;
+    case CameraSettings::ConstellationOverlayTaurus:
+        drawConstellationStars(painter, image, projector, utcDateTime, settings, kTaurusStars);
         break;
     }
 

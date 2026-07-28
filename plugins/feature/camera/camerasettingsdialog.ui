@@ -6387,6 +6387,66 @@ car</string>
                   <string>Crux</string>
                  </property>
                 </item>
+                <item>
+                 <property name="text">
+                  <string>Auriga</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>Boötes</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>Canis Major</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>Cassiopeia</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>Cygnus</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>Gemini</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>Leo</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>Lyra</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>Pegasus</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>Sagittarius</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>Scorpius</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>Taurus</string>
+                 </property>
+                </item>
                </widget>
               </item>
               <item row="1" column="2">

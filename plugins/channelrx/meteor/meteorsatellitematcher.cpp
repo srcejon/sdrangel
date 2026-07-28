@@ -364,11 +364,6 @@ namespace {
             + sinLatitude * vector.m_z;
     }
 
-    double wrappedAngleDifference(double leftDegrees, double rightDegrees)
-    {
-        return std::fabs(std::remainder(leftDegrees - rightDegrees, 360.0));
-    }
-
     bool siteLookAngles(
         const MovingTargetMatcher::Site& site,
         const Vector3& targetPosition,
@@ -400,12 +395,41 @@ namespace {
         const MeteorSatelliteMatcher::Beam& beam,
         double marginDegrees = 0.0)
     {
+        const double azimuth = azimuthDegrees * Pi / 180.0;
+        const double elevation = elevationDegrees * Pi / 180.0;
+        const double beamAzimuth = beam.m_azimuthDegrees * Pi / 180.0;
+        const double beamElevation = beam.m_elevationDegrees * Pi / 180.0;
+        const Vector3 direction {
+            std::cos(elevation) * std::sin(azimuth),
+            std::cos(elevation) * std::cos(azimuth),
+            std::sin(elevation)
+        };
+        const Vector3 boresight {
+            std::cos(beamElevation) * std::sin(beamAzimuth),
+            std::cos(beamElevation) * std::cos(beamAzimuth),
+            std::sin(beamElevation)
+        };
+        const Vector3 horizontalAxis {
+            std::cos(beamAzimuth),
+            -std::sin(beamAzimuth),
+            0.0
+        };
+        const Vector3 verticalAxis {
+            -std::sin(beamElevation) * std::sin(beamAzimuth),
+            -std::sin(beamElevation) * std::cos(beamAzimuth),
+            std::cos(beamElevation)
+        };
+        const double forward = dot(direction, boresight);
+        const double horizontalOffset = std::fabs(
+            std::atan2(dot(direction, horizontalAxis), forward) * 180.0 / Pi);
+        const double verticalOffset = std::fabs(
+            std::atan2(dot(direction, verticalAxis), forward) * 180.0 / Pi);
         const bool horizontalOK = !(beam.m_horizontalBeamwidthDegrees > 0.0)
-            || (wrappedAngleDifference(azimuthDegrees, beam.m_azimuthDegrees)
-                <= beam.m_horizontalBeamwidthDegrees * 0.5 + marginDegrees);
+            || (beam.m_horizontalBeamwidthDegrees >= 360.0)
+            || (horizontalOffset <= beam.m_horizontalBeamwidthDegrees * 0.5 + marginDegrees);
         const bool verticalOK = !(beam.m_verticalBeamwidthDegrees > 0.0)
-            || (std::fabs(elevationDegrees - beam.m_elevationDegrees)
-                <= beam.m_verticalBeamwidthDegrees * 0.5 + marginDegrees);
+            || (beam.m_verticalBeamwidthDegrees >= 180.0)
+            || (verticalOffset <= beam.m_verticalBeamwidthDegrees * 0.5 + marginDegrees);
         return horizontalOK && verticalOK;
     }
 
@@ -433,6 +457,15 @@ namespace {
             .arg(rx.m_verticalBeamwidthDegrees, 0, 'f', 2)
             .arg(geometry.m_maximumAltitudeM, 0, 'f', 1);
     }
+}
+
+bool MeteorSatelliteMatcher::beamContainsLookDirection(
+    double azimuthDegrees,
+    double elevationDegrees,
+    const Beam& beam,
+    double marginDegrees)
+{
+    return insideBeam(azimuthDegrees, elevationDegrees, beam, marginDegrees);
 }
 
 MeteorSatelliteMatcher::MoonPrediction MeteorSatelliteMatcher::predictMoon(

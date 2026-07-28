@@ -140,21 +140,19 @@ void MeteorDemodSink::feed(const SampleVector::const_iterator& begin, const Samp
 
 bool MeteorDemodSink::flushPendingPulse(bool finalizeSweeps)
 {
+    if (!finalizeSweeps)
+    {
+        // A temporary source stall is not an event boundary. Normal stride processing emits
+        // blobs once the final margin proves they cannot grow. Forcing analysis here could
+        // publish a short meteor which later resumes and classifies as a satellite sweep.
+        return false;
+    }
+
     // Only claim work was done if the detector analysed something new or an unfinished
-    // sweep was retired — otherwise an idle source logs a spurious "flushed" message on
-    // every inactivity tick.
+    // sweep was retired.
     const bool flushedDetector = m_blobDetector.flush();
 
     drainBlobDetections();
-
-    if (!finalizeSweeps) {
-        // Inactivity tick: the stream may resume (the detector keeps its window for
-        // exactly that reason). Keep active sweeps alive too, or a >=2 s data stall
-        // mid-pass emits a half-pass row now and a second row for the same pass after
-        // resume. Sweeps retire through the normal stale path once data flows again,
-        // or here when the stream really ends (stop / teardown).
-        return flushedDetector;
-    }
 
     const bool hadActiveSweeps = !m_activeSweeps.empty();
 
@@ -246,7 +244,6 @@ void MeteorDemodSink::configureBlobDetector()
     cfg.m_sweepMinAbsSlopeHzPerS = m_detectorTunables.m_blob.m_sweepMinAbsSlopeHzPerS;
     cfg.m_sweepMinDurationS = m_detectorTunables.m_blob.m_sweepMinDurationS;
     cfg.m_scoreThreshold = m_detectorTunables.m_blob.m_scoreThreshold;
-    cfg.m_windowSeconds = m_detectorTunables.m_blob.m_windowSeconds;
     cfg.m_minWindowSeconds = m_detectorTunables.m_blob.m_minWindowSeconds;
     cfg.m_emitStrideS = m_detectorTunables.m_blob.m_emitStrideS;
     cfg.m_finalMarginS = m_detectorTunables.m_blob.m_finalMarginS;
@@ -256,6 +253,15 @@ void MeteorDemodSink::configureBlobDetector()
     // Link gap is specified in time so fragment merging is rate-independent (a column gap
     // would shrink at higher sample rates and over-split long meteors).
     cfg.m_linkMaxGapCols = std::max(1, (int) std::llround(m_detectorTunables.m_blob.m_linkGapSeconds / cfg.m_dt));
+    const double maxDurationS = (double) std::max(1, m_settings.m_maxDurationMS) / 1000.0;
+    const double finalContextS = cfg.m_finalMarginS
+        + cfg.m_emitStrideS
+        + cfg.m_linkMaxGapCols * cfg.m_dt;
+    cfg.m_windowSeconds = m_detectorTunables.m_blob.m_windowSeconds;
+
+    if (maxDurationS > cfg.m_windowSeconds) {
+        cfg.m_windowSeconds = maxDurationS + finalContextS;
+    }
     m_blobDetector.configure(cfg);
 
     m_blobBinPower.assign(nfft, 1e-30);
@@ -307,16 +313,7 @@ void MeteorDemodSink::drainBlobDetections()
     for (const MeteorBlobDetector::Blob& blob : blobs)
     {
         if (blob.m_sweepRejected) {
-            // A blob can re-emit grown: if it was already reported as a METEOR and the
-            // grown version now classifies as a sweep, a second (satellite) row for the
-            // same event must not appear. The meteor row stands.
-            if (!overlapsRecentDetection(
-                    blob.m_startSample,
-                    blob.m_endSample,
-                    blob.m_f0,
-                    blob.m_f1)) {
-                addSweepFragment(blob);      // stitch into a consolidated Doppler sweep
-            }
+            addSweepFragment(blob);          // stitch into a consolidated Doppler sweep
         } else if (absorbedByActiveSweep(blob)) {
             // on an established sweep's line — part of the sweep, not a meteor
         } else {
@@ -586,7 +583,7 @@ void MeteorDemodSink::finalizeStaleSweeps(quint64 currentSample, bool force)
     // A sweep is complete once no further fragment can extend it: with stride emission a
     // fragment arrives ~(finalMargin + stride) after it ends, so a continuation fragment
     // (starting within the link gap, lasting up to ~a window) is all in by window + gap.
-    const double settleS = m_detectorTunables.m_blob.m_windowSeconds
+    const double settleS = m_blobDetector.config().m_windowSeconds
         + m_detectorTunables.m_blob.m_sweepLinkMaxGapS;
     for (size_t i = 0; i < m_activeSweeps.size();)
     {
@@ -1415,7 +1412,9 @@ void MeteorDemodSink::applySettings(const MeteorSettings& settings, const QStrin
         m_blobDetector.setScoreThreshold(m_settings.m_blobSensitivity);
     }
 
-    if (!sampleRateChanged && historyChanged) {
+    if (!sampleRateChanged && historyChanged)
+    {
         configureDetectionHistory();
+        configureBlobDetector();
     }
 }

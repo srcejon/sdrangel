@@ -17,15 +17,18 @@
 
 #include <cmath>
 #include <limits>
+#include <type_traits>
 
 #include <QDebug>
 
 #include "SWGChannelSettings.h"
+#include "SWGGLSpectrum.h"
 #include "SWGMeteorSettings.h"
 #include "SWGWorkspaceInfo.h"
 
 #include "device/deviceapi.h"
 #include "dsp/dspcommands.h"
+#include "settings/serializable.h"
 
 #include "meteor.h"
 
@@ -37,6 +40,118 @@ const char * const Meteor::m_channelId = "Meteor";
 
 namespace {
     constexpr int CameraEventExpirySeconds = 10 * 60;
+
+    // Keep the source buildable between editing Meteor.yaml and regenerating Swagger.
+    // Once the generated class exposes these properties, overload resolution selects the
+    // typed implementations automatically.
+    template<typename T>
+    auto formatBlobSensitivity(T *swg, float value, int)
+        -> decltype(swg->setBlobSensitivity(value), void())
+    {
+        swg->setBlobSensitivity(value);
+    }
+
+    template<typename T>
+    void formatBlobSensitivity(T *, float, long)
+    {
+    }
+
+    template<typename T>
+    auto readBlobSensitivity(T *swg, float& value, int)
+        -> decltype(swg->getBlobSensitivity(), bool())
+    {
+        value = swg->getBlobSensitivity();
+        return true;
+    }
+
+    template<typename T>
+    bool readBlobSensitivity(T *, float&, long)
+    {
+        return false;
+    }
+
+    template<typename T>
+    auto formatReceiverPositionSet(T *swg, bool value, int)
+        -> decltype(swg->setReceiverPositionSet((qint32) value), void())
+    {
+        swg->setReceiverPositionSet(value ? 1 : 0);
+    }
+
+    template<typename T>
+    void formatReceiverPositionSet(T *, bool, long)
+    {
+    }
+
+    template<typename T>
+    auto readReceiverPositionSet(T *swg, bool& value, int)
+        -> decltype(swg->getReceiverPositionSet(), bool())
+    {
+        const qint32 apiValue = swg->getReceiverPositionSet();
+        if ((apiValue != 0) && (apiValue != 1)) {
+            return false;
+        }
+        value = apiValue != 0;
+        return true;
+    }
+
+    template<typename T>
+    bool readReceiverPositionSet(T *, bool&, long)
+    {
+        return false;
+    }
+
+    template<typename T>
+    auto formatHeadSpectrum(T *swg, const Serializable *spectrum, int)
+        -> decltype(swg->getHeadSpectrumGui(), swg->setHeadSpectrumGui(nullptr), void())
+    {
+        if (!spectrum) {
+            return;
+        }
+
+        auto *apiSpectrum = swg->getHeadSpectrumGui();
+        if (!apiSpectrum)
+        {
+            using SpectrumType = std::remove_pointer_t<decltype(apiSpectrum)>;
+            apiSpectrum = new SpectrumType();
+            swg->setHeadSpectrumGui(apiSpectrum);
+        }
+        spectrum->formatTo(apiSpectrum);
+    }
+
+    template<typename T>
+    void formatHeadSpectrum(T *, const Serializable *, long)
+    {
+    }
+
+    template<typename T>
+    auto updateHeadSpectrum(
+        T *swg,
+        Serializable *spectrum,
+        const QStringList& keys,
+        QString& errorMessage,
+        int)
+        -> decltype(swg->getHeadSpectrumGui(), bool())
+    {
+        if (!swg->getHeadSpectrumGui())
+        {
+            errorMessage = "headSpectrumGUI must not be null";
+            return false;
+        }
+        spectrum->updateFrom(keys, swg->getHeadSpectrumGui());
+        return true;
+    }
+
+    template<typename T>
+    bool updateHeadSpectrum(
+        T *,
+        Serializable *,
+        const QStringList&,
+        QString& errorMessage,
+        long)
+    {
+        errorMessage = "headSpectrumGUI requires regenerated Swagger files";
+        return false;
+    }
 }
 
 Meteor::Meteor(DeviceAPI *deviceAPI) :
@@ -533,15 +648,25 @@ void Meteor::webapiFormatChannelSettings(
     swg->setFrequencyMode((int) settings.m_frequencyMode);
     swg->setFrequency(settings.m_frequency);
     swg->setChannelSampleRate(settings.m_channelSampleRate);
+    formatBlobSensitivity(swg, settings.m_blobSensitivity, 0);
     swg->setMaxDurationMs(settings.m_maxDurationMS);
     swg->setDetectionsTableColumnHidden(settings.m_detectionsTableColumnHidden);
     swg->setDetectionBoxPaddingPixels(settings.m_detectionBoxPaddingPixels);
     swg->setDetectionLabelMode((int) settings.m_detectionLabelMode);
     swg->setTransmitterLatitude(settings.m_transmitterLatitude);
     swg->setTransmitterLongitude(settings.m_transmitterLongitude);
+    swg->setTransmitterAzimuth(settings.m_transmitterAzimuth);
+    swg->setTransmitterElevation(settings.m_transmitterElevation);
+    swg->setTransmitterBeamwidth(settings.m_transmitterBeamwidth);
+    swg->setTransmitterHpbw(settings.m_transmitterHPBW);
+    swg->setReceiverLatitude(settings.m_receiverLatitude);
+    swg->setReceiverLongitude(settings.m_receiverLongitude);
+    formatReceiverPositionSet(swg, settings.m_receiverPositionSet, 0);
     swg->setAntennaAzimuth(settings.m_antennaAzimuth);
     swg->setAntennaElevation(settings.m_antennaElevation);
     swg->setAntennaBeamwidth(settings.m_antennaBeamwidth);
+    swg->setShowAntennaPatterns(settings.m_showAntennaPatterns ? 1 : 0);
+    swg->setMapMaxAltitudeKm(settings.m_mapMaxAltitudeKM);
 
     if (swg->getRotator()) {
         *swg->getRotator() = settings.m_rotator;
@@ -582,6 +707,7 @@ void Meteor::webapiFormatChannelSettings(
             swg->setSpectrumGui(swgSpectrumGUI);
         }
     }
+    formatHeadSpectrum(swg, settings.m_headSpectrumGUI, 0);
 
     if (settings.m_rollupState)
     {
@@ -632,6 +758,12 @@ bool Meteor::webapiUpdateChannelSettings(
     if (channelSettingsKeys.contains("channelSampleRate")) {
         updatedSettings.m_channelSampleRate = swg->getChannelSampleRate();
     }
+    if (channelSettingsKeys.contains("blobSensitivity")
+        && !readBlobSensitivity(swg, updatedSettings.m_blobSensitivity, 0))
+    {
+        errorMessage = "blobSensitivity requires regenerated Swagger files";
+        return false;
+    }
     if (channelSettingsKeys.contains("maxDurationMS")) {
         updatedSettings.m_maxDurationMS = swg->getMaxDurationMs();
     }
@@ -658,6 +790,40 @@ bool Meteor::webapiUpdateChannelSettings(
     if (channelSettingsKeys.contains("transmitterLongitude")) {
         updatedSettings.m_transmitterLongitude = swg->getTransmitterLongitude();
     }
+    if (channelSettingsKeys.contains("transmitterAzimuth")) {
+        updatedSettings.m_transmitterAzimuth = swg->getTransmitterAzimuth();
+    }
+    if (channelSettingsKeys.contains("transmitterElevation")) {
+        updatedSettings.m_transmitterElevation = swg->getTransmitterElevation();
+    }
+    if (channelSettingsKeys.contains("transmitterBeamwidth")) {
+        updatedSettings.m_transmitterBeamwidth = swg->getTransmitterBeamwidth();
+    }
+    if (channelSettingsKeys.contains("transmitterHPBW")) {
+        updatedSettings.m_transmitterHPBW = swg->getTransmitterHpbw();
+    }
+    bool receiverPositionUpdated = false;
+    if (channelSettingsKeys.contains("receiverLatitude"))
+    {
+        updatedSettings.m_receiverLatitude = swg->getReceiverLatitude();
+        receiverPositionUpdated = true;
+    }
+    if (channelSettingsKeys.contains("receiverLongitude"))
+    {
+        updatedSettings.m_receiverLongitude = swg->getReceiverLongitude();
+        receiverPositionUpdated = true;
+    }
+    if (channelSettingsKeys.contains("receiverPositionSet"))
+    {
+        if (!readReceiverPositionSet(swg, updatedSettings.m_receiverPositionSet, 0))
+        {
+            errorMessage = "receiverPositionSet must be 0 or 1 and requires regenerated Swagger files";
+            return false;
+        }
+    }
+    else if (receiverPositionUpdated) {
+        updatedSettings.m_receiverPositionSet = true;
+    }
     if (channelSettingsKeys.contains("antennaAzimuth")) {
         updatedSettings.m_antennaAzimuth = swg->getAntennaAzimuth();
     }
@@ -666,6 +832,18 @@ bool Meteor::webapiUpdateChannelSettings(
     }
     if (channelSettingsKeys.contains("antennaBeamwidth")) {
         updatedSettings.m_antennaBeamwidth = swg->getAntennaBeamwidth();
+    }
+    if (channelSettingsKeys.contains("showAntennaPatterns"))
+    {
+        if ((swg->getShowAntennaPatterns() != 0) && (swg->getShowAntennaPatterns() != 1))
+        {
+            errorMessage = "showAntennaPatterns must be 0 or 1";
+            return false;
+        }
+        updatedSettings.m_showAntennaPatterns = swg->getShowAntennaPatterns() != 0;
+    }
+    if (channelSettingsKeys.contains("mapMaxAltitudeKM")) {
+        updatedSettings.m_mapMaxAltitudeKM = swg->getMapMaxAltitudeKm();
     }
     if (channelSettingsKeys.contains("rotator"))
     {
@@ -735,6 +913,17 @@ bool Meteor::webapiUpdateChannelSettings(
     if (settings.m_spectrumGUI && channelSettingsKeys.contains("spectrumGUI")) {
         settings.m_spectrumGUI->updateFrom(channelSettingsKeys, swg->getSpectrumGui());
     }
+    if (settings.m_headSpectrumGUI
+        && channelSettingsKeys.contains("headSpectrumGUI")
+        && !updateHeadSpectrum(
+            swg,
+            settings.m_headSpectrumGUI,
+            channelSettingsKeys,
+            errorMessage,
+            0))
+    {
+        return false;
+    }
     if (settings.m_rollupState && channelSettingsKeys.contains("rollupState")) {
         settings.m_rollupState->updateFrom(channelSettingsKeys, swg->getRollupState());
     }
@@ -764,6 +953,13 @@ bool Meteor::validateChannelSettings(const MeteorSettings& settings, QString& er
     if ((settings.m_maxDurationMS < 1) || (settings.m_maxDurationMS > 60000))
     {
         errorMessage = "maxDurationMS must be between 1 and 60000";
+        return false;
+    }
+    if (!std::isfinite(settings.m_blobSensitivity)
+        || (settings.m_blobSensitivity < 10.0f)
+        || (settings.m_blobSensitivity > 10000.0f))
+    {
+        errorMessage = "blobSensitivity must be finite and between 10.0 and 10000.0";
         return false;
     }
     if ((settings.m_detectionBoxPaddingPixels < 0) || (settings.m_detectionBoxPaddingPixels > 100))

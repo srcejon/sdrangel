@@ -23,34 +23,17 @@ MeteorSettings:
       type: integer
       minimum: 100
       maximum: 3000
-    powerLPFCutoff:
-      description: "Power envelope low-pass cutoff in Hz"
+    blobSensitivity:
+      description: "Minimum integrated excess-power score for accepting a meteor blob; lower values are more sensitive"
       type: number
       format: float
-      minimum: 0.1
-      maximum: 1350.0
-    detectionThresholdDB:
-      description: "Detection threshold above background in dB"
-      type: number
-      format: float
-      minimum: 1.0
-      maximum: 60.0
-    minDurationMS:
-      description: "Minimum meteor detection duration in milliseconds"
-      type: integer
-      minimum: 1
-      maximum: 10000
+      minimum: 10.0
+      maximum: 10000.0
     maxDurationMS:
       description: "Maximum meteor detection duration in milliseconds"
       type: integer
       minimum: 1
       maximum: 60000
-    maxFrequencyDrift:
-      description: "Maximum allowed detection frequency drift in Hz"
-      type: number
-      format: float
-      minimum: 0.0
-      maximum: 1500.0
     detectionsTableColumnHidden:
       description: "Bit mask of hidden detection table columns"
       type: integer
@@ -117,6 +100,11 @@ MeteorSettings:
       format: double
       minimum: -180.0
       maximum: 180.0
+    receiverPositionSet:
+      description: "Whether the receive antenna position has been explicitly configured"
+      type: integer
+      minimum: 0
+      maximum: 1
     antennaAzimuth:
       description: "Receive antenna azimuth clockwise from true north in degrees"
       type: number
@@ -167,6 +155,8 @@ MeteorSettings:
     channelMarker:
       $ref: "http://swgserver:8081/api/swagger/include/ChannelMarker.yaml#/ChannelMarker"
     spectrumGUI:
+      $ref: "http://swgserver:8081/api/swagger/include/GLSpectrum.yaml#/GLSpectrum"
+    headSpectrumGUI:
       $ref: "http://swgserver:8081/api/swagger/include/GLSpectrum.yaml#/GLSpectrum"
     rollupState:
       $ref: "http://swgserver:8081/api/swagger/include/RollupState.yaml#/RollupState"

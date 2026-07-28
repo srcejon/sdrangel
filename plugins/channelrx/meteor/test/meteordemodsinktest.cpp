@@ -176,6 +176,16 @@ namespace {
 
     bool runMovingTargetMatcherTests(QTextStream& errorStream)
     {
+        const MeteorSatelliteMatcher::Beam zenithBeam {0.0, 90.0, 64.0, 64.0};
+        if (!MeteorSatelliteMatcher::beamContainsLookDirection(0.0, 90.0, zenithBeam)
+            || !MeteorSatelliteMatcher::beamContainsLookDirection(90.0, 70.0, zenithBeam)
+            || !MeteorSatelliteMatcher::beamContainsLookDirection(270.0, 70.0, zenithBeam)
+            || MeteorSatelliteMatcher::beamContainsLookDirection(90.0, 50.0, zenithBeam))
+        {
+            errorStream << "Moving-target matcher test: zenith beam geometry is incorrect\n";
+            return false;
+        }
+
         MovingTargetMatcher::Observation observation;
         observation.m_startDateTimeUtc = QDateTime(
             QDate(2026, 7, 22),

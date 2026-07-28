@@ -124,11 +124,9 @@ bool MeteorBlobDetector::flush()
         return false;                       // nothing new since the last flush
     }
 
-    // Emit everything buffered, ignoring the final margin, but KEEP the window: the
-    // inactivity flush must not wipe the analysis context, or a resuming stream loses
-    // its median floor and waits out the minimum window again. A blob emitted here that
-    // is later extended by resumed columns re-emits longer and is caught by the sink's
-    // overlap dedup.
+    // Emit everything buffered, ignoring the final margin, but keep the window. This is
+    // used only when the stream is ending; inactivity must not publish a provisional
+    // meteor that could grow into a sweep when samples resume.
     processChunk(lastCol);
     m_colsSinceProcess = 0;
     return true;

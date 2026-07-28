@@ -73,7 +73,7 @@ public:
         // ~finalMargin + stride (~1 s), instead of waiting for a chunk boundary (5–15 s).
         // The window must stay much longer than the longest meteor or the per-window median
         // floor absorbs the meteor and truncates its tail (measured earlier).
-        double m_windowSeconds = 20.0;     // rolling stats/analysis window (max intact meteor)
+        double m_windowSeconds = 20.0;     // rolling stats/analysis window
         double m_minWindowSeconds = 10.0;  // don't detect until this much context exists
         double m_emitStrideS = 0.5;        // re-analysis cadence
         double m_finalMarginS = 0.5;       // a blob ending this far behind "now" is final
@@ -130,9 +130,8 @@ public:
                       const std::vector<double>& noiseFloor,
                       std::uint64_t frameCenterSample);
 
-    // Emit everything buffered without waiting for the final margin (end of stream or
-    // inactivity). The analysis window is preserved so a resuming stream keeps its noise
-    // context. Returns true if anything new was analysed.
+    // Emit everything buffered without waiting for the final margin at end of stream.
+    // The analysis window is preserved. Returns true if anything new was analysed.
     bool flush();
 
     // Accepted blobs completed since the last call (moved out).

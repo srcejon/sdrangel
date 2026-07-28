@@ -122,18 +122,14 @@ namespace {
         float m_elevationBeamwidthDegrees;
     };
 
-    // A zenith-pointing beam constrains elevation only: in the az/el box beam test
-    // every azimuth intersects the cone, so the azimuth width must be 360, not the
-    // antenna's physical H-plane width (which would wrongly cull most of the sky
-    // ring around the zenith).
     constexpr TransmitterPreset TransmitterPresets[] = {
         {"GRAVES", 143050000, 47.3480, 5.5151, true,
             MeteorSettings::m_gravesAzimuth,
             MeteorSettings::m_gravesElevation,
             MeteorSettings::m_gravesBeamwidth,
             MeteorSettings::m_gravesHPBW},
-        {"BRAMS",   49970000, 50.0972,  4.5847, true, 0.0f, 90.0f, 360.0f,  64.0f},
-        {"GB3MBA",  50408000, 53.1139, -1.2224, true, 0.0f, 90.0f, 360.0f, 100.0f}
+        {"BRAMS",   49970000, 50.0972,  4.5847, true, 0.0f, 90.0f,  64.0f,  64.0f},
+        {"GB3MBA",  50408000, 53.1139, -1.2224, true, 0.0f, 90.0f, 100.0f, 100.0f}
     };
     constexpr int TransmitterPresetCount =
         (int) (sizeof(TransmitterPresets) / sizeof(TransmitterPresets[0]));

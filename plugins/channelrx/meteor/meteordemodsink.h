@@ -95,8 +95,8 @@ public:
             double m_dashWalkMaxS = 15.0;
             double m_scoreThreshold = 145.0;   // USER SENSITIVITY KNOB (integrated excess dB)
             // Stride scheduling (low latency): rolling window re-analysed every stride; a blob
-            // is emitted ~finalMargin+stride (~1 s) after it ends. Window must stay much longer
-            // than the longest meteor (median floor) — also bounds the max intact duration.
+            // is emitted ~finalMargin+stride (~1 s) after it ends. This is the minimum window;
+            // configureBlobDetector enlarges it to retain maxDurationMS plus final context.
             double m_windowSeconds = 20.0;
             double m_minWindowSeconds = 10.0;
             double m_emitStrideS = 0.5;

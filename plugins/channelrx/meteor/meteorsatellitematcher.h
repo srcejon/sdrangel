@@ -78,6 +78,11 @@ public:
     explicit MeteorSatelliteMatcher(QObject *parent = nullptr);
     ~MeteorSatelliteMatcher() override;
 
+    static bool beamContainsLookDirection(
+        double azimuthDegrees,
+        double elevationDegrees,
+        const Beam& beam,
+        double marginDegrees = 0.0);
     static MoonPrediction predictMoon(
         const MovingTargetMatcher::Observation& observation,
         const Geometry& geometry);

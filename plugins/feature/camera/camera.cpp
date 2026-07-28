@@ -1231,6 +1231,10 @@ void Camera::webapiFormatFeatureSettings(
     swg->setConstellation(settings.m_constellation ? 1 : 0);
     swg->setConstellationColor((qint32) settings.m_constellationColor.rgb());
     swg->setConstellationOverlay((int) settings.m_constellationOverlay);
+    swg->setMessier(settings.m_messier ? 1 : 0);
+    swg->setMessierColor((qint32) settings.m_messierColor.rgb());
+    swg->setMessierMaxMagnitude(settings.m_messierMaxMagnitude);
+    swg->setMessierDetect(settings.m_messierDetect ? 1 : 0);
     swg->setTrackObjects(settings.m_trackObjects ? 1 : 0);
     swg->setTrackObjectMinElevation(settings.m_trackObjectMinElevation);
     swg->setTrackObjectMaxRangeKm(settings.m_trackObjectMaxRangeKm);
@@ -1951,6 +1955,18 @@ void Camera::webapiUpdateFeatureSettings(
     }
     if (featureSettingsKeys.contains("constellationOverlay")) {
         settings.m_constellationOverlay = (CameraSettings::ConstellationOverlay) swg->getConstellationOverlay();
+    }
+    if (featureSettingsKeys.contains("messier")) {
+        settings.m_messier = swg->getMessier() != 0;
+    }
+    if (featureSettingsKeys.contains("messierColor")) {
+        settings.m_messierColor = QColor(swg->getMessierColor());
+    }
+    if (featureSettingsKeys.contains("messierMaxMagnitude")) {
+        settings.m_messierMaxMagnitude = swg->getMessierMaxMagnitude();
+    }
+    if (featureSettingsKeys.contains("messierDetect")) {
+        settings.m_messierDetect = swg->getMessierDetect() != 0;
     }
     if (featureSettingsKeys.contains("trackObjects")) {
         settings.m_trackObjects = swg->getTrackObjects() != 0;

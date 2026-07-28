@@ -5788,6 +5788,20 @@ car</string>
                 </property>
                </widget>
               </item>
+              <item row="5" column="0">
+               <widget class="QLabel" name="plateSolveTimeTextLabel">
+                <property name="text">
+                 <string>Solve time</string>
+                </property>
+               </widget>
+              </item>
+              <item row="5" column="1">
+               <widget class="QLabel" name="plateSolveTimeLabel">
+                <property name="text">
+                 <string>-</string>
+                </property>
+               </widget>
+              </item>
               <item row="0" column="0">
                <widget class="QLabel" name="plateSolveDetectedTextLabel">
                 <property name="text">

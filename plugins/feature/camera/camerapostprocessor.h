@@ -143,6 +143,7 @@ public:
         int getPlateSolveOutlierStars() const { return m_plateSolve.m_outlierStars; }
         float getPlateSolveRmsError() const { return m_plateSolve.m_rmsError; }
         float getPlateSolveMaxError() const { return m_plateSolve.m_maxError; }
+        float getPlateSolveTimeMs() const { return m_plateSolve.m_solveTimeMs; }
         float getPlateSolveAzimuth() const { return m_plateSolve.m_azimuth; }
         float getPlateSolveElevation() const { return m_plateSolve.m_elevation; }
         float getPlateSolveRoll() const { return m_plateSolve.m_roll; }

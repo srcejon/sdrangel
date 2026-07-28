@@ -31,6 +31,7 @@
 #include <QTextDocument>
 #include <QDateTime>
 #include "SWGMapItem.h"
+#include "util/astronomy.h"
 #include "util/azel.h"
 #include "util/weather.h"
 #include "util/profiler.h"
@@ -771,27 +772,62 @@ static bool equatorialToAltAz(double rightAscensionDegrees,
                               double& azimuthDegrees,
                               double& elevationDegrees)
 {
-    const double lstDegrees = normalizeDegrees(greenwichMeanSiderealDegrees(utcDateTime) + longitudeDegrees);
-    double hourAngleDegrees = normalizeDegrees(lstDegrees - rightAscensionDegrees);
-    if (hourAngleDegrees > 180.0) {
-        hourAngleDegrees -= 360.0;
-    }
-
-    const double hourAngle = skyDegToRad(hourAngleDegrees);
-    const double declination = skyDegToRad(declinationDegrees);
-    const double latitude = skyDegToRad(latitudeDegrees);
-
-    const double sinAltitude = std::sin(declination) * std::sin(latitude)
-        + std::cos(declination) * std::cos(latitude) * std::cos(hourAngle);
-    const double altitude = std::asin(std::clamp(sinAltitude, -1.0, 1.0));
-
+    // Overlay projections must live in the SAME sky frame as the plate solver, which precesses
+    // catalogue positions from J2000 to the epoch of observation (buildRaDecToAzAltParams /
+    // raDecToAzAltFast in cameraplatesolvercore.cpp). Raw J2000 coordinates are ~14 arcminutes
+    // stale by the mid-2020s — invisible under a wide constellation overlay, but a ~150 pixel
+    // error on a 1.3-degree telescope field (found via the M51 Messier marker sitting off the
+    // galaxy). This is a copy of the solver's transform — same precession matrix, same sidereal
+    // time source, same azimuth convention — so overlays and solved poses agree exactly.
     static constexpr double kPi = 3.14159265358979323846;
-    const double azimuth = std::atan2(
-        std::sin(hourAngle),
-        std::cos(hourAngle) * std::sin(latitude) - std::tan(declination) * std::cos(latitude)) + kPi;
+    const double lstDegrees = Astronomy::localSiderealTime(utcDateTime, longitudeDegrees);
+    const double jd = Astronomy::julianDate(utcDateTime);
+    const double jdFrom = Astronomy::jd_j2000();
+    const double daysPerCentury = 36524.219878;
+    const double t0 = (jdFrom - Astronomy::jd_b1950()) / daysPerCentury;
+    const double t = (jd - jdFrom) / daysPerCentury;
+    double rot[3][3];
+    rot[0][0] = 1.0 - ((29696.0 + 26.0*t0)*t*t - 13.0*t*t*t)*1e-8;
+    rot[1][0] = ((2234941.0 + 1355.0*t0)*t - 676.0*t*t + 221.0*t*t*t)*1e-8;
+    rot[2][0] = ((971690.0  -  414.0*t0)*t + 207.0*t*t +  96.0*t*t*t)*1e-8;
+    rot[0][1] = -rot[1][0];
+    rot[1][1] = 1.0 - ((24975.0 + 30.0*t0)*t*t - 15.0*t*t*t)*1e-8;
+    rot[2][1] = -((10858.0 + 2.0*t0)*t*t)*1e-8;
+    rot[0][2] = -rot[2][0];
+    rot[1][2] = rot[2][1];
+    rot[2][2] = 1.0 - ((4721.0 - 4.0*t0)*t*t)*1e-8;
 
-    azimuthDegrees = normalizeDegrees(azimuth * 180.0 / M_PI);
-    elevationDegrees = altitude * 180.0 / M_PI;
+    const double raRad = skyDegToRad(rightAscensionDegrees);
+    const double decRad0 = skyDegToRad(declinationDegrees);
+    const double cosDec0 = std::cos(decRad0);
+    const double x = cosDec0 * std::cos(raRad);
+    const double y = cosDec0 * std::sin(raRad);
+    const double z = std::sin(decRad0);
+    const double xp = rot[0][0]*x + rot[0][1]*y + rot[0][2]*z;
+    const double yp = rot[1][0]*x + rot[1][1]*y + rot[1][2]*z;
+    const double zp = rot[2][0]*x + rot[2][1]*y + rot[2][2]*z;
+    const double decRad = std::asin(std::clamp(zp, -1.0, 1.0));
+    const double raPrecRad = std::atan2(yp, xp);
+    const double raPrecDeg = (raPrecRad < 0.0 ? raPrecRad + 2.0 * kPi : raPrecRad) * (180.0 / kPi);
+
+    const double haRad = skyDegToRad(std::fmod(lstDegrees - raPrecDeg, 360.0));
+    const double latRad = skyDegToRad(latitudeDegrees);
+    const double sinLat = std::sin(latRad);
+    const double cosLat = std::cos(latRad);
+    const double sinDec = std::sin(decRad);
+    const double cosDec = std::cos(decRad);
+    const double altRad = std::asin(std::clamp(sinDec * sinLat + cosDec * cosLat * std::cos(haRad), -1.0, 1.0));
+    elevationDegrees = altRad * (180.0 / kPi);
+
+    const double cosAlt = std::cos(altRad);
+    if (std::fabs(cosAlt) < 1e-12)
+    {
+        azimuthDegrees = 0.0;
+        return std::isfinite(elevationDegrees);
+    }
+    const double cosA = std::clamp((sinDec - std::sin(altRad) * sinLat) / (cosAlt * cosLat), -1.0, 1.0);
+    const double a = std::acos(cosA) * (180.0 / kPi);
+    azimuthDegrees = (std::sin(haRad) < 0.0) ? a : 360.0 - a;
     return std::isfinite(azimuthDegrees) && std::isfinite(elevationDegrees);
 }
 

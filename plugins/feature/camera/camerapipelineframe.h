@@ -230,6 +230,7 @@ struct CameraPipelinePlateSolve
     // the ORIGINAL image must set SkyProjector::mirrorX. Detection positions on the frame are
     // already in original-image coordinates.
     bool m_mirrored = false;
+    float m_solveTimeMs = 0.0f;    ///< Wall-clock duration of the plate solve for this frame, in milliseconds
     int m_matchedStars = 0;
     int m_detectedStarsConsidered = 0;
     int m_catalogStarsLoaded = 0;

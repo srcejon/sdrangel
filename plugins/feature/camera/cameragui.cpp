@@ -909,6 +909,7 @@ bool CameraGUI::handleMessage(const Message& message)
         m_lastPlateSolveOutlierStars = report.getPlateSolveOutlierStars();
         m_lastPlateSolveRmsError = report.getPlateSolveRmsError();
         m_lastPlateSolveMaxError = report.getPlateSolveMaxError();
+        m_lastPlateSolveTimeMs = report.getPlateSolveTimeMs();
         m_lastPlateSolveAzimuth = report.getPlateSolveAzimuth();
         m_lastPlateSolveElevation = report.getPlateSolveElevation();
         m_lastPlateSolveRoll = report.getPlateSolveRoll();
@@ -939,6 +940,12 @@ bool CameraGUI::handleMessage(const Message& message)
             m_lastPlateSolved ? QString::number(m_lastPlateSolveDetectedStarsConsidered) : "-");
         settingsUI()->plateSolveRmsLabel->setText(
             m_lastPlateSolved ? tr("%1 / %2").arg(QString::number(m_lastPlateSolveRmsError, 'f', 1)).arg(QString::number(m_lastPlateSolveMaxError, 'f', 1)) : "-");
+        settingsUI()->plateSolveTimeLabel->setText(
+            (m_lastPlateSolveTimeMs > 0.0)
+                ? ((m_lastPlateSolveTimeMs >= 1000.0)
+                    ? tr("%1 s").arg(QString::number(m_lastPlateSolveTimeMs / 1000.0, 'f', 1))
+                    : tr("%1 ms").arg(QString::number(m_lastPlateSolveTimeMs, 'f', 0)))
+                : "-");
 
         settingsUI()->plateSolveApplyButton->setEnabled(m_lastPlateSolved);
         updateImageWidget();
@@ -2045,6 +2052,7 @@ void CameraGUI::resetCameraStatus()
     m_lastPlateSolveOutlierStars = 0;
     m_lastPlateSolveRmsError = 0.0;
     m_lastPlateSolveMaxError = 0.0;
+    m_lastPlateSolveTimeMs = 0.0;
     m_lastPlateSolveAzimuth = 0.0;
     m_lastPlateSolveElevation = 0.0;
     m_lastPlateSolveRoll = 0.0;

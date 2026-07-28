@@ -23,6 +23,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QHash>
+#include <QLocale>
 #include <QMetaObject>
 #include <QNetworkAccessManager>
 #include <QNetworkCookie>
@@ -32,6 +33,7 @@
 #include <QPointer>
 #include <QSaveFile>
 #include <QStandardPaths>
+#include <QStringList>
 #include <QTextStream>
 #include <QThread>
 #include <QTimer>
@@ -86,6 +88,36 @@ namespace {
         "https://www.space-track.org/basicspacedata/query/class/gp/"
         "EPOCH/%3Enow-30/orderby/NORAD_CAT_ID,EPOCH/format/3le";
     constexpr char SpaceTrackCacheName[] = "space-track-gp.3le";
+
+    QDateTime parseHttpDate(const QByteArray& dateHeader)
+    {
+        const QString dateText = QString::fromLatin1(dateHeader).trimmed();
+        QDateTime dateTime = QDateTime::fromString(dateText, Qt::RFC2822Date);
+
+        if (dateTime.isValid()) {
+            return dateTime.toUTC();
+        }
+
+        // HTTP-date uses IMF-fixdate, but recipients should also accept the two
+        // obsolete forms. Parse them explicitly because Qt's RFC 2822 parser
+        // does not consistently accept the named GMT zone.
+        static const QStringList formats {
+            QStringLiteral("ddd, dd MMM yyyy HH:mm:ss 'GMT'"),
+            QStringLiteral("dddd, dd-MMM-yy HH:mm:ss 'GMT'"),
+            QStringLiteral("ddd MMM d HH:mm:ss yyyy")
+        };
+
+        for (const QString& format : formats)
+        {
+            dateTime = QLocale::c().toDateTime(dateText, format);
+
+            if (dateTime.isValid()) {
+                return QDateTime(dateTime.date(), dateTime.time(), Qt::UTC);
+            }
+        }
+
+        return {};
+    }
 
     class MeteorNetworkCookieJar : public QNetworkCookieJar
     {
@@ -816,9 +848,7 @@ private:
             }
             else
             {
-                const QDateTime internetTimeUtc = QDateTime::fromString(
-                    QString::fromLatin1(dateHeader),
-                    Qt::RFC2822Date).toUTC();
+                const QDateTime internetTimeUtc = parseHttpDate(dateHeader);
                 if (!internetTimeUtc.isValid())
                 {
                     m_clockCheckError = dateHeader.isEmpty()

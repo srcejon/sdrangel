@@ -10265,6 +10265,31 @@ void CameraGUI::showStarDetectionInfoDialog(const CameraPipelineStarDetection& s
     QMessageBox::information(this, tr("Star detection"), starDetectionDetails(star));
 }
 
+// Copy the preview to the clipboard as the user sees it: the scene render includes the frame
+// pixmap AND the vector overlay items (star/Messier/grid labels), composed at the image's native
+// resolution rather than the current zoom.
+void CameraGUI::copyPreviewImageToClipboard()
+{
+    if (m_lastImage.isNull()) {
+        return;
+    }
+
+    if (m_imagePixmapItem && ui->imageView->scene())
+    {
+        QImage composed(m_lastImage.size(), QImage::Format_ARGB32);
+        composed.fill(Qt::black);
+        QPainter painter(&composed);
+        painter.setRenderHint(QPainter::Antialiasing);
+        painter.setRenderHint(QPainter::TextAntialiasing);
+        ui->imageView->scene()->render(&painter, QRectF(composed.rect()), m_imagePixmapItem->sceneBoundingRect());
+        painter.end();
+        QApplication::clipboard()->setImage(composed);
+        return;
+    }
+
+    QApplication::clipboard()->setImage(m_lastImage);
+}
+
 bool CameraGUI::showStarDetectionContextMenu(const QPoint& viewportPos, const QPoint& globalPos)
 {
     if (m_lastImage.isNull() || !m_imagePixmapItem || m_lastStarDetections.isEmpty()) {
@@ -10292,6 +10317,8 @@ bool CameraGUI::showStarDetectionContextMenu(const QPoint& viewportPos, const QP
     QAction *simbadAction = menu.addAction(tr("Open in SIMBAD"));
     QAction *copyNameAction = menu.addAction(tr("Copy name"));
     QAction *copyDetailsAction = menu.addAction(tr("Copy details"));
+    menu.addSeparator();
+    QAction *copyImageAction = menu.addAction(tr("Copy image"));
 
     const bool hasTarget = !target.isEmpty();
     skyMapAction->setEnabled(hasTarget);
@@ -10324,6 +10351,10 @@ bool CameraGUI::showStarDetectionContextMenu(const QPoint& viewportPos, const QP
     else if (selectedAction == copyDetailsAction)
     {
         QApplication::clipboard()->setText(starDetectionDetails(star));
+    }
+    else if (selectedAction == copyImageAction)
+    {
+        copyPreviewImageToClipboard();
     }
 
     return true;
@@ -12635,6 +12666,18 @@ bool CameraGUI::eventFilter(QObject *watched, QEvent *event)
                 const QPoint globalPos = mouseEvent->globalPos();
 #endif
                 if (showStarDetectionContextMenu(mouseEvent->pos(), globalPos)) {
+                    return true;
+                }
+                // No star under the cursor: still offer the image-level actions, anywhere in
+                // the preview.
+                if (!m_lastImage.isNull())
+                {
+                    QMenu menu(this);
+                    QAction *copyImageAction = menu.addAction(tr("Copy image"));
+                    const QAction *selectedAction = menu.exec(globalPos);
+                    if (selectedAction == copyImageAction) {
+                        copyPreviewImageToClipboard();
+                    }
                     return true;
                 }
             }

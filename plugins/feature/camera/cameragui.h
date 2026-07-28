@@ -476,6 +476,7 @@ private:
     QString starDetectionDetails(const CameraPipelineStarDetection& star) const;
     QString starDetectionSearchTarget(const CameraPipelineStarDetection& star) const;
     void showStarDetectionInfoDialog(const CameraPipelineStarDetection& star);
+    void copyPreviewImageToClipboard();
     void populateDirectionSourceCombo();
     void updateDirectionSensorOpticalAxis();
     void startDirectionSensors();

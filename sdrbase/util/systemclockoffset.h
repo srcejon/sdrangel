@@ -126,6 +126,7 @@ private:
     QString m_ntpLastError;
     QList<NtpSample> m_ntpSamples;
     Measurement m_measurement;
+    Measurement m_lastSuccessfulMeasurement;
 };
 
 Q_DECLARE_METATYPE(SystemClockOffset::Measurement)

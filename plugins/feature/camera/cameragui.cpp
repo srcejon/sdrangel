@@ -1674,7 +1674,7 @@ void CameraGUI::createDrawingControls()
     layout->addWidget(m_drawingRedoButton);
 
     m_drawingDeleteButton = new QToolButton(m_drawingToolbar);
-    m_drawingDeleteButton->setIcon(QIcon(QStringLiteral(":/preset-delete.png")));
+    m_drawingDeleteButton->setIcon(QIcon(QStringLiteral(":/bin.png")));
     m_drawingDeleteButton->setToolTip(tr("Delete selected drawings"));
     layout->addWidget(m_drawingDeleteButton);
 

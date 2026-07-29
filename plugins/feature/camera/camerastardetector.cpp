@@ -1215,17 +1215,32 @@ bool CameraStarDetector::applyStarDetection(
             const double centerY = mu.m01 / mu.m00;
             const cv::Rect box = cv::boundingRect(contour);
 
-            // Dedupe: if an existing detection already lies inside this saturated core
-            // (its centroid within roughly the core radius), the star is already
-            // represented by the normal pipeline — skip it.
+            // Dedupe: skip only when an existing detection actually REPRESENTS this core.
+            // Falling inside the core's radius is not sufficient — the erased rim of a big
+            // bloomed star leaves tiny specks around its edge, and such a speck would
+            // otherwise suppress the very star it is an artifact of (measured on Vega: a
+            // 1.1px speck 26px from a 50px-wide core, inside the old 29px radius, hid the
+            // star entirely). So a detection near the rim only counts when its own extent is
+            // a meaningful fraction of the core; anything sitting essentially on the centroid
+            // counts regardless of size, since that is a usable position for the star.
+            const double coreRadius = std::sqrt(area / CV_PI);
             const double dedupeRadius = 0.5 * std::max(box.width, box.height) + 4.0;
             const double dedupeRadiusSq = dedupeRadius * dedupeRadius;
+            const double centreRadius = std::max(3.0, 0.25 * coreRadius);
+            const double centreRadiusSq = centreRadius * centreRadius;
+            const double representativeRadius = 0.35 * coreRadius;
             const QPointF center(centerX + roi.x, centerY + roi.y);
             bool alreadyDetected = false;
             for (const CameraPipelineStarDetection& existing : starDetections) {
                 const double dx = existing.m_center.x() - center.x();
                 const double dy = existing.m_center.y() - center.y();
-                if ((dx * dx + dy * dy) <= dedupeRadiusSq) {
+                const double distanceSq = dx * dx + dy * dy;
+                if (distanceSq <= centreRadiusSq) {
+                    alreadyDetected = true;
+                    break;
+                }
+                if ((distanceSq <= dedupeRadiusSq)
+                    && (static_cast<double>(existing.m_radius) >= representativeRadius)) {
                     alreadyDetected = true;
                     break;
                 }

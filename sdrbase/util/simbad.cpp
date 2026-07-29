@@ -24,7 +24,6 @@
 #include <QNetworkRequest>
 #include <QRegularExpression>
 #include <QUrl>
-#include <QUrlQuery>
 
 namespace {
 
@@ -78,17 +77,14 @@ void Simbad::lookup(const QString& identifier)
         "format object \"SDRANGEL_SIMBAD|%IDLIST(1)|%12.8COO(d;A;ICRS;J2000;2000)|%+12.8COO(d;D;ICRS;J2000;2000)\"\n"
         "query id %1").arg(trimmedIdentifier);
 
-    QUrl url(SIMBAD_URL);
-    QUrlQuery query;
-    query.addQueryItem(QStringLiteral("script"), script);
-    url.setQuery(query);
-
-    QNetworkRequest request(url);
+    QNetworkRequest request{QUrl(SIMBAD_URL)};
     request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
     request.setRawHeader("Accept", "text/plain");
+    request.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/x-www-form-urlencoded"));
     request.setRawHeader("User-Agent", "SDRangel SIMBAD resolver");
 
-    QNetworkReply *reply = m_networkManager->get(request);
+    const QByteArray formData = QByteArrayLiteral("script=") + QUrl::toPercentEncoding(script);
+    QNetworkReply *reply = m_networkManager->post(request, formData);
     reply->setProperty(IDENTIFIER_PROPERTY, trimmedIdentifier);
 }
 

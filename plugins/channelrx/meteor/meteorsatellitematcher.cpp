@@ -30,6 +30,7 @@
 #include <QNetworkRequest>
 #include <QPointer>
 #include <QSaveFile>
+#include <QSet>
 #include <QStandardPaths>
 #include <QStringList>
 #include <QTextStream>
@@ -768,6 +769,125 @@ public:
             Qt::QueuedConnection);
     }
 
+    void requestCalibration(
+        const QVector<MovingTargetMatcher::Observation>& observations,
+        const MeteorSatelliteMatcher::Geometry& geometry)
+    {
+        MeteorSatelliteMatcher::CalibrationResult result;
+        result.m_observationCount = observations.size();
+
+#ifdef METEOR_HAS_SGP4
+        if (m_catalog.empty())
+        {
+            result.m_error = m_downloadInProgress
+                ? QStringLiteral("The orbital catalog is still loading")
+                : QStringLiteral("No orbital catalog is available");
+        }
+        else
+        {
+            const QVector<CalibrationObservationModel> models =
+                buildCalibrationModels(observations, geometry);
+            result.m_modelledObservationCount = models.size();
+
+            if (models.size() < MinimumCalibrationObservations)
+            {
+                result.m_error = QStringLiteral(
+                    "Only %1 of %2 observations had usable orbital candidates; "
+                    "at least %3 are required")
+                    .arg(models.size())
+                    .arg(observations.size())
+                    .arg(MinimumCalibrationObservations);
+            }
+            else if (!m_stopRequested.load())
+            {
+                const CalibrationScore baseline =
+                    evaluateCalibration(models, 0.0, 0.0);
+                CalibrationPoint best {0.0, 0.0, baseline};
+
+                searchCalibrationGrid(
+                    models,
+                    -CalibrationMaximumTimeOffsetS,
+                    CalibrationMaximumTimeOffsetS,
+                    CalibrationCoarseTimeStepS,
+                    -CalibrationMaximumFrequencyBiasHz,
+                    CalibrationMaximumFrequencyBiasHz,
+                    CalibrationCoarseFrequencyStepHz,
+                    best);
+                searchCalibrationGrid(
+                    models,
+                    std::max(
+                        -CalibrationMaximumTimeOffsetS,
+                        best.m_timeOffsetS - CalibrationCoarseTimeStepS),
+                    std::min(
+                        CalibrationMaximumTimeOffsetS,
+                        best.m_timeOffsetS + CalibrationCoarseTimeStepS),
+                    CalibrationFineTimeStepS,
+                    std::max(
+                        -CalibrationMaximumFrequencyBiasHz,
+                        best.m_frequencyBiasHz
+                            - CalibrationCoarseFrequencyStepHz),
+                    std::min(
+                        CalibrationMaximumFrequencyBiasHz,
+                        best.m_frequencyBiasHz
+                            + CalibrationCoarseFrequencyStepHz),
+                    CalibrationFineFrequencyStepHz,
+                    best);
+
+                result.m_matchedBefore = baseline.m_matched;
+                result.m_matchedAfter = best.m_score.m_matched;
+                result.m_ambiguousBefore = baseline.m_ambiguous;
+                result.m_ambiguousAfter = best.m_score.m_ambiguous;
+                result.m_meanScoreBefore =
+                    baseline.m_scoreSum / (double) models.size();
+                result.m_meanScoreAfter =
+                    best.m_score.m_scoreSum / (double) models.size();
+                result.m_meanResidualBeforeHz = baseline.m_candidateCount > 0
+                    ? baseline.m_residualSumHz
+                        / (double) baseline.m_candidateCount
+                    : 0.0;
+                result.m_meanResidualAfterHz =
+                    best.m_score.m_candidateCount > 0
+                        ? best.m_score.m_residualSumHz
+                            / (double) best.m_score.m_candidateCount
+                        : 0.0;
+                result.m_timeOffsetS = best.m_timeOffsetS;
+                result.m_frequencyBiasHz = best.m_frequencyBiasHz;
+                result.m_timeAtSearchLimit =
+                    std::fabs(best.m_timeOffsetS)
+                        >= CalibrationMaximumTimeOffsetS
+                            - 0.5 * CalibrationFineTimeStepS;
+                result.m_frequencyAtSearchLimit =
+                    std::fabs(best.m_frequencyBiasHz)
+                        >= CalibrationMaximumFrequencyBiasHz
+                            - 0.5 * CalibrationFineFrequencyStepHz;
+                estimateCalibrationUncertainty(models, best, result);
+                result.m_success = best.m_score.m_matched > 0;
+
+                if (!result.m_success) {
+                    result.m_error = QStringLiteral(
+                        "No unambiguous orbital matches were found anywhere "
+                        "in the search range");
+                }
+            }
+        }
+#else
+        Q_UNUSED(observations)
+        Q_UNUSED(geometry)
+        result.m_error =
+            QStringLiteral("Satellite matching unavailable: SGP4 was not found");
+#endif
+
+        QPointer<MeteorSatelliteMatcher> owner(m_owner);
+        QMetaObject::invokeMethod(
+            m_owner,
+            [owner, result]() {
+                if (owner) {
+                    owner->deliverCalibration(result);
+                }
+            },
+            Qt::QueuedConnection);
+    }
+
     void requestStatistics()
     {
         if (m_clockOffset) {
@@ -811,6 +931,79 @@ private:
         QVector<int> m_candidateIndices;
         MeteorSatelliteMatcher::CatalogStatistics m_statistics;
     };
+
+    struct CalibrationPredictionCurve
+    {
+        QString m_source;
+        QString m_id;
+        QString m_label;
+        double m_start0Hz = 0.0;
+        double m_startLinearHzPerS = 0.0;
+        double m_startQuadraticHzPerS2 = 0.0;
+        double m_end0Hz = 0.0;
+        double m_endLinearHzPerS = 0.0;
+        double m_endQuadraticHzPerS2 = 0.0;
+
+        MovingTargetMatcher::PredictedCandidate predictionAt(
+            double timeOffsetS) const
+        {
+            MovingTargetMatcher::PredictedCandidate candidate;
+            candidate.m_source = m_source;
+            candidate.m_id = m_id;
+            candidate.m_label = m_label;
+            candidate.m_stateAgeS = 0.0;
+            const double timeSquared = timeOffsetS * timeOffsetS;
+            MovingTargetMatcher::Prediction& prediction =
+                candidate.m_prediction;
+            prediction.m_startFrequencyOffsetHz = m_start0Hz
+                + m_startLinearHzPerS * timeOffsetS
+                + m_startQuadraticHzPerS2 * timeSquared;
+            prediction.m_endFrequencyOffsetHz = m_end0Hz
+                + m_endLinearHzPerS * timeOffsetS
+                + m_endQuadraticHzPerS2 * timeSquared;
+            prediction.m_centerFrequencyOffsetHz = 0.5
+                * (prediction.m_startFrequencyOffsetHz
+                    + prediction.m_endFrequencyOffsetHz);
+            prediction.m_frequencyDriftHz =
+                prediction.m_endFrequencyOffsetHz
+                    - prediction.m_startFrequencyOffsetHz;
+            prediction.m_valid =
+                std::isfinite(prediction.m_startFrequencyOffsetHz)
+                && std::isfinite(prediction.m_endFrequencyOffsetHz);
+            return candidate;
+        }
+    };
+
+    struct CalibrationObservationModel
+    {
+        MovingTargetMatcher::Observation m_observation;
+        QVector<CalibrationPredictionCurve> m_curves;
+    };
+
+    struct CalibrationScore
+    {
+        int m_matched = 0;
+        int m_ambiguous = 0;
+        int m_candidateCount = 0;
+        double m_scoreSum = 0.0;
+        double m_residualSumHz = 0.0;
+    };
+
+    struct CalibrationPoint
+    {
+        double m_timeOffsetS = 0.0;
+        double m_frequencyBiasHz = 0.0;
+        CalibrationScore m_score;
+    };
+
+    static constexpr int MinimumCalibrationObservations = 3;
+    static constexpr int MaximumCalibrationObservations = 24;
+    static constexpr double CalibrationMaximumTimeOffsetS = 10.0;
+    static constexpr double CalibrationMaximumFrequencyBiasHz = 1000.0;
+    static constexpr double CalibrationCoarseTimeStepS = 0.5;
+    static constexpr double CalibrationFineTimeStepS = 0.1;
+    static constexpr double CalibrationCoarseFrequencyStepHz = 25.0;
+    static constexpr double CalibrationFineFrequencyStepHz = 5.0;
 
     QString catalogFileName(const CatalogDownloadSource& source) const
     {
@@ -2351,6 +2544,340 @@ private:
         return true;
     }
 
+    QVector<CalibrationObservationModel> buildCalibrationModels(
+        const QVector<MovingTargetMatcher::Observation>& observations,
+        const MeteorSatelliteMatcher::Geometry& geometry)
+    {
+        QVector<CalibrationObservationModel> models;
+        const int requestedCount = observations.size();
+        const int modelLimit = std::min(
+            requestedCount,
+            MaximumCalibrationObservations);
+        models.reserve(modelLimit);
+
+        for (int sampleIndex = 0; sampleIndex < modelLimit; ++sampleIndex)
+        {
+            if (m_stopRequested.load(std::memory_order_relaxed)) {
+                break;
+            }
+
+            // If the GUI supplied more observations than the calibration budget,
+            // sample across the whole interval rather than using one burst from a
+            // fragmented pass.
+            const int observationIndex = modelLimit == requestedCount
+                ? sampleIndex
+                : (int) std::llround(
+                    (double) sampleIndex * (double) (requestedCount - 1)
+                        / (double) (modelLimit - 1));
+            const MovingTargetMatcher::Observation& observation =
+                observations[observationIndex];
+
+            if (!observation.m_startDateTimeUtc.isValid()
+                || !(observation.m_durationS > 0.0)
+                || !(observation.m_referenceFrequencyHz > 0.0))
+            {
+                continue;
+            }
+
+            QSet<int> catalogIndices;
+            const double nodeOffsetsS[3] = {
+                -CalibrationMaximumTimeOffsetS,
+                0.0,
+                CalibrationMaximumTimeOffsetS
+            };
+
+            for (double nodeOffsetS : nodeOffsetsS)
+            {
+                const QDateTime centerTimeUtc =
+                    observation.m_startDateTimeUtc.addMSecs(
+                        (qint64) std::llround(
+                            (nodeOffsetS + 0.5 * observation.m_durationS)
+                                * 1000.0));
+                const Snapshot& snapshot = candidatesForTime(
+                    centerTimeUtc,
+                    observation,
+                    geometry);
+
+                for (int catalogIndex : snapshot.m_candidateIndices) {
+                    catalogIndices.insert(catalogIndex);
+                }
+            }
+
+            CalibrationObservationModel model;
+            model.m_observation = observation;
+            model.m_curves.reserve(catalogIndices.size());
+
+            for (int catalogIndex : catalogIndices)
+            {
+                MovingTargetMatcher::PredictedCandidate nodePredictions[3];
+                bool valid = true;
+
+                for (int node = 0; node < 3; ++node)
+                {
+                    MovingTargetMatcher::Observation shifted = observation;
+                    shifted.m_startDateTimeUtc =
+                        observation.m_startDateTimeUtc.addMSecs(
+                            (qint64) std::llround(
+                                nodeOffsetsS[node] * 1000.0));
+                    valid = predictCatalogEntry(
+                        m_catalog[catalogIndex],
+                        shifted,
+                        nodePredictions[node]);
+
+                    if (!valid) {
+                        break;
+                    }
+                }
+
+                if (!valid) {
+                    continue;
+                }
+
+                const double rangeS = CalibrationMaximumTimeOffsetS;
+                const MovingTargetMatcher::Prediction& minus =
+                    nodePredictions[0].m_prediction;
+                const MovingTargetMatcher::Prediction& zero =
+                    nodePredictions[1].m_prediction;
+                const MovingTargetMatcher::Prediction& plus =
+                    nodePredictions[2].m_prediction;
+                CalibrationPredictionCurve curve;
+                curve.m_source = nodePredictions[1].m_source;
+                curve.m_id = nodePredictions[1].m_id;
+                curve.m_label = nodePredictions[1].m_label;
+                curve.m_start0Hz = zero.m_startFrequencyOffsetHz;
+                curve.m_startLinearHzPerS =
+                    (plus.m_startFrequencyOffsetHz
+                        - minus.m_startFrequencyOffsetHz)
+                    / (2.0 * rangeS);
+                curve.m_startQuadraticHzPerS2 =
+                    (plus.m_startFrequencyOffsetHz
+                        + minus.m_startFrequencyOffsetHz
+                        - 2.0 * zero.m_startFrequencyOffsetHz)
+                    / (2.0 * rangeS * rangeS);
+                curve.m_end0Hz = zero.m_endFrequencyOffsetHz;
+                curve.m_endLinearHzPerS =
+                    (plus.m_endFrequencyOffsetHz
+                        - minus.m_endFrequencyOffsetHz)
+                    / (2.0 * rangeS);
+                curve.m_endQuadraticHzPerS2 =
+                    (plus.m_endFrequencyOffsetHz
+                        + minus.m_endFrequencyOffsetHz
+                        - 2.0 * zero.m_endFrequencyOffsetHz)
+                    / (2.0 * rangeS * rangeS);
+                model.m_curves.append(curve);
+            }
+
+            if (!model.m_curves.isEmpty()) {
+                models.append(model);
+            }
+        }
+
+        return models;
+    }
+
+    CalibrationScore evaluateCalibration(
+        const QVector<CalibrationObservationModel>& models,
+        double timeOffsetS,
+        double frequencyBiasHz) const
+    {
+        CalibrationScore score;
+
+        for (const CalibrationObservationModel& model : models)
+        {
+            MovingTargetMatcher::Observation corrected =
+                model.m_observation;
+            corrected.m_startDateTimeUtc =
+                corrected.m_startDateTimeUtc.addMSecs(
+                    (qint64) std::llround(timeOffsetS * 1000.0));
+            corrected.m_centerFrequencyOffsetHz -= frequencyBiasHz;
+            QVector<MovingTargetMatcher::PredictedCandidate> candidates;
+            candidates.reserve(model.m_curves.size());
+
+            for (const CalibrationPredictionCurve& curve : model.m_curves) {
+                candidates.append(curve.predictionAt(timeOffsetS));
+            }
+
+            const MovingTargetMatcher::Match match =
+                MovingTargetMatcher::matchPredictions(
+                    corrected,
+                    candidates);
+
+            if (match.m_matched) {
+                ++score.m_matched;
+            } else if (match.m_ambiguous) {
+                ++score.m_ambiguous;
+            }
+
+            if (match.m_hasCandidate)
+            {
+                ++score.m_candidateCount;
+                score.m_scoreSum += match.m_scorePercent;
+                score.m_residualSumHz +=
+                    match.m_endpointResidualRMSHz;
+            }
+        }
+
+        return score;
+    }
+
+    static bool betterCalibrationPoint(
+        const CalibrationPoint& candidate,
+        const CalibrationPoint& best)
+    {
+        if (candidate.m_score.m_matched != best.m_score.m_matched) {
+            return candidate.m_score.m_matched > best.m_score.m_matched;
+        }
+        if (candidate.m_score.m_ambiguous != best.m_score.m_ambiguous) {
+            return candidate.m_score.m_ambiguous > best.m_score.m_ambiguous;
+        }
+        if (std::fabs(
+                candidate.m_score.m_scoreSum
+                    - best.m_score.m_scoreSum) > 1e-6)
+        {
+            return candidate.m_score.m_scoreSum
+                > best.m_score.m_scoreSum;
+        }
+        if (std::fabs(
+                candidate.m_score.m_residualSumHz
+                    - best.m_score.m_residualSumHz) > 1e-6)
+        {
+            return candidate.m_score.m_residualSumHz
+                < best.m_score.m_residualSumHz;
+        }
+
+        // Prefer the least correction when the evidence cannot distinguish two
+        // points. This prevents flat/noisy data drifting to a search boundary.
+        return std::fabs(candidate.m_timeOffsetS)
+                + std::fabs(candidate.m_frequencyBiasHz) / 100.0
+            < std::fabs(best.m_timeOffsetS)
+                + std::fabs(best.m_frequencyBiasHz) / 100.0;
+    }
+
+    void searchCalibrationGrid(
+        const QVector<CalibrationObservationModel>& models,
+        double minimumTimeOffsetS,
+        double maximumTimeOffsetS,
+        double timeStepS,
+        double minimumFrequencyBiasHz,
+        double maximumFrequencyBiasHz,
+        double frequencyStepHz,
+        CalibrationPoint& best) const
+    {
+        for (double timeOffsetS = minimumTimeOffsetS;
+            timeOffsetS <= maximumTimeOffsetS + 0.5 * timeStepS;
+            timeOffsetS += timeStepS)
+        {
+            if (m_stopRequested.load(std::memory_order_relaxed)) {
+                return;
+            }
+
+            for (double frequencyBiasHz = minimumFrequencyBiasHz;
+                frequencyBiasHz
+                    <= maximumFrequencyBiasHz + 0.5 * frequencyStepHz;
+                frequencyBiasHz += frequencyStepHz)
+            {
+                CalibrationPoint candidate;
+                candidate.m_timeOffsetS = std::clamp(
+                    timeOffsetS,
+                    -CalibrationMaximumTimeOffsetS,
+                    CalibrationMaximumTimeOffsetS);
+                candidate.m_frequencyBiasHz = std::clamp(
+                    frequencyBiasHz,
+                    -CalibrationMaximumFrequencyBiasHz,
+                    CalibrationMaximumFrequencyBiasHz);
+                candidate.m_score = evaluateCalibration(
+                    models,
+                    candidate.m_timeOffsetS,
+                    candidate.m_frequencyBiasHz);
+
+                if (betterCalibrationPoint(candidate, best)) {
+                    best = candidate;
+                }
+            }
+        }
+    }
+
+    static bool calibrationPointWithinUncertainty(
+        const CalibrationPoint& point,
+        const CalibrationPoint& best,
+        int observationCount)
+    {
+        return (point.m_score.m_matched == best.m_score.m_matched)
+            && (point.m_score.m_ambiguous
+                >= best.m_score.m_ambiguous - 1)
+            && (point.m_score.m_scoreSum
+                >= best.m_score.m_scoreSum
+                    - std::max(5.0, 2.0 * observationCount));
+    }
+
+    void estimateCalibrationUncertainty(
+        const QVector<CalibrationObservationModel>& models,
+        const CalibrationPoint& best,
+        MeteorSatelliteMatcher::CalibrationResult& result) const
+    {
+        constexpr double uncertaintyTimeStepS = 0.2;
+        constexpr double uncertaintyFrequencyStepHz = 10.0;
+        double timeUncertaintyS = 0.5 * uncertaintyTimeStepS;
+        double frequencyUncertaintyHz =
+            0.5 * uncertaintyFrequencyStepHz;
+
+        // Search a joint near-optimal region. Timing and receiver bias are
+        // correlated through Doppler slope, so independent one-dimensional
+        // scans would make both uncertainties look more precise than they are.
+        for (double timeOffsetS = std::max(
+                -CalibrationMaximumTimeOffsetS,
+                best.m_timeOffsetS - 2.0);
+            timeOffsetS <= std::min(
+                CalibrationMaximumTimeOffsetS,
+                best.m_timeOffsetS + 2.0)
+                    + 0.5 * uncertaintyTimeStepS;
+            timeOffsetS += uncertaintyTimeStepS)
+        {
+            if (m_stopRequested.load(std::memory_order_relaxed)) {
+                return;
+            }
+
+            for (double frequencyBiasHz = std::max(
+                    -CalibrationMaximumFrequencyBiasHz,
+                    best.m_frequencyBiasHz - 200.0);
+                frequencyBiasHz <= std::min(
+                    CalibrationMaximumFrequencyBiasHz,
+                    best.m_frequencyBiasHz + 200.0)
+                        + 0.5 * uncertaintyFrequencyStepHz;
+                frequencyBiasHz += uncertaintyFrequencyStepHz)
+            {
+                const CalibrationPoint point {
+                    timeOffsetS,
+                    frequencyBiasHz,
+                    evaluateCalibration(
+                        models,
+                        timeOffsetS,
+                        frequencyBiasHz)
+                };
+
+                if (calibrationPointWithinUncertainty(
+                        point,
+                        best,
+                        models.size()))
+                {
+                    timeUncertaintyS = std::max(
+                        timeUncertaintyS,
+                        std::fabs(
+                            timeOffsetS - best.m_timeOffsetS));
+                    frequencyUncertaintyHz = std::max(
+                        frequencyUncertaintyHz,
+                        std::fabs(
+                            frequencyBiasHz
+                                - best.m_frequencyBiasHz));
+                }
+            }
+        }
+
+        result.m_timeUncertaintyS = timeUncertaintyS;
+        result.m_frequencyUncertaintyHz =
+            frequencyUncertaintyHz;
+    }
+
     bool buildCatalogTrack(
         CatalogEntry& entry,
         const MovingTargetMatcher::Observation& observation,
@@ -2529,6 +3056,23 @@ void MeteorSatelliteMatcher::requestMatch(
         Qt::QueuedConnection);
 }
 
+void MeteorSatelliteMatcher::requestCalibration(
+    const QVector<MovingTargetMatcher::Observation>& observations,
+    const Geometry& geometry)
+{
+    if (!m_worker || !m_thread->isRunning()) {
+        return;
+    }
+
+    MeteorSatelliteMatcherWorker *worker = m_worker;
+    QMetaObject::invokeMethod(
+        worker,
+        [worker, observations, geometry]() {
+            worker->requestCalibration(observations, geometry);
+        },
+        Qt::QueuedConnection);
+}
+
 void MeteorSatelliteMatcher::refreshCatalog()
 {
     if (!m_worker || !m_thread->isRunning()) {
@@ -2583,6 +3127,12 @@ void MeteorSatelliteMatcher::deliverMatch(
     const Track& track)
 {
     emit matchReady(requestId, match, moonPrediction, track);
+}
+
+void MeteorSatelliteMatcher::deliverCalibration(
+    const CalibrationResult& result)
+{
+    emit calibrationReady(result);
 }
 
 void MeteorSatelliteMatcher::deliverStatistics(

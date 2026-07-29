@@ -643,6 +643,16 @@
            </spacer>
           </item>
           <item>
+           <widget class="QPushButton" name="satelliteCalibration">
+            <property name="toolTip">
+             <string>Estimate timing offset and receiver frequency bias from satellite detections</string>
+            </property>
+            <property name="text">
+             <string>Calibrate...</string>
+            </property>
+           </widget>
+          </item>
+          <item>
            <widget class="QToolButton" name="satelliteCatalogInfo">
             <property name="maximumSize">
              <size>

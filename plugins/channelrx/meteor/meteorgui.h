@@ -144,6 +144,7 @@ private:
     QPushButton *m_clearDetections;
     QTableWidget *m_detectionsTable;
     QTableWidget *m_satellitesTable;
+    QPushButton *m_satelliteCalibration;
     QToolButton *m_satelliteCatalogInfo;
     QTableWidget *m_colorgrammeTable;
     QChartView *m_hourlyChartView;
@@ -194,6 +195,17 @@ private:
     };
 
     QHash<quint64, PendingTargetMatch> m_pendingTargetMatches;
+
+    struct SatelliteCalibrationObservation
+    {
+        MovingTargetMatcher::Observation m_observation;
+        double m_satelliteScorePercent = 0.0;
+        bool m_catalogMatched = false;
+    };
+
+    QHash<quint64, SatelliteCalibrationObservation>
+        m_satelliteCalibrationObservations;
+    bool m_satelliteCalibrationPending = false;
 
     struct DetectionOverlay
     {
@@ -262,6 +274,11 @@ private:
         const MovingTargetMatcher::Match& match,
         const MeteorSatelliteMatcher::MoonPrediction& moonPrediction,
         const MeteorSatelliteMatcher::Track& track);
+    MeteorSatelliteMatcher::Geometry satelliteMatcherGeometry() const;
+    void handleSatelliteCalibration(
+        const MeteorSatelliteMatcher::CalibrationResult& result);
+    void showSatelliteCalibrationResult(
+        const MeteorSatelliteMatcher::CalibrationResult& result);
     void handleSatelliteStatistics(
         const MeteorSatelliteMatcher::CatalogStatistics& statistics);
     void showSatelliteStatisticsDialog(
@@ -335,6 +352,7 @@ private slots:
     void on_clearDetections_clicked();
     void on_detectionsTable_itemSelectionChanged();
     void on_satellitesTable_itemSelectionChanged();
+    void on_satelliteCalibration_clicked();
     void on_satelliteCatalogInfo_clicked();
     void on_detectionsTable_customContextMenuRequested(const QPoint& pos);
     void on_satellitesTable_customContextMenuRequested(const QPoint& pos);

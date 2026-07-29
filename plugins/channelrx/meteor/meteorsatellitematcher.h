@@ -113,6 +113,30 @@ public:
         }
     };
 
+    struct CalibrationResult
+    {
+        bool m_success = false;
+        QString m_error;
+        int m_observationCount = 0;
+        int m_modelledObservationCount = 0;
+        int m_matchedBefore = 0;
+        int m_matchedAfter = 0;
+        int m_ambiguousBefore = 0;
+        int m_ambiguousAfter = 0;
+        double m_meanScoreBefore = 0.0;
+        double m_meanScoreAfter = 0.0;
+        double m_meanResidualBeforeHz = 0.0;
+        double m_meanResidualAfterHz = 0.0;
+        // Add this correction to the observation timestamps used for matching.
+        double m_timeOffsetS = 0.0;
+        // Observed frequency minus predicted frequency; subtract this from observations.
+        double m_frequencyBiasHz = 0.0;
+        double m_timeUncertaintyS = 0.0;
+        double m_frequencyUncertaintyHz = 0.0;
+        bool m_timeAtSearchLimit = false;
+        bool m_frequencyAtSearchLimit = false;
+    };
+
     explicit MeteorSatelliteMatcher(
         const QString& spaceTrackUsername = QString(),
         const QString& spaceTrackPassword = QString(),
@@ -131,6 +155,9 @@ public:
         quint64 requestId,
         const MovingTargetMatcher::Observation& observation,
         const Geometry& geometry);
+    void requestCalibration(
+        const QVector<MovingTargetMatcher::Observation>& observations,
+        const Geometry& geometry);
     void requestStatistics();
     void refreshCatalog();
     void setSpaceTrackCredentials(
@@ -143,6 +170,7 @@ signals:
         const MovingTargetMatcher::Match& match,
         const MoonPrediction& moonPrediction,
         const Track& track);
+    void calibrationReady(const CalibrationResult& result);
     void statisticsReady(const CatalogStatistics& statistics);
 
 private:
@@ -153,6 +181,7 @@ private:
         const MovingTargetMatcher::Match& match,
         const MoonPrediction& moonPrediction,
         const Track& track);
+    void deliverCalibration(const CalibrationResult& result);
     void deliverStatistics(const CatalogStatistics& statistics);
 
     QThread *m_thread;

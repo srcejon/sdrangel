@@ -593,6 +593,11 @@ MeteorGUI::MeteorGUI(PluginAPI* pluginAPI, DeviceUISet *deviceUISet, BasebandSam
         &MeteorSatelliteMatcher::statisticsReady,
         this,
         &MeteorGUI::handleSatelliteStatistics);
+    connect(
+        m_satelliteMatcher,
+        &MeteorSatelliteMatcher::calibrationReady,
+        this,
+        &MeteorGUI::handleSatelliteCalibration);
 
     setupSpectrum();
 
@@ -680,6 +685,7 @@ void MeteorGUI::setupUi(RollupContents *rollupContents)
     m_clearDetections = ui->clearDetections;
     m_detectionsTable = ui->detectionsTable;
     m_satellitesTable = ui->satellitesTable;
+    m_satelliteCalibration = ui->satelliteCalibration;
     m_satelliteCatalogInfo = ui->satelliteCatalogInfo;
     m_colorgrammeTable = ui->colorgrammeTable;
     m_hourlyChartView = ui->hourlyChartView;
@@ -804,6 +810,8 @@ void MeteorGUI::setupUi(RollupContents *rollupContents)
     m_clearDetections->setIcon(QIcon(":/bin.png"));
     m_clearDetections->setToolTip("Clear detections");
     m_clearDetections->setMaximumWidth(28);
+    m_satelliteCalibration->setToolTip(
+        "Estimate timing offset and receiver frequency bias from satellite detections");
     m_satelliteCatalogInfo->setToolTip(
         "Show satellite and ADS-B matching statistics");
 
@@ -2002,6 +2010,7 @@ void MeteorGUI::on_clearDetections_clicked()
     m_detectionOverlays.clear();
     m_maxOverlayDurationS = 0.0;
     m_pendingTargetMatches.clear();
+    m_satelliteCalibrationObservations.clear();
     clearSatelliteTracksFromMap();
     m_detectionsTable->setRowCount(0);
     m_satellitesTable->setRowCount(0);
@@ -2014,6 +2023,119 @@ void MeteorGUI::on_clearDetections_clicked()
 void MeteorGUI::on_detectionsTable_itemSelectionChanged()
 {
     handleDetectionTableSelectionChanged(m_detectionsTable);
+}
+
+MeteorSatelliteMatcher::Geometry MeteorGUI::satelliteMatcherGeometry() const
+{
+    MeteorSatelliteMatcher::Geometry geometry;
+    geometry.m_transmitterBeam = {
+        m_settings.m_transmitterAzimuth,
+        m_settings.m_transmitterElevation,
+        m_settings.m_transmitterBeamwidth,
+        m_settings.m_transmitterHPBW
+    };
+    geometry.m_receiverBeam = {
+        m_settings.m_antennaAzimuth,
+        m_settings.m_antennaElevation,
+        m_settings.m_antennaBeamwidth,
+        m_settings.m_antennaBeamwidth
+    };
+    geometry.m_maximumAltitudeM =
+        m_settings.m_mapMaxAltitudeKM * 1000.0;
+    return geometry;
+}
+
+void MeteorGUI::on_satelliteCalibration_clicked()
+{
+    if (!m_satelliteMatcher || m_satelliteCalibrationPending) {
+        return;
+    }
+
+    QSet<quint64> selectedIds;
+    if (m_satellitesTable->selectionModel())
+    {
+        const QModelIndexList selectedRows =
+            m_satellitesTable->selectionModel()->selectedRows();
+
+        for (const QModelIndex& rowIndex : selectedRows)
+        {
+            QTableWidgetItem *timeItem =
+                m_satellitesTable->item(rowIndex.row(), 0);
+            bool ok = false;
+            const quint64 id = timeItem
+                ? timeItem->data(DetectionOverlayIdRole).toULongLong(&ok)
+                : 0;
+
+            if (ok) {
+                selectedIds.insert(id);
+            }
+        }
+    }
+
+    struct TimedObservation
+    {
+        qint64 m_startMSecs;
+        MovingTargetMatcher::Observation m_observation;
+    };
+    QVector<TimedObservation> timedObservations;
+    timedObservations.reserve(m_satelliteCalibrationObservations.size());
+
+    for (auto it = m_satelliteCalibrationObservations.cbegin();
+        it != m_satelliteCalibrationObservations.cend();
+        ++it)
+    {
+        const SatelliteCalibrationObservation& calibration = it.value();
+        const bool selected = selectedIds.contains(it.key());
+        const bool suitableByDefault =
+            (calibration.m_satelliteScorePercent >= 60.0)
+            || calibration.m_catalogMatched;
+
+        if ((!selectedIds.isEmpty() && !selected)
+            || (selectedIds.isEmpty() && !suitableByDefault))
+        {
+            continue;
+        }
+
+        timedObservations.append({
+            calibration.m_observation.m_startDateTimeUtc.toMSecsSinceEpoch(),
+            calibration.m_observation
+        });
+    }
+
+    std::sort(
+        timedObservations.begin(),
+        timedObservations.end(),
+        [](const TimedObservation& left, const TimedObservation& right) {
+            return left.m_startMSecs < right.m_startMSecs;
+        });
+
+    if (timedObservations.size() < 3)
+    {
+        QMessageBox::information(
+            this,
+            tr("Satellite calibration"),
+            selectedIds.isEmpty()
+                ? tr(
+                    "At least three satellite-like detections are required. "
+                    "You can select uncertain rows explicitly to include them.")
+                : tr("Select at least three satellite detections to calibrate."));
+        return;
+    }
+
+    QVector<MovingTargetMatcher::Observation> observations;
+    observations.reserve(timedObservations.size());
+    for (const TimedObservation& timed : timedObservations) {
+        observations.append(timed.m_observation);
+    }
+
+    m_satelliteCalibrationPending = true;
+    m_satelliteCalibration->setEnabled(false);
+    m_satelliteCalibration->setText(tr("Calibrating..."));
+    m_satelliteCalibration->setToolTip(
+        tr("Searching timing and frequency corrections in the satellite matcher worker"));
+    m_satelliteMatcher->requestCalibration(
+        observations,
+        satelliteMatcherGeometry());
 }
 
 void MeteorGUI::on_satelliteCatalogInfo_clicked()
@@ -2336,6 +2458,7 @@ void MeteorGUI::makeUIConnections()
     QObject::connect(m_saveDetections, &QPushButton::clicked, this, &MeteorGUI::on_saveDetections_clicked);
     QObject::connect(m_saveColorgramme, &QPushButton::clicked, this, &MeteorGUI::on_saveColorgramme_clicked);
     QObject::connect(m_clearDetections, &QPushButton::clicked, this, &MeteorGUI::on_clearDetections_clicked);
+    QObject::connect(m_satelliteCalibration, &QPushButton::clicked, this, &MeteorGUI::on_satelliteCalibration_clicked);
     QObject::connect(m_satelliteCatalogInfo, &QToolButton::clicked, this, &MeteorGUI::on_satelliteCatalogInfo_clicked);
     QObject::connect(m_detectionsTable, &QTableWidget::itemSelectionChanged, this, &MeteorGUI::on_detectionsTable_itemSelectionChanged);
     QObject::connect(m_detectionsTable, &QTableWidget::customContextMenuRequested, this, &MeteorGUI::on_detectionsTable_customContextMenuRequested);
@@ -2623,6 +2746,7 @@ void MeteorGUI::addSatelliteDetection(const MeteorDemodSink::MsgSatelliteDetecte
     MovingTargetMatcher::Observation observation;
     QString rfClassification = QStringLiteral("Uncertain");
     bool validObservation = false;
+    double satelliteScorePercent = 0.0;
     if (referenceFrequency > 0)
     {
         const double radialSpeedKPH = Astronomy::dopplerToVelocity(
@@ -2645,6 +2769,7 @@ void MeteorGUI::addSatelliteDetection(const MeteorDemodSink::MsgSatelliteDetecte
             detection.m_frequencyDrift,
             detection.m_durationS);
         rfClassification = classification.m_classification;
+        satelliteScorePercent = classification.m_satelliteScorePercent;
         observation.m_startDateTimeUtc = observationTimeUtc;
         observation.m_durationS = detection.m_durationS;
         observation.m_centerFrequencyOffsetHz = detection.m_centerFrequency;
@@ -2733,25 +2858,16 @@ void MeteorGUI::addSatelliteDetection(const MeteorDemodSink::MsgSatelliteDetecte
     if (validObservation && m_satelliteMatcher)
     {
         m_pendingTargetMatches.insert(overlayId, {targetMatch, rfClassification});
-        MeteorSatelliteMatcher::Geometry geometry;
-        geometry.m_transmitterBeam = {
-            m_settings.m_transmitterAzimuth,
-            m_settings.m_transmitterElevation,
-            m_settings.m_transmitterBeamwidth,
-            m_settings.m_transmitterHPBW
-        };
-        geometry.m_receiverBeam = {
-            m_settings.m_antennaAzimuth,
-            m_settings.m_antennaElevation,
-            m_settings.m_antennaBeamwidth,
-            m_settings.m_antennaBeamwidth
-        };
-        geometry.m_maximumAltitudeM =
-            m_settings.m_mapMaxAltitudeKM * 1000.0;
+        m_satelliteCalibrationObservations.insert(
+            overlayId,
+            {observation, satelliteScorePercent, false});
         if (!targetMatch.m_matched) {
             matchItem->setText(QStringLiteral("Searching orbital catalog..."));
         }
-        m_satelliteMatcher->requestMatch(overlayId, observation, geometry);
+        m_satelliteMatcher->requestMatch(
+            overlayId,
+            observation,
+            satelliteMatcherGeometry());
     }
 
     updateSpectrumViews();
@@ -2973,6 +3089,15 @@ void MeteorGUI::applySatelliteTargetMatch(
 
     const PendingTargetMatch pendingMatch = pending.value();
     m_pendingTargetMatches.erase(pending);
+    auto calibrationObservation =
+        m_satelliteCalibrationObservations.find(overlayId);
+    if ((calibrationObservation
+            != m_satelliteCalibrationObservations.end())
+        && satelliteMatch.m_matched
+        && (satelliteMatch.m_source == QStringLiteral("TLE")))
+    {
+        calibrationObservation->m_catalogMatched = true;
+    }
     const MovingTargetMatcher::Match combinedMatch = MovingTargetMatcher::combine(
         pendingMatch.m_adsbMatch,
         satelliteMatch);
@@ -3109,6 +3234,123 @@ void MeteorGUI::applySatelliteTargetMatch(
         m_satellitesTable->setItem(row, 18, makeTableItem(QString()));
     }
     m_satellitesTable->setSortingEnabled(sortingEnabled);
+}
+
+void MeteorGUI::handleSatelliteCalibration(
+    const MeteorSatelliteMatcher::CalibrationResult& result)
+{
+    m_satelliteCalibrationPending = false;
+    m_satelliteCalibration->setEnabled(true);
+    m_satelliteCalibration->setText(tr("Calibrate..."));
+    m_satelliteCalibration->setToolTip(
+        tr("Estimate timing offset and receiver frequency bias from satellite detections"));
+    showSatelliteCalibrationResult(result);
+}
+
+void MeteorGUI::showSatelliteCalibrationResult(
+    const MeteorSatelliteMatcher::CalibrationResult& result)
+{
+    if (!result.m_success)
+    {
+        QMessageBox::warning(
+            this,
+            tr("Satellite calibration"),
+            result.m_error.isEmpty()
+                ? tr("Calibration did not find a usable solution.")
+                : result.m_error);
+        return;
+    }
+
+    QDialog dialog(this);
+    dialog.setWindowTitle(tr("Satellite timing and frequency calibration"));
+    QVBoxLayout *layout = new QVBoxLayout(&dialog);
+    QFormLayout *form = new QFormLayout();
+    layout->addLayout(form);
+
+    form->addRow(
+        tr("Observations"),
+        new QLabel(
+            tr("%1 supplied, %2 modelled")
+                .arg(result.m_observationCount)
+                .arg(result.m_modelledObservationCount),
+            &dialog));
+    form->addRow(
+        tr("Unambiguous matches"),
+        new QLabel(
+            tr("%1 before, %2 after")
+                .arg(result.m_matchedBefore)
+                .arg(result.m_matchedAfter),
+            &dialog));
+    form->addRow(
+        tr("Ambiguous matches"),
+        new QLabel(
+            tr("%1 before, %2 after")
+                .arg(result.m_ambiguousBefore)
+                .arg(result.m_ambiguousAfter),
+            &dialog));
+    form->addRow(
+        tr("Mean best score"),
+        new QLabel(
+            tr("%1% before, %2% after")
+                .arg(result.m_meanScoreBefore, 0, 'f', 1)
+                .arg(result.m_meanScoreAfter, 0, 'f', 1),
+            &dialog));
+    form->addRow(
+        tr("Mean endpoint residual"),
+        new QLabel(
+            tr("%1 Hz before, %2 Hz after")
+                .arg(result.m_meanResidualBeforeHz, 0, 'f', 1)
+                .arg(result.m_meanResidualAfterHz, 0, 'f', 1),
+            &dialog));
+    form->addRow(
+        tr("Timestamp correction"),
+        new QLabel(
+            tr("Add %1 s  (+/- %2 s)")
+                .arg(result.m_timeOffsetS, 0, 'f', 2)
+                .arg(result.m_timeUncertaintyS, 0, 'f', 2),
+            &dialog));
+    form->addRow(
+        tr("Receiver frequency bias"),
+        new QLabel(
+            tr("%1 Hz  (+/- %2 Hz); subtract from measured offsets")
+                .arg(result.m_frequencyBiasHz, 0, 'f', 1)
+                .arg(result.m_frequencyUncertaintyHz, 0, 'f', 1),
+            &dialog));
+
+    QStringList warnings;
+    if (result.m_timeAtSearchLimit) {
+        warnings.append(tr("The timing result reached the +/- 10 s search limit."));
+    }
+    if (result.m_frequencyAtSearchLimit) {
+        warnings.append(tr("The frequency result reached the +/- 1000 Hz search limit."));
+    }
+    if (result.m_matchedAfter < 3) {
+        warnings.append(tr("Fewer than three unambiguous matches make this a low-confidence estimate."));
+    }
+    if (result.m_matchedAfter <= result.m_matchedBefore) {
+        warnings.append(tr("The correction did not increase the number of unambiguous matches."));
+    }
+
+    QLabel *explanation = new QLabel(
+        tr(
+            "This is a recommendation only; no settings were changed. Interrupted "
+            "GRAVES illumination is acceptable because each visible fragment is "
+            "scored independently with one shared correction. Fragments from one "
+            "pass are correlated, so the reported uncertainty is approximate.")
+            + (warnings.isEmpty()
+                ? QString()
+                : QStringLiteral("\n\n") + warnings.join(QChar('\n'))),
+        &dialog);
+    explanation->setWordWrap(true);
+    layout->addWidget(explanation);
+
+    QDialogButtonBox *buttons = new QDialogButtonBox(
+        QDialogButtonBox::Close,
+        &dialog);
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    layout->addWidget(buttons);
+    dialog.resize(620, dialog.sizeHint().height());
+    dialog.exec();
 }
 
 void MeteorGUI::handleSatelliteStatistics(
@@ -4073,6 +4315,7 @@ void MeteorGUI::deleteSelectedTableRows(QTableWidget *table, bool updateMeteorCo
         for (quint64 id : idsToDelete)
         {
             m_pendingTargetMatches.remove(id);
+            m_satelliteCalibrationObservations.remove(id);
             removeSatelliteTrackFromMap(id);
         }
 

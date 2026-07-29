@@ -1244,6 +1244,14 @@ void RemoteTCPInputTCPHandler::processMetaData()
                         RemoteTCPProtocol::extractUInt64(
                             &metaData[RemoteTCPProtocol::m_clockUncertaintyOffset]);
                     m_localFirstPayloadReceiveTimeUsecs = 0;
+                    qDebug()
+                        << "RemoteTCPInputTCPHandler::processMetaData:"
+                        << "SDRA timing metadata"
+                        << "revision:" << protocolRevision
+                        << "firstSampleTimeUsecs:"
+                        << m_remoteFirstSampleTimeUsecs
+                        << "uncertaintyUsecs:"
+                        << m_remoteClockUncertaintyUsecs;
                 }
                 else
                 {

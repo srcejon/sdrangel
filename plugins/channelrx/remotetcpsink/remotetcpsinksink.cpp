@@ -1085,19 +1085,44 @@ void RemoteTCPSinkSink::acceptConnection(Socket *client)
         RemoteTCPProtocol::encodeFloat(&metaData[68], m_settings.m_squelchGate);
         qint64 correctedSampleTimeUsecs = 0;
         qint64 clockUncertaintyUsecs = 0;
+        const bool estimatedFirstSampleTime = m_nextSampleTimeUsecs <= 0;
+        const qint64 firstSampleTimeUsecs = estimatedFirstSampleTime
+            ? QDateTime::currentMSecsSinceEpoch() * 1000
+            : m_nextSampleTimeUsecs;
 
-        if ((m_nextSampleTimeUsecs > 0)
-            && getCorrectedTimestamp(
-                m_nextSampleTimeUsecs,
+        if (getCorrectedTimestamp(
+                firstSampleTimeUsecs,
                 correctedSampleTimeUsecs,
                 clockUncertaintyUsecs))
         {
+            // A channel restart can accept the reconnecting client just before
+            // the first FIFO write supplies an exact sample timestamp. The
+            // connection is already delayed by 200 ms, so current time is a
+            // close fallback for a live stream; advertise the approximation in
+            // the uncertainty instead of disabling timing for the connection.
+            if (estimatedFirstSampleTime) {
+                clockUncertaintyUsecs = std::max<qint64>(
+                    clockUncertaintyUsecs,
+                    250000);
+            }
             RemoteTCPProtocol::encodeUInt64(
                 &metaData[RemoteTCPProtocol::m_firstSampleTimeOffset],
                 (quint64) correctedSampleTimeUsecs);
             RemoteTCPProtocol::encodeUInt64(
                 &metaData[RemoteTCPProtocol::m_clockUncertaintyOffset],
                 (quint64) std::max<qint64>(0, clockUncertaintyUsecs));
+            qDebug()
+                << "RemoteTCPSinkSink::acceptConnection:"
+                << "SDRA timing metadata"
+                << (estimatedFirstSampleTime ? "estimated" : "sample-derived")
+                << "firstSampleTimeUsecs:" << correctedSampleTimeUsecs
+                << "uncertaintyUsecs:" << clockUncertaintyUsecs;
+        }
+        else
+        {
+            qWarning()
+                << "RemoteTCPSinkSink::acceptConnection:"
+                << "SDRA timing unavailable for this connection";
         }
         // Send API port? Not accessible via MainCore
 

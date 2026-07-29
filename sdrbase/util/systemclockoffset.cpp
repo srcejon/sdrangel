@@ -476,11 +476,7 @@ void SystemClockOffset::startHttpCheck(const QString& ntpError)
             reply->deleteLater();
 
             m_measurement.m_pending = false;
-            m_measurement.m_dateTimeUtc = QDateTime::currentDateTimeUtc();
-            m_measurement.m_roundTripMS = (double) roundTripMS;
-            m_measurement.m_uncertaintyMS =
-                0.5 * (double) roundTripMS + DateHeaderHalfResolutionMS;
-            m_measurement.m_available = false;
+            QString failure;
 
             if ((networkError != QNetworkReply::NoError)
                 || (httpStatus < 200)
@@ -491,7 +487,7 @@ void SystemClockOffset::startHttpCheck(const QString& ntpError)
                         ? networkErrorText
                         : QStringLiteral(
                             "time request returned HTTP %1").arg(httpStatus);
-                m_measurement.m_error = QStringLiteral(
+                failure = QStringLiteral(
                     "SNTP failed (%1); HTTPS fallback failed (%2)")
                         .arg(ntpError, httpError);
             }
@@ -505,7 +501,7 @@ void SystemClockOffset::startHttpCheck(const QString& ntpError)
                             "time response did not contain a Date header")
                         : QStringLiteral(
                             "time response contained an invalid Date header");
-                    m_measurement.m_error = QStringLiteral(
+                    failure = QStringLiteral(
                         "SNTP failed (%1); HTTPS fallback failed (%2)")
                             .arg(ntpError, httpError);
                 }
@@ -516,8 +512,35 @@ void SystemClockOffset::startHttpCheck(const QString& ntpError)
                     m_measurement.m_localClockErrorMS = (double)
                         internetTimeUtc.addMSecs(DateHeaderHalfResolutionMS)
                             .msecsTo(localMidpointUtc);
+                    m_measurement.m_dateTimeUtc =
+                        QDateTime::currentDateTimeUtc();
+                    m_measurement.m_roundTripMS = (double) roundTripMS;
+                    m_measurement.m_uncertaintyMS =
+                        0.5 * (double) roundTripMS
+                            + DateHeaderHalfResolutionMS;
                     m_measurement.m_available = true;
                     m_measurement.m_error.clear();
+                }
+            }
+
+            if (!failure.isEmpty())
+            {
+                if (m_lastSuccessfulMeasurement.m_available)
+                {
+                    m_measurement = m_lastSuccessfulMeasurement;
+                    m_measurement.m_pending = false;
+                    m_measurement.m_error = failure;
+                }
+                else
+                {
+                    m_measurement.m_dateTimeUtc =
+                        QDateTime::currentDateTimeUtc();
+                    m_measurement.m_roundTripMS = (double) roundTripMS;
+                    m_measurement.m_uncertaintyMS =
+                        0.5 * (double) roundTripMS
+                            + DateHeaderHalfResolutionMS;
+                    m_measurement.m_available = false;
+                    m_measurement.m_error = failure;
                 }
             }
 
@@ -527,6 +550,13 @@ void SystemClockOffset::startHttpCheck(const QString& ntpError)
 
 void SystemClockOffset::publishMeasurement()
 {
+    if (m_measurement.m_available
+        && !m_measurement.m_pending
+        && m_measurement.m_error.isEmpty())
+    {
+        m_lastSuccessfulMeasurement = m_measurement;
+    }
+
     emit measurementUpdated(m_measurement);
 }
 

@@ -32,6 +32,7 @@
 RemoteTCPSinkBaseband::RemoteTCPSinkBaseband() :
     m_running(false),
     m_basebandSampleRate(48000),
+    m_sampleTimeRate(48000),
     m_nextSampleTimeUsecs(0),
     m_haveSampleTime(false)
 {
@@ -53,8 +54,7 @@ void RemoteTCPSinkBaseband::reset()
     QMutexLocker mutexLocker(&m_mutex);
     m_inputMessageQueue.clear();
     m_sampleFifo.reset();
-    m_nextSampleTimeUsecs = 0;
-    m_haveSampleTime = false;
+    resetSampleTime();
     m_sink.setNextSampleTime(0);
     m_sink.init();
 }
@@ -74,7 +74,7 @@ void RemoteTCPSinkBaseband::startWork()
         &SampleSinkFifo::written,
         this,
         &RemoteTCPSinkBaseband::handleSamplesWritten,
-        Qt::QueuedConnection
+        Qt::DirectConnection
     );
     connect(&m_inputMessageQueue, SIGNAL(messageEnqueued()), this, SLOT(handleInputMessages()));
     m_sink.start();
@@ -118,6 +118,11 @@ void RemoteTCPSinkBaseband::handleData()
         SampleVector::iterator part2end;
 
         std::size_t count = m_sampleFifo.readBegin(m_sampleFifo.fill(), &part1begin, &part1end, &part2begin, &part2end);
+        const qint64 firstSampleTimeUsecs = nextSampleTimeUsecs();
+
+        if (firstSampleTimeUsecs > 0) {
+            m_sink.setNextSampleTime(firstSampleTimeUsecs);
+        }
 
         // first part of FIFO data
         if (part1begin != part1end) {
@@ -130,6 +135,13 @@ void RemoteTCPSinkBaseband::handleData()
         }
 
         m_sampleFifo.readCommit((unsigned int) count);
+        advanceSampleTime(count);
+
+        const qint64 nextTimeUsecs = nextSampleTimeUsecs();
+
+        if (nextTimeUsecs > 0) {
+            m_sink.setNextSampleTime(nextTimeUsecs);
+        }
     }
 }
 
@@ -137,28 +149,53 @@ void RemoteTCPSinkBaseband::handleSamplesWritten(
     int samples,
     qint64 elapsedNsecs)
 {
-    if ((samples <= 0) || (m_basebandSampleRate <= 0)) {
+    QMutexLocker sampleTimeLocker(&m_sampleTimeMutex);
+
+    if ((samples <= 0) || (m_sampleTimeRate <= 0)) {
         return;
     }
 
-    const qint64 sampleDurationUsecs = (qint64) std::llround(
-        (double) samples * 1000000.0
-        / (double) m_basebandSampleRate);
+    const qint64 queuedSamples = m_sampleFifo.fill();
+    const qint64 queuedDurationUsecs = (qint64) std::llround(
+        (double) queuedSamples * 1000000.0
+        / (double) m_sampleTimeRate);
+    const qint64 nowElapsedNsecs =
+        MainCore::instance()->getElapsedNsecs();
+    const qint64 nowEpochUsecs =
+        QDateTime::currentMSecsSinceEpoch() * 1000;
 
-    if (!m_haveSampleTime)
+    // The signal is emitted while the FIFO write lock is held, so fill()
+    // describes the queue immediately after this batch was appended.
+    // Anchor the next sample at the FIFO read head rather than at its tail.
+    m_nextSampleTimeUsecs = nowEpochUsecs
+        - ((nowElapsedNsecs - elapsedNsecs) / 1000)
+        - queuedDurationUsecs;
+    m_haveSampleTime = true;
+}
+
+void RemoteTCPSinkBaseband::resetSampleTime()
+{
+    QMutexLocker sampleTimeLocker(&m_sampleTimeMutex);
+    m_nextSampleTimeUsecs = 0;
+    m_haveSampleTime = false;
+}
+
+qint64 RemoteTCPSinkBaseband::nextSampleTimeUsecs()
+{
+    QMutexLocker sampleTimeLocker(&m_sampleTimeMutex);
+    return m_haveSampleTime ? m_nextSampleTimeUsecs : 0;
+}
+
+void RemoteTCPSinkBaseband::advanceSampleTime(std::size_t samples)
+{
+    QMutexLocker sampleTimeLocker(&m_sampleTimeMutex);
+
+    if ((samples > 0) && m_haveSampleTime && (m_sampleTimeRate > 0))
     {
-        const qint64 nowElapsedNsecs =
-            MainCore::instance()->getElapsedNsecs();
-        const qint64 nowEpochUsecs =
-            QDateTime::currentMSecsSinceEpoch() * 1000;
-        m_nextSampleTimeUsecs = nowEpochUsecs
-            - ((nowElapsedNsecs - elapsedNsecs) / 1000)
-            - sampleDurationUsecs;
-        m_haveSampleTime = true;
+        m_nextSampleTimeUsecs += (qint64) std::llround(
+            (double) samples * 1000000.0
+            / (double) m_sampleTimeRate);
     }
-
-    m_nextSampleTimeUsecs += sampleDurationUsecs;
-    m_sink.setNextSampleTime(m_nextSampleTimeUsecs);
 }
 
 void RemoteTCPSinkBaseband::handleInputMessages()
@@ -239,8 +276,12 @@ void RemoteTCPSinkBaseband::setBasebandSampleRate(int sampleRate)
     if (sampleRate != m_basebandSampleRate)
     {
         m_basebandSampleRate = sampleRate;
-        m_nextSampleTimeUsecs = 0;
-        m_haveSampleTime = false;
+        {
+            QMutexLocker sampleTimeLocker(&m_sampleTimeMutex);
+            m_sampleTimeRate = sampleRate;
+            m_nextSampleTimeUsecs = 0;
+            m_haveSampleTime = false;
+        }
         m_sink.setNextSampleTime(0);
     }
 

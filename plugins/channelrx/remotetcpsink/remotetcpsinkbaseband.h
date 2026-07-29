@@ -21,6 +21,7 @@
 #define INCLUDE_REMOTETCPSINKBASEBAND_H
 
 #include <QObject>
+#include <QMutex>
 #include <QRecursiveMutex>
 
 #include "dsp/samplesinkfifo.h"
@@ -60,6 +61,8 @@ private:
     bool m_running;
     SampleSinkFifo m_sampleFifo;
     int m_basebandSampleRate;
+    QMutex m_sampleTimeMutex;
+    int m_sampleTimeRate;
     qint64 m_nextSampleTimeUsecs;
     bool m_haveSampleTime;
     DownChannelizer *m_channelizer;
@@ -70,6 +73,9 @@ private:
 
     bool handleMessage(const Message& cmd);
     void applySettings(const RemoteTCPSinkSettings& settings, const QStringList& settingsKeys, bool force = false, bool restartRequired = false);
+    void resetSampleTime();
+    qint64 nextSampleTimeUsecs();
+    void advanceSampleTime(std::size_t samples);
 
 private slots:
     void handleInputMessages();

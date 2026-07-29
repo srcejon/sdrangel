@@ -308,6 +308,7 @@ private:
     void processDecompressedZlibData(const char *inBuf, int nbSamples);
     void calcPower(const Sample *iq, int nbSamples);
     void sendSettings(const RemoteTCPInputSettings& settings, const QStringList& settingsKeys);
+    void noteFirstSamplePayloadReceived();
     void updateTimingReport();
 
 private slots:

@@ -863,6 +863,10 @@ FLAC__StreamDecoderWriteStatus RemoteTCPInputTCPHandler::flacWrite(const FLAC__S
     m_uncompressedFrames++;
 
     int nbSamples = frame->header.blocksize;
+    if (nbSamples > 0) {
+        noteFirstSamplePayloadReceived();
+    }
+
     if (nbSamples > (int) m_converterBufferNbSamples)
     {
         if (m_converterBuffer) {
@@ -988,6 +992,10 @@ FLAC__StreamDecoderWriteStatus RemoteTCPInputTCPHandler::flacWrite(const FLAC__S
 // Convert from zlib uncompressed network format to Samples, to uncompressed data FIFO
 void RemoteTCPInputTCPHandler::processDecompressedZlibData(const char *inBuf, int nbSamples)
 {
+    if (nbSamples > 0) {
+        noteFirstSamplePayloadReceived();
+    }
+
     // Ensure conversion buffer is large enough - FIXME: Don't use this buffer - just write in to FIFO
     if (nbSamples > (int) m_converterBufferNbSamples)
     {
@@ -1176,17 +1184,16 @@ void RemoteTCPInputTCPHandler::dataReadyRead()
     }
 
     if (m_readMetaData
+        && m_iqOnly
         && (m_remoteFirstSampleTimeUsecs > 0)
         && (m_localFirstPayloadReceiveTimeUsecs == 0)
         && m_dataSocket
         && (m_dataSocket->bytesAvailable() > 0))
     {
-        // Timestamp the first stream payload, not just the metadata header.
-        // This keeps the intentional RemoteTCPInput pre-fill out of the
-        // transport estimate while including server and network buffering.
-        m_localFirstPayloadReceiveTimeUsecs =
-            QDateTime::currentMSecsSinceEpoch() * 1000;
-        updateTimingReport();
+        // In IQ-only mode every byte after the metadata is sample payload.
+        // Compressed streams are marked by their first decoded sample block so
+        // their stream headers and encoder block latency are handled correctly.
+        noteFirstSamplePayloadReceived();
     }
 
     if (m_readMetaData && !m_iqOnly) {
@@ -1410,6 +1417,19 @@ void RemoteTCPInputTCPHandler::updateTimingReport()
             m_remoteFirstSampleTimeUsecs,
             latencyUsecs,
             uncertaintyUsecs));
+}
+
+void RemoteTCPInputTCPHandler::noteFirstSamplePayloadReceived()
+{
+    if ((m_remoteFirstSampleTimeUsecs <= 0)
+        || (m_localFirstPayloadReceiveTimeUsecs > 0))
+    {
+        return;
+    }
+
+    m_localFirstPayloadReceiveTimeUsecs =
+        QDateTime::currentMSecsSinceEpoch() * 1000;
+    updateTimingReport();
 }
 
 void RemoteTCPInputTCPHandler::processSpyServerMetaData()

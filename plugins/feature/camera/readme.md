@@ -11,8 +11,8 @@ The Camera plugin supports images and video from:
 * Qt5 Multimedia API (DirectShow on Windows, GStreamer/V4L2 on Linux)
 * ASCOM Alpaca API supported by some telescopes (including support for Filter Wheels and Focusers)
 * ASI cameras (ASICamera2 only currently included in Windows builds)
-* Video files such as MP4, MOV, AVI (via FFmpeg)
-* Streaming protocols such as http: rtsp: rtmp: (via FFmpeg)
+* Video files such as MP4, MOV, AVI (via integrated FFmpeg)
+* Streaming protocols such as http: rtsp: rtmp: (via integrated FFmpeg)
 * Image files such as PNG, JPEG and FITS.
 
 The Camera plugin also supports a variety of post-processing, detection and overlay features, such as:
@@ -20,19 +20,23 @@ The Camera plugin also supports a variety of post-processing, detection and over
 * Dark, flat and bias calibration frames
 * Image stacking with alignment and quality rejection
 * HDR stacking with multiple exposure brackets and merging algorithms
-* Histogram stretching and colour adjustment
+* Histogram stretching, image scaling, colour adjustment and filtering (blur / sharpen / edge detection)
 * YOLO AI object detection (ONNX with OpenCV/TensorRT, or Android LiteRT `.tflite` models with CPU/GPU acceleration)
 * Motion detection
 * Star detection and plate solving
+* Constellation and Messier Catalog overlay
+* Meteor apparent magnitude calculation, based on measaured flux relative to reference stars
 * Optical spectrum extraction from diffraction grating images, with wavelength calibration and reference line overlays
 * Cloud detection
-* Meteor apparent magnitude calculation, based on measaured flux relative to reference stars
 * Difference detection between images
-* ADS-B, AIS, satellite and star tracker item overlay
+* ADS-B, AIS, Satellite and Star Tracker item overlay
 * Date/time and custom HTML overlay
-* Spectrum overlay from SDRangel's SDR devices
+* Spectrum overlay from SDRangel's SDR device spectrums
+* Window overlay from any of SDRangel's windows
 * Azimuth/elevation and right ascension/declination sky grid overlays
+* Overlay basic shapes (lines, arrows, rectangles, ellipses, text and freehand drawings) 
 * Generation of 24-hour keograms
+* Thermal camera temperature extraction and charting (Thermal Master P2 and TOPDON TC001)
 * CUDA acceleration is supported for most operations and the processing runs in multiple threads.
 
 Raw, calibrated, filtered or post-processed images can be saved as JPEG, PNG or FITS files, and video can be recorded in H264/H265 encoded MP4 files. Video can also be streamed to YouTube Live via RTMP.
@@ -41,7 +45,7 @@ The Camera feature can send events to the Scheduler feature when motion or YOLO 
 Recoding images and video can also be triggered via the Scheduler feature, allowing triggering based on time or RF events.
 
 Camera position can be set manually or track GPS. Camera direction can be set manually or track a Rotator controller feature (for telescopes or mounted cameras)
-or sensors such as a compass or accelerometer (for laptop webcams). Optional time-based smoothing stabilizes noisy Qt Sensors azimuth, elevation and roll readings without affecting manual or rotator directions. Direction changes can either reproject the current image for manual fixed-camera alignment, or apply only to subsequently captured frames so a stopped image from a moving camera retains its captured orientation.
+or sensors such as a compass or accelerometer (for laptop webcams).
 
 <h2>Interface</h2>
 
@@ -176,11 +180,12 @@ with the sky background estimated from the RoI rows outside the aperture subtrac
 Controls:
 
 * Auto zero order: locates the zero-order (undispersed) source image as the strongest peak in the RoI. Untick to enter its position manually - required when the zero order lies outside the RoI.
+* Tel lock: continuously anchors the wavelength axis to the telluric O2 absorption bands (759.4 / 686.7 nm) the atmosphere imprints on every spectrum passing through it. A zero-order position error shifts every wavelength by the same amount, and one detected telluric band plus the calibrated dispersion removes that shift entirely - so the axis stays absolute wherever the spectrum sits in the frame, even with the zero order outside the image where auto detection cannot work. The status alongside shows which band is locked and the correction applied; the O2 dip must be detectable in the spectrum (a bright source and some smoothing or averaging help), and setups whose IR-cut filter removes 760 nm must rely on the weaker B band at 687 nm.
 * Dispersion: the wavelength scale in nm/pixel. When 0, the X axis is in pixels. This can be entered directly, or calculated by clicking reference points on the chart with the Calibrate button.
 * Direction: which way wavelength increases along the dispersion axis. Auto compares the red and blue channel centroids of the colour image.
 * Calibrate: calculates the dispersion from reference points clicked on the chart. Click one identified feature (e.g. H-alpha at 656.3 nm in an A-type star) and select or type its wavelength to calibrate against the current zero-order position, or click two identified features to also solve for the zero-order position - useful when the zero order lies outside the RoI. The direction is set automatically from the reference points. Press the button again to finish after a single point.
 * Aperture: the number of rows summed across the trace. 0 sums the full RoI height, but disables background subtraction.
-* Subtract background: subtracts the per-column background estimated from the RoI rows outside the aperture. This suits a star, whose spectrum is a thin trace with sky above and below. The background rows are placed beyond both a guard gap and the measured vertical extent of the trace's glow, so a defocused end of the spectrum (chromatic focus spreads the red end over more rows) is not sampled as sky, and the estimate uses a low-percentile sky statistic smoothed along the wavelength axis, so field stars in the margins - even a dense field of defocused ones - and per-column noise do not imprint on the spectrum. The RoI must therefore be noticeably taller than the trace - draw it with generous sky margins above and below (roughly three times the aperture height works well). If the RoI is too tight for a background estimate, subtraction is skipped and a warning shown. While subtraction is active, the subtracted background is drawn on the chart as a dotted grey series, so an inflated estimate is immediately visible. It is skipped automatically when the source fills the RoI - as with a discharge tube, whose emission lines are images of the tube itself and span the whole frame - because those rows contain the signal rather than a background, and subtracting them would cancel the spectrum out. A warning is shown when this happens, and when a significant part of the aperture is saturated.
+* Subtract background: off by default; subtracts the per-column background estimated from the RoI rows outside the aperture. This suits a star, whose spectrum is a thin trace with sky above and below. The background rows are placed beyond both a guard gap and the measured vertical extent of the trace's glow, so a defocused end of the spectrum (chromatic focus spreads the red end over more rows) is not sampled as sky, and the estimate uses a low-percentile sky statistic smoothed along the wavelength axis, so field stars in the margins - even a dense field of defocused ones - and per-column noise do not imprint on the spectrum. The RoI must therefore be noticeably taller than the trace - draw it with generous sky margins above and below (roughly three times the aperture height works well). If the RoI is too tight for a background estimate, subtraction is skipped and a warning shown. While subtraction is active, the subtracted background is drawn on the chart as a dotted grey series, so an inflated estimate is immediately visible. It is skipped automatically when the source fills the RoI - as with a discharge tube, whose emission lines are images of the tube itself and span the whole frame - because those rows contain the signal rather than a background, and subtracting them would cancel the spectrum out. A warning is shown when this happens, and when a significant part of the aperture is saturated.
 
 For emission sources such as gas discharge tubes, expose so that the brightest lines stay below saturation. An over-exposed source clips to white (losing all colour, as a clipped pixel is white by definition) and scatters a bright haze across the frame that no background subtraction can remove, leaving the extracted colours washed out.
 * Smooth: moving-average width applied to the displayed profile.
@@ -370,13 +375,23 @@ Overlays the right ascension/declination equatorial sky grid.
 
 <h3>38: Constellation overlay</h3>
 
-Overlays the selected constellation stars. This can be used to help determine the camera's pose.
+Overlays the selected constellation's stars. This can be used to help determine the camera's pose manually (E.g. enable the overlay, then tweak the direction settings until the stars line up).
 
-<h3>38a: Image drawings</h3>
+<h3>38a: Messier overlay</h3>
+
+Overlays outlines and labels for [Messier Catalog](https://en.wikipedia.org/wiki/Messier_object) objects (E.g. M51).
+
+When the "Dim undetected objects" option is checked, the outline and label will be dimmed, if a photometric test for the object fails.
+
+![Messier overlay](../../../doc/img/Camera_plugin_messier.png)
+
+<h3>38b: Image drawings</h3>
 
 Shows or hides the image drawing toolbar. Drawings can be added as lines, arrows, rectangles, ellipses, freehand paths or text. Hold Shift while drawing a rectangle or ellipse to constrain it to a square or circle. The toolbar controls line width and colour, optional shape fill or text background, and text font, size, bold and italic styles. Select mode allows one or more drawings to be selected for deletion; the toolbar also provides undo, redo and clear-all commands.
 
 Drawing positions are stored relative to the image dimensions, so they remain aligned when the image resolution changes. They are drawn as scalable scene items in the live preview and are baked into post-processed saved images and video.
+
+![Drawing tools](../../../doc/img/Camera_plugin_drawing_tools.png)
 
 <h3>39: Image display</h3>
 

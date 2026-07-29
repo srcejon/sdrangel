@@ -21,6 +21,7 @@
 #include <QGuiApplication>
 #include <QHash>
 #include <QImage>
+#include <QImageReader>
 #include <QLocale>
 #include <QPainter>
 #include <QRegularExpression>
@@ -33,6 +34,7 @@
 #include <opencv2/imgproc.hpp>
 
 #include "camera.h"
+#include "cameramediametadata.h"
 #include "camerastardetector.h"
 #include "util/astronomy.h"
 #include "util/messagequeue.h"
@@ -113,6 +115,21 @@ struct StarTestCase
     double centerOffsetY = 0.0;
     double distortionK1 = 0.0;
     bool lensMirror = false;   ///< optional "mirror" column: image is horizontally mirrored vs the sky
+    // Which pose/lens/time columns the CSV actually supplied. Anything left blank is filled
+    // from the image's embedded capture geometry, so a row can be as short as image + expectations.
+    bool hasDateTime = false;
+    bool hasLatitude = false;
+    bool hasLongitude = false;
+    bool hasAltitude = false;
+    bool hasAzimuth = false;
+    bool hasElevation = false;
+    bool hasRoll = false;
+    bool hasFov = false;
+    bool hasProjection = false;
+    bool hasCenterOffsetX = false;
+    bool hasCenterOffsetY = false;
+    bool hasDistortionK1 = false;
+    bool hasLensMirror = false;
     double maxMagnitude = std::numeric_limits<double>::quiet_NaN();
     double expectedRoll = std::numeric_limits<double>::quiet_NaN();
     double expectedRollTolerance = std::numeric_limits<double>::quiet_NaN();
@@ -228,6 +245,18 @@ QString fieldValue(const QStringList& header, const QStringList& values, const Q
     return values.at(index).trimmed();
 }
 
+// Column lookup that tolerates an absent column, unlike fieldValue which flags it as an
+// error. Used for the pose/lens/time columns a CSV may omit entirely and leave to the
+// image metadata.
+QString optionalFieldValue(const QStringList& header, const QStringList& values, const QString& name)
+{
+    const int index = header.indexOf(name);
+    if ((index < 0) || (index >= values.size())) {
+        return QString();
+    }
+    return values.at(index).trimmed();
+}
+
 double parseDouble(const QString& value, const QString& column, int lineNumber, bool* ok)
 {
     bool localOk = false;
@@ -241,6 +270,29 @@ double parseDouble(const QString& value, const QString& column, int lineNumber, 
         }
     }
     return result;
+}
+
+// Pose/lens/time columns may be left blank, in which case the value is taken from the
+// capture geometry embedded in the image file (see fillFromImageMetadata). Returns false
+// (without logging an error) when the column is absent or empty, so the caller can decide
+// whether the image supplies it.
+bool parseSuppliedDouble(const QStringList& header,
+                         const QStringList& values,
+                         const QString& name,
+                         int lineNumber,
+                         double& out,
+                         bool* ok)
+{
+    const int index = header.indexOf(name);
+    if ((index < 0) || (index >= values.size())) {
+        return false;
+    }
+    const QString value = values.at(index).trimmed();
+    if (value.isEmpty()) {
+        return false;
+    }
+    out = parseDouble(value, name, lineNumber, ok);
+    return true;
 }
 
 double parseOptionalDouble(const QStringList& header,
@@ -819,6 +871,89 @@ bool projectDiagnosticVector(const TestProjector& projector, const SkyVector& ve
     return std::isfinite(point.x()) && std::isfinite(point.y());
 }
 
+// Fill any pose/lens/time field the CSV left blank from the capture geometry embedded in the
+// image (SDRangel.Camera metadata, written by CameraMediaMetadata::writeImage for PNG and JPEG).
+// CSV values always win, so existing fully-specified rows are untouched and never read the image.
+// Returns false only when a field that materially affects the solve is available from neither
+// source. Cheap path first: QImageReader::text avoids decoding the pixels where the handler
+// supports it, with a full decode as the fallback.
+bool fillFromImageMetadata(StarTestCase& test, int lineNumber)
+{
+    const bool needsAnything = !test.hasDateTime || !test.hasLatitude || !test.hasLongitude
+        || !test.hasAltitude || !test.hasAzimuth || !test.hasElevation || !test.hasRoll
+        || !test.hasFov || !test.hasProjection || !test.hasCenterOffsetX || !test.hasCenterOffsetY
+        || !test.hasDistortionK1 || !test.hasLensMirror;
+    if (!needsAnything) {
+        return true;
+    }
+
+    CameraMediaMetadata metadata;
+    QImageReader reader(test.imagePath);
+    const QString embedded = reader.text(CameraMediaMetadata::metadataKey());
+    if (!embedded.isEmpty()) {
+        metadata = CameraMediaMetadata::fromJson(embedded.toUtf8());
+    }
+    if (!metadata.isValid())
+    {
+        const QImage image(test.imagePath);
+        if (!image.isNull()) {
+            metadata = CameraMediaMetadata::fromImage(image);
+        }
+    }
+
+    if (metadata.isValid())
+    {
+        if (!test.hasDateTime && metadata.captureDateTimeUtc().isValid())
+        {
+            test.dateTime = metadata.captureDateTimeUtc();
+            test.hasDateTime = true;
+        }
+        if (!test.hasLatitude) { test.latitude = metadata.latitude(); test.hasLatitude = true; }
+        if (!test.hasLongitude) { test.longitude = metadata.longitude(); test.hasLongitude = true; }
+        if (!test.hasAltitude) { test.altitude = metadata.altitude(); test.hasAltitude = true; }
+        if (!test.hasAzimuth) { test.azimuth = metadata.azimuth(); test.hasAzimuth = true; }
+        if (!test.hasElevation) { test.elevation = metadata.elevation(); test.hasElevation = true; }
+        if (!test.hasRoll) { test.roll = metadata.roll(); test.hasRoll = true; }
+        if (!test.hasFov && (metadata.fov() > 0.0)) { test.fov = metadata.fov(); test.hasFov = true; }
+        if (!test.hasProjection)
+        {
+            test.projection = static_cast<CameraSettings::LensProjection>(metadata.lensProjection());
+            test.hasProjection = true;
+        }
+        if (!test.hasCenterOffsetX) { test.centerOffsetX = metadata.lensCenterOffsetX(); test.hasCenterOffsetX = true; }
+        if (!test.hasCenterOffsetY) { test.centerOffsetY = metadata.lensCenterOffsetY(); test.hasCenterOffsetY = true; }
+        if (!test.hasDistortionK1) { test.distortionK1 = metadata.lensDistortionK1(); test.hasDistortionK1 = true; }
+        if (!test.hasLensMirror) { test.lensMirror = metadata.lensMirror(); test.hasLensMirror = true; }
+    }
+
+    // Only complain about values the solve genuinely needs. Direction and roll are required
+    // solely by the start modes that trust them; the remaining lens terms have documented
+    // defaults (centred, undistorted, rectilinear, not mirrored).
+    QStringList missing;
+    if (!test.hasDateTime) { missing << QStringLiteral("time"); }
+    if (!test.hasLatitude) { missing << QStringLiteral("latitude"); }
+    if (!test.hasLongitude) { missing << QStringLiteral("longitude"); }
+    if (!test.hasFov) { missing << QStringLiteral("fov"); }
+    const int startMode = static_cast<int>(test.plateSolveStartMode);
+    if (startMode >= static_cast<int>(CameraSettings::PlateSolveStartFovAzEl))
+    {
+        if (!test.hasAzimuth) { missing << QStringLiteral("azimuth"); }
+        if (!test.hasElevation) { missing << QStringLiteral("elevation"); }
+    }
+    if (startMode >= static_cast<int>(CameraSettings::PlateSolveStartFovAzElRoll))
+    {
+        if (!test.hasRoll) { missing << QStringLiteral("roll"); }
+    }
+    if (missing.isEmpty()) {
+        return true;
+    }
+
+    std::cerr << "Line " << lineNumber << ": " << missing.join(QStringLiteral(", ")).toStdString()
+              << " not given in the CSV and no capture geometry embedded in "
+              << QFileInfo(test.imagePath).fileName().toStdString() << '\n';
+    return false;
+}
+
 bool readTestCases(const QString& csvPath, QVector<StarTestCase>& testCases)
 {
     QFile file(csvPath);
@@ -871,18 +1006,28 @@ bool readTestCases(const QString& csvPath, QVector<StarTestCase>& testCases)
         const QString image = fieldValue(header, fields, QStringLiteral("image"), &ok);
         test.imagePath = QFileInfo(image).isAbsolute() ? image : csvDir.filePath(image);
         test.name = QFileInfo(test.imagePath).fileName();
-        test.dateTime = parseDateTime(fieldValue(header, fields, QStringLiteral("time"), &ok), lineNumber, &ok);
-        test.latitude = parseDouble(fieldValue(header, fields, QStringLiteral("latitude"), &ok), QStringLiteral("latitude"), lineNumber, &ok);
-        test.longitude = parseDouble(fieldValue(header, fields, QStringLiteral("longitude"), &ok), QStringLiteral("longitude"), lineNumber, &ok);
-        test.altitude = parseDouble(fieldValue(header, fields, QStringLiteral("altitude"), &ok), QStringLiteral("altitude"), lineNumber, &ok);
-        test.azimuth = parseDouble(fieldValue(header, fields, QStringLiteral("azimuth"), &ok), QStringLiteral("azimuth"), lineNumber, &ok);
-        test.elevation = parseDouble(fieldValue(header, fields, QStringLiteral("elevation"), &ok), QStringLiteral("elevation"), lineNumber, &ok);
-        test.roll = parseDouble(fieldValue(header, fields, QStringLiteral("roll"), &ok), QStringLiteral("roll"), lineNumber, &ok);
-        test.fov = parseDouble(fieldValue(header, fields, QStringLiteral("fov"), &ok), QStringLiteral("fov"), lineNumber, &ok);
-        test.projection = parseProjection(fieldValue(header, fields, QStringLiteral("projection"), &ok));
-        test.centerOffsetX = parseDouble(fieldValue(header, fields, QStringLiteral("cx"), &ok), QStringLiteral("cx"), lineNumber, &ok);
-        test.centerOffsetY = parseDouble(fieldValue(header, fields, QStringLiteral("cy"), &ok), QStringLiteral("cy"), lineNumber, &ok);
-        test.distortionK1 = parseDouble(fieldValue(header, fields, QStringLiteral("k1"), &ok), QStringLiteral("k1"), lineNumber, &ok);
+        const QString timeValue = optionalFieldValue(header, fields, QStringLiteral("time"));
+        if (!timeValue.isEmpty())
+        {
+            test.dateTime = parseDateTime(timeValue, lineNumber, &ok);
+            test.hasDateTime = true;
+        }
+        test.hasLatitude = parseSuppliedDouble(header, fields, QStringLiteral("latitude"), lineNumber, test.latitude, &ok);
+        test.hasLongitude = parseSuppliedDouble(header, fields, QStringLiteral("longitude"), lineNumber, test.longitude, &ok);
+        test.hasAltitude = parseSuppliedDouble(header, fields, QStringLiteral("altitude"), lineNumber, test.altitude, &ok);
+        test.hasAzimuth = parseSuppliedDouble(header, fields, QStringLiteral("azimuth"), lineNumber, test.azimuth, &ok);
+        test.hasElevation = parseSuppliedDouble(header, fields, QStringLiteral("elevation"), lineNumber, test.elevation, &ok);
+        test.hasRoll = parseSuppliedDouble(header, fields, QStringLiteral("roll"), lineNumber, test.roll, &ok);
+        test.hasFov = parseSuppliedDouble(header, fields, QStringLiteral("fov"), lineNumber, test.fov, &ok);
+        const QString projectionValue = optionalFieldValue(header, fields, QStringLiteral("projection"));
+        if (!projectionValue.isEmpty())
+        {
+            test.projection = parseProjection(projectionValue);
+            test.hasProjection = true;
+        }
+        test.hasCenterOffsetX = parseSuppliedDouble(header, fields, QStringLiteral("cx"), lineNumber, test.centerOffsetX, &ok);
+        test.hasCenterOffsetY = parseSuppliedDouble(header, fields, QStringLiteral("cy"), lineNumber, test.centerOffsetY, &ok);
+        test.hasDistortionK1 = parseSuppliedDouble(header, fields, QStringLiteral("k1"), lineNumber, test.distortionK1, &ok);
         int maxMagnitudeIndex = header.indexOf(QStringLiteral("plateSolveMaxMagnitude"));
         if (maxMagnitudeIndex < 0) {
             maxMagnitudeIndex = header.indexOf(QStringLiteral("maxMagnitude"));
@@ -950,10 +1095,13 @@ bool readTestCases(const QString& csvPath, QVector<StarTestCase>& testCases)
         if (mirrorIndex >= 0)
         {
             const QString mirrorValue = fields.value(mirrorIndex).trimmed().toLower();
-            test.lensMirror = !mirrorValue.isEmpty()
-                && (mirrorValue != QStringLiteral("0"))
-                && (mirrorValue != QStringLiteral("false"))
-                && (mirrorValue != QStringLiteral("no"));
+            if (!mirrorValue.isEmpty())
+            {
+                test.lensMirror = (mirrorValue != QStringLiteral("0"))
+                    && (mirrorValue != QStringLiteral("false"))
+                    && (mirrorValue != QStringLiteral("no"));
+                test.hasLensMirror = true;
+            }
         }
         if (std::isfinite(test.expectedRollTolerance) && (test.expectedRollTolerance < 0.0))
         {
@@ -962,6 +1110,9 @@ bool readTestCases(const QString& csvPath, QVector<StarTestCase>& testCases)
         }
 
         if (!ok) {
+            return false;
+        }
+        if (!fillFromImageMetadata(test, lineNumber)) {
             return false;
         }
         testCases.append(test);

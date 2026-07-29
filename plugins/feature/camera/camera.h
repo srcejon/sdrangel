@@ -240,6 +240,21 @@ public:
         { }
     };
 
+    class MsgClearStack : public Message {
+        MESSAGE_CLASS_DECLARATION
+
+    public:
+        static MsgClearStack* create()
+        {
+            return new MsgClearStack();
+        }
+
+    private:
+        MsgClearStack() :
+            Message()
+        { }
+    };
+
     class MsgSaveCloudTestCase : public Message {
         MESSAGE_CLASS_DECLARATION
 

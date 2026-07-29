@@ -19,6 +19,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <limits>
 
 #include <QDebug>
 #include <QElapsedTimer>
@@ -41,10 +42,14 @@
 #include "cameraimageprocessor.h"
 
 MESSAGE_CLASS_DEFINITION(CameraFrameStacker::MsgDeleteStackFrame, Message)
+MESSAGE_CLASS_DEFINITION(CameraFrameStacker::MsgClearStack, Message)
 
 CameraFrameStacker::CameraFrameStacker() :
     m_nextStage(nullptr),
     m_captureActive(false),
+    m_continuousStackFrameCount(0),
+    m_continuousStackExposureMs(0.0),
+    m_lastStackExposureMs(0.0),
 #ifdef CAMERA_OPENCV_CUDA_STACKING
     m_cudaStackAccumulatorInputType(-1),
     m_cudaQualityLaplacianFilterType(-1),
@@ -70,22 +75,34 @@ void CameraFrameStacker::stopWork()
 void CameraFrameStacker::resetFrameHistoryState()
 {
     m_stackFrameHistory.clear();
+    m_stackFrameExposureHistory.clear();
     m_stackFrameQualityHistory.clear();
     m_stackFrameThumbnails.clear();
     m_hdrFrameSamples.clear();
     m_lastFrameTemplate.clear();
     m_lastStackedImage = QImage();
     m_stackAccumulator.release();
+    m_continuousStackFrameCount = 0;
+    m_continuousStackExposureMs = 0.0;
+    m_lastStackExposureMs = 0.0;
 #ifdef CAMERA_OPENCV_CUDA_STACKING
     m_cudaStackAccumulator.release();
     m_cudaStackAccumulatorInputType = -1;
 #endif
 }
 
+bool CameraFrameStacker::isContinuousAverageStacking() const
+{
+    return m_settings.m_stackEnabled
+        && (m_settings.m_stackMethod == CameraSettings::StackMethodAverage)
+        && (m_settings.m_stackDurationMode == CameraSettings::StackDurationContinuous);
+}
+
 bool CameraFrameStacker::preserveFrameOrder() const
 {
     return m_captureActive
         && ((m_settings.isHdrStackingEnabled() && (m_settings.getHdrExposureCount() > 1))
+            || isContinuousAverageStacking()
             || (m_settings.m_stackEnabled && (m_settings.m_stackFrameCount > 1)));
 }
 
@@ -134,19 +151,27 @@ void CameraFrameStacker::trimFrameHistoryToCurrentLimit()
 
     while (static_cast<int>(m_stackFrameHistory.size()) > maxFrames)
     {
-        if ((m_settings.m_stackMethod == CameraSettings::StackMethodAverage) && !m_stackAccumulator.empty())
+        if ((m_settings.m_stackMethod == CameraSettings::StackMethodAverage)
+            && !isContinuousAverageStacking()
+            && !m_stackAccumulator.empty())
         {
             cv::Mat oldestFloatFrame;
             m_stackFrameHistory.front().convertTo(oldestFloatFrame, CV_32FC3);
             m_stackAccumulator -= oldestFloatFrame;
         }
 #ifdef CAMERA_OPENCV_CUDA_STACKING
-        if ((m_settings.m_stackMethod == CameraSettings::StackMethodAverage) && canUseCudaStacking() && !m_cudaStackAccumulator.empty()) {
+        if ((m_settings.m_stackMethod == CameraSettings::StackMethodAverage)
+            && !isContinuousAverageStacking()
+            && canUseCudaStacking()
+            && !m_cudaStackAccumulator.empty()) {
             subtractFromCudaAccumulator(m_stackFrameHistory.front());
         }
 #endif
 
         m_stackFrameHistory.pop_front();
+        if (!m_stackFrameExposureHistory.empty()) {
+            m_stackFrameExposureHistory.pop_front();
+        }
         if (!m_stackFrameQualityHistory.empty()) {
             m_stackFrameQualityHistory.pop_front();
         }
@@ -224,10 +249,76 @@ bool CameraFrameStacker::rebuildCudaAverageAccumulator()
     return true;
 }
 
-bool CameraFrameStacker::applyAverageStackingCuda(const cv::Mat& frameMat, const cv::cuda::GpuMat* sourceFrameGpu, cv::cuda::GpuMat& outputRgbGpu)
+bool CameraFrameStacker::applyAverageStackingCuda(
+    const cv::Mat& frameMat,
+    const cv::cuda::GpuMat* sourceFrameGpu,
+    double frameExposureMs,
+    cv::cuda::GpuMat& outputRgbGpu)
 {
     try
     {
+        if (isContinuousAverageStacking())
+        {
+            if (m_cudaStackAccumulator.empty()
+                || (m_cudaStackAccumulator.size() != frameMat.size())
+                || (m_cudaStackAccumulatorInputType != frameMat.type())
+                || (m_continuousStackFrameCount == 0))
+            {
+                if (!rebuildCudaAverageAccumulator()) {
+                    return false;
+                }
+
+                const quint64 retainedFrameCount = static_cast<quint64>(m_stackFrameHistory.size());
+                cv::cuda::GpuMat meanGpu;
+                m_cudaStackAccumulator.convertTo(
+                    meanGpu,
+                    CV_32FC3,
+                    1.0 / static_cast<double>(std::max<quint64>(1, retainedFrameCount)),
+                    0.0,
+                    m_cudaStackingStream);
+                m_cudaStackAccumulator = meanGpu;
+                m_continuousStackFrameCount = retainedFrameCount;
+                m_continuousStackExposureMs = 0.0;
+                for (double exposureMs : m_stackFrameExposureHistory) {
+                    m_continuousStackExposureMs += exposureMs;
+                }
+            }
+            else
+            {
+                cv::cuda::GpuMat frameGpu;
+                cv::cuda::GpuMat floatGpu;
+                if (sourceFrameGpu && !sourceFrameGpu->empty()) {
+                    frameGpu = *sourceFrameGpu;
+                } else {
+                    frameGpu.upload(frameMat, m_cudaStackingStream);
+                }
+                frameGpu.convertTo(floatGpu, CV_32FC3, m_cudaStackingStream);
+
+                const quint64 newFrameCount = m_continuousStackFrameCount + 1;
+                const double newFrameWeight = 1.0 / static_cast<double>(newFrameCount);
+                cv::cuda::GpuMat updatedMeanGpu;
+                cv::cuda::addWeighted(
+                    m_cudaStackAccumulator,
+                    1.0 - newFrameWeight,
+                    floatGpu,
+                    newFrameWeight,
+                    0.0,
+                    updatedMeanGpu,
+                    -1,
+                    m_cudaStackingStream);
+                m_cudaStackAccumulator = updatedMeanGpu;
+                m_continuousStackFrameCount = newFrameCount;
+                m_continuousStackExposureMs += frameExposureMs;
+            }
+
+            cv::cuda::GpuMat averagedOutputGpu;
+            const int outputType = (frameMat.depth() == CV_16U) ? CV_16UC3 : CV_8UC3;
+            m_cudaStackAccumulator.convertTo(averagedOutputGpu, outputType, 1.0, 0.0, m_cudaStackingStream);
+            averagedOutputGpu.copyTo(outputRgbGpu, m_cudaStackingStream);
+            m_cudaStackingStream.waitForCompletion();
+            return true;
+        }
+
         bool accumulatorIncludesCurrentFrame = false;
         if (m_cudaStackAccumulator.empty()
             || (m_cudaStackAccumulator.size() != frameMat.size())
@@ -266,6 +357,8 @@ bool CameraFrameStacker::applyAverageStackingCuda(const cv::Mat& frameMat, const
         qWarning() << "CameraFrameStacker: CUDA average stacking failed; falling back to CPU:" << error.what();
         m_cudaStackAccumulator.release();
         m_cudaStackAccumulatorInputType = -1;
+        m_continuousStackFrameCount = 0;
+        m_continuousStackExposureMs = 0.0;
     }
 
     return false;
@@ -760,6 +853,16 @@ bool CameraFrameStacker::handleMessage(const Message& cmd)
         deleteStackFrame(deleteMsg.getFrameIndex());
         return true;
     }
+    else if (MsgClearStack::match(cmd))
+    {
+        Camera::discardQueuedProcessFrames(m_inputMessageQueue);
+        QMutexLocker locker(&m_frameMutex);
+        m_pendingFrames.clear();
+        m_droppedFrameCount = 0;
+        m_rejectedFrameCount = 0;
+        resetFrameHistoryState();
+        return true;
+    }
 
     return false;
 }
@@ -790,9 +893,13 @@ void CameraFrameStacker::applySettings(const CameraSettings& settings, const QLi
         || settingsKeys.contains("scaleKeepAspectRatio")
         || settingsKeys.contains("scaleJustification");
     const CameraSettings::StackMethod previousStackMethod = m_settings.m_stackMethod;
+    const CameraSettings::StackDurationMode previousStackDurationMode = m_settings.m_stackDurationMode;
     const bool stackMethodChanged = !force
         && settingsKeys.contains("stackMethod")
         && (previousStackMethod != settings.m_stackMethod);
+    const bool stackDurationModeChanged = !force
+        && settingsKeys.contains("stackDurationMode")
+        && (previousStackDurationMode != settings.m_stackDurationMode);
     const bool hdrStackingModeChanged = stackMethodChanged
         && ((previousStackMethod == CameraSettings::StackMethodHDR)
             || (settings.m_stackMethod == CameraSettings::StackMethodHDR));
@@ -839,7 +946,7 @@ void CameraFrameStacker::applySettings(const CameraSettings& settings, const QLi
     }
     else
     {
-        if (stackMethodChanged)
+        if (stackMethodChanged || stackDurationModeChanged)
         {
             // Non-HDR methods all consume the same aligned frame history. Only
             // their derived accumulator state is method-specific.
@@ -848,6 +955,9 @@ void CameraFrameStacker::applySettings(const CameraSettings& settings, const QLi
             m_cudaStackAccumulator.release();
             m_cudaStackAccumulatorInputType = -1;
 #endif
+            m_continuousStackFrameCount = 0;
+            m_continuousStackExposureMs = 0.0;
+            m_lastStackExposureMs = 0.0;
         }
 
         if (settingsKeys.contains("stackFrameCount")) {
@@ -959,6 +1069,10 @@ void CameraFrameStacker::processNewFrame(const CameraPipelineFramePtr& frame)
     if (passThroughFrame)
     {
         frame->m_stack.m_count = 1;
+        frame->m_stack.m_historyCount = 1;
+        frame->m_stack.m_totalExposureMs = (std::isfinite(frame->m_exposureTimeMs) && (frame->m_exposureTimeMs > 0.0))
+            ? frame->m_exposureTimeMs
+            : std::max(CameraSettings::m_minExposureTimeMs, m_settings.m_exposureTimeMs);
         if (!applyOutputScaling(*frame)) {
             return;
         }
@@ -993,7 +1107,11 @@ void CameraFrameStacker::processNewFrame(const CameraPipelineFramePtr& frame)
         return;
     }
     frame->m_bayerPattern = CameraPipelineFrame::BayerNone;
-    frame->m_stack.m_count = std::max(1, stackCount);
+    frame->m_stack.m_count = isContinuousAverageStacking()
+        ? std::max<quint64>(1, m_continuousStackFrameCount)
+        : static_cast<quint64>(std::max(1, stackCount));
+    frame->m_stack.m_historyCount = static_cast<int>(m_stackFrameHistory.size());
+    frame->m_stack.m_totalExposureMs = std::max(0.0, m_lastStackExposureMs);
     if (!applyOutputScaling(*frame)) {
         return;
     }
@@ -1014,6 +1132,7 @@ bool CameraFrameStacker::canPassThroughFrame(const CameraPipelineFrame& inputFra
 
     const bool hdrStackingEnabled = m_settings.isHdrStackingEnabled() && (m_settings.getHdrExposureCount() > 1);
     const bool stackEnabled = hdrStackingEnabled
+        || isContinuousAverageStacking()
         || (m_settings.m_stackEnabled && (m_settings.m_stackFrameCount > 1));
 
     return !stackEnabled && inputFrame.hasImageData();
@@ -1326,17 +1445,112 @@ void CameraFrameStacker::deleteStackFrame(int frameIndex)
     }
 
     const int boundedFrameIndex = qBound(0, frameIndex, static_cast<int>(m_stackFrameHistory.size()) - 1);
+    const cv::Mat removedFrame = m_stackFrameHistory[boundedFrameIndex];
+    const double removedExposureMs = boundedFrameIndex < static_cast<int>(m_stackFrameExposureHistory.size())
+        ? m_stackFrameExposureHistory[boundedFrameIndex]
+        : 0.0;
+
+    if (isContinuousAverageStacking() && (m_continuousStackFrameCount > 1))
+    {
+        const double oldWeight = static_cast<double>(m_continuousStackFrameCount)
+            / static_cast<double>(m_continuousStackFrameCount - 1);
+        const double removedWeight = -1.0 / static_cast<double>(m_continuousStackFrameCount - 1);
+
+        if (!m_stackAccumulator.empty())
+        {
+            cv::Mat removedFloat;
+            cv::Mat updatedMean;
+            removedFrame.convertTo(removedFloat, CV_32FC3);
+            cv::addWeighted(m_stackAccumulator, oldWeight, removedFloat, removedWeight, 0.0, updatedMean, CV_32FC3);
+            m_stackAccumulator = updatedMean;
+        }
+#ifdef CAMERA_OPENCV_CUDA_STACKING
+        if (!m_cudaStackAccumulator.empty())
+        {
+            try
+            {
+                cv::cuda::GpuMat removedGpu;
+                cv::cuda::GpuMat removedFloatGpu;
+                cv::cuda::GpuMat updatedMeanGpu;
+                removedGpu.upload(removedFrame, m_cudaStackingStream);
+                removedGpu.convertTo(removedFloatGpu, CV_32FC3, m_cudaStackingStream);
+                cv::cuda::addWeighted(
+                    m_cudaStackAccumulator,
+                    oldWeight,
+                    removedFloatGpu,
+                    removedWeight,
+                    0.0,
+                    updatedMeanGpu,
+                    -1,
+                    m_cudaStackingStream);
+                m_cudaStackAccumulator = updatedMeanGpu;
+                m_cudaStackingStream.waitForCompletion();
+            }
+            catch (const cv::Exception& error)
+            {
+                qWarning() << "CameraFrameStacker: CUDA continuous stack deletion failed; retaining CPU state:" << error.what();
+                m_cudaStackAccumulator.release();
+                m_cudaStackAccumulatorInputType = -1;
+            }
+        }
+#endif
+        --m_continuousStackFrameCount;
+        m_continuousStackExposureMs = std::max(0.0, m_continuousStackExposureMs - removedExposureMs);
+        m_lastStackExposureMs = m_continuousStackExposureMs;
+    }
+    else if (isContinuousAverageStacking())
+    {
+        resetFrameHistoryState();
+        return;
+    }
+
     m_stackFrameHistory.erase(m_stackFrameHistory.begin() + boundedFrameIndex);
+    if (boundedFrameIndex < static_cast<int>(m_stackFrameExposureHistory.size())) {
+        m_stackFrameExposureHistory.erase(m_stackFrameExposureHistory.begin() + boundedFrameIndex);
+    }
     if (boundedFrameIndex < static_cast<int>(m_stackFrameQualityHistory.size())) {
         m_stackFrameQualityHistory.erase(m_stackFrameQualityHistory.begin() + boundedFrameIndex);
     }
     if (boundedFrameIndex < static_cast<int>(m_stackFrameThumbnails.size())) {
         m_stackFrameThumbnails.erase(m_stackFrameThumbnails.begin() + boundedFrameIndex);
     }
-    m_stackAccumulator.release();
+
+    if (isContinuousAverageStacking())
+    {
+        cv::Mat stackedMat;
+        const int outputType = (removedFrame.depth() == CV_16U) ? CV_16UC3 : CV_8UC3;
+        if (!m_stackAccumulator.empty()) {
+            m_stackAccumulator.convertTo(stackedMat, outputType);
+        }
 #ifdef CAMERA_OPENCV_CUDA_STACKING
-    m_cudaStackAccumulator.release();
-    m_cudaStackAccumulatorInputType = -1;
+        else if (!m_cudaStackAccumulator.empty())
+        {
+            try
+            {
+                cv::cuda::GpuMat outputGpu;
+                m_cudaStackAccumulator.convertTo(outputGpu, outputType, 1.0, 0.0, m_cudaStackingStream);
+                outputGpu.download(stackedMat, m_cudaStackingStream);
+                m_cudaStackingStream.waitForCompletion();
+            }
+            catch (const cv::Exception& error) {
+                qWarning() << "CameraFrameStacker: CUDA continuous stack preview failed:" << error.what();
+            }
+        }
+#endif
+        if (!stackedMat.empty()) {
+            m_lastStackedImage = workingMatToImage(stackedMat);
+        }
+    }
+
+    if (!isContinuousAverageStacking()) {
+        m_stackAccumulator.release();
+    }
+#ifdef CAMERA_OPENCV_CUDA_STACKING
+    if (!isContinuousAverageStacking())
+    {
+        m_cudaStackAccumulator.release();
+        m_cudaStackAccumulatorInputType = -1;
+    }
 #endif
 
     if (m_settings.m_stackDisplayFrameIndex >= static_cast<int>(m_stackFrameHistory.size())) {
@@ -1362,7 +1576,11 @@ void CameraFrameStacker::emitHistoryPreviewFrame()
     previewFrame->m_image = outputImage;
     previewFrame->m_unprocessedImage = outputImage;
     previewFrame->clearCudaCache();
-    previewFrame->m_stack.m_count = static_cast<int>(m_stackFrameHistory.size());
+    previewFrame->m_stack.m_count = isContinuousAverageStacking()
+        ? std::max<quint64>(1, m_continuousStackFrameCount)
+        : static_cast<quint64>(m_stackFrameHistory.size());
+    previewFrame->m_stack.m_historyCount = static_cast<int>(m_stackFrameHistory.size());
+    previewFrame->m_stack.m_totalExposureMs = m_lastStackExposureMs;
     previewFrame->m_stack.m_queuedCount = 0;
     previewFrame->m_stack.m_rejectedCount = m_rejectedFrameCount;
     if (!applyOutputScaling(*previewFrame)) {
@@ -1377,6 +1595,7 @@ bool CameraFrameStacker::applyFrameStacking(CameraPipelineFrame& inputFrame, QIm
     PROFILER_START();
     const bool hdrStackingEnabled = m_settings.isHdrStackingEnabled() && (m_settings.getHdrExposureCount() > 1);
     const bool stackEnabled = hdrStackingEnabled
+        || isContinuousAverageStacking()
         || (m_settings.m_stackEnabled && (m_settings.m_stackFrameCount > 1));
 
     if (!stackEnabled)
@@ -1478,6 +1697,11 @@ bool CameraFrameStacker::applyFrameStacking(CameraPipelineFrame& inputFrame, QIm
         {
             PROFILER_STOP(__FUNCTION__);
             return false;
+        }
+
+        m_lastStackExposureMs = 0.0;
+        for (const HdrFrameSample& sample : m_hdrFrameSamples) {
+            m_lastStackExposureMs += sample.m_exposureTimeMs;
         }
 
         try
@@ -1885,9 +2109,13 @@ bool CameraFrameStacker::applyFrameStacking(CameraPipelineFrame& inputFrame, QIm
         || m_stackFrameHistory.front().type() != alignedFrameMat.type())
     {
         m_stackFrameHistory.clear();
+        m_stackFrameExposureHistory.clear();
         m_stackFrameQualityHistory.clear();
         m_stackFrameThumbnails.clear();
         m_stackAccumulator.release();
+        m_continuousStackFrameCount = 0;
+        m_continuousStackExposureMs = 0.0;
+        m_lastStackExposureMs = 0.0;
 #ifdef CAMERA_OPENCV_CUDA_STACKING
         m_cudaStackAccumulator.release();
         m_cudaStackAccumulatorInputType = -1;
@@ -1933,7 +2161,11 @@ bool CameraFrameStacker::applyFrameStacking(CameraPipelineFrame& inputFrame, QIm
     }
     inputFrame.m_stack.m_rejectReason.clear();
 
+    const double frameExposureMs = (std::isfinite(inputFrame.m_exposureTimeMs) && (inputFrame.m_exposureTimeMs > 0.0))
+        ? inputFrame.m_exposureTimeMs
+        : std::max(CameraSettings::m_minExposureTimeMs, m_settings.m_exposureTimeMs);
     m_stackFrameHistory.push_back(alignedFrameMat.clone());
+    m_stackFrameExposureHistory.push_back(frameExposureMs);
     if (needQuality) {
         m_stackFrameQualityHistory.push_back(quality);
     }
@@ -1949,12 +2181,16 @@ bool CameraFrameStacker::applyFrameStacking(CameraPipelineFrame& inputFrame, QIm
         ensureStackFrameQualityHistory();
         const std::vector<size_t> selectedIndices = selectedSharpFrameIndices();
         cv::Mat luckyAccumulator = cv::Mat::zeros(alignedFrameMat.size(), CV_32FC3);
+        m_lastStackExposureMs = 0.0;
 
         for (size_t index : selectedIndices)
         {
             cv::Mat floatFrame;
             m_stackFrameHistory[index].convertTo(floatFrame, CV_32FC3);
             luckyAccumulator += floatFrame;
+            if (index < m_stackFrameExposureHistory.size()) {
+                m_lastStackExposureMs += m_stackFrameExposureHistory[index];
+            }
         }
 
         cv::Mat averagedFloat;
@@ -1962,6 +2198,10 @@ bool CameraFrameStacker::applyFrameStacking(CameraPipelineFrame& inputFrame, QIm
         cv::Mat averagedOutput;
         const int outputType = (alignedFrameMat.depth() == CV_16U) ? CV_16UC3 : CV_8UC3;
         averagedFloat.convertTo(averagedOutput, outputType);
+        m_lastStackExposureMs = 0.0;
+        for (double exposureMs : m_stackFrameExposureHistory) {
+            m_lastStackExposureMs += exposureMs;
+        }
 
 #ifdef CAMERA_OPENCV_CUDA_STACKING
         if (useCudaStacking
@@ -1991,7 +2231,12 @@ bool CameraFrameStacker::applyFrameStacking(CameraPipelineFrame& inputFrame, QIm
     {
 #ifdef CAMERA_OPENCV_CUDA_STACKING
         cv::cuda::GpuMat averagedRgbGpu;
-        if (useCudaStacking && applyAverageStackingCuda(alignedFrameMat, cudaFrameMat.empty() ? nullptr : &cudaFrameMat, averagedRgbGpu))
+        if (useCudaStacking
+            && applyAverageStackingCuda(
+                alignedFrameMat,
+                cudaFrameMat.empty() ? nullptr : &cudaFrameMat,
+                frameExposureMs,
+                averagedRgbGpu))
         {
             if (m_settings.m_stackDisplayMode == CameraSettings::StackDisplayStacked)
             {
@@ -2016,11 +2261,93 @@ bool CameraFrameStacker::applyFrameStacking(CameraPipelineFrame& inputFrame, QIm
                     outputImage = stackedImage;
                 }
             }
-            stackCount = static_cast<int>(m_stackFrameHistory.size());
+            stackCount = isContinuousAverageStacking()
+                ? static_cast<int>(std::min<quint64>(m_continuousStackFrameCount, static_cast<quint64>(std::numeric_limits<int>::max())))
+                : static_cast<int>(m_stackFrameHistory.size());
+            m_lastStackExposureMs = isContinuousAverageStacking()
+                ? m_continuousStackExposureMs
+                : 0.0;
+            if (!isContinuousAverageStacking()) {
+                for (double exposureMs : m_stackFrameExposureHistory) {
+                    m_lastStackExposureMs += exposureMs;
+                }
+            }
             PROFILER_STOP(__FUNCTION__);
             return true;
         }
 #endif
+        if (isContinuousAverageStacking())
+        {
+            if (m_stackAccumulator.empty() || (m_continuousStackFrameCount == 0))
+            {
+                m_stackAccumulator = cv::Mat::zeros(alignedFrameMat.size(), CV_32FC3);
+                for (const cv::Mat& historyFrame : m_stackFrameHistory)
+                {
+                    cv::Mat floatFrame;
+                    historyFrame.convertTo(floatFrame, CV_32FC3);
+                    m_stackAccumulator += floatFrame;
+                }
+                const quint64 retainedFrameCount = static_cast<quint64>(m_stackFrameHistory.size());
+                m_stackAccumulator *= 1.0 / static_cast<double>(std::max<quint64>(1, retainedFrameCount));
+                m_continuousStackFrameCount = retainedFrameCount;
+                m_continuousStackExposureMs = 0.0;
+                for (double exposureMs : m_stackFrameExposureHistory) {
+                    m_continuousStackExposureMs += exposureMs;
+                }
+            }
+            else
+            {
+                cv::Mat floatFrame;
+                alignedFrameMat.convertTo(floatFrame, CV_32FC3);
+                const quint64 newFrameCount = m_continuousStackFrameCount + 1;
+                const double newFrameWeight = 1.0 / static_cast<double>(newFrameCount);
+                cv::Mat updatedMean;
+                cv::addWeighted(
+                    m_stackAccumulator,
+                    1.0 - newFrameWeight,
+                    floatFrame,
+                    newFrameWeight,
+                    0.0,
+                    updatedMean,
+                    CV_32FC3);
+                m_stackAccumulator = updatedMean;
+                m_continuousStackFrameCount = newFrameCount;
+                m_continuousStackExposureMs += frameExposureMs;
+            }
+
+            cv::Mat averagedOutput;
+            const int outputType = (alignedFrameMat.depth() == CV_16U) ? CV_16UC3 : CV_8UC3;
+            m_stackAccumulator.convertTo(averagedOutput, outputType);
+
+#ifdef CAMERA_OPENCV_CUDA_STACKING
+            if (useCudaStacking
+                && (m_settings.m_stackDisplayMode == CameraSettings::StackDisplayStacked)
+                && setCudaBgrOutputFromRgbMat(inputFrame, averagedOutput))
+            {
+                m_lastStackedImage = QImage();
+                outputImage = QImage();
+                stackCount = static_cast<int>(std::min<quint64>(
+                    m_continuousStackFrameCount,
+                    static_cast<quint64>(std::numeric_limits<int>::max())));
+                m_lastStackExposureMs = m_continuousStackExposureMs;
+                PROFILER_STOP(__FUNCTION__);
+                return true;
+            }
+#endif
+
+            const QImage stackedImage = workingMatToImage(averagedOutput);
+            m_lastStackedImage = stackedImage;
+            if (!renderStackDisplayImage(stackedImage, outputImage)) {
+                outputImage = stackedImage;
+            }
+            stackCount = static_cast<int>(std::min<quint64>(
+                m_continuousStackFrameCount,
+                static_cast<quint64>(std::numeric_limits<int>::max())));
+            m_lastStackExposureMs = m_continuousStackExposureMs;
+            PROFILER_STOP(__FUNCTION__);
+            return true;
+        }
+
         bool accumulatorIncludesCurrentFrame = false;
         if (m_stackAccumulator.empty() && (m_stackFrameHistory.size() > 1))
         {
@@ -2228,6 +2555,10 @@ bool CameraFrameStacker::applyFrameStacking(CameraPipelineFrame& inputFrame, QIm
         });
 
     PROFILER_STOP(__FUNCTION__);
+    m_lastStackExposureMs = 0.0;
+    for (double exposureMs : m_stackFrameExposureHistory) {
+        m_lastStackExposureMs += exposureMs;
+    }
 #ifdef CAMERA_OPENCV_CUDA_STACKING
     if (useCudaStacking && (m_settings.m_stackDisplayMode == CameraSettings::StackDisplayStacked))
     {

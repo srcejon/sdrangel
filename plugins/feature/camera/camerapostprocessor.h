@@ -129,7 +129,9 @@ public:
         const QImage& getImage() const { return m_image; }
         const CameraHistogramData& getHistogramData() const { return m_histogramData; }
         const CameraOpticalSpectrumData& getOpticalSpectrumData() const { return m_opticalSpectrumData; }
-        int getStackCount() const { return m_stack.m_count; }
+        quint64 getStackCount() const { return m_stack.m_count; }
+        int getStackHistoryCount() const { return m_stack.m_historyCount; }
+        double getStackTotalExposureMs() const { return m_stack.m_totalExposureMs; }
         int getStackQueuedCount() const { return m_stack.m_queuedCount; }
         int getStackDroppedCount() const { return m_stack.m_droppedCount; }
         int getStackRejectedCount() const { return m_stack.m_rejectedCount; }

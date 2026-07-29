@@ -861,20 +861,24 @@ bool CameraGUI::handleMessage(const Message& message)
         m_lastPreviewRectItems = report.getPreviewRectItems();
         m_lastPreviewImageOverlays = report.getPreviewImageOverlays();
         m_lastStackCount = report.getStackCount();
+        m_lastStackHistoryCount = report.getStackHistoryCount();
+        m_lastStackTotalExposureMs = report.getStackTotalExposureMs();
         m_lastStackQueuedCount = report.getStackQueuedCount();
         m_lastStackDroppedCount = report.getStackDroppedCount();
         m_lastStackRejectedCount = report.getStackRejectedCount();
-        settingsUI()->stackCurrentCountValue->setText(tr("%1 / %2 / %3 / %4")
+        settingsUI()->stackCurrentCountValue->setText(tr("%1 / %2 / %3 / %4 / %5")
             .arg(m_lastStackCount)
+            .arg(formatStackExposure(m_lastStackTotalExposureMs))
             .arg(m_lastStackQueuedCount)
             .arg(m_lastStackDroppedCount)
             .arg(m_lastStackRejectedCount));
         const QString stackStatusToolTip = report.getStackRejectReason().isEmpty()
-            ? tr("Stacked / queued / dropped / rejected")
-            : tr("Stacked / queued / dropped / rejected\nLast rejected frame: %1").arg(report.getStackRejectReason());
+            ? tr("Integrated frames / total exposure / queued / dropped / rejected")
+            : tr("Integrated frames / total exposure / queued / dropped / rejected\nLast rejected frame: %1").arg(report.getStackRejectReason());
         settingsUI()->stackCurrentCountValue->setToolTip(stackStatusToolTip);
-        settingsUI()->stackDisplayFrameSpin->setMaximum(std::max(1, m_lastStackCount));
-        settingsUI()->stackDeleteFrameButton->setEnabled(m_lastStackCount > 0);
+        settingsUI()->stackDisplayFrameSpin->setMaximum(std::max(1, m_lastStackHistoryCount));
+        settingsUI()->stackDeleteFrameButton->setEnabled(m_lastStackHistoryCount > 0);
+        settingsUI()->stackClearButton->setEnabled(m_lastStackCount > 0);
         settingsUI()->cloudCoverageLabel->setText(report.isCloudValid()
             ? tr("%1 % (%2)").arg(report.getCloudCoveragePercent(), 0, 'f', 1).arg(report.isCloudNight() ? tr("night") : tr("day"))
             : "-");
@@ -2396,6 +2400,7 @@ void CameraGUI::displaySettings()
     ui->stackEnabledButton->setChecked(m_settings.m_stackEnabled);
     settingsUI()->stackFrameCountSpin->setValue(m_settings.m_stackFrameCount);
     settingsUI()->stackMethodCombo->setCurrentIndex(static_cast<int>(m_settings.m_stackMethod));
+    settingsUI()->stackDurationModeCombo->setCurrentIndex(static_cast<int>(m_settings.m_stackDurationMode));
     settingsUI()->stackHdrAlgorithmCombo->setCurrentIndex(static_cast<int>(m_settings.m_stackHdrAlgorithm));
     settingsUI()->stackHdrExposureCountSpin->setValue(m_settings.getHdrExposureCount());
     settingsUI()->stackAlignmentCombo->setCurrentIndex(static_cast<int>(m_settings.m_stackAlignmentMethod));
@@ -2462,8 +2467,9 @@ void CameraGUI::displaySettings()
     settingsUI()->postProcessWhiteBalanceBlueGainSlider->setValue(doubleSpinBoxValueToSlider(settingsUI()->postProcessWhiteBalanceBlueGainSpin, m_settings.m_postProcessWhiteBalanceBlueGain));
     settingsUI()->postProcessWhiteBalanceHighlightProtectionSpin->setValue(m_settings.m_postProcessWhiteBalanceHighlightProtection);
     settingsUI()->postProcessWhiteBalanceHighlightProtectionSlider->setValue(doubleSpinBoxValueToSlider(settingsUI()->postProcessWhiteBalanceHighlightProtectionSpin, m_settings.m_postProcessWhiteBalanceHighlightProtection));
-    settingsUI()->stackCurrentCountValue->setText(tr("%1 / %2 / %3 / %4")
+    settingsUI()->stackCurrentCountValue->setText(tr("%1 / %2 / %3 / %4 / %5")
         .arg(m_lastStackCount)
+        .arg(formatStackExposure(m_lastStackTotalExposureMs))
         .arg(m_lastStackQueuedCount)
         .arg(m_lastStackDroppedCount)
         .arg(m_lastStackRejectedCount));
@@ -4000,6 +4006,7 @@ void CameraGUI::makeUIConnections()
     QObject::connect(ui->stackEnabledButton, &QToolButton::toggled, this, &CameraGUI::on_stackEnabledCheck_toggled);
     QObject::connect(settingsUI()->stackFrameCountSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_stackFrameCountSpin_valueChanged);
     QObject::connect(settingsUI()->stackMethodCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_stackMethodCombo_currentIndexChanged);
+    QObject::connect(settingsUI()->stackDurationModeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_stackDurationModeCombo_currentIndexChanged);
     QObject::connect(settingsUI()->stackHdrAlgorithmCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
         [this](int index)
         {
@@ -4025,6 +4032,7 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->stackDisplayModeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_stackDisplayModeCombo_currentIndexChanged);
     QObject::connect(settingsUI()->stackDisplayFrameSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_stackDisplayFrameSpin_valueChanged);
     QObject::connect(settingsUI()->stackDeleteFrameButton, &QToolButton::clicked, this, &CameraGUI::on_stackDeleteFrameButton_clicked);
+    QObject::connect(settingsUI()->stackClearButton, &QToolButton::clicked, this, &CameraGUI::on_stackClearButton_clicked);
     QObject::connect(settingsUI()->stackRejectBadFramesCheck, &QCheckBox::toggled, this, &CameraGUI::on_stackRejectBadFramesCheck_toggled);
     QObject::connect(settingsUI()->scaleEnabledCheck, &QCheckBox::toggled, this, &CameraGUI::on_scaleEnabledCheck_toggled);
     QObject::connect(settingsUI()->scaleWidthSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_scaleWidthSpin_valueChanged);
@@ -4694,6 +4702,7 @@ void CameraGUI::updateHdrStackingControls()
     }
 
     const bool hdrSelected = (m_settings.m_stackMethod == CameraSettings::StackMethodHDR);
+    const bool averageSelected = (m_settings.m_stackMethod == CameraSettings::StackMethodAverage);
     const bool hdrControlsEnabled = hdrSelected && isHdrStackingSupported();
     const int visibleExposureRows = hdrSelected ? m_settings.getHdrExposureCount() : 0;
     const auto labels = hdrExposureLabels(settingsUI());
@@ -4702,6 +4711,18 @@ void CameraGUI::updateHdrStackingControls()
 
     settingsUI()->stackFrameCountLabel->setVisible(!hdrSelected);
     settingsUI()->stackFrameCountSpin->setVisible(!hdrSelected);
+    settingsUI()->stackFrameCountLabel->setText(
+        averageSelected && (m_settings.m_stackDurationMode == CameraSettings::StackDurationContinuous)
+            ? tr("History frames")
+            : tr("Frames"));
+    settingsUI()->stackFrameCountSpin->setToolTip(
+        averageSelected && (m_settings.m_stackDurationMode == CameraSettings::StackDurationContinuous)
+            ? tr("Number of recent source frames retained for review; all accepted frames remain in the continuous integration")
+            : tr("Number of recent frames combined in the rolling stack"));
+    settingsUI()->stackDurationModeLabel->setVisible(!hdrSelected);
+    settingsUI()->stackDurationModeCombo->setVisible(!hdrSelected);
+    settingsUI()->stackDurationModeLabel->setEnabled(averageSelected);
+    settingsUI()->stackDurationModeCombo->setEnabled(averageSelected);
     settingsUI()->stackHdrExposureCountLabel->setVisible(hdrSelected);
     settingsUI()->stackHdrExposureCountSpin->setVisible(hdrSelected);
     settingsUI()->stackHdrExposureCountLabel->setEnabled(hdrControlsEnabled);
@@ -4721,6 +4742,25 @@ void CameraGUI::updateHdrStackingControls()
         sliders[exposureIndex]->setEnabled(hdrControlsEnabled);
         spins[exposureIndex]->setEnabled(hdrControlsEnabled);
     }
+}
+
+QString CameraGUI::formatStackExposure(double exposureMs)
+{
+    const qint64 totalSeconds = std::max<qint64>(0, static_cast<qint64>(std::llround(exposureMs / 1000.0)));
+    const qint64 hours = totalSeconds / 3600;
+    const qint64 minutes = (totalSeconds % 3600) / 60;
+    const qint64 seconds = totalSeconds % 60;
+
+    if (hours > 0) {
+        return tr("%1h %2m %3s").arg(hours).arg(minutes).arg(seconds);
+    }
+    if (minutes > 0) {
+        return tr("%1m %2s").arg(minutes).arg(seconds);
+    }
+    if ((exposureMs > 0.0) && (exposureMs < 1000.0)) {
+        return tr("%1 ms").arg(exposureMs, 0, 'f', exposureMs < 10.0 ? 1 : 0);
+    }
+    return tr("%1s").arg(seconds);
 }
 
 void CameraGUI::updateScaleControls()
@@ -9505,8 +9545,23 @@ void CameraGUI::on_stackFrameCountSpin_valueChanged(int value)
 void CameraGUI::on_stackMethodCombo_currentIndexChanged(int index)
 {
     m_settings.m_stackMethod = static_cast<CameraSettings::StackMethod>(index);
+    if ((m_settings.m_stackMethod != CameraSettings::StackMethodAverage)
+        && (m_settings.m_stackDurationMode != CameraSettings::StackDurationRolling))
+    {
+        m_settings.m_stackDurationMode = CameraSettings::StackDurationRolling;
+        QSignalBlocker blocker(settingsUI()->stackDurationModeCombo);
+        settingsUI()->stackDurationModeCombo->setCurrentIndex(static_cast<int>(m_settings.m_stackDurationMode));
+        applySetting("stackDurationMode");
+    }
     updateCameraSettingsVisibility();
     applySetting("stackMethod");
+}
+
+void CameraGUI::on_stackDurationModeCombo_currentIndexChanged(int index)
+{
+    m_settings.m_stackDurationMode = static_cast<CameraSettings::StackDurationMode>(index);
+    updateHdrStackingControls();
+    applySetting("stackDurationMode");
 }
 
 void CameraGUI::on_stackAlignmentCombo_currentIndexChanged(int index)
@@ -9535,6 +9590,24 @@ void CameraGUI::on_stackDeleteFrameButton_clicked()
     if (m_camera) {
         m_camera->getInputMessageQueue()->push(Camera::MsgDeleteStackFrame::create(std::max(0, settingsUI()->stackDisplayFrameSpin->value() - 1)));
     }
+}
+
+void CameraGUI::on_stackClearButton_clicked()
+{
+    if (m_camera) {
+        m_camera->getInputMessageQueue()->push(Camera::MsgClearStack::create());
+    }
+
+    m_lastStackCount = 0;
+    m_lastStackHistoryCount = 0;
+    m_lastStackTotalExposureMs = 0.0;
+    m_lastStackQueuedCount = 0;
+    m_lastStackDroppedCount = 0;
+    m_lastStackRejectedCount = 0;
+    settingsUI()->stackCurrentCountValue->setText(tr("0 / 0s / 0 / 0 / 0"));
+    settingsUI()->stackDisplayFrameSpin->setMaximum(1);
+    settingsUI()->stackDeleteFrameButton->setEnabled(false);
+    settingsUI()->stackClearButton->setEnabled(false);
 }
 
 void CameraGUI::on_stackRejectBadFramesCheck_toggled(bool checked)

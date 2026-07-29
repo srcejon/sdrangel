@@ -85,6 +85,21 @@ public:
         { }
     };
 
+    class MsgClearStack : public Message {
+        MESSAGE_CLASS_DECLARATION
+
+    public:
+        static MsgClearStack* create()
+        {
+            return new MsgClearStack();
+        }
+
+    private:
+        MsgClearStack() :
+            Message()
+        { }
+    };
+
     CameraFrameStacker();
     ~CameraFrameStacker();
 
@@ -120,10 +135,14 @@ private:
     bool m_captureActive;
     quint64 m_captureEpoch = 0;
     std::deque<cv::Mat> m_stackFrameHistory;
+    std::deque<double> m_stackFrameExposureHistory;
     std::deque<StackFrameQuality> m_stackFrameQualityHistory;
     std::deque<QImage> m_stackFrameThumbnails;
     std::vector<HdrFrameSample> m_hdrFrameSamples;
     cv::Mat m_stackAccumulator;
+    quint64 m_continuousStackFrameCount;
+    double m_continuousStackExposureMs;
+    double m_lastStackExposureMs;
 #ifdef CAMERA_OPENCV_CUDA_STACKING
     cv::cuda::Stream m_cudaStackingStream;
     cv::cuda::GpuMat m_cudaStackAccumulator;
@@ -147,12 +166,17 @@ private:
     int pendingFrameLimit() const;
     int dropOldestPendingFramesForOverflow();
     void resetFrameHistoryState();
+    bool isContinuousAverageStacking() const;
     void trimFrameHistoryToCurrentLimit();
 #ifdef CAMERA_OPENCV_CUDA_STACKING
     [[nodiscard]] bool canUseCudaStacking() const;
     void subtractFromCudaAccumulator(const cv::Mat& frameMat);
     bool rebuildCudaAverageAccumulator();
-    [[nodiscard]] bool applyAverageStackingCuda(const cv::Mat& frameMat, const cv::cuda::GpuMat* frameGpu, cv::cuda::GpuMat& outputRgbGpu);
+    [[nodiscard]] bool applyAverageStackingCuda(
+        const cv::Mat& frameMat,
+        const cv::cuda::GpuMat* frameGpu,
+        double frameExposureMs,
+        cv::cuda::GpuMat& outputRgbGpu);
     [[nodiscard]] bool applyMertensFusionCuda(const std::vector<const HdrFrameSample *>& sortedSamples, cv::cuda::GpuMat& tonemappedRgbGpu);
     [[nodiscard]] bool applyDebevecFusionCuda(const std::vector<const HdrFrameSample *>& sortedSamples, const std::vector<float>& exposureTimesSeconds, cv::cuda::GpuMat& tonemappedRgbGpu);
     void setCudaBgrOutputFromRgbGpu(CameraPipelineFrame& inputFrame, const cv::cuda::GpuMat& rgbGpu, int outputDepth = CV_8U);

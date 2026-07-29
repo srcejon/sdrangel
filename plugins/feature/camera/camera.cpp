@@ -48,6 +48,7 @@ MESSAGE_CLASS_DEFINITION(Camera::MsgCaptureActive, Message)
 MESSAGE_CLASS_DEFINITION(Camera::MsgRefreshCameraList, Message)
 MESSAGE_CLASS_DEFINITION(Camera::MsgReportError, Message)
 MESSAGE_CLASS_DEFINITION(Camera::MsgDeleteStackFrame, Message)
+MESSAGE_CLASS_DEFINITION(Camera::MsgClearStack, Message)
 MESSAGE_CLASS_DEFINITION(Camera::MsgSaveCloudTestCase, Message)
 MESSAGE_CLASS_DEFINITION(Camera::MsgSaveClearSkyReference, Message)
 MESSAGE_CLASS_DEFINITION(Camera::MsgClearClearSkyReference, Message)
@@ -584,6 +585,13 @@ bool Camera::handleMessage(const Message& cmd)
         const MsgDeleteStackFrame& msg = (const MsgDeleteStackFrame&) cmd;
         if (m_frameStacker) {
             m_frameStacker->getInputMessageQueue()->push(CameraFrameStacker::MsgDeleteStackFrame::create(msg.getFrameIndex()));
+        }
+        return true;
+    }
+    else if (MsgClearStack::match(cmd))
+    {
+        if (m_frameStacker) {
+            m_frameStacker->getInputMessageQueue()->push(CameraFrameStacker::MsgClearStack::create());
         }
         return true;
     }

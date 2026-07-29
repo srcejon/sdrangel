@@ -625,41 +625,45 @@ Set the optional FITS master dark, flat and bias frames used for pre-stacking ca
 
 Selects the stacking method used to combine frames: Average, Median, Sigma clipped average, Lucky sharp average or HDR.
 
-<h4>3. HDR algorithm</h4>
+<h4>3. Duration</h4>
+
+For Average stacking, selects a rolling frame window or continuous integration. Rolling uses only the configured number of recent frames. Continuous uses every accepted frame in a running average, while retaining only the configured number of recent frames for history review. This keeps memory use bounded even during long integrations. The Clear button restarts the integration.
+
+<h4>4. HDR algorithm</h4>
 
 Selects the algorithm used to merge bracketed HDR frames: Debevec, Robertson or Mertens.
 
-<h4>4. Frames</h4>
+<h4>5. Frames / History frames</h4>
 
-Sets how many frames are combined into one stacked output image.
+Sets how many frames are combined into a rolling stack. In Continuous mode, it instead sets how many recent source frames are retained for review; all accepted frames remain represented in the running average.
 
-<h4>5. HDR frames</h4>
+<h4>6. HDR frames</h4>
 
 Selects how many exposure buckets (2 to 4) are used for HDR stacking.
 
-<h4>6. Alignment</h4>
+<h4>7. Alignment</h4>
 
 Selects optional frame alignment before stacking: None, Phase correlation (translation only) or Star centroid matching (which can also compensate for small rotation/scale drift).
 
-<h4>7. Exposure 1 to Exposure 4</h4>
+<h4>8. Exposure 1 to Exposure 4</h4>
 
 The HDR exposure sliders and spin boxes set the exposure values in milliseconds used by HDR stacking.
 
-<h4>8. Display</h4>
+<h4>9. Display</h4>
 
 Selects what is displayed: the stacked image output, one stored stack history frame, or a tiled overview of stored frames.
 
-<h4>9. History frame</h4>
+<h4>10. History frame</h4>
 
 Selects the stack history frame to display or delete. The Delete button removes the selected stack history frame.
 
-<h4>10. Quality reject</h4>
+<h4>11. Quality reject</h4>
 
 When Reject bad frames is checked, obvious bad stack frames are rejected using brightness, saturation, contrast and sharpness checks.
 
-<h4>11. Stacked / queued / dropped / rejected</h4>
+<h4>12. Integrated / exposure / queued / dropped / rejected</h4>
 
-Displays counts of frames that have been stacked, queued, dropped and rejected in the current stack.
+Displays the number of integrated frames, their total exposure time, and counts of queued, dropped and rejected frames.
 
 <h3>Colour tab</h3>
 

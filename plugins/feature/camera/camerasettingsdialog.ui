@@ -1451,13 +1451,37 @@
            </widget>
           </item>
           <item row="1" column="0">
+           <widget class="QLabel" name="stackDurationModeLabel">
+            <property name="text">
+             <string>Duration</string>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="1">
+           <widget class="QComboBox" name="stackDurationModeCombo">
+            <property name="toolTip">
+             <string>Use a rolling frame window, or continuously integrate accepted Average-stack frames while retaining only the configured number for review</string>
+            </property>
+            <item>
+             <property name="text">
+              <string>Rolling window</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>Continuous</string>
+             </property>
+            </item>
+           </widget>
+          </item>
+          <item row="2" column="0">
            <widget class="QLabel" name="stackHdrAlgorithmLabel">
             <property name="text">
              <string>HDR algorithm</string>
             </property>
            </widget>
           </item>
-          <item row="1" column="1">
+          <item row="2" column="1">
            <widget class="QComboBox" name="stackHdrAlgorithmCombo">
             <property name="toolTip">
              <string>Algorithm used to merge bracketed HDR frames</string>
@@ -1479,14 +1503,14 @@
             </item>
            </widget>
           </item>
-          <item row="2" column="0">
+          <item row="3" column="0">
            <widget class="QLabel" name="stackFrameCountLabel">
             <property name="text">
              <string>Frames</string>
             </property>
            </widget>
           </item>
-          <item row="2" column="1">
+          <item row="3" column="1">
            <widget class="QSpinBox" name="stackFrameCountSpin">
             <property name="toolTip">
              <string>Number of frames to average together</string>
@@ -1502,14 +1526,14 @@
             </property>
            </widget>
           </item>
-          <item row="3" column="0">
+          <item row="4" column="0">
            <widget class="QLabel" name="stackHdrExposureCountLabel">
             <property name="text">
              <string>HDR frames</string>
             </property>
            </widget>
           </item>
-          <item row="3" column="1">
+          <item row="4" column="1">
            <widget class="QSpinBox" name="stackHdrExposureCountSpin">
             <property name="toolTip">
              <string>Number of exposure brackets used for HDR stacking.</string>
@@ -1525,14 +1549,14 @@
             </property>
            </widget>
           </item>
-          <item row="4" column="0">
+          <item row="5" column="0">
            <widget class="QLabel" name="stackAlignmentLabel">
             <property name="text">
              <string>Alignment</string>
             </property>
            </widget>
           </item>
-          <item row="4" column="1">
+          <item row="5" column="1">
            <widget class="QComboBox" name="stackAlignmentCombo">
             <property name="toolTip">
              <string>Optional frame alignment before stacking. Phase correlation handles translation; star centroid matching can also compensate small rotation/scale drift.</string>
@@ -1554,14 +1578,14 @@
             </item>
            </widget>
           </item>
-          <item row="5" column="0">
+          <item row="6" column="0">
            <widget class="QLabel" name="stackHdrExposure1Label">
             <property name="text">
              <string>Exposure 1</string>
             </property>
            </widget>
           </item>
-          <item row="5" column="1">
+          <item row="6" column="1">
            <layout class="QHBoxLayout" name="stackHdrExposure1Layout">
             <item>
              <widget class="QSlider" name="stackHdrExposure1Slider">
@@ -1591,14 +1615,14 @@
             </item>
            </layout>
           </item>
-          <item row="6" column="0">
+          <item row="7" column="0">
            <widget class="QLabel" name="stackHdrExposure2Label">
             <property name="text">
              <string>Exposure 2</string>
             </property>
            </widget>
           </item>
-          <item row="6" column="1">
+          <item row="7" column="1">
            <layout class="QHBoxLayout" name="stackHdrExposure2Layout">
             <item>
              <widget class="QSlider" name="stackHdrExposure2Slider">
@@ -1628,14 +1652,14 @@
             </item>
            </layout>
           </item>
-          <item row="7" column="0">
+          <item row="8" column="0">
            <widget class="QLabel" name="stackHdrExposure3Label">
             <property name="text">
              <string>Exposure 3</string>
             </property>
            </widget>
           </item>
-          <item row="7" column="1">
+          <item row="8" column="1">
            <layout class="QHBoxLayout" name="stackHdrExposure3Layout">
             <item>
              <widget class="QSlider" name="stackHdrExposure3Slider">
@@ -1665,14 +1689,14 @@
             </item>
            </layout>
           </item>
-          <item row="8" column="0">
+          <item row="9" column="0">
            <widget class="QLabel" name="stackHdrExposure4Label">
             <property name="text">
              <string>Exposure 4</string>
             </property>
            </widget>
           </item>
-          <item row="8" column="1">
+          <item row="9" column="1">
            <layout class="QHBoxLayout" name="stackHdrExposure4Layout">
             <item>
              <widget class="QSlider" name="stackHdrExposure4Slider">
@@ -1702,14 +1726,14 @@
             </item>
            </layout>
           </item>
-          <item row="9" column="0">
+          <item row="10" column="0">
            <widget class="QLabel" name="stackDisplayModeLabel">
             <property name="text">
              <string>Display</string>
             </property>
            </widget>
           </item>
-          <item row="9" column="1">
+          <item row="10" column="1">
            <widget class="QComboBox" name="stackDisplayModeCombo">
             <property name="toolTip">
              <string>Select the stack output, one stored stack frame, or a tiled overview of stored frames</string>
@@ -1731,14 +1755,14 @@
             </item>
            </widget>
           </item>
-          <item row="10" column="0">
+          <item row="11" column="0">
            <widget class="QLabel" name="stackDisplayFrameLabel">
             <property name="text">
              <string>History frame</string>
             </property>
            </widget>
           </item>
-          <item row="10" column="1">
+          <item row="11" column="1">
            <layout class="QHBoxLayout" name="stackDisplayFrameLayout">
             <item>
              <widget class="QSpinBox" name="stackDisplayFrameSpin">
@@ -1768,14 +1792,14 @@
             </item>
            </layout>
           </item>
-          <item row="11" column="0">
+          <item row="12" column="0">
            <widget class="QLabel" name="stackRejectBadFramesLabel">
             <property name="text">
              <string>Quality reject</string>
             </property>
            </widget>
           </item>
-          <item row="11" column="1">
+          <item row="12" column="1">
            <widget class="QCheckBox" name="stackRejectBadFramesCheck">
             <property name="toolTip">
              <string>Reject obvious bad stack frames using brightness, saturation, contrast and sharpness checks</string>
@@ -1785,19 +1809,37 @@
             </property>
            </widget>
           </item>
-          <item row="12" column="0">
+          <item row="13" column="0">
            <widget class="QLabel" name="stackCurrentCountLabel">
             <property name="text">
-             <string>Stacked / queued / dropped / rejected</string>
+             <string>Integrated / exp. / Q / D / R</string>
             </property>
            </widget>
           </item>
-          <item row="12" column="1">
-           <widget class="QLabel" name="stackCurrentCountValue">
-            <property name="text">
-             <string>1</string>
-            </property>
-           </widget>
+          <item row="13" column="1">
+           <layout class="QHBoxLayout" name="stackCurrentCountLayout">
+            <item>
+             <widget class="QLabel" name="stackCurrentCountValue">
+              <property name="text">
+               <string>1</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QToolButton" name="stackClearButton">
+              <property name="toolTip">
+               <string>Clear the current stack and restart integration</string>
+              </property>
+              <property name="text">
+               <string>Clear</string>
+              </property>
+              <property name="icon">
+               <iconset resource="../../../sdrgui/resources/res.qrc">
+                <normaloff>:/clear.png</normaloff>:/clear.png</iconset>
+              </property>
+             </widget>
+            </item>
+           </layout>
           </item>
          </layout>
         </widget>

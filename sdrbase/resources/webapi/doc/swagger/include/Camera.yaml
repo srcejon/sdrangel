@@ -318,6 +318,12 @@ CameraSettings:
           * 3 - Lucky sharp average
           * 4 - HDR
       type: integer
+    stackDurationMode:
+      description: >
+        Average stack duration mode
+          * 0 - Rolling frame window
+          * 1 - Continuous integration with a bounded review history
+      type: integer
     stackHdrAlgorithm:
       description: >
         HDR stacking algorithm

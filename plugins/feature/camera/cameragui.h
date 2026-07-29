@@ -291,7 +291,9 @@ private:
     QVector<CameraPostProcessor::WindowOverlayFrame> m_lastPreviewImageOverlays;
     qint64 m_previewPreRecordOffsetMs = 0;
     QList<CameraDetectionHistoryEntry> m_detectionHistory;
-    int m_lastStackCount = 1;
+    quint64 m_lastStackCount = 1;
+    int m_lastStackHistoryCount = 1;
+    double m_lastStackTotalExposureMs = 0.0;
     int m_lastStackQueuedCount = 0;
     int m_lastStackDroppedCount = 0;
     int m_lastStackRejectedCount = 0;
@@ -515,6 +517,7 @@ private:
     void updateExposureControls();
     void updateHdrExposureControls();
     void updateHdrStackingControls();
+    static QString formatStackExposure(double exposureMs);
     void updateScaleControls();
     void createWindowOverlaysTab();
     void updateSpectrumOverlaysTable();
@@ -734,10 +737,12 @@ private slots:
     void on_stackEnabledCheck_toggled(bool checked);
     void on_stackFrameCountSpin_valueChanged(int value);
     void on_stackMethodCombo_currentIndexChanged(int index);
+    void on_stackDurationModeCombo_currentIndexChanged(int index);
     void on_stackAlignmentCombo_currentIndexChanged(int index);
     void on_stackDisplayModeCombo_currentIndexChanged(int index);
     void on_stackDisplayFrameSpin_valueChanged(int value);
     void on_stackDeleteFrameButton_clicked();
+    void on_stackClearButton_clicked();
     void on_stackRejectBadFramesCheck_toggled(bool checked);
     void on_scaleEnabledCheck_toggled(bool checked);
     void on_scaleWidthSpin_valueChanged(int value);

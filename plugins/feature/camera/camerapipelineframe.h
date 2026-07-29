@@ -302,7 +302,9 @@ struct CameraPipelineCloud
  */
 struct CameraPipelineStacking
 {
-    int m_count = 1;
+    quint64 m_count = 1;
+    int m_historyCount = 1;
+    double m_totalExposureMs = 0.0;
     int m_queuedCount = 0;
     int m_droppedCount = 0;
     int m_rejectedCount = 0;

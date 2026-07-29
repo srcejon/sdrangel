@@ -444,6 +444,7 @@ void CameraSettings::resetToDefaults()
     m_stackEnabled = false;
     m_stackFrameCount = 4;
     m_stackMethod = StackMethodAverage;
+    m_stackDurationMode = StackDurationRolling;
     m_stackHdrAlgorithm = StackHdrAlgorithmDebevec;
     m_stackHdrExposureCount = 3;
     m_stackHdrExposureTimesMs = {{12.5, 50.0, 200.0, 800.0}};
@@ -910,6 +911,7 @@ QByteArray CameraSettings::serialize() const
     s.writeU32(373, m_messierColor.rgba());
     s.writeDouble(374, m_messierMaxMagnitude);
     s.writeBool(375, m_messierDetect);
+    s.writeS32(376, static_cast<qint32>(m_stackDurationMode));
     s.writeBool(156, m_trackObjects);
     s.writeDouble(157, m_trackObjectMinElevation);
     s.writeU32(158, m_trackObjectColor.rgba());
@@ -1601,6 +1603,7 @@ bool CameraSettings::deserialize(const QByteArray& data)
         m_messierColor = QColor::fromRgba(messierColorRgba);
         d.readDouble(374, &m_messierMaxMagnitude, 10.5);
         d.readBool(375, &m_messierDetect, true);
+        d.readS32(376, reinterpret_cast<qint32*>(&m_stackDurationMode), static_cast<qint32>(StackDurationRolling));
         d.readBool(156, &m_trackObjects, false);
         d.readBool(238, &m_trackObjectTrails, false);
         d.readBool(239, &m_trackObjectHeatMap, false);
@@ -1860,6 +1863,10 @@ bool CameraSettings::deserialize(const QByteArray& data)
         m_autoExposureMaxGain = std::max(m_autoExposureMinGain, m_autoExposureMaxGain);
         m_stackFrameCount = qBound(m_minStackFrameCount, m_stackFrameCount, m_maxStackFrameCount);
         m_stackMethod = qBound(StackMethodAverage, m_stackMethod, StackMethodHDR);
+        m_stackDurationMode = qBound(StackDurationRolling, m_stackDurationMode, StackDurationContinuous);
+        if (m_stackMethod != StackMethodAverage) {
+            m_stackDurationMode = StackDurationRolling;
+        }
         m_stackHdrAlgorithm = qBound(StackHdrAlgorithmDebevec, m_stackHdrAlgorithm, StackHdrAlgorithmMertens);
         m_stackDisplayMode = qBound(StackDisplayStacked, m_stackDisplayMode, StackDisplayHistoryTiles);
         m_stackDisplayFrameIndex = qBound(0, m_stackDisplayFrameIndex, m_maxStackFrameCount - 1);
@@ -2205,6 +2212,14 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     }
     if (settingsKeys.contains("stackMethod")) {
         m_stackMethod = qBound(StackMethodAverage, settings.m_stackMethod, StackMethodHDR);
+        if (m_stackMethod != StackMethodAverage) {
+            m_stackDurationMode = StackDurationRolling;
+        }
+    }
+    if (settingsKeys.contains("stackDurationMode")) {
+        m_stackDurationMode = m_stackMethod == StackMethodAverage
+            ? qBound(StackDurationRolling, settings.m_stackDurationMode, StackDurationContinuous)
+            : StackDurationRolling;
     }
     if (settingsKeys.contains("stackHdrAlgorithm")) {
         m_stackHdrAlgorithm = qBound(StackHdrAlgorithmDebevec, settings.m_stackHdrAlgorithm, StackHdrAlgorithmMertens);
@@ -3393,6 +3408,9 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("stackMethod") || force) {
         ostr << " m_stackMethod: " << m_stackMethod;
+    }
+    if (settingsKeys.contains("stackDurationMode") || force) {
+        ostr << " m_stackDurationMode: " << m_stackDurationMode;
     }
     if (settingsKeys.contains("stackHdrAlgorithm") || force) {
         ostr << " m_stackHdrAlgorithm: " << m_stackHdrAlgorithm;

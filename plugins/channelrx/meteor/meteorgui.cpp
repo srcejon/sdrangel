@@ -3316,13 +3316,35 @@ void MeteorGUI::showSatelliteCalibrationResult(
                 .arg(result.m_frequencyBiasHz, 0, 'f', 1)
                 .arg(result.m_frequencyUncertaintyHz, 0, 'f', 1),
             &dialog));
+    form->addRow(
+        tr("Assessment"),
+        new QLabel(
+            result.m_recommendationReliable
+                ? tr("Usable correction estimate")
+                : tr("Inconclusive; keep the current calibration"),
+            &dialog));
 
     QStringList warnings;
     if (result.m_timeAtSearchLimit) {
-        warnings.append(tr("The timing result reached the +/- 10 s search limit."));
+        warnings.append(
+            result.m_usedExtendedSearch
+                ? tr("The timing result reached the +/- 10 s extended search limit.")
+                : tr("The timing result reached the +/- 2 s conservative search limit."));
     }
     if (result.m_frequencyAtSearchLimit) {
-        warnings.append(tr("The frequency result reached the +/- 1000 Hz search limit."));
+        warnings.append(
+            result.m_usedExtendedSearch
+                ? tr("The frequency result reached the +/- 1000 Hz extended search limit.")
+                : tr("The frequency result reached the +/- 50 Hz conservative search limit."));
+    }
+    if (result.m_extendedSearchRejected)
+    {
+        warnings.append(
+            tr(
+                "A wider search found %1 s / %2 Hz, but too few additional "
+                "matches supported such a large correction, so it was rejected.")
+                .arg(result.m_extendedTimeOffsetS, 0, 'f', 2)
+                .arg(result.m_extendedFrequencyBiasHz, 0, 'f', 1));
     }
     if (result.m_matchedAfter < 3) {
         warnings.append(tr("Fewer than three unambiguous matches make this a low-confidence estimate."));
@@ -3334,9 +3356,10 @@ void MeteorGUI::showSatelliteCalibrationResult(
     QLabel *explanation = new QLabel(
         tr(
             "This is a recommendation only; no settings were changed. Interrupted "
-            "GRAVES illumination is acceptable because each visible fragment is "
-            "scored independently with one shared correction. Fragments from one "
-            "pass are correlated, so the reported uncertainty is approximate.")
+            "GRAVES illumination is acceptable, but fragments from one pass are "
+            "correlated rather than independent. The extended search is therefore "
+            "only accepted when it produces at least three additional unambiguous "
+            "matches with a materially better aggregate score.")
             + (warnings.isEmpty()
                 ? QString()
                 : QStringLiteral("\n\n") + warnings.join(QChar('\n'))),

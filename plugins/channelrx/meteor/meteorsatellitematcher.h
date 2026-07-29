@@ -135,6 +135,11 @@ public:
         double m_frequencyUncertaintyHz = 0.0;
         bool m_timeAtSearchLimit = false;
         bool m_frequencyAtSearchLimit = false;
+        bool m_usedExtendedSearch = false;
+        bool m_extendedSearchRejected = false;
+        double m_extendedTimeOffsetS = 0.0;
+        double m_extendedFrequencyBiasHz = 0.0;
+        bool m_recommendationReliable = false;
     };
 
     explicit MeteorSatelliteMatcher(

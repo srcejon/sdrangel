@@ -802,8 +802,38 @@ public:
             {
                 const CalibrationScore baseline =
                     evaluateCalibration(models, 0.0, 0.0);
-                CalibrationPoint best {0.0, 0.0, baseline};
+                CalibrationPoint conservativeBest {0.0, 0.0, baseline};
 
+                searchCalibrationGrid(
+                    models,
+                    -CalibrationConservativeMaximumTimeOffsetS,
+                    CalibrationConservativeMaximumTimeOffsetS,
+                    CalibrationCoarseTimeStepS,
+                    -CalibrationConservativeMaximumFrequencyBiasHz,
+                    CalibrationConservativeMaximumFrequencyBiasHz,
+                    CalibrationCoarseFrequencyStepHz,
+                    conservativeBest);
+                searchCalibrationGrid(
+                    models,
+                    std::max(
+                        -CalibrationConservativeMaximumTimeOffsetS,
+                        conservativeBest.m_timeOffsetS - CalibrationCoarseTimeStepS),
+                    std::min(
+                        CalibrationConservativeMaximumTimeOffsetS,
+                        conservativeBest.m_timeOffsetS + CalibrationCoarseTimeStepS),
+                    CalibrationFineTimeStepS,
+                    std::max(
+                        -CalibrationConservativeMaximumFrequencyBiasHz,
+                        conservativeBest.m_frequencyBiasHz
+                            - CalibrationCoarseFrequencyStepHz),
+                    std::min(
+                        CalibrationConservativeMaximumFrequencyBiasHz,
+                        conservativeBest.m_frequencyBiasHz
+                            + CalibrationCoarseFrequencyStepHz),
+                    CalibrationFineFrequencyStepHz,
+                    conservativeBest);
+
+                CalibrationPoint extendedBest = conservativeBest;
                 searchCalibrationGrid(
                     models,
                     -CalibrationMaximumTimeOffsetS,
@@ -812,26 +842,55 @@ public:
                     -CalibrationMaximumFrequencyBiasHz,
                     CalibrationMaximumFrequencyBiasHz,
                     CalibrationCoarseFrequencyStepHz,
-                    best);
+                    extendedBest);
                 searchCalibrationGrid(
                     models,
                     std::max(
                         -CalibrationMaximumTimeOffsetS,
-                        best.m_timeOffsetS - CalibrationCoarseTimeStepS),
+                        extendedBest.m_timeOffsetS - CalibrationCoarseTimeStepS),
                     std::min(
                         CalibrationMaximumTimeOffsetS,
-                        best.m_timeOffsetS + CalibrationCoarseTimeStepS),
+                        extendedBest.m_timeOffsetS + CalibrationCoarseTimeStepS),
                     CalibrationFineTimeStepS,
                     std::max(
                         -CalibrationMaximumFrequencyBiasHz,
-                        best.m_frequencyBiasHz
+                        extendedBest.m_frequencyBiasHz
                             - CalibrationCoarseFrequencyStepHz),
                     std::min(
                         CalibrationMaximumFrequencyBiasHz,
-                        best.m_frequencyBiasHz
+                        extendedBest.m_frequencyBiasHz
                             + CalibrationCoarseFrequencyStepHz),
                     CalibrationFineFrequencyStepHz,
-                    best);
+                    extendedBest);
+
+                const bool extendedOutsideConservativeRange =
+                    std::fabs(extendedBest.m_timeOffsetS)
+                        > CalibrationConservativeMaximumTimeOffsetS
+                    || std::fabs(extendedBest.m_frequencyBiasHz)
+                        > CalibrationConservativeMaximumFrequencyBiasHz;
+                const int extendedMatchGain =
+                    extendedBest.m_score.m_matched
+                        - conservativeBest.m_score.m_matched;
+                const double extendedMeanScoreGain =
+                    (extendedBest.m_score.m_scoreSum
+                        - conservativeBest.m_score.m_scoreSum)
+                    / (double) models.size();
+                const bool extendedEvidenceIsDecisive =
+                    (extendedMatchGain >= CalibrationExtendedMinimumMatchGain)
+                    && (extendedMeanScoreGain
+                        >= CalibrationExtendedMinimumMeanScoreGain);
+                const bool useExtended =
+                    extendedOutsideConservativeRange
+                    && extendedEvidenceIsDecisive;
+                const CalibrationPoint& best =
+                    useExtended ? extendedBest : conservativeBest;
+
+                result.m_usedExtendedSearch = useExtended;
+                result.m_extendedSearchRejected =
+                    extendedOutsideConservativeRange && !useExtended;
+                result.m_extendedTimeOffsetS = extendedBest.m_timeOffsetS;
+                result.m_extendedFrequencyBiasHz =
+                    extendedBest.m_frequencyBiasHz;
 
                 result.m_matchedBefore = baseline.m_matched;
                 result.m_matchedAfter = best.m_score.m_matched;
@@ -852,16 +911,32 @@ public:
                         : 0.0;
                 result.m_timeOffsetS = best.m_timeOffsetS;
                 result.m_frequencyBiasHz = best.m_frequencyBiasHz;
+                const double selectedMaximumTimeOffsetS = useExtended
+                    ? CalibrationMaximumTimeOffsetS
+                    : CalibrationConservativeMaximumTimeOffsetS;
+                const double selectedMaximumFrequencyBiasHz = useExtended
+                    ? CalibrationMaximumFrequencyBiasHz
+                    : CalibrationConservativeMaximumFrequencyBiasHz;
                 result.m_timeAtSearchLimit =
                     std::fabs(best.m_timeOffsetS)
-                        >= CalibrationMaximumTimeOffsetS
+                        >= selectedMaximumTimeOffsetS
                             - 0.5 * CalibrationFineTimeStepS;
                 result.m_frequencyAtSearchLimit =
                     std::fabs(best.m_frequencyBiasHz)
-                        >= CalibrationMaximumFrequencyBiasHz
+                        >= selectedMaximumFrequencyBiasHz
                             - 0.5 * CalibrationFineFrequencyStepHz;
                 estimateCalibrationUncertainty(models, best, result);
                 result.m_success = best.m_score.m_matched > 0;
+                result.m_recommendationReliable =
+                    result.m_success
+                    && (best.m_score.m_matched >= MinimumCalibrationObservations)
+                    && (best.m_score.m_matched > baseline.m_matched)
+                    && !result.m_timeAtSearchLimit
+                    && !result.m_frequencyAtSearchLimit
+                    && (result.m_timeUncertaintyS
+                        <= CalibrationReliableTimeUncertaintyS)
+                    && (result.m_frequencyUncertaintyHz
+                        <= CalibrationReliableFrequencyUncertaintyHz);
 
                 if (!result.m_success) {
                     result.m_error = QStringLiteral(
@@ -998,8 +1073,14 @@ private:
 
     static constexpr int MinimumCalibrationObservations = 3;
     static constexpr int MaximumCalibrationObservations = 24;
+    static constexpr double CalibrationConservativeMaximumTimeOffsetS = 2.0;
+    static constexpr double CalibrationConservativeMaximumFrequencyBiasHz = 50.0;
     static constexpr double CalibrationMaximumTimeOffsetS = 10.0;
     static constexpr double CalibrationMaximumFrequencyBiasHz = 1000.0;
+    static constexpr int CalibrationExtendedMinimumMatchGain = 3;
+    static constexpr double CalibrationExtendedMinimumMeanScoreGain = 5.0;
+    static constexpr double CalibrationReliableTimeUncertaintyS = 1.0;
+    static constexpr double CalibrationReliableFrequencyUncertaintyHz = 25.0;
     static constexpr double CalibrationCoarseTimeStepS = 0.5;
     static constexpr double CalibrationFineTimeStepS = 0.1;
     static constexpr double CalibrationCoarseFrequencyStepHz = 25.0;

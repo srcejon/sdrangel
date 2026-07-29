@@ -185,6 +185,7 @@ private:
     QSet<QDate> m_dirtyRMOBMonths;
     QDateTime m_lastAutomaticRMOBSaveUtc;
     QSet<MessageQueue *> m_mapMessageQueues;
+    QHash<quint64, MeteorSatelliteMatcher::Track> m_satelliteMapTracks;
 
     struct PendingTargetMatch
     {
@@ -236,6 +237,12 @@ private:
     void syncFromSelectedRotator();
     void updateAntennaPatternsOnMap(bool force = false);
     void clearAntennaPatternsFromMap();
+    void sendSatelliteTrackToMap(
+        quint64 overlayId,
+        const MeteorSatelliteMatcher::Track& track,
+        const QSet<MessageQueue *>& messageQueues);
+    void removeSatelliteTrackFromMap(quint64 overlayId);
+    void clearSatelliteTracksFromMap();
     QVector<MovingTargetMatcher::TargetState> collectADSBTargets(
         const QDateTime& detectionTimeUtc,
         ADSBMatchingStatistics *statistics = nullptr) const;
@@ -253,7 +260,8 @@ private:
     void applySatelliteTargetMatch(
         quint64 overlayId,
         const MovingTargetMatcher::Match& match,
-        const MeteorSatelliteMatcher::MoonPrediction& moonPrediction);
+        const MeteorSatelliteMatcher::MoonPrediction& moonPrediction,
+        const MeteorSatelliteMatcher::Track& track);
     void handleSatelliteStatistics(
         const MeteorSatelliteMatcher::CatalogStatistics& statistics);
     void showSatelliteStatisticsDialog(

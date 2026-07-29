@@ -701,6 +701,7 @@ public:
         }
 
         MovingTargetMatcher::Match match;
+        MeteorSatelliteMatcher::Track track;
         const MeteorSatelliteMatcher::MoonPrediction moonPrediction =
             MeteorSatelliteMatcher::predictMoon(observation, geometry);
         match = moonPrediction.m_match;
@@ -735,18 +736,33 @@ public:
             match = MovingTargetMatcher::combine(
                 match,
                 MovingTargetMatcher::matchPredictions(observation, candidates));
+
+            if (match.m_matched && (match.m_source == QStringLiteral("TLE")))
+            {
+                for (int catalogIndex : snapshot.m_candidateIndices)
+                {
+                    CatalogEntry& entry = m_catalog[catalogIndex];
+
+                    if ((entry.m_noradId == match.m_id)
+                        && buildCatalogTrack(entry, observation, track))
+                    {
+                        break;
+                    }
+                }
+            }
         }
 #endif
 
         QPointer<MeteorSatelliteMatcher> owner(m_owner);
         QMetaObject::invokeMethod(
             m_owner,
-            [owner, requestId, match, moonPrediction]() {
+            [owner, requestId, match, moonPrediction, track]() {
                 if (owner) {
                     owner->deliverMatch(
                         requestId,
                         match,
-                        moonPrediction);
+                        moonPrediction,
+                        track);
                 }
             },
             Qt::QueuedConnection);
@@ -2111,7 +2127,8 @@ private:
                         owner->deliverMatch(
                             requestId,
                             moonPrediction.m_match,
-                            moonPrediction);
+                            moonPrediction,
+                            MeteorSatelliteMatcher::Track());
                     }
                 },
                 Qt::QueuedConnection);
@@ -2333,6 +2350,56 @@ private:
         candidate.m_prediction.m_valid = true;
         return true;
     }
+
+    bool buildCatalogTrack(
+        CatalogEntry& entry,
+        const MovingTargetMatcher::Observation& observation,
+        MeteorSatelliteMatcher::Track& track)
+    {
+        const double durationS = std::max(0.001, observation.m_durationS);
+        const int segmentCount = std::clamp((int) std::ceil(durationS), 1, 120);
+        MeteorSatelliteMatcher::Track result;
+        result.m_source = QStringLiteral("TLE");
+        result.m_id = entry.m_noradId;
+        result.m_label = entry.m_name;
+        result.m_points.reserve(segmentCount + 1);
+
+        try
+        {
+            for (int segment = 0; segment <= segmentCount; ++segment)
+            {
+                const qint64 offsetMSecs = (qint64) std::llround(
+                    durationS * 1000.0 * (double) segment / (double) segmentCount);
+                const QDateTime dateTimeUtc =
+                    observation.m_startDateTimeUtc.addMSecs(offsetMSecs);
+                const libsgp4::CoordGeodetic geo = entry.m_propagator
+                    ->FindPosition(toSGP4DateTime(dateTimeUtc))
+                    .ToGeodetic();
+                MeteorSatelliteMatcher::TrackPoint point;
+                point.m_dateTimeUtc = dateTimeUtc;
+                point.m_latitudeDegrees =
+                    libsgp4::Util::RadiansToDegrees(geo.latitude);
+                point.m_longitudeDegrees =
+                    libsgp4::Util::RadiansToDegrees(geo.longitude);
+                point.m_altitudeM = geo.altitude * 1000.0;
+
+                if (!std::isfinite(point.m_latitudeDegrees)
+                    || !std::isfinite(point.m_longitudeDegrees)
+                    || !std::isfinite(point.m_altitudeM))
+                {
+                    return false;
+                }
+
+                result.m_points.append(point);
+            }
+        }
+        catch (const std::exception&) {
+            return false;
+        }
+
+        track = result;
+        return track.isValid();
+    }
 #endif
 
     void deliverStatistics()
@@ -2512,9 +2579,10 @@ void MeteorSatelliteMatcher::requestStatistics()
 void MeteorSatelliteMatcher::deliverMatch(
     quint64 requestId,
     const MovingTargetMatcher::Match& match,
-    const MoonPrediction& moonPrediction)
+    const MoonPrediction& moonPrediction,
+    const Track& track)
 {
-    emit matchReady(requestId, match, moonPrediction);
+    emit matchReady(requestId, match, moonPrediction, track);
 }
 
 void MeteorSatelliteMatcher::deliverStatistics(

@@ -12,6 +12,7 @@
 #include <QDateTime>
 #include <QObject>
 #include <QStringList>
+#include <QVector>
 
 #include "movingtargetmatcher.h"
 
@@ -89,6 +90,29 @@ public:
         MovingTargetMatcher::Match m_match;
     };
 
+    struct TrackPoint
+    {
+        QDateTime m_dateTimeUtc;
+        double m_latitudeDegrees = 0.0;
+        double m_longitudeDegrees = 0.0;
+        double m_altitudeM = 0.0;
+    };
+
+    struct Track
+    {
+        QString m_source;
+        QString m_id;
+        QString m_label;
+        QVector<TrackPoint> m_points;
+
+        bool isValid() const
+        {
+            return (m_source == QStringLiteral("TLE"))
+                && !m_id.isEmpty()
+                && (m_points.size() >= 2);
+        }
+    };
+
     explicit MeteorSatelliteMatcher(
         const QString& spaceTrackUsername = QString(),
         const QString& spaceTrackPassword = QString(),
@@ -117,7 +141,8 @@ signals:
     void matchReady(
         quint64 requestId,
         const MovingTargetMatcher::Match& match,
-        const MoonPrediction& moonPrediction);
+        const MoonPrediction& moonPrediction,
+        const Track& track);
     void statisticsReady(const CatalogStatistics& statistics);
 
 private:
@@ -126,7 +151,8 @@ private:
     void deliverMatch(
         quint64 requestId,
         const MovingTargetMatcher::Match& match,
-        const MoonPrediction& moonPrediction);
+        const MoonPrediction& moonPrediction,
+        const Track& track);
     void deliverStatistics(const CatalogStatistics& statistics);
 
     QThread *m_thread;

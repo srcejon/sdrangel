@@ -635,6 +635,7 @@ MeteorGUI::~MeteorGUI()
 {
     delete m_satelliteMatcher;
     m_satelliteMatcher = nullptr;
+    clearSatelliteTracksFromMap();
     clearAntennaPatternsFromMap();
     saveAutomaticRMOBReports();
     disconnect(&MainCore::instance()->getMasterTimer(), SIGNAL(timeout()), this, SLOT(tick()));
@@ -1111,6 +1112,9 @@ void MeteorGUI::updateAntennaPatternsOnMap(bool force)
         }
     }
 
+    QSet<MessageQueue *> newQueues = currentQueues;
+    newQueues.subtract(m_mapMessageQueues);
+
     if (!force && (currentQueues == m_mapMessageQueues)) {
         return;
     }
@@ -1239,6 +1243,18 @@ void MeteorGUI::updateAntennaPatternsOnMap(bool force)
         }
     }
 
+    for (MessageQueue *messageQueue : newQueues)
+    {
+        const QSet<MessageQueue *> singleQueue {messageQueue};
+
+        for (auto track = m_satelliteMapTracks.cbegin();
+            track != m_satelliteMapTracks.cend();
+            ++track)
+        {
+            sendSatelliteTrackToMap(track.key(), track.value(), singleQueue);
+        }
+    }
+
     m_mapMessageQueues = currentQueues;
 }
 
@@ -1250,6 +1266,103 @@ void MeteorGUI::clearAntennaPatternsFromMap()
     m_settings.m_showAntennaPatterns = showAntennaPatterns;
 
     m_mapMessageQueues.clear();
+}
+
+void MeteorGUI::sendSatelliteTrackToMap(
+    quint64 overlayId,
+    const MeteorSatelliteMatcher::Track& track,
+    const QSet<MessageQueue *>& messageQueues)
+{
+    if (!track.isValid() || messageQueues.isEmpty()) {
+        return;
+    }
+
+    const QString name = QStringLiteral("Meteor matched satellite track %1")
+        .arg(overlayId);
+    const MeteorSatelliteMatcher::TrackPoint& first = track.m_points.front();
+    const MeteorSatelliteMatcher::TrackPoint& last = track.m_points.back();
+    const QString label = track.m_label.isEmpty()
+        ? QStringLiteral("NORAD %1").arg(track.m_id)
+        : QStringLiteral("%1 [%2]").arg(track.m_label, track.m_id);
+    const QString details = tr(
+        "%1\nDetection window: %2 to %3 UTC")
+        .arg(
+            label,
+            first.m_dateTimeUtc.toString(Qt::ISODateWithMs),
+            last.m_dateTimeUtc.toString(Qt::ISODateWithMs));
+
+    for (MessageQueue *messageQueue : messageQueues)
+    {
+        if (!messageQueue) {
+            continue;
+        }
+
+        SWGSDRangel::SWGMapItem *item = new SWGSDRangel::SWGMapItem();
+        item->setName(new QString(name));
+        item->setLabel(new QString(label));
+        item->setText(new QString(details));
+        item->setLatitude(first.m_latitudeDegrees);
+        item->setLongitude(first.m_longitudeDegrees);
+        item->setAltitude(first.m_altitudeM);
+        item->setImage(new QString(QStringLiteral("none")));
+        item->setFixedPosition(true);
+        item->setAltitudeReference(0);
+        item->setColorValid(true);
+        item->setColor(QColor(0, 220, 255, 210).rgba());
+        item->setType(3);
+        QList<SWGSDRangel::SWGMapCoordinate *> *coordinates =
+            new QList<SWGSDRangel::SWGMapCoordinate *>();
+        coordinates->reserve(track.m_points.size());
+
+        for (const MeteorSatelliteMatcher::TrackPoint& point : track.m_points)
+        {
+            SWGSDRangel::SWGMapCoordinate *coordinate =
+                new SWGSDRangel::SWGMapCoordinate();
+            coordinate->setLatitude(point.m_latitudeDegrees);
+            coordinate->setLongitude(point.m_longitudeDegrees);
+            coordinate->setAltitude(point.m_altitudeM);
+            coordinate->setDateTime(new QString(
+                point.m_dateTimeUtc.toString(Qt::ISODateWithMs)));
+            coordinates->append(coordinate);
+        }
+
+        item->setCoordinates(coordinates);
+        messageQueue->push(MainCore::MsgMapItem::create(m_meteor, item));
+    }
+}
+
+void MeteorGUI::removeSatelliteTrackFromMap(quint64 overlayId)
+{
+    m_satelliteMapTracks.remove(overlayId);
+
+    if (m_mapMessageQueues.isEmpty()) {
+        return;
+    }
+
+    const QString name = QStringLiteral("Meteor matched satellite track %1")
+        .arg(overlayId);
+
+    for (MessageQueue *messageQueue : m_mapMessageQueues)
+    {
+        if (!messageQueue) {
+            continue;
+        }
+
+        SWGSDRangel::SWGMapItem *item = new SWGSDRangel::SWGMapItem();
+        item->setName(new QString(name));
+        item->setImage(new QString());
+        item->setType(3);
+        messageQueue->push(MainCore::MsgMapItem::create(m_meteor, item));
+    }
+}
+
+void MeteorGUI::clearSatelliteTracksFromMap()
+{
+    const QList<quint64> overlayIds = m_satelliteMapTracks.keys();
+
+    for (quint64 overlayId : overlayIds) {
+        removeSatelliteTrackFromMap(overlayId);
+    }
 }
 
 void MeteorGUI::setupSpectrum()
@@ -1889,6 +2002,7 @@ void MeteorGUI::on_clearDetections_clicked()
     m_detectionOverlays.clear();
     m_maxOverlayDurationS = 0.0;
     m_pendingTargetMatches.clear();
+    clearSatelliteTracksFromMap();
     m_detectionsTable->setRowCount(0);
     m_satellitesTable->setRowCount(0);
     updateCounters();
@@ -2848,7 +2962,8 @@ QDateTime MeteorGUI::movingTargetObservationDateTimeUtc(const QDateTime& display
 void MeteorGUI::applySatelliteTargetMatch(
     quint64 overlayId,
     const MovingTargetMatcher::Match& satelliteMatch,
-    const MeteorSatelliteMatcher::MoonPrediction& moonPrediction)
+    const MeteorSatelliteMatcher::MoonPrediction& moonPrediction,
+    const MeteorSatelliteMatcher::Track& track)
 {
     auto pending = m_pendingTargetMatches.find(overlayId);
 
@@ -2897,8 +3012,18 @@ void MeteorGUI::applySatelliteTargetMatch(
 
     if (combinedMatch.m_matched)
     {
-        if (combinedMatch.m_source == QStringLiteral("TLE")) {
+        if (combinedMatch.m_source == QStringLiteral("TLE"))
+        {
             classificationItem->setText(QStringLiteral("Satellite (TLE)"));
+            if (track.isValid() && (track.m_id == combinedMatch.m_id))
+            {
+                m_satelliteMapTracks.insert(overlayId, track);
+                updateAntennaPatternsOnMap(false);
+                sendSatelliteTrackToMap(
+                    overlayId,
+                    track,
+                    m_mapMessageQueues);
+            }
         } else if (combinedMatch.m_source == QStringLiteral("Moon")) {
             classificationItem->setText(QStringLiteral("Moon"));
         } else {
@@ -3945,8 +4070,10 @@ void MeteorGUI::deleteSelectedTableRows(QTableWidget *table, bool updateMeteorCo
 
     if (!idsToDelete.isEmpty())
     {
-        for (quint64 id : idsToDelete) {
+        for (quint64 id : idsToDelete)
+        {
             m_pendingTargetMatches.remove(id);
+            removeSatelliteTrackFromMap(id);
         }
 
         for (int i = m_detectionOverlays.size() - 1; i >= 0; i--)

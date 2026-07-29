@@ -2718,14 +2718,39 @@ bool MeteorGUI::remoteTCPInputTransportTiming(
     return true;
 }
 
+bool MeteorGUI::localChannelTiming(
+    double& latencySeconds,
+    double& uncertaintySeconds,
+    double& filterDelaySeconds) const
+{
+    latencySeconds = 0.0;
+    uncertaintySeconds = 0.0;
+    filterDelaySeconds = 0.0;
+
+    return m_meteor
+        && m_meteor->getLocalChannelTiming(
+            latencySeconds,
+            uncertaintySeconds,
+            filterDelaySeconds);
+}
+
 QDateTime MeteorGUI::movingTargetObservationDateTimeUtc(const QDateTime& displayTimeUtc) const
 {
     const QDateTime systemTimeUtc = displayTimeUtc.isValid()
         ? displayTimeUtc.toUTC()
         : QDateTime::currentDateTimeUtc();
+    double localChannelLatencySeconds = 0.0;
+    double localChannelUncertaintySeconds = 0.0;
+    double localFilterDelaySeconds = 0.0;
+    localChannelTiming(
+        localChannelLatencySeconds,
+        localChannelUncertaintySeconds,
+        localFilterDelaySeconds);
+    const QDateTime inputTimeUtc = systemTimeUtc.addMSecs(
+        -(qint64) std::llround(localChannelLatencySeconds * 1000.0));
 
     if (!m_deviceUISet || !m_deviceUISet->m_deviceAPI) {
-        return systemTimeUtc;
+        return inputTimeUtc;
     }
 
     const DeviceAPI *deviceAPI = m_deviceUISet->m_deviceAPI;
@@ -2741,7 +2766,7 @@ QDateTime MeteorGUI::movingTargetObservationDateTimeUtc(const QDateTime& display
             transportLatencySeconds,
             timingUncertaintySeconds);
 
-        return systemTimeUtc.addMSecs(
+        return inputTimeUtc.addMSecs(
             -(qint64) std::llround(
                 (preFillSeconds + transportLatencySeconds) * 1000.0));
     }
@@ -2749,7 +2774,7 @@ QDateTime MeteorGUI::movingTargetObservationDateTimeUtc(const QDateTime& display
     if ((hardwareId != QStringLiteral("FileInput"))
         && (hardwareId != QStringLiteral("SigMFFileInput")))
     {
-        return systemTimeUtc;
+        return inputTimeUtc;
     }
 
     const unsigned int deviceSetIndex = (unsigned int) deviceAPI->getDeviceSetIndex();
@@ -2800,7 +2825,7 @@ QDateTime MeteorGUI::movingTargetObservationDateTimeUtc(const QDateTime& display
     const qint64 queryEndMSecs = QDateTime::currentMSecsSinceEpoch();
 
     if (!playbackTime.isValid()) {
-        return systemTimeUtc;
+        return inputTimeUtc;
     }
 
     int accelerationFactor = 1;
@@ -2812,7 +2837,7 @@ QDateTime MeteorGUI::movingTargetObservationDateTimeUtc(const QDateTime& display
 
     const qint64 queryTimeMSecs = queryStartMSecs
         + (queryEndMSecs - queryStartMSecs) / 2;
-    const qint64 detectionAgeMSecs = systemTimeUtc.msecsTo(
+    const qint64 detectionAgeMSecs = inputTimeUtc.msecsTo(
         QDateTime::fromMSecsSinceEpoch(queryTimeMSecs, Qt::UTC));
     const qint64 playbackAgeMSecs = (qint64) std::llround(
         (double) detectionAgeMSecs * (double) accelerationFactor);
@@ -3179,6 +3204,48 @@ void MeteorGUI::showSatelliteStatisticsDialog(
             hardwareId == QStringLiteral("RemoteTCPInput")
                 ? tr("Unavailable: could not read pre-fill setting")
                 : tr("Not required for this input"));
+    }
+
+    double localChannelLatencySeconds = 0.0;
+    double localChannelUncertaintySeconds = 0.0;
+    double localFilterDelaySeconds = 0.0;
+    const bool localChannelTimingAvailable = localChannelTiming(
+        localChannelLatencySeconds,
+        localChannelUncertaintySeconds,
+        localFilterDelaySeconds);
+
+    if (localChannelTimingAvailable)
+    {
+        const double processingLatencySeconds = std::max(
+            0.0,
+            localChannelLatencySeconds - localFilterDelaySeconds);
+        addValue(
+            sampleTiming,
+            tr("Measured local FIFO/processing latency"),
+            tr("%1 ms").arg(
+                processingLatencySeconds * 1000.0, 0, 'f', 1));
+        addValue(
+            sampleTiming,
+            tr("Estimated local decimation/filter delay"),
+            tr("%1 ms").arg(
+                localFilterDelaySeconds * 1000.0, 0, 'f', 1));
+        addValue(
+            sampleTiming,
+            tr("Applied local channel correction"),
+            tr("%1 ms").arg(
+                localChannelLatencySeconds * 1000.0, 0, 'f', 1));
+        addValue(
+            sampleTiming,
+            tr("Local measurement uncertainty"),
+            tr("+/- %1 ms").arg(
+                localChannelUncertaintySeconds * 1000.0, 0, 'f', 1));
+    }
+    else
+    {
+        addValue(
+            sampleTiming,
+            tr("Local channel correction"),
+            tr("Measuring: no sample timing available yet"));
     }
 
     QTreeWidgetItem *types = addSection(tr("Loaded object types"));

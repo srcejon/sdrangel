@@ -245,6 +245,10 @@ private:
     bool remoteTCPInputTransportTiming(
         double& latencySeconds,
         double& uncertaintySeconds) const;
+    bool localChannelTiming(
+        double& latencySeconds,
+        double& uncertaintySeconds,
+        double& filterDelaySeconds) const;
     QDateTime movingTargetObservationDateTimeUtc(const QDateTime& displayTimeUtc) const;
     void applySatelliteTargetMatch(
         quint64 overlayId,

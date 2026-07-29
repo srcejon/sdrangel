@@ -256,10 +256,24 @@ void MeteorDemodSink::configureBlobDetector()
     // Link gap is specified in time so fragment merging is rate-independent (a column gap
     // would shrink at higher sample rates and over-split long meteors).
     cfg.m_linkMaxGapCols = std::max(1, (int) std::llround(m_detectorTunables.m_blob.m_linkGapSeconds / cfg.m_dt));
+    cfg.m_trailLinkMaxGapCols = std::max(
+        cfg.m_linkMaxGapCols,
+        (int) std::llround(
+            m_detectorTunables.m_blob.m_trailLinkGapSeconds / cfg.m_dt));
+    cfg.m_trailLinkTolHz = m_detectorTunables.m_blob.m_trailLinkTolHz;
+    cfg.m_trailLinkMinFragmentCols = std::max(
+        2,
+        (int) std::llround(
+            m_detectorTunables.m_blob.m_trailLinkMinFragmentSeconds / cfg.m_dt));
+    cfg.m_trailLinkBridgeDb = m_detectorTunables.m_blob.m_trailLinkBridgeDb;
+    cfg.m_trailLinkMinBridgeFraction =
+        m_detectorTunables.m_blob.m_trailLinkMinBridgeFraction;
     const double maxDurationS = (double) std::max(1, m_settings.m_maxDurationMS) / 1000.0;
     const double finalContextS = cfg.m_finalMarginS
         + cfg.m_emitStrideS
-        + cfg.m_linkMaxGapCols * cfg.m_dt;
+        + std::max(
+            cfg.m_linkMaxGapCols,
+            cfg.m_trailLinkMaxGapCols) * cfg.m_dt;
     cfg.m_windowSeconds = m_detectorTunables.m_blob.m_windowSeconds;
 
     if (maxDurationS > cfg.m_windowSeconds) {

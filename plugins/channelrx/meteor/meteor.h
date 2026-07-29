@@ -128,6 +128,16 @@ public:
     SpectrumVis *getSpectrumVis() { return &m_spectrumVis; }
     SpectrumVis *getHeadSpectrumVis() { return &m_headSpectrumVis; }
     int getChannelSampleRate() const { return m_basebandSink->getChannelSampleRate(); }
+    bool getLocalChannelTiming(
+        double& latencySeconds,
+        double& uncertaintySeconds,
+        double& filterDelaySeconds) const
+    {
+        return m_basebandSink->getLocalChannelTiming(
+            latencySeconds,
+            uncertaintySeconds,
+            filterDelaySeconds);
+    }
 
     using BasebandSampleSink::feed;
     virtual void feed(const SampleVector::const_iterator& begin, const SampleVector::const_iterator& end, bool po);

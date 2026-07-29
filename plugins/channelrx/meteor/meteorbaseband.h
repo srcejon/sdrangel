@@ -18,7 +18,11 @@
 #ifndef INCLUDE_METEORBASEBAND_H
 #define INCLUDE_METEORBASEBAND_H
 
+#include <atomic>
+#include <deque>
+
 #include <QElapsedTimer>
+#include <QMutex>
 #include <QObject>
 #include <QRecursiveMutex>
 #include <QTimer>
@@ -88,8 +92,19 @@ public:
     void setInactivityFlushEnabled(bool enabled) { m_inactivityFlushEnabled = enabled; }
     bool isRunning() const { return m_running; }
     void setFifoLabel(const QString& label) { m_sampleFifo.setLabel(label); }
+    bool getLocalChannelTiming(
+        double& latencySeconds,
+        double& uncertaintySeconds,
+        double& filterDelaySeconds) const;
 
 private:
+    struct InputTimingBlock
+    {
+        int m_samplesRemaining;
+        qint64 m_endElapsedNsecs;
+        int m_sampleRate;
+    };
+
     SampleSinkFifo m_sampleFifo;
     DownChannelizer *m_channelizer;
     MeteorDemodSink m_sink;
@@ -102,10 +117,23 @@ private:
     QTimer *m_inactivityTimer;
     QElapsedTimer m_lastDataTimer;
     QRecursiveMutex m_mutex;
+    mutable QMutex m_timingMutex;
+    std::deque<InputTimingBlock> m_inputTimingBlocks;
+    std::atomic<qint64> m_localProcessingLatencyUsecs {-1};
+    std::atomic<qint64> m_localTimingUncertaintyUsecs {0};
+    std::atomic<qint64> m_localFilterDelayUsecs {0};
+    std::atomic<int> m_timingBasebandSampleRate {0};
+    double m_localLatencyMeanUsecs = 0.0;
+    double m_localLatencyDeviationUsecs = 0.0;
+    bool m_haveLocalLatency = false;
 
     bool handleMessage(const Message& cmd);
     void applySettings(const MeteorSettings& settings, const QStringList& settingsKeys, bool force = false);
     void notifyVisualSampleRate();
+    void resetLocalChannelTiming();
+    qint64 consumeInputTiming(int samples);
+    void updateLocalChannelTiming(qint64 inputEndElapsedNsecs);
+    double localFilterDelaySeconds() const;
 
 private slots:
     void startInactivityTimer();
@@ -113,6 +141,7 @@ private slots:
     void handleInactivity();
     void handleInputMessages();
     void handleData();
+    void handleSamplesWritten(int samples, qint64 elapsedNsecs);
 };
 
 #endif // INCLUDE_METEORBASEBAND_H

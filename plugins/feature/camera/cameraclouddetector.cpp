@@ -574,10 +574,23 @@ void CameraCloudDetector::applySettings(const CameraSettings& settings, const QL
 
     if (force || cloudSettingsChanged(settingsKeys))
     {
+        // The caches must invalidate even when the re-run below is skipped: the next
+        // frame's recompute needs the new geometry (sun/moon projection, elevation mask)
         invalidateCache();
 
-        // Re-run on the last frame so tuning is live on a paused/static image
-        if (!force && m_lastInputFrame)
+        // Re-run on the last frame so tuning is live on a paused/static image. A pure
+        // direction change is exempt when the user has chosen not to apply direction
+        // changes to the current image: this stage sits upstream of the star detector,
+        // so its re-processed frame would cascade down the chain and re-run star
+        // detection and the plate solve on an image that is supposed to stay untouched.
+        const bool directionOnly = !settingsKeys.isEmpty()
+            && std::all_of(settingsKeys.cbegin(), settingsKeys.cend(), [](const QString& key) {
+                   return (key == QLatin1String("azimuth"))
+                       || (key == QLatin1String("elevation"))
+                       || (key == QLatin1String("roll"));
+               });
+        if (!force && m_lastInputFrame
+            && !(directionOnly && !settings.m_directionApplyToCurrentImage))
         {
             CameraPipelineFramePtr frame(new CameraPipelineFrame(*m_lastInputFrame));
             CameraImageUtils::applyPlaybackProjectionTransform(*frame, m_settings, true);

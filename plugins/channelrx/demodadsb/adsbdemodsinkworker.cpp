@@ -305,6 +305,7 @@ void ADSBDemodSinkWorker::run()
     int samplesPerBit = m_settings.m_samplesPerBit;
     int samplesPerFrame = samplesPerBit*(ADS_B_PREAMBLE_BITS+ADS_B_ES_BITS);
     int samplesPerChip = samplesPerBit/ADS_B_CHIPS_PER_BIT;
+    const qint64 samplesPerMSec = ADS_B_BITS_PER_SECOND * samplesPerBit / 1000;
 
     qDebug() << "ADSBDemodSinkWorker:: running with"
          << " samplesPerFrame: " << samplesPerFrame
@@ -414,7 +415,6 @@ void ADSBDemodSinkWorker::run()
 
             Real preambleCorrelationScaled = preambleCorrelation * m_correlationScale;
             Real correlationOnes = preambleCorrelationOnes / samplesPerChip;
-            QDateTime dateTime = rxDateTime(firstIdx, readBuffer);
 
             // Is ADS-B?
             df = ((data[0] >> 3) & ADS_B_DF_MASK);
@@ -431,6 +431,8 @@ void ADSBDemodSinkWorker::run()
 
                     if (icaoValid(icao))
                     {
+                        const QDateTime dateTime = rxDateTime(firstIdx, readBuffer, samplesPerMSec);
+
                         // Got a valid frame
                         m_demodStats.m_adsbFrames++;
                         // Save in hash of ICAOs that have been seen
@@ -512,6 +514,7 @@ void ADSBDemodSinkWorker::run()
                             m_crc.calculate(data, bytes-3);
                             int crc = m_crc.get();
                             bool forward = false;
+                            QDateTime dateTime;
 
                             // ICAO address XORed in to parity, apart from DF11
                             // Extract ICAO from parity and see if it matches an aircraft we've already
@@ -524,6 +527,8 @@ void ADSBDemodSinkWorker::run()
 
                                 if (icaoValid(icao))
                                 {
+                                    dateTime = rxDateTime(firstIdx, readBuffer, samplesPerMSec);
+
                                     if (icaoHeardRecently(icao, dateTime)) {
                                         forward = true;
                                     } else {
@@ -547,6 +552,8 @@ void ADSBDemodSinkWorker::run()
 
                                     if (icaoValid(icao))
                                     {
+                                        dateTime = rxDateTime(firstIdx, readBuffer, samplesPerMSec);
+
                                         if (icaoHeardRecently(icao, dateTime)) {
                                             forward = true;
                                         } else {
@@ -684,9 +691,8 @@ void ADSBDemodSinkWorker::handleInputMessages()
     }
 }
 
-QDateTime ADSBDemodSinkWorker::rxDateTime(int firstIdx, int readBuffer) const
+QDateTime ADSBDemodSinkWorker::rxDateTime(int firstIdx, int readBuffer, qint64 samplesPerMSec) const
 {
-    const qint64 samplesPerSecondMSec = ADS_B_BITS_PER_SECOND * m_settings.m_samplesPerBit / 1000;
-    const qint64 offsetMSec = (firstIdx - m_sink->m_samplesPerFrame - 1) / samplesPerSecondMSec;
-    return m_sink->m_bufferFirstSampleDateTime[readBuffer].addMSecs(offsetMSec);
+    const qint64 offsetMSec = (firstIdx - m_sink->m_samplesPerFrame - 1) / samplesPerMSec;
+    return QDateTime::fromMSecsSinceEpoch(m_sink->m_bufferFirstSampleMSecs[readBuffer] + offsetMSec);
 }

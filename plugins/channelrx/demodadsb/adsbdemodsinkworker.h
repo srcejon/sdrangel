@@ -94,7 +94,7 @@ private:
 
     QHash<int, QList<RXRecord>> m_modeSOnlyIcaos;
 
-    QDateTime rxDateTime(int firstIdx, int readBuffer) const;
+    QDateTime rxDateTime(int firstIdx, int readBuffer, qint64 samplesPerMSec) const;
     void handleModeS(unsigned char *data, int bytes, unsigned icao, int df, int firstIndex, unsigned short preamble, Real preambleCorrelation, Real correlationOnes, const QDateTime& dateTime, unsigned crc);
     void forwardFrame(const unsigned char *data, int size, float preambleCorrelation, float correlationOnes, const QDateTime& dateTime, unsigned crc);
     bool icaoHeardRecently(unsigned icao, const QDateTime &dateTime);

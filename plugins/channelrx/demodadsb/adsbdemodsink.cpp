@@ -30,6 +30,8 @@ ADSBDemodSink::ADSBDemodSink() :
     m_channelSampleRate(6000000),
     m_channelFrequencyOffset(0),
     m_sampleBuffer{nullptr, nullptr, nullptr},
+    m_bufferFirstSampleMSecs{0, 0, 0},
+    m_minFirstSampleMSecs(0),
     m_worker(this),
     m_writeBuffer(0),
     m_writeIdx(0),
@@ -128,17 +130,17 @@ void ADSBDemodSink::processOneSample(Real magsq)
     m_writeIdx++;
     if (!m_bufferDateTimeValid[m_writeBuffer])
     {
-        QDateTime dateTime = QDateTime::currentDateTime();
-        if (m_minFirstSampleDateTime.isValid() && (dateTime < m_minFirstSampleDateTime)) {
-            dateTime = m_minFirstSampleDateTime;
+        qint64 dateTimeMSecs = QDateTime::currentMSecsSinceEpoch();
+        if ((m_minFirstSampleMSecs > 0) && (dateTimeMSecs < m_minFirstSampleMSecs)) {
+            dateTimeMSecs = m_minFirstSampleMSecs;
         }
-        m_bufferFirstSampleDateTime[m_writeBuffer] = dateTime;
+        m_bufferFirstSampleMSecs[m_writeBuffer] = dateTimeMSecs;
         m_bufferDateTimeValid[m_writeBuffer] = true;
 
         // Make sure timestamps from different buffers are in order, even if we receive samples faster than real time
         const qint64 samplesPerSecondMSec = ADS_B_BITS_PER_SECOND * m_settings.m_samplesPerBit / 1000;
         const qint64 offsetMSec = m_bufferSize / samplesPerSecondMSec;
-        m_minFirstSampleDateTime = dateTime.addMSecs(offsetMSec);
+        m_minFirstSampleMSecs = dateTimeMSecs + offsetMSec;
     }
     if (m_writeIdx >= m_bufferSize)
     {

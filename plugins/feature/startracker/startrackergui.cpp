@@ -839,7 +839,7 @@ void StarTrackerGUI::on_galacticLongitude_valueChanged(double value)
 void StarTrackerGUI::updateForTarget()
 {
     const QStringList raDecTargets = {
-        "PSR B0329+54", "PSR B0833-45", "Sagittarius A", "Cassiopeia A", "Cygnus A", "Taurus A (M1)", "Virgo A (M87)"
+        "PSR B0329+54", "PSR B0833-45", "Sagittarius A", "Cassiopeia A", "Cygnus A", "Taurus A (M1)", "Virgo A (M87)", "Vega", "QSO B1634+7037"
     };
     const QStringList lbTargets = {
         "S7", "S8", "S9"
@@ -898,6 +898,16 @@ void StarTrackerGUI::updateForTarget()
         {
             ui->rightAscension->setText("12h30m49.42s");
             ui->declination->setText(QString("12%0123'28.04\"").arg(QChar(0xb0)));
+        }
+        else if (m_settings.m_target == "Vega")
+        {
+            ui->rightAscension->setText("18h36m56.34s");
+            ui->declination->setText(QString("38%0147'01.28\"").arg(QChar(0xb0)));
+        }
+        else if (m_settings.m_target == "QSO B1634+7037")
+        {
+            ui->rightAscension->setText("16h34m28.99s");
+            ui->declination->setText(QString("70%0131'32.39\"").arg(QChar(0xb0)));
         }
         on_rightAscension_editingFinished();
         on_declination_editingFinished();
@@ -3373,7 +3383,9 @@ void StarTrackerGUI::updateTargetList()
             "Custom l/b",
             "S7",
             "S8",
-            "S9"
+            "S9",
+            "Vega",
+            "QSO B1634+7037"
         };
 
         for (const auto& target : builtinTargets) {

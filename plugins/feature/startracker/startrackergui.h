@@ -31,6 +31,7 @@
 #include "feature/featuregui.h"
 #include "util/messagequeue.h"
 #include "util/jplhorizons.h"
+#include "util/simbad.h"
 #include "gui/httpdownloadmanagergui.h"
 #include "settings/rollupstate.h"
 #include "availablechannelorfeature.h"
@@ -115,6 +116,8 @@ private:
     bool m_startAfterDownload;
 
     JPLHorizons *m_jplHorizons;
+    Simbad *m_simbad;
+    QString m_simbadPendingIdentifier;
     QStringList m_jplBodies;
     QStringList m_spiceTargets;
     QStringList m_availableFeatures;    // Names of SatelliteTrackers and SkyMaps for target selection
@@ -278,6 +281,8 @@ private slots:
     void downloadFinished(const QString& filename, bool success);
     void spiceDownloadsComplete();
     void majorBodiesUpdated(const QHash<QString, JPLHorizons::BodyID>& bodies);
+    void simbadObjectResolved(const Simbad::Object& object);
+    void simbadLookupFailed(const QString& identifier, const QString& error);
 
 protected:
     void resizeEvent(QResizeEvent *event) override;

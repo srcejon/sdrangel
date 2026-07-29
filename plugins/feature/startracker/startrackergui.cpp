@@ -360,6 +360,7 @@ StarTrackerGUI::StarTrackerGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet,
     m_networkManager(nullptr),
     m_startAfterDownload(false),
     m_jplHorizons(nullptr),
+    m_simbad(nullptr),
     m_spiceEphemerides(this),
     m_solarFlux(0.0),
     m_solarFluxesValid(false),
@@ -537,10 +538,23 @@ StarTrackerGUI::StarTrackerGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet,
         connect(m_jplHorizons, &JPLHorizons::majorBodiesUpdated, this, &StarTrackerGUI::majorBodiesUpdated);
         m_jplHorizons->getMajorBodiesList();
     }
+
+    m_simbad = Simbad::create();
+    if (m_simbad)
+    {
+        connect(m_simbad, &Simbad::objectResolved, this, &StarTrackerGUI::simbadObjectResolved);
+        connect(m_simbad, &Simbad::lookupFailed, this, &StarTrackerGUI::simbadLookupFailed);
+    }
 }
 
 StarTrackerGUI::~StarTrackerGUI()
 {
+    if (m_simbad)
+    {
+        disconnect(m_simbad, &Simbad::objectResolved, this, &StarTrackerGUI::simbadObjectResolved);
+        disconnect(m_simbad, &Simbad::lookupFailed, this, &StarTrackerGUI::simbadLookupFailed);
+        delete m_simbad;
+    }
     if (m_jplHorizons)
     {
         disconnect(m_jplHorizons, &JPLHorizons::majorBodiesUpdated, this, &StarTrackerGUI::majorBodiesUpdated);
@@ -601,11 +615,18 @@ void StarTrackerGUI::displaySettings()
     ui->latitude->setValue(m_settings.m_latitude);
     ui->longitude->setValue(m_settings.m_longitude);
     ui->targetSource->setCurrentIndex(ui->targetSource->findText(m_settings.m_targetSource));
-    ui->target->setEditable(m_settings.m_targetSource == "Horizons");
+    ui->target->setEditable((m_settings.m_targetSource == "Horizons") || (m_settings.m_targetSource == "SIMBAD"));
     if (ui->target->lineEdit()) {
         QObject::connect(ui->target->lineEdit(), &QLineEdit::editingFinished, this, &StarTrackerGUI::on_target_editingFinished, Qt::UniqueConnection);
     }
-    ui->target->setCurrentIndex(ui->target->findText(m_settings.m_target));
+    const int targetIndex = ui->target->findText(m_settings.m_target);
+    if (targetIndex >= 0) {
+        ui->target->setCurrentIndex(targetIndex);
+    } else if (ui->target->isEditable()) {
+        ui->target->setEditText(m_settings.m_target);
+    } else {
+        ui->target->setCurrentIndex(-1);
+    }
     ui->azimuth->setUnits((DMSSpinBox::DisplayUnits)m_settings.m_azElUnits);
     ui->elevation->setUnits((DMSSpinBox::DisplayUnits)m_settings.m_azElUnits);
     ui->galacticLatitude->setUnits((DMSSpinBox::DisplayUnits)m_settings.m_azElUnits);
@@ -845,7 +866,18 @@ void StarTrackerGUI::updateForTarget()
         "S7", "S8", "S9"
     };
 
-    if ((m_settings.m_target == "Sun") || (m_settings.m_target == "Moon"))
+    if (m_settings.m_targetSource == "SIMBAD")
+    {
+        ui->rightAscension->setReadOnly(true);
+        ui->declination->setReadOnly(true);
+        ui->azimuth->setReadOnly(true);
+        ui->elevation->setReadOnly(true);
+        ui->galacticLatitude->setReadOnly(true);
+        ui->galacticLongitude->setReadOnly(true);
+        ui->rightAscension->setText(m_settings.m_ra);
+        ui->declination->setText(m_settings.m_dec);
+    }
+    else if ((m_settings.m_target == "Sun") || (m_settings.m_target == "Moon"))
     {
         ui->rightAscension->setReadOnly(true);
         ui->declination->setReadOnly(true);
@@ -995,6 +1027,10 @@ void StarTrackerGUI::on_target_currentIndexChanged(int index)
 {
     (void) index;
 
+    if (m_settings.m_targetSource == "SIMBAD") {
+        return;
+    }
+
     QString text = ui->target->currentText();
     if (!text.isEmpty())
     {
@@ -1008,9 +1044,23 @@ void StarTrackerGUI::on_target_currentIndexChanged(int index)
 
 void StarTrackerGUI::on_target_editingFinished()
 {
-    QString text = ui->target->currentText();
+    QString text = ui->target->currentText().trimmed();
     if (!text.isEmpty())
     {
+        if (m_settings.m_targetSource == "SIMBAD")
+        {
+            if (!m_simbad)
+            {
+                QMessageBox::warning(this, tr("SIMBAD lookup failed"), tr("The SIMBAD resolver is unavailable."));
+                return;
+            }
+
+            m_simbadPendingIdentifier = text;
+            ui->target->setToolTip(tr("Looking up \"%1\" in SIMBAD...").arg(text));
+            m_simbad->lookup(text);
+            return;
+        }
+
         m_settings.m_target = text;
         m_settingsKeys.append("target");
         applySettings();
@@ -1034,12 +1084,27 @@ void StarTrackerGUI::on_targetSource_currentIndexChanged(int index)
         }
     }
 
-    ui->target->setEditable(m_settings.m_targetSource == "Horizons");
+    if (m_settings.m_targetSource != "SIMBAD") {
+        m_simbadPendingIdentifier.clear();
+    }
+
+    ui->target->setEditable((m_settings.m_targetSource == "Horizons") || (m_settings.m_targetSource == "SIMBAD"));
     if (ui->target->lineEdit()) {
         QObject::connect(ui->target->lineEdit(), &QLineEdit::editingFinished, this, &StarTrackerGUI::on_target_editingFinished, Qt::UniqueConnection);
     }
     updateTargetList();
-    on_target_currentIndexChanged(ui->target->currentIndex()); // updateTargetList blocks signals, so update target manually
+    if (m_settings.m_targetSource == "SIMBAD")
+    {
+        ui->target->setToolTip(tr("Enter an astronomical object identifier to resolve with SIMBAD"));
+        if (ui->target->lineEdit()) {
+            ui->target->lineEdit()->selectAll();
+        }
+    }
+    else
+    {
+        ui->target->setToolTip(tr("Target object"));
+        on_target_currentIndexChanged(ui->target->currentIndex()); // updateTargetList blocks signals, so update target manually
+    }
 }
 
 void StarTrackerGUI::updateLST()
@@ -3360,6 +3425,53 @@ void StarTrackerGUI::majorBodiesUpdated(const QHash<QString, JPLHorizons::BodyID
     updateTargetList();
 }
 
+void StarTrackerGUI::simbadObjectResolved(const Simbad::Object& object)
+{
+    if ((m_settings.m_targetSource != "SIMBAD")
+        || (object.m_identifier != m_simbadPendingIdentifier)
+        || (ui->target->currentText().trimmed() != object.m_identifier))
+    {
+        return;
+    }
+
+    m_simbadPendingIdentifier.clear();
+    m_settings.m_target = object.m_identifier;
+    m_settings.m_ra = Units::decimalHoursToHoursMinutesAndSeconds(object.m_ra);
+    m_settings.m_dec = Units::decimalDegreesToDegreeMinutesAndSeconds(object.m_dec);
+    m_settingsKeys.append("target");
+    m_settingsKeys.append("ra");
+    m_settingsKeys.append("dec");
+
+    ui->target->setEditText(object.m_identifier);
+    ui->target->setToolTip(tr("Resolved by SIMBAD as %1").arg(object.m_name));
+    updateForTarget();
+    applySettings();
+    plotChart();
+}
+
+void StarTrackerGUI::simbadLookupFailed(const QString& identifier, const QString& error)
+{
+    if ((m_settings.m_targetSource != "SIMBAD")
+        || (identifier != m_simbadPendingIdentifier)
+        || (ui->target->currentText().trimmed() != identifier))
+    {
+        return;
+    }
+
+    m_simbadPendingIdentifier.clear();
+    ui->target->setToolTip(tr("SIMBAD lookup failed; the previous resolved target remains active"));
+    QMessageBox::warning(
+        this,
+        tr("SIMBAD lookup failed"),
+        tr("Could not resolve \"%1\".\n\n%2\n\nThe previous target remains active.").arg(identifier, error));
+
+    if (ui->target->lineEdit())
+    {
+        ui->target->lineEdit()->setFocus();
+        ui->target->lineEdit()->selectAll();
+    }
+}
+
 void StarTrackerGUI::updateTargetList()
 {
     bool block = ui->target->blockSignals(true);
@@ -3413,6 +3525,8 @@ void StarTrackerGUI::updateTargetList()
     int index = ui->target->findText(m_settings.m_target, Qt::MatchFixedString); // Case insensitive
     if (index >= 0) {
         ui->target->setCurrentIndex(index);
+    } else if (ui->target->isEditable()) {
+        ui->target->setEditText(m_settings.m_target);
     }
 }
 

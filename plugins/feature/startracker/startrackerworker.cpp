@@ -979,6 +979,9 @@ void StarTrackerWorker::update()
             || (   (raDecTargets.contains(m_settings.m_target) || m_settings.m_target.contains("SkyMap"))  // When switching these targets, we get separate settings updates for RA and Dec, so need to redraw
                 && ((m_settings.m_ra != m_chartRA) || (m_settings.m_dec != m_chartDec)) // We don't want to redraw when RA/Dec for Sun/Moon changes though, as that happens continuously
                 )
+            || (   (m_settings.m_targetSource == "SIMBAD")
+                && ((m_settings.m_ra != m_chartRA) || (m_settings.m_dec != m_chartDec))
+               )
             || (   lbTargets.contains(m_settings.m_target)
                 && ((m_settings.m_l != m_chartL) || (m_settings.m_b != m_chartB))
                )
@@ -1054,7 +1057,8 @@ void StarTrackerWorker::update()
                             rdJ2000.ra = Units::raToDecimal(m_settings.m_ra);
                             rdJ2000.dec = Units::decToDecimal(m_settings.m_dec);
                         }
-                        aa = Astronomy::raDecToAzAlt(rdJ2000, m_settings.m_latitude, m_settings.m_longitude, dt, !m_settings.m_jnow);
+                        const bool j2000 = (m_settings.m_targetSource == "SIMBAD") || !m_settings.m_jnow;
+                        aa = Astronomy::raDecToAzAlt(rdJ2000, m_settings.m_latitude, m_settings.m_longitude, dt, j2000);
                     }
 
                     azimuths.append(aa.az);

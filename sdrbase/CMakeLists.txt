@@ -271,6 +271,7 @@ set(sdrbase_SOURCES
     util/syncmessenger.cpp
     util/samplesourceserializer.cpp
     util/sdrangelserverlist.cpp
+    util/simbad.cpp
     util/simpleserializer.cpp
     util/serialutil.cpp
     util/socket.cpp
@@ -543,6 +544,7 @@ set(sdrbase_HEADERS
     util/syncmessenger.h
     util/samplesourceserializer.h
     util/sdrangelserverlist.h
+    util/simbad.h
     util/simpleserializer.h
     util/serialutil.h
     util/socket.h

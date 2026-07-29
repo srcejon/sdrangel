@@ -75,7 +75,7 @@ struct StarTrackerSettings
     int m_workspaceIndex;
     QByteArray m_geometryBytes;
     enum Rotators {ALL_ROTATORS, NO_ROTATORS, MATCHING_TARGET} m_drawRotators; //!< Which rotators to draw on polar chart
-    QString m_targetSource;     // "SDRangel", "SPICE", "Horizons"
+    QString m_targetSource;     // "SDRangel", "SPICE", "Horizons", "SIMBAD"
     QStringList m_spiceEphemerides;
     QStringList m_solarSystemBodies;
     bool m_logScale;            // Log scale rather than linear for planetary orbits

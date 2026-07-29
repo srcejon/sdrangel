@@ -11,8 +11,8 @@ The Star Tracker feature plugin is for use in radio astronomy and EME (Earth-Moo
 * It can plot the line of sight through the Milky Way.
 * It can send the target to the Sky Map plugin, to display associated imagery in a variety of wavelengths. It can also use the Sky Map to set the target.
 * The plugin can communicate with Stellarium, allowing Stellarium to control SDRangel as though it was a telescope and for the direction the antenna is pointing to be displayed in Stellarium.
-* It has built-in models for calculating the position of the Sun and Moon, as well built-in coordiates for a few of the most significant radio objects,
-but can also use NASA JPL's SPICE toolkit or Horizons API for targetting other solar system objects, such as asteroids, comets, planets, planetary satellites and some spacecraft.
+* It has built-in models for calculating the position of the Sun and Moon, as well built-in coordinates for a few of the most significant radio objects,
+but can also use NASA JPL's SPICE toolkit or Horizons API for targeting other solar system objects, and SIMBAD for resolving identifiers of objects outside the Solar System.
 * For Jupiter decameter radiation (DAM) observations, it can calculate and plot the phase of Io and Ganymede, relative to Jupiter's Central Meridian Longitude (CML) on a chart showing emission probability.
 * It can plot the positions of major solar system bodies in the Solar System Map.
 
@@ -135,6 +135,7 @@ Selects the source of targets listed in the Target list (11).
 - SDRangel: built-in targets as listed in (11).
 - SPICE: Solar System bodies from a SPICE SPK file. 
 - Horizons: Solar System bodies from NASA JPL's Horizons database.
+- SIMBAD: Stars and other astronomical objects resolved by identifier in the SIMBAD database.
 
 SPICE SPK files are available from [NASA JPL's NAIF website](https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/).
 SPK files can be specified in the Star Tracker Settings dialog (5).
@@ -142,6 +143,10 @@ SPK files can be specified in the Star Tracker Settings dialog (5).
 When Horizons is selected, the Target list (11) will be populated with major bodies from the Horizons database. Other bodies can be specified by entering their ID manually.
 The Horizons database includes asteroids, comets, natural satellites, planets, the Sun, some spacecraft and dynamical points (L1 etc) and barycenters.
 [Horizons Manual](https://ssd.jpl.nasa.gov/horizons/manual.html). Using the Horizons API requires an internet connection.
+
+When SIMBAD is selected, the Target list is editable. Enter an identifier such as `Sirius`, `Vega`, `M 31` or `PSR B0329+54`, then press Enter or move focus out of the field.
+If the identifier is found, its J2000/ICRS right ascension and declination are displayed and used for tracking. If lookup fails, the previous successfully resolved target remains active.
+[SIMBAD](https://simbad.cds.unistra.fr/simbad/) lookups require an internet connection.
 
 <h3>13: Frequency</h3>
 

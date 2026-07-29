@@ -32,6 +32,7 @@ struct GS232ControllerSettings
 {
     float m_azimuth;
     float m_elevation;
+    bool m_readOnly;
     QString m_serialPort;
     int m_baudRate;
     QString m_host;

@@ -506,6 +506,9 @@ void GS232ControllerGUI::displaySettings()
     azElToDisplay(m_settings.m_azimuth, m_settings.m_elevation, coord1, coord2);
     ui->coord1->setValue(coord1);
     ui->coord2->setValue(coord2);
+    ui->readOnly->setChecked(m_settings.m_readOnly);
+    ui->coord1->setEnabled(!m_settings.m_readOnly);
+    ui->coord2->setEnabled(!m_settings.m_readOnly);
     ui->connection->setCurrentIndex((int)m_settings.m_connection);
     if (m_settings.m_serialPort.length() > 0) {
         ui->serialPort->lineEdit()->setText(m_settings.m_serialPort);
@@ -877,6 +880,14 @@ void GS232ControllerGUI::on_coord1_valueChanged(double value)
     ui->targetName->setText("");
 }
 
+void GS232ControllerGUI::on_readOnly_toggled(bool checked)
+{
+    m_settings.m_readOnly = checked;
+    ui->coord1->setEnabled(!checked);
+    ui->coord2->setEnabled(!checked);
+    applySetting("readOnly");
+}
+
 void GS232ControllerGUI::on_coord2_valueChanged(double value)
 {
     if (!m_inputUpdate) {
@@ -1225,6 +1236,7 @@ void GS232ControllerGUI::makeUIConnections()
     QObject::connect(ui->port, qOverload<int>(&QSpinBox::valueChanged), this, &GS232ControllerGUI::on_port_valueChanged);
     QObject::connect(ui->baudRate, qOverload<int>(&QComboBox::currentIndexChanged), this, &GS232ControllerGUI::on_baudRate_currentIndexChanged);
     QObject::connect(ui->track, &QCheckBox::stateChanged, this, &GS232ControllerGUI::on_track_stateChanged);
+    QObject::connect(ui->readOnly, &ButtonSwitch::toggled, this, &GS232ControllerGUI::on_readOnly_toggled);
     QObject::connect(ui->coord1, qOverload<double>(&QDoubleSpinBox::valueChanged), this, &GS232ControllerGUI::on_coord1_valueChanged);
     QObject::connect(ui->coord2, qOverload<double>(&QDoubleSpinBox::valueChanged), this, &GS232ControllerGUI::on_coord2_valueChanged);
     QObject::connect(ui->sources, &QComboBox::currentTextChanged, this, &GS232ControllerGUI::on_sources_currentTextChanged);

@@ -45,6 +45,7 @@ void GS232ControllerSettings::resetToDefaults()
 {
     m_azimuth = 0.0f;
     m_elevation = 0.0f;
+    m_readOnly = false;
     m_serialPort = "";
     m_baudRate = 9600;
     m_host = "127.0.0.1";
@@ -140,6 +141,7 @@ QByteArray GS232ControllerSettings::serialize() const
     s.writeFloat(42, m_longitude);
     s.writeFloat(43, m_altitude);
     s.writeBool(44, m_positionSync);
+    s.writeBool(45, m_readOnly);
 
     s.writeFloat(50, m_inputControllerSettings.m_lowSensitivity);
     s.writeFloat(51, m_inputControllerSettings.m_highSensitivity);
@@ -223,6 +225,7 @@ bool GS232ControllerSettings::deserialize(const QByteArray& data)
         d.readFloat(42, &m_longitude, MainCore::instance()->getSettings().getLongitude());
         d.readFloat(43, &m_altitude, MainCore::instance()->getSettings().getAltitude());
         d.readBool(44, &m_positionSync, true);
+        d.readBool(45, &m_readOnly, false);
 
         d.readFloat(50, &m_inputControllerSettings.m_lowSensitivity, 5.0f);
         d.readFloat(51, &m_inputControllerSettings.m_highSensitivity, 50.0f);
@@ -261,6 +264,9 @@ void GS232ControllerSettings::applySettings(const QStringList& settingsKeys, con
     }
     if (settingsKeys.contains("elevation")) {
         m_elevation = settings.m_elevation;
+    }
+    if (settingsKeys.contains("readOnly")) {
+        m_readOnly = settings.m_readOnly;
     }
     if (settingsKeys.contains("serialPort")) {
         m_serialPort = settings.m_serialPort;
@@ -387,6 +393,9 @@ QString GS232ControllerSettings::getDebugString(const QStringList& settingsKeys,
     }
     if (settingsKeys.contains("elevation") || force) {
         ostr << " m_elevation: " << m_elevation;
+    }
+    if (settingsKeys.contains("readOnly") || force) {
+        ostr << " m_readOnly: " << m_readOnly;
     }
     if (settingsKeys.contains("serialPort") || force) {
         ostr << " m_serialPort: " << m_serialPort.toStdString();

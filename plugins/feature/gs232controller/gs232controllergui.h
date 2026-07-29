@@ -126,6 +126,7 @@ private slots:
     void on_port_valueChanged(int value);
     void on_baudRate_currentIndexChanged(int index);
     void on_track_stateChanged(int state);
+    void on_readOnly_toggled(bool checked);
     void on_coord1_valueChanged(double value);
     void on_coord2_valueChanged(double value);
     void on_sources_currentTextChanged(const QString& text);

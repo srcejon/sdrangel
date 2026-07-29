@@ -198,6 +198,16 @@
         </property>
        </widget>
       </item>
+      <item>
+       <widget class="ButtonSwitch" name="readOnly">
+        <property name="toolTip">
+         <string>Read the current direction without commanding the rotator</string>
+        </property>
+        <property name="text">
+         <string>RO</string>
+        </property>
+       </widget>
+      </item>
      </layout>
     </item>
     <item>

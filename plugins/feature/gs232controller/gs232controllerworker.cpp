@@ -150,6 +150,7 @@ bool GS232ControllerWorker::handleMessage(const Message& cmd)
 void GS232ControllerWorker::applySettings(const GS232ControllerSettings& settings, const QList<QString>& settingsKeys, bool force)
 {
     qDebug() << "GS232ControllerWorker::applySettings:" << settings.getDebugString(settingsKeys, force) << " force: " << force;
+    const bool wasReadOnly = m_settings.m_readOnly;
 
     if ((settingsKeys.contains("protocol") && (settings.m_protocol != m_settings.m_protocol)) || force)
     {
@@ -216,6 +217,18 @@ void GS232ControllerWorker::applySettings(const GS232ControllerSettings& setting
 
     if (m_controllerProtocol && (!m_controllerProtocol->usesIODevice() || (m_device != nullptr)))
     {
+        if (m_settings.m_readOnly)
+        {
+            // Establish the connection and report the mount's current direction without slewing it.
+            m_controllerProtocol->update();
+            return;
+        }
+
+        if (wasReadOnly) {
+            m_lastAzimuth = -1;
+            m_lastElevation = -1;
+        }
+
         // Apply offset then clamp
 
         float azimuth, elevation;

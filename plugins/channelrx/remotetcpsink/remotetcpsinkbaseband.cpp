@@ -141,6 +141,10 @@ void RemoteTCPSinkBaseband::handleSamplesWritten(
         return;
     }
 
+    const qint64 sampleDurationUsecs = (qint64) std::llround(
+        (double) samples * 1000000.0
+        / (double) m_basebandSampleRate);
+
     if (!m_haveSampleTime)
     {
         const qint64 nowElapsedNsecs =
@@ -148,13 +152,12 @@ void RemoteTCPSinkBaseband::handleSamplesWritten(
         const qint64 nowEpochUsecs =
             QDateTime::currentMSecsSinceEpoch() * 1000;
         m_nextSampleTimeUsecs = nowEpochUsecs
-            - ((nowElapsedNsecs - elapsedNsecs) / 1000);
+            - ((nowElapsedNsecs - elapsedNsecs) / 1000)
+            - sampleDurationUsecs;
         m_haveSampleTime = true;
     }
 
-    m_nextSampleTimeUsecs += (qint64) std::llround(
-        (double) samples * 1000000.0
-        / (double) m_basebandSampleRate);
+    m_nextSampleTimeUsecs += sampleDurationUsecs;
     m_sink.setNextSampleTime(m_nextSampleTimeUsecs);
 }
 

@@ -2671,10 +2671,12 @@ bool MeteorGUI::remoteTCPInputPreFillSeconds(double& preFillSeconds) const
     return true;
 }
 
-bool MeteorGUI::remoteTCPInputTransportLatencySeconds(
-    double& latencySeconds) const
+bool MeteorGUI::remoteTCPInputTransportTiming(
+    double& latencySeconds,
+    double& uncertaintySeconds) const
 {
     latencySeconds = 0.0;
+    uncertaintySeconds = 0.0;
 
     if (!m_deviceUISet || !m_deviceUISet->m_deviceAPI
         || (m_deviceUISet->m_deviceAPI->getHardwareId()
@@ -2697,16 +2699,22 @@ bool MeteorGUI::remoteTCPInputTransportLatencySeconds(
     const qint64 latencyUsecs = report
         ? report->getTransportLatencyUs()
         : 0;
+    const qint64 uncertaintyUsecs = report
+        ? report->getTimingUncertaintyUs()
+        : 0;
     const bool valid = report
         && (report->getTimingAvailable() != 0)
         && (latencyUsecs >= 0)
-        && (latencyUsecs <= 60LL * 1000000LL);
+        && (latencyUsecs <= 60LL * 1000000LL)
+        && (uncertaintyUsecs >= 0)
+        && (uncertaintyUsecs <= 60LL * 1000000LL);
 
     if (!valid) {
         return false;
     }
 
     latencySeconds = (double) latencyUsecs / 1000000.0;
+    uncertaintySeconds = (double) uncertaintyUsecs / 1000000.0;
     return true;
 }
 
@@ -2727,9 +2735,11 @@ QDateTime MeteorGUI::movingTargetObservationDateTimeUtc(const QDateTime& display
     {
         double preFillSeconds = 0.0;
         double transportLatencySeconds = 0.0;
+        double timingUncertaintySeconds = 0.0;
         remoteTCPInputPreFillSeconds(preFillSeconds);
-        remoteTCPInputTransportLatencySeconds(
-            transportLatencySeconds);
+        remoteTCPInputTransportTiming(
+            transportLatencySeconds,
+            timingUncertaintySeconds);
 
         return systemTimeUtc.addMSecs(
             -(qint64) std::llround(
@@ -3122,6 +3132,13 @@ void MeteorGUI::showSatelliteStatisticsDialog(
     double remotePreFillSeconds = 0.0;
     if (remoteTCPInputPreFillSeconds(remotePreFillSeconds))
     {
+        double transportLatencySeconds = 0.0;
+        double timingUncertaintySeconds = 0.0;
+        const bool transportTimingAvailable =
+            remoteTCPInputTransportTiming(
+                transportLatencySeconds,
+                timingUncertaintySeconds);
+
         addValue(sampleTiming, tr("Input device"), QStringLiteral("RemoteTCPInput"));
         addValue(
             sampleTiming,
@@ -3129,8 +3146,22 @@ void MeteorGUI::showSatelliteStatisticsDialog(
             tr("%1 ms").arg(remotePreFillSeconds * 1000.0, 0, 'f', 0));
         addValue(
             sampleTiming,
+            tr("Measured transport latency"),
+            transportTimingAvailable
+                ? tr("%1 ms").arg(
+                    transportLatencySeconds * 1000.0, 0, 'f', 1)
+                : tr("Unavailable: no valid SDRA timing metadata"));
+        addValue(
+            sampleTiming,
+            tr("Measurement uncertainty"),
+            transportTimingAvailable
+                ? tr("+/- %1 ms").arg(
+                    timingUncertaintySeconds * 1000.0, 0, 'f', 1)
+                : tr("Not available"));
+        addValue(
+            sampleTiming,
             tr("Remaining uncertainty"),
-            tr("Remote USB, server, and transport latency are not measured"));
+            tr("Receiver and device buffering before RemoteTCPSink"));
     }
     else
     {

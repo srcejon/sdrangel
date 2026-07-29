@@ -155,12 +155,10 @@ public:
 
     static quint32 extractUInt32(const quint8 *p)
     {
-        quint32 data;
-        data = (p[3] & 0xff)
-            | ((p[2] & 0xff) << 8)
-            | ((p[1] & 0xff) << 16)
-            | ((p[0] & 0xff) << 24);
-        return data;
+        return quint32(p[3])
+            | (quint32(p[2]) << 8)
+            | (quint32(p[1]) << 16)
+            | (quint32(p[0]) << 24);
     }
 
     static qint32 extractInt32(const quint8 *p)
@@ -182,16 +180,14 @@ public:
 
     static quint64 extractUInt64(const quint8 *p)
     {
-        quint64 data;
-        data = (p[7] & 0xff)
-            | ((p[6] & 0xff) << 8)
-            | ((p[5] & 0xff) << 16)
-            | ((p[4] & 0xff) << 24)
-            | (((quint64)(p[3] & 0xff)) << 32)
-            | (((quint64)(p[2] & 0xff)) << 40)
-            | (((quint64)(p[1] & 0xff)) << 48)
-            | (((quint64)(p[0] & 0xff)) << 56);
-        return data;
+        return quint64(p[7])
+            | (quint64(p[6]) << 8)
+            | (quint64(p[5]) << 16)
+            | (quint64(p[4]) << 24)
+            | (quint64(p[3]) << 32)
+            | (quint64(p[2]) << 40)
+            | (quint64(p[1]) << 48)
+            | (quint64(p[0]) << 56);
     }
 
     static void encodeFloat(quint8 *p, float data)

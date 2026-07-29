@@ -242,8 +242,9 @@ private:
     void addDetection(const MeteorDemodSink::MsgMeteorDetected& detection);
     void addSatelliteDetection(const MeteorDemodSink::MsgSatelliteDetected& detection);
     bool remoteTCPInputPreFillSeconds(double& preFillSeconds) const;
-    bool remoteTCPInputTransportLatencySeconds(
-        double& latencySeconds) const;
+    bool remoteTCPInputTransportTiming(
+        double& latencySeconds,
+        double& uncertaintySeconds) const;
     QDateTime movingTargetObservationDateTimeUtc(const QDateTime& displayTimeUtc) const;
     void applySatelliteTargetMatch(
         quint64 overlayId,

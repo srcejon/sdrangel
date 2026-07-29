@@ -55,6 +55,131 @@
 #endif
 
 namespace {
+    bool runMeteorBlobDetectorTests(QTextStream& errorStream)
+    {
+        MeteorBlobDetector::Config cfg;
+        cfg.m_seedDb = 11.0;
+        cfg.m_growDb = 6.5;
+        cfg.m_floorOffsetDb = 0.0;
+        cfg.m_medianFloor = false;
+        cfg.m_minPix = 3;
+        cfg.m_closeFreqBins = 1;
+        cfg.m_linkMaxGapCols = 2;
+        cfg.m_linkMaxDriftHzPerS = 300.0;
+        cfg.m_linkTolHz = 20.0;
+        cfg.m_trailLinkMaxGapCols = 7;
+        cfg.m_trailLinkTolHz = 12.0;
+        cfg.m_trailLinkMinFragmentCols = 2;
+        cfg.m_trailLinkBridgeDb = 3.0;
+        cfg.m_trailLinkMinBridgeFraction = 0.5;
+        cfg.m_trimKeepTime = 1.0;
+        cfg.m_trimKeepFreq = 1.0;
+        cfg.m_occLimit = 0.9;
+        cfg.m_distributedImpulseMinSeedPixels = 100;
+        cfg.m_minPeakExcessDb = 16.0;
+        cfg.m_scoreThreshold = 20.0;
+        cfg.m_windowSeconds = 5.0;
+        cfg.m_minWindowSeconds = 5.0;
+        cfg.m_emitStrideS = 5.0;
+        cfg.m_finalMarginS = 0.5;
+        cfg.m_binHz = 10.0;
+        cfg.m_dt = 0.1;
+        cfg.m_fMinHz = -80.0;
+
+        auto detect = [&cfg](int secondBin)
+        {
+            MeteorBlobDetector detector;
+            detector.configure(cfg);
+            const std::vector<double> floor(16, 1.0);
+
+            for (int column = 0; column < 16; column++)
+            {
+                std::vector<double> power(16, 1.0);
+                if ((column >= 2) && (column <= 4)) {
+                    power[8] = 100.0;
+                }
+                if ((column >= 5) && (column <= 9)) {
+                    power[8] = 2.1;
+                }
+                if ((column >= 10) && (column <= 12)) {
+                    power[secondBin] = 100.0;
+                }
+                detector.processFrame(
+                    power,
+                    floor,
+                    (std::uint64_t) column * 100);
+            }
+
+            detector.flush();
+            return detector.takeBlobs();
+        };
+
+        const std::vector<MeteorBlobDetector::Blob> linked = detect(8);
+        if ((linked.size() != 1)
+            || (linked[0].m_startSample != 200)
+            || (linked[0].m_endSample != 1200))
+        {
+            errorStream
+                << "Meteor blob detector test: stable trail fragments were not linked\n";
+            return false;
+        }
+
+        const std::vector<MeteorBlobDetector::Blob> separate = detect(12);
+        if (separate.size() != 2)
+        {
+            errorStream
+                << "Meteor blob detector test: distinct-frequency fragments were merged\n";
+            return false;
+        }
+
+        MeteorBlobDetector noBridgeDetector;
+        noBridgeDetector.configure(cfg);
+        const std::vector<double> floor(16, 1.0);
+        for (int column = 0; column < 16; column++)
+        {
+            std::vector<double> power(16, 1.0);
+            if (((column >= 2) && (column <= 4))
+                || ((column >= 10) && (column <= 12)))
+            {
+                power[8] = 100.0;
+            }
+            noBridgeDetector.processFrame(
+                power,
+                floor,
+                (std::uint64_t) column * 100);
+        }
+        noBridgeDetector.flush();
+        if (noBridgeDetector.takeBlobs().size() != 2)
+        {
+            errorStream
+                << "Meteor blob detector test: an unsupported quiet gap was bridged\n";
+            return false;
+        }
+
+        MeteorBlobDetector shortDetector;
+        shortDetector.configure(cfg);
+        for (int column = 0; column < 16; column++)
+        {
+            std::vector<double> power(16, 1.0);
+            if ((column == 3) || (column == 9)) {
+                power[7] = power[8] = power[9] = 100.0;
+            }
+            shortDetector.processFrame(
+                power,
+                floor,
+                (std::uint64_t) column * 100);
+        }
+        shortDetector.flush();
+        if (shortDetector.takeBlobs().size() != 2)
+        {
+            errorStream
+                << "Meteor blob detector test: isolated noise components were chained\n";
+            return false;
+        }
+
+        return true;
+    }
+
     bool runMeteorSettingsTests(QTextStream& errorStream)
     {
         MeteorSettings expected;
@@ -572,6 +697,11 @@ namespace {
             {QStringLiteral("blobLinkGapSeconds"), [](Tunables& t) -> auto& { return t.m_blob.m_linkGapSeconds; }},
             {QStringLiteral("blobLinkMaxDriftHzPerS"), [](Tunables& t) -> auto& { return t.m_blob.m_linkMaxDriftHzPerS; }},
             {QStringLiteral("blobLinkTolHz"), [](Tunables& t) -> auto& { return t.m_blob.m_linkTolHz; }},
+            {QStringLiteral("blobTrailLinkGapSeconds"), [](Tunables& t) -> auto& { return t.m_blob.m_trailLinkGapSeconds; }},
+            {QStringLiteral("blobTrailLinkTolHz"), [](Tunables& t) -> auto& { return t.m_blob.m_trailLinkTolHz; }},
+            {QStringLiteral("blobTrailLinkMinFragmentSeconds"), [](Tunables& t) -> auto& { return t.m_blob.m_trailLinkMinFragmentSeconds; }},
+            {QStringLiteral("blobTrailLinkBridgeDb"), [](Tunables& t) -> auto& { return t.m_blob.m_trailLinkBridgeDb; }},
+            {QStringLiteral("blobTrailLinkMinBridgeFraction"), [](Tunables& t) -> auto& { return t.m_blob.m_trailLinkMinBridgeFraction; }},
             {QStringLiteral("blobTrimKeepTime"), [](Tunables& t) -> auto& { return t.m_blob.m_trimKeepTime; }},
             {QStringLiteral("blobTrimKeepFreq"), [](Tunables& t) -> auto& { return t.m_blob.m_trimKeepFreq; }},
             {QStringLiteral("blobOccLimit"), [](Tunables& t) -> auto& { return t.m_blob.m_occLimit; }},
@@ -1520,7 +1650,8 @@ int main(int argc, char *argv[])
         return 0;
     }
 
-    if (!runMeteorSettingsTests(err)
+    if (!runMeteorBlobDetectorTests(err)
+        || !runMeteorSettingsTests(err)
         || !runMeteorMapGeometryTests(err)
         || !runMovingTargetMatcherTests(err)
         || !runMoonTargetMatcherTests(err)

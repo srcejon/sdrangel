@@ -53,6 +53,11 @@ public:
         int    m_linkMaxGapCols = 3;       // trajectory linking: max column gap
         double m_linkMaxDriftHzPerS = 300.0;
         double m_linkTolHz = 40.0;
+        int    m_trailLinkMaxGapCols = 3;  // longer gap, only for stationary trail fragments
+        double m_trailLinkTolHz = 20.0;
+        int    m_trailLinkMinFragmentCols = 2;
+        double m_trailLinkBridgeDb = 3.0;  // weak evidence required through the gap
+        double m_trailLinkMinBridgeFraction = 0.5;
         double m_trimKeepTime = 0.97;      // energy kept along time (loose: preserve tails)
         double m_trimKeepFreq = 0.90;      // energy kept along frequency (tight: hug the core)
         double m_occLimit = 0.5;           // broadband-impulse gate: reject maxOcc above this

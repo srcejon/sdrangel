@@ -62,6 +62,14 @@ public:
             double m_linkGapSeconds = 0.12;    // max temporal gap when linking fragments
             double m_linkMaxDriftHzPerS = 300.0;
             double m_linkTolHz = 40.0;
+            // A stable trail can blink below the grow threshold for longer than a moving
+            // feature. Bridge only persistent, frequency-stable fragments with weak
+            // evidence through the gap, avoiding broad time-only merging.
+            double m_trailLinkGapSeconds = 0.65;
+            double m_trailLinkTolHz = 12.0;
+            double m_trailLinkMinFragmentSeconds = 0.20;
+            double m_trailLinkBridgeDb = 3.0;
+            double m_trailLinkMinBridgeFraction = 0.5;
             double m_trimKeepTime = 0.97;      // energy kept along time (loose: preserve tails)
             double m_trimKeepFreq = 0.90;      // energy kept along frequency (tight: hug the core)
             double m_occLimit = 0.5;

@@ -43,10 +43,13 @@ void MeteorBlobDetector::reset()
     m_windowCols = (int) std::min(colCap, std::max(2LL, (long long) std::llround(m_cfg.m_windowSeconds / dt)));
     m_minCols = (int) std::min(colCap, std::max(2LL, (long long) std::llround(m_cfg.m_minWindowSeconds / dt)));
     m_strideCols = (int) std::min(colCap, std::max(1LL, (long long) std::llround(m_cfg.m_emitStrideS / dt)));
-    // final margin must exceed every mechanism that could still extend a "finished" blob:
-    // the trace-link gap plus the bright-absorb reach (<=5 cols)
-    m_finalMarginCols = std::max(m_cfg.m_linkMaxGapCols + 8,
-                                 (int) std::llround(m_cfg.m_finalMarginS / dt));
+    // Final margin must exceed every mechanism that could still extend a "finished" blob:
+    // either trace-link gap plus the bright-absorb reach (<=5 cols).
+    m_finalMarginCols = std::max(
+        std::max(
+            m_cfg.m_linkMaxGapCols,
+            m_cfg.m_trailLinkMaxGapCols) + 8,
+        (int) std::llround(m_cfg.m_finalMarginS / dt));
     m_colsSinceProcess = 0;
     m_absStart = 0;
     m_emittedThroughAbs = -1;
@@ -305,7 +308,7 @@ void MeteorBlobDetector::processChunk(long long emitThroughAbs)
     struct Comp {
         std::vector<Px> px;
         int cmin, cmax;
-        double fstart, fend;
+        double fstart, fend, ftrackMin, ftrackMax;
     };
     std::vector<Comp> comps;
     {
@@ -346,6 +349,14 @@ void MeteorBlobDetector::processChunk(long long emitThroughAbs)
             };
             c.fstart = colFreq(c.cmin);
             c.fend = colFreq(c.cmax);
+            c.ftrackMin = c.fstart;
+            c.ftrackMax = c.fstart;
+            for (int x = c.cmin + 1; x <= c.cmax; ++x)
+            {
+                const double f = colFreq(x);
+                c.ftrackMin = std::min(c.ftrackMin, f);
+                c.ftrackMax = std::max(c.ftrackMax, f);
+            }
             comps.push_back(std::move(c));
         }
     }
@@ -358,6 +369,12 @@ void MeteorBlobDetector::processChunk(long long emitThroughAbs)
         for (size_t i = 0; i < order.size(); i++) order[i] = (int) i;
         std::stable_sort(order.begin(), order.end(),
                          [&](int a, int b) { return comps[a].cmin < comps[b].cmin; });
+        const int maxLinkGapCols = std::max(
+            m_cfg.m_linkMaxGapCols,
+            m_cfg.m_trailLinkMaxGapCols);
+        const double trailTolHz = std::min(
+            m_cfg.m_trailLinkTolHz,
+            2.0 * m_cfg.m_binHz);
         for (int bi : order)
         {
             const Comp& B = comps[bi];
@@ -367,10 +384,72 @@ void MeteorBlobDetector::processChunk(long long emitThroughAbs)
                 if ((int) ai == bi) continue;
                 const Comp& A = comps[ai];
                 const int gap = B.cmin - A.cmax;
-                if (gap < 0 || gap > m_cfg.m_linkMaxGapCols) continue;
-                const double reach = m_cfg.m_linkMaxDriftHzPerS * (gap + 1) * m_cfg.m_dt + m_cfg.m_linkTolHz;
                 const double d = std::fabs(B.fstart - A.fend);
-                if (d <= reach && d < bestd) { bestd = d; best = (int) ai; }
+                if (gap < 0) {
+                    continue;
+                }
+                if (gap > maxLinkGapCols) {
+                    continue;
+                }
+
+                const double reach =
+                    m_cfg.m_linkMaxDriftHzPerS * (gap + 1) * m_cfg.m_dt
+                    + m_cfg.m_linkTolHz;
+                const bool trajectoryLink =
+                    (gap <= m_cfg.m_linkMaxGapCols)
+                    && (d <= reach);
+                const bool stableTrailShape =
+                    (gap <= m_cfg.m_trailLinkMaxGapCols)
+                    && ((A.cmax - A.cmin + 1)
+                        >= m_cfg.m_trailLinkMinFragmentCols)
+                    && ((B.cmax - B.cmin + 1)
+                        >= m_cfg.m_trailLinkMinFragmentCols)
+                    && ((A.ftrackMax - A.ftrackMin) <= trailTolHz)
+                    && ((B.ftrackMax - B.ftrackMin) <= trailTolHz)
+                    && (d <= trailTolHz);
+                bool stableTrailLink = stableTrailShape;
+
+                if (stableTrailLink && (gap > m_cfg.m_linkMaxGapCols))
+                {
+                    const int firstGapCol = A.cmax + 1;
+                    const int lastGapCol = B.cmin - 1;
+                    const int gapCols = std::max(
+                        0,
+                        lastGapCol - firstGapCol + 1);
+                    const int centerBin = std::clamp(
+                        (int) std::llround(
+                            (0.5 * (A.fend + B.fstart) - m_cfg.m_fMinHz)
+                            / m_cfg.m_binHz),
+                        0,
+                        nb - 1);
+                    int evidenceCols = 0;
+
+                    for (int x = firstGapCol; x <= lastGapCol; ++x)
+                    {
+                        double maxExcess = -1e9;
+                        for (int y = std::max(0, centerBin - 1);
+                             y <= std::min(nb - 1, centerBin + 1);
+                             ++y)
+                        {
+                            maxExcess = std::max(
+                                maxExcess,
+                                EX(y, x));
+                        }
+                        if (maxExcess >= m_cfg.m_trailLinkBridgeDb) {
+                            ++evidenceCols;
+                        }
+                    }
+
+                    const int requiredEvidenceCols = (int) std::ceil(
+                        m_cfg.m_trailLinkMinBridgeFraction * gapCols);
+                    stableTrailLink =
+                        evidenceCols >= requiredEvidenceCols;
+                }
+
+                if ((trajectoryLink || stableTrailLink) && d < bestd) {
+                    bestd = d;
+                    best = (int) ai;
+                }
             }
             if (best >= 0) parent[findRoot(parent, bi)] = findRoot(parent, best);
         }

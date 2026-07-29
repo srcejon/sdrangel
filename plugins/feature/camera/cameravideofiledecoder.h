@@ -30,6 +30,7 @@
 
 #include "cameraaudiobytequeue.h"
 #include "cameraimagepool.h"
+#include "cameramediametadata.h"
 
 struct AVCodecContext;
 struct AVFormatContext;
@@ -103,6 +104,7 @@ public:
         QString& errorMessage);
     [[nodiscard]] qint64 durationMs() const { return m_durationMs; }
     [[nodiscard]] double frameRate() const { return m_frameRate; }
+    [[nodiscard]] const CameraMediaMetadata& cameraMetadata() const { return m_cameraMetadata; }
     [[nodiscard]] qint64 audioDecodedPositionMs() const { return m_audioDecodedPositionMs; }
     // Source content position (ms) of the FIRST sample of the audio handed back by the
     // most recent readNextFrame(). This is the audio's own PTS, which runs ahead of the
@@ -217,6 +219,7 @@ private:
     int m_audioStreamIndex = -1;
     qint64 m_durationMs = 0;
     double m_frameRate = 25.0;
+    CameraMediaMetadata m_cameraMetadata;
     int m_outputSampleRate = 48000;
     // Cap (ms) on the live-source pending-audio staging buffer; settable so it can
     // track the controller's streamBufferingSeconds (see setMaxLivePendingAudioMs).

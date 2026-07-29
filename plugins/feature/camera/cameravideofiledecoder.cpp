@@ -31,6 +31,7 @@
 #include <QUrl>
 
 #include "cameraffmpegaudio.h"
+#include "cameramediametadata.h"
 #include "cameraffmpegcompat.h"
 
 #ifdef CAMERA_FFMPEG_STREAMING
@@ -250,6 +251,25 @@ bool CameraVideoFileDecoder::open(
             return false;
         }
 
+        const QByteArray metadataKey = CameraMediaMetadata::metadataKey().toUtf8();
+        const AVDictionaryEntry *cameraMetadataEntry = av_dict_get(
+            m_formatContext->metadata,
+            metadataKey.constData(),
+            nullptr,
+            0);
+        if (cameraMetadataEntry && cameraMetadataEntry->value)
+        {
+            QString metadataError;
+            m_cameraMetadata = CameraMediaMetadata::fromJson(
+                QByteArray(cameraMetadataEntry->value),
+                &metadataError);
+            if (!m_cameraMetadata.isValid()) {
+                qWarning() << "CameraVideoFileDecoder: invalid embedded camera metadata:" << metadataError;
+            } else {
+                qDebug() << "CameraVideoFileDecoder: loaded embedded camera metadata";
+            }
+        }
+
         qDebug() << "CameraVideoFileDecoder: media stream info ready"
                  << fileName
                  << "rtspTransport" << (rtspSource ? transportName : QStringLiteral("n/a"))
@@ -451,6 +471,7 @@ void CameraVideoFileDecoder::close()
     m_audioStreamIndex = -1;
     m_durationMs = 0;
     m_frameRate = 25.0;
+    m_cameraMetadata = CameraMediaMetadata();
     m_outputSampleRate = 48000;
     m_audioPaceFrameRate = 0.0;
     m_audioPaceRemainderFrames = 0.0;

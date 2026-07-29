@@ -39,7 +39,7 @@ The Camera plugin also supports a variety of post-processing, detection and over
 * Thermal camera temperature extraction and charting (Thermal Master P2 and TOPDON TC001)
 * CUDA acceleration is supported for most operations and the processing runs in multiple threads.
 
-Raw, calibrated, filtered or post-processed images can be saved as JPEG, PNG or FITS files, and video can be recorded in H264/H265 encoded MP4 files. Video can also be streamed to YouTube Live via RTMP.
+Raw, calibrated, filtered or post-processed images can be saved as JPEG, PNG or FITS files, and video can be recorded in H264/H265 encoded MP4 files. Camera position, direction, projection and image-transform metadata is embedded in JPEG/PNG images and as the initial values in MP4 recordings, then restored automatically when those files are replayed by the Camera feature. Video can also be streamed to YouTube Live via RTMP.
 
 The Camera feature can send events to the Scheduler feature when motion or YOLO object classes are detected, allowing you to automate actions such as recording from SDR devices, sending notifications or running custom commands. 
 Recoding images and video can also be triggered via the Scheduler feature, allowing triggering based on time or RF events.

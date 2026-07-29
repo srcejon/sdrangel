@@ -33,6 +33,7 @@
 #include "util/message.h"
 #include "util/messagequeue.h"
 #include "camerapipelineframe.h"
+#include "cameramediametadata.h"
 #include "camerasettings.h"
 
 class CameraPostProcessor;
@@ -246,6 +247,7 @@ private:
         QImage m_calibratedImage;
         QImage m_filteredImage;
         QImage m_processedImage;
+        CameraMediaMetadata m_metadata;
     };
 
     struct AudioChunk
@@ -329,14 +331,14 @@ private:
     void closeVideoWriter(std::unique_ptr<CameraVideoWriter>& writer, QSize& openedSize, const QString& variant);
     void closeYouTubeStream();
     void updateYouTubeStream(const QImage& calibratedImage, const QImage& processedImage, qint64 videoContentMs);
-    bool ensureVideoWriter(std::unique_ptr<CameraVideoWriter>& writer, const QString& baseFileName, const QImage& frameForSize, const QString& variant, double frameRate);
+    bool ensureVideoWriter(std::unique_ptr<CameraVideoWriter>& writer, const QString& baseFileName, const QImage& frameForSize, const QString& variant, double frameRate, const CameraMediaMetadata& metadata);
     bool writeVideoFrame(CameraVideoWriter& writer, const QImage& frameToWrite, const QString& variant, qint64 timestampMs = -1);
     void reportErrorToFeature(const QString& errorKey, const QString& title, const QString& errorMessage);
     int preRecordBufferFrameLimit() const;
     int outputQueueFrameLimit() const;
     void trimPreRecordBuffer();
-    void appendPreRecordFrame(const QImage& calibratedImage, const QImage& filteredImage, const QImage& processedImage);
-    void flushPreRecordFrames(const QImage& currentCalibratedImage, const QImage& currentFilteredImage, const QImage& currentProcessedImage, double frameRate);
+    void appendPreRecordFrame(const QImage& calibratedImage, const QImage& filteredImage, const QImage& processedImage, const CameraMediaMetadata& metadata);
+    void flushPreRecordFrames(const QImage& currentCalibratedImage, const QImage& currentFilteredImage, const QImage& currentProcessedImage, double frameRate, const CameraMediaMetadata& metadata);
     void reportPreRecordPreviewFrame(qint64 offsetMs);
     void updateKeogram(const QImage& calibratedImage, const QDateTime& captureDateTime);
     void resetKeogram();

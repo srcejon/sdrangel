@@ -73,6 +73,7 @@ void CameraImageUtils::captureDirection(CameraPipelineFrame& frame, const Camera
 CameraSettings CameraImageUtils::projectionSettingsForFrame(const CameraSettings& settings, const CameraPipelineFrame& frame)
 {
     CameraSettings projectionSettings = settings;
+    frame.m_mediaMetadata.applyProjectionSettings(projectionSettings);
     if (!settings.m_directionApplyToCurrentImage && frame.m_captureDirection.m_valid)
     {
         projectionSettings.m_azimuth = frame.m_captureDirection.m_azimuth;
@@ -103,7 +104,9 @@ void CameraImageUtils::applyPlaybackProjectionTransform(CameraPipelineFrame& fra
         frame.m_imageTransform.clear();
     }
 
-    if (!settings.m_playbackProjectionEnabled) {
+    if (!settings.m_playbackProjectionEnabled)
+    {
+        frame.m_mediaMetadata.applyImageTransform(frame);
         return;
     }
 

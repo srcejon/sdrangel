@@ -40,6 +40,7 @@
 #endif
 
 #include "cameraopticalspectrum.h"
+#include "cameramediametadata.h"
 
 /**
  * \brief A single object detection (bounding box, class label, confidence).
@@ -474,6 +475,7 @@ struct CameraPipelineFrame
     CameraOpticalSpectrumData m_opticalSpectrumData;
     QDateTime m_captureDateTime;
     CameraPipelineDirection m_captureDirection;
+    CameraMediaMetadata m_mediaMetadata;
     CameraPipelineThermal m_thermal;
     quint64 m_captureEpoch = 0;
     qint64 m_pipelineInputWallClockMs = 0;

@@ -63,6 +63,7 @@ public:
         double m_fps = 25.0;
         bool m_preferHardwareEncoding = true;
         bool m_audioEnabled = true;
+        QByteArray m_cameraMetadataJson;
     };
 
     CameraVideoWriter();

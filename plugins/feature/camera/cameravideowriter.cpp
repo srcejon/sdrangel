@@ -29,6 +29,7 @@
 #include <QStringList>
 
 #include "cameraffmpegcompat.h"
+#include "cameramediametadata.h"
 
 #ifdef CAMERA_FFMPEG_STREAMING
 extern "C" {
@@ -432,7 +433,26 @@ bool CameraVideoWriter::open(const Settings& settings, const QImage& firstFrame,
         }
     }
 
-    ret = avformat_write_header(m_formatContext, nullptr);
+    if (!settings.m_cameraMetadataJson.isEmpty())
+    {
+        const QByteArray metadataKey = CameraMediaMetadata::metadataKey().toUtf8();
+        av_dict_set(
+            &m_formatContext->metadata,
+            metadataKey.constData(),
+            settings.m_cameraMetadataJson.constData(),
+            0);
+    }
+
+    AVDictionary *formatOptions = nullptr;
+    const QString outputFormatName = m_formatContext->oformat && m_formatContext->oformat->name
+        ? QString::fromLatin1(m_formatContext->oformat->name)
+        : QString();
+    if (outputFormatName.contains(QStringLiteral("mp4"), Qt::CaseInsensitive)
+        || outputFormatName.contains(QStringLiteral("mov"), Qt::CaseInsensitive)) {
+        av_dict_set(&formatOptions, "movflags", "use_metadata_tags", 0);
+    }
+    ret = avformat_write_header(m_formatContext, &formatOptions);
+    av_dict_free(&formatOptions);
     if (ret < 0)
     {
         errorMessage = QStringLiteral("Cannot write video file header: %1").arg(avErrorString(ret));

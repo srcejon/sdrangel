@@ -282,6 +282,7 @@ private:
     QString m_lastAlpacaErrorMessage;
 
     QImage m_lastImage;     ///< Last processed image received from the worker (displayed in the GUI)
+    CameraMediaMetadata m_lastMediaMetadata;
     CameraHistogramData m_lastHistogramData; ///< Last histogram computed after image processing but before detection/overlays
     CameraOpticalSpectrumData m_lastOpticalSpectrumData; ///< Last optical spectrum extracted from the detection RoI after image processing
     QVector<CameraPipelineStarDetection> m_lastStarDetections;

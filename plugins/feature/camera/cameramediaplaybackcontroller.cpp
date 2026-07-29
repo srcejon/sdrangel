@@ -332,6 +332,7 @@ void CameraMediaPlaybackController::submitStreamPresentFrame(const QImage& image
     frame->m_playbackPositionMs = ptsMs;
     frame->m_playbackFrameRate = qMax(1.0, m_state.m_frameRate) * qMax(0.1, m_settings->m_videoPlaybackRate);
     m_callbacks.populateExposureMeta(*frame);
+    m_state.m_decoder->cameraMetadata().applyToFrame(*frame);
     frame->m_captureEpoch = m_callbacks.captureEpoch();
     frame->m_pipelineInputWallClockMs = QDateTime::currentMSecsSinceEpoch();
     submitVideoFileFrame(frame, false);
@@ -1157,6 +1158,10 @@ void CameraMediaPlaybackController::submitDecodedVideoFileFrame(
         frame->m_playbackPositionMs = playbackPositionMs;
         frame->m_playbackFrameRate = qMax(0.001, m_state.m_frameRate) * qMax(0.1, m_settings->m_videoPlaybackRate);
         m_callbacks.populateExposureMeta(*frame);
+        const qint64 metadataOffsetMs = m_settings->isVideoFileCamera()
+            ? qMax<qint64>(0, playbackPositionMs)
+            : 0;
+        m_state.m_decoder->cameraMetadata().applyToFrame(*frame, metadataOffsetMs);
         frame->m_captureEpoch = m_callbacks.captureEpoch();
         frame->m_pipelineInputWallClockMs = QDateTime::currentMSecsSinceEpoch();
         submitVideoFileFrame(frame, applyPlaybackOffset);

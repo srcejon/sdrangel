@@ -166,6 +166,7 @@ public:
         const QVector<CameraPipelineTrackedObject>& getTrackedObjects() const { return m_trackedObjects; }
         const CameraPipelineThermal& getThermal() const { return m_thermal; }
         const QDateTime& getCaptureDateTime() const { return m_captureDateTime; }
+        const CameraMediaMetadata& getMediaMetadata() const { return m_mediaMetadata; }
         quint64 getCaptureEpoch() const { return m_captureEpoch; }
         bool isManualPreviewFrame() const { return m_manualPreviewFrame; }
 
@@ -180,9 +181,10 @@ public:
                                       const QVector<CameraPipelineDetection>& detections,
                                       const QVector<CameraPipelineMeteorPhotometry>& meteorPhotometry,
                                       const QVector<CameraPipelineTrackedObject>& trackedObjects,
-                                      const CameraPipelineThermal& thermal,
-                                      const QDateTime& captureDateTime,
-                                      quint64 captureEpoch,
+                                       const CameraPipelineThermal& thermal,
+                                       const QDateTime& captureDateTime,
+                                       const CameraMediaMetadata& mediaMetadata,
+                                       quint64 captureEpoch,
                                       bool manualPreviewFrame,
                                       const QVector<PreviewTextLabel>& previewTextLabels,
                                       const QVector<PreviewRectItem>& previewRectItems,
@@ -202,6 +204,7 @@ public:
                 trackedObjects,
                 thermal,
                 captureDateTime,
+                mediaMetadata,
                 captureEpoch,
                 manualPreviewFrame,
                 previewTextLabels,
@@ -223,6 +226,7 @@ public:
         QVector<CameraPipelineTrackedObject> m_trackedObjects;
         CameraPipelineThermal m_thermal;
         QDateTime m_captureDateTime;
+        CameraMediaMetadata m_mediaMetadata;
         quint64 m_captureEpoch;
         bool m_manualPreviewFrame;
         QVector<PreviewTextLabel> m_previewTextLabels;
@@ -242,6 +246,7 @@ public:
                        const QVector<CameraPipelineTrackedObject>& trackedObjects,
                        const CameraPipelineThermal& thermal,
                        const QDateTime& captureDateTime,
+                       const CameraMediaMetadata& mediaMetadata,
                        quint64 captureEpoch,
                        bool manualPreviewFrame,
                        const QVector<PreviewTextLabel>& previewTextLabels,
@@ -261,6 +266,7 @@ public:
             m_trackedObjects(trackedObjects),
             m_thermal(thermal),
             m_captureDateTime(captureDateTime),
+            m_mediaMetadata(mediaMetadata),
             m_captureEpoch(captureEpoch),
             m_manualPreviewFrame(manualPreviewFrame),
             m_previewTextLabels(previewTextLabels),

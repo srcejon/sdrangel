@@ -141,6 +141,7 @@
 #include "camera.h"
 #include "cameraimageutils.h"
 #include "cameradetectionhistory.h"
+#include "cameramediametadata.h"
 #include "cameraframestacker.h"
 #include "camerahistogramdialog.h"
 #include "cameraopticalspectrumdialog.h"
@@ -841,6 +842,7 @@ bool CameraGUI::handleMessage(const Message& message)
         const qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
         QSize oldSize = m_lastImage.size();
         m_lastImage = report.getImage();
+        m_lastMediaMetadata = report.getMediaMetadata();
         m_lastHistogramData = report.getHistogramData();
         m_lastOpticalSpectrumData = report.getOpticalSpectrumData();
         m_lastStarDetections = report.getStarDetections();
@@ -7658,6 +7660,7 @@ void CameraGUI::submitQtImageFrame(const QImage& image, qint64 playbackPositionM
         frame->m_playbackFrameNumber = playbackFrameNumber;
         frame->m_playbackActiveFrame = m_captureActive && ((playbackPositionMs >= 0) || (playbackFrameNumber > 0));
         populateFrameExposureMetadata(*frame, exposureTimeMs, hdrExposureIndex, hdrExposureCount, captureDateTime);
+        CameraMediaMetadata::fromImage(image).applyToFrame(*frame);
         frame->m_captureEpoch = m_captureEpoch;
         frame->m_manualPreviewFrame = !m_captureActive;
         frame->m_thermal.m_rawFrame = rawFrame;
@@ -9212,8 +9215,12 @@ void CameraGUI::on_saveImageButton_clicked()
         QPainter painter(&image);
         painter.setRenderHint(QPainter::Antialiasing);
         m_imageScene->render(&painter); // Should render full image, regardless of zoom settings
-        if (!image.save(fileName)) {
-            QMessageBox::warning(this, tr("Save image"), tr("Failed to save image to %1").arg(fileName));
+        QString errorMessage;
+        if (!CameraMediaMetadata::writeImage(fileName, image, m_lastMediaMetadata, &errorMessage)) {
+            QMessageBox::warning(
+                this,
+                tr("Save image"),
+                tr("Failed to save image to %1:\n%2").arg(fileName, errorMessage));
         }
     }
 }

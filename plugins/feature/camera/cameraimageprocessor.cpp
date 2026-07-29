@@ -120,6 +120,7 @@ void CameraImageProcessor::LastInputFrame::clear()
     m_rawInputImage = QImage();
     m_captureDateTime = QDateTime();
     m_captureDirection = CameraPipelineDirection();
+    m_mediaMetadata = CameraMediaMetadata();
     m_captureEpoch = 0;
     m_pipelineInputWallClockMs = 0;
     m_playbackPositionMs = -1;
@@ -459,6 +460,7 @@ void CameraImageProcessor::storeLastInputFrame(const CameraPipelineFrame& frame)
     cachedFrame.m_rawInputImage = frame.m_rawInputImage;
     cachedFrame.m_captureDateTime = frame.m_captureDateTime;
     cachedFrame.m_captureDirection = frame.m_captureDirection;
+    cachedFrame.m_mediaMetadata = frame.m_mediaMetadata;
     cachedFrame.m_captureEpoch = frame.m_captureEpoch;
     cachedFrame.m_pipelineInputWallClockMs = frame.m_pipelineInputWallClockMs;
     cachedFrame.m_playbackPositionMs = frame.m_playbackPositionMs;
@@ -488,6 +490,7 @@ CameraPipelineFramePtr CameraImageProcessor::createFrameFromLastInput() const
     frame->m_rawInputImage = m_lastInputFrame.m_rawInputImage;
     frame->m_captureDateTime = m_lastInputFrame.m_captureDateTime;
     frame->m_captureDirection = m_lastInputFrame.m_captureDirection;
+    frame->m_mediaMetadata = m_lastInputFrame.m_mediaMetadata;
     frame->m_captureEpoch = m_lastInputFrame.m_captureEpoch;
     frame->m_pipelineInputWallClockMs = m_lastInputFrame.m_pipelineInputWallClockMs;
     frame->m_manualPreviewFrame = true;

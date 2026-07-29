@@ -7,6 +7,23 @@ set(camera_star_tests_SOURCES
     ../camerasettings.cpp
     ../cameraicons.qrc
 )
+
+add_executable(featurecamera_media_metadata_tests EXCLUDE_FROM_ALL
+    cameramediametadatatests.cpp
+    ../cameramediametadata.cpp
+    ../cameramediametadata.h
+    ../camerapipelineframe.h
+    ../camerasettings.h
+)
+target_include_directories(featurecamera_media_metadata_tests PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/..
+    ${OpenCV_INCLUDE_DIRS}
+)
+target_link_libraries(featurecamera_media_metadata_tests PRIVATE
+    Qt::Core
+    Qt::Gui
+    ${camera_OpenCV_LIBS}
+)
 # WS1a: cameraplatesolver.cpp is NOT compiled here. It comes from the camera_platesolver static
 # library (defined in ../CMakeLists.txt) which the featurecamera plugin also links, so the harness
 # runs the byte-identical solver object that ships in the GUI -- no cross-build ULP divergence.

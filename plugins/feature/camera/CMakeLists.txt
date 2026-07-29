@@ -29,6 +29,7 @@ set(camera_SOURCES
     cameraopticalspectrumlibrary.cpp
     cameramediaplaybackstate.cpp
     cameramediaplaybackcontroller.cpp
+    cameramediametadata.cpp
     cameraffmpegaudio.cpp
     camerarecorder.cpp
     cameravideowriter.cpp
@@ -72,6 +73,7 @@ set(camera_HEADERS
     cameraopticalspectrumlibrary.h
     cameramediaplaybackstate.h
     cameramediaplaybackcontroller.h
+    cameramediametadata.h
     cameraffmpegaudio.h
     cameraffmpegcompat.h
     camerarecorder.h

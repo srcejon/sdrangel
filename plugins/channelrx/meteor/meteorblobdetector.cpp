@@ -565,6 +565,58 @@ void MeteorBlobDetector::processChunk(long long emitThroughAbs)
         }
         if (ymaxB < 0) { yminB = ymin; ymaxB = ymax; }   // no bright pixels: fall back to full extent
 
+        // Count the longest run of narrow seed-level support. Saturated fireballs often have
+        // one or two full-band columns at their onset, but unlike an electrical impulse they
+        // retain a connected, narrow trail for many STFT hops.
+        int touchedColumns = 0;
+        int broadColumns = 0;
+        int longestNarrowRun = 0;
+        int narrowRun = 0;
+        {
+            const int spanCols = xmax - xmin + 1;
+            std::vector<int> seedCount(spanCols, 0);
+            std::vector<int> seedMin(spanCols, nb);
+            std::vector<int> seedMax(spanCols, -1);
+            for (const Px& p : pts)
+            {
+                if (EX(p.y, p.x) < m_cfg.m_seedDb) {
+                    continue;
+                }
+                const int c = p.x - xmin;
+                seedCount[c]++;
+                seedMin[c] = std::min(seedMin[c], p.y);
+                seedMax[c] = std::max(seedMax[c], p.y);
+            }
+            for (int c = 0; c < spanCols; ++c)
+            {
+                if (seedCount[c] == 0)
+                {
+                    narrowRun = 0;
+                    continue;
+                }
+                touchedColumns++;
+                const double seedOcc = (double) seedCount[c] / (double) nb;
+                const double seedSpan = (double) (seedMax[c] - seedMin[c] + 1)
+                    / (double) nb;
+                const bool broad = colDistributedImpulse[xmin + c]
+                    || (seedOcc > m_cfg.m_occLimit)
+                    || (seedSpan >= m_cfg.m_distributedImpulseSpanLimit);
+                if (broad)
+                {
+                    broadColumns++;
+                    narrowRun = 0;
+                }
+                else if (seedOcc <= m_cfg.m_fireballNarrowOccLimit)
+                {
+                    longestNarrowRun = std::max(longestNarrowRun, ++narrowRun);
+                }
+                else
+                {
+                    narrowRun = 0;
+                }
+            }
+        }
+
         // emit each blob exactly once: when its last column first becomes final
         // (older than emitThroughAbs but newer than the previous emission boundary)
         const long long endAbs = m_absStart + xmax;
@@ -613,6 +665,17 @@ void MeteorBlobDetector::processChunk(long long emitThroughAbs)
         const bool isSweep = (linR2 >= m_cfg.m_sweepMinLinR2)
                           && (std::fabs(slope) >= m_cfg.m_sweepMinAbsSlopeHzPerS)
                           && (durS >= m_cfg.m_sweepMinDurationS);
+        const bool broadbandVeto = (maxOcc > m_cfg.m_occLimit) || distributedImpulse;
+        const double narrowDurationS = longestNarrowRun * m_cfg.m_dt;
+        const double broadColumnFraction = touchedColumns > 0
+            ? (double) broadColumns / (double) touchedColumns : 1.0;
+        const bool fireballRescued = broadbandVeto
+            && (score >= m_cfg.m_fireballScoreMultiplier * m_cfg.m_scoreThreshold)
+            && (maxEx >= m_cfg.m_fireballMinPeakExcessDb)
+            && (durS >= m_cfg.m_fireballMinDurationS)
+            && (narrowDurationS >= m_cfg.m_fireballMinNarrowDurationS)
+            && (broadColumnFraction <= m_cfg.m_fireballMaxBroadColumnFraction)
+            && !isSweep;
 
         Blob b;
         const double absT0 = (double) (m_absStart + xmin) * m_cfg.m_dt;
@@ -629,14 +692,18 @@ void MeteorBlobDetector::processChunk(long long emitThroughAbs)
         b.m_peakExcessDb = maxEx;
         b.m_maxOcc = maxOcc;
         b.m_distributedImpulse = distributedImpulse;
+        b.m_fireballRescued = fireballRescued;
         b.m_linR2 = linR2;
         b.m_slopeHzPerS = slope;
         b.m_peakPower = peakP;
         b.m_totalPower = totalP;
         b.m_backgroundPower = pts.empty() ? 1e-30 : floorSum / pts.size();
         b.m_sweepRejected = isSweep;
-        b.m_accepted = (score >= m_cfg.m_scoreThreshold) && (maxOcc <= m_cfg.m_occLimit)
-                    && !distributedImpulse && (maxEx >= m_cfg.m_minPeakExcessDb) && !isSweep;
+        const bool normalAccepted = (score >= m_cfg.m_scoreThreshold)
+            && !broadbandVeto
+            && (maxEx >= m_cfg.m_minPeakExcessDb)
+            && !isSweep;
+        b.m_accepted = normalAccepted || fireballRescued;
         m_out.push_back(b);
     }
 

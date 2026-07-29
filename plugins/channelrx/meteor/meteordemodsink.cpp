@@ -242,6 +242,13 @@ void MeteorDemodSink::configureBlobDetector()
     cfg.m_occLimit = m_detectorTunables.m_blob.m_occLimit;
     cfg.m_distributedImpulseSpanLimit = m_detectorTunables.m_blob.m_distributedImpulseSpanLimit;
     cfg.m_distributedImpulseMinSeedPixels = m_detectorTunables.m_blob.m_distributedImpulseMinSeedPixels;
+    cfg.m_fireballScoreMultiplier = m_detectorTunables.m_blob.m_fireballScoreMultiplier;
+    cfg.m_fireballMinPeakExcessDb = m_detectorTunables.m_blob.m_fireballMinPeakExcessDb;
+    cfg.m_fireballMinDurationS = m_detectorTunables.m_blob.m_fireballMinDurationS;
+    cfg.m_fireballMinNarrowDurationS = m_detectorTunables.m_blob.m_fireballMinNarrowDurationS;
+    cfg.m_fireballNarrowOccLimit = m_detectorTunables.m_blob.m_fireballNarrowOccLimit;
+    cfg.m_fireballMaxBroadColumnFraction =
+        m_detectorTunables.m_blob.m_fireballMaxBroadColumnFraction;
     cfg.m_minPeakExcessDb = m_detectorTunables.m_blob.m_minPeakExcessDb;
     cfg.m_sweepMinLinR2 = m_detectorTunables.m_blob.m_sweepMinLinR2;
     cfg.m_sweepMinAbsSlopeHzPerS = m_detectorTunables.m_blob.m_sweepMinAbsSlopeHzPerS;
@@ -1192,7 +1199,9 @@ void MeteorDemodSink::emitBlobDetection(const MeteorBlobDetector::Blob& blob)
         }
     }
 
-    emitDetectionReport(report, "blob-detector");
+    emitDetectionReport(
+        report,
+        blob.m_fireballRescued ? "blob-fireball" : "blob-detector");
 }
 
 bool MeteorDemodSink::overlapsRecentDetection(

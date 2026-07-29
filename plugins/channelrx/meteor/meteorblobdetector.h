@@ -63,6 +63,15 @@ public:
         double m_occLimit = 0.5;           // broadband-impulse gate: reject maxOcc above this
         double m_distributedImpulseSpanLimit = 0.6; // reject a time column spanning this band fraction
         int    m_distributedImpulseMinSeedPixels = 16;
+        // A saturated fireball can contain one or more broadband columns around a much
+        // longer, coherent trail. Rescue only exceptionally energetic blobs that retain a
+        // sustained narrow-band core; isolated broadband impulses remain rejected.
+        double m_fireballScoreMultiplier = 4.0;
+        double m_fireballMinPeakExcessDb = 20.0;
+        double m_fireballMinDurationS = 0.5;
+        double m_fireballMinNarrowDurationS = 0.3;
+        double m_fireballNarrowOccLimit = 0.2;
+        double m_fireballMaxBroadColumnFraction = 0.35;
         // Peak-brightness gate ("red blob"): a real meteor peaks well above the floor; faint
         // spread noise blobs and weak interference clear the score by area but never get bright.
         double m_minPeakExcessDb = 16.0;
@@ -110,6 +119,7 @@ public:
         double m_peakExcessDb = 0.0;         // brightest pixel's excess over the floor
         double m_maxOcc = 0.0;               // max per-column band occupancy over the blob
         bool   m_distributedImpulse = false;  // shared a column with a band-spanning impulse
+        bool   m_fireballRescued = false;     // broadband veto overridden by sustained trail evidence
         double m_linR2 = 0.0;                // linearity of the freq-vs-time centroid track
         double m_slopeHzPerS = 0.0;          // drift of that track (Hz/s)
         double m_peakPower = 0.0, m_backgroundPower = 0.0, m_totalPower = 0.0;

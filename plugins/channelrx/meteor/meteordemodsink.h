@@ -75,6 +75,14 @@ public:
             double m_occLimit = 0.5;
             double m_distributedImpulseSpanLimit = 0.6;
             int    m_distributedImpulseMinSeedPixels = 16;
+            // Rescue saturated fireballs which contain a broadband onset plus a sustained
+            // narrow trail. These gates deliberately exclude isolated broadband impulses.
+            double m_fireballScoreMultiplier = 4.0;
+            double m_fireballMinPeakExcessDb = 20.0;
+            double m_fireballMinDurationS = 0.5;
+            double m_fireballMinNarrowDurationS = 0.3;
+            double m_fireballNarrowOccLimit = 0.2;
+            double m_fireballMaxBroadColumnFraction = 0.35;
             double m_minPeakExcessDb = 16.0;       // "red blob" gate: reject faint spread noise
             double m_sweepMinLinR2 = 0.9;          // reject linear drifting tracks (satellite sweeps)
             double m_sweepMinAbsSlopeHzPerS = 20.0;

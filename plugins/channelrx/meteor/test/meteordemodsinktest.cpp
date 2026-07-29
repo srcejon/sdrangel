@@ -177,6 +177,59 @@ namespace {
             return false;
         }
 
+        MeteorBlobDetector::Config fireballCfg = cfg;
+        fireballCfg.m_occLimit = 0.5;
+        fireballCfg.m_distributedImpulseSpanLimit = 0.6;
+        fireballCfg.m_distributedImpulseMinSeedPixels = 12;
+        fireballCfg.m_fireballScoreMultiplier = 4.0;
+        fireballCfg.m_fireballMinPeakExcessDb = 20.0;
+        fireballCfg.m_fireballMinDurationS = 0.5;
+        fireballCfg.m_fireballMinNarrowDurationS = 0.3;
+        fireballCfg.m_fireballNarrowOccLimit = 0.2;
+        fireballCfg.m_fireballMaxBroadColumnFraction = 0.35;
+        fireballCfg.m_scoreThreshold = 20.0;
+        fireballCfg.m_fMinHz = -160.0;
+
+        auto detectFireball = [&fireballCfg](bool includeTrail)
+        {
+            MeteorBlobDetector detector;
+            detector.configure(fireballCfg);
+            const std::vector<double> floor(32, 1.0);
+            for (int column = 0; column < 24; ++column)
+            {
+                std::vector<double> power(32, 1.0);
+                if (column == 5) {
+                    std::fill(power.begin(), power.end(), 1000.0);
+                }
+                if (includeTrail && (column >= 6) && (column <= 16)) {
+                    power[15] = power[16] = power[17] = 1000.0;
+                }
+                detector.processFrame(
+                    power,
+                    floor,
+                    (std::uint64_t) column * 100);
+            }
+            detector.flush();
+            return detector.takeBlobs();
+        };
+
+        const std::vector<MeteorBlobDetector::Blob> rescuedFireball =
+            detectFireball(true);
+        if ((rescuedFireball.size() != 1)
+            || !rescuedFireball[0].m_fireballRescued)
+        {
+            errorStream
+                << "Meteor blob detector test: saturated fireball with a sustained trail was rejected\n";
+            return false;
+        }
+
+        if (!detectFireball(false).empty())
+        {
+            errorStream
+                << "Meteor blob detector test: isolated broadband impulse was accepted as a fireball\n";
+            return false;
+        }
+
         return true;
     }
 
@@ -706,6 +759,12 @@ namespace {
             {QStringLiteral("blobTrimKeepFreq"), [](Tunables& t) -> auto& { return t.m_blob.m_trimKeepFreq; }},
             {QStringLiteral("blobOccLimit"), [](Tunables& t) -> auto& { return t.m_blob.m_occLimit; }},
             {QStringLiteral("blobDistributedImpulseSpanLimit"), [](Tunables& t) -> auto& { return t.m_blob.m_distributedImpulseSpanLimit; }},
+            {QStringLiteral("blobFireballScoreMultiplier"), [](Tunables& t) -> auto& { return t.m_blob.m_fireballScoreMultiplier; }},
+            {QStringLiteral("blobFireballMinPeakExcessDb"), [](Tunables& t) -> auto& { return t.m_blob.m_fireballMinPeakExcessDb; }},
+            {QStringLiteral("blobFireballMinDurationS"), [](Tunables& t) -> auto& { return t.m_blob.m_fireballMinDurationS; }},
+            {QStringLiteral("blobFireballMinNarrowDurationS"), [](Tunables& t) -> auto& { return t.m_blob.m_fireballMinNarrowDurationS; }},
+            {QStringLiteral("blobFireballNarrowOccLimit"), [](Tunables& t) -> auto& { return t.m_blob.m_fireballNarrowOccLimit; }},
+            {QStringLiteral("blobFireballMaxBroadColumnFraction"), [](Tunables& t) -> auto& { return t.m_blob.m_fireballMaxBroadColumnFraction; }},
             {QStringLiteral("blobMinPeakExcessDb"), [](Tunables& t) -> auto& { return t.m_blob.m_minPeakExcessDb; }},
             {QStringLiteral("blobSweepMinLinR2"), [](Tunables& t) -> auto& { return t.m_blob.m_sweepMinLinR2; }},
             {QStringLiteral("blobSweepMinAbsSlopeHzPerS"), [](Tunables& t) -> auto& { return t.m_blob.m_sweepMinAbsSlopeHzPerS; }},

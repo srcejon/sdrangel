@@ -538,15 +538,21 @@ CameraFrameStacker::StackFrameQuality CameraFrameStacker::computeStackFrameQuali
         cv::cuda::countNonZero(saturatedMask, saturatedCountGpu, m_cudaStackingStream);
         const double pixelCount = static_cast<double>(std::max(1, gray8uGpu.rows * gray8uGpu.cols));
 
+        cv::cuda::GpuMat gray32fGpu;
+        gray8uGpu.convertTo(gray32fGpu, CV_32F, 1.0, 0.0, m_cudaStackingStream);
+
         if (!m_cudaQualityLaplacianFilter
-            || (m_cudaQualityLaplacianFilterType != gray8uGpu.type()))
+            || (m_cudaQualityLaplacianFilterType != gray32fGpu.type()))
         {
-            m_cudaQualityLaplacianFilter = cv::cuda::createLaplacianFilter(gray8uGpu.type(), CV_32F, 1);
-            m_cudaQualityLaplacianFilterType = gray8uGpu.type();
+            m_cudaQualityLaplacianFilter = cv::cuda::createLaplacianFilter(
+                gray32fGpu.type(),
+                gray32fGpu.type(),
+                1);
+            m_cudaQualityLaplacianFilterType = gray32fGpu.type();
         }
 
         cv::cuda::GpuMat laplacianGpu;
-        m_cudaQualityLaplacianFilter->apply(gray8uGpu, laplacianGpu, m_cudaStackingStream);
+        m_cudaQualityLaplacianFilter->apply(gray32fGpu, laplacianGpu, m_cudaStackingStream);
         cv::cuda::GpuMat laplacianMeanStdDevGpu;
         cv::cuda::meanStdDev(laplacianGpu, laplacianMeanStdDevGpu, m_cudaStackingStream);
 
@@ -783,6 +789,13 @@ void CameraFrameStacker::applySettings(const CameraSettings& settings, const QLi
         || settingsKeys.contains("scaleHeight")
         || settingsKeys.contains("scaleKeepAspectRatio")
         || settingsKeys.contains("scaleJustification");
+    const CameraSettings::StackMethod previousStackMethod = m_settings.m_stackMethod;
+    const bool stackMethodChanged = !force
+        && settingsKeys.contains("stackMethod")
+        && (previousStackMethod != settings.m_stackMethod);
+    const bool hdrStackingModeChanged = stackMethodChanged
+        && ((previousStackMethod == CameraSettings::StackMethodHDR)
+            || (settings.m_stackMethod == CameraSettings::StackMethodHDR));
     const bool sourceChanged = force
         || settingsKeys.contains("cameraId")
         || settingsKeys.contains("cameraProtocol")
@@ -799,7 +812,6 @@ void CameraFrameStacker::applySettings(const CameraSettings& settings, const QLi
         || settingsKeys.contains("cameraReadoutMode")
         || settingsKeys.contains("exposureTimeMs")
         || settingsKeys.contains("stackEnabled")
-        || settingsKeys.contains("stackMethod")
         || settingsKeys.contains("postProcessUseCuda")
         || settingsKeys.contains("stackHdrAlgorithm")
         || settingsKeys.contains("stackHdrExposureCount")
@@ -816,7 +828,7 @@ void CameraFrameStacker::applySettings(const CameraSettings& settings, const QLi
         m_settings.applySettings(settingsKeys, settings);
     }
 
-    if (sourceChanged)
+    if (sourceChanged || hdrStackingModeChanged)
     {
         Camera::discardQueuedProcessFrames(m_inputMessageQueue);
         QMutexLocker locker(&m_frameMutex);
@@ -825,12 +837,25 @@ void CameraFrameStacker::applySettings(const CameraSettings& settings, const QLi
         m_rejectedFrameCount = 0;
         resetFrameHistoryState();
     }
-    else if (settingsKeys.contains("stackFrameCount"))
+    else
     {
-        trimFrameHistoryToCurrentLimit();
+        if (stackMethodChanged)
+        {
+            // Non-HDR methods all consume the same aligned frame history. Only
+            // their derived accumulator state is method-specific.
+            m_stackAccumulator.release();
+#ifdef CAMERA_OPENCV_CUDA_STACKING
+            m_cudaStackAccumulator.release();
+            m_cudaStackAccumulatorInputType = -1;
+#endif
+        }
+
+        if (settingsKeys.contains("stackFrameCount")) {
+            trimFrameHistoryToCurrentLimit();
+        }
     }
 
-    if (!sourceChanged && (displayChanged || scaleChanged)) {
+    if (!sourceChanged && !hdrStackingModeChanged && (displayChanged || scaleChanged)) {
         emitHistoryPreviewFrame();
     }
 }

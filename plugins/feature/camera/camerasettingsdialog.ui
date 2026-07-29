@@ -9277,6 +9277,12 @@ Right-click: toggle continual synchronization from My Position.</string>
        </item>
        <item>
         <widget class="QGroupBox" name="thermalChartGroup">
+         <property name="sizePolicy">
+          <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+           <horstretch>0</horstretch>
+           <verstretch>0</verstretch>
+          </sizepolicy>
+         </property>
          <property name="toolTip">
           <string>Bounded marker-temperature history using frame capture timestamps.</string>
          </property>
@@ -9325,6 +9331,19 @@ Right-click: toggle continual synchronization from My Position.</string>
           </item>
          </layout>
         </widget>
+       </item>
+       <item>
+        <spacer name="verticalSpacer_13">
+         <property name="orientation">
+          <enum>Qt::Orientation::Vertical</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>20</width>
+           <height>40</height>
+          </size>
+         </property>
+        </spacer>
        </item>
       </layout>
      </widget>

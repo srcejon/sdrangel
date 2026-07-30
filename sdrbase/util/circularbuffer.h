@@ -141,29 +141,32 @@ public:
     // newSize of <= 1 not supported
     void resize(size_type newSize)
     {
-        // Reduce count to newSize, by removing oldest items first
+        if (newSize == m_buffer.size()) {
+            return;
+        }
+
+        // Reduce count to newSize, by removing oldest items first.
         while (size() > newSize) {
             removeFirst();
         }
 
-        // Shuffle data to the beginning of the buffer, so we can free up or allocate space at the end
-        if (m_head < m_tail)
+        // Put the retained items at the beginning in logical order. A full
+        // buffer also has head == tail, so it must use the wrapped case.
+        if (!isEmpty())
         {
-            std::rotate(m_buffer.begin(), m_buffer.begin() + m_tail, m_buffer.end());
-            m_head = m_count;
-            m_tail = 0;
-        }
-        else
-        {
-            std::rotate(m_buffer.begin(), m_buffer.begin() + m_tail, m_buffer.begin() + m_head);
-            m_head = m_count;
-            m_tail = 0;
+            if ((m_head < m_tail) || isFull()) {
+                std::rotate(m_buffer.begin(), m_buffer.begin() + m_tail, m_buffer.end());
+            } else if (m_tail != 0) {
+                std::rotate(m_buffer.begin(), m_buffer.begin() + m_tail, m_buffer.begin() + m_head);
+            }
         }
 
+        m_head = m_count;
+        m_tail = 0;
         m_buffer.resize(newSize);
 
         if (m_head >= newSize) {
-            m_head -= newSize;
+            m_head = 0;
         }
     }
 

@@ -840,12 +840,24 @@ void Camera::webapiFormatFeatureReport(SWGSDRangel::SWGFeatureReport& response)
     QDateTime captureDateTime;
     QStringList detectedObjectClasses;
     bool motionDetected = false;
+    bool thermalValid = false;
+    QString thermalDecoderName;
+    float thermalMarkerTemperatureC = 0.0f;
+    float thermalMinimumC = 0.0f;
+    float thermalMaximumC = 0.0f;
+    float thermalMeanC = 0.0f;
 
     {
         QMutexLocker locker(&m_reportMutex);
         captureDateTime = m_reportCaptureDateTime;
         detectedObjectClasses = m_reportDetectedObjectClasses;
         motionDetected = m_reportMotionDetected;
+        thermalValid = m_reportThermal.m_valid;
+        thermalDecoderName = m_reportThermal.m_decoderName;
+        thermalMarkerTemperatureC = m_reportThermal.m_markerTemperatureC;
+        thermalMinimumC = m_reportThermal.m_minimumC;
+        thermalMaximumC = m_reportThermal.m_maximumC;
+        thermalMeanC = m_reportThermal.m_meanC;
     }
 
     QList<QString*> *swgDetectedObjectClasses = new QList<QString*>();
@@ -859,6 +871,12 @@ void Camera::webapiFormatFeatureReport(SWGSDRangel::SWGFeatureReport& response)
     response.getCameraReport()->setMotionDetected(motionDetected ? 1 : 0);
     response.getCameraReport()->setCloudCoveragePercent(m_lastCloudCoveragePercent.load());
     response.getCameraReport()->setCloudCoverageValid(m_lastCloudCoverageValid.load() ? 1 : 0);
+    response.getCameraReport()->setThermalValid(thermalValid ? 1 : 0);
+    response.getCameraReport()->setThermalDecoderName(new QString(thermalDecoderName));
+    response.getCameraReport()->setThermalMarkerTemperatureC(thermalMarkerTemperatureC);
+    response.getCameraReport()->setThermalMinimumC(thermalMinimumC);
+    response.getCameraReport()->setThermalMaximumC(thermalMaximumC);
+    response.getCameraReport()->setThermalMeanC(thermalMeanC);
 }
 
 int Camera::webapiActionsPost(
@@ -1143,6 +1161,11 @@ void Camera::webapiFormatFeatureSettings(
     swg->setVideoLoop(settings.m_videoLoop ? 1 : 0);
     swg->setVideoPlaybackRate(settings.m_videoPlaybackRate);
     swg->setVideoPlaybackAudioOffsetMs(settings.m_videoPlaybackAudioOffsetMs);
+    swg->setPlaybackProjectionEnabled(settings.m_playbackProjectionEnabled ? 1 : 0);
+    swg->setPlaybackProjectionX(settings.m_playbackProjectionX);
+    swg->setPlaybackProjectionY(settings.m_playbackProjectionY);
+    swg->setPlaybackProjectionWidth(settings.m_playbackProjectionWidth);
+    swg->setPlaybackProjectionHeight(settings.m_playbackProjectionHeight);
     swg->setVideoPreRecordBufferSeconds(settings.m_videoPreRecordBufferSeconds);
     swg->setImageRecordLimit(settings.m_imageRecordLimit);
     swg->setVideoRecordLimitSeconds(settings.m_videoRecordLimitSeconds);
@@ -1151,6 +1174,7 @@ void Camera::webapiFormatFeatureSettings(
     swg->setStackEnabled(settings.m_stackEnabled ? 1 : 0);
     swg->setStackFrameCount(settings.m_stackFrameCount);
     swg->setStackMethod((int) settings.m_stackMethod);
+    swg->setStackDurationMode((int) settings.m_stackDurationMode);
     swg->setStackHdrAlgorithm((int) settings.m_stackHdrAlgorithm);
     swg->setStackHdrExposureCount(settings.m_stackHdrExposureCount);
     auto *swgHdrExposures = new QList<double>();
@@ -1369,18 +1393,38 @@ void Camera::webapiFormatFeatureSettings(
     // YOLO
     swg->setYoloEnabled(settings.m_yoloEnabled ? 1 : 0);
     swg->setYoloModelPath(new QString(settings.m_yoloModelPath));
+    swg->setYoloTileModelPath(new QString(settings.m_yoloTileModelPath));
     swg->setYoloLabelsPath(new QString(settings.m_yoloLabelsPath));
     swg->setYoloConfThreshold(settings.m_yoloConfThreshold);
     swg->setYoloNmsThreshold(settings.m_yoloNmsThreshold);
     swg->setYoloBoxColor((qint32) settings.m_yoloBoxColor.rgb());
     swg->setYoloTileLargeImages(settings.m_yoloTileLargeImages ? 1 : 0);
     swg->setYoloTileOverlapPercent(settings.m_yoloTileOverlapPercent);
+    swg->setYoloDisappearDebounce(settings.m_yoloDisappearDebounce);
     auto *yoloIgnoredClassNames = new QList<QString*>();
     for (const QString& className : settings.m_yoloIgnoredClassNames) {
         yoloIgnoredClassNames->append(new QString(className));
     }
     swg->setYoloIgnoredClassNames(yoloIgnoredClassNames);
     swg->setYoloDnnTarget((int) settings.m_yoloDnnTarget);
+
+    // Thermal imaging
+    swg->setThermalDecoder((int) settings.m_thermalDecoder);
+    swg->setThermalPalette((int) settings.m_thermalPalette);
+    swg->setThermalUnits((int) settings.m_thermalUnits);
+    swg->setThermalAutoRange(settings.m_thermalAutoRange ? 1 : 0);
+    swg->setThermalMinimumC(settings.m_thermalMinimumC);
+    swg->setThermalMaximumC(settings.m_thermalMaximumC);
+    swg->setThermalAutoLowPercentile(settings.m_thermalAutoLowPercentile);
+    swg->setThermalAutoHighPercentile(settings.m_thermalAutoHighPercentile);
+    swg->setThermalAutoRangeSmoothing(settings.m_thermalAutoRangeSmoothing);
+    swg->setThermalMarkerEnabled(settings.m_thermalMarkerEnabled ? 1 : 0);
+    swg->setThermalMarkerX(settings.m_thermalMarkerX);
+    swg->setThermalMarkerY(settings.m_thermalMarkerY);
+    swg->setThermalShowMinMax(settings.m_thermalShowMinMax ? 1 : 0);
+    swg->setThermalChartEnabled(settings.m_thermalChartEnabled ? 1 : 0);
+    swg->setThermalChartHistorySeconds(settings.m_thermalChartHistorySeconds);
+    swg->setThermalChartSampleIntervalMs(settings.m_thermalChartSampleIntervalMs);
 
     // Audio (Qt camera)
     swg->setAudioMute(settings.m_audioMute ? 1 : 0);
@@ -1708,6 +1752,21 @@ void Camera::webapiUpdateFeatureSettings(
     if (featureSettingsKeys.contains("videoPlaybackAudioOffsetMs")) {
         settings.m_videoPlaybackAudioOffsetMs = swg->getVideoPlaybackAudioOffsetMs();
     }
+    if (featureSettingsKeys.contains("playbackProjectionEnabled")) {
+        settings.m_playbackProjectionEnabled = swg->getPlaybackProjectionEnabled() != 0;
+    }
+    if (featureSettingsKeys.contains("playbackProjectionX")) {
+        settings.m_playbackProjectionX = swg->getPlaybackProjectionX();
+    }
+    if (featureSettingsKeys.contains("playbackProjectionY")) {
+        settings.m_playbackProjectionY = swg->getPlaybackProjectionY();
+    }
+    if (featureSettingsKeys.contains("playbackProjectionWidth")) {
+        settings.m_playbackProjectionWidth = swg->getPlaybackProjectionWidth();
+    }
+    if (featureSettingsKeys.contains("playbackProjectionHeight")) {
+        settings.m_playbackProjectionHeight = swg->getPlaybackProjectionHeight();
+    }
     if (featureSettingsKeys.contains("videoPreRecordBufferSeconds")) {
         settings.m_videoPreRecordBufferSeconds = swg->getVideoPreRecordBufferSeconds();
     }
@@ -1725,6 +1784,9 @@ void Camera::webapiUpdateFeatureSettings(
     }
     if (featureSettingsKeys.contains("stackMethod")) {
         settings.m_stackMethod = (CameraSettings::StackMethod) swg->getStackMethod();
+    }
+    if (featureSettingsKeys.contains("stackDurationMode")) {
+        settings.m_stackDurationMode = (CameraSettings::StackDurationMode) swg->getStackDurationMode();
     }
     if (featureSettingsKeys.contains("stackHdrAlgorithm")) {
         settings.m_stackHdrAlgorithm = (CameraSettings::StackHdrAlgorithm) swg->getStackHdrAlgorithm();
@@ -2322,6 +2384,9 @@ void Camera::webapiUpdateFeatureSettings(
     if (featureSettingsKeys.contains("yoloModelPath")) {
         settings.m_yoloModelPath = *swg->getYoloModelPath();
     }
+    if (featureSettingsKeys.contains("yoloTileModelPath")) {
+        settings.m_yoloTileModelPath = *swg->getYoloTileModelPath();
+    }
     if (featureSettingsKeys.contains("yoloLabelsPath")) {
         settings.m_yoloLabelsPath = *swg->getYoloLabelsPath();
     }
@@ -2340,6 +2405,9 @@ void Camera::webapiUpdateFeatureSettings(
     if (featureSettingsKeys.contains("yoloTileOverlapPercent")) {
         settings.m_yoloTileOverlapPercent = swg->getYoloTileOverlapPercent();
     }
+    if (featureSettingsKeys.contains("yoloDisappearDebounce")) {
+        settings.m_yoloDisappearDebounce = swg->getYoloDisappearDebounce();
+    }
     if (featureSettingsKeys.contains("yoloIgnoredClassNames"))
     {
         settings.m_yoloIgnoredClassNames.clear();
@@ -2353,6 +2421,56 @@ void Camera::webapiUpdateFeatureSettings(
     }
     if (featureSettingsKeys.contains("yoloDnnTarget")) {
         settings.m_yoloDnnTarget = (CameraSettings::DNNTarget) swg->getYoloDnnTarget();
+    }
+
+    // Thermal imaging
+    if (featureSettingsKeys.contains("thermalDecoder")) {
+        settings.m_thermalDecoder = (CameraSettings::ThermalDecoder) swg->getThermalDecoder();
+    }
+    if (featureSettingsKeys.contains("thermalPalette")) {
+        settings.m_thermalPalette = (CameraSettings::ThermalPalette) swg->getThermalPalette();
+    }
+    if (featureSettingsKeys.contains("thermalUnits")) {
+        settings.m_thermalUnits = (CameraSettings::ThermalUnits) swg->getThermalUnits();
+    }
+    if (featureSettingsKeys.contains("thermalAutoRange")) {
+        settings.m_thermalAutoRange = swg->getThermalAutoRange() != 0;
+    }
+    if (featureSettingsKeys.contains("thermalMinimumC")) {
+        settings.m_thermalMinimumC = swg->getThermalMinimumC();
+    }
+    if (featureSettingsKeys.contains("thermalMaximumC")) {
+        settings.m_thermalMaximumC = swg->getThermalMaximumC();
+    }
+    if (featureSettingsKeys.contains("thermalAutoLowPercentile")) {
+        settings.m_thermalAutoLowPercentile = swg->getThermalAutoLowPercentile();
+    }
+    if (featureSettingsKeys.contains("thermalAutoHighPercentile")) {
+        settings.m_thermalAutoHighPercentile = swg->getThermalAutoHighPercentile();
+    }
+    if (featureSettingsKeys.contains("thermalAutoRangeSmoothing")) {
+        settings.m_thermalAutoRangeSmoothing = swg->getThermalAutoRangeSmoothing();
+    }
+    if (featureSettingsKeys.contains("thermalMarkerEnabled")) {
+        settings.m_thermalMarkerEnabled = swg->getThermalMarkerEnabled() != 0;
+    }
+    if (featureSettingsKeys.contains("thermalMarkerX")) {
+        settings.m_thermalMarkerX = swg->getThermalMarkerX();
+    }
+    if (featureSettingsKeys.contains("thermalMarkerY")) {
+        settings.m_thermalMarkerY = swg->getThermalMarkerY();
+    }
+    if (featureSettingsKeys.contains("thermalShowMinMax")) {
+        settings.m_thermalShowMinMax = swg->getThermalShowMinMax() != 0;
+    }
+    if (featureSettingsKeys.contains("thermalChartEnabled")) {
+        settings.m_thermalChartEnabled = swg->getThermalChartEnabled() != 0;
+    }
+    if (featureSettingsKeys.contains("thermalChartHistorySeconds")) {
+        settings.m_thermalChartHistorySeconds = swg->getThermalChartHistorySeconds();
+    }
+    if (featureSettingsKeys.contains("thermalChartSampleIntervalMs")) {
+        settings.m_thermalChartSampleIntervalMs = swg->getThermalChartSampleIntervalMs();
     }
 
     // Audio (Qt camera)

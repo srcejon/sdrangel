@@ -828,7 +828,8 @@ private slots:
     void on_cannyEdgeSpin_valueChanged(double value);
     void on_flipXButton_toggled(bool checked);
     void on_flipYButton_toggled(bool checked);
-    void on_imageRotationCombo_currentIndexChanged(int index);
+    void on_imageRotationCombo_activated(int index);
+    void on_imageRotationCombo_editingFinished();
     void on_brightnessSlider_valueChanged(int value);
     void on_brightnessSpin_valueChanged(int value);
     void on_contrastSlider_valueChanged(int value);

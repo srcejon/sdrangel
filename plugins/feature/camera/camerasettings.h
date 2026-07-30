@@ -641,7 +641,7 @@ struct CameraSettings
     double m_cannyEdge;       ///< Canny edge blend amount: 0.0..3.0
     bool m_flipX;             ///< Flip image horizontally
     bool m_flipY;             ///< Flip image vertically
-    int m_imageRotation;      ///< Rotate image clockwise by 0, 90, 180, or 270 degrees
+    int m_imageRotation;      ///< Rotate image clockwise by -360 to 360 degrees
     double m_brightness;      ///< Brightness adjustment: -100.0..100.0
     double m_contrast;        ///< Contrast multiplier: 0.1..3.0
     bool m_invertColors;      ///< Invert all colour channels

@@ -19,6 +19,8 @@
 #ifndef INCLUDE_FEATURE_CAMERAPIPELINEFRAME_H_
 #define INCLUDE_FEATURE_CAMERAPIPELINEFRAME_H_
 
+#include <algorithm>
+#include <cmath>
 #include <cstring>
 #include <limits>
 
@@ -395,26 +397,82 @@ struct CameraPipelineImageTransform
         applyImageTransform(transform);
     }
 
+    static QTransform rotationTransform(int degrees, const QSize& imageSize, QSize *rotatedSize = nullptr)
+    {
+        if (rotatedSize) {
+            *rotatedSize = imageSize;
+        }
+        if (imageSize.isEmpty()) {
+            return QTransform();
+        }
+
+        int normalizedDegrees = degrees % 360;
+        if (normalizedDegrees < 0) {
+            normalizedDegrees += 360;
+        }
+        switch (normalizedDegrees)
+        {
+        case 90:
+            if (rotatedSize) {
+                *rotatedSize = QSize(imageSize.height(), imageSize.width());
+            }
+            return QTransform(0.0, 1.0, 0.0, -1.0, 0.0, 0.0, imageSize.height() - 1, 0.0, 1.0);
+        case 180:
+            return QTransform(-1.0, 0.0, 0.0, 0.0, -1.0, 0.0, imageSize.width() - 1, imageSize.height() - 1, 1.0);
+        case 270:
+            if (rotatedSize) {
+                *rotatedSize = QSize(imageSize.height(), imageSize.width());
+            }
+            return QTransform(0.0, -1.0, 0.0, 1.0, 0.0, 0.0, 0.0, imageSize.width() - 1, 1.0);
+        case 0:
+            return QTransform();
+        default:
+            break;
+        }
+
+        constexpr double degreesToRadians = 3.14159265358979323846 / 180.0;
+        const double radians = static_cast<double>(normalizedDegrees) * degreesToRadians;
+        const double cosine = std::cos(radians);
+        const double sine = std::sin(radians);
+        const int outputWidth = std::max(
+            1,
+            static_cast<int>(std::ceil(
+                std::abs(static_cast<double>(imageSize.width()) * cosine)
+                + std::abs(static_cast<double>(imageSize.height()) * sine))));
+        const int outputHeight = std::max(
+            1,
+            static_cast<int>(std::ceil(
+                std::abs(static_cast<double>(imageSize.width()) * sine)
+                + std::abs(static_cast<double>(imageSize.height()) * cosine))));
+        const double sourceCenterX = (imageSize.width() - 1) * 0.5;
+        const double sourceCenterY = (imageSize.height() - 1) * 0.5;
+        const double outputCenterX = (outputWidth - 1) * 0.5;
+        const double outputCenterY = (outputHeight - 1) * 0.5;
+
+        if (rotatedSize) {
+            *rotatedSize = QSize(outputWidth, outputHeight);
+        }
+
+        return QTransform(
+            cosine,
+            sine,
+            0.0,
+            -sine,
+            cosine,
+            0.0,
+            outputCenterX - cosine * sourceCenterX + sine * sourceCenterY,
+            outputCenterY - sine * sourceCenterX - cosine * sourceCenterY,
+            1.0);
+    }
+
     void applyRotation(int degrees, const QSize& imageSize)
     {
         if (!isValid() || imageSize.isEmpty()) {
             return;
         }
 
-        QTransform transform;
-        switch (degrees)
-        {
-        case 90:
-            transform = QTransform(0.0, 1.0, 0.0, -1.0, 0.0, 0.0, imageSize.height() - 1, 0.0, 1.0);
-            break;
-        case 180:
-            transform = QTransform(-1.0, 0.0, 0.0, 0.0, -1.0, 0.0, imageSize.width() - 1, imageSize.height() - 1, 1.0);
-            break;
-        case 270:
-            transform = QTransform(0.0, -1.0, 0.0, 1.0, 0.0, 0.0, 0.0, imageSize.width() - 1, 1.0);
-            break;
-        case 0:
-        default:
+        const QTransform transform = rotationTransform(degrees, imageSize);
+        if (transform.isIdentity()) {
             return;
         }
         applyImageTransform(transform);

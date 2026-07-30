@@ -212,6 +212,8 @@ SWGCameraSettings::SWGCameraSettings() {
     m_stack_frame_count_isSet = false;
     stack_method = 0;
     m_stack_method_isSet = false;
+    stack_duration_mode = 0;
+    m_stack_duration_mode_isSet = false;
     stack_hdr_algorithm = 0;
     m_stack_hdr_algorithm_isSet = false;
     stack_hdr_exposure_count = 0;
@@ -866,6 +868,8 @@ SWGCameraSettings::init() {
     m_stack_frame_count_isSet = false;
     stack_method = 0;
     m_stack_method_isSet = false;
+    stack_duration_mode = 0;
+    m_stack_duration_mode_isSet = false;
     stack_hdr_algorithm = 0;
     m_stack_hdr_algorithm_isSet = false;
     stack_hdr_exposure_count = 0;
@@ -1478,6 +1482,7 @@ SWGCameraSettings::cleanup() {
 
 
 
+
     if(stack_dark_file_name != nullptr) { 
         delete stack_dark_file_name;
     }
@@ -1941,6 +1946,8 @@ SWGCameraSettings::fromJsonObject(QJsonObject &pJson) {
     ::SWGSDRangel::setValue(&stack_frame_count, pJson["stackFrameCount"], "qint32", "");
     
     ::SWGSDRangel::setValue(&stack_method, pJson["stackMethod"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&stack_duration_mode, pJson["stackDurationMode"], "qint32", "");
     
     ::SWGSDRangel::setValue(&stack_hdr_algorithm, pJson["stackHdrAlgorithm"], "qint32", "");
     
@@ -2695,6 +2702,9 @@ SWGCameraSettings::asJsonObject() {
     }
     if(m_stack_method_isSet){
         obj->insert("stackMethod", QJsonValue(stack_method));
+    }
+    if(m_stack_duration_mode_isSet){
+        obj->insert("stackDurationMode", QJsonValue(stack_duration_mode));
     }
     if(m_stack_hdr_algorithm_isSet){
         obj->insert("stackHdrAlgorithm", QJsonValue(stack_hdr_algorithm));
@@ -4311,6 +4321,16 @@ void
 SWGCameraSettings::setStackMethod(qint32 stack_method) {
     this->stack_method = stack_method;
     this->m_stack_method_isSet = true;
+}
+
+qint32
+SWGCameraSettings::getStackDurationMode() {
+    return stack_duration_mode;
+}
+void
+SWGCameraSettings::setStackDurationMode(qint32 stack_duration_mode) {
+    this->stack_duration_mode = stack_duration_mode;
+    this->m_stack_duration_mode_isSet = true;
 }
 
 qint32
@@ -6902,6 +6922,9 @@ SWGCameraSettings::isSet(){
             isObjectUpdated = true; break;
         }
         if(m_stack_method_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_stack_duration_mode_isSet){
             isObjectUpdated = true; break;
         }
         if(m_stack_hdr_algorithm_isSet){

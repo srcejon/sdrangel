@@ -4149,6 +4149,10 @@ margin-bottom: 20px;
       "type" : "integer",
       "description" : "Frame stacking method\n  * 0 - Average\n  * 1 - Median\n  * 2 - Sigma-clipped average\n  * 3 - Lucky sharp average\n  * 4 - HDR\n"
     },
+    "stackDurationMode" : {
+      "type" : "integer",
+      "description" : "Average stack duration mode\n  * 0 - Rolling frame window\n  * 1 - Continuous integration with a bounded review history\n"
+    },
     "stackHdrAlgorithm" : {
       "type" : "integer",
       "description" : "HDR stacking algorithm\n  * 0 - Debevec\n  * 1 - Robertson\n  * 2 - Mertens\n"
@@ -4444,7 +4448,9 @@ margin-bottom: 20px;
     },
     "imageRotation" : {
       "type" : "integer",
-      "description" : "Rotate image clockwise after flips\n  * 0 - 0 degrees\n  * 90 - 90 degrees\n  * 180 - 180 degrees\n  * 270 - 270 degrees\n"
+      "description" : "Rotate image clockwise after flips, in whole degrees from -360 to 360",
+      "minimum" : -360,
+      "maximum" : 360
     },
     "invertColors" : {
       "type" : "integer",
@@ -63028,7 +63034,7 @@ except ApiException as e:
           </div>
           <div id="generator">
             <div class="content">
-              Generated 2026-07-29T01:39:29.283+02:00
+              Generated 2026-07-30T13:12:42.015+02:00
             </div>
           </div>
       </div>

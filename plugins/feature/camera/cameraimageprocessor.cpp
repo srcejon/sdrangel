@@ -81,6 +81,19 @@ void convertBgrTo8Bit(cv::Mat& bgrMat)
     bgrMat = std::move(bgr8u);
 }
 
+int normalizedImageRotation(int degrees)
+{
+    const int normalized = degrees % 360;
+    return normalized < 0 ? normalized + 360 : normalized;
+}
+
+cv::Mat affineMatrixFromTransform(const QTransform& transform)
+{
+    return (cv::Mat_<double>(2, 3)
+        << transform.m11(), transform.m21(), transform.dx(),
+           transform.m12(), transform.m22(), transform.dy());
+}
+
 }
 
 
@@ -743,7 +756,7 @@ void CameraImageProcessor::applyImageProcessingCpu(CameraPipelineFrame& frame)
     const bool needsSobelEdge = m_settings.m_sobelEdge > 1e-4;
     const bool needsCannyEdge = m_settings.m_cannyEdge > 1e-4;
     const bool needsFlip = m_settings.m_flipX || m_settings.m_flipY;
-    const bool needsRotation = m_settings.m_imageRotation != 0;
+    const bool needsRotation = (m_settings.m_imageRotation % 360) != 0;
     const bool needsBrightContrast = (m_settings.m_brightness != 0.0 || m_settings.m_contrast != 1.0);
     const bool needsAny = needsWhiteBalance
         || needsUnwarp
@@ -865,7 +878,7 @@ void CameraImageProcessor::applyImageProcessingCuda(CameraPipelineFrame& frame)
     const bool needsSobelEdge = m_settings.m_sobelEdge > 1e-4;
     const bool needsCannyEdge = m_settings.m_cannyEdge > 1e-4;
     const bool needsFlip = m_settings.m_flipX || m_settings.m_flipY;
-    const bool needsRotation = m_settings.m_imageRotation != 0;
+    const bool needsRotation = (m_settings.m_imageRotation % 360) != 0;
     const bool needsBrightContrast = (m_settings.m_brightness != 0.0 || m_settings.m_contrast != 1.0);
     const bool needsAny = needsWhiteBalance
         || needsUnwarp
@@ -1593,7 +1606,7 @@ void CameraImageProcessor::applyRotationCuda(cv::cuda::GpuMat& bgrGpu, cv::cuda:
     PROFILER_START();
 
     cv::cuda::GpuMat rotatedGpu;
-    switch (m_settings.m_imageRotation)
+    switch (normalizedImageRotation(m_settings.m_imageRotation))
     {
     case 90:
     {
@@ -1616,8 +1629,27 @@ void CameraImageProcessor::applyRotationCuda(cv::cuda::GpuMat& bgrGpu, cv::cuda:
         break;
     }
     case 0:
-    default:
         break;
+    default:
+    {
+        QSize rotatedSize;
+        const QTransform transform = CameraPipelineImageTransform::rotationTransform(
+            m_settings.m_imageRotation,
+            QSize(bgrGpu.cols, bgrGpu.rows),
+            &rotatedSize);
+        const cv::Mat affine = affineMatrixFromTransform(transform);
+        cv::cuda::warpAffine(
+            bgrGpu,
+            rotatedGpu,
+            affine,
+            cv::Size(rotatedSize.width(), rotatedSize.height()),
+            cv::INTER_LINEAR,
+            cv::BORDER_CONSTANT,
+            cv::Scalar(),
+            stream);
+        bgrGpu = rotatedGpu;
+        break;
+    }
     }
 
     PROFILER_STOP(__FUNCTION__);
@@ -2105,7 +2137,7 @@ void CameraImageProcessor::applyRotation(cv::Mat& bgrMat) const
     PROFILER_START();
 
     cv::Mat rotated;
-    switch (m_settings.m_imageRotation)
+    switch (normalizedImageRotation(m_settings.m_imageRotation))
     {
     case 90:
         cv::rotate(bgrMat, rotated, cv::ROTATE_90_CLOCKWISE);
@@ -2120,8 +2152,25 @@ void CameraImageProcessor::applyRotation(cv::Mat& bgrMat) const
         bgrMat = std::move(rotated);
         break;
     case 0:
-    default:
         break;
+    default:
+    {
+        QSize rotatedSize;
+        const QTransform transform = CameraPipelineImageTransform::rotationTransform(
+            m_settings.m_imageRotation,
+            QSize(bgrMat.cols, bgrMat.rows),
+            &rotatedSize);
+        const cv::Mat affine = affineMatrixFromTransform(transform);
+        cv::warpAffine(
+            bgrMat,
+            rotated,
+            affine,
+            cv::Size(rotatedSize.width(), rotatedSize.height()),
+            cv::INTER_LINEAR,
+            cv::BORDER_CONSTANT);
+        bgrMat = std::move(rotated);
+        break;
+    }
     }
 
     PROFILER_STOP(__FUNCTION__);

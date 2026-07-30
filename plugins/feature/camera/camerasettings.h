@@ -594,6 +594,10 @@ struct CameraSettings
     float m_azimuthOffset;         ///< Offset added to synced rotator/sensor azimuth in degrees
     float m_elevationOffset;       ///< Offset added to synced rotator/sensor elevation in degrees
     float m_rollOffset;            ///< Offset added to synced sensor roll in degrees
+    bool m_autoguide;              ///< Autoguide: trim the followed rotator's az/el offsets to zero the plate-solve pointing error
+    float m_autoguideGain;         ///< Fraction of the measured pointing residual corrected per solve (0..1)
+    float m_autoguideDeadbandDeg;  ///< On-sky residual below which no correction is sent, in degrees; 0 = auto (rotator tolerance/step and measured solve noise)
+    float m_autoguideMaxCorrectionDeg; ///< Largest single on-sky correction per axis, in degrees; 0 = auto (solved FoV / 4)
     float m_fov;                   ///< Camera field of view in degrees
     FovMode m_fovMode;             ///< Whether FoV is entered directly or calculated from sensor/focal length
     double m_fovSensorWidthMm;     ///< Sensor width for calculated FoV

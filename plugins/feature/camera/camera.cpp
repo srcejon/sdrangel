@@ -16,6 +16,7 @@
 // along with this program. If not, see <http://www.gnu.org/licenses/>.          //
 ///////////////////////////////////////////////////////////////////////////////////
 
+#include <cmath>
 #include <memory>
 
 #include <QCoreApplication>
@@ -34,6 +35,7 @@
 #include "SWGCameraActions.h"
 
 #include "maincore.h"
+#include "channel/channelwebapiutils.h"
 #include "pipes/messagepipes.h"
 #include "settings/serializable.h"
 #include "util/messagequeue.h"
@@ -54,6 +56,7 @@ MESSAGE_CLASS_DEFINITION(Camera::MsgSaveClearSkyReference, Message)
 MESSAGE_CLASS_DEFINITION(Camera::MsgClearClearSkyReference, Message)
 MESSAGE_CLASS_DEFINITION(Camera::MsgClearTrackedObjectHeatMap, Message)
 MESSAGE_CLASS_DEFINITION(Camera::MsgSaveCurrentImage, Message)
+MESSAGE_CLASS_DEFINITION(Camera::MsgReportAutoguideStatus, Message)
 
 const char* const Camera::m_featureIdURI = "sdrangel.feature.camera";
 const char* const Camera::m_featureId = "Camera";
@@ -214,6 +217,7 @@ Camera::Camera(WebAPIAdapterInterface *webAPIAdapterInterface) :
     m_starDetector->setNextStage(m_objectDetector);
     m_starDetector->setCoalesceForwardedFrames(true);
     m_starDetector->setMessageQueueToGUI(getMessageQueueToGUI());
+    m_starDetector->setMessageQueueToFeature(getInputMessageQueue());
     m_starDetectorThread->start();
     m_starDetector->getInputMessageQueue()->push(Camera::MsgConfigureCamera::create(m_settings, QList<QString>(), true));
 
@@ -699,6 +703,11 @@ bool Camera::handleMessage(const Message& cmd)
         m_reportThermal = report.getThermal();
         return true;
     }
+    else if (CameraStarDetector::MsgReportPointingError::match(cmd))
+    {
+        autoguideHandlePointingError((const CameraStarDetector::MsgReportPointingError&) cmd);
+        return true;
+    }
 
     return false;
 }
@@ -778,10 +787,24 @@ void Camera::applySettings(const CameraSettings& settings, const QList<QString>&
         m_postProcessor->getInputMessageQueue()->push(Camera::MsgConfigureCamera::create(settings, settingsKeys, force));
     }
 
+    const bool autoguideConfigChanged = force
+        || settingsKeys.contains("autoguide")
+        || settingsKeys.contains("rotator");
+
     if (force) {
         m_settings = settings;
     } else {
         m_settings.applySettings(settingsKeys, settings);
+    }
+
+    if (autoguideConfigChanged)
+    {
+        // A fresh enable, or a different rotator, invalidates the learned noise floor and any
+        // pending correction confirmation
+        autoguideReset();
+        if (!m_settings.m_autoguide) {
+            autoguideStatus(QString());
+        }
     }
 }
 
@@ -2525,4 +2548,252 @@ void Camera::webapiUpdateFeatureSettings(
     if (featureSettingsKeys.contains("workspaceIndex")) {
         settings.m_workspaceIndex = swg->getWorkspaceIndex();
     }
+}
+
+void Camera::autoguideReset()
+{
+    m_autoguideLastCorrectionTime = QDateTime();
+    m_autoguideNoiseCount = 0;
+    m_autoguideNoiseVarAzSky = 0.0;
+    m_autoguideNoiseVarEl = 0.0;
+    m_autoguidePendingValid = false;
+}
+
+void Camera::autoguideStatus(const QString& status)
+{
+    if (status == m_autoguideLastStatus) {
+        return;
+    }
+    m_autoguideLastStatus = status;
+    if (getMessageQueueToGUI()) {
+        getMessageQueueToGUI()->push(MsgReportAutoguideStatus::create(status));
+    }
+}
+
+// Autoguide Phase 1: adapt the followed rotator controller's azimuth/elevation offsets so the
+// plate-solved boresight converges on the tracker's target.
+//
+// Loop algebra: the rotator drives the mount to target T plus offset o; the camera follows the
+// rotator's readback r = T + o and adds its own direction offset k (m_azimuthOffset /
+// m_elevationOffset), so the solve is seeded with c = r + k while the sky-true boresight is
+// s = r + eps for mount-model error eps. The reported error e = c - s = k - eps is therefore
+// INVARIANT to o, and naively integrating it (o += gain * e) diverges. Centring the target means
+// s = T, i.e. o* = -eps = e - k, so the residual driven to zero is
+//     residual = e - k - o
+// per axis, and o += gain * residual converges with no dependence on where the offset started.
+//
+// Adaptive parameters (no per-mount tuning): the deadband floor comes from the rotator's own
+// declared tolerance and command precision (read live over the local WebAPI, so any rotator
+// exposing those settings works), plus the measured solve-to-solve noise once enough in-deadband
+// samples exist; the largest single correction scales with the solved field of view; and the
+// correction cadence follows the measured solve time.
+void Camera::autoguideHandlePointingError(const CameraStarDetector::MsgReportPointingError& report)
+{
+    if (!m_settings.m_autoguide) {
+        return;
+    }
+
+    const QStringList rotatorParts = m_settings.m_rotator.split(':');
+    bool setOk = false;
+    bool indexOk = false;
+    unsigned int featureSetIndex = 0;
+    unsigned int featureIndex = 0;
+    if (rotatorParts.size() == 2)
+    {
+        featureSetIndex = rotatorParts[0].toUInt(&setOk);
+        featureIndex = rotatorParts[1].toUInt(&indexOk);
+    }
+    if (!setOk || !indexOk)
+    {
+        autoguideStatus("No rotator selected on the Position tab");
+        return;
+    }
+
+    // Solve quality gate: a sparse match is more likely a marginal or wrong pose
+    const int minMatchedStars = 20;
+    if (report.getMatchedStars() < minMatchedStars)
+    {
+        autoguideStatus(QString("Skipped solve: only %1 matched stars (need %2)")
+            .arg(report.getMatchedStars()).arg(minMatchedStars));
+        return;
+    }
+
+    // The actuation path requires a rotator exposing offset settings (e.g. Rotator Controller)
+    double rotatorAzOffset = 0.0;
+    double rotatorElOffset = 0.0;
+    if (!ChannelWebAPIUtils::getFeatureSetting(featureSetIndex, featureIndex, "azimuthOffset", rotatorAzOffset)
+        || !ChannelWebAPIUtils::getFeatureSetting(featureSetIndex, featureIndex, "elevationOffset", rotatorElOffset))
+    {
+        autoguideStatus("Rotator does not support azimuth/elevation offsets");
+        return;
+    }
+
+    const auto wrapDegrees = [](double degrees) {
+        degrees = std::fmod(degrees + 180.0, 360.0);
+        if (degrees < 0.0) {
+            degrees += 360.0;
+        }
+        return degrees - 180.0;
+    };
+    const auto formatDegrees = [](double degrees) {
+        return std::fabs(degrees) < 1.0
+            ? QString("%1'").arg(degrees * 60.0, 0, 'f', 2)
+            : QString("%1%2").arg(degrees, 0, 'f', 3).arg(QChar(0xB0));
+    };
+
+    const double cosElevation = std::cos(report.getSolvedElDeg() * (3.14159265358979323846 / 180.0));
+    const double residualAzRaw = wrapDegrees(
+        report.getErrorAzDeg() - static_cast<double>(m_settings.m_azimuthOffset) - rotatorAzOffset);
+    const double residualEl =
+        report.getErrorElDeg() - static_cast<double>(m_settings.m_elevationOffset) - rotatorElOffset;
+    const double residualAzSky = residualAzRaw * cosElevation;
+    const double residualMagnitude = std::hypot(residualAzSky, residualEl);
+
+    // Adaptive deadband: the rotator's declared pointing tolerance and command-precision step
+    // are hard floors below which a correction cannot take effect; the measured solve noise
+    // stops the loop chasing its own scatter
+    double deadband = static_cast<double>(m_settings.m_autoguideDeadbandDeg);
+    if (deadband <= 0.0)
+    {
+        double tolerance = 0.0;
+        ChannelWebAPIUtils::getFeatureSetting(featureSetIndex, featureIndex, "tolerance", tolerance);
+        double precisionStep = 0.0;
+        int precision = 0;
+        if (ChannelWebAPIUtils::getFeatureSetting(featureSetIndex, featureIndex, "precision", precision)) {
+            precisionStep = std::pow(10.0, -precision);
+        }
+        const double noise = m_autoguideNoiseCount >= 5
+            ? 1.5 * std::sqrt(std::max(m_autoguideNoiseVarAzSky, m_autoguideNoiseVarEl))
+            : 0.0;
+        deadband = std::max({tolerance, precisionStep, noise, 0.002});
+    }
+
+    // Adaptive per-axis correction clamp: within a quarter field the target stays framed even
+    // if a solve was subtly wrong
+    double maxCorrection = static_cast<double>(m_settings.m_autoguideMaxCorrectionDeg);
+    if (maxCorrection <= 0.0) {
+        maxCorrection = std::max(report.getSolvedFovDeg() / 4.0, 0.01);
+    }
+
+    if (residualMagnitude <= deadband)
+    {
+        // Converged: learn the solve-to-solve noise that sets the auto deadband
+        const double alpha = m_autoguideNoiseCount < 5 ? 1.0 / (m_autoguideNoiseCount + 1) : 0.2;
+        m_autoguideNoiseVarAzSky += alpha * (residualAzSky * residualAzSky - m_autoguideNoiseVarAzSky);
+        m_autoguideNoiseVarEl += alpha * (residualEl * residualEl - m_autoguideNoiseVarEl);
+        m_autoguideNoiseCount++;
+        m_autoguidePendingValid = false;
+        autoguideStatus(QString("In deadband (%1 <= %2)")
+            .arg(formatDegrees(residualMagnitude), formatDegrees(deadband)));
+        qInfo().noquote().nospace()
+            << "CameraAutoguide: state=deadband residualAzSkyDeg=" << QString::number(residualAzSky, 'f', 5)
+            << " residualElDeg=" << QString::number(residualEl, 'f', 5)
+            << " deadbandDeg=" << QString::number(deadband, 'f', 5)
+            << " noiseSamples=" << m_autoguideNoiseCount;
+        return;
+    }
+
+    // Adaptive cadence: let the mount settle and a post-move solve complete before judging the
+    // previous correction
+    const QDateTime now = QDateTime::currentDateTimeUtc();
+    const qint64 minIntervalMs = static_cast<qint64>(std::max(5000.0, report.getSolveTimeMs() + 3000.0));
+    if (m_autoguideLastCorrectionTime.isValid() && m_autoguideLastCorrectionTime.msecsTo(now) < minIntervalMs)
+    {
+        autoguideStatus(QString("Settling after correction (residual %1)")
+            .arg(formatDegrees(residualMagnitude)));
+        return;
+    }
+
+    double correctionResidualAzRaw = residualAzRaw;
+    double correctionResidualEl = residualEl;
+
+    // A large residual could equally be a bad solve; require two consecutive solves to agree
+    // before acting on it
+    const double largeThreshold = std::max(4.0 * deadband, 0.25 * maxCorrection);
+    if (residualMagnitude > largeThreshold)
+    {
+        const auto axesAgree = [deadband](double a, double b) {
+            // Agreement per axis: both negligible, or same sign and within a factor of two
+            if (std::fabs(a) <= deadband && std::fabs(b) <= deadband) {
+                return true;
+            }
+            if (a * b <= 0.0) {
+                return false;
+            }
+            const double ratio = std::fabs(a) / std::fabs(b);
+            return ratio > 0.5 && ratio < 2.0;
+        };
+        if (!m_autoguidePendingValid
+            || !axesAgree(residualAzRaw, m_autoguidePendingAzRawDeg)
+            || !axesAgree(residualEl, m_autoguidePendingElDeg))
+        {
+            m_autoguidePendingValid = true;
+            m_autoguidePendingAzRawDeg = residualAzRaw;
+            m_autoguidePendingElDeg = residualEl;
+            autoguideStatus(QString("Large residual %1 - awaiting confirming solve")
+                .arg(formatDegrees(residualMagnitude)));
+            qInfo().noquote().nospace()
+                << "CameraAutoguide: state=confirming residualAzRawDeg=" << QString::number(residualAzRaw, 'f', 5)
+                << " residualElDeg=" << QString::number(residualEl, 'f', 5)
+                << " thresholdDeg=" << QString::number(largeThreshold, 'f', 5);
+            return;
+        }
+        // Confirmed: act on the mean of the two measurements
+        correctionResidualAzRaw = 0.5 * (residualAzRaw + m_autoguidePendingAzRawDeg);
+        correctionResidualEl = 0.5 * (residualEl + m_autoguidePendingElDeg);
+    }
+    m_autoguidePendingValid = false;
+
+    const double gain = static_cast<double>(m_settings.m_autoguideGain);
+    double correctionAzRaw = gain * correctionResidualAzRaw;
+    double correctionEl = gain * correctionResidualEl;
+
+    // Clamp per axis on-sky; drop the azimuth axis entirely near the zenith where raw azimuth
+    // is degenerate
+    if (report.getSolvedElDeg() > 88.0 || cosElevation <= 0.0) {
+        correctionAzRaw = 0.0;
+    } else if (std::fabs(correctionAzRaw) * cosElevation > maxCorrection) {
+        correctionAzRaw = std::copysign(maxCorrection / cosElevation, correctionAzRaw);
+    }
+    correctionEl = qBound(-maxCorrection, correctionEl, maxCorrection);
+
+    const double newAzOffset = wrapDegrees(rotatorAzOffset + correctionAzRaw);
+    const double newElOffset = qBound(-180.0, rotatorElOffset + correctionEl, 180.0);
+
+    // Runaway guard: a genuine mount misalignment is at most a few degrees, so a large
+    // accumulated offset means the loop is being fed bad solves - hold rather than slew away
+    const double offsetLimit = 20.0;
+    if (std::fabs(newAzOffset) > offsetLimit || std::fabs(newElOffset) > offsetLimit)
+    {
+        autoguideStatus(QString("Offset limit reached (%1, %2) - check the mount and solves")
+            .arg(formatDegrees(newAzOffset), formatDegrees(newElOffset)));
+        qWarning() << "Camera::autoguideHandlePointingError: offset limit reached"
+            << "azOffset" << newAzOffset << "elOffset" << newElOffset;
+        return;
+    }
+
+    if (!ChannelWebAPIUtils::patchFeatureSetting(featureSetIndex, featureIndex, "azimuthOffset", newAzOffset)
+        || !ChannelWebAPIUtils::patchFeatureSetting(featureSetIndex, featureIndex, "elevationOffset", newElOffset))
+    {
+        autoguideStatus("Failed to apply offsets to the rotator");
+        return;
+    }
+
+    m_autoguideLastCorrectionTime = now;
+    autoguideStatus(QString("Corrected %1 az, %2 el (offsets %3, %4)")
+        .arg(formatDegrees(correctionAzRaw * cosElevation), formatDegrees(correctionEl),
+            formatDegrees(newAzOffset), formatDegrees(newElOffset)));
+    qInfo().noquote().nospace()
+        << "CameraAutoguide: state=corrected t=" << report.getCaptureDateTime().toUTC().toString(Qt::ISODateWithMs)
+        << " residualAzSkyDeg=" << QString::number(residualAzSky, 'f', 5)
+        << " residualElDeg=" << QString::number(residualEl, 'f', 5)
+        << " correctionAzRawDeg=" << QString::number(correctionAzRaw, 'f', 5)
+        << " correctionElDeg=" << QString::number(correctionEl, 'f', 5)
+        << " newAzOffsetDeg=" << QString::number(newAzOffset, 'f', 5)
+        << " newElOffsetDeg=" << QString::number(newElOffset, 'f', 5)
+        << " deadbandDeg=" << QString::number(deadband, 'f', 5)
+        << " maxCorrectionDeg=" << QString::number(maxCorrection, 'f', 5)
+        << " gain=" << QString::number(gain, 'f', 2)
+        << " matched=" << report.getMatchedStars()
+        << " rms=" << QString::number(report.getRmsErrorPixels(), 'f', 2);
 }

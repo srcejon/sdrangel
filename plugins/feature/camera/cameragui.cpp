@@ -1008,6 +1008,12 @@ bool CameraGUI::handleMessage(const Message& message)
         }
         return true;
     }
+    else if (Camera::MsgReportAutoguideStatus::match(message))
+    {
+        const Camera::MsgReportAutoguideStatus& report = (const Camera::MsgReportAutoguideStatus&) message;
+        settingsUI()->autoguideStatusLabel->setText(report.getStatus());
+        return true;
+    }
     else if (CameraObjectDetector::MsgReportTensorRtConversion::match(message))
     {
         const CameraObjectDetector::MsgReportTensorRtConversion& report = (CameraObjectDetector::MsgReportTensorRtConversion&) message;
@@ -2457,6 +2463,10 @@ void CameraGUI::displaySettings()
     settingsUI()->azimuthOffsetSpin->setValue(m_settings.m_azimuthOffset);
     settingsUI()->elevationOffsetSpin->setValue(m_settings.m_elevationOffset);
     settingsUI()->rollOffsetSpin->setValue(m_settings.m_rollOffset);
+    settingsUI()->autoguideCheck->setChecked(m_settings.m_autoguide);
+    settingsUI()->autoguideGainSpin->setValue(m_settings.m_autoguideGain);
+    settingsUI()->autoguideDeadbandSpin->setValue(m_settings.m_autoguideDeadbandDeg);
+    settingsUI()->autoguideMaxCorrectionSpin->setValue(m_settings.m_autoguideMaxCorrectionDeg);
     settingsUI()->rollSpin->setValue(m_settings.m_roll);
     settingsUI()->sensorOpticalAxisCombo->setCurrentIndex(static_cast<int>(m_settings.m_sensorOpticalAxis));
     settingsUI()->directionSensorFilterCheck->setChecked(m_settings.m_directionSensorFilterEnabled);
@@ -4083,6 +4093,10 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->azimuthOffsetSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_azimuthOffsetSpin_valueChanged);
     QObject::connect(settingsUI()->elevationOffsetSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_elevationOffsetSpin_valueChanged);
     QObject::connect(settingsUI()->rollOffsetSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_rollOffsetSpin_valueChanged);
+    QObject::connect(settingsUI()->autoguideCheck, &QCheckBox::toggled, this, &CameraGUI::on_autoguideCheck_toggled);
+    QObject::connect(settingsUI()->autoguideGainSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_autoguideGainSpin_valueChanged);
+    QObject::connect(settingsUI()->autoguideDeadbandSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_autoguideDeadbandSpin_valueChanged);
+    QObject::connect(settingsUI()->autoguideMaxCorrectionSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_autoguideMaxCorrectionSpin_valueChanged);
     QObject::connect(settingsUI()->rollSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_rollSpin_valueChanged);
     QObject::connect(settingsUI()->sensorOpticalAxisCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_sensorOpticalAxisCombo_currentIndexChanged);
     QObject::connect(settingsUI()->directionSensorFilterCheck, &QCheckBox::toggled, this, &CameraGUI::on_directionSensorFilterCheck_toggled);
@@ -6470,6 +6484,10 @@ void CameraGUI::updatePositionControls()
     settingsUI()->azimuthOffsetLabel->setEnabled(azElSynced);
     settingsUI()->elevationOffsetLabel->setEnabled(azElSynced);
     settingsUI()->rollOffsetLabel->setEnabled(sensorSynced);
+    // Autoguiding needs a rotator to actuate; the value spins stay editable so the loop can be
+    // configured before the rotator is selected
+    settingsUI()->autoguideCheck->setEnabled(rotatorSynced);
+    settingsUI()->autoguideStatusLabel->setEnabled(rotatorSynced && m_settings.m_autoguide);
     settingsUI()->playbackProjectionXLabel->setEnabled(m_settings.m_playbackProjectionEnabled);
     settingsUI()->playbackProjectionYLabel->setEnabled(m_settings.m_playbackProjectionEnabled);
     settingsUI()->playbackProjectionWidthLabel->setEnabled(m_settings.m_playbackProjectionEnabled);
@@ -9810,6 +9828,33 @@ void CameraGUI::on_rollSpin_valueChanged(double value)
 {
     m_settings.m_roll = static_cast<float>(value);
     applySetting("roll");
+}
+
+void CameraGUI::on_autoguideCheck_toggled(bool checked)
+{
+    m_settings.m_autoguide = checked;
+    if (!checked) {
+        settingsUI()->autoguideStatusLabel->setText(QString());
+    }
+    applySetting("autoguide");
+}
+
+void CameraGUI::on_autoguideGainSpin_valueChanged(double value)
+{
+    m_settings.m_autoguideGain = static_cast<float>(value);
+    applySetting("autoguideGain");
+}
+
+void CameraGUI::on_autoguideDeadbandSpin_valueChanged(double value)
+{
+    m_settings.m_autoguideDeadbandDeg = static_cast<float>(value);
+    applySetting("autoguideDeadbandDeg");
+}
+
+void CameraGUI::on_autoguideMaxCorrectionSpin_valueChanged(double value)
+{
+    m_settings.m_autoguideMaxCorrectionDeg = static_cast<float>(value);
+    applySetting("autoguideMaxCorrectionDeg");
 }
 
 void CameraGUI::on_azimuthOffsetSpin_valueChanged(double value)

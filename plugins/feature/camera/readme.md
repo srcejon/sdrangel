@@ -1249,6 +1249,27 @@ Left click sets the camera position from SDRangel's My Position preferences. Rig
 
 Selects a GS232Controller feature used to continually synchronize the camera azimuth and elevation.
 
+<h4>3a. Autoguide</h4>
+
+When a rotator is selected and plate solving is enabled with a direction-seeded start mode (FoV+Az/El or beyond),
+autoguiding closes the loop on the mount: after each successful plate solve, the difference between the commanded
+direction and the solved boresight is trimmed out via the rotator controller's azimuth and elevation offsets, keeping
+the tracked object centered (e.g. for stacking) without any per-mount calibration.
+
+The parameters adapt to the connected hardware:
+
+- Gain - fraction of the measured residual corrected per solve. 0.5 halves the error each correction.
+- Deadband - on-sky residual below which no correction is sent. Auto derives it from the rotator's declared
+  tolerance and command precision, plus the measured solve-to-solve noise, so the loop does not chase scatter
+  the mount cannot act on.
+- Max correction - largest single correction per axis. Auto uses a quarter of the solved field of view, so a
+  wrong solve cannot slew the target out of frame.
+
+Corrections larger than the confirmation threshold require two consecutive agreeing solves before being applied, and
+corrections wait for the mount to settle and a fresh solve to complete. Azimuth corrections are suspended within 2
+degrees of the zenith where azimuth is degenerate. Only the rotator's offsets are ever adjusted - the target set by
+Star Tracker (or entered manually) is untouched, and disabling autoguiding leaves the offsets at their last value.
+
 <h4>4. Azimuth / Elevation / Roll</h4>
 
 Set the camera pointing direction.

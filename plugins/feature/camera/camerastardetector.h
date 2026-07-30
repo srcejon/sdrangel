@@ -23,6 +23,8 @@
 #include <opencv2/cudafilters.hpp>
 #endif
 
+#include <QDateTime>
+
 #include "cameradetector.h"
 #include "cameraplatesolver.h"
 
@@ -66,9 +68,64 @@ public:
         { }
     };
 
+    /**
+     * \brief Per-solve pointing error report sent to the Camera feature for autoguiding.
+     *
+     * Errors are commanded − solved in raw degrees (azimuth NOT cos-elevation scaled — the
+     * autoguide controller needs the raw value to add to the rotator's azimuth offset, and
+     * scales on-sky itself for deadband tests). Sent only for solved, direction-seeded frames.
+     */
+    class MsgReportPointingError : public Message {
+        MESSAGE_CLASS_DECLARATION
+
+    public:
+        double getErrorAzDeg() const { return m_errorAzDeg; }       //!< commanded − solved azimuth, raw degrees, wrapped to [-180,180)
+        double getErrorElDeg() const { return m_errorElDeg; }       //!< commanded − solved elevation, degrees
+        double getSolvedElDeg() const { return m_solvedElDeg; }
+        double getSolvedFovDeg() const { return m_solvedFovDeg; }
+        int getMatchedStars() const { return m_matchedStars; }
+        float getRmsErrorPixels() const { return m_rmsErrorPixels; }
+        double getSolveTimeMs() const { return m_solveTimeMs; }
+        QDateTime getCaptureDateTime() const { return m_captureDateTime; }
+
+        static MsgReportPointingError* create(
+            double errorAzDeg, double errorElDeg, double solvedElDeg, double solvedFovDeg,
+            int matchedStars, float rmsErrorPixels, double solveTimeMs, const QDateTime& captureDateTime)
+        {
+            return new MsgReportPointingError(
+                errorAzDeg, errorElDeg, solvedElDeg, solvedFovDeg,
+                matchedStars, rmsErrorPixels, solveTimeMs, captureDateTime);
+        }
+
+    private:
+        double m_errorAzDeg;
+        double m_errorElDeg;
+        double m_solvedElDeg;
+        double m_solvedFovDeg;
+        int m_matchedStars;
+        float m_rmsErrorPixels;
+        double m_solveTimeMs;
+        QDateTime m_captureDateTime;
+
+        MsgReportPointingError(
+            double errorAzDeg, double errorElDeg, double solvedElDeg, double solvedFovDeg,
+            int matchedStars, float rmsErrorPixels, double solveTimeMs, const QDateTime& captureDateTime) :
+            Message(),
+            m_errorAzDeg(errorAzDeg),
+            m_errorElDeg(errorElDeg),
+            m_solvedElDeg(solvedElDeg),
+            m_solvedFovDeg(solvedFovDeg),
+            m_matchedStars(matchedStars),
+            m_rmsErrorPixels(rmsErrorPixels),
+            m_solveTimeMs(solveTimeMs),
+            m_captureDateTime(captureDateTime)
+        { }
+    };
+
     CameraStarDetector();
     ~CameraStarDetector() override;
     void setMessageQueueToGUI(MessageQueue *messageQueue) { m_msgQueueToGUI = messageQueue; }
+    void setMessageQueueToFeature(MessageQueue *messageQueue) { m_msgQueueToFeature = messageQueue; }
     void requestPlateSolveCancellation();
     [[nodiscard]] static bool plateSolveInputSettingsChanged(const QList<QString>& settingsKeys, bool applyDirectionChanges = true);
 
@@ -81,6 +138,7 @@ private:
     CameraPipelineFramePtr m_lastInputFrame;
     CameraPlateSolver m_plateSolver;
     MessageQueue *m_msgQueueToGUI;
+    MessageQueue *m_msgQueueToFeature;
 
     [[nodiscard]] static bool starDisplaySettingsChanged(const QList<QString>& settingsKeys, bool applyDirectionChanges);
     void reportPlateSolveStatus(bool solving) const;

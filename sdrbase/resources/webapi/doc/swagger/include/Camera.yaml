@@ -417,6 +417,21 @@ CameraSettings:
     rotator:
       description: "Rotator feature identifier as featureSetIndex:featureIndex"
       type: string
+    autoguide:
+      description: "Autoguide: trim the followed rotator's azimuth/elevation offsets to zero the plate-solve pointing error (1 for enabled)"
+      type: integer
+    autoguideGain:
+      description: "Fraction of the measured pointing residual corrected per solve (0.05 to 1)"
+      type: number
+      format: float
+    autoguideDeadbandDeg:
+      description: "On-sky residual in degrees below which no correction is sent; 0 for automatic (rotator tolerance/step and measured solve noise)"
+      type: number
+      format: float
+    autoguideMaxCorrectionDeg:
+      description: "Largest single on-sky correction per axis in degrees; 0 for automatic (solved field of view / 4)"
+      type: number
+      format: float
     fov:
       description: "Camera field of view in degrees"
       type: number

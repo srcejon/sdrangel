@@ -463,6 +463,10 @@ void CameraSettings::resetToDefaults()
     m_azimuthOffset = 0.0f;
     m_elevationOffset = 0.0f;
     m_rollOffset = 0.0f;
+    m_autoguide = false;
+    m_autoguideGain = 0.5f;
+    m_autoguideDeadbandDeg = 0.0f;
+    m_autoguideMaxCorrectionDeg = 0.0f;
     m_fov = 60.0f;
     m_fovMode = FovModeDirect;
     m_fovSensorWidthMm = 36.0;
@@ -898,6 +902,10 @@ QByteArray CameraSettings::serialize() const
     s.writeDouble(374, m_messierMaxMagnitude);
     s.writeBool(375, m_messierDetect);
     s.writeS32(376, static_cast<qint32>(m_stackDurationMode));
+    s.writeBool(377, m_autoguide);
+    s.writeFloat(378, m_autoguideGain);
+    s.writeFloat(379, m_autoguideDeadbandDeg);
+    s.writeFloat(380, m_autoguideMaxCorrectionDeg);
     s.writeBool(156, m_trackObjects);
     s.writeDouble(157, m_trackObjectMinElevation);
     s.writeU32(158, m_trackObjectColor.rgba());
@@ -1590,6 +1598,10 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readDouble(374, &m_messierMaxMagnitude, 10.5);
         d.readBool(375, &m_messierDetect, true);
         d.readS32(376, reinterpret_cast<qint32*>(&m_stackDurationMode), static_cast<qint32>(StackDurationRolling));
+        d.readBool(377, &m_autoguide, false);
+        d.readFloat(378, &m_autoguideGain, 0.5f);
+        d.readFloat(379, &m_autoguideDeadbandDeg, 0.0f);
+        d.readFloat(380, &m_autoguideMaxCorrectionDeg, 0.0f);
         d.readBool(156, &m_trackObjects, false);
         d.readBool(238, &m_trackObjectTrails, false);
         d.readBool(239, &m_trackObjectHeatMap, false);
@@ -2377,6 +2389,18 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     }
     if (settingsKeys.contains("rollOffset")) {
         m_rollOffset = normalizeSignedDegrees(settings.m_rollOffset);
+    }
+    if (settingsKeys.contains("autoguide")) {
+        m_autoguide = settings.m_autoguide;
+    }
+    if (settingsKeys.contains("autoguideGain")) {
+        m_autoguideGain = qBound(0.05f, settings.m_autoguideGain, 1.0f);
+    }
+    if (settingsKeys.contains("autoguideDeadbandDeg")) {
+        m_autoguideDeadbandDeg = qBound(0.0f, settings.m_autoguideDeadbandDeg, 10.0f);
+    }
+    if (settingsKeys.contains("autoguideMaxCorrectionDeg")) {
+        m_autoguideMaxCorrectionDeg = qBound(0.0f, settings.m_autoguideMaxCorrectionDeg, 45.0f);
     }
     if (settingsKeys.contains("fov")) {
         m_fov = qBound(m_minFov, settings.m_fov, m_maxFov);
@@ -3562,6 +3586,18 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("rollOffset") || force) {
         ostr << " m_rollOffset: " << m_rollOffset;
+    }
+    if (settingsKeys.contains("autoguide") || force) {
+        ostr << " m_autoguide: " << m_autoguide;
+    }
+    if (settingsKeys.contains("autoguideGain") || force) {
+        ostr << " m_autoguideGain: " << m_autoguideGain;
+    }
+    if (settingsKeys.contains("autoguideDeadbandDeg") || force) {
+        ostr << " m_autoguideDeadbandDeg: " << m_autoguideDeadbandDeg;
+    }
+    if (settingsKeys.contains("autoguideMaxCorrectionDeg") || force) {
+        ostr << " m_autoguideMaxCorrectionDeg: " << m_autoguideMaxCorrectionDeg;
     }
     if (settingsKeys.contains("fov") || force) {
         ostr << " m_fov: " << m_fov;

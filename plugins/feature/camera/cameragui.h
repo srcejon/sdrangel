@@ -771,6 +771,10 @@ private slots:
     void on_azimuthOffsetSpin_valueChanged(double value);
     void on_elevationOffsetSpin_valueChanged(double value);
     void on_rollOffsetSpin_valueChanged(double value);
+    void on_autoguideCheck_toggled(bool checked);
+    void on_autoguideGainSpin_valueChanged(double value);
+    void on_autoguideDeadbandSpin_valueChanged(double value);
+    void on_autoguideMaxCorrectionSpin_valueChanged(double value);
     void on_sensorOpticalAxisCombo_currentIndexChanged(int index);
     void on_directionSensorFilterCheck_toggled(bool checked);
     void on_directionSensorFilterTimeConstantSpin_valueChanged(double value);

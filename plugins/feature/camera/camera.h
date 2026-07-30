@@ -335,6 +335,29 @@ public:
         { }
     };
 
+    /**
+     * \brief Autoguide status line for the GUI (Position tab Autoguide group).
+     */
+    class MsgReportAutoguideStatus : public Message {
+        MESSAGE_CLASS_DECLARATION
+
+    public:
+        const QString& getStatus() const { return m_status; }
+
+        static MsgReportAutoguideStatus* create(const QString& status)
+        {
+            return new MsgReportAutoguideStatus(status);
+        }
+
+    private:
+        QString m_status;
+
+        explicit MsgReportAutoguideStatus(const QString& status) :
+            Message(),
+            m_status(status)
+        { }
+    };
+
     Camera(WebAPIAdapterInterface *webAPIAdapterInterface);
     ~Camera() override;
     void destroy() override { delete this; }
@@ -433,6 +456,19 @@ private:
     CameraCloudEventTracker m_cloudEventTracker;
     double m_cloudCoverageEma = -1.0; ///< Coverage smoothed over recomputes for event decisions; -1 = no report yet
 
+    // Autoguide controller state (all accessed only from handleMessage / applySettings on the
+    // feature thread). The residual driven to zero is err − cameraOffset − rotatorOffset per
+    // axis, which is invariant to the rotator offset only through the err term — see
+    // autoguideHandlePointingError() for the loop algebra.
+    QDateTime m_autoguideLastCorrectionTime;    ///< Wall clock of the last offset patch; invalid = none yet
+    int m_autoguideNoiseCount = 0;              ///< Residual samples folded into the noise estimate
+    double m_autoguideNoiseVarAzSky = 0.0;      ///< EW variance of the on-sky azimuth residual, deg^2
+    double m_autoguideNoiseVarEl = 0.0;         ///< EW variance of the elevation residual, deg^2
+    bool m_autoguidePendingValid = false;       ///< A large correction awaits a confirming second solve
+    double m_autoguidePendingAzRawDeg = 0.0;    ///< Pending raw azimuth residual, degrees
+    double m_autoguidePendingElDeg = 0.0;       ///< Pending elevation residual, degrees
+    QString m_autoguideLastStatus;              ///< Last status string sent to the GUI (dedupe)
+
     void start();
     void stop();
     CameraFramePreprocessor* getFramePreprocessor() { return m_framePreprocessor; }
@@ -440,6 +476,9 @@ private:
     MessageQueue* getPostProcessorInputMessageQueue() { return m_postProcessor ? m_postProcessor->getInputMessageQueue() : nullptr; }
     void applySettings(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force = false);
     void webapiFormatFeatureReport(SWGSDRangel::SWGFeatureReport& response);
+    void autoguideHandlePointingError(const CameraStarDetector::MsgReportPointingError& report);
+    void autoguideReset();
+    void autoguideStatus(const QString& status);
 };
 
 #endif // INCLUDE_FEATURE_CAMERA_H_

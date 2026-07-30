@@ -36,6 +36,7 @@
 #include "camerastardetector.h"
 
 MESSAGE_CLASS_DEFINITION(CameraStarDetector::MsgReportPlateSolveStatus, Message)
+MESSAGE_CLASS_DEFINITION(CameraStarDetector::MsgReportPointingError, Message)
 
 namespace {
 
@@ -275,13 +276,15 @@ CameraStarDetector::CameraStarDetector()
     :
     m_plateSolver(this),
     m_msgQueueToGUI(nullptr),
+    m_msgQueueToFeature(nullptr),
     m_cudaStarSmallBlurFilterType(-1),
     m_cudaStarBackgroundBlurFilterType(-1),
     m_cudaStarBackgroundBlurFilterSize(0)
 #else
     :
     m_plateSolver(this),
-    m_msgQueueToGUI(nullptr)
+    m_msgQueueToGUI(nullptr),
+    m_msgQueueToFeature(nullptr)
 #endif
 {
 }
@@ -772,6 +775,22 @@ void CameraStarDetector::processNewFrame(const CameraPipelineFramePtr& frame)
                 << " matched=" << plateSolveResult.m_matchedStars
                 << " rms=" << QString::number(plateSolveResult.m_rmsErrorPixels, 'f', 2)
                 << " solveMs=" << QString::number(frame->m_plateSolve.m_solveTimeMs, 'f', 0);
+            if (m_msgQueueToFeature)
+            {
+                // Autoguide Phase 1: hand the raw (not cos-elevation scaled) errors to the
+                // Camera feature, which closes the loop on the rotator controller's offsets.
+                const double errorAzRaw =
+                    wrapDegrees(static_cast<double>(solveSettings.m_azimuth) - plateSolveResult.m_azimuthDegrees);
+                m_msgQueueToFeature->push(MsgReportPointingError::create(
+                    errorAzRaw,
+                    errorEl,
+                    plateSolveResult.m_elevationDegrees,
+                    plateSolveResult.m_fovDegrees,
+                    plateSolveResult.m_matchedStars,
+                    static_cast<float>(plateSolveResult.m_rmsErrorPixels),
+                    frame->m_plateSolve.m_solveTimeMs,
+                    frame->m_captureDateTime));
+            }
         }
     }
 

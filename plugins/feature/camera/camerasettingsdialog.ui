@@ -8357,6 +8357,134 @@ Right-click: toggle continual synchronization from My Position.</string>
         </widget>
        </item>
        <item>
+        <widget class="QGroupBox" name="autoguideGroup">
+         <property name="toolTip">
+          <string>Close the loop on the selected rotator: after each plate solve, trim the rotator controller's azimuth/elevation offsets so the solved boresight converges on the commanded direction, keeping the tracked object centered.</string>
+         </property>
+         <property name="title">
+          <string>Autoguide</string>
+         </property>
+         <layout class="QGridLayout" name="autoguideGridLayout">
+          <item row="0" column="0">
+           <widget class="QCheckBox" name="autoguideCheck">
+            <property name="toolTip">
+             <string>Enable autoguiding. Requires a rotator direction source, plate solving with a direction-seeded start mode, and a rotator controller with offset settings.</string>
+            </property>
+            <property name="text">
+             <string>Enable</string>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="2">
+           <widget class="QLabel" name="autoguideGainLabel">
+            <property name="text">
+             <string>Gain</string>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="3">
+           <widget class="QDoubleSpinBox" name="autoguideGainSpin">
+            <property name="toolTip">
+             <string>Fraction of the measured pointing residual corrected per solve. 0.5 halves the error each correction; lower values are gentler but slower to converge.</string>
+            </property>
+            <property name="decimals">
+             <number>2</number>
+            </property>
+            <property name="minimum">
+             <double>0.050000000000000</double>
+            </property>
+            <property name="maximum">
+             <double>1.000000000000000</double>
+            </property>
+            <property name="singleStep">
+             <double>0.050000000000000</double>
+            </property>
+            <property name="value">
+             <double>0.500000000000000</double>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="2">
+           <widget class="QLabel" name="autoguideDeadbandLabel">
+            <property name="text">
+             <string>Deadband</string>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="3">
+           <widget class="QDoubleSpinBox" name="autoguideDeadbandSpin">
+            <property name="toolTip">
+             <string>On-sky residual below which no correction is sent. Auto derives it from the rotator's tolerance and command precision plus the measured solve-to-solve noise.</string>
+            </property>
+            <property name="specialValueText">
+             <string>Auto</string>
+            </property>
+            <property name="suffix">
+             <string>°</string>
+            </property>
+            <property name="decimals">
+             <number>4</number>
+            </property>
+            <property name="minimum">
+             <double>0.000000000000000</double>
+            </property>
+            <property name="maximum">
+             <double>10.000000000000000</double>
+            </property>
+            <property name="singleStep">
+             <double>0.010000000000000</double>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="2">
+           <widget class="QLabel" name="autoguideMaxCorrectionLabel">
+            <property name="text">
+             <string>Max correction</string>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="3">
+           <widget class="QDoubleSpinBox" name="autoguideMaxCorrectionSpin">
+            <property name="toolTip">
+             <string>Largest single on-sky correction per axis. Auto uses a quarter of the solved field of view, so a wrong solve cannot slew the target out of frame.</string>
+            </property>
+            <property name="specialValueText">
+             <string>Auto</string>
+            </property>
+            <property name="suffix">
+             <string>°</string>
+            </property>
+            <property name="decimals">
+             <number>2</number>
+            </property>
+            <property name="minimum">
+             <double>0.000000000000000</double>
+            </property>
+            <property name="maximum">
+             <double>45.000000000000000</double>
+            </property>
+            <property name="singleStep">
+             <double>0.100000000000000</double>
+            </property>
+           </widget>
+          </item>
+          <item row="3" column="0" colspan="4">
+           <widget class="QLabel" name="autoguideStatusLabel">
+            <property name="toolTip">
+             <string>Autoguide status: last correction applied, residual within the deadband, or why the last solve was not acted on.</string>
+            </property>
+            <property name="text">
+             <string/>
+            </property>
+            <property name="wordWrap">
+             <bool>true</bool>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
         <widget class="QGroupBox" name="lensSensorGroup">
          <property name="toolTip">
           <string>Lens, sensor, field-of-view, projection, and distortion settings.</string>

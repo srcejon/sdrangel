@@ -316,6 +316,7 @@ struct CameraPipelineStacking
     int m_alignmentMatchedStars = 0;
     QString m_alignmentRejectReason;
     QString m_rejectReason;
+    bool m_projectionValid = true;
 };
 
 /**
@@ -437,6 +438,24 @@ struct CameraPipelineImageTransform
 };
 
 /**
+ * \brief Geometry of the fixed image coordinate system used by alignment and stacking.
+ *
+ * Alignment warps later captures into the first reference frame's pixel coordinates.
+ * Keeping this metadata separate avoids confusing the current physical exposure with the
+ * coordinate system of the eventual stacked image.
+ */
+struct CameraPipelineFrameGeometry
+{
+    QDateTime m_captureDateTime;
+    CameraPipelineDirection m_captureDirection;
+    CameraMediaMetadata m_mediaMetadata;
+    CameraPipelineImageTransform m_imageTransform;
+    QSize m_imageSize;
+    quint64 m_generation = 0;
+    bool m_valid = false;
+};
+
+/**
  * \brief The unit of data flowing through the camera processing pipeline.
  *
  * Carries everything about one captured (or played-back) frame as it travels from image
@@ -494,6 +513,7 @@ struct CameraPipelineFrame
     QVector<CameraPipelineStarDetection> m_starDetections;
     CameraPipelinePlateSolve m_plateSolve;
     CameraPipelineImageTransform m_imageTransform;
+    CameraPipelineFrameGeometry m_alignmentReferenceGeometry;
     bool m_saveCurrentImage = false;
     CameraPipelineStacking m_stack;
     BayerPattern m_bayerPattern = BayerNone;
@@ -597,6 +617,31 @@ struct CameraPipelineFrame
     QPointF mapImageToOptical(const QPointF& point) const
     {
         return m_imageTransform.mapImageToOptical(point);
+    }
+
+    CameraPipelineFrameGeometry captureGeometry(quint64 generation = 0) const
+    {
+        CameraPipelineFrameGeometry geometry;
+        geometry.m_captureDateTime = m_captureDateTime;
+        geometry.m_captureDirection = m_captureDirection;
+        geometry.m_mediaMetadata = m_mediaMetadata;
+        geometry.m_imageTransform = m_imageTransform;
+        geometry.m_imageSize = imageSize();
+        geometry.m_generation = generation;
+        geometry.m_valid = !geometry.m_imageSize.isEmpty();
+        return geometry;
+    }
+
+    void applyGeometry(const CameraPipelineFrameGeometry& geometry)
+    {
+        if (!geometry.m_valid) {
+            return;
+        }
+
+        m_captureDateTime = geometry.m_captureDateTime;
+        m_captureDirection = geometry.m_captureDirection;
+        m_mediaMetadata = geometry.m_mediaMetadata;
+        m_imageTransform = geometry.m_imageTransform;
     }
 
     void clearCpuImage()

@@ -639,7 +639,9 @@ void CameraStarDetector::processNewFrame(const CameraPipelineFramePtr& frame)
             frame->m_starDetections.end());
     }
 
-    if (m_settings.m_plateSolve && !frame->m_starDetections.isEmpty())
+    if (m_settings.m_plateSolve
+        && frame->m_stack.m_projectionValid
+        && !frame->m_starDetections.isEmpty())
     {
         reportPlateSolveStatus(true);
         // With the mirror flip active the detections are (still) in the flipped detection

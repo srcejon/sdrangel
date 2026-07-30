@@ -79,6 +79,7 @@ void CameraFrameStacker::resetFrameHistoryState()
     m_stackFrameQualityHistory.clear();
     m_stackFrameThumbnails.clear();
     m_hdrFrameSamples.clear();
+    m_stackReferenceGeometry = CameraPipelineFrameGeometry();
     m_lastFrameTemplate.clear();
     m_lastStackedImage = QImage();
     m_stackAccumulator.release();
@@ -89,6 +90,47 @@ void CameraFrameStacker::resetFrameHistoryState()
     m_cudaStackAccumulator.release();
     m_cudaStackAccumulatorInputType = -1;
 #endif
+}
+
+void CameraFrameStacker::prepareStackReferenceGeometry(const CameraPipelineFrame& inputFrame)
+{
+    const CameraPipelineFrameGeometry inputGeometry = inputFrame.m_alignmentReferenceGeometry.m_valid
+        ? inputFrame.m_alignmentReferenceGeometry
+        : inputFrame.captureGeometry();
+
+    if (!inputGeometry.m_valid) {
+        return;
+    }
+
+    // Without geometric alignment each HDR bracket has its own first-exposure coordinate
+    // system. Re-anchor at exposure zero; aligned HDR frames instead retain the aligner's
+    // fixed reference for the whole capture sequence.
+    if (!inputFrame.m_alignmentReferenceGeometry.m_valid
+        && m_settings.isHdrStackingEnabled()
+        && (inputFrame.m_hdrExposureIndex == 0))
+    {
+        m_stackReferenceGeometry = inputGeometry;
+        return;
+    }
+
+    const bool alignmentReferenceChanged = m_stackReferenceGeometry.m_valid
+        && (inputGeometry.m_generation != 0)
+        && (m_stackReferenceGeometry.m_generation != inputGeometry.m_generation);
+    const bool frameGeometryChanged = m_stackReferenceGeometry.m_valid
+        && (m_stackReferenceGeometry.m_imageSize != inputGeometry.m_imageSize);
+
+    if (alignmentReferenceChanged || frameGeometryChanged) {
+        resetFrameHistoryState();
+    }
+
+    if (!m_stackReferenceGeometry.m_valid) {
+        m_stackReferenceGeometry = inputGeometry;
+    }
+}
+
+void CameraFrameStacker::applyStackReferenceGeometry(CameraPipelineFrame& outputFrame) const
+{
+    outputFrame.applyGeometry(m_stackReferenceGeometry);
 }
 
 bool CameraFrameStacker::isContinuousAverageStacking() const
@@ -1087,6 +1129,7 @@ void CameraFrameStacker::processNewFrame(const CameraPipelineFramePtr& frame)
         return;
     }
 
+    prepareStackReferenceGeometry(*frame);
     frame->m_stack.m_rejectedCount = m_rejectedFrameCount;
 
     QImage stackedImage;
@@ -1112,6 +1155,9 @@ void CameraFrameStacker::processNewFrame(const CameraPipelineFramePtr& frame)
         : static_cast<quint64>(std::max(1, stackCount));
     frame->m_stack.m_historyCount = static_cast<int>(m_stackFrameHistory.size());
     frame->m_stack.m_totalExposureMs = std::max(0.0, m_lastStackExposureMs);
+    frame->m_stack.m_projectionValid =
+        m_settings.m_stackDisplayMode != CameraSettings::StackDisplayHistoryTiles;
+    applyStackReferenceGeometry(*frame);
     if (!applyOutputScaling(*frame)) {
         return;
     }
@@ -1583,6 +1629,9 @@ void CameraFrameStacker::emitHistoryPreviewFrame()
     previewFrame->m_stack.m_totalExposureMs = m_lastStackExposureMs;
     previewFrame->m_stack.m_queuedCount = 0;
     previewFrame->m_stack.m_rejectedCount = m_rejectedFrameCount;
+    previewFrame->m_stack.m_projectionValid =
+        m_settings.m_stackDisplayMode != CameraSettings::StackDisplayHistoryTiles;
+    applyStackReferenceGeometry(*previewFrame);
     if (!applyOutputScaling(*previewFrame)) {
         return;
     }

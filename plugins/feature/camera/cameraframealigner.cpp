@@ -37,6 +37,7 @@
 CameraFrameAligner::CameraFrameAligner() :
     m_nextStage(nullptr),
     m_captureActive(false),
+    m_alignmentReferenceGeneration(0),
     m_processingFrame(false),
     m_droppedFrameCount(0)
 {
@@ -57,6 +58,7 @@ void CameraFrameAligner::stopWork()
 void CameraFrameAligner::resetAlignmentState()
 {
     m_alignmentReference = cv::Mat();
+    m_alignmentReferenceGeometry = CameraPipelineFrameGeometry();
     m_previousStarAlignmentTransform = cv::Mat();
     m_lastStarAlignmentTransform = cv::Mat();
     m_lastStarAlignmentTargetStars.clear();
@@ -322,7 +324,7 @@ QImage CameraFrameAligner::applyAlignment(CameraPipelineFrame& frame)
         && (m_alignmentReference.size() != frameMat.size()
             || m_alignmentReference.type() != frameMat.type()))
     {
-        m_alignmentReference = cv::Mat();
+        resetAlignmentState();
     }
 
 #ifdef CAMERA_OPENCV_CUDA_STACKING
@@ -336,9 +338,16 @@ QImage CameraFrameAligner::applyAlignment(CameraPipelineFrame& frame)
     // Anchor the reference once on the first frame after a reset. Use the *input*
     // (unaligned) frame so subsequent warps don't compound. We keep this reference for
     // the whole sequence — there is no drift, no discontinuity when the stack rolls.
-    if (m_alignmentReference.empty()) {
+    if (m_alignmentReference.empty())
+    {
         m_alignmentReference = frameMat.clone();
+        ++m_alignmentReferenceGeneration;
+        if (m_alignmentReferenceGeneration == 0) {
+            ++m_alignmentReferenceGeneration;
+        }
+        m_alignmentReferenceGeometry = frame.captureGeometry(m_alignmentReferenceGeneration);
     }
+    frame.m_alignmentReferenceGeometry = m_alignmentReferenceGeometry;
 
 #ifdef CAMERA_OPENCV_CUDA_STACKING
     if (m_settings.m_postProcessUseCuda

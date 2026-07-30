@@ -139,6 +139,7 @@ private:
     std::deque<StackFrameQuality> m_stackFrameQualityHistory;
     std::deque<QImage> m_stackFrameThumbnails;
     std::vector<HdrFrameSample> m_hdrFrameSamples;
+    CameraPipelineFrameGeometry m_stackReferenceGeometry;
     cv::Mat m_stackAccumulator;
     quint64 m_continuousStackFrameCount;
     double m_continuousStackExposureMs;
@@ -166,6 +167,8 @@ private:
     int pendingFrameLimit() const;
     int dropOldestPendingFramesForOverflow();
     void resetFrameHistoryState();
+    void prepareStackReferenceGeometry(const CameraPipelineFrame& inputFrame);
+    void applyStackReferenceGeometry(CameraPipelineFrame& outputFrame) const;
     bool isContinuousAverageStacking() const;
     void trimFrameHistoryToCurrentLimit();
 #ifdef CAMERA_OPENCV_CUDA_STACKING

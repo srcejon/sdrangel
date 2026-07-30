@@ -2934,6 +2934,10 @@ void CameraPostProcessor::applySkyGridOverlay(const CameraPipelineFrame& frame, 
 {
     PROFILER_START();
 
+    if (!frame.m_stack.m_projectionValid) {
+        return;
+    }
+
     const CameraSettings settings = CameraImageUtils::projectionSettingsForFrame(m_settings, frame);
 
     const bool drawEquatorial = m_settings.m_equatorialGrid;
@@ -3016,6 +3020,10 @@ void CameraPostProcessor::applyConstellationOverlay(const CameraPipelineFrame& f
 {
     PROFILER_START();
 
+    if (!frame.m_stack.m_projectionValid) {
+        return;
+    }
+
     const CameraSettings settings = CameraImageUtils::projectionSettingsForFrame(m_settings, frame);
 
     if (!m_settings.m_constellation) {
@@ -3088,6 +3096,10 @@ void CameraPostProcessor::applyConstellationOverlay(const CameraPipelineFrame& f
 void CameraPostProcessor::applyMessierOverlay(const CameraPipelineFrame& frame, QImage& image, bool drawLabels, QVector<PreviewTextLabel> *previewTextLabels) const
 {
     PROFILER_START();
+
+    if (!frame.m_stack.m_projectionValid) {
+        return;
+    }
 
     const CameraSettings settings = CameraImageUtils::projectionSettingsForFrame(m_settings, frame);
 
@@ -3358,6 +3370,10 @@ void CameraPostProcessor::applyMessierOverlay(const CameraPipelineFrame& frame, 
 void CameraPostProcessor::applyTrackedObjectOverlay(const CameraPipelineFrame& frame, QImage& image, bool drawLabels, QVector<PreviewTextLabel> *previewTextLabels, QVector<CameraPipelineTrackedObject> *trackedObjects)
 {
     PROFILER_START();
+
+    if (!frame.m_stack.m_projectionValid) {
+        return;
+    }
 
     const CameraSettings projectionSettings = CameraImageUtils::projectionSettingsForFrame(m_settings, frame);
 

@@ -87,6 +87,8 @@ private:
     // frame. Reset on capture start, on settings changes that invalidate the source, or
     // when the frame geometry changes.
     cv::Mat m_alignmentReference;
+    CameraPipelineFrameGeometry m_alignmentReferenceGeometry;
+    quint64 m_alignmentReferenceGeneration;
     cv::Mat m_previousStarAlignmentTransform;
     cv::Mat m_lastStarAlignmentTransform;
     std::vector<cv::Point2f> m_lastStarAlignmentTargetStars;

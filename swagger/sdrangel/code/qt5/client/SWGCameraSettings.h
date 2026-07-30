@@ -321,6 +321,9 @@ public:
     qint32 getStackMethod();
     void setStackMethod(qint32 stack_method);
 
+    qint32 getStackDurationMode();
+    void setStackDurationMode(qint32 stack_duration_mode);
+
     qint32 getStackHdrAlgorithm();
     void setStackHdrAlgorithm(qint32 stack_hdr_algorithm);
 
@@ -1293,6 +1296,9 @@ private:
 
     qint32 stack_method;
     bool m_stack_method_isSet;
+
+    qint32 stack_duration_mode;
+    bool m_stack_duration_mode_isSet;
 
     qint32 stack_hdr_algorithm;
     bool m_stack_hdr_algorithm_isSet;

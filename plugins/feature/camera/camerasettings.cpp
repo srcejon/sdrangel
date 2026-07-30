@@ -665,7 +665,7 @@ void CameraSettings::resetToDefaults()
     m_opticalSpectrumZeroOrderX = 0.0;
     m_opticalSpectrumDirection = OpticalSpectrumDirectionAuto;
     m_opticalSpectrumApertureRows = 15;
-    m_opticalSpectrumBackgroundSub = true;
+    m_opticalSpectrumBackgroundSub = false;
     m_opticalSpectrumSmoothing = 1;
     m_opticalSpectrumAverageFrames = 1;
     m_opticalSpectrumNormalize = false;
@@ -1735,7 +1735,7 @@ bool CameraSettings::deserialize(const QByteArray& data)
             static_cast<qint32>(OpticalSpectrumDirectionFlipped)));
         d.readS32(323, &m_opticalSpectrumApertureRows, 15);
         m_opticalSpectrumApertureRows = qBound(0, m_opticalSpectrumApertureRows, 256);
-        d.readBool(324, &m_opticalSpectrumBackgroundSub, true);
+        d.readBool(324, &m_opticalSpectrumBackgroundSub, false);
         d.readS32(325, &m_opticalSpectrumSmoothing, 1);
         m_opticalSpectrumSmoothing = qBound(1, m_opticalSpectrumSmoothing, 99);
         d.readS32(326, &m_opticalSpectrumAverageFrames, 1);

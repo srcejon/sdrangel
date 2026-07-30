@@ -933,6 +933,495 @@ QVector<CameraOpticalSpectrumFeature> CameraOpticalSpectrumExtractor::detectFeat
     return features;
 }
 
+namespace {
+
+// ---------------------------------------------------------------------------
+// Automatic wavelength calibration
+//
+// The axis is nm = start + slope * index (slope negative when red lies towards
+// decreasing pixels), so every hypothesis is a (start, slope) pair. Solving means
+// generating plausible pairs and scoring them.
+// ---------------------------------------------------------------------------
+
+struct AxisHypothesis
+{
+    double m_startNm = 0.0;
+    double m_slopeNm = 0.0;  ///< nm per sample, signed
+    double m_score = -2.0;
+    double m_margin = 0.0;   ///< score less the best materially different rival's score
+    int m_matched = 0;
+    double m_rmsNm = 0.0;
+};
+
+// A reference template resampled onto a uniform wavelength grid with its continuum
+// removed, so scoring a hypothesis costs one interpolation per sample instead of a
+// binary search, and only the LINES (not the continuum slope, which the instrument
+// response distorts anyway) drive the correlation.
+struct TemplateResidual
+{
+    double m_startNm = 0.0;
+    double m_stepNm = 0.25;
+    QVector<double> m_values;
+
+    [[nodiscard]] bool valid() const { return m_values.size() > 16; }
+
+    [[nodiscard]] double at(double nm) const
+    {
+        const double grid = (nm - m_startNm) / m_stepNm;
+        if ((grid < 0.0) || (grid > m_values.size() - 1.0)) {
+            return std::numeric_limits<double>::quiet_NaN();
+        }
+        const int index = static_cast<int>(grid);
+        const int next = qMin(index + 1, static_cast<int>(m_values.size()) - 1);
+        const double fraction = grid - index;
+        return (1.0 - fraction) * m_values[index] + fraction * m_values[next];
+    }
+};
+
+TemplateResidual buildTemplateResidual(const QVector<QPointF>& reference, double continuumWindowNm)
+{
+    TemplateResidual residual;
+    if (reference.size() < 16) {
+        return residual;
+    }
+    const double first = reference.first().x();
+    const double last = reference.last().x();
+    if (last - first < 50.0) {
+        return residual;
+    }
+
+    constexpr int kMaxSamples = 8192;
+    residual.m_startNm = first;
+    residual.m_stepNm = std::max(0.25, (last - first) / (kMaxSamples - 1));
+    const int count = static_cast<int>((last - first) / residual.m_stepNm) + 1;
+
+    QVector<double> sampled(count);
+    int cursor = 0;
+    for (int i = 0; i < count; i++)
+    {
+        const double nm = first + i * residual.m_stepNm;
+        while ((cursor + 2 < reference.size()) && (reference[cursor + 1].x() < nm)) {
+            cursor++;
+        }
+        const double x0 = reference[cursor].x();
+        const double x1 = reference[cursor + 1].x();
+        const double t = (x1 > x0) ? ((nm - x0) / (x1 - x0)) : 0.0;
+        sampled[i] = reference[cursor].y() + t * (reference[cursor + 1].y() - reference[cursor].y());
+    }
+
+    const int half = qMax(2, static_cast<int>(std::lround(continuumWindowNm / residual.m_stepNm)));
+    const QVector<double> continuum = movingMedian(sampled, half);
+    residual.m_values.resize(count);
+    for (int i = 0; i < count; i++) {
+        residual.m_values[i] = sampled[i] - continuum[i];
+    }
+    return residual;
+}
+
+// Pearson correlation of the continuum-removed observation against the template under a
+// given hypothesis. Scale-free by construction, so the instrument response and exposure
+// do not matter - only whether the line patterns line up.
+double templateCorrelation(const QVector<double>& observedResidual, const TemplateResidual& reference,
+                           double startNm, double slopeNm, int stride)
+{
+    double sumX = 0.0, sumY = 0.0, sumXX = 0.0, sumYY = 0.0, sumXY = 0.0;
+    int used = 0;
+    int considered = 0;
+    for (int i = 0; i < observedResidual.size(); i += stride)
+    {
+        considered++;
+        const double value = reference.at(startNm + slopeNm * i);
+        if (std::isnan(value)) {
+            continue;
+        }
+        const double observed = observedResidual[i];
+        sumX += observed;
+        sumY += value;
+        sumXX += observed * observed;
+        sumYY += value * value;
+        sumXY += observed * value;
+        used++;
+    }
+    // Require the hypothesis to place most of the spectrum inside the template, or a
+    // solution that overlaps in a narrow corner can win on a handful of samples
+    if ((used < 32) || (used < considered / 2)) {
+        return -2.0;
+    }
+    const double covariance = sumXY - sumX * sumY / used;
+    const double varianceX = sumXX - sumX * sumX / used;
+    const double varianceY = sumYY - sumY * sumY / used;
+    if ((varianceX <= 0.0) || (varianceY <= 0.0)) {
+        return -2.0;
+    }
+    return covariance / std::sqrt(varianceX * varianceY);
+}
+
+// How many detected features land on a catalog line under a hypothesis, and how closely
+void scoreAgainstLines(const QVector<double>& featureIndices, const QVector<double>& catalogNm,
+                       double startNm, double slopeNm, double toleranceNm, int& matchedOut, double& rmsOut)
+{
+    matchedOut = 0;
+    double sumSquares = 0.0;
+    for (const double index : featureIndices)
+    {
+        const double nm = startNm + slopeNm * index;
+        double best = toleranceNm;
+        bool hit = false;
+        for (const double line : catalogNm)
+        {
+            const double distance = std::abs(line - nm);
+            if (distance < best)
+            {
+                best = distance;
+                hit = true;
+            }
+        }
+        if (hit)
+        {
+            matchedOut++;
+            sumSquares += best * best;
+        }
+    }
+    rmsOut = (matchedOut > 0) ? std::sqrt(sumSquares / matchedOut) : 0.0;
+}
+
+// Line-only figure of merit: identifications dominate, with the residual as a tie-break
+double lineScore(int matched, double rmsNm, double toleranceNm)
+{
+    if (matched < 2) {
+        return -2.0;
+    }
+    return matched + (1.0 - qBound(0.0, rmsNm / std::max(0.001, toleranceNm), 1.0));
+}
+
+bool hypothesisDiffers(const AxisHypothesis& a, const AxisHypothesis& b, int length)
+{
+    const double slopeChange = std::abs(a.m_slopeNm - b.m_slopeNm) / std::max(1e-9, std::abs(a.m_slopeNm));
+    const double centre = length / 2.0;
+    const double centreShift = std::abs((a.m_startNm + a.m_slopeNm * centre) - (b.m_startNm + b.m_slopeNm * centre));
+    return (slopeChange > 0.02) || (centreShift > 5.0);
+}
+
+} // namespace
+
+CameraOpticalSpectrumAutoCalibration CameraOpticalSpectrumExtractor::autoCalibrate(
+    const QVector<float>& profile,
+    const QVector<double>& catalogNm,
+    const QVector<QPointF>& referenceTemplate,
+    const CameraOpticalSpectrumAutoCalibrationOptions& options)
+{
+    CameraOpticalSpectrumAutoCalibration result;
+    const int length = profile.size();
+    if ((length < 64) || (options.m_minDispersion <= 0.0) || (options.m_maxDispersion < options.m_minDispersion)) {
+        return result;
+    }
+
+    // Continuum-removed observation: the lines carry the calibration information, while the
+    // continuum shape is dominated by the instrument response and says nothing about scale
+    QVector<double> observed(length);
+    for (int i = 0; i < length; i++) {
+        observed[i] = profile[i];
+    }
+    constexpr int kContinuumHalfWindow = 30;
+    const QVector<double> continuum = movingMedian(observed, kContinuumHalfWindow);
+    QVector<double> observedResidual(length);
+    for (int i = 0; i < length; i++) {
+        observedResidual[i] = observed[i] - continuum[i];
+    }
+
+    const TemplateResidual reference = buildTemplateResidual(referenceTemplate, 30.0);
+    const bool haveTemplate = reference.valid();
+    const int stride = qMax(1, length / 512);
+
+    // Sorted catalog, capped: the triplet table grows as the cube of the line count, and a
+    // sprawling catalog also multiplies coincidental matches
+    QVector<double> lines = catalogNm;
+    std::sort(lines.begin(), lines.end());
+    lines.erase(std::unique(lines.begin(), lines.end(),
+        [](double a, double b) { return std::abs(a - b) < 0.05; }), lines.end());
+    constexpr int kMaxCatalogLines = 120;
+    if (lines.size() > kMaxCatalogLines) {
+        lines.resize(kMaxCatalogLines);
+    }
+
+    // Detected features, as sub-sample positions along the profile
+    const QVector<CameraOpticalSpectrumFeature> features = detectFeatures(profile, 14);
+    QVector<double> featureIndices;
+    featureIndices.reserve(features.size());
+    for (const CameraOpticalSpectrumFeature& feature : features) {
+        featureIndices.append(feature.m_index);
+    }
+    std::sort(featureIndices.begin(), featureIndices.end());
+
+    const double minSlope = options.m_minDispersion;
+    const double maxSlope = options.m_maxDispersion;
+    const auto plausible = [&](double startNm, double slopeNm) {
+        const double endNm = startNm + slopeNm * (length - 1);
+        const double low = std::min(startNm, endNm);
+        const double high = std::max(startNm, endNm);
+        return (low >= options.m_minWavelength) && (high <= options.m_maxWavelength);
+    };
+
+    QVector<AxisHypothesis> hypotheses;
+
+    // --- Hypothesis generation 1: interval-ratio matching of feature triplets ---
+    // Three lines fix both unknowns, and the ratio of their intervals is invariant under
+    // the unknown zero order, so it can be matched without knowing the axis at all.
+    if ((featureIndices.size() >= 3) && (lines.size() >= 3))
+    {
+        struct CatalogTriplet { double m_ratio; double m_first; double m_last; };
+        QVector<CatalogTriplet> triplets;
+        for (int a = 0; a < lines.size(); a++) {
+            for (int b = a + 1; b < lines.size(); b++) {
+                for (int c = b + 1; c < lines.size(); c++)
+                {
+                    const double span = lines[c] - lines[a];
+                    if (span < 20.0) {
+                        continue; // too short a baseline to constrain the dispersion
+                    }
+                    triplets.append({(lines[b] - lines[a]) / span, lines[a], lines[c]});
+                }
+            }
+        }
+        std::sort(triplets.begin(), triplets.end(),
+            [](const CatalogTriplet& x, const CatalogTriplet& y) { return x.m_ratio < y.m_ratio; });
+
+        constexpr double kRatioTolerance = 0.012;
+        constexpr int kMaxHypotheses = 40000;
+        for (int i = 0; (i < featureIndices.size()) && (hypotheses.size() < kMaxHypotheses); i++)
+        {
+            for (int j = i + 1; (j < featureIndices.size()) && (hypotheses.size() < kMaxHypotheses); j++)
+            {
+                for (int k = j + 1; (k < featureIndices.size()) && (hypotheses.size() < kMaxHypotheses); k++)
+                {
+                    const double baseline = featureIndices[k] - featureIndices[i];
+                    if (baseline < 16.0) {
+                        continue;
+                    }
+                    const double observedRatio = (featureIndices[j] - featureIndices[i]) / baseline;
+
+                    // Forward maps the first feature to the first catalog line (red at
+                    // increasing pixels); reversed maps it to the last, which mirrors the
+                    // ratio, and covers the flipped direction without a second table
+                    for (int pass = 0; pass < 2; pass++)
+                    {
+                        const double target = (pass == 0) ? observedRatio : (1.0 - observedRatio);
+                        const auto lower = std::lower_bound(triplets.cbegin(), triplets.cend(), target - kRatioTolerance,
+                            [](const CatalogTriplet& t, double value) { return t.m_ratio < value; });
+                        for (auto it = lower; (it != triplets.cend()) && (it->m_ratio <= target + kRatioTolerance); ++it)
+                        {
+                            const double span = it->m_last - it->m_first;
+                            const double slope = (pass == 0) ? (span / baseline) : (-span / baseline);
+                            if ((std::abs(slope) < minSlope) || (std::abs(slope) > maxSlope)) {
+                                continue;
+                            }
+                            const double anchor = (pass == 0) ? it->m_first : it->m_last;
+                            const double start = anchor - slope * featureIndices[i];
+                            if (!plausible(start, slope)) {
+                                continue;
+                            }
+                            AxisHypothesis hypothesis;
+                            hypothesis.m_startNm = start;
+                            hypothesis.m_slopeNm = slope;
+                            hypotheses.append(hypothesis);
+                            if (hypotheses.size() >= kMaxHypotheses) {
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // --- Hypothesis generation 2: bounded grid, for a spectrum whose features are too few
+    // to form triplets. Only worthwhile with a template to score against and a reasonably
+    // tight dispersion prior, otherwise the grid is both enormous and unreliable.
+    if (haveTemplate && (hypotheses.size() < 8) && (maxSlope / minSlope <= 8.0))
+    {
+        // Steps fine enough that the far end of the spectrum cannot slip past a line
+        // between adjacent hypotheses
+        const double slopeStepRatio = 1.0 + 2.0 / length;
+        for (double magnitude = minSlope; magnitude <= maxSlope; magnitude *= slopeStepRatio)
+        {
+            for (int direction = 0; direction < 2; direction++)
+            {
+                const double slope = (direction == 0) ? magnitude : -magnitude;
+                const double startStep = 2.0 * magnitude;
+                const double lowest = (slope > 0.0)
+                    ? options.m_minWavelength
+                    : options.m_minWavelength - slope * (length - 1);
+                const double highest = (slope > 0.0)
+                    ? options.m_maxWavelength - slope * (length - 1)
+                    : options.m_maxWavelength;
+                for (double start = lowest; start <= highest; start += startStep)
+                {
+                    AxisHypothesis hypothesis;
+                    hypothesis.m_startNm = start;
+                    hypothesis.m_slopeNm = slope;
+                    hypotheses.append(hypothesis);
+                }
+            }
+        }
+    }
+
+    if (hypotheses.isEmpty()) {
+        return result;
+    }
+
+    // --- Scoring ---
+    // Line evidence is cheap, so it ranks every hypothesis; template correlation is the
+    // stronger discriminator (it uses the whole line pattern, not just detections) and is
+    // reserved for the shortlist.
+    for (AxisHypothesis& hypothesis : hypotheses)
+    {
+        scoreAgainstLines(featureIndices, lines, hypothesis.m_startNm, hypothesis.m_slopeNm,
+                          options.m_matchToleranceNm, hypothesis.m_matched, hypothesis.m_rmsNm);
+        hypothesis.m_score = lineScore(hypothesis.m_matched, hypothesis.m_rmsNm, options.m_matchToleranceNm);
+    }
+    std::sort(hypotheses.begin(), hypotheses.end(),
+        [](const AxisHypothesis& a, const AxisHypothesis& b) { return a.m_score > b.m_score; });
+
+    if (haveTemplate)
+    {
+        constexpr int kShortlist = 400;
+        const int shortlist = qMin(kShortlist, static_cast<int>(hypotheses.size()));
+        hypotheses.resize(shortlist);
+        for (AxisHypothesis& hypothesis : hypotheses)
+        {
+            hypothesis.m_score = templateCorrelation(observedResidual, reference,
+                hypothesis.m_startNm, hypothesis.m_slopeNm, stride);
+        }
+        std::sort(hypotheses.begin(), hypotheses.end(),
+            [](const AxisHypothesis& a, const AxisHypothesis& b) { return a.m_score > b.m_score; });
+    }
+
+    AxisHypothesis best = hypotheses.first();
+    if (best.m_score <= -1.0) {
+        return result;
+    }
+
+    // --- Refinement ---
+    if (haveTemplate)
+    {
+        // Two local passes at full resolution around the winner
+        double slopeSpan = std::abs(best.m_slopeNm) * 0.02;
+        double startSpan = 4.0;
+        for (int pass = 0; pass < 2; pass++)
+        {
+            AxisHypothesis refined = best;
+            for (int s = -10; s <= 10; s++)
+            {
+                for (int t = -10; t <= 10; t++)
+                {
+                    const double slope = best.m_slopeNm + s * (slopeSpan / 10.0);
+                    const double start = best.m_startNm + t * (startSpan / 10.0);
+                    if ((std::abs(slope) < minSlope) || (std::abs(slope) > maxSlope)) {
+                        continue;
+                    }
+                    const double score = templateCorrelation(observedResidual, reference, start, slope, 1);
+                    if (score > refined.m_score)
+                    {
+                        refined.m_score = score;
+                        refined.m_slopeNm = slope;
+                        refined.m_startNm = start;
+                    }
+                }
+            }
+            best = refined;
+            slopeSpan /= 8.0;
+            startSpan /= 8.0;
+        }
+    }
+    else if (best.m_matched >= 2)
+    {
+        // Least-squares refit through the identified lines
+        double sumIndex = 0.0, sumNm = 0.0, sumIndexIndex = 0.0, sumIndexNm = 0.0;
+        int count = 0;
+        for (const double index : featureIndices)
+        {
+            const double nm = best.m_startNm + best.m_slopeNm * index;
+            double bestDistance = options.m_matchToleranceNm;
+            double matchedLine = 0.0;
+            bool hit = false;
+            for (const double line : lines)
+            {
+                const double distance = std::abs(line - nm);
+                if (distance < bestDistance)
+                {
+                    bestDistance = distance;
+                    matchedLine = line;
+                    hit = true;
+                }
+            }
+            if (hit)
+            {
+                sumIndex += index;
+                sumNm += matchedLine;
+                sumIndexIndex += index * index;
+                sumIndexNm += index * matchedLine;
+                count++;
+            }
+        }
+        const double denominator = count * sumIndexIndex - sumIndex * sumIndex;
+        if ((count >= 2) && (std::abs(denominator) > 1e-9))
+        {
+            const double slope = (count * sumIndexNm - sumIndex * sumNm) / denominator;
+            if ((std::abs(slope) >= minSlope) && (std::abs(slope) <= maxSlope))
+            {
+                best.m_slopeNm = slope;
+                best.m_startNm = (sumNm - slope * sumIndex) / count;
+            }
+        }
+    }
+
+    // Final identification statistics against the refined axis
+    scoreAgainstLines(featureIndices, lines, best.m_startNm, best.m_slopeNm,
+                      options.m_matchToleranceNm, best.m_matched, best.m_rmsNm);
+    if (!haveTemplate) {
+        best.m_score = lineScore(best.m_matched, best.m_rmsNm, options.m_matchToleranceNm);
+    }
+
+    // --- Confidence: the margin over the best MATERIALLY DIFFERENT solution ---
+    // Discrete line matching throws off coincidental fits readily, so a solution is only
+    // trustworthy when the runner-up is clearly worse; neighbouring grid points and
+    // near-identical triplet solutions do not count as rivals.
+    double runnerUp = -2.0;
+    for (const AxisHypothesis& hypothesis : hypotheses)
+    {
+        if (hypothesisDiffers(best, hypothesis, length))
+        {
+            runnerUp = hypothesis.m_score;
+            break;
+        }
+    }
+    best.m_margin = (runnerUp <= -1.0) ? best.m_score : (best.m_score - runnerUp);
+
+    if (best.m_matched < 2) {
+        return result; // nothing identified: no defensible answer
+    }
+    if (haveTemplate && (best.m_score < 0.2)) {
+        return result; // the template simply does not fit anywhere
+    }
+
+    result.m_valid = true;
+    result.m_dispersion = std::abs(best.m_slopeNm);
+    result.m_redPositive = best.m_slopeNm > 0.0;
+    // nm = slope * (index - indexOfZeroOrder), so the zero order sits where nm reaches 0
+    result.m_zeroOrderPx = options.m_axisOrigin - best.m_startNm / best.m_slopeNm;
+    result.m_matchedLines = best.m_matched;
+    result.m_rmsNm = best.m_rmsNm;
+    result.m_score = best.m_score;
+    result.m_margin = best.m_margin;
+    result.m_startNm = best.m_startNm;
+    result.m_endNm = best.m_startNm + best.m_slopeNm * (length - 1);
+    result.m_method = haveTemplate
+        ? QStringLiteral("template correlation")
+        : QStringLiteral("line pattern");
+    result.m_ambiguous = haveTemplate ? (best.m_margin < 0.05) : (best.m_margin < 1.0);
+    return result;
+}
+
 bool CameraOpticalSpectrumExtractor::autoDirectionDecisive(const CameraOpticalSpectrumData& data, double minSeparationSamples)
 {
     if (!data.isValid()) {

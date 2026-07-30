@@ -31,6 +31,7 @@
 #include <QInputDialog>
 #include <QLabel>
 #include <QDir>
+#include <QApplication>
 #include <QMessageBox>
 #include <QMouseEvent>
 #include <QNetworkAccessManager>
@@ -132,6 +133,10 @@ CameraOpticalSpectrumDialog::CameraOpticalSpectrumDialog(CameraSettings& setting
     // axis - effectively the observed spectrum, useful for lining up reference lines.
     m_imageStrip = new QLabel(this);
     m_imageStrip->setFixedHeight(kColourStripHeight);
+    // The strips hold pixmaps rendered at the chart's current width; without this the
+    // pixmap size becomes the label's minimum and the dialog can never be made narrower
+    // (the strips re-render at the new width via plotAreaChanged when resized)
+    m_imageStrip->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
     m_imageStrip->setToolTip(tr("Colours extracted from the image along the dispersion axis (the observed spectrum),\n"
         "scaled to the brightest sample. Use it to line the reference lines up with the real features."));
 
@@ -139,6 +144,7 @@ CameraOpticalSpectrumDialog::CameraOpticalSpectrumDialog(CameraSettings& setting
     // luminance. Both strips are aligned with the chart's plot area.
     m_colourStrip = new QLabel(this);
     m_colourStrip->setFixedHeight(kColourStripHeight);
+    m_colourStrip->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
     m_colourStrip->setToolTip(tr("Approximate colour of each wavelength, with brightness following the plotted luminance.\nGrey outside the visible range or when uncalibrated."));
 
     // Calibration controls. Toggles are compact icon/text ButtonSwitches; the tooltips
@@ -177,6 +183,14 @@ CameraOpticalSpectrumDialog::CameraOpticalSpectrumDialog(CameraSettings& setting
             setCalibrationMode(false);
         }
     });
+    m_autoCalibrateButton = new QPushButton(tr("Auto..."), this);
+    m_autoCalibrateButton->setToolTip(tr("Solve the wavelength scale from the spectrum itself: detected features are matched\n"
+        "against known lines by the ratios of the intervals between them (which do not depend on\n"
+        "the unknown zero order), and each candidate is scored against the selected reference\n"
+        "template when one is loaded. The solution is shown for confirmation before it is applied.\n"
+        "Reliability depends on having real lines in the spectrum and, above all, on the current\n"
+        "dispersion being roughly right - it is used as a search prior."));
+    connect(m_autoCalibrateButton, &QPushButton::clicked, this, [this]() { autoCalibrate(); });
 
     // Extraction controls
     m_apertureSpin = new QSpinBox(this);
@@ -354,6 +368,7 @@ CameraOpticalSpectrumDialog::CameraOpticalSpectrumDialog(CameraSettings& setting
     calibrationLayout->addWidget(new QLabel(tr("Direction"), this));
     calibrationLayout->addWidget(m_directionCombo);
     calibrationLayout->addWidget(m_calibrateButton);
+    calibrationLayout->addWidget(m_autoCalibrateButton);
     calibrationLayout->addStretch();
 
     auto* extractionLayout = new QHBoxLayout();
@@ -445,6 +460,25 @@ CameraOpticalSpectrumDialog::CameraOpticalSpectrumDialog(CameraSettings& setting
     buttonLayout->addWidget(m_overlayLabel);
     buttonLayout->addStretch();
     buttonLayout->addWidget(closeButton);
+
+    // The dialog's minimum width is the widest control row. Wide value ranges give the
+    // spin boxes wide minimum size hints, and long status texts (template names, overlay
+    // names, velocities) would otherwise enforce their full width - let them shrink (spin
+    // text scrolls, labels clip) so the dialog can be resized narrower.
+    m_zeroOrderSpin->setMinimumWidth(70);
+    m_dispersionSpin->setMinimumWidth(80);
+    m_redshiftSpin->setMinimumWidth(70);
+    m_directionCombo->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
+    m_directionCombo->setMinimumContentsLength(9);
+    // Minimum 1 (not an Ignored size policy, which would collapse the label to nothing
+    // next to a layout stretch): the label keeps its preferred size while space allows
+    // and clips only when the dialog is squeezed
+    const auto allowLabelShrink = [](QLabel* label) {
+        label->setMinimumWidth(1);
+    };
+    allowLabelShrink(m_referenceLabel);
+    allowLabelShrink(m_redshiftVelocityLabel);
+    allowLabelShrink(m_overlayLabel);
 
     auto* layout = new QVBoxLayout();
     layout->addLayout(calibrationLayout);
@@ -1103,6 +1137,10 @@ void CameraOpticalSpectrumDialog::updateChart()
     m_displayBlueRaw = m_displayBlue;
     m_displayValidFirst = 0;
     m_displayValidLast = length - 1;
+    m_displayBlankedLum.clear();
+    m_displayBlankedRed.clear();
+    m_displayBlankedGreen.clear();
+    m_displayBlankedBlue.clear();
 
     // Instrument response correction: divide the luminance by the captured response.
     // Where the response is very weak (the band edges) or the curve does not reach,
@@ -1115,6 +1153,7 @@ void CameraOpticalSpectrumDialog::updateChart()
         int blanked = 0;
         int firstCovered = -1;
         int lastCovered = -1;
+        m_displayBlankedLum = QVector<bool>(length, false);
         for (int i = 0; i < m_displayLuminance.size(); i++)
         {
             const double response = CameraOpticalSpectrumLibrary::responseAt(m_responsePoints, xValues[i]);
@@ -1129,6 +1168,7 @@ void CameraOpticalSpectrumDialog::updateChart()
             else
             {
                 m_displayLuminance[i] = 0.0f;
+                m_displayBlankedLum[i] = true;
                 blanked++;
             }
         }
@@ -1146,7 +1186,7 @@ void CameraOpticalSpectrumDialog::updateChart()
         // channel divides by its own response; the curves share one normalisation so
         // the relative channel sensitivities (and hence the hue in the image strip)
         // are corrected rather than re-scaled away.
-        const auto correctChannel = [this, &xValues](QVector<float>& profile, const QVector<QPointF>& response) {
+        const auto correctChannel = [this, &xValues](QVector<float>& profile, const QVector<QPointF>& response, QVector<bool>& blankedOut) {
             if (response.isEmpty()) {
                 return;
             }
@@ -1158,25 +1198,34 @@ void CameraOpticalSpectrumDialog::updateChart()
                 return;
             }
             const double floor = 0.05 * channelPeak;
+            blankedOut = QVector<bool>(profile.size(), false);
             for (int i = 0; i < profile.size(); i++)
             {
                 const double r = CameraOpticalSpectrumLibrary::responseAt(response, xValues[i]);
-                profile[i] = (r > floor) ? static_cast<float>(profile[i] / r) : 0.0f;
+                if (r > floor)
+                {
+                    profile[i] = static_cast<float>(profile[i] / r);
+                }
+                else
+                {
+                    profile[i] = 0.0f;
+                    blankedOut[i] = true;
+                }
             }
         };
-        correctChannel(m_displayRed, m_responseRed);
-        correctChannel(m_displayGreen, m_responseGreen);
-        correctChannel(m_displayBlue, m_responseBlue);
+        correctChannel(m_displayRed, m_responseRed, m_displayBlankedRed);
+        correctChannel(m_displayGreen, m_responseGreen, m_displayBlankedGreen);
+        correctChannel(m_displayBlue, m_responseBlue, m_displayBlankedBlue);
     }
     m_warningLabel->setText(displayWarnings.isEmpty() ? QString() : QStringLiteral("⚠ ") + displayWarnings.join(QStringLiteral("; ")));
 
     // The display profiles are already averaged, smoothed and (for luminance)
     // response-corrected above
-    const struct { const QVector<float>* profile; const char* name; QColor color; bool visible; } channelDefs[] = {
-        {&m_displayLuminance, QT_TR_NOOP("Luminance"), Qt::white, m_luminanceCheck->isChecked()},
-        {&m_displayRed, QT_TR_NOOP("Red"), Qt::red, m_redCheck->isChecked()},
-        {&m_displayGreen, QT_TR_NOOP("Green"), Qt::green, m_greenCheck->isChecked()},
-        {&m_displayBlue, QT_TR_NOOP("Blue"), QColor(80, 130, 255), m_blueCheck->isChecked()},
+    const struct { const QVector<float>* profile; const QVector<bool>* blanked; const char* name; QColor color; bool visible; } channelDefs[] = {
+        {&m_displayLuminance, &m_displayBlankedLum, QT_TR_NOOP("Luminance"), Qt::white, m_luminanceCheck->isChecked()},
+        {&m_displayRed, &m_displayBlankedRed, QT_TR_NOOP("Red"), Qt::red, m_redCheck->isChecked()},
+        {&m_displayGreen, &m_displayBlankedGreen, QT_TR_NOOP("Green"), Qt::green, m_greenCheck->isChecked()},
+        {&m_displayBlue, &m_displayBlankedBlue, QT_TR_NOOP("Blue"), QColor(80, 130, 255), m_blueCheck->isChecked()},
     };
 
     // Normalisation factor from the maximum of the visible smoothed profiles
@@ -1245,27 +1294,56 @@ void CameraOpticalSpectrumDialog::updateChart()
             continue;
         }
         const QVector<float>& smoothed = *def.profile;
-        auto* series = new QLineSeries();
-        series->setName(tr(def.name));
-        QPen pen(def.color);
-        pen.setWidth(1);
-        series->setPen(pen);
-        QList<QPointF> points;
-        points.reserve(length);
+        const bool haveBlanked = !def.blanked->isEmpty() && (def.blanked->size() == length);
+        // Blanked samples (no response coverage there) break the line into segments so
+        // the chart shows a gap - "no measurement" - rather than a false zero
+        QList<QList<QPointF>> segments;
+        QList<QPointF> current;
         for (int i = 0; i < length; i++)
         {
+            if (haveBlanked && def.blanked->at(i))
+            {
+                if (!current.isEmpty())
+                {
+                    segments.append(current);
+                    current.clear();
+                }
+                continue;
+            }
             double v = smoothed[i] * normFactor;
             if (logY) {
                 v = qMax(v, plotFloor);
             }
-            points.append(QPointF(xValues[i], v));
+            current.append(QPointF(xValues[i], v));
             minY = qMin(minY, v);
             maxY = qMax(maxY, v);
         }
-        series->replace(points);
-        m_chart->addSeries(series);
-        series->attachAxis(m_axisX);
-        series->attachAxis(activeAxisY());
+        if (!current.isEmpty()) {
+            segments.append(current);
+        }
+
+        bool firstSegment = true;
+        for (const QList<QPointF>& segment : segments)
+        {
+            auto* series = new QLineSeries();
+            series->setName(tr(def.name));
+            QPen pen(def.color);
+            pen.setWidth(1);
+            series->setPen(pen);
+            series->replace(segment);
+            m_chart->addSeries(series);
+            series->attachAxis(m_axisX);
+            series->attachAxis(activeAxisY());
+            // One legend entry per channel, however many segments the gaps produce
+            if (!firstSegment)
+            {
+                const auto markers = m_chart->legend()->markers(series);
+                for (QLegendMarker* marker : markers) {
+                    marker->setVisible(false);
+                }
+            }
+            firstSegment = false;
+        }
     }
 
     // Show what background subtraction removed, so an inflated estimate (trace glow or
@@ -2247,6 +2325,130 @@ void CameraOpticalSpectrumDialog::finishCalibration()
         applyCalibration(calibration, setZeroOrder);
     }
     setCalibrationMode(false);
+}
+
+// Solves the wavelength scale from the spectrum itself and offers it for confirmation.
+// Deliberately not automatic: a wrong solve would silently invalidate every wavelength the
+// user reads off the chart, so the evidence (identified lines, residual, runner-up margin)
+// is shown and the existing calibration is only replaced on an explicit Apply.
+void CameraOpticalSpectrumDialog::autoCalibrate()
+{
+    const QVector<float>& profile = !m_displayLuminanceRaw.isEmpty()
+        ? m_displayLuminanceRaw
+        : m_displayLuminance;
+    if (profile.size() < 64)
+    {
+        QMessageBox::information(this, tr("Auto calibrate"), tr("No spectrum to solve from."));
+        return;
+    }
+
+    // Candidate lines: the user's selection when they have made one (they usually know what
+    // the source is, and a focused list is both faster and far less prone to coincidental
+    // matches), otherwise every known line
+    QVector<double> catalogNm;
+    QString catalogDescription;
+    const QVector<CameraOpticalSpectrumRefLine> selected = CameraOpticalSpectrumExtractor::selectedReferenceLines(
+        m_settings.m_opticalSpectrumRefLines, m_settings.m_opticalSpectrumCustomLines);
+    if (selected.size() >= 3)
+    {
+        for (const CameraOpticalSpectrumRefLine& line : selected) {
+            catalogNm.append(line.m_nm);
+        }
+        catalogDescription = tr("%1 selected reference lines").arg(selected.size());
+    }
+    else
+    {
+        for (const CameraOpticalSpectrumRefLineSet& set : CameraOpticalSpectrumExtractor::referenceLineSets())
+        {
+            for (const CameraOpticalSpectrumRefLine& line : set.m_lines) {
+                catalogNm.append(line.m_nm);
+            }
+        }
+        for (const CameraOpticalSpectrumRefLine& line : CameraOpticalSpectrumExtractor::parseCustomLines(
+                m_settings.m_opticalSpectrumCustomLines)) {
+            catalogNm.append(line.m_nm);
+        }
+        catalogDescription = tr("all %1 known lines").arg(catalogNm.size());
+    }
+
+    CameraOpticalSpectrumAutoCalibrationOptions options;
+    options.m_axisOrigin = m_spectrumData.m_axisOrigin;
+    // The current dispersion is the strongest prior available: if it is roughly right the
+    // search is both quick and trustworthy. Uncalibrated, the range has to be wide open.
+    if (m_settings.m_opticalSpectrumDispersion > 0.0)
+    {
+        options.m_minDispersion = m_settings.m_opticalSpectrumDispersion / 2.0;
+        options.m_maxDispersion = m_settings.m_opticalSpectrumDispersion * 2.0;
+    }
+
+    // Only use the template when it is the one currently selected and loaded
+    const bool templateReady = !m_referencePoints.isEmpty()
+        && (m_referenceLoadedKey == m_settings.m_opticalSpectrumReferenceTemplate);
+
+    QApplication::setOverrideCursor(Qt::WaitCursor);
+    const CameraOpticalSpectrumAutoCalibration solution = CameraOpticalSpectrumExtractor::autoCalibrate(
+        profile, catalogNm, templateReady ? m_referencePoints : QVector<QPointF>(), options);
+    QApplication::restoreOverrideCursor();
+
+    if (!solution.m_valid)
+    {
+        QMessageBox::information(this, tr("Auto calibrate"),
+            tr("Could not solve the wavelength scale.\n\n"
+               "Searched %1 using %2%3.\n\n"
+               "It needs identifiable lines in the spectrum: try a brighter source, more frame averaging or "
+               "a little smoothing, select the line set matching the source, and check that the dispersion "
+               "is roughly right (it bounds the search) or set it to 0 to search a wide range.")
+                .arg(catalogDescription)
+                .arg(templateReady ? tr("the %1 template").arg(
+                        CameraOpticalSpectrumLibrary::templateDisplayName(m_settings.m_opticalSpectrumReferenceTemplate))
+                    : tr("line matching only"))
+                .arg(m_settings.m_opticalSpectrumDispersion > 0.0
+                    ? tr(", dispersion %1-%2 nm/px").arg(options.m_minDispersion, 0, 'f', 3).arg(options.m_maxDispersion, 0, 'f', 3)
+                    : QString()));
+        return;
+    }
+
+    const QString direction = solution.m_redPositive
+        ? tr("red towards +pixels")
+        : tr("red towards -pixels");
+    QString message = tr("Dispersion: %1 nm/px (%2)\n"
+                         "Zero order: %3 px%4\n"
+                         "Range: %5 - %6 nm\n\n"
+                         "Identified %7 lines, residual %8 nm\n"
+                         "Method: %9 (score %10, margin %11)")
+        .arg(solution.m_dispersion, 0, 'f', 4)
+        .arg(direction)
+        .arg(solution.m_zeroOrderPx, 0, 'f', 1)
+        .arg(((solution.m_zeroOrderPx < m_spectrumData.m_axisOrigin)
+              || (solution.m_zeroOrderPx > m_spectrumData.m_axisOrigin + profile.size()))
+             ? tr(" (outside the profile)") : QString())
+        .arg(std::min(solution.m_startNm, solution.m_endNm), 0, 'f', 1)
+        .arg(std::max(solution.m_startNm, solution.m_endNm), 0, 'f', 1)
+        .arg(solution.m_matchedLines)
+        .arg(solution.m_rmsNm, 0, 'f', 2)
+        .arg(solution.m_method)
+        .arg(solution.m_score, 0, 'f', 3)
+        .arg(solution.m_margin, 0, 'f', 3);
+    if (solution.m_ambiguous)
+    {
+        message += tr("\n\n⚠ A rival solution scored almost as well, so this one may be wrong. "
+                      "Check that the reference lines land on real features before trusting it - "
+                      "narrowing the dispersion or selecting the line set for this source helps.");
+    }
+    message += tr("\n\nApply this calibration?");
+
+    const QMessageBox::StandardButton answer = QMessageBox::question(this, tr("Auto calibrate"), message,
+        QMessageBox::Apply | QMessageBox::Cancel, QMessageBox::Apply);
+    if (answer != QMessageBox::Apply) {
+        return;
+    }
+
+    CameraOpticalSpectrumCalibration calibration;
+    calibration.m_valid = true;
+    calibration.m_dispersion = solution.m_dispersion;
+    calibration.m_redPositive = solution.m_redPositive;
+    calibration.m_zeroOrderPx = solution.m_zeroOrderPx;
+    applyCalibration(calibration, true);
 }
 
 void CameraOpticalSpectrumDialog::applyCalibration(const CameraOpticalSpectrumCalibration& calibration, bool setZeroOrder)

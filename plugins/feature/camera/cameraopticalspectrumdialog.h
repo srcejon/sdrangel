@@ -127,6 +127,7 @@ private:
     void handleReferenceDownload(QNetworkReply* reply);
     void updateReferenceLabel(const QString& status = QString());
     [[nodiscard]] static QString referenceCachePath(const QString& key);
+    void autoCalibrate();
     void setCalibrationMode(bool active);
     void handleCalibrationClick(const QPointF& viewportPos);
     void finishCalibration();
@@ -189,6 +190,12 @@ private:
     // range or the hard blank->signal step at its edges reads as a strong feature.
     int m_displayValidFirst = 0;       ///< First profile index with response coverage
     int m_displayValidLast = -1;       ///< Last profile index with response coverage; full range when no correction
+    // Per-sample blanked flags per profile (empty = nothing blanked): the chart renders
+    // blanked samples as a gap in the line rather than a false zero
+    QVector<bool> m_displayBlankedLum;
+    QVector<bool> m_displayBlankedRed;
+    QVector<bool> m_displayBlankedGreen;
+    QVector<bool> m_displayBlankedBlue;
 
     QPushButton* m_referenceButton;
     QLabel* m_referenceLabel;
@@ -209,6 +216,7 @@ private:
     ButtonSwitch* m_applyResponseCheck;
     QToolButton* m_responseFileButton;
     QPushButton* m_calibrateButton;
+    QPushButton* m_autoCalibrateButton;
     QVector<QPointF> m_calibrationClicks; ///< x = along-axis image pixel, y = wavelength in nm
     ButtonSwitch* m_zeroOrderAutoCheck;
     QDoubleSpinBox* m_zeroOrderSpin;

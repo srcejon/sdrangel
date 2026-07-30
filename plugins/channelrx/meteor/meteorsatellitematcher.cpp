@@ -747,6 +747,10 @@ public:
                     if ((entry.m_noradId == match.m_id)
                         && buildCatalogTrack(entry, observation, track))
                     {
+                        track.m_prediction = match.m_prediction;
+                        track.m_matchScorePercent = match.m_scorePercent;
+                        track.m_endpointResidualRMSHz =
+                            match.m_endpointResidualRMSHz;
                         break;
                     }
                 }
@@ -2970,6 +2974,7 @@ private:
         result.m_source = QStringLiteral("TLE");
         result.m_id = entry.m_noradId;
         result.m_label = entry.m_name;
+        result.m_objectType = entry.m_objectType;
         result.m_points.reserve(segmentCount + 1);
 
         try

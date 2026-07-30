@@ -103,6 +103,10 @@ public:
         QString m_source;
         QString m_id;
         QString m_label;
+        QString m_objectType;
+        MovingTargetMatcher::Prediction m_prediction;
+        double m_matchScorePercent = 0.0;
+        double m_endpointResidualRMSHz = 0.0;
         QVector<TrackPoint> m_points;
 
         bool isValid() const

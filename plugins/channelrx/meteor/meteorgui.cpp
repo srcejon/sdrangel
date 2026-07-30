@@ -114,6 +114,7 @@ namespace {
     // 370-450 km annulus that allowance covers is where long-range forward-scatter
     // aircraft sweeps originate. The Doppler scorer arbitrates afterwards.
     constexpr double MinimumAircraftElevationDegrees = -1.0;
+    constexpr double MeanEarthRadiusM = 6371008.8;
     constexpr int ManualTransmitterPresetIndex = 0;
     constexpr char SpaceTrackSettingsGroup[] = "Meteor/SpaceTrack";
     constexpr char SpaceTrackUsernameKey[] = "username";
@@ -143,6 +144,76 @@ namespace {
     };
     constexpr int TransmitterPresetCount =
         (int) (sizeof(TransmitterPresets) / sizeof(TransmitterPresets[0]));
+
+    double greatCircleDistanceM(
+        double latitude1Degrees,
+        double longitude1Degrees,
+        double latitude2Degrees,
+        double longitude2Degrees)
+    {
+        const double latitude1 = latitude1Degrees * M_PI / 180.0;
+        const double latitude2 = latitude2Degrees * M_PI / 180.0;
+        const double deltaLatitude =
+            (latitude2Degrees - latitude1Degrees) * M_PI / 180.0;
+        const double deltaLongitude =
+            (longitude2Degrees - longitude1Degrees) * M_PI / 180.0;
+        const double sinHalfLatitude = std::sin(deltaLatitude * 0.5);
+        const double sinHalfLongitude = std::sin(deltaLongitude * 0.5);
+        const double haversine =
+            sinHalfLatitude * sinHalfLatitude
+            + std::cos(latitude1) * std::cos(latitude2)
+                * sinHalfLongitude * sinHalfLongitude;
+
+        return 2.0 * MeanEarthRadiusM * std::asin(
+            std::sqrt(std::clamp(haversine, 0.0, 1.0)));
+    }
+
+    double initialBearingDegrees(
+        double latitude1Degrees,
+        double longitude1Degrees,
+        double latitude2Degrees,
+        double longitude2Degrees)
+    {
+        const double latitude1 = latitude1Degrees * M_PI / 180.0;
+        const double latitude2 = latitude2Degrees * M_PI / 180.0;
+        const double deltaLongitude =
+            (longitude2Degrees - longitude1Degrees) * M_PI / 180.0;
+        const double y = std::sin(deltaLongitude) * std::cos(latitude2);
+        const double x =
+            std::cos(latitude1) * std::sin(latitude2)
+            - std::sin(latitude1) * std::cos(latitude2)
+                * std::cos(deltaLongitude);
+        const double bearing = std::atan2(y, x) * 180.0 / M_PI;
+
+        return std::fmod(bearing + 360.0, 360.0);
+    }
+
+    QString compassDirection(double bearingDegrees)
+    {
+        static const char *Directions[] = {
+            "N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE",
+            "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"
+        };
+        const int index =
+            ((int) std::floor((bearingDegrees + 11.25) / 22.5)) % 16;
+
+        return QString::fromLatin1(Directions[index]);
+    }
+
+    QString satelliteObjectTypeDescription(const QString& objectType)
+    {
+        if (objectType == QStringLiteral("PAY")) {
+            return QStringLiteral("Payload");
+        }
+        if (objectType == QStringLiteral("R/B")) {
+            return QStringLiteral("Rocket body");
+        }
+        if (objectType == QStringLiteral("DEB")) {
+            return QStringLiteral("Debris");
+        }
+
+        return objectType.isEmpty() ? QStringLiteral("Unknown") : objectType;
+    }
 
     struct SweepClassification
     {
@@ -1292,12 +1363,87 @@ void MeteorGUI::sendSatelliteTrackToMap(
     const QString label = track.m_label.isEmpty()
         ? QStringLiteral("NORAD %1").arg(track.m_id)
         : QStringLiteral("%1 [%2]").arg(track.m_label, track.m_id);
-    const QString details = tr(
-        "%1\nDetection window: %2 to %3 UTC")
-        .arg(
-            label,
-            first.m_dateTimeUtc.toString(Qt::ISODateWithMs),
-            last.m_dateTimeUtc.toString(Qt::ISODateWithMs));
+    double minimumAltitudeM = first.m_altitudeM;
+    double maximumAltitudeM = first.m_altitudeM;
+    double groundDistanceM = 0.0;
+
+    for (int i = 1; i < track.m_points.size(); ++i)
+    {
+        const MeteorSatelliteMatcher::TrackPoint& previous =
+            track.m_points[i - 1];
+        const MeteorSatelliteMatcher::TrackPoint& point = track.m_points[i];
+        minimumAltitudeM = std::min(minimumAltitudeM, point.m_altitudeM);
+        maximumAltitudeM = std::max(maximumAltitudeM, point.m_altitudeM);
+        groundDistanceM += greatCircleDistanceM(
+            previous.m_latitudeDegrees,
+            previous.m_longitudeDegrees,
+            point.m_latitudeDegrees,
+            point.m_longitudeDegrees);
+    }
+
+    const MeteorSatelliteMatcher::TrackPoint& middle =
+        track.m_points[track.m_points.size() / 2];
+    const double durationS = std::max(
+        0.0,
+        first.m_dateTimeUtc.msecsTo(last.m_dateTimeUtc) / 1000.0);
+    const double bearingDegrees = initialBearingDegrees(
+        first.m_latitudeDegrees,
+        first.m_longitudeDegrees,
+        last.m_latitudeDegrees,
+        last.m_longitudeDegrees);
+    QStringList detailLines {
+        label,
+        tr("Type: %1").arg(
+            satelliteObjectTypeDescription(track.m_objectType)),
+        tr("Altitude: %1 km (%2 to %3 km)")
+            .arg(middle.m_altitudeM / 1000.0, 0, 'f', 1)
+            .arg(minimumAltitudeM / 1000.0, 0, 'f', 1)
+            .arg(maximumAltitudeM / 1000.0, 0, 'f', 1),
+        tr("Heading: %1 (%2 deg)")
+            .arg(compassDirection(bearingDegrees))
+            .arg(bearingDegrees, 0, 'f', 1)
+    };
+
+    if (durationS > 0.0)
+    {
+        detailLines.append(
+            tr("Ground track: %1 km at %2 km/s")
+                .arg(groundDistanceM / 1000.0, 0, 'f', 1)
+                .arg(groundDistanceM / durationS / 1000.0, 0, 'f', 2));
+    }
+
+    if (track.m_prediction.m_valid)
+    {
+        detailLines.append(
+            tr("Predicted Doppler: %1 to %2 Hz (drift %3 Hz)")
+                .arg(
+                    track.m_prediction.m_startFrequencyOffsetHz,
+                    0,
+                    'f',
+                    1)
+                .arg(
+                    track.m_prediction.m_endFrequencyOffsetHz,
+                    0,
+                    'f',
+                    1)
+                .arg(track.m_prediction.m_frequencyDriftHz, 0, 'f', 1));
+    }
+
+    detailLines.append(
+        tr("Match: %1% (endpoint RMS %2 Hz)")
+            .arg(track.m_matchScorePercent, 0, 'f', 1)
+            .arg(track.m_endpointResidualRMSHz, 0, 'f', 1));
+    detailLines.append(
+        tr("Start: %1, %2 at %3 UTC")
+            .arg(first.m_latitudeDegrees, 0, 'f', 4)
+            .arg(first.m_longitudeDegrees, 0, 'f', 4)
+            .arg(first.m_dateTimeUtc.toString(Qt::ISODateWithMs)));
+    detailLines.append(
+        tr("End: %1, %2 at %3 UTC")
+            .arg(last.m_latitudeDegrees, 0, 'f', 4)
+            .arg(last.m_longitudeDegrees, 0, 'f', 4)
+            .arg(last.m_dateTimeUtc.toString(Qt::ISODateWithMs)));
+    const QString details = detailLines.join(QLatin1Char('\n'));
 
     for (MessageQueue *messageQueue : messageQueues)
     {

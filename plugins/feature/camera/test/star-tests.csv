@@ -10,6 +10,8 @@ image,time,latitude,longitude,altitude,azimuth,elevation,roll,fov,projection,cx,
 "images/stars-narrow-9.jpg",2025-07-17 18:22:56,3.50139,72.9028,0.0,201.95,60.22,56.06,1.29,"rectilinear",0.0,0.0,0.0,"11 Sgr",17.0,3,0,0,0,0,,,"11 Sgr:540:915"
 "images/vega.jpg",2026-07-28 23:50:38,51.366299,-0.125000,100,243.3083,68.7861,0.0,1.29,"rectilinear",0.0,0.0,0.0,"Vega",20.0,4,0,0,0,0,,,"Vega:827:1200"
 "images/vega.jpg",,,,,,,,,,,,,"Vega",20.0,4,0,0,0,0,,,"Vega:827:1200"
+"images/hip114104.jpg",,,,,,,,,,,,,"1    Cas",20.0,3,0,0,0,0,,,"1    Cas:564:795,HIP 114163:253:1158,2    Cas:1026:1021"
+"images/hip113561.jpg",,,,,,,,,,,,,"HIP 113561",20.0,3,0,0,0,0,,,"HIP 113561:617:773,HIP 113684:575:1151"
 "images/stars-wide-1.jpg",2026-05-09 22:54:53,51.366299,-0.125000,100.0,100.0,81.0,-60.0,165.0,"equidistant fisheye",0.0,0.0,0.0,"Arcturus,Alkaid,Mizar,Alioth,Dubhe",7.0,4,0,0,0,0,,,"Arcturus:2269:2321"
 "images/stars-wide-1.jpg",2026-05-09 22:54:53,51.366299,-0.125000,100.0,0.0,0.0,0.0,165.0,"equidistant fisheye",0.0,0.0,0.0,"Arcturus,Alkaid,Mizar,Alioth,Dubhe",7.0,1,0,0,0,0,,,"Arcturus:2269:2321"
 "images/stars-wide-1.jpg",2026-05-09 22:54:53,51.366299,-0.125000,100.0,0.0,0.0,0.0,0.0,"equidistant fisheye",0.0,0.0,0.0,"Arcturus,Alkaid,Mizar,Alioth,Dubhe",7.0,0,0,0,0,0,,,"Arcturus:2269:2321"

@@ -907,8 +907,8 @@ void DSCDemodGUI::sendAreaToMapFeature(const QString& name, const QString& addre
                 QString image = QString("none");
                 swgMapItem->setImage(new QString(image));
                 swgMapItem->setImageRotation(0);
-                swgMapItem->setText(new QString(text));                   // Not used - label is used instead for now
-                swgMapItem->setLabel(new QString(text));
+                swgMapItem->setText(new QString(text));
+                swgMapItem->setLabel(new QString(name));
                 swgMapItem->setAltitudeReference(0);
                 QList<SWGSDRangel::SWGMapCoordinate *> *coords = new QList<SWGSDRangel::SWGMapCoordinate *>();
 

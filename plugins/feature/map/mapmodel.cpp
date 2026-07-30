@@ -41,6 +41,8 @@ QVariant MapModel::data(const QModelIndex &index, int role) const
         return QVariant::fromValue(m_items[row]->m_name);
     case labelRole:
         return QVariant::fromValue(m_items[row]->m_label);
+    case textRole:
+        return QVariant::fromValue(m_items[row]->m_text);
     case positionRole:
     {
         // Coordinates to display the label at
@@ -216,6 +218,7 @@ QHash<int, QByteArray> MapModel::roleNames() const
     roles[labelRole] = "label";
     roles[positionRole] = "position";
     roles[mapImageMinZoomRole] = "mapImageMinZoom";
+    roles[textRole] = "details";
     return roles;
 }
 
@@ -376,6 +379,28 @@ MapItem *PolylineMapModel::newMapItem(const QObject *sourcePipe, const QString &
     return new PolylineMapItem(sourcePipe, group, itemSettings, mapItem);
 }
 
+void PolylineMapModel::add(MapItem *item)
+{
+    m_selected.append(false);
+    MapModel::add(item);
+}
+
+void PolylineMapModel::remove(MapItem *item)
+{
+    const int row = m_items.indexOf(item);
+    if (row >= 0)
+    {
+        m_selected.removeAt(row);
+        MapModel::remove(item);
+    }
+}
+
+void PolylineMapModel::removeAll()
+{
+    MapModel::removeAll();
+    m_selected.clear();
+}
+
 QVariant PolylineMapModel::data(const QModelIndex &index, int role) const
 {
     int row = index.row();
@@ -395,9 +420,31 @@ QVariant PolylineMapModel::data(const QModelIndex &index, int role) const
         return QVariant::fromValue(polylineItem->m_polyline);
     case boundsRole:
         return QVariant::fromValue(polylineItem->m_bounds);
+    case mapTextRole:
+    {
+        const QString label = polylineItem->m_label.isEmpty() ? polylineItem->m_name : polylineItem->m_label;
+        return QVariant::fromValue(m_selected[row] && !polylineItem->m_text.isEmpty() ? polylineItem->m_text : label);
+    }
+    case selectedRole:
+        return QVariant::fromValue(m_selected[row]);
     default:
         return MapModel::data(index, role);
     }
+}
+
+bool PolylineMapModel::setData(const QModelIndex &index, const QVariant& value, int role)
+{
+    const int row = index.row();
+    if ((row < 0) || (row >= m_items.count())) {
+        return false;
+    }
+    if (role == selectedRole)
+    {
+        m_selected[row] = value.toBool();
+        emit dataChanged(index, index, {mapTextRole, selectedRole});
+        return true;
+    }
+    return MapModel::setData(index, value, role);
 }
 
 void PolylineMapModel::update3D(MapItem *item)

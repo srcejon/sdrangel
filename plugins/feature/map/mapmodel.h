@@ -46,7 +46,8 @@ public:
         labelRole = Qt::UserRole + 3,
         positionRole = Qt::UserRole + 4,
         mapImageMinZoomRole = Qt::UserRole + 5,
-        lastRole = Qt::UserRole + 6
+        textRole = Qt::UserRole + 6,
+        lastRole = Qt::UserRole + 7
     };
 
     MapModel(MapGUI *gui) :
@@ -170,6 +171,8 @@ public:
         lineColorRole = MapModel::lastRole + 0,
         coordinatesRole = MapModel::lastRole + 1,
         boundsRole =  MapModel::lastRole + 2,
+        mapTextRole = MapModel::lastRole + 3,
+        selectedRole = MapModel::lastRole + 4
     };
 
     PolylineMapModel(MapGUI *gui) :
@@ -182,14 +185,23 @@ public:
         roles[lineColorRole] = "lineColor";
         roles[coordinatesRole] = "coordinates";
         roles[boundsRole] = "bounds";
+        roles[mapTextRole] = "mapText";
+        roles[selectedRole] = "selected";
         return roles;
     }
 
+    void add(MapItem *item) override;
+    void remove(MapItem *item) override;
+    void removeAll() override;
     QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const override;
+    bool setData(const QModelIndex &index, const QVariant& value, int role = Qt::EditRole) override;
 
 protected:
     void update3D(MapItem *item) override;
     MapItem *newMapItem(const QObject *sourcePipe, const QString &group, MapSettings::MapItemSettings *itemSettings, SWGSDRangel::SWGMapItem *mapItem) override;
+
+private:
+    QList<bool> m_selected;
 };
 
 class MeshMapModel : public MapModel {

@@ -2086,9 +2086,9 @@ void SIDGUI::on_showPaths_clicked()
                         QString image = QString("none");
                         swgMapItem->setImage(new QString(image));
                         swgMapItem->setImageRotation(0);
-                        swgMapItem->setText(new QString(details));   // Not used - label is used instead for now
+                        swgMapItem->setText(new QString(details));
                         swgMapItem->setFixedPosition(true);
-                        swgMapItem->setLabel(new QString(details));
+                        swgMapItem->setLabel(new QString(name));
                         swgMapItem->setAltitudeReference(0);
                         QList<SWGSDRangel::SWGMapCoordinate *> *coords = new QList<SWGSDRangel::SWGMapCoordinate *>();
 

@@ -63,6 +63,7 @@ protected:
 
     QString m_name;                     // Unique id
     QString m_label;
+    QString m_text;                     // Detailed text shown when the item is selected
     QDateTime m_labelDateTime;          // Date & time from which this label is valid from (for 3D map). Invalid date/time is forever
     float m_latitude;                   // Position for label
     float m_longitude;
@@ -116,7 +117,6 @@ protected:
     QDateTime m_orientationDateTime;
     QString m_image;
     int m_imageRotation;
-    QString m_text;
     QList<qint64> m_frequencies;        // Frequencies that can be tuned (currently only extracted from text)
     QStringList m_frequencyStrings;
     bool m_fixedPosition;               // Don't record/display track

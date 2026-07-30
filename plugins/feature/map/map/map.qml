@@ -227,19 +227,29 @@ Item {
         id: polylineNameComponent
         MapQuickItem {
             coordinate: position
-            anchorPoint.x: polylineText.width/2
-            anchorPoint.y: polylineText.height/2
+            anchorPoint.x: polylineBubble.width/2
+            anchorPoint.y: polylineBubble.height/2
             zoomLevel: mapZoomLevel > 11 ? mapZoomLevel : 11
-            sourceItem: Grid {
-                columns: 1
-                Grid {
-                    layer.enabled: smoothing
-                    layer.smooth: smoothing
-                    horizontalItemAlignment: Grid.AlignHCenter
-                    Text {
-                        id: polylineText
-                        text: label
-                        textFormat: TextEdit.RichText
+            sourceItem: Rectangle {
+                id: polylineBubble
+                color: selected ? "lightgreen" : "transparent"
+                border.width: selected ? 1 : 0
+                width: polylineText.width + (selected ? 10 : 0)
+                height: polylineText.height + (selected ? 10 : 0)
+                radius: 5
+                MouseArea {
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    onClicked: selected = !selected
+                }
+                // Keep text above the MouseArea so rich-text links remain clickable.
+                Text {
+                    id: polylineText
+                    anchors.centerIn: parent
+                    text: mapText
+                    textFormat: TextEdit.RichText
+                    onLinkActivated: function(link) {
+                        mapModel.link(link)
                     }
                 }
             }

@@ -57,6 +57,12 @@ void MapItem::update(SWGSDRangel::SWGMapItem *mapItem)
     } else {
         m_label = "";
     }
+    if (mapItem->getText()) {
+        m_text = *mapItem->getText();
+        m_text.replace("\n", "<br>");  // Convert to HTML
+    } else {
+        m_text = "";
+    }
     if (mapItem->getLabelDateTime()) {
         m_labelDateTime = QDateTime::fromString(*mapItem->getLabelDateTime(), Qt::ISODateWithMs);
     } else {
@@ -101,12 +107,6 @@ void ObjectMapItem::update(SWGSDRangel::SWGMapItem *mapItem)
     }
     m_image = *mapItem->getImage();
     m_imageRotation = mapItem->getImageRotation();
-    QString *text = mapItem->getText();
-    if (text != nullptr) {
-        m_text = text->replace("\n", "<br>");  // Convert to HTML
-    } else {
-        m_text = "";
-    }
     if (mapItem->getModel()) {
         m_model = *mapItem->getModel();
     } else {

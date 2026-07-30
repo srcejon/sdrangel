@@ -1267,7 +1267,7 @@ void MapGUI::addAirspace(const Airspace *airspace, const QString& group, int cnt
     QString image = QString("none");
     airspaceMapItem.setImage(new QString(image));
     airspaceMapItem.setImageRotation(0);
-    airspaceMapItem.setText(new QString(details));   // Not used - label is used instead for now
+    airspaceMapItem.setText(new QString(details));
     airspaceMapItem.setFixedPosition(true);
     airspaceMapItem.setLabel(new QString(details));
     airspaceMapItem.setAltitudeReference(0);

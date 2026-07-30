@@ -160,8 +160,11 @@ QJsonObject CZML::update(PolygonMapItem *mapItem)
     };
     obj.insert("position", position);
 
+    const QString label = mapItem->m_label.isEmpty() ? mapItem->m_name : mapItem->m_label;
+    const QString description = mapItem->m_text.isEmpty() ? label : mapItem->m_text;
+    obj.insert("name", label);
     obj.insert("polygon", polygon);
-    obj.insert("description", mapItem->m_label);
+    obj.insert("description", description);
 
     //qDebug() << "Polygon " << obj;
     return obj;
@@ -237,8 +240,11 @@ QJsonObject CZML::update(PolylineMapItem *mapItem)
     };
     obj.insert("position", position);
 
+    const QString label = mapItem->m_label.isEmpty() ? mapItem->m_name : mapItem->m_label;
+    const QString description = mapItem->m_text.isEmpty() ? label : mapItem->m_text;
+    obj.insert("name", label);
     obj.insert("polyline", polyline);
-    obj.insert("description", mapItem->m_label);
+    obj.insert("description", description);
 
     //qDebug() << "Polyline " << obj;
     return obj;
@@ -969,7 +975,9 @@ QJsonObject CZML::update(ObjectMapItem *mapItem, bool isTarget, bool isSelected)
         }
 
         // Description
-        QString description = mapItem->m_text;
+        QString description = mapItem->m_text.isEmpty()
+            ? (mapItem->m_label.isEmpty() ? mapItem->m_name : mapItem->m_label)
+            : mapItem->m_text;
         if (   !existingId
             || (description != state.m_description)
             )

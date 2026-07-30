@@ -1146,6 +1146,8 @@ VORLocalizerGUI::VORLocalizerGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISe
 	connect(rollupContents, SIGNAL(widgetRolled(QWidget*,bool)), this, SLOT(onWidgetRolled(QWidget*,bool)));
 
     ui->map->setAttribute(Qt::WA_AcceptTouchEvents, true);
+    // Keep handled map wheel events from propagating to the enclosing QMdiArea.
+    ui->map->setAttribute(Qt::WA_NoMousePropagation, true);
 
     ui->map->rootContext()->setContextProperty("vorModel", &m_vorModel);
 #if (QT_VERSION < QT_VERSION_CHECK(6, 0, 0))

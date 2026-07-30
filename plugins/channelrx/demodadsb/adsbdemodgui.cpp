@@ -6988,6 +6988,8 @@ ADSBDemodGUI::ADSBDemodGUI(PluginAPI* pluginAPI, DeviceUISet *deviceUISet, Baseb
 
 #ifdef QT_LOCATION_FOUND
     ui->map->setAttribute(Qt::WA_AcceptTouchEvents, true);
+    // Keep handled map wheel events from propagating to the enclosing QMdiArea.
+    ui->map->setAttribute(Qt::WA_NoMousePropagation, true);
 
     ui->map->rootContext()->setContextProperty("aircraftModel", &m_aircraftModel);
     ui->map->rootContext()->setContextProperty("airportModel", &m_airportModel);

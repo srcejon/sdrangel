@@ -264,6 +264,8 @@ MapGUI::MapGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *featur
     m_webServer = new WebServer(m_webPort);
 
     ui->map->setAttribute(Qt::WA_AcceptTouchEvents, true);
+    // Keep handled map wheel events from propagating to the enclosing QMdiArea.
+    ui->map->setAttribute(Qt::WA_NoMousePropagation, true);
 
     m_objectMapFilter.setSourceModel(&m_objectMapModel);
     m_imageMapFilter.setSourceModel(&m_imageMapModel);

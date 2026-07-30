@@ -1150,6 +1150,87 @@ void CameraPlateSolver::SolverContext::mergeBundledBrightStarsIntoCatalog(const 
     }
 }
 
+QString CameraPlateSolver::SolverContext::catalogDepthDiagnostic(
+    const CameraSettings& settings,
+    const PlateSolveCatalogContext& catalogContext,
+    const QSize& imageSize,
+    const Evaluation& best,
+    bool useStartDirection)
+{
+    const int requiredMatches = std::max(1, settings.m_plateSolveMinMatches);
+    // Only speak up when catalogue depth is plausibly the limiting factor. A field holding
+    // plenty of catalogue stars that still failed to match is a pose problem, and should keep
+    // the concise original reason.
+    const int noteThreshold = std::max(2 * requiredMatches, 8);
+    const int visibleCount = static_cast<int>(catalogContext.visibleStars.size());
+
+    // Defensive: if the visible-star list was never populated on this path, a zero count says
+    // nothing about catalogue depth, so stay quiet rather than misattribute the failure.
+    if ((visibleCount == 0) && (catalogContext.catalogStars.size() > noteThreshold)) {
+        return QString();
+    }
+
+    // Prefer the trusted seed direction — it is what the user entered — over a pose that was
+    // just rejected.
+    double centerAzimuth = 0.0;
+    double centerElevation = 0.0;
+    bool haveCenter = false;
+    if (useStartDirection)
+    {
+        centerAzimuth = settings.m_azimuth;
+        centerElevation = settings.m_elevation;
+        haveCenter = true;
+    }
+    else if (best.valid)
+    {
+        centerAzimuth = best.azimuthDegrees;
+        centerElevation = best.elevationDegrees;
+        haveCenter = true;
+    }
+
+    const double fovDegrees = (best.valid && (best.fovDegrees > 0.0))
+        ? best.fovDegrees
+        : static_cast<double>(settings.m_fov);
+
+    if (haveCenter && (fovDegrees > 0.0) && (imageSize.width() > 0) && (imageSize.height() > 0))
+    {
+        // Frame half-diagonal from the long-edge FoV, with a margin so a slightly-off seed
+        // still counts the right neighbourhood.
+        const double shortOverLong =
+            static_cast<double>(std::min(imageSize.width(), imageSize.height()))
+            / static_cast<double>(std::max(imageSize.width(), imageSize.height()));
+        const double halfDiagonal = 0.5 * fovDegrees * std::sqrt(1.0 + shortOverLong * shortOverLong);
+        const double radiusDegrees = std::min(90.0, halfDiagonal * 1.2);
+        const SkyVector center = vectorFromAltAz(centerAzimuth, centerElevation);
+        const double cosRadius = std::cos(degToRad(radiusDegrees));
+        int inFrame = 0;
+        for (const VisibleCatalogStar& star : catalogContext.visibleStars)
+        {
+            if (dot(star.vector, center) >= cosRadius) {
+                ++inFrame;
+            }
+        }
+        if (inFrame < noteThreshold)
+        {
+            return QStringLiteral("only %1 catalogue star%2 in the %3 deg field at magnitude <= %4 - raise the plate-solve maximum magnitude")
+                .arg(inFrame)
+                .arg((inFrame == 1) ? QString() : QStringLiteral("s"))
+                .arg(QString::number(fovDegrees, 'f', 2))
+                .arg(QString::number(settings.m_plateSolveMaxMagnitude, 'f', 1));
+        }
+        return QString();
+    }
+
+    if (visibleCount < noteThreshold)
+    {
+        return QStringLiteral("only %1 catalogue star%2 visible at magnitude <= %3 - raise the plate-solve maximum magnitude")
+            .arg(visibleCount)
+            .arg((visibleCount == 1) ? QString() : QStringLiteral("s"))
+            .arg(QString::number(settings.m_plateSolveMaxMagnitude, 'f', 1));
+    }
+    return QString();
+}
+
 QString CameraPlateSolver::SolverContext::matchSummary(const PlateSolveCatalogContext& catalogContext, const QVector<CameraPipelineStarDetection>& starDetections, const QVector<Match>& matches)
 {
     QStringList parts;

@@ -776,6 +776,12 @@ static void mergeBundledBrightStarsIntoCatalog(const CameraSettings& settings, Q
 
 static QString matchSummary(const PlateSolveCatalogContext& catalogContext, const QVector<CameraPipelineStarDetection>& starDetections, const QVector<Match>& matches);
 
+// Explain a low-match failure that is really a catalogue-depth failure. Returns a note when
+// the magnitude limit leaves too few catalogue stars in the frame for the required match
+// count to be reachable at all, and an empty string when the catalogue is well populated (so
+// a genuine pose failure keeps its concise reason). See the call site in solve().
+static QString catalogDepthDiagnostic(const CameraSettings& settings, const PlateSolveCatalogContext& catalogContext, const QSize& imageSize, const Evaluation& best, bool useStartDirection);
+
 // Post-match collision repair: for each unmatched detection that is (a) closer to a
 // matched catalog star than the current match and (b) substantially brighter (SNR ratio),
 // replace the matched detection with the closer brighter one.  This corrects "brightness-

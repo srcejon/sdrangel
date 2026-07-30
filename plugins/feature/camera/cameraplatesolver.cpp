@@ -722,6 +722,17 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
         result.m_failureReason = QStringLiteral("best pose had too few matches: %1 < %2")
             .arg(best.matchCount)
             .arg(settings.m_plateSolveMinMatches);
+        // "Too few matches" is also what an unreachably shallow catalogue looks like: if the
+        // magnitude limit leaves (almost) nothing inside the frame, no pose can reach the
+        // required match count, yet the symptom reads as a pointing failure. Count the
+        // catalogue stars that could actually land in the frame and name that cause instead
+        // (a 1.3-degree field holds no stars at all brighter than magnitude 5, so the default
+        // limit cannot solve a telescope field).
+        const QString depthNote = catalogDepthDiagnostic(
+            settings, catalogContext, imageSize, best, useStartDirection);
+        if (!depthNote.isEmpty()) {
+            result.m_failureReason += QStringLiteral(" (%1)").arg(depthNote);
+        }
         return result;
     }
     bool skipMultiHypothesisRefine = false;

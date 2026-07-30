@@ -203,7 +203,7 @@ namespace {
     QString satelliteObjectTypeDescription(const QString& objectType)
     {
         if (objectType == QStringLiteral("PAY")) {
-            return QStringLiteral("Payload");
+            return QStringLiteral("Satellite");
         }
         if (objectType == QStringLiteral("R/B")) {
             return QStringLiteral("Rocket body");

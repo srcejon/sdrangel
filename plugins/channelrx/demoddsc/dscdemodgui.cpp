@@ -441,6 +441,7 @@ void DSCDemodGUI::on_filter_editingFinished()
 void DSCDemodGUI::on_clearTable_clicked()
 {
     ui->messages->setRowCount(0);
+    clearAllFromMapFeature();
 }
 
 void DSCDemodGUI::on_udpEnabled_clicked(bool checked)
@@ -973,8 +974,16 @@ void DSCDemodGUI::clearAreaFromMapFeature(const QString& name)
     m_mapItems.removeAll(name);
 }
 
+void DSCDemodGUI::clearAllFromMapFeature()
+{
+    while (!m_mapItems.isEmpty()) {
+        clearAreaFromMapFeature(m_mapItems.constFirst());
+    }
+}
+
 DSCDemodGUI::~DSCDemodGUI()
 {
+    clearAllFromMapFeature();
     delete m_aprsFi;
     delete ui;
 }

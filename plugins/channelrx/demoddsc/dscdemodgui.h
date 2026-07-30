@@ -137,6 +137,7 @@ private:
     void createMenuFindOnMapAction(QMenu* tableContextMenu, const QString& text, const QString& target);
     void sendAreaToMapFeature(const QString& name, const QString& address, const QString& text);
     void clearAreaFromMapFeature(const QString& name);
+    void clearAllFromMapFeature();
 
 private slots:
     void on_deltaFrequency_changed(qint64 value);

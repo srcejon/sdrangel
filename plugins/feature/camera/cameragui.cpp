@@ -53,6 +53,7 @@
 #include <QHeaderView>
 #include <QHBoxLayout>
 #include <QInputDialog>
+#include <QIntValidator>
 #include <QLabel>
 #include <QMenu>
 #include <QMdiSubWindow>
@@ -2515,7 +2516,7 @@ void CameraGUI::displaySettings()
     settingsUI()->cannyEdgeSpin->setValue(m_settings.m_cannyEdge);
     settingsUI()->flipXButton->setChecked(m_settings.m_flipX);
     settingsUI()->flipYButton->setChecked(m_settings.m_flipY);
-    settingsUI()->imageRotationCombo->setCurrentIndex(qBound(0, m_settings.m_imageRotation / 90, 3));
+    settingsUI()->imageRotationCombo->setCurrentText(QString::number(m_settings.m_imageRotation));
     settingsUI()->brightnessSlider->setValue(static_cast<int>(m_settings.m_brightness));
     settingsUI()->brightnessSpin->setValue(static_cast<int>(m_settings.m_brightness));
     settingsUI()->contrastSlider->setValue(static_cast<int>(m_settings.m_contrast * 100.0));
@@ -4118,7 +4119,10 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->cannyEdgeSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_cannyEdgeSpin_valueChanged);
     QObject::connect(settingsUI()->flipXButton, &QCheckBox::toggled, this, &CameraGUI::on_flipXButton_toggled);
     QObject::connect(settingsUI()->flipYButton, &QCheckBox::toggled, this, &CameraGUI::on_flipYButton_toggled);
-    QObject::connect(settingsUI()->imageRotationCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_imageRotationCombo_currentIndexChanged);
+    settingsUI()->imageRotationCombo->lineEdit()->setValidator(
+        new QIntValidator(-360, 360, settingsUI()->imageRotationCombo));
+    QObject::connect(settingsUI()->imageRotationCombo, QOverload<int>::of(&QComboBox::activated), this, &CameraGUI::on_imageRotationCombo_activated);
+    QObject::connect(settingsUI()->imageRotationCombo->lineEdit(), &QLineEdit::editingFinished, this, &CameraGUI::on_imageRotationCombo_editingFinished);
     QObject::connect(settingsUI()->brightnessSlider, &QSlider::valueChanged, this, &CameraGUI::on_brightnessSlider_valueChanged);
     QObject::connect(settingsUI()->brightnessSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_brightnessSpin_valueChanged);
     QObject::connect(settingsUI()->contrastSlider, &QSlider::valueChanged, this, &CameraGUI::on_contrastSlider_valueChanged);
@@ -10809,10 +10813,36 @@ void CameraGUI::on_flipYButton_toggled(bool checked)
     applySetting("flipY");
 }
 
-void CameraGUI::on_imageRotationCombo_currentIndexChanged(int index)
+void CameraGUI::on_imageRotationCombo_activated(int index)
 {
-    m_settings.m_imageRotation = qBound(0, index, 3) * 90;
-    applySetting("imageRotation");
+    bool valid = false;
+    const int rotation = settingsUI()->imageRotationCombo->itemText(index).toInt(&valid);
+    if (valid && (rotation != m_settings.m_imageRotation))
+    {
+        m_settings.m_imageRotation = rotation;
+        applySetting("imageRotation");
+    }
+}
+
+void CameraGUI::on_imageRotationCombo_editingFinished()
+{
+    bool valid = false;
+    int rotation = settingsUI()->imageRotationCombo->currentText().trimmed().toInt(&valid);
+    if (!valid) {
+        rotation = m_settings.m_imageRotation;
+    }
+    rotation = qBound(-360, rotation, 360);
+
+    {
+        const QSignalBlocker blocker(settingsUI()->imageRotationCombo);
+        settingsUI()->imageRotationCombo->setCurrentText(QString::number(rotation));
+    }
+
+    if (rotation != m_settings.m_imageRotation)
+    {
+        m_settings.m_imageRotation = rotation;
+        applySetting("imageRotation");
+    }
 }
 
 void CameraGUI::on_brightnessSlider_valueChanged(int value)

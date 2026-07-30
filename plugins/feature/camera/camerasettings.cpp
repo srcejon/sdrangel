@@ -57,23 +57,9 @@ float normalizeSignedDegrees(float value)
     return value;
 }
 
-int normalizeImageRotation(int value)
+int clampImageRotation(int value)
 {
-    int normalized = value % 360;
-    if (normalized < 0) {
-        normalized += 360;
-    }
-
-    switch (normalized)
-    {
-    case 90:
-    case 180:
-    case 270:
-        return normalized;
-    case 0:
-    default:
-        return 0;
-    }
+    return qBound(-360, value, 360);
 }
 
 float calculateLongEdgeFovDegrees(double sensorWidthMm, double sensorHeightMm, double focalLengthMm)
@@ -1292,7 +1278,7 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readBool(80, &m_flipX, false);
         d.readBool(81, &m_flipY, false);
         d.readS32(214, &m_imageRotation, 0);
-        m_imageRotation = normalizeImageRotation(m_imageRotation);
+        m_imageRotation = clampImageRotation(m_imageRotation);
         m_postProcessWhiteBalanceMode = qBound(m_minNonNegative, m_postProcessWhiteBalanceMode, 2);
         m_postProcessWhiteBalanceRedGain = qBound(m_minWhiteBalanceGain, m_postProcessWhiteBalanceRedGain, m_maxWhiteBalanceGain);
         m_postProcessWhiteBalanceGreenGain = qBound(m_minWhiteBalanceGain, m_postProcessWhiteBalanceGreenGain, m_maxWhiteBalanceGain);
@@ -2531,7 +2517,7 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
         m_flipY = settings.m_flipY;
     }
     if (settingsKeys.contains("imageRotation")) {
-        m_imageRotation = normalizeImageRotation(settings.m_imageRotation);
+        m_imageRotation = clampImageRotation(settings.m_imageRotation);
     }
     if (settingsKeys.contains("contrast")) {
         m_contrast = qBound(m_minWhiteBalanceGain, settings.m_contrast, m_maxFilterAmount);

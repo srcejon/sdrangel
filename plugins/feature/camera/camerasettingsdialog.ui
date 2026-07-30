@@ -3171,33 +3171,39 @@
           <item row="2" column="0">
            <widget class="QLabel" name="imageRotationLabel">
             <property name="text">
-             <string>Rotation</string>
+             <string>Rotation (&#176;)</string>
             </property>
            </widget>
           </item>
           <item row="2" column="1">
            <widget class="QComboBox" name="imageRotationCombo">
+            <property name="editable">
+             <bool>true</bool>
+            </property>
+            <property name="insertPolicy">
+             <enum>QComboBox::NoInsert</enum>
+            </property>
             <property name="toolTip">
-             <string>Rotate the image clockwise</string>
+             <string>Rotate the image clockwise by any whole number of degrees from -360 to 360</string>
             </property>
             <item>
              <property name="text">
-              <string>0°</string>
+              <string>0</string>
              </property>
             </item>
             <item>
              <property name="text">
-              <string>90°</string>
+              <string>90</string>
              </property>
             </item>
             <item>
              <property name="text">
-              <string>180°</string>
+              <string>180</string>
              </property>
             </item>
             <item>
              <property name="text">
-              <string>270°</string>
+              <string>270</string>
              </property>
             </item>
            </widget>

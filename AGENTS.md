@@ -59,8 +59,10 @@ If Qt autogen fails with `libuv process spawn failed: operation not permitted`, 
 ### Camera Star Spectrum Tests
 Build and run the standalone optical spectrum extractor tests on Windows with:
 `cmd /c "C:\PROGRA~1\MICROS~3\2022\COMMUN~1\VC\AUXILI~1\Build\vcvars64.bat && cmake --build --preset default-qt6-windows --target featurecamera_spectrum_tests --parallel"`
-`cmd /c "set PATH=C:\Qt\6.11.0\msvc2022_64\bin;%PATH% && build-qt6\bin\plugins\featurecamera_spectrum_tests.exe"`
+`cmd /c "set PATH=C:\Qt\6.11.1\msvc2022_64\bin;%PATH% && build-qt6\bin\plugins\featurecamera_spectrum_tests.exe"`
 The tests are self-contained (synthetic images, no CSV or catalog data) and exit non-zero on failure.
+
+Use the same Qt version the build was configured against (currently 6.11.1). An older Qt on `PATH` usually still runs, but its install may be missing plugin sets the newer one has - a partial 6.11.0 install with no `plugins\imageformats`, for instance, makes any test that reads or writes a JPEG fail with "Unsupported image format".
 
 ### Camera Star/Plate Solver Tests
 Build the standalone camera star test target on Windows with:
@@ -72,7 +74,7 @@ Profile the standalone camera star/plate solver tests with Visual Studio Diagnos
 The profiling target runs one unprofiled warmup pass, then writes a `.diagsession` under `build-qt6/plugins/feature/camera/test/vs-profile/`. Open that file in Visual Studio's Performance Profiler.
 
 Run the test outside the sandbox so it uses the real user's `%APPDATA%\f4exb\SDRangel\camera` catalog cache. Set the Qt plugin path and runtime DLL paths explicitly:
-`cmd /c "set QT_PLUGIN_PATH=C:\Qt\6.11.0\msvc2022_64\plugins && set PATH=C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v13.2\bin;C:\Users\jon\source\repos\srcejon_sdrangel_fix\external\windows\fftw-3;C:\Users\jon\source\repos\srcejon_sdrangel_fix\external\windows\libsigmf\lib;C:\Users\jon\source\repos\srcejon_sdrangel_fix\build-qt6\bin;C:\Qt\6.11.0\msvc2022_64\bin;C:\Users\jon\source\repos\srcejon_sdrangel_fix\external\windows\opencv4\x64\vc17\bin;%PATH% && build-qt6\bin\plugins\featurecamera_star_tests.exe plugins\feature\camera\test\star-tests.csv"`
+`cmd /c "set QT_PLUGIN_PATH=C:\Qt\6.11.1\msvc2022_64\plugins && set PATH=C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v13.2\bin;C:\Users\jon\source\repos\srcejon_sdrangel_fix\external\windows\fftw-3;C:\Users\jon\source\repos\srcejon_sdrangel_fix\external\windows\libsigmf\lib;C:\Users\jon\source\repos\srcejon_sdrangel_fix\build-qt6\bin;C:\Qt\6.11.1\msvc2022_64\bin;C:\Users\jon\source\repos\srcejon_sdrangel_fix\external\windows\opencv4\x64\vc17\bin;%PATH% && build-qt6\bin\plugins\featurecamera_star_tests.exe plugins\feature\camera\test\star-tests.csv"`
 
 When running from a Codex worktree, replace `C:\Users\jon\source\repos\srcejon_sdrangel_fix` with the current worktree path. If catalog/network behavior is being investigated, add `set QT_FORCE_STDERR_LOGGING=1 && set QT_LOGGING_RULES=*.debug=true;*.warning=true &&` before the `PATH` assignment to show Qt TLS and plate-solver diagnostics.
 

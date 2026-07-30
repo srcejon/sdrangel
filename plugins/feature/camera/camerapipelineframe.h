@@ -234,6 +234,15 @@ struct CameraPipelinePlateSolve
     // already in original-image coordinates.
     bool m_mirrored = false;
     float m_solveTimeMs = 0.0f;    ///< Wall-clock duration of the plate solve for this frame, in milliseconds
+    // Autoguide Phase 0 (passive measurement): the mount's pointing error for this frame —
+    // commanded direction (whatever seeded the solve: rotator follow, embedded metadata or
+    // manual entry) minus the solved direction. The azimuth component is on-sky (multiplied
+    // by cos elevation) so a degree means a degree everywhere. Valid only for solved,
+    // direction-seeded frames.
+    bool m_pointingErrorValid = false;
+    float m_pointingErrorAzDeg = 0.0f;   ///< (commanded − solved) azimuth × cos(el), degrees on-sky
+    float m_pointingErrorElDeg = 0.0f;   ///< (commanded − solved) elevation, degrees
+    float m_pointingErrorRollDeg = 0.0f; ///< (commanded − solved) roll, degrees (field-rotation bookkeeping)
     int m_matchedStars = 0;
     int m_detectedStarsConsidered = 0;
     int m_catalogStarsLoaded = 0;

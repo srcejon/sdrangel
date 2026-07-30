@@ -254,6 +254,9 @@ private:
     double m_lastPlateSolveRmsError = 0.0;
     double m_lastPlateSolveMaxError = 0.0;
     double m_lastPlateSolveTimeMs = 0.0;
+    bool m_lastPlateSolvePointingErrorValid = false;
+    double m_lastPlateSolvePointingErrorAzDeg = 0.0;
+    double m_lastPlateSolvePointingErrorElDeg = 0.0;
     double m_lastPlateSolveAzimuth = 0.0;
     double m_lastPlateSolveElevation = 0.0;
     double m_lastPlateSolveRoll = 0.0;

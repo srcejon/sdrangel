@@ -146,6 +146,9 @@ public:
         float getPlateSolveRmsError() const { return m_plateSolve.m_rmsError; }
         float getPlateSolveMaxError() const { return m_plateSolve.m_maxError; }
         float getPlateSolveTimeMs() const { return m_plateSolve.m_solveTimeMs; }
+        bool getPlateSolvePointingErrorValid() const { return m_plateSolve.m_pointingErrorValid; }
+        float getPlateSolvePointingErrorAzDeg() const { return m_plateSolve.m_pointingErrorAzDeg; }
+        float getPlateSolvePointingErrorElDeg() const { return m_plateSolve.m_pointingErrorElDeg; }
         float getPlateSolveAzimuth() const { return m_plateSolve.m_azimuth; }
         float getPlateSolveElevation() const { return m_plateSolve.m_elevation; }
         float getPlateSolveRoll() const { return m_plateSolve.m_roll; }

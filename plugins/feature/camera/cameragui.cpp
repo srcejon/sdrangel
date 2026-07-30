@@ -917,6 +917,9 @@ bool CameraGUI::handleMessage(const Message& message)
         m_lastPlateSolveRmsError = report.getPlateSolveRmsError();
         m_lastPlateSolveMaxError = report.getPlateSolveMaxError();
         m_lastPlateSolveTimeMs = report.getPlateSolveTimeMs();
+        m_lastPlateSolvePointingErrorValid = report.getPlateSolvePointingErrorValid();
+        m_lastPlateSolvePointingErrorAzDeg = report.getPlateSolvePointingErrorAzDeg();
+        m_lastPlateSolvePointingErrorElDeg = report.getPlateSolvePointingErrorElDeg();
         m_lastPlateSolveAzimuth = report.getPlateSolveAzimuth();
         m_lastPlateSolveElevation = report.getPlateSolveElevation();
         m_lastPlateSolveRoll = report.getPlateSolveRoll();
@@ -953,6 +956,25 @@ bool CameraGUI::handleMessage(const Message& message)
                     ? tr("%1 s").arg(QString::number(m_lastPlateSolveTimeMs / 1000.0, 'f', 1))
                     : tr("%1 ms").arg(QString::number(m_lastPlateSolveTimeMs, 'f', 0)))
                 : "-");
+        if (m_lastPlateSolvePointingErrorValid)
+        {
+            // Arcminutes reads naturally at telescope scale; fall back to degrees when the
+            // mount is off by more than one degree.
+            const auto formatError = [this](double degrees) {
+                if (std::fabs(degrees) >= 1.0) {
+                    return tr("%1°").arg(QString::number(degrees, 'f', 2));
+                }
+                return tr("%1'").arg(QString::number(degrees * 60.0, 'f', 2));
+            };
+            settingsUI()->plateSolvePointingErrorLabel->setText(
+                tr("Az %1  El %2")
+                    .arg(formatError(m_lastPlateSolvePointingErrorAzDeg))
+                    .arg(formatError(m_lastPlateSolvePointingErrorElDeg)));
+        }
+        else
+        {
+            settingsUI()->plateSolvePointingErrorLabel->setText("-");
+        }
 
         settingsUI()->plateSolveApplyButton->setEnabled(m_lastPlateSolved);
         updateImageWidget();
@@ -2060,6 +2082,9 @@ void CameraGUI::resetCameraStatus()
     m_lastPlateSolveRmsError = 0.0;
     m_lastPlateSolveMaxError = 0.0;
     m_lastPlateSolveTimeMs = 0.0;
+    m_lastPlateSolvePointingErrorValid = false;
+    m_lastPlateSolvePointingErrorAzDeg = 0.0;
+    m_lastPlateSolvePointingErrorElDeg = 0.0;
     m_lastPlateSolveAzimuth = 0.0;
     m_lastPlateSolveElevation = 0.0;
     m_lastPlateSolveRoll = 0.0;

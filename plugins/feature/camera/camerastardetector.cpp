@@ -734,6 +734,45 @@ void CameraStarDetector::processNewFrame(const CameraPipelineFramePtr& frame)
         frame->m_plateSolve.m_matchSummary = plateSolveResult.m_matchSummary;
         frame->m_plateSolve.m_profileSummary = plateSolveResult.m_profileSummary;
         frame->m_plateSolve.m_requiredMatches = plateSolveResult.m_requiredMatches;
+
+        // Autoguide Phase 0: measure (do not act on) the mount's pointing error. The solve was
+        // seeded with the commanded direction in solveSettings, so commanded − solved is the
+        // error a future guiding loop would trim out via the rotator controller's offsets.
+        // Logged per solve so a night's run gives the drift rate and noise floor that pick the
+        // loop's gain, deadband and cadence.
+        if (plateSolveResult.m_solved
+            && (static_cast<int>(solveSettings.m_plateSolveStartMode)
+                >= static_cast<int>(CameraSettings::PlateSolveStartFovAzEl)))
+        {
+            const auto wrapDegrees = [](double degrees) {
+                degrees = std::fmod(degrees + 180.0, 360.0);
+                if (degrees < 0.0) {
+                    degrees += 360.0;
+                }
+                return degrees - 180.0;
+            };
+            const double cosElevation = std::cos(plateSolveResult.m_elevationDegrees * (3.14159265358979323846 / 180.0));
+            const double errorAzOnSky =
+                wrapDegrees(static_cast<double>(solveSettings.m_azimuth) - plateSolveResult.m_azimuthDegrees) * cosElevation;
+            const double errorEl = static_cast<double>(solveSettings.m_elevation) - plateSolveResult.m_elevationDegrees;
+            const double errorRoll = wrapDegrees(static_cast<double>(solveSettings.m_roll) - plateSolveResult.m_rollDegrees);
+            frame->m_plateSolve.m_pointingErrorValid = true;
+            frame->m_plateSolve.m_pointingErrorAzDeg = static_cast<float>(errorAzOnSky);
+            frame->m_plateSolve.m_pointingErrorElDeg = static_cast<float>(errorEl);
+            frame->m_plateSolve.m_pointingErrorRollDeg = static_cast<float>(errorRoll);
+            qInfo().noquote().nospace()
+                << "CameraPointingError: t=" << frame->m_captureDateTime.toUTC().toString(Qt::ISODateWithMs)
+                << " errAzOnSkyDeg=" << QString::number(errorAzOnSky, 'f', 5)
+                << " errElDeg=" << QString::number(errorEl, 'f', 5)
+                << " errRollDeg=" << QString::number(errorRoll, 'f', 3)
+                << " commandedAz=" << QString::number(solveSettings.m_azimuth, 'f', 4)
+                << " commandedEl=" << QString::number(solveSettings.m_elevation, 'f', 4)
+                << " solvedAz=" << QString::number(plateSolveResult.m_azimuthDegrees, 'f', 4)
+                << " solvedEl=" << QString::number(plateSolveResult.m_elevationDegrees, 'f', 4)
+                << " matched=" << plateSolveResult.m_matchedStars
+                << " rms=" << QString::number(plateSolveResult.m_rmsErrorPixels, 'f', 2)
+                << " solveMs=" << QString::number(frame->m_plateSolve.m_solveTimeMs, 'f', 0);
+        }
     }
 
     if (lensMirror && !frame->m_starDetections.isEmpty())

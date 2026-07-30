@@ -5843,6 +5843,23 @@ car</string>
                 </property>
                </widget>
               </item>
+              <item row="6" column="0">
+               <widget class="QLabel" name="plateSolvePointingErrorTextLabel">
+                <property name="toolTip">
+                 <string>Commanded direction minus solved direction (azimuth on-sky). The mount pointing error a guiding loop would correct.</string>
+                </property>
+                <property name="text">
+                 <string>Pointing error</string>
+                </property>
+               </widget>
+              </item>
+              <item row="6" column="1">
+               <widget class="QLabel" name="plateSolvePointingErrorLabel">
+                <property name="text">
+                 <string>-</string>
+                </property>
+               </widget>
+              </item>
               <item row="5" column="1">
                <widget class="QLabel" name="plateSolveTimeLabel">
                 <property name="text">

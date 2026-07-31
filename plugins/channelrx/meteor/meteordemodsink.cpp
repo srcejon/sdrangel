@@ -464,6 +464,7 @@ void MeteorDemodSink::accumulateSweepLine(
         sweep.m_sumTT += t * t;
         sweep.m_sumTF += t * f;
         sweep.m_nPts++;
+        sweep.m_frequencyPoints.emplace_back(t, f);
     };
 
     // Retain the direction contained inside every fragment. Storing only one centre point
@@ -739,6 +740,10 @@ void MeteorDemodSink::coalesceActiveSweeps()
             a.m_sumTT += b.m_sumTT;
             a.m_sumTF += b.m_sumTF;
             a.m_nPts += b.m_nPts;
+            a.m_frequencyPoints.insert(
+                a.m_frequencyPoints.end(),
+                b.m_frequencyPoints.begin(),
+                b.m_frequencyPoints.end());
             if (b.m_lastSample > a.m_lastSample)
             {
                 a.m_lastCentreT = b.m_lastCentreT;
@@ -1129,6 +1134,46 @@ void MeteorDemodSink::emitConsolidatedSweep(const ActiveSweep& sweep)
     d.m_centerFrequency = 0.5 * (sweep.m_f0 + sweep.m_f1);
     d.m_frequencySpan = sweep.m_f1 - sweep.m_f0;
     d.m_frequencyDrift = slope * d.m_durationS;   // total Hz swept over the pass
+    double intercept = 0.0;
+    fitSweepLine(sweep, slope, intercept);
+    double residualSquaredSum = 0.0;
+    std::vector<std::pair<double, double>> points = sweep.m_frequencyPoints;
+    std::sort(points.begin(), points.end());
+    d.m_frequencySamples.reserve(points.size());
+    for (const auto& point : points)
+    {
+        const double residual = point.second - (slope * point.first + intercept);
+        residualSquaredSum += residual * residual;
+    }
+    const double binWidthHz = (double) sampleRate
+        / (double) std::max(1, m_blobFFTSize);
+    d.m_frequencyFitUncertaintyHz = std::max(
+        binWidthHz,
+        points.empty()
+            ? binWidthHz
+            : std::sqrt(residualSquaredSum / points.size()));
+    for (const auto& point : points)
+    {
+        const double relativeTimeS = std::clamp(
+            point.first - (double) startSample / sampleRate,
+            0.0,
+            d.m_durationS);
+        if (!d.m_frequencySamples.empty()
+            && std::fabs(
+                d.m_frequencySamples.back().m_timeOffsetS - relativeTimeS)
+                < 1e-4)
+        {
+            d.m_frequencySamples.back().m_frequencyOffsetHz =
+                0.5 * (d.m_frequencySamples.back().m_frequencyOffsetHz
+                    + point.second);
+            continue;
+        }
+        d.m_frequencySamples.push_back({
+            relativeTimeS,
+            point.second,
+            d.m_frequencyFitUncertaintyHz
+        });
+    }
     d.m_peakPower = sweep.m_peakPower;
     d.m_backgroundPower = sweep.m_fragCount > 0
         ? std::max(sweep.m_backgroundSum / sweep.m_fragCount, 1e-20) : 1e-20;

@@ -136,6 +136,13 @@ public:
 
     struct DetectionRecord
     {
+        struct FrequencySample
+        {
+            double m_timeOffsetS = 0.0;
+            double m_frequencyOffsetHz = 0.0;
+            double m_uncertaintyHz = 0.0;
+        };
+
         bool m_valid = false;
         QDateTime m_dateTimeUtc;
         QDateTime m_displayDateTimeUtc;
@@ -152,6 +159,8 @@ public:
         double m_centerFrequency = 0.0;
         double m_frequencySpan = 0.0;
         double m_frequencyDrift = 0.0;
+        double m_frequencyFitUncertaintyHz = 0.0;
+        std::vector<FrequencySample> m_frequencySamples;
         int m_sampleRate = 0;
         bool m_truncated = false;
     };
@@ -280,6 +289,7 @@ private:
         int m_fragCount = 0;
         double m_sumT = 0.0, m_sumF = 0.0, m_sumTT = 0.0, m_sumTF = 0.0;  // running line fit
         int m_nPts = 0;
+        std::vector<std::pair<double, double>> m_frequencyPoints;
         double m_lastCentreT = 0.0, m_lastCentreF = 0.0, m_lastSlope = 0.0;
         quint64 m_lastSample = 0;
     };

@@ -525,6 +525,148 @@ namespace {
             return false;
         }
 
+        auto predictedCandidate = [](
+            const QString& id,
+            const QVector<double>& samples,
+            double startHz,
+            double endHz,
+            double scoreFactor = 1.0,
+            bool softGeometry = false)
+        {
+            MovingTargetMatcher::PredictedCandidate candidate;
+            candidate.m_source = QStringLiteral("TLE");
+            candidate.m_id = id;
+            candidate.m_label = id;
+            candidate.m_scoreFactor = scoreFactor;
+            candidate.m_softGeometry = softGeometry;
+            candidate.m_prediction.m_valid = true;
+            candidate.m_prediction.m_startFrequencyOffsetHz = startHz;
+            candidate.m_prediction.m_endFrequencyOffsetHz = endHz;
+            candidate.m_prediction.m_centerFrequencyOffsetHz =
+                0.5 * (startHz + endHz);
+            candidate.m_prediction.m_frequencyDriftHz = endHz - startHz;
+            candidate.m_prediction.m_frequencySamplesHz = samples;
+            return candidate;
+        };
+
+        MovingTargetMatcher::Observation curvedObservation;
+        curvedObservation.m_startDateTimeUtc = observation.m_startDateTimeUtc;
+        curvedObservation.m_durationS = 4.0;
+        curvedObservation.m_frequencySpanHz = 60.0;
+        curvedObservation.m_frequencyUncertaintyHz = 10.0;
+        curvedObservation.m_frequencySamples = {
+            {0.0, 0.0, 10.0},
+            {1.0, 40.0, 10.0},
+            {2.0, 60.0, 10.0},
+            {3.0, 40.0, 10.0},
+            {4.0, 0.0, 10.0}
+        };
+        const MovingTargetMatcher::PredictedCandidate endpointDecoy =
+            predictedCandidate(
+                QStringLiteral("ENDPOINT-DECOY"),
+                {0.0, 0.0, 0.0, 0.0, 0.0},
+                0.0,
+                0.0);
+        const MovingTargetMatcher::PredictedCandidate trajectoryTarget =
+            predictedCandidate(
+                QStringLiteral("TRAJECTORY"),
+                {5.0, 45.0, 65.0, 45.0, 5.0},
+                5.0,
+                5.0);
+        const MovingTargetMatcher::Match trajectoryMatch =
+            MovingTargetMatcher::matchPredictions(
+                curvedObservation,
+                {endpointDecoy, trajectoryTarget});
+
+        if (!trajectoryMatch.m_matched
+            || (trajectoryMatch.m_id != trajectoryTarget.m_id)
+            || (trajectoryMatch.m_trajectoryResidualRMSHz > 1e-6)
+            || (std::fabs(trajectoryMatch.m_fittedFrequencyBiasHz + 5.0) > 1e-6))
+        {
+            errorStream << "Moving-target matcher test: full trajectory did not reject an endpoint decoy\n";
+            return false;
+        }
+
+        const MovingTargetMatcher::PredictedCandidate softTarget =
+            predictedCandidate(
+                QStringLiteral("SOFT"),
+                {0.0, 40.0, 60.0, 40.0, 0.0},
+                0.0,
+                0.0,
+                0.82,
+                true);
+        const MovingTargetMatcher::Match softMatch =
+            MovingTargetMatcher::matchPredictions(
+                curvedObservation,
+                {softTarget});
+
+        if (!softMatch.m_matched
+            || !softMatch.m_softGeometry
+            || (softMatch.m_scorePercent < 81.9)
+            || (softMatch.m_scorePercent > 82.1))
+        {
+            errorStream << "Moving-target matcher test: soft beam candidate was not penalized correctly\n";
+            return false;
+        }
+
+        MovingTargetMatcher::Observation wideObservation;
+        wideObservation.m_startDateTimeUtc = observation.m_startDateTimeUtc;
+        wideObservation.m_durationS = 2.0;
+        wideObservation.m_frequencySpanHz = 10000.0;
+        wideObservation.m_frequencyUncertaintyHz = 25.0;
+        const MovingTargetMatcher::Match wideMismatch =
+            MovingTargetMatcher::matchPredictions(
+                wideObservation,
+                {predictedCandidate(
+                    QStringLiteral("WIDE-DECOY"),
+                    {},
+                    50.0,
+                    150.0)});
+
+        if (!wideMismatch.m_hasCandidate || wideMismatch.m_matched)
+        {
+            errorStream << "Moving-target matcher test: visible span incorrectly relaxed measurement uncertainty\n";
+            return false;
+        }
+
+        MovingTargetMatcher::Observation fragment1;
+        fragment1.m_startDateTimeUtc = observation.m_startDateTimeUtc;
+        fragment1.m_durationS = 1.0;
+        fragment1.m_frequencyUncertaintyHz = 25.0;
+        MovingTargetMatcher::Observation fragment2 = fragment1;
+        fragment2.m_startDateTimeUtc = fragment1.m_startDateTimeUtc.addSecs(5);
+        fragment2.m_centerFrequencyOffsetHz = 100.0;
+        fragment2.m_frequencyDriftHz = 20.0;
+        const MovingTargetMatcher::PredictedCandidate fragment1A =
+            predictedCandidate(QStringLiteral("PASS-A"), {}, 0.0, 0.0);
+        const MovingTargetMatcher::PredictedCandidate fragment1B =
+            predictedCandidate(QStringLiteral("PASS-B"), {}, 0.0, 1.0);
+        const MovingTargetMatcher::PredictedCandidate fragment2A =
+            predictedCandidate(QStringLiteral("PASS-A"), {}, 90.0, 110.0);
+        const MovingTargetMatcher::PredictedCandidate fragment2B =
+            predictedCandidate(QStringLiteral("PASS-B"), {}, 115.0, 145.0);
+        const MovingTargetMatcher::Match fragmentOnly =
+            MovingTargetMatcher::matchPredictions(
+                fragment1,
+                {fragment1A, fragment1B});
+        const MovingTargetMatcher::Match passMatch =
+            MovingTargetMatcher::matchPredictionGroups(
+                {fragment1, fragment2},
+                {
+                    {fragment1A, fragment1B},
+                    {fragment2A, fragment2B}
+                });
+
+        if (!fragmentOnly.m_ambiguous
+            || !passMatch.m_matched
+            || passMatch.m_ambiguous
+            || (passMatch.m_id != QStringLiteral("PASS-A"))
+            || (passMatch.m_passFragmentCount != 2))
+        {
+            errorStream << "Moving-target matcher test: correlated fragments did not resolve a pass\n";
+            return false;
+        }
+
         return true;
     }
 
@@ -731,6 +873,7 @@ namespace {
         int tailMS = 2000;
         int expectCount = -1;
         bool details = false;
+        bool internalOnly = false;
         bool showHelp = false;
     };
 
@@ -956,7 +1099,7 @@ namespace {
             return false;
         }
 
-        if (options.wavPath.isEmpty() && options.testDir.isEmpty())
+        if (!options.internalOnly && options.wavPath.isEmpty() && options.testDir.isEmpty())
         {
             error = "Missing --wav <file.wav> or --test-dir <directory> option";
             return false;
@@ -980,6 +1123,10 @@ namespace {
             else if (arg == "--details")
             {
                 options.details = true;
+            }
+            else if (arg == "--internal-only")
+            {
+                options.internalOnly = true;
             }
             else if (readOptionValue(args, i, "wav", value, error))
             {
@@ -1050,7 +1197,7 @@ namespace {
             }
         }
 
-        if (options.wavPath.isEmpty() && options.testDir.isEmpty())
+        if (!options.internalOnly && options.wavPath.isEmpty() && options.testDir.isEmpty())
         {
             const QString defaultTestDir = QString::fromUtf8(METEOR_TEST_DATA_DIR);
 
@@ -1064,12 +1211,13 @@ namespace {
 
     void printHelp(QTextStream& out)
     {
-        out << "Usage: meteor_demod_sink_test [--wav <file.wav> | --test-dir <directory>] [options]\n\n";
+        out << "Usage: meteor_demod_sink_test [--wav <file.wav> | --test-dir <directory> | --internal-only] [options]\n\n";
         out << "Play stereo 16-bit I/Q WAV files through MeteorBaseband and count or validate meteor detections.\n\n";
         out << "Options:\n";
         out << "  -h, --help                         Show this help text.\n";
         out << "      --wav <file.wav>               Input SDRangel stereo 16-bit I/Q WAV file.\n";
         out << "      --test-dir <directory>         Directory of paired .wav and .csv regression fixtures.\n";
+        out << "      --internal-only                Run self-contained unit tests without WAV fixtures.\n";
         out << "      --tunable <name=value>         Override a DetectorTunables member (repeatable). Names drop the\n";
         out << "                                     m_ prefix, e.g. --tunable blobScoreThreshold=100.\n";
         out << "      --channel-sample-rate <rate>   Detector sample rate: 100, 300, 1000, or 3000 Hz.\n";
@@ -1717,6 +1865,11 @@ int main(int argc, char *argv[])
         || !runRMOBReportTests(err))
     {
         return 2;
+    }
+
+    if (options.internalOnly) {
+        out << "Internal meteor tests: OK\n";
+        return 0;
     }
 
     if (!options.testDir.isEmpty() && options.wavPath.isEmpty())

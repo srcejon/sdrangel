@@ -44,12 +44,23 @@ public:
 
     struct Observation
     {
+        struct FrequencySample
+        {
+            double m_timeOffsetS = 0.0;
+            double m_frequencyOffsetHz = 0.0;
+            double m_uncertaintyHz = 0.0;
+        };
+
         QDateTime m_startDateTimeUtc;
         double m_durationS = 0.0;
         double m_centerFrequencyOffsetHz = 0.0;
         double m_frequencyDriftHz = 0.0;
         double m_frequencySpanHz = 0.0;
         double m_referenceFrequencyHz = 0.0;
+        double m_frequencyUncertaintyHz = 25.0;
+        double m_timingUncertaintyS = 0.05;
+        bool m_applySystemClockCorrection = true;
+        QVector<FrequencySample> m_frequencySamples;
         Site m_transmitter;
         Site m_receiver;
     };
@@ -61,6 +72,7 @@ public:
         double m_endFrequencyOffsetHz = 0.0;
         double m_centerFrequencyOffsetHz = 0.0;
         double m_frequencyDriftHz = 0.0;
+        QVector<double> m_frequencySamplesHz;
     };
 
     struct Candidate
@@ -72,7 +84,10 @@ public:
         double m_endpointResidualRMSHz = 0.0;
         double m_centerResidualHz = 0.0;
         double m_driftResidualHz = 0.0;
+        double m_trajectoryResidualRMSHz = 0.0;
+        double m_fittedFrequencyBiasHz = 0.0;
         double m_stateAgeS = 0.0;
+        bool m_softGeometry = false;
         Prediction m_prediction;
     };
 
@@ -89,7 +104,15 @@ public:
         double m_endpointResidualRMSHz = 0.0;
         double m_centerResidualHz = 0.0;
         double m_driftResidualHz = 0.0;
+        double m_trajectoryResidualRMSHz = 0.0;
+        double m_fittedFrequencyBiasHz = 0.0;
         double m_stateAgeS = 0.0;
+        int m_candidateCount = 0;
+        int m_closeCandidateCount = 0;
+        int m_passFragmentCount = 1;
+        double m_appliedClockCorrectionS = 0.0;
+        bool m_softGeometry = false;
+        QString m_diagnostic;
         Prediction m_prediction;
         QVector<Candidate> m_alternatives;
     };
@@ -101,6 +124,9 @@ public:
         double m_centerSpanScale = 0.20;
         double m_minimumDriftScaleHz = 12.0;
         double m_driftScale = 0.25;
+        double m_defaultFrequencyUncertaintyHz = 25.0;
+        double m_maximumFittedFrequencyBiasHz = 20.0;
+        double m_huberTransitionSigma = 1.5;
         double m_minimumMatchScorePercent = 60.0;
         double m_minimumScoreMarginPercent = 8.0;
 
@@ -119,6 +145,8 @@ public:
         QString m_id;
         QString m_label;
         double m_stateAgeS = 0.0;
+        double m_scoreFactor = 1.0;
+        bool m_softGeometry = false;
         Prediction m_prediction;
     };
 
@@ -134,6 +162,10 @@ public:
     static Match matchPredictions(
         const Observation& observation,
         const QVector<PredictedCandidate>& candidates,
+        const Tunables& tunables = Tunables());
+    static Match matchPredictionGroups(
+        const QVector<Observation>& observations,
+        const QVector<QVector<PredictedCandidate>>& candidateGroups,
         const Tunables& tunables = Tunables());
     static Match combine(
         const Match& first,

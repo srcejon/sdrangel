@@ -2922,6 +2922,39 @@ void MeteorGUI::addSatelliteDetection(const MeteorDemodSink::MsgSatelliteDetecte
         observation.m_frequencyDriftHz = detection.m_frequencyDrift;
         observation.m_frequencySpanHz = detection.m_frequencySpan;
         observation.m_referenceFrequencyHz = (double) referenceFrequency;
+        observation.m_frequencyUncertaintyHz = std::max(
+            1.0,
+            detection.m_frequencyFitUncertaintyHz);
+        double measuredLatencyS = 0.0;
+        double measuredUncertaintyS = 0.0;
+        double filterDelayS = 0.0;
+        if (localChannelTiming(
+                measuredLatencyS,
+                measuredUncertaintyS,
+                filterDelayS))
+        {
+            observation.m_timingUncertaintyS = std::max(
+                0.001,
+                measuredUncertaintyS);
+        }
+        if (m_deviceUISet && m_deviceUISet->m_deviceAPI)
+        {
+            const QString hardwareId =
+                m_deviceUISet->m_deviceAPI->getHardwareId();
+            observation.m_applySystemClockCorrection =
+                (hardwareId != QStringLiteral("FileInput"))
+                && (hardwareId != QStringLiteral("SigMFFileInput"));
+        }
+        observation.m_frequencySamples.reserve(
+            (int) detection.m_frequencySamples.size());
+        for (const auto& sample : detection.m_frequencySamples)
+        {
+            observation.m_frequencySamples.append({
+                sample.m_timeOffsetS,
+                sample.m_frequencyOffsetHz,
+                sample.m_uncertaintyHz
+            });
+        }
         observation.m_transmitter = {
             m_settings.m_transmitterLatitude,
             m_settings.m_transmitterLongitude,
@@ -2970,17 +3003,34 @@ void MeteorGUI::addSatelliteDetection(const MeteorDemodSink::MsgSatelliteDetecte
             "Score: %2%\n"
             "Predicted start/end: %3 / %4 Hz\n"
             "Center/drift residual: %5 / %6 Hz\n"
-            "State age: %7 s")
+            "Trajectory RMS / fitted bias: %7 / %8 Hz\n"
+            "Candidates / close candidates: %9 / %10\n"
+            "Pass fragments: %11\n"
+            "Geometry: %12\n"
+            "Clock correction: %13 s\n"
+            "State age: %14 s")
             .arg(movingTargetLabel(targetMatch))
             .arg(targetMatch.m_scorePercent, 0, 'f', 1)
             .arg(targetMatch.m_prediction.m_startFrequencyOffsetHz, 0, 'f', 1)
             .arg(targetMatch.m_prediction.m_endFrequencyOffsetHz, 0, 'f', 1)
             .arg(targetMatch.m_centerResidualHz, 0, 'f', 1)
             .arg(targetMatch.m_driftResidualHz, 0, 'f', 1)
+            .arg(targetMatch.m_trajectoryResidualRMSHz, 0, 'f', 1)
+            .arg(targetMatch.m_fittedFrequencyBiasHz, 0, 'f', 1)
+            .arg(targetMatch.m_candidateCount)
+            .arg(targetMatch.m_closeCandidateCount)
+            .arg(targetMatch.m_passFragmentCount)
+            .arg(targetMatch.m_softGeometry
+                ? QStringLiteral("soft beam fallback")
+                : QStringLiteral("configured beams"))
+            .arg(targetMatch.m_appliedClockCorrectionS, 0, 'f', 3)
             .arg(targetMatch.m_stateAgeS, 0, 'f', 1);
         const QString alternatives = movingTargetAlternativesToolTip(targetMatch);
         if (!alternatives.isEmpty()) {
             toolTip += QChar('\n') + alternatives;
+        }
+        if (!targetMatch.m_diagnostic.isEmpty()) {
+            toolTip += QChar('\n') + targetMatch.m_diagnostic;
         }
         matchItem->setToolTip(toolTip);
     }
@@ -3317,17 +3367,34 @@ void MeteorGUI::applySatelliteTargetMatch(
             "Score: %2%\n"
             "Predicted start/end: %3 / %4 Hz\n"
             "Center/drift residual: %5 / %6 Hz\n"
-            "State age: %7 s")
+            "Trajectory RMS / fitted bias: %7 / %8 Hz\n"
+            "Candidates / close candidates: %9 / %10\n"
+            "Pass fragments: %11\n"
+            "Geometry: %12\n"
+            "Clock correction: %13 s\n"
+            "State age: %14 s")
             .arg(movingTargetLabel(combinedMatch))
             .arg(combinedMatch.m_scorePercent, 0, 'f', 1)
             .arg(combinedMatch.m_prediction.m_startFrequencyOffsetHz, 0, 'f', 1)
             .arg(combinedMatch.m_prediction.m_endFrequencyOffsetHz, 0, 'f', 1)
             .arg(combinedMatch.m_centerResidualHz, 0, 'f', 1)
             .arg(combinedMatch.m_driftResidualHz, 0, 'f', 1)
+            .arg(combinedMatch.m_trajectoryResidualRMSHz, 0, 'f', 1)
+            .arg(combinedMatch.m_fittedFrequencyBiasHz, 0, 'f', 1)
+            .arg(combinedMatch.m_candidateCount)
+            .arg(combinedMatch.m_closeCandidateCount)
+            .arg(combinedMatch.m_passFragmentCount)
+            .arg(combinedMatch.m_softGeometry
+                ? QStringLiteral("soft beam fallback")
+                : QStringLiteral("configured beams"))
+            .arg(combinedMatch.m_appliedClockCorrectionS, 0, 'f', 3)
             .arg(combinedMatch.m_stateAgeS, 0, 'f', 1);
         const QString alternatives = movingTargetAlternativesToolTip(combinedMatch);
         if (!alternatives.isEmpty()) {
             toolTip += QChar('\n') + alternatives;
+        }
+        if (!combinedMatch.m_diagnostic.isEmpty()) {
+            toolTip += QChar('\n') + combinedMatch.m_diagnostic;
         }
         matchItem->setToolTip(toolTip);
     }
@@ -3470,6 +3537,123 @@ void MeteorGUI::showSatelliteCalibrationResult(
                 : tr("Inconclusive; keep the current calibration"),
             &dialog));
 
+    if (!result.m_observationComparisons.isEmpty())
+    {
+        QTableWidget *comparisonTable = new QTableWidget(
+            result.m_observationComparisons.size(),
+            10,
+            &dialog);
+        comparisonTable->setHorizontalHeaderLabels({
+            tr("Time (UTC)"),
+            tr("Before satellite"),
+            tr("Before result"),
+            tr("Before score (%)"),
+            tr("Before RMS (Hz)"),
+            tr("After satellite"),
+            tr("After result"),
+            tr("After score (%)"),
+            tr("After RMS (Hz)"),
+            tr("Change")
+        });
+        comparisonTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
+        comparisonTable->setSelectionBehavior(QAbstractItemView::SelectRows);
+        comparisonTable->setAlternatingRowColors(true);
+        comparisonTable->verticalHeader()->setVisible(false);
+
+        const auto satelliteName = [](const MovingTargetMatcher::Match& match) {
+            if (!match.m_hasCandidate) {
+                return QStringLiteral("-");
+            }
+
+            const QString name = match.m_label.isEmpty()
+                ? match.m_id
+                : match.m_label;
+            return match.m_id.isEmpty() || (name == match.m_id)
+                ? name
+                : QStringLiteral("%1 [%2]").arg(name, match.m_id);
+        };
+        const auto matchStatus = [this](const MovingTargetMatcher::Match& match) {
+            if (match.m_matched) {
+                return tr("Matched");
+            }
+            if (match.m_ambiguous) {
+                return tr("Ambiguous");
+            }
+            return match.m_hasCandidate
+                ? tr("Below threshold")
+                : tr("No candidate");
+        };
+        const auto changeDescription =
+            [this, &satelliteName](const MovingTargetMatcher::Match& before,
+                const MovingTargetMatcher::Match& after)
+        {
+            const bool sameCandidate =
+                before.m_hasCandidate == after.m_hasCandidate
+                && (!before.m_hasCandidate
+                    || ((before.m_source == after.m_source)
+                        && (before.m_id == after.m_id)));
+
+            if (!sameCandidate) {
+                return tr("%1 -> %2")
+                    .arg(satelliteName(before), satelliteName(after));
+            }
+            if (!before.m_matched && after.m_matched) {
+                return tr("New match");
+            }
+            if (before.m_matched && !after.m_matched) {
+                return tr("Lost match");
+            }
+            if (before.m_ambiguous != after.m_ambiguous) {
+                return after.m_ambiguous
+                    ? tr("Now ambiguous")
+                    : tr("Ambiguity resolved");
+            }
+            return tr("Unchanged");
+        };
+
+        int row = 0;
+        for (const auto& comparison : result.m_observationComparisons)
+        {
+            const MovingTargetMatcher::Match& before = comparison.m_before;
+            const MovingTargetMatcher::Match& after = comparison.m_after;
+            comparisonTable->setItem(row, 0, new QTableWidgetItem(
+                comparison.m_dateTimeUtc.toString("yyyy-MM-dd HH:mm:ss.zzz")));
+            comparisonTable->setItem(row, 1, new QTableWidgetItem(
+                satelliteName(before)));
+            comparisonTable->setItem(row, 2, new QTableWidgetItem(
+                matchStatus(before)));
+            comparisonTable->setItem(row, 3, new QTableWidgetItem(
+                before.m_hasCandidate
+                    ? QString::number(before.m_scorePercent, 'f', 1)
+                    : QStringLiteral("-")));
+            comparisonTable->setItem(row, 4, new QTableWidgetItem(
+                before.m_hasCandidate
+                    ? QString::number(before.m_endpointResidualRMSHz, 'f', 1)
+                    : QStringLiteral("-")));
+            comparisonTable->setItem(row, 5, new QTableWidgetItem(
+                satelliteName(after)));
+            comparisonTable->setItem(row, 6, new QTableWidgetItem(
+                matchStatus(after)));
+            comparisonTable->setItem(row, 7, new QTableWidgetItem(
+                after.m_hasCandidate
+                    ? QString::number(after.m_scorePercent, 'f', 1)
+                    : QStringLiteral("-")));
+            comparisonTable->setItem(row, 8, new QTableWidgetItem(
+                after.m_hasCandidate
+                    ? QString::number(after.m_endpointResidualRMSHz, 'f', 1)
+                    : QStringLiteral("-")));
+            comparisonTable->setItem(row, 9, new QTableWidgetItem(
+                changeDescription(before, after)));
+            ++row;
+        }
+
+        comparisonTable->horizontalHeader()->setSectionResizeMode(
+            QHeaderView::ResizeToContents);
+        comparisonTable->horizontalHeader()->setStretchLastSection(true);
+        comparisonTable->setMinimumHeight(220);
+        layout->addWidget(comparisonTable, 1);
+    }
+
     QStringList warnings;
     if (result.m_timeAtSearchLimit) {
         warnings.append(
@@ -3518,7 +3702,11 @@ void MeteorGUI::showSatelliteCalibrationResult(
         &dialog);
     connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
     layout->addWidget(buttons);
-    dialog.resize(620, dialog.sizeHint().height());
+    dialog.resize(
+        result.m_observationComparisons.isEmpty() ? 620 : 1200,
+        result.m_observationComparisons.isEmpty()
+            ? dialog.sizeHint().height()
+            : 700);
     dialog.exec();
 }
 

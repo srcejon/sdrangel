@@ -71,6 +71,8 @@ namespace {
     // that produced the sweep is not culled while actually inside the beam mid-sweep.
     // The exact per-endpoint scoring afterwards decides for real.
     constexpr double SnapshotCullMarginDegrees = 10.0;
+    constexpr double SoftBeamCullMarginDegrees = 30.0;
+    constexpr double SoftBeamScoreFactor = 0.82;
     // The maximum-altitude setting doubles as the map projection altitude, where values
     // like 100 km (the meteor ablation region) are natural; below any real satellite
     // orbit it cannot be a meaningful matcher cull, so treat it as display-only rather
@@ -694,11 +696,33 @@ public:
 
     void requestMatch(
         quint64 requestId,
-        const MovingTargetMatcher::Observation& observation,
+        const MovingTargetMatcher::Observation& requestedObservation,
         const MeteorSatelliteMatcher::Geometry& geometry)
     {
         if (m_stopRequested.load()) {
             return;
+        }
+
+        MovingTargetMatcher::Observation observation = requestedObservation;
+        double appliedClockCorrectionS = 0.0;
+        if (observation.m_applySystemClockCorrection
+            && m_clockMeasurement.isFresh()
+            && (m_clockMeasurement.assess()
+                != SystemClockOffset::Assessment::Unavailable))
+        {
+            const QDateTime corrected =
+                m_clockMeasurement.correctedDateTimeUtc(
+                    observation.m_startDateTimeUtc);
+            if (corrected.isValid())
+            {
+                appliedClockCorrectionS = observation.m_startDateTimeUtc.msecsTo(
+                    corrected) / 1000.0;
+                observation.m_startDateTimeUtc = corrected;
+                observation.m_applySystemClockCorrection = false;
+                observation.m_timingUncertaintyS = std::hypot(
+                    observation.m_timingUncertaintyS,
+                    m_clockMeasurement.m_uncertaintyMS / 1000.0);
+            }
         }
 
         MovingTargetMatcher::Match match;
@@ -723,7 +747,9 @@ public:
                 (qint64) std::llround(observation.m_durationS * 500.0));
             const Snapshot& snapshot = candidatesForTime(centerTimeUtc, observation, geometry);
             QVector<MovingTargetMatcher::PredictedCandidate> candidates;
-            candidates.reserve(snapshot.m_candidateIndices.size());
+            candidates.reserve(
+                snapshot.m_candidateIndices.size()
+                + snapshot.m_softCandidateIndices.size());
 
             for (int catalogIndex : snapshot.m_candidateIndices)
             {
@@ -734,13 +760,134 @@ public:
                 }
             }
 
-            match = MovingTargetMatcher::combine(
-                match,
-                MovingTargetMatcher::matchPredictions(observation, candidates));
+            MovingTargetMatcher::Match catalogMatch =
+                MovingTargetMatcher::matchPredictions(observation, candidates);
+            if (!catalogMatch.m_matched)
+            {
+                for (int catalogIndex : snapshot.m_softCandidateIndices)
+                {
+                    MovingTargetMatcher::PredictedCandidate candidate;
+                    if (predictCatalogEntry(m_catalog[catalogIndex], observation, candidate))
+                    {
+                        candidate.m_scoreFactor = SoftBeamScoreFactor;
+                        candidate.m_softGeometry = true;
+                        candidates.append(candidate);
+                    }
+                }
+                catalogMatch = MovingTargetMatcher::matchPredictions(
+                    observation,
+                    candidates);
+            }
+
+            QVector<MovingTargetMatcher::Observation> passObservations;
+            const double currentRate = observation.m_frequencyDriftHz
+                / std::max(0.001, observation.m_durationS);
+            for (const RecentPassFragment& fragment : m_recentPassFragments)
+            {
+                const double gapS = fragment.m_observation.m_startDateTimeUtc
+                    .addMSecs((qint64) std::llround(
+                        fragment.m_observation.m_durationS * 1000.0))
+                    .msecsTo(observation.m_startDateTimeUtc) / 1000.0;
+                const double fragmentRate =
+                    fragment.m_observation.m_frequencyDriftHz
+                    / std::max(0.001, fragment.m_observation.m_durationS);
+                const double predictedCurrentStart =
+                    fragment.m_observation.m_centerFrequencyOffsetHz
+                    + 0.5 * fragment.m_observation.m_frequencyDriftHz
+                    + fragmentRate * std::max(0.0, gapS);
+                const double observedCurrentStart =
+                    observation.m_centerFrequencyOffsetHz
+                    - 0.5 * observation.m_frequencyDriftHz;
+                if ((gapS >= 0.0) && (gapS <= 60.0)
+                    && (fragmentRate * currentRate > 0.0)
+                    && (std::fabs(fragmentRate - currentRate) <= 20.0)
+                    && (std::fabs(predictedCurrentStart - observedCurrentStart)
+                        <= 400.0))
+                {
+                    passObservations.append(fragment.m_observation);
+                }
+            }
+            passObservations.append(observation);
+            if (passObservations.size() > 1)
+            {
+                QVector<QVector<MovingTargetMatcher::PredictedCandidate>> groups;
+                groups.reserve(passObservations.size());
+                for (const auto& passObservation : passObservations)
+                {
+                    const QDateTime passCenter =
+                        passObservation.m_startDateTimeUtc.addMSecs(
+                            (qint64) std::llround(
+                                passObservation.m_durationS * 500.0));
+                    const Snapshot& passSnapshot = candidatesForTime(
+                        passCenter,
+                        passObservation,
+                        geometry);
+                    QVector<int> indices = passSnapshot.m_candidateIndices;
+                    indices += passSnapshot.m_softCandidateIndices;
+                    QVector<MovingTargetMatcher::PredictedCandidate> group;
+                    group.reserve(indices.size());
+                    for (int catalogIndex : indices)
+                    {
+                        MovingTargetMatcher::PredictedCandidate predicted;
+                        if (predictCatalogEntry(
+                                m_catalog[catalogIndex],
+                                passObservation,
+                                predicted))
+                        {
+                            if (passSnapshot.m_softCandidateIndices.contains(catalogIndex))
+                            {
+                                predicted.m_scoreFactor = SoftBeamScoreFactor;
+                                predicted.m_softGeometry = true;
+                            }
+                            group.append(predicted);
+                        }
+                    }
+                    groups.append(group);
+                }
+                const MovingTargetMatcher::Match joint =
+                    MovingTargetMatcher::matchPredictionGroups(
+                        passObservations,
+                        groups);
+                if (joint.m_matched
+                    && (!catalogMatch.m_matched
+                        || (joint.m_scorePercent > catalogMatch.m_scorePercent)))
+                {
+                    catalogMatch = joint;
+                    catalogMatch.m_diagnostic =
+                        QStringLiteral("Jointly matched interrupted pass fragments");
+                }
+            }
+            m_recentPassFragments.append({observation, geometry});
+            const QDateTime oldest = observation.m_startDateTimeUtc.addSecs(-90);
+            while (!m_recentPassFragments.isEmpty()
+                && (m_recentPassFragments.first().m_observation.m_startDateTimeUtc
+                    < oldest))
+            {
+                m_recentPassFragments.removeFirst();
+            }
+            match = MovingTargetMatcher::combine(match, catalogMatch);
+            if (match.m_source == catalogMatch.m_source
+                && match.m_id == catalogMatch.m_id)
+            {
+                match.m_candidateCount = catalogMatch.m_candidateCount;
+                match.m_closeCandidateCount =
+                    catalogMatch.m_closeCandidateCount;
+                match.m_passFragmentCount =
+                    catalogMatch.m_passFragmentCount;
+                match.m_trajectoryResidualRMSHz =
+                    catalogMatch.m_trajectoryResidualRMSHz;
+                match.m_fittedFrequencyBiasHz =
+                    catalogMatch.m_fittedFrequencyBiasHz;
+                match.m_softGeometry = catalogMatch.m_softGeometry;
+                match.m_diagnostic = catalogMatch.m_diagnostic;
+            }
+            match.m_appliedClockCorrectionS = appliedClockCorrectionS;
 
             if (match.m_matched && (match.m_source == QStringLiteral("TLE")))
             {
-                for (int catalogIndex : snapshot.m_candidateIndices)
+                QVector<int> trackCandidates = snapshot.m_candidateIndices;
+                trackCandidates += snapshot.m_softCandidateIndices;
+                for (int catalogIndex : trackCandidates)
                 {
                     CatalogEntry& entry = m_catalog[catalogIndex];
 
@@ -757,6 +904,7 @@ public:
             }
         }
 #endif
+        match.m_appliedClockCorrectionS = appliedClockCorrectionS;
 
         QPointer<MeteorSatelliteMatcher> owner(m_owner);
         QMetaObject::invokeMethod(
@@ -774,9 +922,34 @@ public:
     }
 
     void requestCalibration(
-        const QVector<MovingTargetMatcher::Observation>& observations,
+        const QVector<MovingTargetMatcher::Observation>& requestedObservations,
         const MeteorSatelliteMatcher::Geometry& geometry)
     {
+        QVector<MovingTargetMatcher::Observation> observations =
+            requestedObservations;
+        if (m_clockMeasurement.isFresh()
+            && (m_clockMeasurement.assess()
+                != SystemClockOffset::Assessment::Unavailable))
+        {
+            for (MovingTargetMatcher::Observation& observation : observations)
+            {
+                if (!observation.m_applySystemClockCorrection) {
+                    continue;
+                }
+                const QDateTime corrected =
+                    m_clockMeasurement.correctedDateTimeUtc(
+                        observation.m_startDateTimeUtc);
+                if (!corrected.isValid()) {
+                    continue;
+                }
+                observation.m_startDateTimeUtc = corrected;
+                observation.m_applySystemClockCorrection = false;
+                observation.m_timingUncertaintyS = std::hypot(
+                    observation.m_timingUncertaintyS,
+                    m_clockMeasurement.m_uncertaintyMS / 1000.0);
+            }
+        }
+
         MeteorSatelliteMatcher::CalibrationResult result;
         result.m_observationCount = observations.size();
 
@@ -942,6 +1115,23 @@ public:
                     && (result.m_frequencyUncertaintyHz
                         <= CalibrationReliableFrequencyUncertaintyHz);
 
+                result.m_observationComparisons.reserve(models.size());
+                for (const CalibrationObservationModel& model : models)
+                {
+                    MeteorSatelliteMatcher::CalibrationResult::ObservationComparison comparison;
+                    comparison.m_dateTimeUtc =
+                        model.m_observation.m_startDateTimeUtc;
+                    comparison.m_before = matchCalibrationObservation(
+                        model,
+                        0.0,
+                        0.0);
+                    comparison.m_after = matchCalibrationObservation(
+                        model,
+                        best.m_timeOffsetS,
+                        best.m_frequencyBiasHz);
+                    result.m_observationComparisons.append(comparison);
+                }
+
                 if (!result.m_success) {
                     result.m_error = QStringLiteral(
                         "No unambiguous orbital matches were found anywhere "
@@ -955,7 +1145,6 @@ public:
         result.m_error =
             QStringLiteral("Satellite matching unavailable: SGP4 was not found");
 #endif
-
         QPointer<MeteorSatelliteMatcher> owner(m_owner);
         QMetaObject::invokeMethod(
             m_owner,
@@ -1008,7 +1197,14 @@ private:
         // culling at the snapshot instant; the per-request exact endpoint propagation
         // works from these. Valid until the next installCatalog (which clears snapshots).
         QVector<int> m_candidateIndices;
+        QVector<int> m_softCandidateIndices;
         MeteorSatelliteMatcher::CatalogStatistics m_statistics;
+    };
+
+    struct RecentPassFragment
+    {
+        MovingTargetMatcher::Observation m_observation;
+        MeteorSatelliteMatcher::Geometry m_geometry;
     };
 
     struct CalibrationPredictionCurve
@@ -1078,13 +1274,13 @@ private:
     static constexpr int MinimumCalibrationObservations = 3;
     static constexpr int MaximumCalibrationObservations = 24;
     static constexpr double CalibrationConservativeMaximumTimeOffsetS = 2.0;
-    static constexpr double CalibrationConservativeMaximumFrequencyBiasHz = 50.0;
+    static constexpr double CalibrationConservativeMaximumFrequencyBiasHz = 20.0;
     static constexpr double CalibrationMaximumTimeOffsetS = 10.0;
     static constexpr double CalibrationMaximumFrequencyBiasHz = 1000.0;
     static constexpr int CalibrationExtendedMinimumMatchGain = 3;
     static constexpr double CalibrationExtendedMinimumMeanScoreGain = 5.0;
     static constexpr double CalibrationReliableTimeUncertaintyS = 1.0;
-    static constexpr double CalibrationReliableFrequencyUncertaintyHz = 25.0;
+    static constexpr double CalibrationReliableFrequencyUncertaintyHz = 20.0;
     static constexpr double CalibrationCoarseTimeStepS = 0.5;
     static constexpr double CalibrationFineTimeStepS = 0.1;
     static constexpr double CalibrationCoarseFrequencyStepHz = 25.0;
@@ -2442,6 +2638,7 @@ private:
             Qt::UTC);
         Snapshot snapshot;
         QVector<int>& candidateIndices = snapshot.m_candidateIndices;
+        QVector<int>& softCandidateIndices = snapshot.m_softCandidateIndices;
         candidateIndices.reserve((int) std::min<size_t>(m_catalog.size(), 1024));
         snapshot.m_statistics = m_statistics;
         snapshot.m_statistics.m_snapshotValid = true;
@@ -2523,26 +2720,42 @@ private:
                     ++snapshot.m_statistics.m_belowReceiverHorizonEntries;
                     continue;
                 }
-                if (!insideBeam(
+                const bool insideTransmitterBeam = insideBeam(
                         txAzimuth,
                         txElevation,
                         geometry.m_transmitterBeam,
-                        SnapshotCullMarginDegrees))
+                        SnapshotCullMarginDegrees);
+                const bool insideReceiverBeam = insideBeam(
+                        rxAzimuth,
+                        rxElevation,
+                        geometry.m_receiverBeam,
+                        SnapshotCullMarginDegrees);
+                if (!insideTransmitterBeam
+                    && !insideBeam(
+                        txAzimuth,
+                        txElevation,
+                        geometry.m_transmitterBeam,
+                        SoftBeamCullMarginDegrees))
                 {
                     ++snapshot.m_statistics.m_outsideTransmitterBeamEntries;
                     continue;
                 }
-                if (!insideBeam(
+                if (!insideReceiverBeam
+                    && !insideBeam(
                         rxAzimuth,
                         rxElevation,
                         geometry.m_receiverBeam,
-                        SnapshotCullMarginDegrees))
+                        SoftBeamCullMarginDegrees))
                 {
                     ++snapshot.m_statistics.m_outsideReceiverBeamEntries;
                     continue;
                 }
 
-                candidateIndices.append(catalogIndex);
+                if (insideTransmitterBeam && insideReceiverBeam) {
+                    candidateIndices.append(catalogIndex);
+                } else {
+                    softCandidateIndices.append(catalogIndex);
+                }
                 ++snapshot.m_statistics.m_candidateEntries;
             }
             catch (const std::exception&) {
@@ -2582,34 +2795,49 @@ private:
 
         try
         {
-            for (int endpoint = 0; endpoint < 2; ++endpoint)
-            {
-                const libsgp4::DateTime sgp4Time = toSGP4DateTime(endpointTimesUtc[endpoint]);
-                auto ecefAt = [&entry](const libsgp4::DateTime& when) {
-                    const libsgp4::CoordGeodetic geo =
-                        entry.m_propagator->FindPosition(when).ToGeodetic();
-                    const MovingTargetMatcher::Site site {
-                        libsgp4::Util::RadiansToDegrees(geo.latitude),
-                        libsgp4::Util::RadiansToDegrees(geo.longitude),
-                        geo.altitude * 1000.0
-                    };
-                    return geodeticToECEF(site);
+            auto ecefAt = [&entry](const libsgp4::DateTime& when) {
+                const libsgp4::CoordGeodetic geo =
+                    entry.m_propagator->FindPosition(when).ToGeodetic();
+                const MovingTargetMatcher::Site site {
+                    libsgp4::Util::RadiansToDegrees(geo.latitude),
+                    libsgp4::Util::RadiansToDegrees(geo.longitude),
+                    geo.altitude * 1000.0
                 };
+                return geodeticToECEF(site);
+            };
+            auto offsetAt = [&](const QDateTime& dateTimeUtc) {
+                const libsgp4::DateTime sgp4Time = toSGP4DateTime(dateTimeUtc);
                 const Vector3 position = ecefAt(sgp4Time);
                 const Vector3 velocity =
                     (ecefAt(sgp4Time.AddSeconds(velocityDeltaS))
                         - ecefAt(sgp4Time.AddSeconds(-velocityDeltaS)))
                     * (1.0 / (2.0 * velocityDeltaS));
-                offsetsHz[endpoint] = bistaticDopplerOffset(
+                return bistaticDopplerOffset(
                     position,
                     velocity,
                     transmitterPosition,
                     receiverPosition,
                     observation.m_referenceFrequencyHz);
+            };
+            for (int endpoint = 0; endpoint < 2; ++endpoint)
+            {
+                offsetsHz[endpoint] = offsetAt(endpointTimesUtc[endpoint]);
 
                 if (!std::isfinite(offsetsHz[endpoint])) {
                     return false;
                 }
+            }
+            candidate.m_prediction.m_frequencySamplesHz.reserve(
+                observation.m_frequencySamples.size());
+            for (const auto& sample : observation.m_frequencySamples)
+            {
+                const double offset = offsetAt(
+                    observation.m_startDateTimeUtc.addMSecs(
+                        (qint64) std::llround(sample.m_timeOffsetS * 1000.0)));
+                if (!std::isfinite(offset)) {
+                    return false;
+                }
+                candidate.m_prediction.m_frequencySamplesHz.append(offset);
             }
         }
         catch (const std::exception&) {
@@ -2769,23 +2997,11 @@ private:
 
         for (const CalibrationObservationModel& model : models)
         {
-            MovingTargetMatcher::Observation corrected =
-                model.m_observation;
-            corrected.m_startDateTimeUtc =
-                corrected.m_startDateTimeUtc.addMSecs(
-                    (qint64) std::llround(timeOffsetS * 1000.0));
-            corrected.m_centerFrequencyOffsetHz -= frequencyBiasHz;
-            QVector<MovingTargetMatcher::PredictedCandidate> candidates;
-            candidates.reserve(model.m_curves.size());
-
-            for (const CalibrationPredictionCurve& curve : model.m_curves) {
-                candidates.append(curve.predictionAt(timeOffsetS));
-            }
-
             const MovingTargetMatcher::Match match =
-                MovingTargetMatcher::matchPredictions(
-                    corrected,
-                    candidates);
+                matchCalibrationObservation(
+                    model,
+                    timeOffsetS,
+                    frequencyBiasHz);
 
             if (match.m_matched) {
                 ++score.m_matched;
@@ -2803,6 +3019,28 @@ private:
         }
 
         return score;
+    }
+
+    MovingTargetMatcher::Match matchCalibrationObservation(
+        const CalibrationObservationModel& model,
+        double timeOffsetS,
+        double frequencyBiasHz) const
+    {
+        MovingTargetMatcher::Observation corrected = model.m_observation;
+        corrected.m_startDateTimeUtc =
+            corrected.m_startDateTimeUtc.addMSecs(
+                (qint64) std::llround(timeOffsetS * 1000.0));
+        corrected.m_centerFrequencyOffsetHz -= frequencyBiasHz;
+        QVector<MovingTargetMatcher::PredictedCandidate> candidates;
+        candidates.reserve(model.m_curves.size());
+
+        for (const CalibrationPredictionCurve& curve : model.m_curves) {
+            candidates.append(curve.predictionAt(timeOffsetS));
+        }
+
+        return MovingTargetMatcher::matchPredictions(
+            corrected,
+            candidates);
     }
 
     static bool betterCalibrationPoint(
@@ -3084,6 +3322,7 @@ private:
     QHash<qint64, Snapshot> m_snapshots;
     QList<qint64> m_snapshotOrder;
     QString m_geometryKey;
+    QVector<RecentPassFragment> m_recentPassFragments;
 #else
     std::vector<int> m_catalog;
 #endif

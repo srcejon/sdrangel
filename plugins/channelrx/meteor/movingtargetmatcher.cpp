@@ -13,6 +13,8 @@
 #include <cmath>
 #include <limits>
 
+#include <QHash>
+
 namespace {
     constexpr double Pi = 3.14159265358979323846;
     constexpr double SpeedOfLightMPS = 299792458.0;
@@ -183,10 +185,6 @@ namespace {
         }
         candidates.insert(insertionIndex, candidate);
 
-        const int maximumCandidateCount = MaximumAlternativeCount + 1;
-        if (candidates.size() > maximumCandidateCount) {
-            candidates.resize(maximumCandidateCount);
-        }
     }
 
     MovingTargetMatcher::Candidate candidateFromMatch(
@@ -200,7 +198,10 @@ namespace {
         candidate.m_endpointResidualRMSHz = match.m_endpointResidualRMSHz;
         candidate.m_centerResidualHz = match.m_centerResidualHz;
         candidate.m_driftResidualHz = match.m_driftResidualHz;
+        candidate.m_trajectoryResidualRMSHz = match.m_trajectoryResidualRMSHz;
+        candidate.m_fittedFrequencyBiasHz = match.m_fittedFrequencyBiasHz;
         candidate.m_stateAgeS = match.m_stateAgeS;
+        candidate.m_softGeometry = match.m_softGeometry;
         candidate.m_prediction = match.m_prediction;
         return candidate;
     }
@@ -217,7 +218,10 @@ namespace {
         match.m_endpointResidualRMSHz = candidate.m_endpointResidualRMSHz;
         match.m_centerResidualHz = candidate.m_centerResidualHz;
         match.m_driftResidualHz = candidate.m_driftResidualHz;
+        match.m_trajectoryResidualRMSHz = candidate.m_trajectoryResidualRMSHz;
+        match.m_fittedFrequencyBiasHz = candidate.m_fittedFrequencyBiasHz;
         match.m_stateAgeS = candidate.m_stateAgeS;
+        match.m_softGeometry = candidate.m_softGeometry;
         match.m_prediction = candidate.m_prediction;
     }
 
@@ -231,32 +235,44 @@ namespace {
         }
 
         setBestCandidate(match, rankedCandidates.first());
+        match.m_candidateCount = rankedCandidates.size();
         match.m_secondBestScorePercent = rankedCandidates.size() > 1
             ? rankedCandidates[1].m_scorePercent
             : 0.0;
         match.m_alternatives.clear();
 
+        const double densityMarginPercent =
+            tunables.m_minimumScoreMarginPercent
+            + 1.5 * std::log10(std::max(1.0, (double) rankedCandidates.size()));
         for (int index = 1;
             (index < rankedCandidates.size())
                 && (match.m_alternatives.size() < MaximumAlternativeCount);
             ++index)
         {
             if ((match.m_scorePercent - rankedCandidates[index].m_scorePercent)
-                >= tunables.m_minimumScoreMarginPercent)
+                >= densityMarginPercent)
             {
                 break;
             }
             match.m_alternatives.append(rankedCandidates[index]);
         }
+        match.m_closeCandidateCount = 1 + match.m_alternatives.size();
 
         const double scoreMarginPercent = match.m_scorePercent
             - match.m_secondBestScorePercent;
         match.m_ambiguous =
             (match.m_scorePercent >= tunables.m_minimumMatchScorePercent)
             && (match.m_secondBestScorePercent > 0.0)
-            && (scoreMarginPercent < tunables.m_minimumScoreMarginPercent);
+            && (scoreMarginPercent < densityMarginPercent);
         match.m_matched = (match.m_scorePercent >= tunables.m_minimumMatchScorePercent)
             && !match.m_ambiguous;
+        if (match.m_ambiguous) {
+            match.m_diagnostic = QStringLiteral(
+                "Several catalog objects fit within the density-adjusted score margin");
+        } else if (!match.m_matched) {
+            match.m_diagnostic = QStringLiteral(
+                "Best candidate is below the minimum trajectory score");
+        }
     }
 }
 
@@ -336,6 +352,18 @@ MovingTargetMatcher::Prediction MovingTargetMatcher::predict(
             * (prediction.m_startFrequencyOffsetHz + prediction.m_endFrequencyOffsetHz);
         prediction.m_frequencyDriftHz = prediction.m_endFrequencyOffsetHz
             - prediction.m_startFrequencyOffsetHz;
+        prediction.m_frequencySamplesHz.reserve(observation.m_frequencySamples.size());
+        for (const Observation::FrequencySample& sample : observation.m_frequencySamples)
+        {
+            const Vector3 samplePosition = targetEpochPosition
+                + targetVelocity * (startOffsetS + sample.m_timeOffsetS);
+            prediction.m_frequencySamplesHz.append(bistaticDopplerOffset(
+                samplePosition,
+                targetVelocity,
+                transmitterPosition,
+                receiverPosition,
+                observation.m_referenceFrequencyHz));
+        }
     }
 
     return prediction;
@@ -359,16 +387,33 @@ namespace {
             - 0.5 * observation.m_frequencyDriftHz;
         scales.m_observedEndFrequencyHz = observation.m_centerFrequencyOffsetHz
             + 0.5 * observation.m_frequencyDriftHz;
+        const double measurementSigmaHz = std::max(
+            1.0,
+            observation.m_frequencyUncertaintyHz > 0.0
+                ? observation.m_frequencyUncertaintyHz
+                : tunables.m_defaultFrequencyUncertaintyHz);
+        const double driftRateHzPerS = std::fabs(observation.m_frequencyDriftHz)
+            / std::max(0.001, observation.m_durationS);
+        const double timingContributionHz = driftRateHzPerS
+            * std::max(0.0, observation.m_timingUncertaintyS);
         scales.m_centerScaleHz = std::max(
             tunables.m_minimumCenterScaleHz,
-            std::fabs(observation.m_frequencySpanHz) * tunables.m_centerSpanScale);
+            std::hypot(measurementSigmaHz, timingContributionHz));
         scales.m_driftScaleHz = std::max(
             tunables.m_minimumDriftScaleHz,
-            std::fabs(observation.m_frequencyDriftHz) * tunables.m_driftScale);
+            std::sqrt(2.0) * measurementSigmaHz);
         return scales;
     }
 
     constexpr double ApproximateDirectionScoreFactor = 0.85;
+
+    double huberLoss(double normalizedResidual, double transition)
+    {
+        const double magnitude = std::fabs(normalizedResidual);
+        return magnitude <= transition
+            ? 0.5 * magnitude * magnitude
+            : transition * (magnitude - 0.5 * transition);
+    }
 
     MovingTargetMatcher::Candidate scoreCandidate(
         const MovingTargetMatcher::Observation& observation,
@@ -378,22 +423,79 @@ namespace {
         const QString& label,
         double stateAgeS,
         const MovingTargetMatcher::Prediction& prediction,
-        double scoreFactor)
+        double scoreFactor,
+        const MovingTargetMatcher::Tunables& tunables)
     {
         const double centerResidualHz = observation.m_centerFrequencyOffsetHz
             - prediction.m_centerFrequencyOffsetHz;
         const double driftResidualHz = observation.m_frequencyDriftHz
             - prediction.m_frequencyDriftHz;
-        const double normalizedSquared =
-            std::pow(centerResidualHz / scales.m_centerScaleHz, 2.0)
-            + std::pow(driftResidualHz / scales.m_driftScaleHz, 2.0);
-        const double scorePercent = 100.0 * scoreFactor * std::exp(-0.5 * normalizedSquared);
+        double normalizedLoss =
+            0.5 * std::pow(centerResidualHz / scales.m_centerScaleHz, 2.0)
+            + 0.5 * std::pow(driftResidualHz / scales.m_driftScaleHz, 2.0);
         const double startResidualHz = scales.m_observedStartFrequencyHz
             - prediction.m_startFrequencyOffsetHz;
         const double endResidualHz = scales.m_observedEndFrequencyHz
             - prediction.m_endFrequencyOffsetHz;
         const double endpointResidualRMSHz = std::sqrt(
             0.5 * (startResidualHz * startResidualHz + endResidualHz * endResidualHz));
+        double trajectoryResidualRMSHz = endpointResidualRMSHz;
+        double fittedFrequencyBiasHz = 0.0;
+
+        if ((observation.m_frequencySamples.size() >= 3)
+            && (prediction.m_frequencySamplesHz.size()
+                == observation.m_frequencySamples.size()))
+        {
+            double weightedResidualSum = 0.0;
+            double weightSum = 0.0;
+            for (int i = 0; i < observation.m_frequencySamples.size(); ++i)
+            {
+                const double sigma = std::max(
+                    1.0,
+                    observation.m_frequencySamples[i].m_uncertaintyHz > 0.0
+                        ? observation.m_frequencySamples[i].m_uncertaintyHz
+                        : observation.m_frequencyUncertaintyHz);
+                const double weight = 1.0 / (sigma * sigma);
+                weightedResidualSum += weight
+                    * (observation.m_frequencySamples[i].m_frequencyOffsetHz
+                        - prediction.m_frequencySamplesHz[i]);
+                weightSum += weight;
+            }
+            fittedFrequencyBiasHz = std::clamp(
+                weightSum > 0.0 ? weightedResidualSum / weightSum : 0.0,
+                -tunables.m_maximumFittedFrequencyBiasHz,
+                tunables.m_maximumFittedFrequencyBiasHz);
+
+            double squaredResidualSum = 0.0;
+            double robustLossSum = 0.0;
+            for (int i = 0; i < observation.m_frequencySamples.size(); ++i)
+            {
+                const double sigma = std::max(
+                    1.0,
+                    observation.m_frequencySamples[i].m_uncertaintyHz > 0.0
+                        ? observation.m_frequencySamples[i].m_uncertaintyHz
+                        : observation.m_frequencyUncertaintyHz);
+                const double residual =
+                    observation.m_frequencySamples[i].m_frequencyOffsetHz
+                    - prediction.m_frequencySamplesHz[i]
+                    - fittedFrequencyBiasHz;
+                squaredResidualSum += residual * residual;
+                robustLossSum += huberLoss(
+                    residual / sigma,
+                    tunables.m_huberTransitionSigma);
+            }
+            trajectoryResidualRMSHz = std::sqrt(
+                squaredResidualSum / observation.m_frequencySamples.size());
+            normalizedLoss = robustLossSum / observation.m_frequencySamples.size();
+            const double biasSigma = std::max(
+                1.0,
+                tunables.m_maximumFittedFrequencyBiasHz);
+            normalizedLoss += 0.5 * std::pow(
+                fittedFrequencyBiasHz / biasSigma,
+                2.0);
+        }
+
+        const double scorePercent = 100.0 * scoreFactor * std::exp(-normalizedLoss);
 
         MovingTargetMatcher::Candidate candidate;
         candidate.m_source = source;
@@ -403,6 +505,8 @@ namespace {
         candidate.m_endpointResidualRMSHz = endpointResidualRMSHz;
         candidate.m_centerResidualHz = centerResidualHz;
         candidate.m_driftResidualHz = driftResidualHz;
+        candidate.m_trajectoryResidualRMSHz = trajectoryResidualRMSHz;
+        candidate.m_fittedFrequencyBiasHz = fittedFrequencyBiasHz;
         candidate.m_stateAgeS = stateAgeS;
         candidate.m_prediction = prediction;
         return candidate;
@@ -443,7 +547,8 @@ MovingTargetMatcher::Match MovingTargetMatcher::match(
             target.m_label,
             stateAgeS,
             prediction,
-            target.m_approximateDirection ? ApproximateDirectionScoreFactor : 1.0));
+            target.m_approximateDirection ? ApproximateDirectionScoreFactor : 1.0,
+            tunables));
     }
 
     finalizeMatch(bestMatch, rankedCandidates, tunables);
@@ -468,7 +573,7 @@ MovingTargetMatcher::Match MovingTargetMatcher::matchPredictions(
             continue;
         }
 
-        insertRankedCandidate(rankedCandidates, scoreCandidate(
+        Candidate scored = scoreCandidate(
             observation,
             scales,
             candidate.m_source,
@@ -476,11 +581,74 @@ MovingTargetMatcher::Match MovingTargetMatcher::matchPredictions(
             candidate.m_label,
             candidate.m_stateAgeS,
             candidate.m_prediction,
-            1.0));
+            candidate.m_scoreFactor,
+            tunables);
+        scored.m_softGeometry = candidate.m_softGeometry;
+        insertRankedCandidate(rankedCandidates, scored);
     }
 
     finalizeMatch(bestMatch, rankedCandidates, tunables);
     return bestMatch;
+}
+
+MovingTargetMatcher::Match MovingTargetMatcher::matchPredictionGroups(
+    const QVector<Observation>& observations,
+    const QVector<QVector<PredictedCandidate>>& candidateGroups,
+    const Tunables& tunables)
+{
+    if (observations.isEmpty() || (observations.size() != candidateGroups.size())) {
+        return Match();
+    }
+
+    QHash<QString, QVector<Candidate>> byIdentity;
+    for (int group = 0; group < observations.size(); ++group)
+    {
+        const ObservationScales scales = makeObservationScales(observations[group], tunables);
+        for (const PredictedCandidate& predicted : candidateGroups[group])
+        {
+            if (!predicted.m_prediction.m_valid) {
+                continue;
+            }
+            const QString key = predicted.m_source + QChar('\x1f') + predicted.m_id;
+            byIdentity[key].append(scoreCandidate(
+                observations[group],
+                scales,
+                predicted.m_source,
+                predicted.m_id,
+                predicted.m_label,
+                predicted.m_stateAgeS,
+                predicted.m_prediction,
+                predicted.m_scoreFactor,
+                tunables));
+        }
+    }
+
+    QVector<Candidate> ranked;
+    for (auto it = byIdentity.cbegin(); it != byIdentity.cend(); ++it)
+    {
+        if (it.value().size() != observations.size()) {
+            continue;
+        }
+        Candidate joint = it.value().last();
+        double logScore = 0.0;
+        double rmsSquared = 0.0;
+        for (const Candidate& fragment : it.value())
+        {
+            logScore += std::log(std::max(1e-6, fragment.m_scorePercent / 100.0));
+            rmsSquared += fragment.m_trajectoryResidualRMSHz
+                * fragment.m_trajectoryResidualRMSHz;
+            joint.m_softGeometry = joint.m_softGeometry || fragment.m_softGeometry;
+        }
+        joint.m_scorePercent = 100.0 * std::exp(logScore / observations.size());
+        joint.m_trajectoryResidualRMSHz = std::sqrt(
+            rmsSquared / observations.size());
+        insertRankedCandidate(ranked, joint);
+    }
+
+    Match result;
+    finalizeMatch(result, ranked, tunables);
+    result.m_passFragmentCount = observations.size();
+    return result;
 }
 
 MovingTargetMatcher::Match MovingTargetMatcher::combine(

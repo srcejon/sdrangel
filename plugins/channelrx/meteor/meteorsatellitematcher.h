@@ -119,6 +119,13 @@ public:
 
     struct CalibrationResult
     {
+        struct ObservationComparison
+        {
+            QDateTime m_dateTimeUtc;
+            MovingTargetMatcher::Match m_before;
+            MovingTargetMatcher::Match m_after;
+        };
+
         bool m_success = false;
         QString m_error;
         int m_observationCount = 0;
@@ -144,6 +151,7 @@ public:
         double m_extendedTimeOffsetS = 0.0;
         double m_extendedFrequencyBiasHz = 0.0;
         bool m_recommendationReliable = false;
+        QVector<ObservationComparison> m_observationComparisons;
     };
 
     explicit MeteorSatelliteMatcher(

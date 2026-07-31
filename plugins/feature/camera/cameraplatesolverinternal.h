@@ -1679,6 +1679,20 @@ static bool isAcceptableNarrowGuidedFov(const CameraSettings& settings, double f
 
 static QString narrowGuidedFovRejectionReason(const CameraSettings& settings, double fovDegrees);
 
+// Seed-distance plausibility gate for narrow direction-seeded solves: the accepted centre
+// must lie within seed-error range of the run's seed direction. Legitimate pointing errors
+// are sub-FoV and the recenter ladder itself only roams +/- 1 FoV per hop, while
+// rotation-about-anchor aliases can land many FoV away (a false mode-4 accept sat 7.3 deg =
+// 5.7 FoV from its seed) - such a pose is on a different star field and the seed's whole
+// purpose is gone.
+static double maxDirectionSeedDistanceDegrees(const CameraSettings& settings);
+
+static double directionSeedSeparationDegrees(const CameraSettings& settings, double azimuthDegrees, double elevationDegrees);
+
+static bool isAcceptableDirectionSeedDistance(const CameraSettings& settings, double azimuthDegrees, double elevationDegrees);
+
+static QString directionSeedDistanceRejectionReason(const CameraSettings& settings, double azimuthDegrees, double elevationDegrees);
+
 // Residual gates for a direction-seeded solve. Shared by isAcceptableDirectionSeedSolve()
 // and directionSeedRejectionReason() so the accept decision and the human-readable
 // reason can never drift apart.

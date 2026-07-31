@@ -3345,6 +3345,56 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
                 - directionPenalty;
         };
         const int strongRecenterMatchCount = std::max(settings.m_plateSolveMinMatches + 48, 80);
+        // Consecutive-repeat futility cut: on an unsolvable field the ladder's late
+        // (elevation-tier) offsets can re-converge to the SAME rejected pose attempt
+        // after attempt at 11-16 s each (synth-rand-c-002: identical rejected pose from
+        // runs 14/15/16, 121 s total burned, starving the depth escape that actually
+        // solves the field). CONSECUTIVE repetition is the safe signal: measured across
+        // every recenter-using row of the REAL corpus and the RAND2 subset, no ladder
+        // that eventually succeeds ever produces even two identical rejected poses
+        // back-to-back - solvable fields interleave different candidate poses between
+        // repeats (stars-narrow-1 re-derives one rejected pose from offsets 3/5/8/10 yet
+        // wins on 11), and a genuine late rescue produces a fresh pose from every offset
+        // (synth-rand-e-002 solves on attempt 6 with no repeats at all). A total-repeat
+        // count is NOT safe - it broke exactly those two rows.
+        struct LastRejectedRecenterPose
+        {
+            bool valid = false;
+            double azimuthDegrees = 0.0;
+            double elevationDegrees = 0.0;
+            double rollDegrees = 0.0;
+        };
+        LastRejectedRecenterPose lastRejectedRecenterPose;
+        const auto rejectedPoseRepeatsPrevious = [&lastRejectedRecenterPose](const CameraPlateSolveResult& rejected) {
+            // The all-zero pose is the default-initialized sentinel of an attempt that
+            // found no candidate pose at all (it can carry a nonzero match count -
+            // stars-narrow-7 emits it from mid-ladder offsets before the winning one);
+            // it is not a re-derived attractor, so it breaks the run like an empty
+            // attempt does.
+            const bool noPose = (rejected.m_azimuthDegrees == 0.0)
+                && (rejected.m_elevationDegrees == 0.0)
+                && (rejected.m_rollDegrees == 0.0);
+            if (rejected.m_solved || (rejected.m_matchedStars <= 0) || noPose)
+            {
+                // A solved, empty or pose-less attempt breaks any run of consecutive repeats
+                lastRejectedRecenterPose.valid = false;
+                return false;
+            }
+            const auto wrappedDifference = [](double a, double b) {
+                double difference = std::fmod(a - b + 180.0, 360.0);
+                if (difference < 0.0) {
+                    difference += 360.0;
+                }
+                return std::fabs(difference - 180.0);
+            };
+            const bool repeats = lastRejectedRecenterPose.valid
+                && (wrappedDifference(lastRejectedRecenterPose.azimuthDegrees, rejected.m_azimuthDegrees) <= 0.02)
+                && (std::fabs(lastRejectedRecenterPose.elevationDegrees - rejected.m_elevationDegrees) <= 0.02)
+                && (wrappedDifference(lastRejectedRecenterPose.rollDegrees, rejected.m_rollDegrees) <= 0.5);
+            lastRejectedRecenterPose = {
+                true, rejected.m_azimuthDegrees, rejected.m_elevationDegrees, rejected.m_rollDegrees};
+            return repeats;
+        };
         // Budget enough attempts to reach the finer az tier (indices 4..7), the
         // elevation tier (indices 8..13), and now also the el ±1.0·fov tier (indices
         // 14..15); the coarse offsets that already resolve a case early-stop well before
@@ -3382,6 +3432,17 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
                      << "elevation" << retrySettings.m_elevation
                      << "searchRadius" << retrySettings.m_plateSolveAzElSearchRadius;
             CameraPlateSolveResult retryResult = runSolve(retrySettings, QStringLiteral("recenter"), true);
+            if (rejectedPoseRepeatsPrevious(retryResult))
+            {
+                qDebug() << "CameraPlateSolver: stopping dense narrow recenter retries - consecutive identical rejected pose"
+                         << "attempts" << recenterAttempts
+                         << "Az" << retryResult.m_azimuthDegrees
+                         << "El" << retryResult.m_elevationDegrees
+                         << "Roll" << retryResult.m_rollDegrees
+                         << "matches" << retryResult.m_matchedStars;
+                starDetections = detectionsBeforeRecenters;
+                break;
+            }
             const double retryScore = denseNarrowRecenterScore(retryResult);
             const double bestScore = denseNarrowRecenterScore(bestRecenterResult);
             const double retryOriginalDistance = originalSeedAngularDistance(retryResult);

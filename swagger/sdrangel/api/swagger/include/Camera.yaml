@@ -441,6 +441,7 @@ CameraSettings:
         Field-of-view input mode
           * 0 - Direct FoV
           * 1 - Calculate from sensor size and focal length
+          * 2 - Calculate from camera-reported sensor size and focal length
       type: integer
     fovSensorWidthMm:
       description: "Sensor width in millimetres when calculating FoV"

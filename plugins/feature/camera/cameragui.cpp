@@ -1262,6 +1262,8 @@ CameraGUI::CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *
     m_alpacaHasNamedOffsets(false),
     m_alpacaCameraSizeX(0),
     m_alpacaCameraSizeY(0),
+    m_cameraPixelSizeXUm(0.0),
+    m_cameraPixelSizeYUm(0.0),
     m_qtZoomSupported(false),
     m_qtManualExposureSupported(true),
     m_qtIsoSensitivitySupported(true),
@@ -2071,6 +2073,8 @@ bool CameraGUI::restorePreviousCameraSelection(const QString& previousCameraProt
 
 void CameraGUI::resetCameraStatus()
 {
+    m_cameraPixelSizeXUm = 0.0;
+    m_cameraPixelSizeYUm = 0.0;
     m_lastAlpacaCameraState = -1;
     m_lastAlpacaCaptureTimeMs = -1;
     m_lastAlpacaReceiveImageFormat.clear();
@@ -6506,12 +6510,15 @@ void CameraGUI::updatePositionControls()
 
 void CameraGUI::updateFovControls()
 {
-    const bool calculateFov = m_settings.m_fovMode == CameraSettings::FovModeSensorFocalLength;
+    const bool calculateFov = m_settings.m_fovMode != CameraSettings::FovModeDirect;
+    const bool cameraSensor = m_settings.m_fovMode == CameraSettings::FovModeCameraFocalLength;
     settingsUI()->fovSpin->setReadOnly(calculateFov);
     settingsUI()->fovSensorWidthLabel->setEnabled(calculateFov);
     settingsUI()->fovSensorWidthSpin->setEnabled(calculateFov);
+    settingsUI()->fovSensorWidthSpin->setReadOnly(cameraSensor);
     settingsUI()->fovSensorHeightLabel->setEnabled(calculateFov);
     settingsUI()->fovSensorHeightSpin->setEnabled(calculateFov);
+    settingsUI()->fovSensorHeightSpin->setReadOnly(cameraSensor);
     settingsUI()->fovFocalLengthLabel->setEnabled(calculateFov);
     settingsUI()->fovFocalLengthSpin->setEnabled(calculateFov);
 
@@ -6520,11 +6527,36 @@ void CameraGUI::updateFovControls()
     }
 }
 
+bool CameraGUI::updateFovSensorSizeFromCamera()
+{
+    if ((m_alpacaCameraSizeX <= 0) || (m_alpacaCameraSizeY <= 0)
+        || (m_cameraPixelSizeXUm <= 0.0) || (m_cameraPixelSizeYUm <= 0.0))
+    {
+        return false;
+    }
+
+    const double sensorWidthMm = static_cast<double>(m_alpacaCameraSizeX) * m_cameraPixelSizeXUm / 1000.0;
+    const double sensorHeightMm = static_cast<double>(m_alpacaCameraSizeY) * m_cameraPixelSizeYUm / 1000.0;
+    const bool changed = !qFuzzyCompare(m_settings.m_fovSensorWidthMm, sensorWidthMm)
+        || !qFuzzyCompare(m_settings.m_fovSensorHeightMm, sensorHeightMm);
+
+    m_settings.m_fovSensorWidthMm = sensorWidthMm;
+    m_settings.m_fovSensorHeightMm = sensorHeightMm;
+    QSignalBlocker widthBlocker(settingsUI()->fovSensorWidthSpin);
+    QSignalBlocker heightBlocker(settingsUI()->fovSensorHeightSpin);
+    settingsUI()->fovSensorWidthSpin->setValue(sensorWidthMm);
+    settingsUI()->fovSensorHeightSpin->setValue(sensorHeightMm);
+    return changed;
+}
+
 void CameraGUI::updateCalculatedFov()
 {
-    if (m_settings.m_fovMode != CameraSettings::FovModeSensorFocalLength) {
+    if (m_settings.m_fovMode == CameraSettings::FovModeDirect) {
         return;
     }
+
+    const bool cameraGeometryChanged = (m_settings.m_fovMode == CameraSettings::FovModeCameraFocalLength)
+        && updateFovSensorSizeFromCamera();
 
     const double sensorLongEdgeMm = std::max(m_settings.m_fovSensorWidthMm, m_settings.m_fovSensorHeightMm);
     if ((sensorLongEdgeMm <= 0.0) || (m_settings.m_fovFocalLengthMm <= 0.0)) {
@@ -6541,8 +6573,15 @@ void CameraGUI::updateCalculatedFov()
     settingsUI()->fovSpin->blockSignals(true);
     settingsUI()->fovSpin->setValue(m_settings.m_fov);
     settingsUI()->fovSpin->blockSignals(false);
-    if (m_doApplySettings) {
-        applySetting("fov");
+    if (m_doApplySettings)
+    {
+        QStringList settingsKeys = {"fov"};
+        if (cameraGeometryChanged)
+        {
+            settingsKeys.append("fovSensorWidthMm");
+            settingsKeys.append("fovSensorHeightMm");
+        }
+        applySettings(settingsKeys);
     }
 }
 
@@ -8151,6 +8190,8 @@ void CameraGUI::updateAlpacaCapabilities(const CameraWorker::MsgReportAlpacaCame
     settingsUI()->cameraBinYSpin->setValue(qBound(1, m_settings.m_cameraBinY, info.getMaxBinY()));
     m_alpacaCameraSizeX = std::max(0, info.getCameraSizeX());
     m_alpacaCameraSizeY = std::max(0, info.getCameraSizeY());
+    m_cameraPixelSizeXUm = std::max(0.0, info.getPixelSizeX());
+    m_cameraPixelSizeYUm = std::max(0.0, info.getPixelSizeY());
     updateCameraSubframeControls();
 
     // Gain
@@ -8249,6 +8290,9 @@ void CameraGUI::updateAlpacaCapabilities(const CameraWorker::MsgReportAlpacaCame
 
     updateCameraSettingsVisibility();
     blockApplySettings(false);
+    if (m_settings.m_fovMode == CameraSettings::FovModeCameraFocalLength) {
+        updateCalculatedFov();
+    }
 }
 
 void CameraGUI::updateAsiCapabilities(const CameraWorker::MsgReportAsiCameraInfo& info)
@@ -8267,6 +8311,8 @@ void CameraGUI::updateAsiCapabilities(const CameraWorker::MsgReportAsiCameraInfo
     m_asiRaw8Supported = info.isRaw8Supported();
     m_alpacaCameraSizeX = std::max(0, info.getCameraSizeX());
     m_alpacaCameraSizeY = std::max(0, info.getCameraSizeY());
+    m_cameraPixelSizeXUm = std::max(0.0, info.getPixelSizeUm());
+    m_cameraPixelSizeYUm = m_cameraPixelSizeXUm;
 
     settingsUI()->cameraBinXSpin->setMaximum(std::max(1, info.getMaxBinX()));
     settingsUI()->cameraBinXSpin->setValue(qBound(1, m_settings.m_cameraBinX, info.getMaxBinX()));
@@ -8366,6 +8412,9 @@ void CameraGUI::updateAsiCapabilities(const CameraWorker::MsgReportAsiCameraInfo
 
     updateCameraSettingsVisibility();
     blockApplySettings(false);
+    if (m_settings.m_fovMode == CameraSettings::FovModeCameraFocalLength) {
+        updateCalculatedFov();
+    }
 }
 
 void CameraGUI::updateCameraSubframeControls()
@@ -9966,9 +10015,9 @@ void CameraGUI::on_fovModeCombo_currentIndexChanged(int index)
     m_settings.m_fovMode = static_cast<CameraSettings::FovMode>(qBound(
         static_cast<int>(CameraSettings::FovModeDirect),
         index,
-        static_cast<int>(CameraSettings::FovModeSensorFocalLength)));
+        static_cast<int>(CameraSettings::FovModeCameraFocalLength)));
     updateFovControls();
-    applySettings({"fovMode", "fov"});
+    applySettings({"fovMode", "fov", "fovSensorWidthMm", "fovSensorHeightMm"});
 }
 
 void CameraGUI::on_fovSpin_valueChanged(double value)

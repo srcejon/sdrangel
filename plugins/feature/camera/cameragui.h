@@ -334,6 +334,8 @@ private:
     bool m_alpacaHasNamedOffsets; // true if offsets list has named entries
     int m_alpacaCameraSizeX;
     int m_alpacaCameraSizeY;
+    double m_cameraPixelSizeXUm;
+    double m_cameraPixelSizeYUm;
     bool m_qtZoomSupported;             // true when the active Qt camera reports zoom range > 1.0
     bool m_qtManualExposureSupported;   // true when the active Qt camera supports manual exposure time
     bool m_qtIsoSensitivitySupported;   // true when the active Qt camera supports manual ISO sensitivity
@@ -492,6 +494,7 @@ private:
     void applyPositionSync();
     void updatePositionControls();
     void updateFovControls();
+    bool updateFovSensorSizeFromCamera();
     void updateCalculatedFov();
     void updateKeogramPreview(const QImage& image, const QString& fileName, bool visible);
     void initialiseVideoRecordBitrateCombo();

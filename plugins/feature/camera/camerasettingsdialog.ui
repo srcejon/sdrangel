@@ -8612,7 +8612,7 @@ Right-click: toggle continual synchronization from My Position.</string>
           <item row="0" column="1">
            <widget class="QComboBox" name="fovModeCombo">
             <property name="toolTip">
-             <string>Chooses whether field of view is entered directly or calculated from sensor and focal length.</string>
+             <string>Chooses whether field of view is entered directly, calculated from entered sensor dimensions, or calculated from camera-reported sensor dimensions. Focal length remains user supplied.</string>
             </property>
             <item>
              <property name="text">
@@ -8622,6 +8622,11 @@ Right-click: toggle continual synchronization from My Position.</string>
             <item>
              <property name="text">
               <string>Sensor/focal length</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>Camera/focal length</string>
              </property>
             </item>
            </widget>

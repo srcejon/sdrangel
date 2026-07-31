@@ -332,7 +332,8 @@ struct CameraSettings
     enum FovMode
     {
         FovModeDirect = 0,
-        FovModeSensorFocalLength
+        FovModeSensorFocalLength,
+        FovModeCameraFocalLength
     };
 
     static constexpr int m_minHdrExposureCount = 2;
@@ -599,7 +600,7 @@ struct CameraSettings
     float m_autoguideDeadbandDeg;  ///< On-sky residual below which no correction is sent, in degrees; 0 = auto (rotator tolerance/step and measured solve noise)
     float m_autoguideMaxCorrectionDeg; ///< Largest single on-sky correction per axis, in degrees; 0 = auto (solved FoV / 4)
     float m_fov;                   ///< Camera field of view in degrees
-    FovMode m_fovMode;             ///< Whether FoV is entered directly or calculated from sensor/focal length
+    FovMode m_fovMode;             ///< Whether FoV is entered directly or calculated from manual/camera sensor geometry
     double m_fovSensorWidthMm;     ///< Sensor width for calculated FoV
     double m_fovSensorHeightMm;    ///< Sensor height for calculated FoV
     double m_fovFocalLengthMm;     ///< Lens focal length for calculated FoV

@@ -1220,7 +1220,7 @@ bool CameraSettings::deserialize(const QByteArray& data)
         m_fovMode = static_cast<FovMode>(qBound(
             static_cast<qint32>(FovModeDirect),
             fovMode,
-            static_cast<qint32>(FovModeSensorFocalLength)));
+            static_cast<qint32>(FovModeCameraFocalLength)));
         d.readDouble(216, &m_fovSensorWidthMm, 36.0);
         d.readDouble(217, &m_fovSensorHeightMm, 24.0);
         d.readDouble(218, &m_fovFocalLengthMm, 35.0);
@@ -1905,7 +1905,7 @@ bool CameraSettings::deserialize(const QByteArray& data)
         m_azimuthOffset = normalizeSignedDegrees(m_azimuthOffset);
         m_elevationOffset = qBound(-180.0f, m_elevationOffset, 180.0f);
         m_rollOffset = normalizeSignedDegrees(m_rollOffset);
-        if (m_fovMode == FovModeSensorFocalLength) {
+        if (m_fovMode != FovModeDirect) {
             m_fov = calculateLongEdgeFovDegrees(m_fovSensorWidthMm, m_fovSensorHeightMm, m_fovFocalLengthMm);
         }
         m_fov = qBound(m_minFov, m_fov, m_maxFov);
@@ -2409,7 +2409,7 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
         m_fovMode = static_cast<FovMode>(qBound(
             static_cast<qint32>(FovModeDirect),
             static_cast<qint32>(settings.m_fovMode),
-            static_cast<qint32>(FovModeSensorFocalLength)));
+            static_cast<qint32>(FovModeCameraFocalLength)));
     }
     if (settingsKeys.contains("fovSensorWidthMm")) {
         m_fovSensorWidthMm = std::max(0.001, settings.m_fovSensorWidthMm);
@@ -2419,6 +2419,14 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     }
     if (settingsKeys.contains("fovFocalLengthMm")) {
         m_fovFocalLengthMm = std::max(0.001, settings.m_fovFocalLengthMm);
+    }
+    if ((m_fovMode != FovModeDirect)
+        && (settingsKeys.contains("fovMode")
+            || settingsKeys.contains("fovSensorWidthMm")
+            || settingsKeys.contains("fovSensorHeightMm")
+            || settingsKeys.contains("fovFocalLengthMm")))
+    {
+        m_fov = calculateLongEdgeFovDegrees(m_fovSensorWidthMm, m_fovSensorHeightMm, m_fovFocalLengthMm);
     }
     if (settingsKeys.contains("lensProjection")) {
         m_lensProjection = (LensProjection) qBound((int) LensProjectionRectilinear, (int) settings.m_lensProjection, (int) LensProjectionEquisolid);

@@ -125,6 +125,12 @@ public:
         double m_minimumDriftScaleHz = 12.0;
         double m_driftScale = 0.25;
         double m_defaultFrequencyUncertaintyHz = 25.0;
+        // Detector trajectories are reconstructed from correlated fragment centres and
+        // slopes rather than independent ridge samples. This floor represents that model
+        // discrepancy and prevents FFT-bin precision from making the match overconfident.
+        double m_trajectoryModelUncertaintyFloorHz = 25.0;
+        double m_reconstructedTrajectoryWeight = 0.20;
+        double m_maximumTrajectoryPenalty = 1.0;
         double m_maximumFittedFrequencyBiasHz = 20.0;
         double m_huberTransitionSigma = 1.5;
         double m_minimumMatchScorePercent = 60.0;

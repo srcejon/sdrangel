@@ -387,11 +387,14 @@ namespace {
             - 0.5 * observation.m_frequencyDriftHz;
         scales.m_observedEndFrequencyHz = observation.m_centerFrequencyOffsetHz
             + 0.5 * observation.m_frequencyDriftHz;
-        const double measurementSigmaHz = std::max(
+        const double reportedMeasurementSigmaHz = std::max(
             1.0,
             observation.m_frequencyUncertaintyHz > 0.0
                 ? observation.m_frequencyUncertaintyHz
                 : tunables.m_defaultFrequencyUncertaintyHz);
+        const double measurementSigmaHz = std::hypot(
+            reportedMeasurementSigmaHz,
+            std::max(0.0, tunables.m_trajectoryModelUncertaintyFloorHz));
         const double driftRateHzPerS = std::fabs(observation.m_frequencyDriftHz)
             / std::max(0.001, observation.m_durationS);
         const double timingContributionHz = driftRateHzPerS
@@ -430,9 +433,10 @@ namespace {
             - prediction.m_centerFrequencyOffsetHz;
         const double driftResidualHz = observation.m_frequencyDriftHz
             - prediction.m_frequencyDriftHz;
-        double normalizedLoss =
+        double endpointLoss =
             0.5 * std::pow(centerResidualHz / scales.m_centerScaleHz, 2.0)
             + 0.5 * std::pow(driftResidualHz / scales.m_driftScaleHz, 2.0);
+        double normalizedLoss = endpointLoss;
         const double startResidualHz = scales.m_observedStartFrequencyHz
             - prediction.m_startFrequencyOffsetHz;
         const double endResidualHz = scales.m_observedEndFrequencyHz
@@ -450,11 +454,14 @@ namespace {
             double weightSum = 0.0;
             for (int i = 0; i < observation.m_frequencySamples.size(); ++i)
             {
-                const double sigma = std::max(
+                const double reportedSigma = std::max(
                     1.0,
                     observation.m_frequencySamples[i].m_uncertaintyHz > 0.0
                         ? observation.m_frequencySamples[i].m_uncertaintyHz
                         : observation.m_frequencyUncertaintyHz);
+                const double sigma = std::hypot(
+                    reportedSigma,
+                    std::max(0.0, tunables.m_trajectoryModelUncertaintyFloorHz));
                 const double weight = 1.0 / (sigma * sigma);
                 weightedResidualSum += weight
                     * (observation.m_frequencySamples[i].m_frequencyOffsetHz
@@ -470,11 +477,14 @@ namespace {
             double robustLossSum = 0.0;
             for (int i = 0; i < observation.m_frequencySamples.size(); ++i)
             {
-                const double sigma = std::max(
+                const double reportedSigma = std::max(
                     1.0,
                     observation.m_frequencySamples[i].m_uncertaintyHz > 0.0
                         ? observation.m_frequencySamples[i].m_uncertaintyHz
                         : observation.m_frequencyUncertaintyHz);
+                const double sigma = std::hypot(
+                    reportedSigma,
+                    std::max(0.0, tunables.m_trajectoryModelUncertaintyFloorHz));
                 const double residual =
                     observation.m_frequencySamples[i].m_frequencyOffsetHz
                     - prediction.m_frequencySamplesHz[i]
@@ -486,11 +496,28 @@ namespace {
             }
             trajectoryResidualRMSHz = std::sqrt(
                 squaredResidualSum / observation.m_frequencySamples.size());
-            normalizedLoss = robustLossSum / observation.m_frequencySamples.size();
+            const double trajectoryLoss = robustLossSum
+                / observation.m_frequencySamples.size();
+            // Keep endpoints as the primary acceptance evidence. The reconstructed
+            // trajectory is correlated and is therefore most useful for ranking close
+            // candidates, not as an unlimited rejection gate.
+            endpointLoss =
+                0.5 * std::pow(
+                    (centerResidualHz - fittedFrequencyBiasHz)
+                        / scales.m_centerScaleHz,
+                    2.0)
+                + 0.5 * std::pow(
+                    driftResidualHz / scales.m_driftScaleHz,
+                    2.0);
+            normalizedLoss = endpointLoss
+                + std::max(0.0, tunables.m_reconstructedTrajectoryWeight)
+                    * std::min(
+                        trajectoryLoss,
+                        std::max(0.0, tunables.m_maximumTrajectoryPenalty));
             const double biasSigma = std::max(
                 1.0,
                 tunables.m_maximumFittedFrequencyBiasHz);
-            normalizedLoss += 0.5 * std::pow(
+            normalizedLoss += 0.1 * std::pow(
                 fittedFrequencyBiasHz / biasSigma,
                 2.0);
         }

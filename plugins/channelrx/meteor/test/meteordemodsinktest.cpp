@@ -587,6 +587,33 @@ namespace {
             return false;
         }
 
+        MovingTargetMatcher::Observation noisyTrajectoryObservation = curvedObservation;
+        noisyTrajectoryObservation.m_centerFrequencyOffsetHz = 0.0;
+        noisyTrajectoryObservation.m_frequencyDriftHz = 0.0;
+        noisyTrajectoryObservation.m_frequencyUncertaintyHz = 2.0;
+        noisyTrajectoryObservation.m_frequencySamples = {
+            {0.0, 18.0, 2.0},
+            {1.0, -22.0, 2.0},
+            {2.0, 20.0, 2.0},
+            {3.0, -17.0, 2.0},
+            {4.0, 1.0, 2.0}
+        };
+        const MovingTargetMatcher::Match noisyTrajectoryMatch =
+            MovingTargetMatcher::matchPredictions(
+                noisyTrajectoryObservation,
+                {predictedCandidate(
+                    QStringLiteral("NOISY-TRAJECTORY"),
+                    {0.0, 0.0, 0.0, 0.0, 0.0},
+                    0.0,
+                    0.0)});
+
+        if (!noisyTrajectoryMatch.m_matched
+            || (noisyTrajectoryMatch.m_scorePercent < 60.0))
+        {
+            errorStream << "Moving-target matcher test: reconstructed trajectory was treated as independent FFT-bin measurements\n";
+            return false;
+        }
+
         const MovingTargetMatcher::PredictedCandidate softTarget =
             predictedCandidate(
                 QStringLiteral("SOFT"),

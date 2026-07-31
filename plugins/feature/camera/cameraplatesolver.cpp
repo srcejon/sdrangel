@@ -3172,6 +3172,73 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
     // deepen escape first; the ladder and the late fallback below only run if it fails.
     attemptDeepenEscape();
 
+    // The mirror failure: a faint-carpet drowning. In a dense catalog region a
+    // short-exposure frame's few real stars are outnumbered by the catalog's faint
+    // carpet, which (a) lets wrong rolls accumulate coincidental matches and (b) drags
+    // refinement of the *true* basin away from its tight bright alignment (sadr @mag20:
+    // truth stalls at rms 15 against 1457 in-field candidates but refines to rms 1.44
+    // with 4/4 tight matches against the 32-star mag-10 subset). Retry once with the
+    // catalog capped at bright stars only; the sparse tight result is accepted via the
+    // sparse-tight certificate (hasSparseTightBrightCertifiedPose), which demands every
+    // match tight plus a named bright anchor, so this cannot adopt a faint-coincidence
+    // alias. Runs before the recenter ladder because it is one cheap solve against a
+    // tiny catalog, while the ladder is up to 16 full-depth attempts.
+    const auto attemptShallowEscape = [&]() {
+        constexpr double kShallowEscapeMaxMagnitude = 10.0;
+        // Sparse frames only: on a dense frame the full-depth machinery (deepen escape,
+        // recenter ladder) has real evidence to work with, and this retry would only eat
+        // wall-clock budget the ladder needs (m101's 924-detection recenter rescue was
+        // starved past the solve budget when this ran unconditionally).
+        constexpr qsizetype kShallowEscapeMaxDetections = 80;
+        if (result.m_solved
+            || !solveUsesDirection
+            || solveUsesRoll
+            || !SolverContext::isNarrowField(settings)
+            || (starDetections.size() > kShallowEscapeMaxDetections)
+            || (static_cast<double>(settings.m_plateSolveMaxMagnitude) <= kShallowEscapeMaxMagnitude + 0.5)
+            || isCancellationRequested())
+        {
+            return;
+        }
+        const QVector<CameraPipelineStarDetection> detectionsBeforeShallowEscape = starDetections;
+        CameraSettings retrySettings(cappedSettings);
+        retrySettings.m_plateSolveMaxMagnitude = static_cast<float>(kShallowEscapeMaxMagnitude);
+        qDebug() << "CameraPlateSolver: shallow-escape retry at bright-only catalog"
+                 << "maxMagnitude" << retrySettings.m_plateSolveMaxMagnitude
+                 << "detections" << starDetections.size()
+                 << "candidates" << result.m_catalogCandidateStars;
+        CameraPlateSolveResult shallowResult = runSolve(retrySettings, QStringLiteral("shallow-escape"));
+        // Adopt only a certificate-grade result (mirrors hasSparseTightBrightCertifiedPose:
+        // every match tight, named bright anchor pinned). A merely-acceptable sparse solve
+        // is NOT adopted: the recenter ladder below may still find the same pose at full
+        // depth with far more matches (stars-narrow-1: shallow 6 matches @ rms 4.2 vs the
+        // ladder's 25 @ rms 0.3), so a loose shallow accept must not preempt it.
+        const bool certificateGrade =
+            shallowResult.m_solved
+            && (shallowResult.m_matchedStars >= std::max(settings.m_plateSolveMinMatches, 4))
+            && std::isfinite(shallowResult.m_rmsErrorPixels)
+            && (shallowResult.m_rmsErrorPixels <= 2.0)
+            && std::isfinite(shallowResult.m_maxErrorPixels)
+            && (shallowResult.m_maxErrorPixels <= 3.0)
+            && (shallowResult.m_namedBrightAnchorMatches >= 1)
+            && std::isfinite(shallowResult.m_namedBrightAnchorRmsErrorPixels)
+            && (shallowResult.m_namedBrightAnchorRmsErrorPixels <= 3.0);
+        if (certificateGrade) {
+            result = shallowResult;
+        } else {
+            if (shallowResult.m_solved)
+            {
+                qDebug() << "CameraPlateSolver: shallow-escape solved but below certificate grade, not adopting"
+                         << "matches" << shallowResult.m_matchedStars
+                         << "rms" << shallowResult.m_rmsErrorPixels
+                         << "max" << shallowResult.m_maxErrorPixels
+                         << "namedAnchors" << shallowResult.m_namedBrightAnchorMatches;
+            }
+            starDetections = detectionsBeforeShallowEscape;
+        }
+    };
+    attemptShallowEscape();
+
     // NB: a "strong rejected anchor" guard used to suppress the recenter retry here, but
     // it mis-fired on wrong-roll aliases that coincidentally match a few named bright
     // anchors (e.g. m51 @16 from a ~1° offset seed locks onto a roll-58° alias with 3

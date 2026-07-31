@@ -7801,6 +7801,11 @@ bool CameraPlateSolver::SolverContext::hasWeakNarrowGuidedBrightSupport(const Ca
         logBrightSupportDecision(false, "named-bright-anchor certified pose");
         return false;
     }
+    if (hasSparseTightBrightCertifiedPose(settings, finalPass) && !gateAblationDisabled("sparseTightCert"))
+    {
+        logBrightSupportDecision(false, "sparse-tight bright certified pose");
+        return false;
+    }
 
     const bool denseFinalEvidenceOverridesSeedRadial =
         hasDenseFinalEvidenceOverridingSeedRadial(settings, finalPass);
@@ -8085,6 +8090,12 @@ bool CameraPlateSolver::SolverContext::hasAcceptableGuidedFinalBrightnessConsist
             && (evaluation.brightCatalogShapeMismatches > 0))
         {
             return false;
+        }
+        // A sparse-tight certified pose is geometrically verified (every match tight,
+        // named anchor pinned, near-seed); the seed-radial/brightness-rank heuristics
+        // below assume more matches than a sparse bright-only solve can produce.
+        if (hasSparseTightBrightCertifiedPose(settings, evaluation) && !gateAblationDisabled("sparseTightCert")) {
+            return true;
         }
 
         const bool lowMagnitudeNarrowGuided = isLowMagnitudeNarrowGuidedSolve(settings);

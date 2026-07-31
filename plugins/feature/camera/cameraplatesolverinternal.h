@@ -1574,6 +1574,39 @@ bool hasNamedBrightAnchorCertifiedPose(const CameraSettings& settings,
         && (directionSeedAngularDistanceDegrees(finalPass.pose) <= kMaxSeedDirectionOffsetDegrees);
 }
 
+// Sparse-tight certificate: the shallow-catalog analogue of the named-bright-anchor
+// certificate above, for fields whose detection set is too sparse to ever reach the
+// dense certificate's >= 80 matches (e.g. a short-exposure frame with ~40 detections).
+// Against a bright-only catalog a correct pose matches a *sparse* set - but every
+// match is tight and the set includes a named bright anchor pinning the field. A
+// wrong-roll alias can keep the anchor itself tight (any rotation about the anchor
+// does) yet cannot place the remaining bright stars: measured on sadr.jpg @mag10 the
+// true pose fits 4/4 at rms 1.44 / max 1.73 px while the best alias manages rms 4.77 /
+// max 8.67. The whole-set max bound is the load-bearing part: a pose that also picks
+// up coincidental matches anywhere inside the (much larger) final match radius fails
+// it, so this cannot certify a pose riding on loose faint coincidences.
+bool hasSparseTightBrightCertifiedPose(const CameraSettings& settings,
+                                       const FinalMatchPassEvaluation& finalPass) const
+{
+    constexpr double kMaxSeedDirectionOffsetDegrees = 1.5;
+    constexpr double kMaxNamedAnchorRmsPixels = 3.0;
+    constexpr double kMaxOverallRmsPixels = 2.0;
+    constexpr double kMaxWorstMatchPixels = 3.0;
+    return isNarrowField(settings)
+        && isLowMagnitudeNarrowGuidedSolve(settings)
+        && finalPass.projectorValid
+        && (finalPass.namedBrightAnchorMatches >= 1)
+        && std::isfinite(finalPass.namedBrightAnchorRmsErrorPixels)
+        && (finalPass.namedBrightAnchorRmsErrorPixels <= kMaxNamedAnchorRmsPixels)
+        && (finalPass.finalMatches.size()
+            >= static_cast<qsizetype>(std::max(settings.m_plateSolveMinMatches, 4)))
+        && std::isfinite(finalPass.rmsErrorPixels)
+        && (finalPass.rmsErrorPixels <= kMaxOverallRmsPixels)
+        && std::isfinite(finalPass.maxErrorPixels)
+        && (finalPass.maxErrorPixels <= kMaxWorstMatchPixels)
+        && (directionSeedAngularDistanceDegrees(finalPass.pose) <= kMaxSeedDirectionOffsetDegrees);
+}
+
 // ---------------------------------------------------------------------------------
 // Experimental robust verifier (SHADOW MODE -- computed and logged for corpus
 // comparison, not yet wired into the accept/reject decision).

@@ -4288,8 +4288,12 @@ void CameraPlateSolver::SolverContext::appendWideBrightSupplementalMatches(const
 
 bool CameraPlateSolver::SolverContext::hasDenseFinalEvidenceOverridingSeedRadial(const CameraSettings& settings, const FinalMatchPassEvaluation& finalPass)
 {
-    return !usesSeedProjectedBrightGate(settings)
-        && (finalPass.finalMatches.size() >= static_cast<qsizetype>(std::max(settings.m_plateSolveMinMatches + 50, 80)))
+    if (usesSeedProjectedBrightGate(settings)) {
+        return false;
+    }
+
+    const bool denseEvidence =
+        (finalPass.finalMatches.size() >= static_cast<qsizetype>(std::max(settings.m_plateSolveMinMatches + 50, 80)))
         && (finalPass.matchedBrightDetections >= std::min(12, std::max(4, finalPass.brightDetections / 2)))
         && (finalPass.matchedBrightProjectedStars >= std::min(8, std::max(3, finalPass.brightProjectedStars / 2)))
         && (finalPass.matchedProjectedMagnitudeSupport >= 60.0)
@@ -4298,6 +4302,24 @@ bool CameraPlateSolver::SolverContext::hasDenseFinalEvidenceOverridingSeedRadial
         && (finalPass.rmsErrorPixels <= std::min(
                 static_cast<double>(settings.m_plateSolveFinalMatchRadius) * 0.60,
                 16.0));
+
+    // Sparse-frame tier: a ~90-detection frame can never reach the dense tier's 80-match
+    // floor, yet its correct pose can be unambiguous (36cyg capture 2: 63 matches at rms
+    // 2.56 with 16/24 bright detections and 8/12 bright projected matched at magErr 0.35
+    // - vetoed purely because a ~2 deg mount pointing error wrecked every seed-reference
+    // projection). Fewer matches are accepted only with far stricter quality: the rms and
+    // magnitude-error bounds sit miles from the measured wrong-roll aliases (rms 12-16,
+    // 0-1/12 bright projected, magErr 1.6+), and the bright-detection floor keeps out the
+    // genuinely weak poses the dense tier's comment names (stars-narrow-1/3 match only ~3
+    // bright detections).
+    const bool sparseTightEvidence =
+        (finalPass.finalMatches.size() >= static_cast<qsizetype>(std::max(settings.m_plateSolveMinMatches + 30, 40)))
+        && (finalPass.matchedBrightDetections >= 12)
+        && (finalPass.matchedBrightProjectedStars >= 6)
+        && (finalPass.brightDetectionMagnitudeError <= 0.80)
+        && (finalPass.rmsErrorPixels <= 4.0);
+
+    return denseEvidence || sparseTightEvidence;
 }
 
 bool CameraPlateSolver::SolverContext::isBetterByGeometricTieBreak(const Evaluation& candidate, const Evaluation& best)

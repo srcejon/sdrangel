@@ -492,6 +492,43 @@ QString CameraPlateSolver::SolverContext::narrowGuidedFovRejectionReason(const C
         .arg(maxNarrowGuidedFovDeltaDegrees(settings), 0, 'f', 3);
 }
 
+double CameraPlateSolver::SolverContext::maxDirectionSeedDistanceDegrees(const CameraSettings& settings)
+{
+    // 3 FoV (2 deg floor for tiny fields) is far beyond any legitimate seed error - the
+    // recenter ladder's own scoring already treats poses much nearer than this as
+    // essentially disqualified (quadratic distance penalty) - yet well inside where
+    // observed false accepts land.
+    return std::max(3.0 * static_cast<double>(settings.m_fov), 2.0);
+}
+
+double CameraPlateSolver::SolverContext::directionSeedSeparationDegrees(const CameraSettings& settings, double azimuthDegrees, double elevationDegrees)
+{
+    const SkyVector seedVector = normalize(vectorFromAltAz(settings.m_azimuth, settings.m_elevation));
+    const SkyVector solvedVector = normalize(vectorFromAltAz(azimuthDegrees, elevationDegrees));
+    const double cosSeparation = std::clamp(dot(seedVector, solvedVector), -1.0, 1.0);
+    return std::acos(cosSeparation) * (180.0 / 3.14159265358979323846);
+}
+
+bool CameraPlateSolver::SolverContext::isAcceptableDirectionSeedDistance(const CameraSettings& settings, double azimuthDegrees, double elevationDegrees)
+{
+    if (!plateSolveStartUsesDirection(settings) || !isNarrowField(settings)) {
+        return true;
+    }
+    if (!std::isfinite(azimuthDegrees) || !std::isfinite(elevationDegrees)) {
+        return false;
+    }
+
+    return directionSeedSeparationDegrees(settings, azimuthDegrees, elevationDegrees)
+        <= maxDirectionSeedDistanceDegrees(settings);
+}
+
+QString CameraPlateSolver::SolverContext::directionSeedDistanceRejectionReason(const CameraSettings& settings, double azimuthDegrees, double elevationDegrees)
+{
+    return QStringLiteral("solution %1 deg from seed direction (limit %2 deg)")
+        .arg(directionSeedSeparationDegrees(settings, azimuthDegrees, elevationDegrees), 0, 'f', 2)
+        .arg(maxDirectionSeedDistanceDegrees(settings), 0, 'f', 2);
+}
+
 CameraPlateSolver::SolverContext::ResidualGates CameraPlateSolver::SolverContext::directionSeedResidualGates(const CameraSettings& settings, const QVector<CameraPipelineStarDetection>& starDetections, int matchCount)
 {
     const bool narrowField = isNarrowField(settings);

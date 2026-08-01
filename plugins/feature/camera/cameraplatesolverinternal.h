@@ -1574,6 +1574,39 @@ bool hasNamedBrightAnchorCertifiedPose(const CameraSettings& settings,
         && (directionSeedAngularDistanceDegrees(finalPass.pose) <= kMaxSeedDirectionOffsetDegrees);
 }
 
+// Sparse-tight certificate: the shallow-catalog analogue of the named-bright-anchor
+// certificate above, for fields whose detection set is too sparse to ever reach the
+// dense certificate's >= 80 matches (e.g. a short-exposure frame with ~40 detections).
+// Against a bright-only catalog a correct pose matches a *sparse* set - but every
+// match is tight and the set includes a named bright anchor pinning the field. A
+// wrong-roll alias can keep the anchor itself tight (any rotation about the anchor
+// does) yet cannot place the remaining bright stars: measured on sadr.jpg @mag10 the
+// true pose fits 4/4 at rms 1.44 / max 1.73 px while the best alias manages rms 4.77 /
+// max 8.67. The whole-set max bound is the load-bearing part: a pose that also picks
+// up coincidental matches anywhere inside the (much larger) final match radius fails
+// it, so this cannot certify a pose riding on loose faint coincidences.
+bool hasSparseTightBrightCertifiedPose(const CameraSettings& settings,
+                                       const FinalMatchPassEvaluation& finalPass) const
+{
+    constexpr double kMaxSeedDirectionOffsetDegrees = 1.5;
+    constexpr double kMaxNamedAnchorRmsPixels = 3.0;
+    constexpr double kMaxOverallRmsPixels = 2.0;
+    constexpr double kMaxWorstMatchPixels = 3.0;
+    return isNarrowField(settings)
+        && isLowMagnitudeNarrowGuidedSolve(settings)
+        && finalPass.projectorValid
+        && (finalPass.namedBrightAnchorMatches >= 1)
+        && std::isfinite(finalPass.namedBrightAnchorRmsErrorPixels)
+        && (finalPass.namedBrightAnchorRmsErrorPixels <= kMaxNamedAnchorRmsPixels)
+        && (finalPass.finalMatches.size()
+            >= static_cast<qsizetype>(std::max(settings.m_plateSolveMinMatches, 4)))
+        && std::isfinite(finalPass.rmsErrorPixels)
+        && (finalPass.rmsErrorPixels <= kMaxOverallRmsPixels)
+        && std::isfinite(finalPass.maxErrorPixels)
+        && (finalPass.maxErrorPixels <= kMaxWorstMatchPixels)
+        && (directionSeedAngularDistanceDegrees(finalPass.pose) <= kMaxSeedDirectionOffsetDegrees);
+}
+
 // ---------------------------------------------------------------------------------
 // Experimental robust verifier (SHADOW MODE -- computed and logged for corpus
 // comparison, not yet wired into the accept/reject decision).
@@ -1678,6 +1711,20 @@ static double maxNarrowGuidedFovDeltaDegrees(const CameraSettings& settings);
 static bool isAcceptableNarrowGuidedFov(const CameraSettings& settings, double fovDegrees);
 
 static QString narrowGuidedFovRejectionReason(const CameraSettings& settings, double fovDegrees);
+
+// Seed-distance plausibility gate for narrow direction-seeded solves: the accepted centre
+// must lie within seed-error range of the run's seed direction. Legitimate pointing errors
+// are sub-FoV and the recenter ladder itself only roams +/- 1 FoV per hop, while
+// rotation-about-anchor aliases can land many FoV away (a false mode-4 accept sat 7.3 deg =
+// 5.7 FoV from its seed) - such a pose is on a different star field and the seed's whole
+// purpose is gone.
+static double maxDirectionSeedDistanceDegrees(const CameraSettings& settings);
+
+static double directionSeedSeparationDegrees(const CameraSettings& settings, double azimuthDegrees, double elevationDegrees);
+
+static bool isAcceptableDirectionSeedDistance(const CameraSettings& settings, double azimuthDegrees, double elevationDegrees);
+
+static QString directionSeedDistanceRejectionReason(const CameraSettings& settings, double azimuthDegrees, double elevationDegrees);
 
 // Residual gates for a direction-seeded solve. Shared by isAcceptableDirectionSeedSolve()
 // and directionSeedRejectionReason() so the accept decision and the human-readable

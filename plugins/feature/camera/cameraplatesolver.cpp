@@ -2080,6 +2080,7 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
         bool acceptable = false;
         bool weakBrightSupport = false;
         bool fovAccepted = false;
+        bool seedDistanceAccepted = true;
     };
     auto directionSeedAcceptanceFor = [&](const FinalMatchPassEvaluation& pass) -> DirectionSeedAcceptance
     {
@@ -2094,9 +2095,12 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
             && hasWeakNarrowGuidedBrightSupport(settings, pass);
         acceptance.fovAccepted = gateAblationDisabled("fov")
             || isAcceptableNarrowGuidedFov(settings, pass.pose.fovDegrees);
+        acceptance.seedDistanceAccepted = gateAblationDisabled("seedDistance")
+            || isAcceptableDirectionSeedDistance(settings, pass.pose.azimuthDegrees, pass.pose.elevationDegrees);
         acceptance.acceptable = !useStartDirection
             || (!acceptance.weakBrightSupport
                 && acceptance.fovAccepted
+                && acceptance.seedDistanceAccepted
                 && (gateAblationDisabled("residual")
                     || isAcceptableDirectionSeedSolve(
                         settings,
@@ -2354,14 +2358,19 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
     {
         const QString rejectionReason = !narrowGuidedFovAccepted
             ? narrowGuidedFovRejectionReason(settings, selectedFinalPassForAcceptance.pose.fovDegrees)
-            : (weakNarrowGuidedBrightSupport
-                ? QStringLiteral("weak bright-anchor support")
-                : directionSeedRejectionReason(
-                settings,
-                starDetections,
-                selectedFinalPassForAcceptance.finalMatches,
-                selectedFinalPassForAcceptance.rmsErrorPixels,
-                selectedFinalPassForAcceptance.maxErrorPixels));
+            : (!directionSeedAcceptance.seedDistanceAccepted
+                ? directionSeedDistanceRejectionReason(
+                    settings,
+                    selectedFinalPassForAcceptance.pose.azimuthDegrees,
+                    selectedFinalPassForAcceptance.pose.elevationDegrees)
+                : (weakNarrowGuidedBrightSupport
+                    ? QStringLiteral("weak bright-anchor support")
+                    : directionSeedRejectionReason(
+                    settings,
+                    starDetections,
+                    selectedFinalPassForAcceptance.finalMatches,
+                    selectedFinalPassForAcceptance.rmsErrorPixels,
+                    selectedFinalPassForAcceptance.maxErrorPixels)));
         qDebug() << "CameraPlateSolver: rejecting direction-seeded solution"
                  << "matches=" << selectedFinalPassForAcceptance.finalMatches.size()
                  << "required=" << minimumDirectionSeedAcceptedMatches(settings, starDetections)
@@ -3163,6 +3172,73 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
     // deepen escape first; the ladder and the late fallback below only run if it fails.
     attemptDeepenEscape();
 
+    // The mirror failure: a faint-carpet drowning. In a dense catalog region a
+    // short-exposure frame's few real stars are outnumbered by the catalog's faint
+    // carpet, which (a) lets wrong rolls accumulate coincidental matches and (b) drags
+    // refinement of the *true* basin away from its tight bright alignment (sadr @mag20:
+    // truth stalls at rms 15 against 1457 in-field candidates but refines to rms 1.44
+    // with 4/4 tight matches against the 32-star mag-10 subset). Retry once with the
+    // catalog capped at bright stars only; the sparse tight result is accepted via the
+    // sparse-tight certificate (hasSparseTightBrightCertifiedPose), which demands every
+    // match tight plus a named bright anchor, so this cannot adopt a faint-coincidence
+    // alias. Runs before the recenter ladder because it is one cheap solve against a
+    // tiny catalog, while the ladder is up to 16 full-depth attempts.
+    const auto attemptShallowEscape = [&]() {
+        constexpr double kShallowEscapeMaxMagnitude = 10.0;
+        // Sparse frames only: on a dense frame the full-depth machinery (deepen escape,
+        // recenter ladder) has real evidence to work with, and this retry would only eat
+        // wall-clock budget the ladder needs (m101's 924-detection recenter rescue was
+        // starved past the solve budget when this ran unconditionally).
+        constexpr qsizetype kShallowEscapeMaxDetections = 80;
+        if (result.m_solved
+            || !solveUsesDirection
+            || solveUsesRoll
+            || !SolverContext::isNarrowField(settings)
+            || (starDetections.size() > kShallowEscapeMaxDetections)
+            || (static_cast<double>(settings.m_plateSolveMaxMagnitude) <= kShallowEscapeMaxMagnitude + 0.5)
+            || isCancellationRequested())
+        {
+            return;
+        }
+        const QVector<CameraPipelineStarDetection> detectionsBeforeShallowEscape = starDetections;
+        CameraSettings retrySettings(cappedSettings);
+        retrySettings.m_plateSolveMaxMagnitude = static_cast<float>(kShallowEscapeMaxMagnitude);
+        qDebug() << "CameraPlateSolver: shallow-escape retry at bright-only catalog"
+                 << "maxMagnitude" << retrySettings.m_plateSolveMaxMagnitude
+                 << "detections" << starDetections.size()
+                 << "candidates" << result.m_catalogCandidateStars;
+        CameraPlateSolveResult shallowResult = runSolve(retrySettings, QStringLiteral("shallow-escape"));
+        // Adopt only a certificate-grade result (mirrors hasSparseTightBrightCertifiedPose:
+        // every match tight, named bright anchor pinned). A merely-acceptable sparse solve
+        // is NOT adopted: the recenter ladder below may still find the same pose at full
+        // depth with far more matches (stars-narrow-1: shallow 6 matches @ rms 4.2 vs the
+        // ladder's 25 @ rms 0.3), so a loose shallow accept must not preempt it.
+        const bool certificateGrade =
+            shallowResult.m_solved
+            && (shallowResult.m_matchedStars >= std::max(settings.m_plateSolveMinMatches, 4))
+            && std::isfinite(shallowResult.m_rmsErrorPixels)
+            && (shallowResult.m_rmsErrorPixels <= 2.0)
+            && std::isfinite(shallowResult.m_maxErrorPixels)
+            && (shallowResult.m_maxErrorPixels <= 3.0)
+            && (shallowResult.m_namedBrightAnchorMatches >= 1)
+            && std::isfinite(shallowResult.m_namedBrightAnchorRmsErrorPixels)
+            && (shallowResult.m_namedBrightAnchorRmsErrorPixels <= 3.0);
+        if (certificateGrade) {
+            result = shallowResult;
+        } else {
+            if (shallowResult.m_solved)
+            {
+                qDebug() << "CameraPlateSolver: shallow-escape solved but below certificate grade, not adopting"
+                         << "matches" << shallowResult.m_matchedStars
+                         << "rms" << shallowResult.m_rmsErrorPixels
+                         << "max" << shallowResult.m_maxErrorPixels
+                         << "namedAnchors" << shallowResult.m_namedBrightAnchorMatches;
+            }
+            starDetections = detectionsBeforeShallowEscape;
+        }
+    };
+    attemptShallowEscape();
+
     // NB: a "strong rejected anchor" guard used to suppress the recenter retry here, but
     // it mis-fired on wrong-roll aliases that coincidentally match a few named bright
     // anchors (e.g. m51 @16 from a ~1° offset seed locks onto a roll-58° alias with 3
@@ -3269,6 +3345,56 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
                 - directionPenalty;
         };
         const int strongRecenterMatchCount = std::max(settings.m_plateSolveMinMatches + 48, 80);
+        // Consecutive-repeat futility cut: on an unsolvable field the ladder's late
+        // (elevation-tier) offsets can re-converge to the SAME rejected pose attempt
+        // after attempt at 11-16 s each (synth-rand-c-002: identical rejected pose from
+        // runs 14/15/16, 121 s total burned, starving the depth escape that actually
+        // solves the field). CONSECUTIVE repetition is the safe signal: measured across
+        // every recenter-using row of the REAL corpus and the RAND2 subset, no ladder
+        // that eventually succeeds ever produces even two identical rejected poses
+        // back-to-back - solvable fields interleave different candidate poses between
+        // repeats (stars-narrow-1 re-derives one rejected pose from offsets 3/5/8/10 yet
+        // wins on 11), and a genuine late rescue produces a fresh pose from every offset
+        // (synth-rand-e-002 solves on attempt 6 with no repeats at all). A total-repeat
+        // count is NOT safe - it broke exactly those two rows.
+        struct LastRejectedRecenterPose
+        {
+            bool valid = false;
+            double azimuthDegrees = 0.0;
+            double elevationDegrees = 0.0;
+            double rollDegrees = 0.0;
+        };
+        LastRejectedRecenterPose lastRejectedRecenterPose;
+        const auto rejectedPoseRepeatsPrevious = [&lastRejectedRecenterPose](const CameraPlateSolveResult& rejected) {
+            // The all-zero pose is the default-initialized sentinel of an attempt that
+            // found no candidate pose at all (it can carry a nonzero match count -
+            // stars-narrow-7 emits it from mid-ladder offsets before the winning one);
+            // it is not a re-derived attractor, so it breaks the run like an empty
+            // attempt does.
+            const bool noPose = (rejected.m_azimuthDegrees == 0.0)
+                && (rejected.m_elevationDegrees == 0.0)
+                && (rejected.m_rollDegrees == 0.0);
+            if (rejected.m_solved || (rejected.m_matchedStars <= 0) || noPose)
+            {
+                // A solved, empty or pose-less attempt breaks any run of consecutive repeats
+                lastRejectedRecenterPose.valid = false;
+                return false;
+            }
+            const auto wrappedDifference = [](double a, double b) {
+                double difference = std::fmod(a - b + 180.0, 360.0);
+                if (difference < 0.0) {
+                    difference += 360.0;
+                }
+                return std::fabs(difference - 180.0);
+            };
+            const bool repeats = lastRejectedRecenterPose.valid
+                && (wrappedDifference(lastRejectedRecenterPose.azimuthDegrees, rejected.m_azimuthDegrees) <= 0.02)
+                && (std::fabs(lastRejectedRecenterPose.elevationDegrees - rejected.m_elevationDegrees) <= 0.02)
+                && (wrappedDifference(lastRejectedRecenterPose.rollDegrees, rejected.m_rollDegrees) <= 0.5);
+            lastRejectedRecenterPose = {
+                true, rejected.m_azimuthDegrees, rejected.m_elevationDegrees, rejected.m_rollDegrees};
+            return repeats;
+        };
         // Budget enough attempts to reach the finer az tier (indices 4..7), the
         // elevation tier (indices 8..13), and now also the el ±1.0·fov tier (indices
         // 14..15); the coarse offsets that already resolve a case early-stop well before
@@ -3306,6 +3432,17 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
                      << "elevation" << retrySettings.m_elevation
                      << "searchRadius" << retrySettings.m_plateSolveAzElSearchRadius;
             CameraPlateSolveResult retryResult = runSolve(retrySettings, QStringLiteral("recenter"), true);
+            if (rejectedPoseRepeatsPrevious(retryResult))
+            {
+                qDebug() << "CameraPlateSolver: stopping dense narrow recenter retries - consecutive identical rejected pose"
+                         << "attempts" << recenterAttempts
+                         << "Az" << retryResult.m_azimuthDegrees
+                         << "El" << retryResult.m_elevationDegrees
+                         << "Roll" << retryResult.m_rollDegrees
+                         << "matches" << retryResult.m_matchedStars;
+                starDetections = detectionsBeforeRecenters;
+                break;
+            }
             const double retryScore = denseNarrowRecenterScore(retryResult);
             const double bestScore = denseNarrowRecenterScore(bestRecenterResult);
             const double retryOriginalDistance = originalSeedAngularDistance(retryResult);

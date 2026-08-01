@@ -7801,6 +7801,11 @@ bool CameraPlateSolver::SolverContext::hasWeakNarrowGuidedBrightSupport(const Ca
         logBrightSupportDecision(false, "named-bright-anchor certified pose");
         return false;
     }
+    if (hasSparseTightBrightCertifiedPose(settings, finalPass) && !gateAblationDisabled("sparseTightCert"))
+    {
+        logBrightSupportDecision(false, "sparse-tight bright certified pose");
+        return false;
+    }
 
     const bool denseFinalEvidenceOverridesSeedRadial =
         hasDenseFinalEvidenceOverridingSeedRadial(settings, finalPass);
@@ -7810,9 +7815,17 @@ bool CameraPlateSolver::SolverContext::hasWeakNarrowGuidedBrightSupport(const Ca
     // both scopes with identical inputs).
     const bool poorNoRollSeedRadialSupport =
         hasPoorNoRollSeedRadialSupport(settings, finalPass, useSeedProjectedBrightGate);
+    // The override exists because a bright star's detection can be *assigned* to a
+    // nearby fainter catalog star in a dense catalog (undercounting matchedBright-
+    // Detections) - but undercounting to ZERO while only faint projected stars match
+    // is the signature of a wrong pose, not of assignment ambiguity (a wrong-FoV
+    // carpet accept on pollux @0.4 deg matched 7/12 faint projected stars with 0/24
+    // bright detections - the frame's genuinely bright stars, including Pollux
+    // itself, matched nothing). Require at least one matched bright detection.
     const bool projectedBrightSupportCanOverrideDetectedBright =
         !useSeedProjectedBrightGate
         && !poorNoRollSeedRadialSupport
+        && (finalPass.matchedBrightDetections >= 1)
         && (finalPass.matchedBrightProjectedStars >= 5)
         && (finalPass.projectedMagnitudeMatchFraction >= 0.30)
         && (finalPass.seedProjectedMagnitudeSupport < 80.0);
@@ -8086,6 +8099,12 @@ bool CameraPlateSolver::SolverContext::hasAcceptableGuidedFinalBrightnessConsist
         {
             return false;
         }
+        // A sparse-tight certified pose is geometrically verified (every match tight,
+        // named anchor pinned, near-seed); the seed-radial/brightness-rank heuristics
+        // below assume more matches than a sparse bright-only solve can produce.
+        if (hasSparseTightBrightCertifiedPose(settings, evaluation) && !gateAblationDisabled("sparseTightCert")) {
+            return true;
+        }
 
         const bool lowMagnitudeNarrowGuided = isLowMagnitudeNarrowGuidedSolve(settings);
         const bool useSeedProjectedBrightGate = usesSeedProjectedBrightGate(settings);
@@ -8095,6 +8114,7 @@ bool CameraPlateSolver::SolverContext::hasAcceptableGuidedFinalBrightnessConsist
         const bool projectedBrightSupportCanOverrideDetectedBright =
             !useSeedProjectedBrightGate
             && !poorNoRollSeedRadialSupport
+            && (evaluation.matchedBrightDetections >= 1)
             && (evaluation.matchedBrightProjectedStars >= 5)
             && (evaluation.projectedMagnitudeMatchFraction >= 0.30)
             && (evaluation.seedProjectedMagnitudeSupport < 80.0);

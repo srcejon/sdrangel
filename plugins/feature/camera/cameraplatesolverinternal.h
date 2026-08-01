@@ -38,6 +38,7 @@
 #include <QDir>
 #include <QDebug>
 #include <QElapsedTimer>
+#include <QLoggingCategory>
 #include <QEventLoop>
 #include <QFile>
 #include <QFileInfo>
@@ -66,6 +67,16 @@
 
 #include "util/astronomy.h"
 #include "util/profiler.h"
+
+// Per-solve tracing (pose candidates, seed retries, accept/reject reasons). Defined in
+// cameraplatesolver.cpp; defaults to QtWarningMsg, so a solve emits nothing at debug level
+// unless it is asked for. A solve prints ~100 lines, which otherwise buries the per-frame
+// lines that matter for operation (CameraPointingError / CameraAutoguide, both qInfo).
+// Turn the trace back on with the standard Qt filter:
+//     QT_LOGGING_RULES="camera.platesolver.debug=true"
+// (harness recipes using QT_LOGGING_RULES="*.debug=true" keep working unchanged - an
+// explicit rule overrides the category's default level).
+Q_DECLARE_LOGGING_CATEGORY(cameraPlateSolverLog)
 
 class CameraPlateSolver::SolverContext
 {

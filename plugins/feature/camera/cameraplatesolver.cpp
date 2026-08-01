@@ -151,7 +151,7 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
         if (!profilePlateSolve) {
             return;
         }
-        qDebug().noquote().nospace()
+        qCDebug(cameraPlateSolverLog).noquote().nospace()
             << "CameraPlateSolverProfile solve." << stage
             << " elapsedMs=" << elapsedMs
             << " totalMs=" << solveProfileTimer.elapsed();
@@ -273,7 +273,7 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
         && (solveMaxMagnitude < static_cast<double>(settings.m_plateSolveMaxMagnitude));
     if (useBrightFirstPassCatalog)
     {
-        qDebug() << "CameraPlateSolver: guided narrow-field solve using bright first-pass catalog"
+        qCDebug(cameraPlateSolverLog) << "CameraPlateSolver: guided narrow-field solve using bright first-pass catalog"
                  << "requestedMaxMag" << settings.m_plateSolveMaxMagnitude
                  << "solveMaxMag" << solveMaxMagnitude
                  << "fov" << settings.m_fov;
@@ -510,7 +510,7 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
             bestStrongEnoughToSkipGuidedAnchor = false;
             if (profilePlateSolve && (useStartDirection || useWideWeakAnchorSearch))
             {
-                qDebug().noquote().nospace()
+                qCDebug(cameraPlateSolverLog).noquote().nospace()
                     << "CameraPlateSolverProfile solve.guidedAnchor skip rejected"
                     << " bestMatches=" << best.matchCount
                     << " finalMatches=" << skipFinalPass.finalMatches.size()
@@ -522,7 +522,7 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
     }
     if (profilePlateSolve && (useStartDirection || useWideWeakAnchorSearch) && bestStrongEnoughToSkipGuidedAnchor)
     {
-        qDebug().noquote().nospace()
+        qCDebug(cameraPlateSolverLog).noquote().nospace()
             << "CameraPlateSolverProfile solve.guidedAnchor skipped"
             << " bestMatches=" << best.matchCount
             << " required=" << result.m_requiredMatches
@@ -1242,7 +1242,7 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
         logPlateSolveEvaluation("refine-from-matches", best, true);
     }
     if (!best.valid || (!selectedFinalPass.projectorValid && (best.matchCount < settings.m_plateSolveMinMatches))) {
-        qDebug().noquote().nospace()
+        qCDebug(cameraPlateSolverLog).noquote().nospace()
             << "CameraPlateSolver: refine stage rejected candidate"
             << " valid=" << best.valid
             << " matches=" << best.matchCount
@@ -1888,7 +1888,7 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
         hasAcceptableWideBrightAnchorSupport(settings, starDetections, selectedFinalPass);
     if (!selectedWideBrightAnchorAccepted)
     {
-        qDebug() << "CameraPlateSolver: final match pass rejected candidate due to weak wide-field bright-star support"
+        qCDebug(cameraPlateSolverLog) << "CameraPlateSolver: final match pass rejected candidate due to weak wide-field bright-star support"
                  << "finalMatches" << finalMatches.size()
                  << "brightDetections" << selectedFinalPass.matchedBrightDetections
                  << "/" << selectedFinalPass.brightDetections
@@ -1935,7 +1935,7 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
         && !sparseWideBlindAccepted
         && !sparseGuidedPairAccepted)
     {
-        qDebug().noquote().nospace()
+        qCDebug(cameraPlateSolverLog).noquote().nospace()
             << "CameraPlateSolver: final match pass rejected candidate"
             << " finalMatches=" << finalMatches.size()
             << " minMatches=" << settings.m_plateSolveMinMatches
@@ -2060,7 +2060,7 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
         && useStartDirection
         && (isNarrowField(settings)))
     {
-        qDebug() << "CameraPlateSolver: final direction acceptance"
+        qCDebug(cameraPlateSolverLog) << "CameraPlateSolver: final direction acceptance"
                  << "sparsePairAccepted" << sparseGuidedPairAccepted
                  << "highConfidenceSparseAnchors" << hasHighConfidenceSparseGuidedAnchors(settings, selectedFinalPassForAcceptance)
                  << "highConfidenceTriangle" << hasHighConfidenceGuidedTriangleSupport(settings, selectedFinalPassForAcceptance)
@@ -2121,7 +2121,7 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
         && useStartDirection
         && isNarrowField(settings))
     {
-        qDebug() << "CameraPlateSolver: pre-polish acceptance"
+        qCDebug(cameraPlateSolverLog) << "CameraPlateSolver: pre-polish acceptance"
                  << "acceptable=" << directionSeedAcceptance.acceptable
                  << "weakBrightSupport=" << directionSeedAcceptance.weakBrightSupport
                  << "fovAccepted=" << directionSeedAcceptance.fovAccepted
@@ -2167,7 +2167,7 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
                 std::floor(static_cast<double>(selectedFinalPassForAcceptance.finalMatches.size()) * 0.9));
             if (debugSparse)
             {
-                qDebug() << "CameraPlateSolver: dense-match FoV/pose polish candidate"
+                qCDebug(cameraPlateSolverLog) << "CameraPlateSolver: dense-match FoV/pose polish candidate"
                          << "matches=" << polishedPass.finalMatches.size()
                          << "minRetained=" << minRetainedMatches
                          << "rms=" << polishedPass.rmsErrorPixels
@@ -2185,14 +2185,14 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
                 const DirectionSeedAcceptance polishedAcceptance = directionSeedAcceptanceFor(polishedPass);
                 if (debugSparse)
                 {
-                    qDebug() << "CameraPlateSolver: dense-match FoV/pose polish acceptance"
+                    qCDebug(cameraPlateSolverLog) << "CameraPlateSolver: dense-match FoV/pose polish acceptance"
                              << "acceptable=" << polishedAcceptance.acceptable
                              << "weakBrightSupport=" << polishedAcceptance.weakBrightSupport
                              << "fovAccepted=" << polishedAcceptance.fovAccepted;
                 }
                 if (polishedAcceptance.acceptable)
                 {
-                    qDebug() << "CameraPlateSolver: dense-match FoV/pose polish adopted pose"
+                    qCDebug(cameraPlateSolverLog) << "CameraPlateSolver: dense-match FoV/pose polish adopted pose"
                              << "matches=" << polishedPass.finalMatches.size()
                              << "rms=" << polishedPass.rmsErrorPixels
                              << "Az=" << polishedPass.pose.azimuthDegrees
@@ -2253,7 +2253,7 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
         }
         else if (debugSparse)
         {
-            qDebug() << "CameraPlateSolver: dense-match FoV/pose polish refine invalid";
+            qCDebug(cameraPlateSolverLog) << "CameraPlateSolver: dense-match FoV/pose polish refine invalid";
         }
     }
     logSolveProfile("densePolish", stageStartMs);
@@ -2289,7 +2289,7 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
             if (rescueAcceptance.acceptable
                 && hasGeometricallyConsistentMatches(starDetections, rescuePass.projectedStars, rescuePass.finalMatches, finalMatchRadius))
             {
-                qDebug() << "CameraPlateSolver: bright-anchor verifier rescue adopted pose"
+                qCDebug(cameraPlateSolverLog) << "CameraPlateSolver: bright-anchor verifier rescue adopted pose"
                          << "matches=" << rescuePass.finalMatches.size()
                          << "rms=" << rescuePass.rmsErrorPixels
                          << "Az=" << rescuePass.pose.azimuthDegrees
@@ -2371,7 +2371,7 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
                     selectedFinalPassForAcceptance.finalMatches,
                     selectedFinalPassForAcceptance.rmsErrorPixels,
                     selectedFinalPassForAcceptance.maxErrorPixels)));
-        qDebug() << "CameraPlateSolver: rejecting direction-seeded solution"
+        qCDebug(cameraPlateSolverLog) << "CameraPlateSolver: rejecting direction-seeded solution"
                  << "matches=" << selectedFinalPassForAcceptance.finalMatches.size()
                  << "required=" << minimumDirectionSeedAcceptedMatches(settings, starDetections)
                  << "rms=" << selectedFinalPassForAcceptance.rmsErrorPixels
@@ -2394,7 +2394,7 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
         && !gateAblationDisabled("elevationSeed")
         && !isAcceptableElevationSeedSolve(settings, starDetections, finalMatches, result.m_rmsErrorPixels, result.m_maxErrorPixels))
     {
-        qDebug() << "CameraPlateSolver: rejecting elevation-seeded solution"
+        qCDebug(cameraPlateSolverLog) << "CameraPlateSolver: rejecting elevation-seeded solution"
                  << "matches=" << finalMatches.size()
                  << "rms=" << result.m_rmsErrorPixels
                  << "max=" << result.m_maxErrorPixels
@@ -2416,7 +2416,7 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
         && !denseWideBlindAccepted
         && !isAcceptableBlindSolve(settings, starDetections, finalMatches, result.m_rmsErrorPixels, result.m_maxErrorPixels))
     {
-        qDebug() << "CameraPlateSolver: rejecting blind solution"
+        qCDebug(cameraPlateSolverLog) << "CameraPlateSolver: rejecting blind solution"
                  << "matches=" << finalMatches.size()
                  << "rms=" << result.m_rmsErrorPixels
                  << "max=" << result.m_maxErrorPixels
@@ -2581,7 +2581,7 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
             rangeCacheBytes += v.size();
         }
         if (rangeCacheBytes > SolverContext::kSirilMaxRangeCacheBytes) {
-            qDebug() << "CameraPlateSolver: Siril range cache exceeded" << SolverContext::kSirilMaxRangeCacheBytes
+            qCDebug(cameraPlateSolverLog) << "CameraPlateSolver: Siril range cache exceeded" << SolverContext::kSirilMaxRangeCacheBytes
                      << "bytes (" << rangeCacheBytes << "), clearing";
             m_sirilRangeCache.clear();
         }
@@ -2913,7 +2913,7 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
         retrySettings.m_plateSolveAzElSearchRadius = static_cast<float>(std::max(
             static_cast<double>(retrySettings.m_plateSolveAzElSearchRadius),
             kRetrySearchRadiusDegrees));
-        qDebug() << "CameraPlateSolver: trying dense narrow bright catalog before full catalog"
+        qCDebug(cameraPlateSolverLog) << "CameraPlateSolver: trying dense narrow bright catalog before full catalog"
                  << "maxMagnitude" << retrySettings.m_plateSolveMaxMagnitude
                  << "searchRadius" << retrySettings.m_plateSolveAzElSearchRadius;
         markAttemptedDenseNarrowBrightCatalogMagnitude(retrySettings.m_plateSolveMaxMagnitude);
@@ -2923,7 +2923,7 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
     {
         CameraSettings retrySettings(cappedSettings);
         retrySettings.m_plateSolveStartMode = CameraSettings::PlateSolveStartFovAzEl;
-        qDebug() << "CameraPlateSolver: trying dense narrow roll-prior solve without roll constraint first"
+        qCDebug(cameraPlateSolverLog) << "CameraPlateSolver: trying dense narrow roll-prior solve without roll constraint first"
                  << "maxMagnitude" << settings.m_plateSolveMaxMagnitude;
         result = runSolve(retrySettings, QStringLiteral("without-roll"));
     }
@@ -2997,7 +2997,7 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
             retrySettings.m_plateSolveAzElSearchRadius = static_cast<float>(std::max(
                 static_cast<double>(retrySettings.m_plateSolveAzElSearchRadius),
                 kRetrySearchRadiusDegrees));
-            qDebug() << "CameraPlateSolver: retrying dense narrow direction solve with bright catalog"
+            qCDebug(cameraPlateSolverLog) << "CameraPlateSolver: retrying dense narrow direction solve with bright catalog"
                      << "maxMagnitude" << retrySettings.m_plateSolveMaxMagnitude
                      << "searchRadius" << retrySettings.m_plateSolveAzElSearchRadius;
             QVector<CameraPipelineStarDetection> detectionsBeforeRetry = starDetections;
@@ -3024,7 +3024,7 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
                 && (retryResult.m_matchedStars >= competitiveSolvedMatchFloor);
             if (retryResult.m_solved && !solvedRetryKeepsSupport && !retryScoreBetter)
             {
-                qDebug() << "CameraPlateSolver: ignoring weak bright-catalog solved retry"
+                qCDebug(cameraPlateSolverLog) << "CameraPlateSolver: ignoring weak bright-catalog solved retry"
                          << "matches" << retryResult.m_matchedStars
                          << "required" << competitiveSolvedMatchFloor
                          << "currentMatches" << result.m_matchedStars
@@ -3126,7 +3126,7 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
                 retrySettings.m_plateSolveMaxMagnitude = static_cast<float>(escapeMagnitude);
                 retrySettings.m_azimuth = static_cast<float>(SolverContext::normalizeDegrees(
                     static_cast<double>(settings.m_azimuth) + azimuthOffset));
-                qDebug() << "CameraPlateSolver: deepen-escape retry at deeper catalog"
+                qCDebug(cameraPlateSolverLog) << "CameraPlateSolver: deepen-escape retry at deeper catalog"
                          << "maxMagnitude" << retrySettings.m_plateSolveMaxMagnitude
                          << "azimuthOffset" << azimuthOffset
                          << "detections" << starDetections.size()
@@ -3152,7 +3152,7 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
                     // feeding acceptable-looking aliases for this field — further
                     // offsets/depths can only find more of the same, so stop the whole
                     // escape rather than spend (and risk) the remaining budget.
-                    qDebug() << "CameraPlateSolver: deepen-escape solved but matches too few of the deeper candidates, rejecting"
+                    qCDebug(cameraPlateSolverLog) << "CameraPlateSolver: deepen-escape solved but matches too few of the deeper candidates, rejecting"
                              << "matches" << escapeResult.m_matchedStars
                              << "candidates" << escapeResult.m_catalogCandidateStars;
                     deepenAliasContaminated = true;
@@ -3203,7 +3203,7 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
         const QVector<CameraPipelineStarDetection> detectionsBeforeShallowEscape = starDetections;
         CameraSettings retrySettings(cappedSettings);
         retrySettings.m_plateSolveMaxMagnitude = static_cast<float>(kShallowEscapeMaxMagnitude);
-        qDebug() << "CameraPlateSolver: shallow-escape retry at bright-only catalog"
+        qCDebug(cameraPlateSolverLog) << "CameraPlateSolver: shallow-escape retry at bright-only catalog"
                  << "maxMagnitude" << retrySettings.m_plateSolveMaxMagnitude
                  << "detections" << starDetections.size()
                  << "candidates" << result.m_catalogCandidateStars;
@@ -3228,7 +3228,7 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
         } else {
             if (shallowResult.m_solved)
             {
-                qDebug() << "CameraPlateSolver: shallow-escape solved but below certificate grade, not adopting"
+                qCDebug(cameraPlateSolverLog) << "CameraPlateSolver: shallow-escape solved but below certificate grade, not adopting"
                          << "matches" << shallowResult.m_matchedStars
                          << "rms" << shallowResult.m_rmsErrorPixels
                          << "max" << shallowResult.m_maxErrorPixels
@@ -3408,7 +3408,7 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
             }
             if (recenterAttempts >= maxRecenterAttempts)
             {
-                qDebug() << "CameraPlateSolver: stopping dense narrow recenter retries after attempt budget"
+                qCDebug(cameraPlateSolverLog) << "CameraPlateSolver: stopping dense narrow recenter retries after attempt budget"
                          << "attempts" << recenterAttempts
                          << "bestSolved" << bestRecenterResult.m_solved
                          << "bestMatches" << bestRecenterResult.m_matchedStars
@@ -3427,14 +3427,14 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
             retrySettings.m_plateSolveAzElSearchRadius = static_cast<float>(std::max(
                 static_cast<double>(retrySettings.m_plateSolveAzElSearchRadius),
                 kRetrySearchRadiusDegrees));
-            qDebug() << "CameraPlateSolver: retrying dense narrow direction solve with recentered seed"
+            qCDebug(cameraPlateSolverLog) << "CameraPlateSolver: retrying dense narrow direction solve with recentered seed"
                      << "azimuth" << retrySettings.m_azimuth
                      << "elevation" << retrySettings.m_elevation
                      << "searchRadius" << retrySettings.m_plateSolveAzElSearchRadius;
             CameraPlateSolveResult retryResult = runSolve(retrySettings, QStringLiteral("recenter"), true);
             if (rejectedPoseRepeatsPrevious(retryResult))
             {
-                qDebug() << "CameraPlateSolver: stopping dense narrow recenter retries - consecutive identical rejected pose"
+                qCDebug(cameraPlateSolverLog) << "CameraPlateSolver: stopping dense narrow recenter retries - consecutive identical rejected pose"
                          << "attempts" << recenterAttempts
                          << "Az" << retryResult.m_azimuthDegrees
                          << "El" << retryResult.m_elevationDegrees
@@ -3488,7 +3488,7 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
                     && ((bestRecenterResult.m_matchedStars >= strongRecenterMatchCount)
                         || dominantSparseCoverage))
                 {
-                    qDebug() << "CameraPlateSolver: stopping dense narrow recenter retries after strong solved candidate"
+                    qCDebug(cameraPlateSolverLog) << "CameraPlateSolver: stopping dense narrow recenter retries after strong solved candidate"
                              << "matches" << bestRecenterResult.m_matchedStars
                              << "candidates" << bestRecenterResult.m_catalogCandidateStars
                              << "score" << retryScore
@@ -3538,7 +3538,7 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
         QVector<CameraPipelineStarDetection> rollPriorDetections = starDetections;
         CameraSettings retrySettings(cappedSettings);
         retrySettings.m_plateSolveStartMode = CameraSettings::PlateSolveStartFovAzEl;
-        qDebug() << "CameraPlateSolver: retrying narrow roll-prior solve without roll constraint"
+        qCDebug(cameraPlateSolverLog) << "CameraPlateSolver: retrying narrow roll-prior solve without roll constraint"
                  << "directionDelta" << (result.m_solved ? directionDeltaDegrees(result) : -1.0)
                  << "threshold" << rollPriorDirectionRetryThreshold;
         CameraPlateSolveResult retryResult = runSolve(retrySettings, QStringLiteral("without-roll"));
@@ -3602,7 +3602,7 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
             markAttemptedDenseNarrowBrightCatalogMagnitude(escapeMagnitude);
             CameraSettings retrySettings(cappedSettings);
             retrySettings.m_plateSolveMaxMagnitude = static_cast<float>(escapeMagnitude);
-            qDebug() << "CameraPlateSolver: depth-escape retry at shallower catalog"
+            qCDebug(cameraPlateSolverLog) << "CameraPlateSolver: depth-escape retry at shallower catalog"
                      << "maxMagnitude" << retrySettings.m_plateSolveMaxMagnitude;
             CameraPlateSolveResult escapeResult = runSolve(retrySettings, QStringLiteral("depth-escape"));
             if (escapeResult.m_solved && (escapeResult.m_rmsErrorPixels <= kDepthEscapeMaxAcceptableRmsPixels))
@@ -3612,7 +3612,7 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
             }
             if (escapeResult.m_solved)
             {
-                qDebug() << "CameraPlateSolver: depth-escape retry solved but fit too loose, rejecting"
+                qCDebug(cameraPlateSolverLog) << "CameraPlateSolver: depth-escape retry solved but fit too loose, rejecting"
                          << "maxMagnitude" << retrySettings.m_plateSolveMaxMagnitude
                          << "matches" << escapeResult.m_matchedStars
                          << "rms" << escapeResult.m_rmsErrorPixels;

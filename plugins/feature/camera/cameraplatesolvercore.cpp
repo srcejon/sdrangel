@@ -1018,7 +1018,7 @@ void CameraPlateSolver::SolverContext::applyNamedAliasesToCatalog(const CameraSe
     }
 
     if (aliasCount > 0) {
-        qDebug() << "CameraPlateSolver: applied bundled catalog aliases" << aliasCount;
+        qCDebug(cameraPlateSolverLog) << "CameraPlateSolver: applied bundled catalog aliases" << aliasCount;
     }
 }
 
@@ -1144,7 +1144,7 @@ void CameraPlateSolver::SolverContext::mergeBundledBrightStarsIntoCatalog(const 
 
     if ((addedCount > 0) || (updatedCount > 0))
     {
-        qDebug() << "CameraPlateSolver: merged bundled bright stars into catalog"
+        qCDebug(cameraPlateSolverLog) << "CameraPlateSolver: merged bundled bright stars into catalog"
                  << "added" << addedCount
                  << "updated" << updatedCount;
     }
@@ -1395,7 +1395,7 @@ void CameraPlateSolver::SolverContext::debugDumpUnmatchedDetections(const PlateS
 
         if (nearestCatalogIndex < 0)
         {
-            qDebug() << "CameraPlateSolver[unmatched-detection]"
+            qCDebug(cameraPlateSolverLog) << "CameraPlateSolver[unmatched-detection]"
                      << "detection" << detectionIndex
                      << "x" << detection.m_center.x()
                      << "y" << detection.m_center.y()
@@ -1417,7 +1417,7 @@ void CameraPlateSolver::SolverContext::debugDumpUnmatchedDetections(const PlateS
             }
         }
 
-        qDebug() << "CameraPlateSolver[unmatched-detection]"
+        qCDebug(cameraPlateSolverLog) << "CameraPlateSolver[unmatched-detection]"
                  << "detection" << detectionIndex
                  << "x" << detection.m_center.x()
                  << "y" << detection.m_center.y()
@@ -4152,7 +4152,7 @@ void CameraPlateSolver::SolverContext::appendSupplementalMatches(const QVector<C
             detectionMatched[detectionIndex] = true;
             catalogMatched.insert(bestCatalogIndex, true);
             if (kLogPlateSolveCandidates) {
-                qDebug() << "CameraPlateSolver: supplemental final match"
+                qCDebug(cameraPlateSolverLog) << "CameraPlateSolver: supplemental final match"
                          << "detection=" << detectionIndex
                          << "catalog=" << bestCatalogIndex
                          << "distance=" << distancePixels;

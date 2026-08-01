@@ -205,7 +205,7 @@ QByteArray CameraPlateSolver::SolverContext::fetchSirilRangeFromSource(int chunk
     {
         // Includes the OperationCanceledError case from requestNetworkCancellation().
         if (isCancellationRequested()) {
-            qDebug() << "CameraPlateSolver: Siril SPCC range request cancelled";
+            qCDebug(cameraPlateSolverLog) << "CameraPlateSolver: Siril SPCC range request cancelled";
         } else {
             qWarning() << "CameraPlateSolver: Siril SPCC range request failed"
                        << "source" << sirilSpccSourceName(sourceIndex)
@@ -647,7 +647,7 @@ QVector<CameraPlateSolver::SolverContext::CatalogStar> CameraPlateSolver::Solver
         if (catalogSource) {
             *catalogSource = QStringLiteral("Siril Gaia DR3 Astrometric");
         }
-        qDebug() << "CameraPlateSolver: loaded cached Siril Gaia astrometric stars"
+        qCDebug(cameraPlateSolverLog) << "CameraPlateSolver: loaded cached Siril Gaia astrometric stars"
                  << stars.size()
                  << "center RA" << centerRaDegrees
                  << "Dec" << centerDecDegrees
@@ -733,7 +733,7 @@ QVector<CameraPlateSolver::SolverContext::CatalogStar> CameraPlateSolver::Solver
 
     QSet<quint64> seenStars;
     stars.reserve(cellRanges.size() * 16);
-    qDebug() << "CameraPlateSolver: Siril Gaia astrometric request"
+    qCDebug(cameraPlateSolverLog) << "CameraPlateSolver: Siril Gaia astrometric request"
              << "pixels" << pixels.size()
              << "cells" << cellRanges.size()
              << "ranges" << mergedRanges.size()
@@ -820,7 +820,7 @@ QVector<CameraPlateSolver::SolverContext::CatalogStar> CameraPlateSolver::Solver
         *catalogSource = QStringLiteral("Siril Gaia DR3 Astrometric");
     }
     writeSirilRegionDiskCacheFile(regionCachePath, stars, settings.m_starCatalogDiskCacheSizeGb);
-    qDebug() << "CameraPlateSolver: loaded Siril Gaia astrometric stars"
+    qCDebug(cameraPlateSolverLog) << "CameraPlateSolver: loaded Siril Gaia astrometric stars"
              << stars.size()
              << "pixels" << pixels.size()
              << "center RA" << centerRaDegrees
@@ -861,7 +861,7 @@ QVector<CameraPlateSolver::SolverContext::CatalogStar> CameraPlateSolver::Solver
         if (catalogSource) {
             *catalogSource = QStringLiteral("Siril SPCC Gaia DR3");
         }
-        qDebug() << "CameraPlateSolver: loaded cached Siril SPCC Gaia stars"
+        qCDebug(cameraPlateSolverLog) << "CameraPlateSolver: loaded cached Siril SPCC Gaia stars"
                  << stars.size()
                  << "center RA" << centerRaDegrees
                  << "Dec" << centerDecDegrees
@@ -942,7 +942,7 @@ QVector<CameraPlateSolver::SolverContext::CatalogStar> CameraPlateSolver::Solver
     QSet<quint64> seenStars;
     stars.reserve(cellRanges.size() * 8);
 
-    qDebug() << "CameraPlateSolver: Siril SPCC Gaia request"
+    qCDebug(cameraPlateSolverLog) << "CameraPlateSolver: Siril SPCC Gaia request"
              << "pixels" << pixels.size()
              << "cells" << cellRanges.size()
              << "ranges" << mergedRanges.size()
@@ -1046,7 +1046,7 @@ QVector<CameraPlateSolver::SolverContext::CatalogStar> CameraPlateSolver::Solver
     enforceSirilRegionDiskCacheLimit(
         QDir(sirilCacheRootDir()).filePath(QStringLiteral("ranges")),
         settings.m_starCatalogDiskCacheSizeGb);
-    qDebug() << "CameraPlateSolver: loaded Siril SPCC Gaia stars"
+    qCDebug(cameraPlateSolverLog) << "CameraPlateSolver: loaded Siril SPCC Gaia stars"
              << stars.size()
              << "pixels" << pixels.size()
              << "center RA" << centerRaDegrees
@@ -2710,7 +2710,7 @@ QVector<CameraPlateSolver::SolverContext::Evaluation> CameraPlateSolver::SolverC
 
     if (qEnvironmentVariableIsSet("SDRANGEL_CAMERA_PLATE_SOLVER_DEBUG_SPARSE"))
     {
-        qDebug() << "CameraPlateSolver: bright-triangle pools"
+        qCDebug(cameraPlateSolverLog) << "CameraPlateSolver: bright-triangle pools"
                  << "detections" << triangleDetectionIndices.size()
                  << "catalog" << triangleCatalogStars.size();
     }
@@ -2903,7 +2903,7 @@ QVector<CameraPlateSolver::SolverContext::Evaluation> CameraPlateSolver::SolverC
             });
             if (debugCatalogStarMatches(catalogContext, visibleStar.catalogIndex))
             {
-                qDebug().noquote() << "CameraPlateSolver: ANCHOR candidate for" << catalogDisplayName(catalogContext.catalogStars[visibleStar.catalogIndex])
+                qCDebug(cameraPlateSolverLog).noquote() << "CameraPlateSolver: ANCHOR candidate for" << catalogDisplayName(catalogContext.catalogStars[visibleStar.catalogIndex])
                     << "detection #" << detectionIndex
                     << "center" << detection.m_center
                     << "score" << score
@@ -4053,7 +4053,7 @@ QVector<CameraPlateSolver::SolverContext::Evaluation> CameraPlateSolver::SolverC
             if (!seededCandidate.valid) {
                 if (debugTargetTriangle)
                 {
-                    qDebug().noquote() << "CameraPlateSolver: projected triangle target seed invalid"
+                    qCDebug(cameraPlateSolverLog).noquote() << "CameraPlateSolver: projected triangle target seed invalid"
                         << debugTriangleAnchorSummary(
                             catalogContext,
                             starDetections,
@@ -4079,7 +4079,7 @@ QVector<CameraPlateSolver::SolverContext::Evaluation> CameraPlateSolver::SolverC
             projectedTriangleMaxAnchors = std::max(projectedTriangleMaxAnchors, anchorSupport);
             if (debugTargetTriangle)
             {
-                qDebug().noquote() << "CameraPlateSolver: projected triangle target seed"
+                qCDebug(cameraPlateSolverLog).noquote() << "CameraPlateSolver: projected triangle target seed"
                     << "anchorSupport" << anchorSupport
                     << "matches" << seededCandidate.matchCount
                     << "rms" << seededCandidate.rmsErrorPixels
@@ -4133,7 +4133,7 @@ QVector<CameraPlateSolver::SolverContext::Evaluation> CameraPlateSolver::SolverC
                 seeds.append(candidate);
                 ++projectedTriangleSeeds;
                 if (debugTargetTriangle) {
-                    qDebug() << "CameraPlateSolver: projected triangle target appended";
+                    qCDebug(cameraPlateSolverLog) << "CameraPlateSolver: projected triangle target appended";
                 }
             }
 
@@ -4159,7 +4159,7 @@ QVector<CameraPlateSolver::SolverContext::Evaluation> CameraPlateSolver::SolverC
                 ++projectedTriangleSeeds;
                 ++projectedTriangleVerifiedSeeds;
                 if (debugTargetTriangle) {
-                    qDebug() << "CameraPlateSolver: projected triangle target verified appended";
+                    qCDebug(cameraPlateSolverLog) << "CameraPlateSolver: projected triangle target verified appended";
                 }
             }
         }
@@ -4587,7 +4587,7 @@ QVector<CameraPlateSolver::SolverContext::Evaluation> CameraPlateSolver::SolverC
             if (!seededCandidate.valid) {
                 if (debugTargetTriangle)
                 {
-                    qDebug().noquote() << "CameraPlateSolver: ordered triangle target seed invalid"
+                    qCDebug(cameraPlateSolverLog).noquote() << "CameraPlateSolver: ordered triangle target seed invalid"
                         << debugTriangleAnchorSummary(
                             catalogContext,
                             starDetections,
@@ -4615,7 +4615,7 @@ QVector<CameraPlateSolver::SolverContext::Evaluation> CameraPlateSolver::SolverC
                 orderedTriangleMaxAnchors = std::max(orderedTriangleMaxAnchors, orderedAnchorSupport);
                 if (debugTargetTriangle)
                 {
-                    qDebug().noquote() << "CameraPlateSolver: ordered triangle target seed"
+                    qCDebug(cameraPlateSolverLog).noquote() << "CameraPlateSolver: ordered triangle target seed"
                         << "anchorSupport" << orderedAnchorSupport
                         << "matches" << seededCandidate.matchCount
                         << "rms" << seededCandidate.rmsErrorPixels
@@ -4670,7 +4670,7 @@ QVector<CameraPlateSolver::SolverContext::Evaluation> CameraPlateSolver::SolverC
                     seeds.append(candidate);
                     ++orderedTriangleSeeds;
                     if (debugTargetTriangle) {
-                        qDebug() << "CameraPlateSolver: ordered triangle target appended";
+                        qCDebug(cameraPlateSolverLog) << "CameraPlateSolver: ordered triangle target appended";
                     }
                 }
 
@@ -4696,7 +4696,7 @@ QVector<CameraPlateSolver::SolverContext::Evaluation> CameraPlateSolver::SolverC
                     ++orderedTriangleSeeds;
                     ++orderedTriangleVerifiedSeeds;
                     if (debugTargetTriangle) {
-                        qDebug() << "CameraPlateSolver: ordered triangle target verified appended";
+                        qCDebug(cameraPlateSolverLog) << "CameraPlateSolver: ordered triangle target verified appended";
                     }
                 }
         }
@@ -4808,7 +4808,7 @@ QVector<CameraPlateSolver::SolverContext::Evaluation> CameraPlateSolver::SolverC
                     }
                     if (matchedNames >= tripleNames.size())
                     {
-                        qDebug().noquote() << "CameraPlateSolver: TRIPLE candidate"
+                        qCDebug(cameraPlateSolverLog).noquote() << "CameraPlateSolver: TRIPLE candidate"
                             << debugTriangleAnchorSummary(catalogContext, starDetections, debugDetectionIndices, debugCatalogIndices)
                             << "detectionRatios" << detectionRatios[0] << detectionRatios[1] << detectionRatios[2]
                             << "catalogRatios" << catalogRatios[0] << catalogRatios[1] << catalogRatios[2]
@@ -4873,7 +4873,7 @@ QVector<CameraPlateSolver::SolverContext::Evaluation> CameraPlateSolver::SolverC
                     }
                     if (matchedNames2 >= tripleNames.size())
                     {
-                        qDebug().noquote() << "CameraPlateSolver: TRIPLE appended"
+                        qCDebug(cameraPlateSolverLog).noquote() << "CameraPlateSolver: TRIPLE appended"
                             << debugTriangleAnchorSummary(catalogContext, starDetections, debugDetectionIndices2, debugCatalogIndices2)
                             << "score" << triangleCandidate.score
                             << "baseFov" << baseFov
@@ -5033,7 +5033,7 @@ QVector<CameraPlateSolver::SolverContext::Evaluation> CameraPlateSolver::SolverC
             if (!seededCandidate.valid) {
                 if (debugTargetTriangle)
                 {
-                    qDebug().noquote() << "CameraPlateSolver: anchor triangle target seed invalid"
+                    qCDebug(cameraPlateSolverLog).noquote() << "CameraPlateSolver: anchor triangle target seed invalid"
                         << debugTriangleAnchorSummary(
                             catalogContext,
                             starDetections,
@@ -5057,7 +5057,7 @@ QVector<CameraPlateSolver::SolverContext::Evaluation> CameraPlateSolver::SolverC
                     anchorDistancePixels);
             if (debugTargetTriangle)
             {
-                qDebug().noquote() << "CameraPlateSolver: anchor triangle target seed"
+                qCDebug(cameraPlateSolverLog).noquote() << "CameraPlateSolver: anchor triangle target seed"
                     << "anchorSupport" << anchorSupport
                     << "matches" << seededCandidate.matchCount
                     << "rms" << seededCandidate.rmsErrorPixels
@@ -5105,7 +5105,7 @@ QVector<CameraPlateSolver::SolverContext::Evaluation> CameraPlateSolver::SolverC
             {
                 seeds.append(candidate);
                 if (debugTargetTriangle) {
-                    qDebug() << "CameraPlateSolver: anchor triangle target appended";
+                    qCDebug(cameraPlateSolverLog) << "CameraPlateSolver: anchor triangle target appended";
                 }
             }
 
@@ -5130,7 +5130,7 @@ QVector<CameraPlateSolver::SolverContext::Evaluation> CameraPlateSolver::SolverC
                 seeds.append(verifiedCandidate);
                 ++verifiedSeeds;
                 if (debugTargetTriangle) {
-                    qDebug() << "CameraPlateSolver: anchor triangle target verified appended";
+                    qCDebug(cameraPlateSolverLog) << "CameraPlateSolver: anchor triangle target verified appended";
                 }
             }
         }
@@ -5557,7 +5557,7 @@ QVector<CameraPlateSolver::SolverContext::Evaluation> CameraPlateSolver::SolverC
         && qEnvironmentVariableIsSet("SDRANGEL_CAMERA_PLATE_SOLVER_DEBUG_SPARSE"))
     {
         const int debugDetectionCount = std::min(48, static_cast<int>(brightDetectionIndices.size()));
-        qDebug() << "CameraPlateSolver: bright-pair detection pool"
+        qCDebug(cameraPlateSolverLog) << "CameraPlateSolver: bright-pair detection pool"
                  << brightDetectionIndices.size()
                  << "showing" << debugDetectionCount;
         for (int i = 0; i < debugDetectionCount; ++i)
@@ -5567,7 +5567,7 @@ QVector<CameraPlateSolver::SolverContext::Evaluation> CameraPlateSolver::SolverC
                 continue;
             }
             const CameraPipelineStarDetection& detection = starDetections[detectionIndex];
-            qDebug().noquote().nospace()
+            qCDebug(cameraPlateSolverLog).noquote().nospace()
                 << "CameraPlateSolver: bright detection #" << i
                 << " idx=" << detectionIndex
                 << " x=" << detection.m_center.x()
@@ -6198,7 +6198,7 @@ QVector<CameraPlateSolver::SolverContext::Evaluation> CameraPlateSolver::SolverC
         if (qEnvironmentVariableIsSet("SDRANGEL_CAMERA_PLATE_SOLVER_DEBUG_SPARSE"))
         {
             const int debugSeedCount = std::min(64, static_cast<int>(sparseGuidedPairSeeds.size()));
-            qDebug() << "CameraPlateSolver: sparse guided pair seeds"
+            qCDebug(cameraPlateSolverLog) << "CameraPlateSolver: sparse guided pair seeds"
                      << sparseGuidedPairSeeds.size()
                      << "showing" << debugSeedCount;
             for (int i = 0; i < debugSeedCount; ++i)
@@ -6210,7 +6210,7 @@ QVector<CameraPlateSolver::SolverContext::Evaluation> CameraPlateSolver::SolverC
                 const QString secondaryName = ((seed.secondaryAnchorCatalogIndex >= 0) && (seed.secondaryAnchorCatalogIndex < catalogContext.catalogStars.size()))
                     ? catalogDisplayName(catalogContext.catalogStars[seed.secondaryAnchorCatalogIndex])
                     : QString();
-                qDebug().noquote().nospace()
+                qCDebug(cameraPlateSolverLog).noquote().nospace()
                     << "CameraPlateSolver: sparse seed #" << i
                     << " Az=" << seed.azimuthDegrees
                     << " El=" << seed.elevationDegrees
@@ -6558,7 +6558,7 @@ QVector<CameraPlateSolver::SolverContext::Evaluation> CameraPlateSolver::SolverC
         const bool debugSparseQuad = qEnvironmentVariableIsSet("SDRANGEL_CAMERA_PLATE_SOLVER_DEBUG_SPARSE");
         if (!seededCandidate.valid) {
             if (debugSparseQuad) {
-                qDebug().noquote().nospace()
+                qCDebug(cameraPlateSolverLog).noquote().nospace()
                     << "CameraPlateSolver[vector-quad-hyp] h=" << h
                     << " score=" << hypothesis.score
                     << " poseAz=" << azimuthDegrees << " poseEl=" << elevationDegrees << " poseRoll=" << rollDegrees
@@ -6592,18 +6592,18 @@ QVector<CameraPlateSolver::SolverContext::Evaluation> CameraPlateSolver::SolverC
             detectionIndices,
             candidate);
         if (debugSparseQuad) {
-            // Note: keep each qDebug() statement to <=9 QString::arg() placeholders -
+            // Note: keep each qCDebug(cameraPlateSolverLog) statement to <=9 QString::arg() placeholders -
             // 10+ placeholders (i.e. reaching %10/%11) truncates the output on this toolchain.
-            qDebug().noquote() << QStringLiteral("CameraPlateSolver[vector-quad-hyp] h=%1 seeded.matches=%2 seeded.rms=%3")
+            qCDebug(cameraPlateSolverLog).noquote() << QStringLiteral("CameraPlateSolver[vector-quad-hyp] h=%1 seeded.matches=%2 seeded.rms=%3")
                 .arg(h).arg(seededCandidate.matchCount).arg(seededCandidate.rmsErrorPixels);
-            qDebug().noquote() << QStringLiteral("CameraPlateSolver[vector-quad-hyp] h=%1 candidate.matches=%2 candidate.rms=%3 candidate.valid=%4 verified.valid=%5")
+            qCDebug(cameraPlateSolverLog).noquote() << QStringLiteral("CameraPlateSolver[vector-quad-hyp] h=%1 candidate.matches=%2 candidate.rms=%3 candidate.valid=%4 verified.valid=%5")
                 .arg(h).arg(candidate.matchCount).arg(candidate.rmsErrorPixels).arg(candidate.valid).arg(verifiedCandidate.valid);
         }
         if (verifiedCandidate.valid) {
             seeds.append(verifiedCandidate);
             if (debugSparseQuad)
             {
-                qDebug().noquote().nospace()
+                qCDebug(cameraPlateSolverLog).noquote().nospace()
                     << "CameraPlateSolver[vector-quad-seed] h=" << h
                     << " score=" << hypothesis.score
                     << " Az=" << verifiedCandidate.azimuthDegrees
@@ -6634,7 +6634,7 @@ QVector<CameraPlateSolver::SolverContext::Evaluation> CameraPlateSolver::SolverC
             {
                 seeds.append(candidate);
                 if (debugSparseQuad) {
-                    qDebug().noquote() << QStringLiteral("CameraPlateSolver[vector-quad-seed-relaxed] h=%1 matches=%2 rms=%3")
+                    qCDebug(cameraPlateSolverLog).noquote() << QStringLiteral("CameraPlateSolver[vector-quad-seed-relaxed] h=%1 matches=%2 rms=%3")
                         .arg(h).arg(candidate.matchCount).arg(candidate.rmsErrorPixels);
                 }
             }
@@ -7188,7 +7188,7 @@ void CameraPlateSolver::SolverContext::logUnmatchedDetections(const PlateSolveCa
                 ? catalogStars[nearestUnmatchedCatalogIndex].name
                 : QString();
 
-        qDebug().noquote()
+        qCDebug(cameraPlateSolverLog).noquote()
             << "CameraPlateSolver: unmatched detection"
             << "index=" << detectionIndex
             << "center=" << detection.m_center
@@ -7582,7 +7582,7 @@ bool CameraPlateSolver::SolverContext::isAcceptableSparseGuidedPairFinalPass(con
     {
         if (debugSparse && finalPass.projectorValid && isGuidedAnchorPose)
         {
-            qDebug() << "CameraPlateSolver: sparse final rejected before evaluation"
+            qCDebug(cameraPlateSolverLog) << "CameraPlateSolver: sparse final rejected before evaluation"
                      << "matches" << finalPass.finalMatches.size()
                      << "min" << std::max(4, settings.m_plateSolveMinMatches)
                      << "Az" << finalPass.pose.azimuthDegrees
@@ -7600,7 +7600,7 @@ bool CameraPlateSolver::SolverContext::isAcceptableSparseGuidedPairFinalPass(con
     {
         if (debugSparse)
         {
-            qDebug() << "CameraPlateSolver: sparse final rejected by weak bright support"
+            qCDebug(cameraPlateSolverLog) << "CameraPlateSolver: sparse final rejected by weak bright support"
                      << "matches" << finalPass.finalMatches.size()
                      << "brightDetections" << finalPass.matchedBrightDetections << "/" << finalPass.brightDetections
                      << "brightProjected" << finalPass.matchedBrightProjectedStars << "/" << finalPass.brightProjectedStars
@@ -7629,7 +7629,7 @@ bool CameraPlateSolver::SolverContext::isAcceptableSparseGuidedPairFinalPass(con
         evaluation);
     if (debugSparse && !accepted)
     {
-        qDebug() << "CameraPlateSolver: sparse final rejected by evaluation"
+        qCDebug(cameraPlateSolverLog) << "CameraPlateSolver: sparse final rejected by evaluation"
                  << "matches" << finalPass.finalMatches.size()
                  << "rms" << finalPass.rmsErrorPixels
                  << "Az" << finalPass.pose.azimuthDegrees
@@ -7766,7 +7766,7 @@ bool CameraPlateSolver::SolverContext::hasWeakNarrowGuidedBrightSupport(const Ca
         if (!debugSparse) {
             return;
         }
-        qDebug() << "CameraPlateSolver: hasWeakNarrowGuidedBrightSupport"
+        qCDebug(cameraPlateSolverLog) << "CameraPlateSolver: hasWeakNarrowGuidedBrightSupport"
                  << (weak ? "REJECT" : "pass") << reason
                  << finalPassBrightDiagnosticSummary(finalPass)
                  << "Az" << finalPass.pose.azimuthDegrees
@@ -7791,7 +7791,7 @@ bool CameraPlateSolver::SolverContext::hasWeakNarrowGuidedBrightSupport(const Ca
     {
         if (debugSparse)
         {
-            qDebug() << "CameraPlateSolver: named-bright-anchor certificate bypasses weak-bright-support checks"
+            qCDebug(cameraPlateSolverLog) << "CameraPlateSolver: named-bright-anchor certificate bypasses weak-bright-support checks"
                      << "namedAnchors" << finalPass.namedBrightAnchorMatches
                      << "namedRms" << finalPass.namedBrightAnchorRmsErrorPixels
                      << "rms" << finalPass.rmsErrorPixels
@@ -7961,7 +7961,7 @@ bool CameraPlateSolver::SolverContext::hasWeakNarrowGuidedBrightSupport(const Ca
     const bool weak = weakBrightDetections || weakSeedRadial || weakBrightProjected || weakBrightMagnitude;
     if (debugSparse && weak)
     {
-        qDebug() << "CameraPlateSolver: hasWeakNarrowGuidedBrightSupport REJECT final"
+        qCDebug(cameraPlateSolverLog) << "CameraPlateSolver: hasWeakNarrowGuidedBrightSupport REJECT final"
                  << "weakBrightDetections" << weakBrightDetections
                  << "weakSeedRadial" << weakSeedRadial
                  << "weakBrightProjected" << weakBrightProjected
@@ -9321,7 +9321,7 @@ CameraPlateSolver::SolverContext::FinalMatchPassEvaluation CameraPlateSolver::So
                     && (projectedStar.catalogIndex < catalogContext.catalogStars.size()))
                     ? catalogDisplayName(catalogContext.catalogStars[projectedStar.catalogIndex])
                     : QStringLiteral("?");
-                qDebug().noquote().nospace()
+                qCDebug(cameraPlateSolverLog).noquote().nospace()
                     << "BRIGHTPROJ"
                     << " Az=" << candidate.azimuthDegrees
                     << " El=" << candidate.elevationDegrees
@@ -9381,7 +9381,7 @@ CameraPlateSolver::SolverContext::FinalMatchPassEvaluation CameraPlateSolver::So
             if (match.distancePixels <= 8.0) ++within8;
             if (match.distancePixels <= 16.0) ++within16;
         }
-        qDebug().noquote().nospace()
+        qCDebug(cameraPlateSolverLog).noquote().nospace()
             << "CandidateDump,az=" << QString::number(finalPass.pose.azimuthDegrees, 'f', 3)
             << ",el=" << QString::number(finalPass.pose.elevationDegrees, 'f', 3)
             << ",roll=" << QString::number(finalPass.pose.rollDegrees, 'f', 3)
@@ -9455,7 +9455,7 @@ void CameraPlateSolver::SolverContext::logFinalMatchPassEvaluation(const char *s
         return;
     }
 
-    qDebug().noquote().nospace()
+    qCDebug(cameraPlateSolverLog).noquote().nospace()
         << "CameraPlateSolver[" << stage << "] "
         << (best ? "best " : "candidate ")
         << "Az=" << evaluation.pose.azimuthDegrees
@@ -10172,7 +10172,7 @@ bool CameraPlateSolver::SolverContext::isBetterWeakModeFinalMatchPass(const Came
         const bool bestBrightAnchorAccepted =
             hasAcceptableWideBrightAnchorSupport(settings, starDetections, best);
         if (qEnvironmentVariableIsSet("SDRANGEL_CAMERA_SOLVER_DEBUG_COMPARE")) {
-            qDebug().noquote().nospace()
+            qCDebug(cameraPlateSolverLog).noquote().nospace()
                 << "COMPARE"
                 << " cAz=" << candidate.pose.azimuthDegrees
                 << " cM=" << candidate.finalMatches.size()
@@ -10858,7 +10858,7 @@ bool CameraPlateSolver::SolverContext::hasCompetitiveRollAlias(const CameraSetti
         constexpr double kRollLogOddsMargin = 5.0;
         if (winnerLogOdds >= (competitorLogOdds + kRollLogOddsMargin))
         {
-            qDebug() << "CameraPlateSolver: ignoring roll alias with weaker bright-weighted log-odds"
+            qCDebug(cameraPlateSolverLog) << "CameraPlateSolver: ignoring roll alias with weaker bright-weighted log-odds"
                      << "winnerRoll" << winner.pose.rollDegrees << "winnerLogOdds" << winnerLogOdds
                      << "aliasRoll" << competitor.pose.rollDegrees << "aliasLogOdds" << competitorLogOdds;
             continue;
@@ -10933,7 +10933,7 @@ bool CameraPlateSolver::SolverContext::hasCompetitiveRollAlias(const CameraSetti
             if ((seedConsistencyDelta >= seedConsistencyMargin)
                 && winnerScoreAtLeastFraction(0.85))
             {
-                qDebug() << "CameraPlateSolver: ignoring roll alias with weaker seed consistency"
+                qCDebug(cameraPlateSolverLog) << "CameraPlateSolver: ignoring roll alias with weaker seed consistency"
                          << "winnerRoll" << winner.pose.rollDegrees
                          << "winnerMatches" << winner.finalMatches.size()
                          << "winnerRms" << winner.rmsErrorPixels
@@ -10957,7 +10957,7 @@ bool CameraPlateSolver::SolverContext::hasCompetitiveRollAlias(const CameraSetti
                     || (seedProjectedFractionDelta >= 0.035))
                 && winnerScoreAtLeastFraction(0.88))
             {
-                qDebug() << "CameraPlateSolver: ignoring roll alias with weaker seed-projected consistency"
+                qCDebug(cameraPlateSolverLog) << "CameraPlateSolver: ignoring roll alias with weaker seed-projected consistency"
                          << "winnerRoll" << winner.pose.rollDegrees
                          << "winnerMatches" << winner.finalMatches.size()
                          << "winnerRms" << winner.rmsErrorPixels
@@ -10976,7 +10976,7 @@ bool CameraPlateSolver::SolverContext::hasCompetitiveRollAlias(const CameraSetti
             if ((brightConsistencyDelta >= 1.0)
                 && winnerScoreAtLeastFraction(0.90))
             {
-                qDebug() << "CameraPlateSolver: ignoring roll alias with weaker brightness consistency"
+                qCDebug(cameraPlateSolverLog) << "CameraPlateSolver: ignoring roll alias with weaker brightness consistency"
                          << "winnerRoll" << winner.pose.rollDegrees
                          << "winnerMatches" << winner.finalMatches.size()
                          << "winnerRms" << winner.rmsErrorPixels
@@ -10992,7 +10992,7 @@ bool CameraPlateSolver::SolverContext::hasCompetitiveRollAlias(const CameraSetti
 
             if (winnerScoreStrictlyBetter(1.12))
             {
-                qDebug() << "CameraPlateSolver: ignoring roll alias with weaker final score"
+                qCDebug(cameraPlateSolverLog) << "CameraPlateSolver: ignoring roll alias with weaker final score"
                          << "winnerRoll" << winner.pose.rollDegrees
                          << "winnerMatches" << winner.finalMatches.size()
                          << "winnerRms" << winner.rmsErrorPixels
@@ -11018,7 +11018,7 @@ bool CameraPlateSolver::SolverContext::hasCompetitiveRollAlias(const CameraSetti
                 .arg(competitorFinalScore, 0, 'f', 2)
                 .arg(winnerFinalScore, 0, 'f', 2);
         }
-        qDebug() << "CameraPlateSolver: rejecting ambiguous direction-seeded solution"
+        qCDebug(cameraPlateSolverLog) << "CameraPlateSolver: rejecting ambiguous direction-seeded solution"
                  << "winnerRoll" << winner.pose.rollDegrees
                  << "winnerMatches" << winner.finalMatches.size()
                  << "winnerRms" << winner.rmsErrorPixels
@@ -11044,7 +11044,7 @@ bool CameraPlateSolver::SolverContext::hasCompetitiveRollAlias(const CameraSetti
         if (betterAlias) {
             *betterAlias = adoptableAlias;
         }
-        qDebug() << "CameraPlateSolver: adopting bright-better roll alias"
+        qCDebug(cameraPlateSolverLog) << "CameraPlateSolver: adopting bright-better roll alias"
                  << "winnerRoll" << winner.pose.rollDegrees << "winnerLogOdds" << winnerLogOdds
                  << "aliasRoll" << adoptableAlias.pose.rollDegrees
                  << "aliasLogOdds" << adoptableAliasLogOdds
@@ -11246,7 +11246,7 @@ CameraPlateSolver::SolverContext::Evaluation CameraPlateSolver::SolverContext::s
 
     if (kLogPlateSolveCandidates)
     {
-        qDebug() << "CameraPlateSolver: guided anchor search"
+        qCDebug(cameraPlateSolverLog) << "CameraPlateSolver: guided anchor search"
                  << "anchors" << anchors.size()
                  << "using" << anchorLimit
                  << "localStars" << localVisibleStars.size()
@@ -11257,7 +11257,7 @@ CameraPlateSolver::SolverContext::Evaluation CameraPlateSolver::SolverContext::s
             const QString anchorName = ((anchor.catalogIndex >= 0) && (anchor.catalogIndex < catalogContext.catalogStars.size()))
                 ? catalogDisplayName(catalogContext.catalogStars[anchor.catalogIndex])
                 : QString();
-            qDebug() << "CameraPlateSolver: guided anchor candidate"
+            qCDebug(cameraPlateSolverLog) << "CameraPlateSolver: guided anchor candidate"
                      << i
                      << anchorName
                      << "catalog" << anchor.catalogIndex
@@ -11558,7 +11558,7 @@ CameraPlateSolver::SolverContext::FinalMatchPassEvaluation CameraPlateSolver::So
         for (int idx : brightDetectionIndices)
         {
             const CameraPipelineStarDetection& d = starDetections[idx];
-            qDebug() << "CameraPlateSolver: searchBrightAnchorVerifierRescue brightDetection" << idx
+            qCDebug(cameraPlateSolverLog) << "CameraPlateSolver: searchBrightAnchorVerifierRescue brightDetection" << idx
                      << "x" << d.m_center.x() << "y" << d.m_center.y()
                      << "flux" << d.m_flux << "saturated" << d.m_saturated
                      << "hotPixel" << d.m_hotPixelSuspect;
@@ -11568,7 +11568,7 @@ CameraPlateSolver::SolverContext::FinalMatchPassEvaluation CameraPlateSolver::So
             const QString name = ((star.catalogIndex >= 0) && (star.catalogIndex < catalogContext.catalogStars.size()))
                 ? catalogContext.catalogStars[star.catalogIndex].name
                 : QString();
-            qDebug() << "CameraPlateSolver: searchBrightAnchorVerifierRescue brightCatalogStar"
+            qCDebug(cameraPlateSolverLog) << "CameraPlateSolver: searchBrightAnchorVerifierRescue brightCatalogStar"
                      << "catalogIndex" << star.catalogIndex << "name" << name
                      << "mag" << star.magnitude
                      << "az" << star.azimuthDegrees << "el" << star.elevationDegrees;
@@ -11746,7 +11746,7 @@ CameraPlateSolver::SolverContext::FinalMatchPassEvaluation CameraPlateSolver::So
         for (int i = 0; i < shortlist.size(); ++i)
         {
             const RescueShortlistCandidate& candidate = shortlist[i];
-            qDebug() << "CameraPlateSolver: searchBrightAnchorVerifierRescue shortlist" << i
+            qCDebug(cameraPlateSolverLog) << "CameraPlateSolver: searchBrightAnchorVerifierRescue shortlist" << i
                      << "cheapScore" << candidate.cheapScore
                      << "Az" << candidate.refined.azimuthDegrees
                      << "El" << candidate.refined.elevationDegrees
@@ -11775,7 +11775,7 @@ CameraPlateSolver::SolverContext::FinalMatchPassEvaluation CameraPlateSolver::So
             finalMatchRadius);
         if (!candidatePass.projectorValid) {
             if (debugSparse) {
-                qDebug() << "CameraPlateSolver: searchBrightAnchorVerifierRescue pass2 invalid-projector"
+                qCDebug(cameraPlateSolverLog) << "CameraPlateSolver: searchBrightAnchorVerifierRescue pass2 invalid-projector"
                          << "Az" << candidate.refined.azimuthDegrees
                          << "El" << candidate.refined.elevationDegrees
                          << "Roll" << candidate.refined.rollDegrees;
@@ -11791,7 +11791,7 @@ CameraPlateSolver::SolverContext::FinalMatchPassEvaluation CameraPlateSolver::So
             static_cast<int>(starDetections.size()));
         if (debugSparse)
         {
-            qDebug() << "CameraPlateSolver: searchBrightAnchorVerifierRescue pass2"
+            qCDebug(cameraPlateSolverLog) << "CameraPlateSolver: searchBrightAnchorVerifierRescue pass2"
                      << "faLogOdds" << falseAlarmLogOdds
                      << "Az" << candidatePass.pose.azimuthDegrees
                      << "El" << candidatePass.pose.elevationDegrees
@@ -11809,7 +11809,7 @@ CameraPlateSolver::SolverContext::FinalMatchPassEvaluation CameraPlateSolver::So
 
     if (debugSparse && best.projectorValid)
     {
-        qDebug() << "CameraPlateSolver: searchBrightAnchorVerifierRescue selected"
+        qCDebug(cameraPlateSolverLog) << "CameraPlateSolver: searchBrightAnchorVerifierRescue selected"
                  << "faLogOdds" << bestFalseAlarmLogOdds
                  << "Az" << best.pose.azimuthDegrees
                  << "El" << best.pose.elevationDegrees
@@ -11998,7 +11998,7 @@ void CameraPlateSolver::SolverContext::logPlateSolveEvaluation(const char *stage
         return;
     }
 
-    qDebug().noquote().nospace()
+    qCDebug(cameraPlateSolverLog).noquote().nospace()
         << "CameraPlateSolver[" << stage << "] "
         << (isNewBest ? "best " : "candidate ")
         << "Az=" << evaluation.azimuthDegrees
@@ -12024,7 +12024,7 @@ void CameraPlateSolver::SolverContext::logWeakModePoolDecision(const char *stage
         return;
     }
 
-    qDebug().noquote().nospace()
+    qCDebug(cameraPlateSolverLog).noquote().nospace()
         << "CameraPlateSolver[" << stage << "] "
         << decision
         << " score=" << weakModeEvaluationScore(candidate)
@@ -12041,7 +12041,7 @@ void CameraPlateSolver::SolverContext::logWeakModePoolDecision(const char *stage
         << " K1=" << candidate.distortionK1;
 
     if (other && other->valid) {
-        qDebug().noquote().nospace()
+        qCDebug(cameraPlateSolverLog).noquote().nospace()
             << "CameraPlateSolver[" << stage << "] "
             << "compared-to"
             << " score=" << weakModeEvaluationScore(*other)
@@ -12063,12 +12063,12 @@ void CameraPlateSolver::SolverContext::logWeakModeCandidatePool(const char *stag
         return;
     }
 
-    qDebug().noquote().nospace()
+    qCDebug(cameraPlateSolverLog).noquote().nospace()
         << "CameraPlateSolver[" << stage << "] pool-size=" << candidates.size();
     for (int i = 0; i < candidates.size(); ++i)
     {
         const Evaluation& candidate = candidates.at(i);
-        qDebug().noquote().nospace()
+        qCDebug(cameraPlateSolverLog).noquote().nospace()
             << "CameraPlateSolver[" << stage << "] #"<< i
             << " score=" << weakModeEvaluationScore(candidate)
             << " matches=" << candidate.matchCount
@@ -12101,7 +12101,7 @@ CameraPlateSolver::SolverContext::Evaluation CameraPlateSolver::SolverContext::s
         if (!profilePlateSolve) {
             return;
         }
-        qDebug().noquote().nospace()
+        qCDebug(cameraPlateSolverLog).noquote().nospace()
             << "CameraPlateSolverProfile search." << stage
             << " elapsedMs=" << elapsedMs
             << " totalMs=" << searchProfileTimer.elapsed()
@@ -12826,7 +12826,7 @@ CameraPlateSolver::SolverContext::Evaluation CameraPlateSolver::SolverContext::s
             if (!localVisibleStars.isEmpty()) {
                 blindVisibleStars = &localVisibleStars;
             }
-            qDebug() << "CameraPlateSolver: guided narrow blind seed catalog"
+            qCDebug(cameraPlateSolverLog) << "CameraPlateSolver: guided narrow blind seed catalog"
                      << "stars" << blindVisibleStars->size()
                      << "radius" << localRadiusDegrees;
         }

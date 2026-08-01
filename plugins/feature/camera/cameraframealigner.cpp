@@ -131,7 +131,7 @@ void CameraFrameAligner::handleInputMessages()
 
 void CameraFrameAligner::applySettings(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force)
 {
-    qDebug() << "CameraFrameAligner::applySettings:" << settings.getDebugString(settingsKeys, force) << "force:" << force;
+    cameraLogSettingsChange("CameraFrameAligner::applySettings:", settings, settingsKeys, force);
 
     const bool sourceChanged = force
         || settingsKeys.contains("cameraId")

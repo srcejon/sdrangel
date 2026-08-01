@@ -72,7 +72,7 @@ CameraMotionDetector::~CameraMotionDetector() = default;
 
 void CameraMotionDetector::applySettings(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force)
 {
-    qDebug() << "CameraMotionDetector::applySettings:" << settings.getDebugString(settingsKeys, force) << "force:" << force;
+    cameraLogSettingsChange("CameraMotionDetector::applySettings:", settings, settingsKeys, force);
 
     CameraDetectionStage::applySettings(settings, settingsKeys, force);
 

@@ -568,7 +568,7 @@ void CameraCloudDetector::invalidateCache()
 
 void CameraCloudDetector::applySettings(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force)
 {
-    qDebug() << "CameraCloudDetector::applySettings:" << settings.getDebugString(settingsKeys, force) << "force:" << force;
+    cameraLogSettingsChange("CameraCloudDetector::applySettings:", settings, settingsKeys, force);
 
     CameraDetectionStage::applySettings(settings, settingsKeys, force);
 

@@ -1311,7 +1311,7 @@ void CameraPostProcessor::saveCurrentImage()
 
 void CameraPostProcessor::applySettings(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force)
 {
-    qDebug() << "CameraPostProcessor::applySettings:" << settings.getDebugString(settingsKeys, force) << "force:" << force;
+    cameraLogSettingsChange("CameraPostProcessor::applySettings:", settings, settingsKeys, force);
 
     static const QStringList kPostProcessingKeys = {
         "overlayDateTime", "dateTimeColor",

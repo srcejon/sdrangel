@@ -227,7 +227,7 @@ void CameraImageProcessor::handleInputMessages()
 
 void CameraImageProcessor::applySettings(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force)
 {
-    qDebug() << "CameraImageProcessor::applySettings:" << settings.getDebugString(settingsKeys, force) << "force:" << force;
+    cameraLogSettingsChange("CameraImageProcessor::applySettings:", settings, settingsKeys, force);
 
     static const QStringList kImageProcessingKeys = {
         "postProcessWhiteBalanceMode",

@@ -987,7 +987,7 @@ bool CameraWorker::handleMessage(const Message& cmd)
 
 void CameraWorker::applySettings(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force)
 {
-    qDebug() << "CameraWorker::applySettings:" << settings.getDebugString(settingsKeys, force) << "force:" << force;
+    cameraLogSettingsChange("CameraWorker::applySettings:", settings, settingsKeys, force);
 
     const bool cameraSourceChanged = force
         || settingsKeys.contains("cameraProtocol")

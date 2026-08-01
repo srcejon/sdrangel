@@ -26,6 +26,7 @@
 #include <QDateTime>
 #include <QHash>
 #include <QList>
+#include <QLoggingCategory>
 #include <QRect>
 #include <QString>
 #include <QStringList>
@@ -915,5 +916,25 @@ struct CameraSettings
     double getCaptureFrameRate() const;
     static QString urlToFilename(const QString &url, const QString& destSubDir);
 };
+
+// Settings-change tracing for the feature and its pipeline stages. Only carries the
+// high-rate direction syncs (see cameraLogSettingsChange); defaults to QtWarningMsg, so
+// those are silent unless asked for with:
+//     QT_LOGGING_RULES="camera.settings.debug=true"
+Q_DECLARE_LOGGING_CATEGORY(cameraSettingsLog)
+
+/**
+ * \brief Log one settings change for a pipeline stage, damping the direction-sync flood.
+ *
+ * A rotator or direction sensor re-broadcasts the settings several times a second, and each
+ * of the thirteen recipients logs its own identical copy - which buries real configuration
+ * changes and the per-frame operational lines in an overnight log. A change that touches
+ * only the direction fields is machine traffic, so it goes to the (default-off)
+ * cameraSettingsLog category; everything else - any other field, and every forced apply -
+ * logs unconditionally as before.
+ *
+ * \param context Full message prefix, e.g. "CameraWorker::applySettings:".
+ */
+void cameraLogSettingsChange(const char *context, const CameraSettings& settings, const QStringList& settingsKeys, bool force);
 
 #endif // INCLUDE_FEATURE_CAMERASETTINGS_H_

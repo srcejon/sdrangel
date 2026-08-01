@@ -736,7 +736,7 @@ bool Camera::deserialize(const QByteArray& data)
 
 void Camera::applySettings(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force)
 {
-    qDebug() << "Camera::applySettings:" << settings.getDebugString(settingsKeys, force) << "force:" << force;
+    cameraLogSettingsChange("Camera::applySettings:", settings, settingsKeys, force);
 
     const bool cancellingPlateSolve = (force && !settings.m_plateSolve)
         || (!force && settingsKeys.contains("plateSolve") && !settings.m_plateSolve)

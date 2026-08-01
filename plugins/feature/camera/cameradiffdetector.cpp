@@ -78,7 +78,7 @@ CameraDiffDetector::~CameraDiffDetector() = default;
 
 void CameraDiffDetector::applySettings(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force)
 {
-    qDebug() << "CameraDiffDetector::applySettings:" << settings.getDebugString(settingsKeys, force) << "force:" << force;
+    cameraLogSettingsChange("CameraDiffDetector::applySettings:", settings, settingsKeys, force);
 
     CameraDetectionStage::applySettings(settings, settingsKeys, force);
 

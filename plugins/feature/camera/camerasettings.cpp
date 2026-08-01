@@ -3165,6 +3165,32 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     }
 }
 
+Q_LOGGING_CATEGORY(cameraSettingsLog, "camera.settings", QtWarningMsg)
+
+void cameraLogSettingsChange(const char *context, const CameraSettings& settings, const QStringList& settingsKeys, bool force)
+{
+    bool directionSyncOnly = !force && !settingsKeys.isEmpty();
+    for (const QString& key : settingsKeys)
+    {
+        if ((key != QLatin1String("azimuth"))
+            && (key != QLatin1String("elevation"))
+            && (key != QLatin1String("roll")))
+        {
+            directionSyncOnly = false;
+            break;
+        }
+    }
+
+    if (directionSyncOnly)
+    {
+        // Silent by default; the string is not even built unless the category is enabled
+        qCDebug(cameraSettingsLog) << context << settings.getDebugString(settingsKeys, force) << "force:" << force;
+        return;
+    }
+
+    qDebug() << context << settings.getDebugString(settingsKeys, force) << "force:" << force;
+}
+
 QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool force) const
 {
     std::ostringstream ostr;

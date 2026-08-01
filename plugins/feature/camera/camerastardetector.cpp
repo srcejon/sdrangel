@@ -434,7 +434,7 @@ void CameraStarDetector::captureActiveChanged(bool active)
 
 void CameraStarDetector::applySettings(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force)
 {
-    qDebug() << "CameraStarDetector::applySettings:" << settings.getDebugString(settingsKeys, force) << "force:" << force;
+    cameraLogSettingsChange("CameraStarDetector::applySettings:", settings, settingsKeys, force);
     if ((force && !settings.m_plateSolve)
         || (!force && settingsKeys.contains("plateSolve") && !settings.m_plateSolve)
         || (!force && settings.m_plateSolve && plateSolveInputSettingsChanged(settingsKeys, settings.m_directionApplyToCurrentImage)))

@@ -107,7 +107,7 @@ void CameraFramePreprocessor::handleInputMessages()
 
 void CameraFramePreprocessor::applySettings(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force)
 {
-    qDebug() << "CameraFramePreprocessor::applySettings:" << settings.getDebugString(settingsKeys, force) << "force:" << force;
+    cameraLogSettingsChange("CameraFramePreprocessor::applySettings:", settings, settingsKeys, force);
 
     const bool sourceChanged = force
         || settingsKeys.contains("cameraId")

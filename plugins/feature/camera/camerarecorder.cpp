@@ -335,7 +335,7 @@ void CameraRecorder::handleInputMessages()
 
 void CameraRecorder::applySettings(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force)
 {
-    qDebug() << "CameraRecorder::applySettings:" << settings.getDebugString(settingsKeys, force) << "force:" << force;
+    cameraLogSettingsChange("CameraRecorder::applySettings:", settings, settingsKeys, force);
 
     const bool wasSavingVideo = m_settings.m_saveVideo;
     const QString previousVideoFileName = m_settings.m_videoFileName;

@@ -694,7 +694,7 @@ bool CameraObjectDetector::handleStageMessage(const Message& cmd)
 
 void CameraObjectDetector::applySettings(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force)
 {
-    qDebug() << "CameraObjectDetector::applySettings:" << settings.getDebugString(settingsKeys, force) << "force:" << force;
+    cameraLogSettingsChange("CameraObjectDetector::applySettings:", settings, settingsKeys, force);
     CameraDetectionStage::applySettings(settings, settingsKeys, force);
 
     const QString effectiveScaleModelPath = m_settings.m_yoloModelPath.isEmpty() ? m_settings.m_yoloTileModelPath : m_settings.m_yoloModelPath;

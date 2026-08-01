@@ -925,7 +925,7 @@ void CameraFrameStacker::handleInputMessages()
 
 void CameraFrameStacker::applySettings(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force)
 {
-    qDebug() << "CameraFrameStacker::applySettings:" << settings.getDebugString(settingsKeys, force) << "force:" << force;
+    cameraLogSettingsChange("CameraFrameStacker::applySettings:", settings, settingsKeys, force);
 
     const bool displayChanged = settingsKeys.contains("stackDisplayMode")
         || settingsKeys.contains("stackDisplayFrameIndex");

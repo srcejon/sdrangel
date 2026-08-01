@@ -614,6 +614,56 @@ namespace {
             return false;
         }
 
+        MovingTargetMatcher::Observation largeSweepObservation;
+        largeSweepObservation.m_startDateTimeUtc = observation.m_startDateTimeUtc;
+        largeSweepObservation.m_durationS = 20.0;
+        largeSweepObservation.m_centerFrequencyOffsetHz = 0.0;
+        largeSweepObservation.m_frequencySpanHz = 1000.0;
+        largeSweepObservation.m_frequencyDriftHz = -1000.0;
+        largeSweepObservation.m_frequencyUncertaintyHz = 2.0;
+        largeSweepObservation.m_frequencySamples = {
+            {0.0, 500.0, 2.0},
+            {5.0, 250.0, 2.0},
+            {10.0, 0.0, 2.0},
+            {15.0, -250.0, 2.0},
+            {20.0, -500.0, 2.0}
+        };
+        const MovingTargetMatcher::PredictedCandidate fragmentedSweepTarget =
+            predictedCandidate(
+                QStringLiteral("FRAGMENTED-SWEEP"),
+                {430.0, 215.0, 0.0, -215.0, -430.0},
+                430.0,
+                -430.0);
+        const MovingTargetMatcher::PredictedCandidate oppositeSweepDecoy =
+            predictedCandidate(
+                QStringLiteral("OPPOSITE-SWEEP"),
+                {-250.0, -125.0, 0.0, 125.0, 250.0},
+                -250.0,
+                250.0);
+        const MovingTargetMatcher::Match largeSweepMatch =
+            MovingTargetMatcher::matchPredictions(
+                largeSweepObservation,
+                {oppositeSweepDecoy, fragmentedSweepTarget});
+
+        if (!largeSweepMatch.m_matched
+            || (largeSweepMatch.m_id != fragmentedSweepTarget.m_id)
+            || (largeSweepMatch.m_scorePercent < 60.0))
+        {
+            errorStream << "Moving-target matcher test: plausible fragmented large sweep was rejected\n";
+            return false;
+        }
+
+        const MovingTargetMatcher::Match oppositeSweepMatch =
+            MovingTargetMatcher::matchPredictions(
+                largeSweepObservation,
+                {oppositeSweepDecoy});
+
+        if (!oppositeSweepMatch.m_hasCandidate || oppositeSweepMatch.m_matched)
+        {
+            errorStream << "Moving-target matcher test: opposite large sweep direction was accepted\n";
+            return false;
+        }
+
         const MovingTargetMatcher::PredictedCandidate softTarget =
             predictedCandidate(
                 QStringLiteral("SOFT"),

@@ -123,6 +123,9 @@ public:
         double m_minimumCenterScaleHz = 25.0;
         double m_centerSpanScale = 0.20;
         double m_minimumDriftScaleHz = 12.0;
+        // Fragment endpoints become less repeatable as the total sweep excursion grows.
+        // Keep drift matching proportional to that excursion as well as to the reported
+        // measurement uncertainty.
         double m_driftScale = 0.25;
         double m_defaultFrequencyUncertaintyHz = 25.0;
         // Detector trajectories are reconstructed from correlated fragment centres and

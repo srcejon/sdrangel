@@ -403,8 +403,11 @@ namespace {
             tunables.m_minimumCenterScaleHz,
             std::hypot(measurementSigmaHz, timingContributionHz));
         scales.m_driftScaleHz = std::max(
-            tunables.m_minimumDriftScaleHz,
-            std::sqrt(2.0) * measurementSigmaHz);
+            {
+                tunables.m_minimumDriftScaleHz,
+                std::sqrt(2.0) * measurementSigmaHz,
+                std::fabs(observation.m_frequencyDriftHz) * tunables.m_driftScale
+            });
         return scales;
     }
 

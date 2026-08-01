@@ -738,6 +738,49 @@ void CameraStarDetector::processNewFrame(const CameraPipelineFramePtr& frame)
         frame->m_plateSolve.m_profileSummary = plateSolveResult.m_profileSummary;
         frame->m_plateSolve.m_requiredMatches = plateSolveResult.m_requiredMatches;
 
+        // One line per solve, always on (uncategorised qInfo, so it survives the
+        // camera.platesolver trace category being off). This is the operational summary:
+        // it names the inputs the solve actually got - how many stars were detected, which
+        // catalogue was used and how deep it turned out to be, how many of its stars fell in
+        // the field - alongside the outcome and, on failure, the reason. Those catalogue
+        // counts are the ones that matter in practice: an empty or shallow catalogue looks
+        // exactly like a bad frame from the outside, and without them the only way to tell
+        // was to turn the full trace on and reproduce.
+        qInfo().noquote().nospace()
+            << "CameraPlateSolve: solved=" << (plateSolveResult.m_solved ? 1 : 0)
+            << " detections=" << frame->m_starDetections.size()
+            << " considered=" << plateSolveResult.m_detectedStarsConsidered
+            << " matched=" << plateSolveResult.m_matchedStars
+            << " required=" << plateSolveResult.m_requiredMatches
+            << " catalog=" << (plateSolveResult.m_catalogSource.isEmpty()
+                    ? QStringLiteral("none") : plateSolveResult.m_catalogSource)
+            << " catalogStars=" << plateSolveResult.m_catalogStarsLoaded
+            << " inFieldCandidates=" << plateSolveResult.m_catalogCandidateStars
+            << " maxMag=" << QString::number(solveSettings.m_plateSolveMaxMagnitude, 'f', 1)
+            << " startMode=" << static_cast<int>(solveSettings.m_plateSolveStartMode)
+            << " seedAz=" << QString::number(solveSettings.m_azimuth, 'f', 3)
+            << " seedEl=" << QString::number(solveSettings.m_elevation, 'f', 3)
+            << " seedFov=" << QString::number(solveSettings.m_fov, 'f', 3)
+            << " solveMs=" << QString::number(frame->m_plateSolve.m_solveTimeMs, 'f', 0);
+        if (plateSolveResult.m_solved)
+        {
+            qInfo().noquote().nospace()
+                << "CameraPlateSolve: pose az=" << QString::number(plateSolveResult.m_azimuthDegrees, 'f', 4)
+                << " el=" << QString::number(plateSolveResult.m_elevationDegrees, 'f', 4)
+                << " roll=" << QString::number(plateSolveResult.m_rollDegrees, 'f', 3)
+                << " fov=" << QString::number(plateSolveResult.m_fovDegrees, 'f', 4)
+                << " rms=" << QString::number(plateSolveResult.m_rmsErrorPixels, 'f', 2)
+                << " max=" << QString::number(plateSolveResult.m_maxErrorPixels, 'f', 2)
+                << " outliers=" << plateSolveResult.m_outlierStars;
+        }
+        else
+        {
+            qInfo().noquote().nospace()
+                << "CameraPlateSolve: failed reason="
+                << (plateSolveResult.m_failureReason.isEmpty()
+                        ? QStringLiteral("(none given)") : plateSolveResult.m_failureReason);
+        }
+
         // Autoguide Phase 0: measure (do not act on) the mount's pointing error. The solve was
         // seeded with the commanded direction in solveSettings, so commanded − solved is the
         // error a future guiding loop would trim out via the rotator controller's offsets.

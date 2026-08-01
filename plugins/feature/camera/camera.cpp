@@ -738,9 +738,11 @@ void Camera::applySettings(const CameraSettings& settings, const QList<QString>&
 {
     cameraLogSettingsChange("Camera::applySettings:", settings, settingsKeys, force);
 
+    // m_settings is still the pre-change state here, so the direction move can be sized
     const bool cancellingPlateSolve = (force && !settings.m_plateSolve)
         || (!force && settingsKeys.contains("plateSolve") && !settings.m_plateSolve)
-        || (!force && settings.m_plateSolve && CameraStarDetector::plateSolveInputSettingsChanged(settingsKeys));
+        || (!force && settings.m_plateSolve
+            && CameraStarDetector::plateSolveInputSettingsChanged(m_settings, settings, settingsKeys));
 
     if (m_starDetector && cancellingPlateSolve)
     {

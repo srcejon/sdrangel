@@ -357,6 +357,59 @@ bool CameraStarDetector::starDisplaySettingsChanged(const QList<QString>& settin
         || plateSolveInputSettingsChanged(settingsKeys, applyDirectionChanges);
 }
 
+bool CameraStarDetector::plateSolveInputSettingsChanged(
+    const CameraSettings& previousSettings,
+    const CameraSettings& newSettings,
+    const QList<QString>& settingsKeys)
+{
+    // Anything that is not the pointing direction invalidates an in-flight solve outright.
+    if (plateSolveInputSettingsChanged(settingsKeys, /*applyDirectionChanges=*/false)) {
+        return true;
+    }
+
+    const bool directionChanged = settingsKeys.contains("azimuth")
+        || settingsKeys.contains("elevation")
+        || settingsKeys.contains("roll");
+    if (!directionChanged) {
+        return false;
+    }
+
+    // With "apply direction changes to current image" off, the solve is seeded from the
+    // frame's own captured direction (see CameraImageUtils::projectionSettingsForFrame),
+    // so the live direction is not a solve input at all and cannot invalidate anything.
+    if (!newSettings.m_directionApplyToCurrentImage) {
+        return false;
+    }
+
+    // Otherwise the solve does re-seed from the live direction, but only a move large
+    // enough to be a different pointing is worth restarting for. A rotator tracking a
+    // target re-broadcasts the direction about once a second while drifting ~0.01 deg/s -
+    // a hundredth of a 1.27 deg field - and treating that as a re-point aborted every
+    // solve before it could finish (measured in the field: 19 attempts, 19 cancelled, 0
+    // completed, each killed ~1 s into a multi-second solve).
+    constexpr double kDegreesToRadians = 3.14159265358979323846 / 180.0;
+    const double thresholdDegrees = std::max(0.5 * static_cast<double>(newSettings.m_fov), 0.25);
+    const double previousElevation = static_cast<double>(previousSettings.m_elevation) * kDegreesToRadians;
+    const double newElevation = static_cast<double>(newSettings.m_elevation) * kDegreesToRadians;
+    const double azimuthDelta =
+        (static_cast<double>(newSettings.m_azimuth) - static_cast<double>(previousSettings.m_azimuth)) * kDegreesToRadians;
+    const double cosSeparation = std::clamp(
+        (std::sin(previousElevation) * std::sin(newElevation))
+            + (std::cos(previousElevation) * std::cos(newElevation) * std::cos(azimuthDelta)),
+        -1.0,
+        1.0);
+    const double separationDegrees = std::acos(cosSeparation) / kDegreesToRadians;
+
+    double rollDelta = std::fmod(
+        static_cast<double>(newSettings.m_roll) - static_cast<double>(previousSettings.m_roll) + 180.0, 360.0);
+    if (rollDelta < 0.0) {
+        rollDelta += 360.0;
+    }
+    rollDelta = std::fabs(rollDelta - 180.0);
+
+    return (separationDegrees > thresholdDegrees) || (rollDelta > thresholdDegrees);
+}
+
 #ifdef CAMERA_OPENCV_CUDA_DETECTION
 bool CameraStarDetector::canUseCudaDetection() const
 {
@@ -437,7 +490,7 @@ void CameraStarDetector::applySettings(const CameraSettings& settings, const QLi
     cameraLogSettingsChange("CameraStarDetector::applySettings:", settings, settingsKeys, force);
     if ((force && !settings.m_plateSolve)
         || (!force && settingsKeys.contains("plateSolve") && !settings.m_plateSolve)
-        || (!force && settings.m_plateSolve && plateSolveInputSettingsChanged(settingsKeys, settings.m_directionApplyToCurrentImage)))
+        || (!force && settings.m_plateSolve && plateSolveInputSettingsChanged(m_settings, settings, settingsKeys)))
     {
         requestPlateSolveCancellation();
     }

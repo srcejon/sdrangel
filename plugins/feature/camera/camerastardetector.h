@@ -128,6 +128,21 @@ public:
     void setMessageQueueToFeature(MessageQueue *messageQueue) { m_msgQueueToFeature = messageQueue; }
     void requestPlateSolveCancellation();
     [[nodiscard]] static bool plateSolveInputSettingsChanged(const QList<QString>& settingsKeys, bool applyDirectionChanges = true);
+    /**
+     * \brief Whether a settings change invalidates an in-flight plate solve.
+     *
+     * Prefer this over the key-list-only overload: it knows both what changed and by how
+     * much, so a tracking rotator's continuous direction updates no longer abort every
+     * solve. A direction change counts only when the camera actually re-solves against the
+     * live direction (\ref CameraSettings::m_directionApplyToCurrentImage) AND the move is
+     * a meaningful fraction of the field rather than tracking drift.
+     *
+     * \param previousSettings Settings in force before the change (for the move size).
+     */
+    [[nodiscard]] static bool plateSolveInputSettingsChanged(
+        const CameraSettings& previousSettings,
+        const CameraSettings& newSettings,
+        const QList<QString>& settingsKeys);
 
 protected:
     void applySettings(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force = false) override;

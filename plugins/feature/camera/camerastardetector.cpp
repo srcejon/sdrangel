@@ -828,6 +828,16 @@ void CameraStarDetector::processNewFrame(const CameraPipelineFramePtr& frame)
         }
         else
         {
+            // The rejected candidate's own numbers, so a rejection can be judged from the log
+            // instead of having to reproduce the frame offline: whether the pose looked right
+            // (compare its roll against neighbouring solves) and how tight the fit was.
+            qInfo().noquote().nospace()
+                << "CameraPlateSolve: rejected pose az=" << QString::number(plateSolveResult.m_azimuthDegrees, 'f', 4)
+                << " el=" << QString::number(plateSolveResult.m_elevationDegrees, 'f', 4)
+                << " roll=" << QString::number(plateSolveResult.m_rollDegrees, 'f', 3)
+                << " fov=" << QString::number(plateSolveResult.m_fovDegrees, 'f', 4)
+                << " rms=" << QString::number(plateSolveResult.m_rmsErrorPixels, 'f', 2)
+                << " max=" << QString::number(plateSolveResult.m_maxErrorPixels, 'f', 2);
             qInfo().noquote().nospace()
                 << "CameraPlateSolve: failed reason="
                 << (plateSolveResult.m_failureReason.isEmpty()

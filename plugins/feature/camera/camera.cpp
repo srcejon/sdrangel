@@ -2620,6 +2620,24 @@ void Camera::autoguideHandlePointingError(const CameraStarDetector::MsgReportPoi
         return;
     }
 
+    // Fit-quality gate: a solve can clear the solver's accept gate (which tolerates an rms of
+    // roughly three quarters of the match radius) and still be a wrong-roll alias with plenty
+    // of matched stars. Measured over a real guiding session, the correct solves sat at rms
+    // 1.5-5.2 px while three wrong-roll accepts sat at 12.8-14.4 px, and one of those reported
+    // a spurious 0.46 deg azimuth error - the largest of the night, and opposite in sign to the
+    // true drift. Steering a mount with that is worse than not steering at all, so require a
+    // fit that is tight relative to the matching tolerance. A rig whose solves are genuinely
+    // looser simply corrects less often, which is the safe direction for a control loop.
+    const double maxRmsErrorPixels = 0.35 * static_cast<double>(m_settings.m_plateSolveFinalMatchRadius);
+    if (!std::isfinite(static_cast<double>(report.getRmsErrorPixels()))
+        || (static_cast<double>(report.getRmsErrorPixels()) > maxRmsErrorPixels))
+    {
+        autoguideStatus(QString("Skipped solve: fit rms %1 px exceeds %2 px")
+            .arg(static_cast<double>(report.getRmsErrorPixels()), 0, 'f', 2)
+            .arg(maxRmsErrorPixels, 0, 'f', 2));
+        return;
+    }
+
     // The actuation path requires a rotator exposing offset settings (e.g. Rotator Controller)
     double rotatorAzOffset = 0.0;
     double rotatorElOffset = 0.0;

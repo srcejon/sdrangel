@@ -4319,7 +4319,36 @@ bool CameraPlateSolver::SolverContext::hasDenseFinalEvidenceOverridingSeedRadial
         && (finalPass.brightDetectionMagnitudeError <= 0.80)
         && (finalPass.rmsErrorPixels <= 4.0);
 
-    return denseEvidence || sparseTightEvidence;
+    // Complete-bright-agreement tier: the seed-reference checks project the catalogue along
+    // the MOUNT's reported direction, so on a mount with a real pointing error they fail no
+    // matter how good the pose is - they are measuring the mount, not the fit. When the
+    // frame's bright stars agree completely with the pose there is nothing left to doubt:
+    // every bright detection matched a catalogue star, three quarters of the bright stars
+    // the pose predicts were found, and their magnitudes line up. Measured on a live
+    // guiding session, a pose with 24/24 bright detections, 11/12 bright projected and
+    // magnitude error 0.00 was rejected on seed-reference grounds alone; its roll (4.79 deg)
+    // agreed with the solves accepted either side of it (4.77, 4.54) to two hundredths of a
+    // degree. The same session's genuinely weak failures are excluded by a wide margin -
+    // they matched 0/12 bright projected at magnitude errors of 1.9 and 3.4.
+    //
+    // The fit must also be tight relative to the matching tolerance. Without that bound this
+    // tier fires on a coarse early candidate and short-circuits the search that would have
+    // refined it: stars-narrow-1 settled for the right pose at rms 11.1 instead of letting
+    // the recenter ladder reach the same pose at rms 0.30. The same ratio gates autoguide
+    // corrections (Camera::autoguideHandlePointingError), so what this admits early is
+    // exactly what is good enough to steer a mount with.
+    const bool completeBrightAgreement =
+        (finalPass.brightDetections >= 8)
+        && (finalPass.matchedBrightDetections >= finalPass.brightDetections)
+        && (finalPass.brightProjectedStars >= 6)
+        && ((finalPass.matchedBrightProjectedStars * 4) >= (finalPass.brightProjectedStars * 3))
+        && (finalPass.brightDetectionMagnitudeError <= 0.60)
+        && (finalPass.rmsErrorPixels
+            <= (0.35 * static_cast<double>(settings.m_plateSolveFinalMatchRadius)))
+        && (finalPass.finalMatches.size()
+            >= static_cast<qsizetype>(std::max(settings.m_plateSolveMinMatches + 8, 12)));
+
+    return denseEvidence || sparseTightEvidence || completeBrightAgreement;
 }
 
 bool CameraPlateSolver::SolverContext::isBetterByGeometricTieBreak(const Evaluation& candidate, const Evaluation& best)

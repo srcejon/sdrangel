@@ -80,7 +80,11 @@ public:
         QString m_source;
         QString m_id;
         QString m_label;
+        // Endpoint score determines geometric eligibility. The trajectory score
+        // ranks eligible objects without turning reconstructed ridge samples into
+        // an additional hard rejection gate.
         double m_scorePercent = 0.0;
+        double m_rankingScorePercent = 0.0;
         double m_endpointResidualRMSHz = 0.0;
         double m_centerResidualHz = 0.0;
         double m_driftResidualHz = 0.0;
@@ -100,6 +104,7 @@ public:
         QString m_id;
         QString m_label;
         double m_scorePercent = 0.0;
+        double m_rankingScorePercent = 0.0;
         double m_secondBestScorePercent = 0.0;
         double m_endpointResidualRMSHz = 0.0;
         double m_centerResidualHz = 0.0;

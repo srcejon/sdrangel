@@ -155,6 +155,16 @@ namespace {
             && (first.m_label == second.m_label);
     }
 
+    double rankingScore(const MovingTargetMatcher::Candidate& candidate)
+    {
+        // Manually constructed matches and older serialized diagnostics only have
+        // m_scorePercent. A real trajectory score cannot exceed its endpoint score.
+        return (candidate.m_rankingScorePercent > 0.0)
+                && (candidate.m_rankingScorePercent <= candidate.m_scorePercent + 1e-9)
+            ? candidate.m_rankingScorePercent
+            : candidate.m_scorePercent;
+    }
+
     void insertRankedCandidate(
         QVector<MovingTargetMatcher::Candidate>& candidates,
         const MovingTargetMatcher::Candidate& candidate)
@@ -169,7 +179,7 @@ namespace {
                 continue;
             }
 
-            if (candidates[index].m_scorePercent >= candidate.m_scorePercent) {
+            if (rankingScore(candidates[index]) >= rankingScore(candidate)) {
                 return;
             }
 
@@ -179,7 +189,7 @@ namespace {
 
         int insertionIndex = 0;
         while ((insertionIndex < candidates.size())
-            && (candidates[insertionIndex].m_scorePercent >= candidate.m_scorePercent))
+            && (rankingScore(candidates[insertionIndex]) >= rankingScore(candidate)))
         {
             ++insertionIndex;
         }
@@ -195,6 +205,7 @@ namespace {
         candidate.m_id = match.m_id;
         candidate.m_label = match.m_label;
         candidate.m_scorePercent = match.m_scorePercent;
+        candidate.m_rankingScorePercent = match.m_rankingScorePercent;
         candidate.m_endpointResidualRMSHz = match.m_endpointResidualRMSHz;
         candidate.m_centerResidualHz = match.m_centerResidualHz;
         candidate.m_driftResidualHz = match.m_driftResidualHz;
@@ -215,6 +226,7 @@ namespace {
         match.m_id = candidate.m_id;
         match.m_label = candidate.m_label;
         match.m_scorePercent = candidate.m_scorePercent;
+        match.m_rankingScorePercent = rankingScore(candidate);
         match.m_endpointResidualRMSHz = candidate.m_endpointResidualRMSHz;
         match.m_centerResidualHz = candidate.m_centerResidualHz;
         match.m_driftResidualHz = candidate.m_driftResidualHz;
@@ -234,44 +246,58 @@ namespace {
             return;
         }
 
-        setBestCandidate(match, rankedCandidates.first());
         match.m_candidateCount = rankedCandidates.size();
-        match.m_secondBestScorePercent = rankedCandidates.size() > 1
-            ? rankedCandidates[1].m_scorePercent
-            : 0.0;
         match.m_alternatives.clear();
+
+        QVector<const MovingTargetMatcher::Candidate *> eligible;
+        eligible.reserve(rankedCandidates.size());
+        for (const MovingTargetMatcher::Candidate& candidate : rankedCandidates)
+        {
+            if (candidate.m_scorePercent >= tunables.m_minimumMatchScorePercent) {
+                eligible.append(&candidate);
+            }
+        }
+
+        if (eligible.isEmpty())
+        {
+            setBestCandidate(match, rankedCandidates.first());
+            match.m_diagnostic = QStringLiteral(
+                "Best candidate is below the minimum endpoint score");
+            return;
+        }
+
+        setBestCandidate(match, *eligible.first());
+        match.m_secondBestScorePercent = eligible.size() > 1
+            ? eligible[1]->m_scorePercent
+            : 0.0;
 
         const double densityMarginPercent =
             tunables.m_minimumScoreMarginPercent
-            + 1.5 * std::log10(std::max(1.0, (double) rankedCandidates.size()));
+            + 1.5 * std::log10(std::max(1.0, (double) eligible.size()));
         for (int index = 1;
-            (index < rankedCandidates.size())
+            (index < eligible.size())
                 && (match.m_alternatives.size() < MaximumAlternativeCount);
             ++index)
         {
-            if ((match.m_scorePercent - rankedCandidates[index].m_scorePercent)
+            if ((match.m_rankingScorePercent - rankingScore(*eligible[index]))
                 >= densityMarginPercent)
             {
                 break;
             }
-            match.m_alternatives.append(rankedCandidates[index]);
+            match.m_alternatives.append(*eligible[index]);
         }
         match.m_closeCandidateCount = 1 + match.m_alternatives.size();
 
-        const double scoreMarginPercent = match.m_scorePercent
-            - match.m_secondBestScorePercent;
+        const double scoreMarginPercent = eligible.size() > 1
+            ? match.m_rankingScorePercent - rankingScore(*eligible[1])
+            : match.m_rankingScorePercent;
         match.m_ambiguous =
-            (match.m_scorePercent >= tunables.m_minimumMatchScorePercent)
-            && (match.m_secondBestScorePercent > 0.0)
+            (eligible.size() > 1)
             && (scoreMarginPercent < densityMarginPercent);
-        match.m_matched = (match.m_scorePercent >= tunables.m_minimumMatchScorePercent)
-            && !match.m_ambiguous;
+        match.m_matched = !match.m_ambiguous;
         if (match.m_ambiguous) {
             match.m_diagnostic = QStringLiteral(
                 "Several catalog objects fit within the density-adjusted score margin");
-        } else if (!match.m_matched) {
-            match.m_diagnostic = QStringLiteral(
-                "Best candidate is below the minimum trajectory score");
         }
     }
 }
@@ -525,13 +551,23 @@ namespace {
                 2.0);
         }
 
-        const double scorePercent = 100.0 * scoreFactor * std::exp(-normalizedLoss);
+        const double biasSigma = std::max(
+            1.0,
+            tunables.m_maximumFittedFrequencyBiasHz);
+        const double biasPenalty = 0.1 * std::pow(
+            fittedFrequencyBiasHz / biasSigma,
+            2.0);
+        const double endpointScorePercent =
+            100.0 * scoreFactor * std::exp(-endpointLoss - biasPenalty);
+        const double rankingScorePercent =
+            100.0 * scoreFactor * std::exp(-normalizedLoss);
 
         MovingTargetMatcher::Candidate candidate;
         candidate.m_source = source;
         candidate.m_id = id;
         candidate.m_label = label;
-        candidate.m_scorePercent = scorePercent;
+        candidate.m_scorePercent = endpointScorePercent;
+        candidate.m_rankingScorePercent = rankingScorePercent;
         candidate.m_endpointResidualRMSHz = endpointResidualRMSHz;
         candidate.m_centerResidualHz = centerResidualHz;
         candidate.m_driftResidualHz = driftResidualHz;
@@ -640,7 +676,7 @@ MovingTargetMatcher::Match MovingTargetMatcher::matchPredictionGroups(
                 continue;
             }
             const QString key = predicted.m_source + QChar('\x1f') + predicted.m_id;
-            byIdentity[key].append(scoreCandidate(
+            Candidate scored = scoreCandidate(
                 observations[group],
                 scales,
                 predicted.m_source,
@@ -649,7 +685,9 @@ MovingTargetMatcher::Match MovingTargetMatcher::matchPredictionGroups(
                 predicted.m_stateAgeS,
                 predicted.m_prediction,
                 predicted.m_scoreFactor,
-                tunables));
+                tunables);
+            scored.m_softGeometry = predicted.m_softGeometry;
+            byIdentity[key].append(scored);
         }
     }
 
@@ -661,15 +699,20 @@ MovingTargetMatcher::Match MovingTargetMatcher::matchPredictionGroups(
         }
         Candidate joint = it.value().last();
         double logScore = 0.0;
+        double logRankingScore = 0.0;
         double rmsSquared = 0.0;
         for (const Candidate& fragment : it.value())
         {
             logScore += std::log(std::max(1e-6, fragment.m_scorePercent / 100.0));
+            logRankingScore += std::log(
+                std::max(1e-6, rankingScore(fragment) / 100.0));
             rmsSquared += fragment.m_trajectoryResidualRMSHz
                 * fragment.m_trajectoryResidualRMSHz;
             joint.m_softGeometry = joint.m_softGeometry || fragment.m_softGeometry;
         }
         joint.m_scorePercent = 100.0 * std::exp(logScore / observations.size());
+        joint.m_rankingScorePercent = 100.0 * std::exp(
+            logRankingScore / observations.size());
         joint.m_trajectoryResidualRMSHz = std::sqrt(
             rmsSquared / observations.size());
         insertRankedCandidate(ranked, joint);

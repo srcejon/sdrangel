@@ -73,6 +73,10 @@ namespace {
     constexpr double SnapshotCullMarginDegrees = 10.0;
     constexpr double SoftBeamCullMarginDegrees = 30.0;
     constexpr double SoftBeamScoreFactor = 0.82;
+    constexpr double MaximumPassFragmentGapS = 60.0;
+    constexpr double MinimumPassPropagationScorePercent = 35.0;
+    constexpr double PassHypothesisRetentionS = 90.0;
+    constexpr int MaximumPassHypothesisFragments = 32;
     // The maximum-altitude setting doubles as the map projection altitude, where values
     // like 100 km (the meteor ablation region) are natural; below any real satellite
     // orbit it cannot be a meaningful matcher cull, so treat it as display-only rather
@@ -85,6 +89,52 @@ namespace {
         "https://www.space-track.org/basicspacedata/query/class/gp/"
         "EPOCH/%3Enow-30/orderby/NORAD_CAT_ID,EPOCH/format/3le";
     constexpr char SpaceTrackCacheName[] = "space-track-gp.3le";
+
+    bool likelySamePassFragments(
+        const MovingTargetMatcher::Observation& first,
+        const MovingTargetMatcher::Observation& second)
+    {
+        if (!first.m_startDateTimeUtc.isValid()
+            || !second.m_startDateTimeUtc.isValid())
+        {
+            return false;
+        }
+
+        const MovingTargetMatcher::Observation *earlier = &first;
+        const MovingTargetMatcher::Observation *later = &second;
+        if (later->m_startDateTimeUtc < earlier->m_startDateTimeUtc) {
+            std::swap(earlier, later);
+        }
+
+        const double startDeltaS = earlier->m_startDateTimeUtc.msecsTo(
+            later->m_startDateTimeUtc) / 1000.0;
+        const double gapS = startDeltaS - earlier->m_durationS;
+        if (gapS > MaximumPassFragmentGapS) {
+            return false;
+        }
+
+        const double earlierRate = earlier->m_frequencyDriftHz
+            / std::max(0.001, earlier->m_durationS);
+        const double laterRate = later->m_frequencyDriftHz
+            / std::max(0.001, later->m_durationS);
+        const double rateToleranceHzPerS = std::max(
+            20.0,
+            0.25 * std::max(std::fabs(earlierRate), std::fabs(laterRate)));
+        if ((earlierRate * laterRate <= 0.0)
+            || (std::fabs(earlierRate - laterRate) > rateToleranceHzPerS))
+        {
+            return false;
+        }
+
+        const double predictedLaterStart =
+            earlier->m_centerFrequencyOffsetHz
+            - 0.5 * earlier->m_frequencyDriftHz
+            + earlierRate * startDeltaS;
+        const double observedLaterStart =
+            later->m_centerFrequencyOffsetHz
+            - 0.5 * later->m_frequencyDriftHz;
+        return std::fabs(predictedLaterStart - observedLaterStart) <= 400.0;
+    }
 
     class MeteorNetworkCookieJar : public QNetworkCookieJar
     {
@@ -762,109 +812,170 @@ public:
 
             MovingTargetMatcher::Match catalogMatch =
                 MovingTargetMatcher::matchPredictions(observation, candidates);
-            if (!catalogMatch.m_matched)
+            for (int catalogIndex : snapshot.m_softCandidateIndices)
             {
-                for (int catalogIndex : snapshot.m_softCandidateIndices)
+                MovingTargetMatcher::PredictedCandidate candidate;
+                if (predictCatalogEntry(m_catalog[catalogIndex], observation, candidate))
                 {
-                    MovingTargetMatcher::PredictedCandidate candidate;
-                    if (predictCatalogEntry(m_catalog[catalogIndex], observation, candidate))
-                    {
-                        candidate.m_scoreFactor = SoftBeamScoreFactor;
-                        candidate.m_softGeometry = true;
-                        candidates.append(candidate);
-                    }
+                    candidate.m_scoreFactor = SoftBeamScoreFactor;
+                    candidate.m_softGeometry = true;
+                    candidates.append(candidate);
                 }
+            }
+            if (!catalogMatch.m_matched) {
                 catalogMatch = MovingTargetMatcher::matchPredictions(
                     observation,
                     candidates);
             }
 
-            QVector<MovingTargetMatcher::Observation> passObservations;
-            const double currentRate = observation.m_frequencyDriftHz
-                / std::max(0.001, observation.m_durationS);
-            for (const RecentPassFragment& fragment : m_recentPassFragments)
+            PassFragment currentFragment {
+                requestId,
+                observation,
+                candidates,
+                moonPrediction
+            };
+            const QDateTime oldest = observation.m_startDateTimeUtc.addMSecs(
+                (qint64) std::llround(-PassHypothesisRetentionS * 1000.0));
+            for (int hypothesisIndex = m_passHypotheses.size() - 1;
+                hypothesisIndex >= 0;
+                --hypothesisIndex)
             {
-                const double gapS = fragment.m_observation.m_startDateTimeUtc
-                    .addMSecs((qint64) std::llround(
-                        fragment.m_observation.m_durationS * 1000.0))
-                    .msecsTo(observation.m_startDateTimeUtc) / 1000.0;
-                const double fragmentRate =
-                    fragment.m_observation.m_frequencyDriftHz
-                    / std::max(0.001, fragment.m_observation.m_durationS);
-                const double predictedCurrentStart =
-                    fragment.m_observation.m_centerFrequencyOffsetHz
-                    + 0.5 * fragment.m_observation.m_frequencyDriftHz
-                    + fragmentRate * std::max(0.0, gapS);
-                const double observedCurrentStart =
-                    observation.m_centerFrequencyOffsetHz
-                    - 0.5 * observation.m_frequencyDriftHz;
-                if ((gapS >= 0.0) && (gapS <= 60.0)
-                    && (fragmentRate * currentRate > 0.0)
-                    && (std::fabs(fragmentRate - currentRate) <= 20.0)
-                    && (std::fabs(predictedCurrentStart - observedCurrentStart)
-                        <= 400.0))
+                const PassHypothesis& hypothesis = m_passHypotheses[hypothesisIndex];
+                if (hypothesis.m_fragments.isEmpty()
+                    || (hypothesis.m_fragments.last().m_observation.m_startDateTimeUtc
+                        < oldest))
                 {
-                    passObservations.append(fragment.m_observation);
+                    m_passHypotheses.removeAt(hypothesisIndex);
                 }
             }
-            passObservations.append(observation);
-            if (passObservations.size() > 1)
+
+            QVector<int> associatedHypotheses;
+            for (int hypothesisIndex = 0;
+                hypothesisIndex < m_passHypotheses.size();
+                ++hypothesisIndex)
             {
-                QVector<QVector<MovingTargetMatcher::PredictedCandidate>> groups;
-                groups.reserve(passObservations.size());
-                for (const auto& passObservation : passObservations)
+                const PassHypothesis& hypothesis = m_passHypotheses[hypothesisIndex];
+                bool associated = false;
+                for (const PassFragment& fragment : hypothesis.m_fragments)
                 {
-                    const QDateTime passCenter =
-                        passObservation.m_startDateTimeUtc.addMSecs(
-                            (qint64) std::llround(
-                                passObservation.m_durationS * 500.0));
-                    const Snapshot& passSnapshot = candidatesForTime(
-                        passCenter,
-                        passObservation,
-                        geometry);
-                    QVector<int> indices = passSnapshot.m_candidateIndices;
-                    indices += passSnapshot.m_softCandidateIndices;
-                    QVector<MovingTargetMatcher::PredictedCandidate> group;
-                    group.reserve(indices.size());
-                    for (int catalogIndex : indices)
+                    if (compatiblePassGeometry(fragment.m_observation, observation)
+                        && likelySamePassFragments(fragment.m_observation, observation))
                     {
-                        MovingTargetMatcher::PredictedCandidate predicted;
-                        if (predictCatalogEntry(
-                                m_catalog[catalogIndex],
-                                passObservation,
-                                predicted))
-                        {
-                            if (passSnapshot.m_softCandidateIndices.contains(catalogIndex))
-                            {
-                                predicted.m_scoreFactor = SoftBeamScoreFactor;
-                                predicted.m_softGeometry = true;
-                            }
-                            group.append(predicted);
-                        }
+                        associated = true;
+                        break;
                     }
-                    groups.append(group);
                 }
-                const MovingTargetMatcher::Match joint =
-                    MovingTargetMatcher::matchPredictionGroups(
-                        passObservations,
-                        groups);
-                if (joint.m_matched
-                    && (!catalogMatch.m_matched
-                        || (joint.m_scorePercent > catalogMatch.m_scorePercent)))
-                {
-                    catalogMatch = joint;
-                    catalogMatch.m_diagnostic =
-                        QStringLiteral("Jointly matched interrupted pass fragments");
+                if (associated) {
+                    associatedHypotheses.append(hypothesisIndex);
                 }
             }
-            m_recentPassFragments.append({observation, geometry});
-            const QDateTime oldest = observation.m_startDateTimeUtc.addSecs(-90);
-            while (!m_recentPassFragments.isEmpty()
-                && (m_recentPassFragments.first().m_observation.m_startDateTimeUtc
-                    < oldest))
+
+            int passHypothesisIndex = -1;
+            if (associatedHypotheses.isEmpty())
             {
-                m_recentPassFragments.removeFirst();
+                PassHypothesis hypothesis;
+                m_passHypotheses.append(hypothesis);
+                passHypothesisIndex = m_passHypotheses.size() - 1;
             }
+            else
+            {
+                passHypothesisIndex = associatedHypotheses.first();
+                // A new fragment can bridge two interrupted chains. Merge them into
+                // one physical pass before scoring the identity.
+                for (int associatedIndex = associatedHypotheses.size() - 1;
+                    associatedIndex > 0;
+                    --associatedIndex)
+                {
+                    const int sourceIndex = associatedHypotheses[associatedIndex];
+                    m_passHypotheses[passHypothesisIndex].m_fragments +=
+                        m_passHypotheses[sourceIndex].m_fragments;
+                    if (!m_passHypotheses[passHypothesisIndex].m_identityMatch.m_matched
+                        && m_passHypotheses[sourceIndex].m_identityMatch.m_matched)
+                    {
+                        m_passHypotheses[passHypothesisIndex].m_identityMatch =
+                            m_passHypotheses[sourceIndex].m_identityMatch;
+                    }
+                    m_passHypotheses.removeAt(sourceIndex);
+                }
+            }
+
+            PassHypothesis& hypothesis = m_passHypotheses[passHypothesisIndex];
+            hypothesis.m_fragments.append(currentFragment);
+            std::sort(
+                hypothesis.m_fragments.begin(),
+                hypothesis.m_fragments.end(),
+                [](const PassFragment& left, const PassFragment& right) {
+                    return left.m_observation.m_startDateTimeUtc
+                        < right.m_observation.m_startDateTimeUtc;
+                });
+            while (hypothesis.m_fragments.size() > MaximumPassHypothesisFragments) {
+                hypothesis.m_fragments.removeFirst();
+            }
+
+            QVector<MovingTargetMatcher::Observation> passObservations;
+            QVector<QVector<MovingTargetMatcher::PredictedCandidate>> passGroups;
+            passObservations.reserve(hypothesis.m_fragments.size());
+            passGroups.reserve(hypothesis.m_fragments.size());
+            for (const PassFragment& fragment : hypothesis.m_fragments)
+            {
+                passObservations.append(fragment.m_observation);
+                passGroups.append(fragment.m_candidates);
+            }
+            MovingTargetMatcher::Match joint =
+                MovingTargetMatcher::matchPredictionGroups(
+                    passObservations,
+                    passGroups);
+            const bool identityEstablishedJointly =
+                joint.m_matched && !joint.m_ambiguous;
+            if (identityEstablishedJointly)
+            {
+                hypothesis.m_identityMatch = joint;
+                hypothesis.m_identityMatch.m_diagnostic = QStringLiteral(
+                    "Persistent pass hypothesis matched %1 fragments jointly")
+                        .arg(hypothesis.m_fragments.size());
+            }
+            else if (!hypothesis.m_identityMatch.m_matched
+                && catalogMatch.m_matched
+                && !catalogMatch.m_ambiguous)
+            {
+                hypothesis.m_identityMatch = catalogMatch;
+            }
+
+            if (hypothesis.m_identityMatch.m_matched)
+            {
+                const QString identitySource = hypothesis.m_identityMatch.m_source;
+                const QString identityId = hypothesis.m_identityMatch.m_id;
+                for (PassFragment& fragment : hypothesis.m_fragments)
+                {
+                    MovingTargetMatcher::Match fragmentMatch = matchPassIdentity(
+                        fragment,
+                        hypothesis.m_identityMatch,
+                        hypothesis.m_fragments.size(),
+                        identityEstablishedJointly
+                            ? 0.0
+                            : MinimumPassPropagationScorePercent);
+                    if (!fragmentMatch.m_hasCandidate) {
+                        continue;
+                    }
+
+                    if (fragment.m_requestId == requestId) {
+                        catalogMatch = fragmentMatch;
+                    } else if ((fragment.m_emittedSource != identitySource)
+                        || (fragment.m_emittedId != identityId))
+                    {
+                        queueMatchDelivery(
+                            fragment.m_requestId,
+                            MovingTargetMatcher::combine(
+                                fragment.m_moonPrediction.m_match,
+                                fragmentMatch),
+                            fragment.m_moonPrediction,
+                            MeteorSatelliteMatcher::Track());
+                    }
+                    fragment.m_emittedSource = identitySource;
+                    fragment.m_emittedId = identityId;
+                }
+            }
+
             match = MovingTargetMatcher::combine(match, catalogMatch);
             if (match.m_source == catalogMatch.m_source
                 && match.m_id == catalogMatch.m_id)
@@ -906,19 +1017,7 @@ public:
 #endif
         match.m_appliedClockCorrectionS = appliedClockCorrectionS;
 
-        QPointer<MeteorSatelliteMatcher> owner(m_owner);
-        QMetaObject::invokeMethod(
-            m_owner,
-            [owner, requestId, match, moonPrediction, track]() {
-                if (owner) {
-                    owner->deliverMatch(
-                        requestId,
-                        match,
-                        moonPrediction,
-                        track);
-                }
-            },
-            Qt::QueuedConnection);
+        queueMatchDelivery(requestId, match, moonPrediction, track);
     }
 
     void requestCalibration(
@@ -1165,6 +1264,27 @@ public:
     }
 
 private:
+    void queueMatchDelivery(
+        quint64 requestId,
+        const MovingTargetMatcher::Match& match,
+        const MeteorSatelliteMatcher::MoonPrediction& moonPrediction,
+        const MeteorSatelliteMatcher::Track& track)
+    {
+        QPointer<MeteorSatelliteMatcher> owner(m_owner);
+        QMetaObject::invokeMethod(
+            m_owner,
+            [owner, requestId, match, moonPrediction, track]() {
+                if (owner) {
+                    owner->deliverMatch(
+                        requestId,
+                        match,
+                        moonPrediction,
+                        track);
+                }
+            },
+            Qt::QueuedConnection);
+    }
+
 #ifdef METEOR_HAS_SGP4
     struct CatalogMetadata
     {
@@ -1201,11 +1321,72 @@ private:
         MeteorSatelliteMatcher::CatalogStatistics m_statistics;
     };
 
-    struct RecentPassFragment
+    struct PassFragment
     {
+        quint64 m_requestId = 0;
         MovingTargetMatcher::Observation m_observation;
-        MeteorSatelliteMatcher::Geometry m_geometry;
+        QVector<MovingTargetMatcher::PredictedCandidate> m_candidates;
+        MeteorSatelliteMatcher::MoonPrediction m_moonPrediction;
+        QString m_emittedSource;
+        QString m_emittedId;
     };
+
+    struct PassHypothesis
+    {
+        QVector<PassFragment> m_fragments;
+        MovingTargetMatcher::Match m_identityMatch;
+    };
+
+    static bool compatiblePassGeometry(
+        const MovingTargetMatcher::Observation& first,
+        const MovingTargetMatcher::Observation& second)
+    {
+        return (std::fabs(first.m_referenceFrequencyHz
+                    - second.m_referenceFrequencyHz) < 1.0)
+            && (std::fabs(first.m_transmitter.m_latitudeDegrees
+                    - second.m_transmitter.m_latitudeDegrees) < 1e-6)
+            && (std::fabs(first.m_transmitter.m_longitudeDegrees
+                    - second.m_transmitter.m_longitudeDegrees) < 1e-6)
+            && (std::fabs(first.m_receiver.m_latitudeDegrees
+                    - second.m_receiver.m_latitudeDegrees) < 1e-6)
+            && (std::fabs(first.m_receiver.m_longitudeDegrees
+                    - second.m_receiver.m_longitudeDegrees) < 1e-6);
+    }
+
+    static MovingTargetMatcher::Match matchPassIdentity(
+        const PassFragment& fragment,
+        const MovingTargetMatcher::Match& identity,
+        int fragmentCount,
+        double minimumScorePercent)
+    {
+        for (const auto& candidate : fragment.m_candidates)
+        {
+            if ((candidate.m_source != identity.m_source)
+                || (candidate.m_id != identity.m_id))
+            {
+                continue;
+            }
+
+            MovingTargetMatcher::Match result =
+                MovingTargetMatcher::matchPredictions(
+                    fragment.m_observation,
+                    {candidate});
+            if (!result.m_hasCandidate) {
+                return result;
+            }
+            if (result.m_scorePercent < minimumScorePercent) {
+                return MovingTargetMatcher::Match();
+            }
+            result.m_matched = true;
+            result.m_ambiguous = false;
+            result.m_passFragmentCount = fragmentCount;
+            result.m_diagnostic = QStringLiteral(
+                "Identity established by persistent %1-fragment pass hypothesis")
+                    .arg(fragmentCount);
+            return result;
+        }
+        return MovingTargetMatcher::Match();
+    }
 
     struct CalibrationPredictionCurve
     {
@@ -2518,6 +2699,7 @@ private:
         m_catalog = std::move(catalog);
         m_snapshots.clear();
         m_snapshotOrder.clear();
+        m_passHypotheses.clear();
         const int supplementalCount = (int) m_catalog.size() - activeCount;
         m_status = QStringLiteral(
             "%1 orbital elements loaded (%2 active, %3 supplemental)")
@@ -3322,7 +3504,7 @@ private:
     QHash<qint64, Snapshot> m_snapshots;
     QList<qint64> m_snapshotOrder;
     QString m_geometryKey;
-    QVector<RecentPassFragment> m_recentPassFragments;
+    QVector<PassHypothesis> m_passHypotheses;
 #else
     std::vector<int> m_catalog;
 #endif

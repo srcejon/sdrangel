@@ -614,6 +614,33 @@ namespace {
             return false;
         }
 
+        MovingTargetMatcher::Observation endpointEligibleObservation =
+            noisyTrajectoryObservation;
+        endpointEligibleObservation.m_frequencySamples = {
+            {0.0, 100.0, 2.0},
+            {1.0, -100.0, 2.0},
+            {2.0, 100.0, 2.0},
+            {3.0, -100.0, 2.0},
+            {4.0, 0.0, 2.0}
+        };
+        const MovingTargetMatcher::Match endpointEligibleMatch =
+            MovingTargetMatcher::matchPredictions(
+                endpointEligibleObservation,
+                {predictedCandidate(
+                    QStringLiteral("ENDPOINT-ELIGIBLE"),
+                    {0.0, 0.0, 0.0, 0.0, 0.0},
+                    0.0,
+                    0.0,
+                    0.65)});
+
+        if (!endpointEligibleMatch.m_matched
+            || (endpointEligibleMatch.m_scorePercent < 60.0)
+            || (endpointEligibleMatch.m_rankingScorePercent >= 60.0))
+        {
+            errorStream << "Moving-target matcher test: trajectory ranking incorrectly became an acceptance gate\n";
+            return false;
+        }
+
         MovingTargetMatcher::Observation largeSweepObservation;
         largeSweepObservation.m_startDateTimeUtc = observation.m_startDateTimeUtc;
         largeSweepObservation.m_durationS = 20.0;

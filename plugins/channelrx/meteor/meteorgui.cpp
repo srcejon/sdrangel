@@ -970,7 +970,7 @@ void MeteorGUI::setupUi(RollupContents *rollupContents)
         "Conservative RF-only classification from endpoint speed, Doppler rate, sweep excursion and track duration.",
         "Heuristic RF-only satellite evidence score from 0 to 100; this is not a calibrated probability.",
         "Strong, unambiguous moving-target correlation using fresh ADS-B aircraft states, the worker-thread CelesTrak active and supplemental orbital-element catalog, and the lunar ephemeris.",
-        "Doppler endpoint match score from 0 to 100. A match requires at least 60 and an 8 point lead over the next target.",
+        "Doppler endpoint match score from 0 to 100. A standalone match requires at least 60; full-trajectory agreement ranks eligible targets and continuous fragments can inherit a confident pass identity.",
         "Root-mean-square residual between observed and predicted start/end Doppler offsets in hertz.",
         "Whether the Moon is above both horizons and lies inside both configured transmitter and receiver antenna beams at the detection time.",
         "Expected bistatic center Doppler offset in hertz for a reflection from the Moon.",
@@ -3284,7 +3284,8 @@ void MeteorGUI::applySatelliteTargetMatch(
     }
 
     const PendingTargetMatch pendingMatch = pending.value();
-    m_pendingTargetMatches.erase(pending);
+    // Keep the source context until the row is deleted. A later fragment can resolve
+    // an interrupted satellite pass and the worker then updates this earlier row.
     auto calibrationObservation =
         m_satelliteCalibrationObservations.find(overlayId);
     if ((calibrationObservation

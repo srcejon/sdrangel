@@ -1729,6 +1729,15 @@ static QString narrowGuidedFovRejectionReason(const CameraSettings& settings, do
 // rotation-about-anchor aliases can land many FoV away (a false mode-4 accept sat 7.3 deg =
 // 5.7 FoV from its seed) - such a pose is on a different star field and the seed's whole
 // purpose is gone.
+// Bright-disagreement veto: the mirror of the bright-agreement override in
+// hasDenseFinalEvidenceOverridingSeedRadial. Where that one says the seed-reference checks
+// cannot condemn a pose whose bright stars all agree, this says no amount of faint matching
+// can save a pose whose bright stars all disagree - the brightest, most reliably detected
+// and most sparsely distributed stars in the field are the ones a wrong pose cannot fake.
+static bool hasImplausibleBrightDisagreement(const CameraSettings& settings, const FinalMatchPassEvaluation& finalPass);
+
+static QString brightDisagreementRejectionReason(const FinalMatchPassEvaluation& finalPass);
+
 static double maxDirectionSeedDistanceDegrees(const CameraSettings& settings);
 
 static double directionSeedSeparationDegrees(const CameraSettings& settings, double azimuthDegrees, double elevationDegrees);

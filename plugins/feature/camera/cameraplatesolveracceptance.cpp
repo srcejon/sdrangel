@@ -492,6 +492,56 @@ QString CameraPlateSolver::SolverContext::narrowGuidedFovRejectionReason(const C
         .arg(maxNarrowGuidedFovDeltaDegrees(settings), 0, 'f', 3);
 }
 
+bool CameraPlateSolver::SolverContext::hasImplausibleBrightDisagreement(const CameraSettings& settings, const FinalMatchPassEvaluation& finalPass)
+{
+    if (!plateSolveStartUsesDirection(settings)
+        || !isNarrowField(settings)
+        || !finalPass.projectorValid)
+    {
+        return false;
+    }
+
+    // "Almost none of them matched" only means something when the pose predicts a decent
+    // number of bright stars in the first place.
+    if (finalPass.brightProjectedStars < 6) {
+        return false;
+    }
+
+    // Sparse solves only. Bright-star agreement is decisive when the bright stars are
+    // essentially all the evidence there is (the wrong-roll alias this exists to stop was
+    // accepted on 15 matches), but it is the LEAST reliable evidence in a dense nebulous
+    // field, where nebulosity and saturated cores corrupt bright detections and their
+    // magnitudes while a thousand faint stars pin the pose perfectly well. Left unguarded
+    // this vetoed nebula-c11's correct pose - 1285 matches, roll -4.9 against a declared 0,
+    // all three named stars projected - in favour of a denser wrong-roll alias at -19.8.
+    // The threshold is the same "dense evidence" bar hasDenseFinalEvidenceOverridingSeedRadial
+    // uses, so the two agree on what counts as a densely-supported pose.
+    if (finalPass.finalMatches.size()
+        >= static_cast<qsizetype>(std::max(settings.m_plateSolveMinMatches + 50, 80)))
+    {
+        return false;
+    }
+
+    // All three have to be bad at once, and each threshold sits in a measured gap between
+    // right and wrong poses on a real guiding session (correct | wrong): bright projected
+    // matched 5-9 of 12 | 0-2 of 12, magnitude error 0.21-0.70 | 1.24-2.92, rms 1.14-7.25 |
+    // 12.35-15.53 px. The conjunction is deliberate - a correct pose in a thin, cloud-hit
+    // frame can look bad on any one of them, but not on all three, whereas the wrong-roll
+    // alias this exists to stop failed all three at once on every frame it was accepted on.
+    return (finalPass.matchedBrightProjectedStars <= 2)
+        && (finalPass.brightDetectionMagnitudeError > 1.20)
+        && (finalPass.rmsErrorPixels > (0.35 * static_cast<double>(settings.m_plateSolveFinalMatchRadius)));
+}
+
+QString CameraPlateSolver::SolverContext::brightDisagreementRejectionReason(const FinalMatchPassEvaluation& finalPass)
+{
+    return QStringLiteral("bright stars disagree: %1/%2 bright projected matched, magnitude error %3, rms %4")
+        .arg(finalPass.matchedBrightProjectedStars)
+        .arg(finalPass.brightProjectedStars)
+        .arg(finalPass.brightDetectionMagnitudeError, 0, 'f', 2)
+        .arg(finalPass.rmsErrorPixels, 0, 'f', 2);
+}
+
 double CameraPlateSolver::SolverContext::maxDirectionSeedDistanceDegrees(const CameraSettings& settings)
 {
     // 3 FoV (2 deg floor for tiny fields) is far beyond any legitimate seed error - the

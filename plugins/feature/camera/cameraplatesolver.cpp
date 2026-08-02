@@ -2087,6 +2087,7 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
         bool weakBrightSupport = false;
         bool fovAccepted = false;
         bool seedDistanceAccepted = true;
+        bool brightAgreementAccepted = true;
     };
     auto directionSeedAcceptanceFor = [&](const FinalMatchPassEvaluation& pass) -> DirectionSeedAcceptance
     {
@@ -2103,10 +2104,13 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
             || isAcceptableNarrowGuidedFov(settings, pass.pose.fovDegrees);
         acceptance.seedDistanceAccepted = gateAblationDisabled("seedDistance")
             || isAcceptableDirectionSeedDistance(settings, pass.pose.azimuthDegrees, pass.pose.elevationDegrees);
+        acceptance.brightAgreementAccepted = gateAblationDisabled("brightDisagreement")
+            || !hasImplausibleBrightDisagreement(settings, pass);
         acceptance.acceptable = !useStartDirection
             || (!acceptance.weakBrightSupport
                 && acceptance.fovAccepted
                 && acceptance.seedDistanceAccepted
+                && acceptance.brightAgreementAccepted
                 && (gateAblationDisabled("residual")
                     || isAcceptableDirectionSeedSolve(
                         settings,
@@ -2374,21 +2378,27 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
     const bool directionSeedSolveAcceptable = directionSeedAcceptance.acceptable;
     if (!directionSeedSolveAcceptable)
     {
-        const QString rejectionReason = !narrowGuidedFovAccepted
-            ? narrowGuidedFovRejectionReason(settings, selectedFinalPassForAcceptance.pose.fovDegrees)
-            : (!directionSeedAcceptance.seedDistanceAccepted
-                ? directionSeedDistanceRejectionReason(
-                    settings,
-                    selectedFinalPassForAcceptance.pose.azimuthDegrees,
-                    selectedFinalPassForAcceptance.pose.elevationDegrees)
-                : (weakNarrowGuidedBrightSupport
-                    ? QStringLiteral("weak bright-anchor support")
-                    : directionSeedRejectionReason(
-                    settings,
-                    starDetections,
-                    selectedFinalPassForAcceptance.finalMatches,
-                    selectedFinalPassForAcceptance.rmsErrorPixels,
-                    selectedFinalPassForAcceptance.maxErrorPixels)));
+        // Report whichever gate actually refused, in the order they are applied
+        QString rejectionReason;
+        if (!narrowGuidedFovAccepted) {
+            rejectionReason = narrowGuidedFovRejectionReason(settings, selectedFinalPassForAcceptance.pose.fovDegrees);
+        } else if (!directionSeedAcceptance.seedDistanceAccepted) {
+            rejectionReason = directionSeedDistanceRejectionReason(
+                settings,
+                selectedFinalPassForAcceptance.pose.azimuthDegrees,
+                selectedFinalPassForAcceptance.pose.elevationDegrees);
+        } else if (!directionSeedAcceptance.brightAgreementAccepted) {
+            rejectionReason = brightDisagreementRejectionReason(selectedFinalPassForAcceptance);
+        } else if (weakNarrowGuidedBrightSupport) {
+            rejectionReason = QStringLiteral("weak bright-anchor support");
+        } else {
+            rejectionReason = directionSeedRejectionReason(
+                settings,
+                starDetections,
+                selectedFinalPassForAcceptance.finalMatches,
+                selectedFinalPassForAcceptance.rmsErrorPixels,
+                selectedFinalPassForAcceptance.maxErrorPixels);
+        }
         qCDebug(cameraPlateSolverLog) << "CameraPlateSolver: rejecting direction-seeded solution"
                  << "matches=" << selectedFinalPassForAcceptance.finalMatches.size()
                  << "required=" << minimumDirectionSeedAcceptedMatches(settings, starDetections)

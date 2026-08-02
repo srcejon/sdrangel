@@ -81,6 +81,18 @@ struct CameraPlateSolveResult
     double m_seedRadialMagnitudeMatchFraction = 1.0;
     int m_prioritySeedProjectedChecks = 0;
     double m_prioritySeedProjectedErrorPixels = std::numeric_limits<double>::infinity();
+    // Bright-star agreement for the selected pose. These are the measurements the accept
+    // decision turns on, and they separate a true pose from a wrong-roll alias far better
+    // than the match count does (measured on a guiding session: bright projected 5-9 of 12
+    // for correct poses against 0-2 of 12 for wrong ones). Carried on the result so an
+    // ACCEPTED pose can be judged from an operational log, not just a rejected one - the
+    // rejection path already reports them inside its failure reason.
+    int m_brightDetections = 0;
+    int m_matchedBrightDetections = 0;
+    int m_brightProjectedStars = 0;
+    int m_matchedBrightProjectedStars = 0;
+    double m_brightDetectionMagnitudeError = std::numeric_limits<double>::infinity();
+    double m_brightnessRankError = std::numeric_limits<double>::infinity();
 };
 
 class QNetworkAccessManager;

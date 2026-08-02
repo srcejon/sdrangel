@@ -815,6 +815,19 @@ void CameraStarDetector::processNewFrame(const CameraPipelineFramePtr& frame)
             << " seedEl=" << QString::number(solveSettings.m_elevation, 'f', 3)
             << " seedFov=" << QString::number(solveSettings.m_fov, 'f', 3)
             << " solveMs=" << QString::number(frame->m_plateSolve.m_solveTimeMs, 'f', 0);
+        // Bright-star agreement, on the accepted line as well as the rejected one: it is what
+        // tells a true pose from a wrong-roll alias (a guiding session measured 5-9 of 12
+        // bright projected stars matched for correct poses against 0-2 for wrong ones), and
+        // without it an accepted pose could not be second-guessed from an operational log.
+        const auto brightSupportSummary = [&plateSolveResult]() {
+            return QStringLiteral(" brightDet=%1/%2 brightProj=%3/%4 magErr=%5 rankErr=%6")
+                .arg(plateSolveResult.m_matchedBrightDetections)
+                .arg(plateSolveResult.m_brightDetections)
+                .arg(plateSolveResult.m_matchedBrightProjectedStars)
+                .arg(plateSolveResult.m_brightProjectedStars)
+                .arg(plateSolveResult.m_brightDetectionMagnitudeError, 0, 'f', 2)
+                .arg(plateSolveResult.m_brightnessRankError, 0, 'f', 2);
+        };
         if (plateSolveResult.m_solved)
         {
             qInfo().noquote().nospace()
@@ -824,7 +837,8 @@ void CameraStarDetector::processNewFrame(const CameraPipelineFramePtr& frame)
                 << " fov=" << QString::number(plateSolveResult.m_fovDegrees, 'f', 4)
                 << " rms=" << QString::number(plateSolveResult.m_rmsErrorPixels, 'f', 2)
                 << " max=" << QString::number(plateSolveResult.m_maxErrorPixels, 'f', 2)
-                << " outliers=" << plateSolveResult.m_outlierStars;
+                << " outliers=" << plateSolveResult.m_outlierStars
+                << brightSupportSummary();
         }
         else
         {
@@ -837,7 +851,8 @@ void CameraStarDetector::processNewFrame(const CameraPipelineFramePtr& frame)
                 << " roll=" << QString::number(plateSolveResult.m_rollDegrees, 'f', 3)
                 << " fov=" << QString::number(plateSolveResult.m_fovDegrees, 'f', 4)
                 << " rms=" << QString::number(plateSolveResult.m_rmsErrorPixels, 'f', 2)
-                << " max=" << QString::number(plateSolveResult.m_maxErrorPixels, 'f', 2);
+                << " max=" << QString::number(plateSolveResult.m_maxErrorPixels, 'f', 2)
+                << brightSupportSummary();
             qInfo().noquote().nospace()
                 << "CameraPlateSolve: failed reason="
                 << (plateSolveResult.m_failureReason.isEmpty()

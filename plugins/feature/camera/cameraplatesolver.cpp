@@ -1865,6 +1865,12 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
     result.m_seedRadialMagnitudeMatchFraction = selectedFinalPass.seedRadialMagnitudeMatchFraction;
     result.m_prioritySeedProjectedChecks = selectedFinalPass.prioritySeedProjectedChecks;
     result.m_prioritySeedProjectedErrorPixels = selectedFinalPass.prioritySeedProjectedErrorPixels;
+    result.m_brightDetections = selectedFinalPass.brightDetections;
+    result.m_matchedBrightDetections = selectedFinalPass.matchedBrightDetections;
+    result.m_brightProjectedStars = selectedFinalPass.brightProjectedStars;
+    result.m_matchedBrightProjectedStars = selectedFinalPass.matchedBrightProjectedStars;
+    result.m_brightDetectionMagnitudeError = selectedFinalPass.brightDetectionMagnitudeError;
+    result.m_brightnessRankError = selectedFinalPass.brightnessRankError;
 
     // SHADOW MODE: record the robust false-alarm log-odds for the selected pose so it
     // can be compared against the heuristic accept/reject decision across the corpus.
@@ -2213,6 +2219,12 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
                     result.m_seedRadialMagnitudeMatchFraction = selectedFinalPass.seedRadialMagnitudeMatchFraction;
                     result.m_prioritySeedProjectedChecks = selectedFinalPass.prioritySeedProjectedChecks;
                     result.m_prioritySeedProjectedErrorPixels = selectedFinalPass.prioritySeedProjectedErrorPixels;
+                    result.m_brightDetections = selectedFinalPass.brightDetections;
+                    result.m_matchedBrightDetections = selectedFinalPass.matchedBrightDetections;
+                    result.m_brightProjectedStars = selectedFinalPass.brightProjectedStars;
+                    result.m_matchedBrightProjectedStars = selectedFinalPass.matchedBrightProjectedStars;
+                    result.m_brightDetectionMagnitudeError = selectedFinalPass.brightDetectionMagnitudeError;
+                    result.m_brightnessRankError = selectedFinalPass.brightnessRankError;
                     result.m_azimuthDegrees = selectedFinalPass.pose.azimuthDegrees;
                     result.m_elevationDegrees = selectedFinalPass.pose.elevationDegrees;
                     result.m_rollDegrees = selectedFinalPass.pose.rollDegrees;
@@ -2311,6 +2323,12 @@ CameraPlateSolveResult CameraPlateSolver::SolverContext::solve(const CameraSetti
                 result.m_seedRadialMagnitudeMatchFraction = selectedFinalPass.seedRadialMagnitudeMatchFraction;
                 result.m_prioritySeedProjectedChecks = selectedFinalPass.prioritySeedProjectedChecks;
                 result.m_prioritySeedProjectedErrorPixels = selectedFinalPass.prioritySeedProjectedErrorPixels;
+                result.m_brightDetections = selectedFinalPass.brightDetections;
+                result.m_matchedBrightDetections = selectedFinalPass.matchedBrightDetections;
+                result.m_brightProjectedStars = selectedFinalPass.brightProjectedStars;
+                result.m_matchedBrightProjectedStars = selectedFinalPass.matchedBrightProjectedStars;
+                result.m_brightDetectionMagnitudeError = selectedFinalPass.brightDetectionMagnitudeError;
+                result.m_brightnessRankError = selectedFinalPass.brightnessRankError;
                 result.m_azimuthDegrees = selectedFinalPass.pose.azimuthDegrees;
                 result.m_elevationDegrees = selectedFinalPass.pose.elevationDegrees;
                 result.m_rollDegrees = selectedFinalPass.pose.rollDegrees;

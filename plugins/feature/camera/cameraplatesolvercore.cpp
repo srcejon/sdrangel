@@ -4328,27 +4328,41 @@ bool CameraPlateSolver::SolverContext::hasDenseFinalEvidenceOverridingSeedRadial
     // guiding session, a pose with 24/24 bright detections, 11/12 bright projected and
     // magnitude error 0.00 was rejected on seed-reference grounds alone; its roll (4.79 deg)
     // agreed with the solves accepted either side of it (4.77, 4.54) to two hundredths of a
-    // degree. The same session's genuinely weak failures are excluded by a wide margin -
-    // they matched 0/12 bright projected at magnitude errors of 1.9 and 3.4.
+    // degree. The same session's genuinely weak failures are excluded by a wide margin.
     //
-    // The fit must also be tight relative to the matching tolerance. Without that bound this
-    // tier fires on a coarse early candidate and short-circuits the search that would have
-    // refined it: stars-narrow-1 settled for the right pose at rms 11.1 instead of letting
-    // the recenter ladder reach the same pose at rms 0.30. The same ratio gates autoguide
-    // corrections (Camera::autoguideHandlePointingError), so what this admits early is
-    // exactly what is good enough to steer a mount with.
-    const bool completeBrightAgreement =
-        (finalPass.brightDetections >= 8)
-        && (finalPass.matchedBrightDetections >= finalPass.brightDetections)
-        && (finalPass.brightProjectedStars >= 6)
-        && ((finalPass.matchedBrightProjectedStars * 4) >= (finalPass.brightProjectedStars * 3))
-        && (finalPass.brightDetectionMagnitudeError <= 0.60)
+    // The three conditions are the ones a second, cloudier session measured as separating
+    // right from wrong completely - 7 correct poses (roll within 0.2 deg of the session's
+    // true 1.6 deg, all rejected on seed-reference grounds) against 17 wrong ones:
+    //                        correct          wrong
+    //   bright projected     5-9 of 12        0-2 of 12
+    //   bright magnitude     0.21-0.70        1.24-2.92
+    //   rms                  1.14-7.25 px     12.35-15.53 px
+    // Each gap is wide, and a wrong pose has to cross all three. Note what is deliberately
+    // NOT here: the matched fraction of bright DETECTIONS, which measured 58-92% for correct
+    // poses and 50-83% for wrong ones - it does not separate, because a cloudy frame's
+    // brightest blobs include cloud edges and thermal artefacts that match nothing at any
+    // pose. An earlier version of this tier required all of them to match and so fired on
+    // none of the frames it was written for.
+    //
+    // The rms bound is load-bearing beyond alias rejection: this tier ends the search, so a
+    // loose bound makes it settle for an adequate pose where the recenter ladder would have
+    // refined the same pose to a far better fit (stars-narrow-1: accepted at rms 11.1 with no
+    // bound and 8.25 at 0.35x the match radius, against 0.30 when the ladder is allowed to
+    // run). A quarter of the match radius keeps that row's refinement intact while still
+    // clearing the measured band of correct field poses by a wide margin, and sits half way
+    // to the looser 0.35x that decides whether a solve is good enough to steer a mount with
+    // (Camera::autoguideHandlePointingError) - so anything short-circuited here is
+    // comfortably usable downstream.
+    const bool brightAgreementEvidence =
+        (finalPass.brightProjectedStars >= 6)
+        && (finalPass.matchedBrightProjectedStars >= 4)
+        && (finalPass.brightDetectionMagnitudeError <= 1.00)
         && (finalPass.rmsErrorPixels
-            <= (0.35 * static_cast<double>(settings.m_plateSolveFinalMatchRadius)))
+            <= (0.25 * static_cast<double>(settings.m_plateSolveFinalMatchRadius)))
         && (finalPass.finalMatches.size()
             >= static_cast<qsizetype>(std::max(settings.m_plateSolveMinMatches + 8, 12)));
 
-    return denseEvidence || sparseTightEvidence || completeBrightAgreement;
+    return denseEvidence || sparseTightEvidence || brightAgreementEvidence;
 }
 
 bool CameraPlateSolver::SolverContext::isBetterByGeometricTieBreak(const Evaluation& candidate, const Evaluation& best)

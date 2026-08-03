@@ -647,6 +647,7 @@ void CameraSettings::resetToDefaults()
     m_plateSolveCatalogSource = PlateSolveCatalogAuto;
     m_plateSolveApplyMode = PlateSolveApplyAzElRollFov;
     m_starCatalogDiskCacheSizeGb = 32;
+    m_stellariumRemoteControlUrl = QStringLiteral("http://127.0.0.1:8090");
     m_thermalDecoder = ThermalDecoderOff;
     m_thermalPalette = ThermalPaletteWhiteHot;
     m_thermalUnits = ThermalUnitsCelsius;
@@ -988,6 +989,7 @@ QByteArray CameraSettings::serialize() const
     s.writeBool(235, m_recordCalibratedMedia);
     s.writeBool(236, m_recordPostProcessedMedia);
     s.writeS32(237, m_starCatalogDiskCacheSizeGb);
+    s.writeString(381, m_stellariumRemoteControlUrl);
     s.writeBool(238, m_trackObjectTrails);
     s.writeBool(239, m_trackObjectHeatMap);
     s.writeBool(240, m_keogramEnabled);
@@ -1847,6 +1849,7 @@ bool CameraSettings::deserialize(const QByteArray& data)
             m_minStarCatalogDiskCacheSizeGb,
             m_starCatalogDiskCacheSizeGb,
             m_maxStarCatalogDiskCacheSizeGb);
+        d.readString(381, &m_stellariumRemoteControlUrl, QStringLiteral("http://127.0.0.1:8090"));
         m_asiCoolerOn = qBound(m_minAsiControl, m_asiCoolerOn, m_maxAsiControl);
         m_asiUsbBandwidth = std::max(m_minAsiControl, m_asiUsbBandwidth);
         m_asiHighSpeedMode = qBound(m_minAsiControl, m_asiHighSpeedMode, m_maxAsiControl);
@@ -2825,6 +2828,9 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
             m_minStarCatalogDiskCacheSizeGb,
             settings.m_starCatalogDiskCacheSizeGb,
             m_maxStarCatalogDiskCacheSizeGb);
+    }
+    if (settingsKeys.contains("stellariumRemoteControlUrl")) {
+        m_stellariumRemoteControlUrl = settings.m_stellariumRemoteControlUrl.trimmed();
     }
     if (settingsKeys.contains("thermalDecoder")) {
         m_thermalDecoder = static_cast<ThermalDecoder>(qBound(
@@ -4016,6 +4022,9 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("starCatalogDiskCacheSizeGb") || force) {
         ostr << " m_starCatalogDiskCacheSizeGb: " << m_starCatalogDiskCacheSizeGb;
+    }
+    if (settingsKeys.contains("stellariumRemoteControlUrl") || force) {
+        ostr << " m_stellariumRemoteControlUrl: " << m_stellariumRemoteControlUrl.toStdString();
     }
     if (settingsKeys.contains("thermalDecoder") || force) {
         ostr << " m_thermalDecoder: " << static_cast<int>(m_thermalDecoder);

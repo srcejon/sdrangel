@@ -770,6 +770,7 @@ struct CameraSettings
     PlateSolveCatalogSource m_plateSolveCatalogSource; ///< Catalog source used for plate solving
     PlateSolveApplyMode m_plateSolveApplyMode; ///< Which solved values should be copied back into camera settings
     int    m_starCatalogDiskCacheSizeGb; ///< Maximum Siril/Gaia region disk cache size in GB; 0 = unlimited
+    QString m_stellariumRemoteControlUrl; ///< Root URL of Stellarium's Remote Control HTTP service
 
     // Radiometric UVC thermal-camera settings
     ThermalDecoder m_thermalDecoder;

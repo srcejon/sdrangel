@@ -149,6 +149,7 @@
 #include "camerafilesequencedialog.h"
 #include "camerarecorder.h"
 #include "camerasettingsdialog.h"
+#include "camerastellariumclient.h"
 #include "cameraworker.h"
 #include "cameraclearskyreferencedialog.h"
 #include "cameraclouddetector.h"
@@ -1255,6 +1256,7 @@ CameraGUI::CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *
     m_lastAlpacaErrorNumber(0),
     m_lastAlpacaErrorMessage(),
     m_settingsDialog(nullptr),
+    m_stellariumClient(new CameraStellariumClient(this)),
     m_detectionHistoryDialog(nullptr),
     m_histogramDialog(nullptr),
     m_opticalSpectrumDialog(nullptr),
@@ -1337,6 +1339,9 @@ CameraGUI::CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *
 
     m_settingsDialog = new CameraSettingsDialog(this);
     new DialogPositioner(m_settingsDialog, false);
+    connect(m_stellariumClient, &CameraStellariumClient::focusFailed, this, [this](const QString& errorMessage) {
+        QMessageBox::warning(this, tr("Stellarium"), errorMessage);
+    });
     initialiseVideoRecordBitrateCombo();
     initialiseYouTubeBitrateCombo();
     initialiseYoloPathCombos();
@@ -2678,6 +2683,7 @@ void CameraGUI::displaySettings()
     updatePlateSolveDateTimeEdit();
     settingsUI()->plateSolveCatalogSourceCombo->setCurrentIndex(static_cast<int>(m_settings.m_plateSolveCatalogSource));
     settingsUI()->starCatalogDiskCacheSizeSpin->setValue(m_settings.m_starCatalogDiskCacheSizeGb);
+    settingsUI()->stellariumRemoteControlUrlEdit->setText(m_settings.m_stellariumRemoteControlUrl);
     settingsUI()->thermalDecoderCombo->setCurrentIndex(static_cast<int>(m_settings.m_thermalDecoder));
     settingsUI()->thermalPaletteCombo->setCurrentIndex(static_cast<int>(m_settings.m_thermalPalette));
     settingsUI()->thermalUnitsCombo->setCurrentIndex(static_cast<int>(m_settings.m_thermalUnits));
@@ -4297,6 +4303,7 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->plateSolveDateTimeNowButton, &QToolButton::clicked, this, &CameraGUI::on_plateSolveDateTimeNowButton_clicked);
     QObject::connect(settingsUI()->plateSolveCatalogSourceCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_plateSolveCatalogSourceCombo_currentIndexChanged);
     QObject::connect(settingsUI()->starCatalogDiskCacheSizeSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_starCatalogDiskCacheSizeSpin_valueChanged);
+    QObject::connect(settingsUI()->stellariumRemoteControlUrlEdit, &QLineEdit::editingFinished, this, &CameraGUI::on_stellariumRemoteControlUrlEdit_editingFinished);
     QObject::connect(settingsUI()->plateSolveApplyModeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_plateSolveApplyModeCombo_currentIndexChanged);
     QObject::connect(settingsUI()->plateSolveDownloadCatalogButton, &QToolButton::clicked, this, &CameraGUI::on_plateSolveDownloadCatalogButton_clicked);
     QObject::connect(settingsUI()->plateSolveApplyButton, &QToolButton::clicked, this, &CameraGUI::on_plateSolveApplyButton_clicked);
@@ -10517,6 +10524,7 @@ bool CameraGUI::showStarDetectionContextMenu(const QPoint& viewportPos, const QP
     menu.addSection(starDetectionDisplayName(star));
     QAction *infoAction = menu.addAction(tr("Star information..."));
     QAction *skyMapAction = menu.addAction(tr("Find in Sky Map"));
+    QAction *stellariumAction = menu.addAction(tr("View in Stellarium"));
     QAction *simbadAction = menu.addAction(tr("Open in SIMBAD"));
     QAction *copyNameAction = menu.addAction(tr("Copy name"));
     QAction *copyDetailsAction = menu.addAction(tr("Copy details"));
@@ -10524,7 +10532,9 @@ bool CameraGUI::showStarDetectionContextMenu(const QPoint& viewportPos, const QP
     QAction *copyImageAction = menu.addAction(tr("Copy image"));
 
     const bool hasTarget = !target.isEmpty();
+    const bool hasCoordinates = hasCatalogCoordinates(star);
     skyMapAction->setEnabled(hasTarget);
+    stellariumAction->setEnabled(hasCoordinates);
     simbadAction->setEnabled(simbadUrl.isValid() && !simbadUrl.isEmpty());
     copyNameAction->setEnabled(hasTarget);
 
@@ -10546,6 +10556,13 @@ bool CameraGUI::showStarDetectionContextMenu(const QPoint& viewportPos, const QP
     else if (selectedAction == simbadAction)
     {
         QDesktopServices::openUrl(simbadUrl);
+    }
+    else if (selectedAction == stellariumAction)
+    {
+        m_stellariumClient->focusJ2000(
+            m_settings.m_stellariumRemoteControlUrl,
+            star.m_catalogRightAscensionDegrees,
+            star.m_catalogDeclinationDegrees);
     }
     else if (selectedAction == copyNameAction)
     {
@@ -11637,6 +11654,7 @@ void CameraGUI::on_detectionResetDefaultsButton_clicked()
     m_settings.m_plateSolveCatalogSource = defaults.m_plateSolveCatalogSource;
     m_settings.m_plateSolveApplyMode = defaults.m_plateSolveApplyMode;
     m_settings.m_starCatalogDiskCacheSizeGb = defaults.m_starCatalogDiskCacheSizeGb;
+    m_settings.m_stellariumRemoteControlUrl = defaults.m_stellariumRemoteControlUrl;
 
     m_settings.m_diffMask = defaults.m_diffMask;
     m_settings.m_diffThreshold = defaults.m_diffThreshold;
@@ -11697,6 +11715,7 @@ void CameraGUI::on_detectionResetDefaultsButton_clicked()
         "plateSolveCatalogSource",
         "plateSolveApplyMode",
         "starCatalogDiskCacheSizeGb",
+        "stellariumRemoteControlUrl",
         "diffMask",
         "diffThreshold",
         "diffMaskOpenSize",
@@ -12141,6 +12160,17 @@ void CameraGUI::on_starCatalogDiskCacheSizeSpin_valueChanged(int value)
 {
     m_settings.m_starCatalogDiskCacheSizeGb = value;
     applySetting("starCatalogDiskCacheSizeGb");
+}
+
+void CameraGUI::on_stellariumRemoteControlUrlEdit_editingFinished()
+{
+    const QString url = settingsUI()->stellariumRemoteControlUrlEdit->text().trimmed();
+    settingsUI()->stellariumRemoteControlUrlEdit->setText(url);
+    if (m_settings.m_stellariumRemoteControlUrl != url)
+    {
+        m_settings.m_stellariumRemoteControlUrl = url;
+        applySetting("stellariumRemoteControlUrl");
+    }
 }
 
 void CameraGUI::on_plateSolveApplyModeCombo_currentIndexChanged(int index)

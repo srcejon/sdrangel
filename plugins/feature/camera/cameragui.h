@@ -65,6 +65,7 @@ class FeatureUISet;
 class Camera;
 class Feature;
 class CameraSettingsDialog;
+class CameraStellariumClient;
 class CameraDetectionHistory;
 class CameraHistogramDialog;
 class CameraOpticalSpectrumDialog;
@@ -302,6 +303,7 @@ private:
     int m_lastStackDroppedCount = 0;
     int m_lastStackRejectedCount = 0;
     CameraSettingsDialog *m_settingsDialog;
+    CameraStellariumClient *m_stellariumClient;
     QString m_clearSkyReferenceSummary; // Latest clear-sky reference store status from the cloud detector
     CameraDetectionHistory *m_detectionHistoryDialog;
     CameraHistogramDialog *m_histogramDialog;
@@ -972,6 +974,7 @@ private slots:
     void on_plateSolveDateTimeNowButton_clicked();
     void on_plateSolveCatalogSourceCombo_currentIndexChanged(int index);
     void on_starCatalogDiskCacheSizeSpin_valueChanged(int value);
+    void on_stellariumRemoteControlUrlEdit_editingFinished();
     void on_plateSolveApplyModeCombo_currentIndexChanged(int index);
     void on_plateSolveDownloadCatalogButton_clicked();
     void on_plateSolveApplyButton_clicked();

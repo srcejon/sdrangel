@@ -115,6 +115,7 @@ if(NOT SERVER_MODE)
         cameraopticalspectrumlinesdialog.cpp
         cameraopticalspectrumreferencedialog.cpp
         cameraclearskyreferencedialog.cpp
+        camerastellariumclient.cpp
         cameraicons.qrc
     )
     set(camera_HEADERS
@@ -129,6 +130,7 @@ if(NOT SERVER_MODE)
         cameraopticalspectrumlinesdialog.h
         cameraopticalspectrumreferencedialog.h
         cameraclearskyreferencedialog.h
+        camerastellariumclient.h
     )
 
     set(TARGET_NAME ${PLUGINS_PREFIX}featurecamera)

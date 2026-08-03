@@ -1053,6 +1053,9 @@ CameraSettings:
     starCatalogDiskCacheSizeGb:
       description: "Maximum star catalog disk cache size in GB; 0 = unlimited"
       type: integer
+    stellariumRemoteControlUrl:
+      description: "Root URL of the Stellarium Remote Control HTTP service"
+      type: string
     overlaySpectrum:
       description: "Overlay the spectrum view image on each frame (1 for yes, 0 for no)"
       type: integer

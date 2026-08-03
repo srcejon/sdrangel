@@ -1205,6 +1205,12 @@ Sets the maximum size of the star catalog region disk cache in GB; 0 disables pr
 
 The Solution group displays the latest plate-solving result: detected stars, matched stars, RMS / max error and pointing. The Apply button applies the last solution to the camera settings, and the adjacent combo selects which solved pointing values (Az/El, Az/El/Roll, Az/El/Roll/FoV or Az/El/Roll/FoV/Lens) are applied.
 
+<h4>15. Stellarium URL</h4>
+
+Sets the root URL of Stellarium's Remote Control service. The default is `http://127.0.0.1:8090`. Enable Stellarium's Remote Control plugin and start its server before using this integration.
+
+Right-clicking a catalog-matched star in the camera preview opens its context menu. **View in Stellarium** sends the star's J2000 catalog coordinates to the configured Remote Control service and centers Stellarium on that position. Coordinates are used instead of the displayed catalog name, so the action also works for stars that only have a generated Gaia label.
+
 On the Difference Detection sub-tab:
 
 ![Difference Detection tab](../../../doc/img/Camera_plugin_difference_detection_tab.png)

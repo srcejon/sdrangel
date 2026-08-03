@@ -5721,6 +5721,23 @@ car</string>
                 </property>
                </widget>
               </item>
+              <item row="11" column="0">
+               <widget class="QLabel" name="stellariumRemoteControlUrlLabel">
+                <property name="text">
+                 <string>Stellarium URL</string>
+                </property>
+               </widget>
+              </item>
+              <item row="11" column="1" colspan="3">
+               <widget class="QLineEdit" name="stellariumRemoteControlUrlEdit">
+                <property name="toolTip">
+                 <string>Root URL of Stellarium's Remote Control service. The Remote Control plugin must be enabled in Stellarium.</string>
+                </property>
+                <property name="placeholderText">
+                 <string>http://127.0.0.1:8090</string>
+                </property>
+               </widget>
+              </item>
              </layout>
             </widget>
            </item>

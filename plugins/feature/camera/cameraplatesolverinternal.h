@@ -1585,6 +1585,36 @@ bool hasNamedBrightAnchorCertifiedPose(const CameraSettings& settings,
         && (directionSeedAngularDistanceDegrees(finalPass.pose) <= kMaxSeedDirectionOffsetDegrees);
 }
 
+// Complete-bright-agreement certificate: every bright star in the frame accounted for.
+//
+// The seed-reference checks (seed-projected and seed-radial) project the catalogue along the
+// MOUNT's reported direction, so on a mount with a real pointing error they fail regardless
+// of how good the pose is - they measure the mount, not the fit. There is more than one such
+// check, and patching them one at a time has now missed twice: a stacked-frame solve was
+// refused for "weak bright-anchor support" while matching 24 of 24 bright detections and 12
+// of 12 predicted bright stars at a magnitude error of exactly 0.00, with a pose identical to
+// the solve accepted moments earlier - vetoed by the seed-PROJECTED branch after the earlier
+// fix had covered only the seed-RADIAL one.
+//
+// So this is deliberately a certificate rather than another per-branch exception: when every
+// bright detection matches a catalogue star, three quarters of the bright stars the pose
+// predicts are found, magnitudes agree and the fit is tight, nothing a seed-reference check
+// can say should overturn it - and any seed-reference branch added later is covered too.
+bool hasCompleteBrightAgreementPose(const CameraSettings& settings,
+                                    const FinalMatchPassEvaluation& finalPass) const
+{
+    return isNarrowField(settings)
+        && finalPass.projectorValid
+        && (finalPass.brightDetections >= 8)
+        && (finalPass.matchedBrightDetections >= finalPass.brightDetections)
+        && (finalPass.brightProjectedStars >= 6)
+        && ((finalPass.matchedBrightProjectedStars * 4) >= (finalPass.brightProjectedStars * 3))
+        && (finalPass.brightDetectionMagnitudeError <= 0.50)
+        && std::isfinite(finalPass.rmsErrorPixels)
+        && (finalPass.rmsErrorPixels
+            <= (0.25 * static_cast<double>(settings.m_plateSolveFinalMatchRadius)));
+}
+
 // Sparse-tight certificate: the shallow-catalog analogue of the named-bright-anchor
 // certificate above, for fields whose detection set is too sparse to ever reach the
 // dense certificate's >= 80 matches (e.g. a short-exposure frame with ~40 detections).

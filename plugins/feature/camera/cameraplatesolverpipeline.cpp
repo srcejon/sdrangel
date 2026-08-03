@@ -7806,6 +7806,11 @@ bool CameraPlateSolver::SolverContext::hasWeakNarrowGuidedBrightSupport(const Ca
         logBrightSupportDecision(false, "sparse-tight bright certified pose");
         return false;
     }
+    if (hasCompleteBrightAgreementPose(settings, finalPass) && !gateAblationDisabled("completeBrightAgreement"))
+    {
+        logBrightSupportDecision(false, "complete bright agreement certified pose");
+        return false;
+    }
 
     const bool denseFinalEvidenceOverridesSeedRadial =
         hasDenseFinalEvidenceOverridingSeedRadial(settings, finalPass);
@@ -8103,6 +8108,11 @@ bool CameraPlateSolver::SolverContext::hasAcceptableGuidedFinalBrightnessConsist
         // named anchor pinned, near-seed); the seed-radial/brightness-rank heuristics
         // below assume more matches than a sparse bright-only solve can produce.
         if (hasSparseTightBrightCertifiedPose(settings, evaluation) && !gateAblationDisabled("sparseTightCert")) {
+            return true;
+        }
+        // Likewise when every bright star in the frame is accounted for - there is no
+        // brightness inconsistency left to find
+        if (hasCompleteBrightAgreementPose(settings, evaluation) && !gateAblationDisabled("completeBrightAgreement")) {
             return true;
         }
 

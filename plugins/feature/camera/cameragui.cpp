@@ -929,6 +929,9 @@ bool CameraGUI::handleMessage(const Message& message)
         m_lastPlateSolveCenterOffsetY = report.getPlateSolveCenterOffsetY();
         m_lastPlateSolveDistortionK1 = report.getPlateSolveDistortionK1();
         m_lastPlateSolveCatalogSource = report.getPlateSolveCatalogSource();
+        // Pointing shows the last pose that actually solved and is deliberately left alone
+        // otherwise - a failed or in-progress solve should not erase the last thing we knew
+        // about where the camera is looking. The state field carries that transient news.
         if (m_lastPlateSolved)
         {
             settingsUI()->plateSolveStatusLabel->setText(
@@ -940,10 +943,11 @@ bool CameraGUI::handleMessage(const Message& message)
                 .arg(QString::number(m_lastPlateSolveCenterOffsetX, 'f', 1))
                 .arg(QString::number(m_lastPlateSolveCenterOffsetY, 'f', 1))
                 .arg(QString::number(m_lastPlateSolveDistortionK1, 'f', 3)));
+            settingsUI()->plateSolveStateLabel->setText(tr("Solved"));
         }
         else
         {
-            settingsUI()->plateSolveStatusLabel->setText(tr("Unsolved"));
+            settingsUI()->plateSolveStateLabel->setText(tr("Unsolved"));
         }
         settingsUI()->plateSolveMatchesLabel->setText(
             m_lastPlateSolved ? QString::number(m_lastPlateSolvedMatches) : "-");
@@ -1005,7 +1009,7 @@ bool CameraGUI::handleMessage(const Message& message)
     {
         const CameraStarDetector::MsgReportPlateSolveStatus& report = (const CameraStarDetector::MsgReportPlateSolveStatus&) message;
         if (report.isSolving()) {
-            settingsUI()->plateSolveStatusLabel->setText(tr("Solving"));
+            settingsUI()->plateSolveStateLabel->setText(tr("Solving"));
         }
         return true;
     }
@@ -2115,6 +2119,7 @@ void CameraGUI::resetCameraStatus()
     clearPreviewOverlayItems();
     settingsUI()->pipelineFpsLabel->setText("-");
     settingsUI()->plateSolveStatusLabel->setText("-");
+    settingsUI()->plateSolveStateLabel->setText("-");
     settingsUI()->plateSolveMatchesLabel->setText("-");
     settingsUI()->plateSolveDetectedLabel->setText("-");
     settingsUI()->plateSolveRmsLabel->setText("-");

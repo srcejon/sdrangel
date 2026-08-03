@@ -664,8 +664,8 @@ void MeteorDemodSink::mergeSweepFragment(ActiveSweep& s, const MeteorBlobDetecto
     const double fc = 0.5 * (blob.m_f0 + blob.m_f1);
     s.m_t0 = std::min(s.m_t0, blob.m_t0); s.m_t1 = std::max(s.m_t1, blob.m_t1);
     s.m_f0 = std::min(s.m_f0, blob.m_f0); s.m_f1 = std::max(s.m_f1, blob.m_f1);
-    s.m_startSample = std::min(s.m_startSample, blob.m_startSample);
-    s.m_endSample = std::max(s.m_endSample, blob.m_endSample);
+    s.m_startSample = std::min(s.m_startSample, static_cast<quint64>(blob.m_startSample));
+    s.m_endSample = std::max(s.m_endSample, static_cast<quint64>(blob.m_endSample));
     s.m_peakPower = std::max(s.m_peakPower, blob.m_peakPower);
     s.m_totalPower += blob.m_totalPower;
     s.m_backgroundSum += blob.m_backgroundPower;
@@ -1079,8 +1079,8 @@ void MeteorDemodSink::walkSweepAlongDashes(ActiveSweep& sweep)
             sweep.m_t1 = std::max(sweep.m_t1, d.m_t1);
             sweep.m_f0 = std::min(sweep.m_f0, d.m_f0);
             sweep.m_f1 = std::max(sweep.m_f1, d.m_f1);
-            sweep.m_startSample = std::min(sweep.m_startSample, d.m_startSample);
-            sweep.m_endSample = std::max(sweep.m_endSample, d.m_endSample);
+            sweep.m_startSample = std::min(sweep.m_startSample, static_cast<quint64>(d.m_startSample));
+            sweep.m_endSample = std::max(sweep.m_endSample, static_cast<quint64>(d.m_endSample));
             sweep.m_peakPower = std::max(sweep.m_peakPower, d.m_peakPower);
             sweep.m_totalPower += d.m_totalPower;
             edgeT = backward ? d.m_t0 : d.m_t1;

@@ -522,14 +522,22 @@ bool CameraPlateSolver::SolverContext::hasImplausibleBrightDisagreement(const Ca
         return false;
     }
 
-    // All three have to be bad at once, and each threshold sits in a measured gap between
-    // right and wrong poses on a real guiding session (correct | wrong): bright projected
-    // matched 5-9 of 12 | 0-2 of 12, magnitude error 0.21-0.70 | 1.24-2.92, rms 1.14-7.25 |
-    // 12.35-15.53 px. The conjunction is deliberate - a correct pose in a thin, cloud-hit
-    // frame can look bad on any one of them, but not on all three, whereas the wrong-roll
-    // alias this exists to stop failed all three at once on every frame it was accepted on.
-    return (finalPass.matchedBrightProjectedStars <= 2)
-        && (finalPass.brightDetectionMagnitudeError > 1.20)
+    // All three have to be bad at once. The conjunction is deliberate - a correct pose in a
+    // thin, cloud-hit frame can look bad on any one of them, but not on all three.
+    //
+    // Thresholds are the union of two measured guiding sessions, taking the worst case on
+    // each side so both are covered (correct | wrong):
+    //   bright projected matched   5-12 of 12  |  0-3 of 12
+    //   bright magnitude error     0.03-1.38   |  0.97-2.92
+    //   rms                        0.85-13.83  |  12.35-15.53 px
+    // The first session's wrong poses sat at <= 2 matched with magnitude error > 1.2, and
+    // thresholds set there missed the second session's, which reached 3 matched at 0.97 -
+    // each of its three wrong poses escaped on a different one of the two. Note the wide
+    // overlap on rms alone (a correct pose reached 13.83), and that bright-projected
+    // agreement is the one measurement that separates cleanly in both sessions: no correct
+    // pose ever fell below 5 of 12, no wrong pose ever reached 4.
+    return (finalPass.matchedBrightProjectedStars <= 3)
+        && (finalPass.brightDetectionMagnitudeError > 0.90)
         && (finalPass.rmsErrorPixels > (0.35 * static_cast<double>(settings.m_plateSolveFinalMatchRadius)));
 }
 

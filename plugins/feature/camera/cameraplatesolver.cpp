@@ -2947,6 +2947,67 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
         markAttemptedDenseNarrowBrightCatalogMagnitude(retrySettings.m_plateSolveMaxMagnitude);
         result = runSolve(retrySettings, QStringLiteral("bright-catalog"));
     }
+    else if (solveUsesDirection
+        && !solveUsesRoll
+        && SolverContext::isNarrowField(settings)
+        && (settings.m_plateSolveMaxMagnitude >= 15.0f)
+        && (starDetections.size() <= 80))
+    {
+        // Sparse narrow fields: try the bright catalogue FIRST. A telescope frame holding a
+        // few dozen detections cannot use a deep catalogue - at a 1.27 deg field a magnitude
+        // 20 catalogue puts ~900 stars in frame against ~50 detections, and that faint carpet
+        // is what breeds wrong-roll aliases and drives the retry ladder. Measured over a
+        // guiding session's frames: solving them against a magnitude 10 catalogue (~5200
+        // stars) returned the same poses at 305-756 ms, against 4.8-7.0 s at magnitude 20,
+        // with tighter fits and better bright agreement - and the deep pass was frequently
+        // rescued by the bright-catalogue escape further down anyway, so the depth was doing
+        // no work but costing the time.
+        //
+        // The detection cap is the point of the whole thing: a bright-only solve is right
+        // when the frame has too few stars for depth to help, and wrong when the frame can
+        // genuinely use it. Without the cap this shortcut fired on richer frames and returned
+        // correct but far sparser match sets - 36cyg dropped from 63 matches to 21 (the same
+        // pose, a tighter fit, but no longer matching the named stars the row checks), and
+        // the m-82/m-83 galaxy fields lost a tenth of their matches. Those match sets feed
+        // star labelling and the Messier overlay, not just the pose.
+        //
+        // Adopted only when the result is unambiguous - a tight fit AND most of the bright
+        // stars the pose predicts actually found. Anything less is discarded and the normal
+        // full-depth solve runs exactly as before, so this can only cost the bright pass
+        // (well under a second) and can never substitute a weaker answer for a stronger one.
+        const QVector<CameraPipelineStarDetection> detectionsBeforeBrightFirst = starDetections;
+        CameraSettings brightSettings(cappedSettings);
+        brightSettings.m_plateSolveMaxMagnitude = 10.0f;
+        qCDebug(cameraPlateSolverLog) << "CameraPlateSolver: trying sparse narrow bright catalog before full catalog"
+                 << "maxMagnitude" << brightSettings.m_plateSolveMaxMagnitude
+                 << "detections" << starDetections.size();
+        markAttemptedDenseNarrowBrightCatalogMagnitude(brightSettings.m_plateSolveMaxMagnitude);
+        const CameraPlateSolveResult brightResult = runSolve(brightSettings, QStringLiteral("bright-first"));
+        const bool brightResultConclusive =
+            brightResult.m_solved
+            && (brightResult.m_matchedStars >= (settings.m_plateSolveMinMatches + 4))
+            && std::isfinite(brightResult.m_rmsErrorPixels)
+            && (brightResult.m_rmsErrorPixels
+                <= (0.25 * static_cast<double>(settings.m_plateSolveFinalMatchRadius)))
+            && (brightResult.m_matchedBrightProjectedStars >= 4)
+            && ((brightResult.m_matchedBrightProjectedStars * 2) >= brightResult.m_brightProjectedStars);
+        if (brightResultConclusive)
+        {
+            result = brightResult;
+        }
+        else
+        {
+            if (brightResult.m_solved)
+            {
+                qCDebug(cameraPlateSolverLog) << "CameraPlateSolver: sparse narrow bright-first solve inconclusive, using full catalog"
+                         << "matches" << brightResult.m_matchedStars
+                         << "rms" << brightResult.m_rmsErrorPixels
+                         << "brightProjected" << brightResult.m_matchedBrightProjectedStars
+                         << "of" << brightResult.m_brightProjectedStars;
+            }
+            starDetections = detectionsBeforeBrightFirst;
+        }
+    }
     if (tryWithoutRollBeforeRollPrior)
     {
         CameraSettings retrySettings(cappedSettings);

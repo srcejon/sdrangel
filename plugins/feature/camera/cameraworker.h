@@ -128,6 +128,48 @@ public:
         { }
     };
 
+    /**
+     * \brief Autoguiding asks to own the gap between exposures (feature -> worker).
+     *
+     * A guide correction slews the mount by more than a tenth of a degree, which at a
+     * telescope field is over a hundred pixels - so an exposure spanning it is trailed and
+     * useless. The correction cannot simply be issued when it is computed either: a solve
+     * takes several seconds, by which time the next exposure is typically already running.
+     * The worker therefore finishes any exposure in flight, starts no new one, and answers
+     * with MsgGuideWindowOpen; capture resumes on MsgReleaseGuideWindow.
+     */
+    class MsgRequestGuideWindow : public Message {
+        MESSAGE_CLASS_DECLARATION
+
+    public:
+        static MsgRequestGuideWindow* create() { return new MsgRequestGuideWindow(); }
+
+    private:
+        MsgRequestGuideWindow() : Message() { }
+    };
+
+    /// Capture is idle and will stay idle until the window is released (worker -> feature).
+    class MsgGuideWindowOpen : public Message {
+        MESSAGE_CLASS_DECLARATION
+
+    public:
+        static MsgGuideWindowOpen* create() { return new MsgGuideWindowOpen(); }
+
+    private:
+        MsgGuideWindowOpen() : Message() { }
+    };
+
+    /// The mount has settled (or timed out) - resume capture (feature -> worker).
+    class MsgReleaseGuideWindow : public Message {
+        MESSAGE_CLASS_DECLARATION
+
+    public:
+        static MsgReleaseGuideWindow* create() { return new MsgReleaseGuideWindow(); }
+
+    private:
+        MsgReleaseGuideWindow() : Message() { }
+    };
+
     class MsgRefreshCameraList : public Message {
         MESSAGE_CLASS_DECLARATION
 
@@ -626,6 +668,13 @@ private:
     QSet<QString> m_reportedFeatureErrorKeys;
     bool m_capturing;
     quint64 m_captureEpoch;
+    // Autoguide exposure window (see MsgRequestGuideWindow). Requested = hold off the next
+    // exposure once the one in flight finishes; open = capture is idle and the guide
+    // correction owns the mount. m_guideWindowOpenedMs backs a safety timeout so a feature
+    // that never releases cannot stall capture indefinitely.
+    bool m_guideWindowRequested = false;
+    bool m_guideWindowOpen = false;
+    qint64 m_guideWindowOpenedMs = 0;
     QTimer m_captureTimer;
     QNetworkAccessManager *m_networkManager;
     CameraFinder *m_cameraFinder;

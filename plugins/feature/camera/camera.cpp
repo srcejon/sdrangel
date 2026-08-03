@@ -708,6 +708,11 @@ bool Camera::handleMessage(const Message& cmd)
         autoguideHandlePointingError((const CameraStarDetector::MsgReportPointingError&) cmd);
         return true;
     }
+    else if (CameraWorker::MsgGuideWindowOpen::match(cmd))
+    {
+        autoguideApplyPendingCorrection();
+        return true;
+    }
 
     return false;
 }
@@ -2552,8 +2557,81 @@ void Camera::webapiUpdateFeatureSettings(
     }
 }
 
+void Camera::autoguideApplyPendingCorrection()
+{
+    if (!m_autoguideCorrectionPending)
+    {
+        // A stale grant (settings changed, autoguiding switched off) - hand capture straight back
+        autoguideReleaseWindow(QStringLiteral("no correction pending"));
+        return;
+    }
+
+    const bool applied =
+        ChannelWebAPIUtils::patchFeatureSetting(
+            m_autoguideRotatorSet, m_autoguideRotatorIndex, "azimuthOffset", m_autoguidePendingAzOffsetDeg)
+        && ChannelWebAPIUtils::patchFeatureSetting(
+            m_autoguideRotatorSet, m_autoguideRotatorIndex, "elevationOffset", m_autoguidePendingElOffsetDeg);
+    if (!applied)
+    {
+        autoguideStatus(QStringLiteral("Failed to apply offsets to the rotator"));
+        autoguideReleaseWindow(QStringLiteral("offset write failed"));
+        return;
+    }
+
+    autoguideStatus(m_autoguidePendingSummary);
+    m_autoguideSettleStartedMs = QDateTime::currentMSecsSinceEpoch();
+    if (!m_autoguideSettleTimer)
+    {
+        m_autoguideSettleTimer = new QTimer(this);
+        m_autoguideSettleTimer->setInterval(250);
+        QObject::connect(m_autoguideSettleTimer, &QTimer::timeout, this, &Camera::autoguideCheckSettled);
+    }
+    m_autoguideSettleTimer->start();
+}
+
+void Camera::autoguideCheckSettled()
+{
+    // Capture stays paused until the mount reports it has arrived, so the next exposure
+    // starts on a stationary field rather than part way through the slew. The timeout keeps
+    // a rotator that never asserts onTarget from holding capture.
+    constexpr qint64 kMaxSettleMs = 15000;
+    const qint64 elapsed = QDateTime::currentMSecsSinceEpoch() - m_autoguideSettleStartedMs;
+    int onTarget = 0;
+    const bool haveReport = ChannelWebAPIUtils::getFeatureReportValue(
+        m_autoguideRotatorSet, m_autoguideRotatorIndex, "onTarget", onTarget);
+
+    if (haveReport && (onTarget != 0))
+    {
+        autoguideReleaseWindow(QStringLiteral("mount on target after %1 ms").arg(elapsed));
+        return;
+    }
+    if (elapsed > kMaxSettleMs)
+    {
+        autoguideReleaseWindow(haveReport
+            ? QStringLiteral("settle timeout after %1 ms").arg(elapsed)
+            : QStringLiteral("rotator reports no onTarget state, resuming after %1 ms").arg(elapsed));
+    }
+}
+
+void Camera::autoguideReleaseWindow(const QString& reason)
+{
+    if (m_autoguideSettleTimer) {
+        m_autoguideSettleTimer->stop();
+    }
+    m_autoguideCorrectionPending = false;
+    m_autoguideWindowRequestedMs = 0;
+    m_autoguideSettleStartedMs = 0;
+    qInfo().noquote().nospace() << "CameraAutoguide: state=released reason=" << reason;
+    if (m_worker) {
+        m_worker->getInputMessageQueue()->push(CameraWorker::MsgReleaseGuideWindow::create());
+    }
+}
+
 void Camera::autoguideReset()
 {
+    if (m_autoguideCorrectionPending) {
+        autoguideReleaseWindow(QStringLiteral("autoguide reconfigured"));
+    }
     m_autoguideLastCorrectionTime = QDateTime();
     m_autoguideNoiseCount = 0;
     m_autoguideNoiseMeanAzSky = 0.0;
@@ -2594,6 +2672,12 @@ void Camera::autoguideStatus(const QString& status)
 void Camera::autoguideHandlePointingError(const CameraStarDetector::MsgReportPointingError& report)
 {
     if (!m_settings.m_autoguide) {
+        return;
+    }
+
+    // One correction at a time: while a previous one waits for the exposure gap or for the
+    // mount to settle, further solves describe a mount that is about to move anyway
+    if (m_autoguideCorrectionPending) {
         return;
     }
 
@@ -2820,17 +2904,25 @@ void Camera::autoguideHandlePointingError(const CameraStarDetector::MsgReportPoi
         return;
     }
 
-    if (!ChannelWebAPIUtils::patchFeatureSetting(featureSetIndex, featureIndex, "azimuthOffset", newAzOffset)
-        || !ChannelWebAPIUtils::patchFeatureSetting(featureSetIndex, featureIndex, "elevationOffset", newElOffset))
-    {
-        autoguideStatus("Failed to apply offsets to the rotator");
-        return;
-    }
-
-    m_autoguideLastCorrectionTime = now;
-    autoguideStatus(QString("Corrected %1 az, %2 el (offsets %3, %4)")
+    // Do not touch the mount yet. A solve takes seconds, so by now the next exposure is
+    // usually already running and slewing would trail it - measured at over a hundred pixels
+    // for a correction this size. Hold the correction until the worker hands over the gap
+    // between exposures (MsgRequestGuideWindow).
+    m_autoguideCorrectionPending = true;
+    m_autoguideRotatorSet = featureSetIndex;
+    m_autoguideRotatorIndex = featureIndex;
+    m_autoguidePendingAzOffsetDeg = newAzOffset;
+    m_autoguidePendingElOffsetDeg = newElOffset;
+    m_autoguideWindowRequestedMs = QDateTime::currentMSecsSinceEpoch();
+    m_autoguidePendingSummary = QString("Corrected %1 az, %2 el (offsets %3, %4)")
         .arg(formatDegrees(correctionAzRaw * cosElevation), formatDegrees(correctionEl),
-            formatDegrees(newAzOffset), formatDegrees(newElOffset)));
+            formatDegrees(newAzOffset), formatDegrees(newElOffset));
+    m_autoguideLastCorrectionTime = now;
+    autoguideStatus(QString("Waiting for exposure to finish before correcting %1 az, %2 el")
+        .arg(formatDegrees(correctionAzRaw * cosElevation), formatDegrees(correctionEl)));
+    if (m_worker) {
+        m_worker->getInputMessageQueue()->push(CameraWorker::MsgRequestGuideWindow::create());
+    }
     qInfo().noquote().nospace()
         << "CameraAutoguide: state=corrected t=" << report.getCaptureDateTime().toUTC().toString(Qt::ISODateWithMs)
         << " residualAzSkyDeg=" << QString::number(residualAzSky, 'f', 5)

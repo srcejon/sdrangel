@@ -40,6 +40,9 @@
 #include "cameraworker.h"
 
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgStartStop, Message)
+MESSAGE_CLASS_DEFINITION(CameraWorker::MsgRequestGuideWindow, Message)
+MESSAGE_CLASS_DEFINITION(CameraWorker::MsgGuideWindowOpen, Message)
+MESSAGE_CLASS_DEFINITION(CameraWorker::MsgReleaseGuideWindow, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgRefreshCameraList, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgStartAutoFocus, Message)
 MESSAGE_CLASS_DEFINITION(CameraWorker::MsgVideoFileControl, Message)
@@ -928,6 +931,30 @@ bool CameraWorker::handleMessage(const Message& cmd)
         applySettings(cfg.getSettings(), cfg.getSettingsKeys(), cfg.getForce());
         return true;
     }
+    else if (MsgRequestGuideWindow::match(cmd))
+    {
+        QMutexLocker locker(&m_mutex);
+        m_guideWindowRequested = true;
+        // captureTick opens it once nothing is in flight - that tick IS the gap between
+        // exposures, which is exactly where the correction belongs
+        return true;
+    }
+    else if (MsgReleaseGuideWindow::match(cmd))
+    {
+        QMutexLocker locker(&m_mutex);
+        if (m_guideWindowOpen || m_guideWindowRequested)
+        {
+            qInfo().noquote().nospace()
+                << "CameraGuideWindow: released after "
+                << (m_guideWindowOpenedMs > 0
+                        ? QDateTime::currentMSecsSinceEpoch() - m_guideWindowOpenedMs : 0)
+                << " ms";
+        }
+        m_guideWindowRequested = false;
+        m_guideWindowOpen = false;
+        m_guideWindowOpenedMs = 0;
+        return true;
+    }
     else if (MsgStartStop::match(cmd))
     {
         MsgStartStop& cfg = (MsgStartStop&) cmd;
@@ -1298,6 +1325,9 @@ void CameraWorker::startCapture()
 void CameraWorker::stopCapture()
 {
     m_capturing = false;
+    m_guideWindowRequested = false;
+    m_guideWindowOpen = false;
+    m_guideWindowOpenedMs = 0;
     cancelAutoFocus(tr("Auto focus cancelled"));
     m_captureTimer.stop();
     m_alpaca.m_captureTimer.invalidate();
@@ -1324,6 +1354,45 @@ void CameraWorker::stopCapture()
 void CameraWorker::captureTick()
 {
     if (!m_capturing) {
+        return;
+    }
+
+    // Autoguide exposure window. This tick is the moment a new exposure would start, i.e.
+    // precisely the gap between exposures, so it is where a guide correction can slew the
+    // mount without smearing anything. Hold off starting an exposure while the window is
+    // requested or open; the periodic timer keeps ticking, so capture resumes by itself on
+    // the first tick after release.
+    if (m_guideWindowOpen)
+    {
+        // Safety valve: a feature that dies or never releases must not stall capture
+        constexpr qint64 kMaxGuideWindowMs = 30000;
+        if ((m_guideWindowOpenedMs > 0)
+            && ((QDateTime::currentMSecsSinceEpoch() - m_guideWindowOpenedMs) > kMaxGuideWindowMs))
+        {
+            qWarning() << "CameraWorker::captureTick: autoguide window held for over"
+                       << kMaxGuideWindowMs << "ms, resuming capture";
+            m_guideWindowOpen = false;
+            m_guideWindowOpenedMs = 0;
+        }
+        else
+        {
+            return;
+        }
+    }
+    else if (m_guideWindowRequested)
+    {
+        if (m_settings.isAlpacaCamera() && m_alpaca.m_frameRequestPending)
+        {
+            // An exposure is still in flight - let it finish before handing over the mount
+            return;
+        }
+        m_guideWindowRequested = false;
+        m_guideWindowOpen = true;
+        m_guideWindowOpenedMs = QDateTime::currentMSecsSinceEpoch();
+        qInfo() << "CameraGuideWindow: opened, capture paused for autoguide correction";
+        if (m_msgQueueToFeature) {
+            m_msgQueueToFeature->push(MsgGuideWindowOpen::create());
+        }
         return;
     }
 

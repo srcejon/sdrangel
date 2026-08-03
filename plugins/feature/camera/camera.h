@@ -26,6 +26,7 @@
 #include <QMutex>
 #include <QStringList>
 #include <QThread>
+#include <QTimer>
 
 #include "feature/feature.h"
 #include "util/message.h"
@@ -470,6 +471,18 @@ private:
     double m_autoguidePendingAzRawDeg = 0.0;    ///< Pending raw azimuth residual, degrees
     double m_autoguidePendingElDeg = 0.0;       ///< Pending elevation residual, degrees
     QString m_autoguideLastStatus;              ///< Last status string sent to the GUI (dedupe)
+    // A correction waits for the worker to hand over the gap between exposures before it
+    // touches the mount, so no exposure ever spans the slew (see
+    // CameraWorker::MsgRequestGuideWindow). These hold it in the meantime.
+    bool m_autoguideCorrectionPending = false;  ///< A correction is waiting for, or holding, the guide window
+    unsigned int m_autoguideRotatorSet = 0;     ///< Rotator feature set index for the pending correction
+    unsigned int m_autoguideRotatorIndex = 0;   ///< Rotator feature index for the pending correction
+    double m_autoguidePendingAzOffsetDeg = 0.0; ///< Azimuth offset to write when the window opens
+    double m_autoguidePendingElOffsetDeg = 0.0; ///< Elevation offset to write when the window opens
+    QString m_autoguidePendingSummary;          ///< Status text describing the pending correction
+    qint64 m_autoguideWindowRequestedMs = 0;    ///< When the window was requested (wait timeout)
+    qint64 m_autoguideSettleStartedMs = 0;      ///< When the offsets were written (settle timeout)
+    QTimer *m_autoguideSettleTimer = nullptr;   ///< Polls the rotator's onTarget report while settling
 
     void start();
     void stop();
@@ -481,6 +494,12 @@ private:
     void autoguideHandlePointingError(const CameraStarDetector::MsgReportPointingError& report);
     void autoguideReset();
     void autoguideStatus(const QString& status);
+    /// Guide window granted: write the offsets and start waiting for the mount to settle.
+    void autoguideApplyPendingCorrection();
+    /// Poll the rotator's onTarget report; release the window once settled or timed out.
+    void autoguideCheckSettled();
+    /// Hand capture back and forget the pending correction.
+    void autoguideReleaseWindow(const QString& reason);
 };
 
 #endif // INCLUDE_FEATURE_CAMERA_H_

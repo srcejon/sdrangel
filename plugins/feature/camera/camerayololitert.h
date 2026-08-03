@@ -33,6 +33,7 @@ public:
     bool infer(const cv::Mat& letterbox, std::vector<cv::Mat>& outputs, QString& error);
     cv::Size inputSize() const;
     bool gpuActive() const;
+    QString gpuFallbackReason() const;
 
 private:
     struct Impl;

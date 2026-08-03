@@ -10,10 +10,13 @@
 #include "camerayololitert.h"
 
 #include <algorithm>
+#include <cstdarg>
 #include <cmath>
+#include <cstdio>
 #include <cstring>
 
 #include <QDebug>
+#include <QStringList>
 #include <QStringList>
 
 #ifdef CAMERA_LITERT_YOLO
@@ -41,6 +44,10 @@ struct CameraYoloLiteRt::Impl
     bool m_requestedGpu = false;
     bool m_gpuActive = false;
     bool m_loggedOutputRanges = false;
+    QString m_gpuFallbackReason;
+#ifdef CAMERA_LITERT_YOLO
+    QStringList m_runtimeErrors;
+#endif
 
     void reset()
     {
@@ -58,22 +65,68 @@ struct CameraYoloLiteRt::Impl
         m_requestedGpu = false;
         m_gpuActive = false;
         m_loggedOutputRanges = false;
+        m_gpuFallbackReason.clear();
+#ifdef CAMERA_LITERT_YOLO
+        m_runtimeErrors.clear();
+#endif
     }
 
 #ifdef CAMERA_LITERT_YOLO
-    static QString statusError(const QString& operation)
+    static void errorReporter(void *userData, const char *format, va_list args)
     {
-        return QStringLiteral("LiteRT failed to %1").arg(operation);
+        Impl *impl = static_cast<Impl *>(userData);
+        if (!impl || !format) {
+            return;
+        }
+
+        char buffer[4096];
+        va_list argsCopy;
+        va_copy(argsCopy, args);
+        const int length = std::vsnprintf(buffer, sizeof(buffer), format, argsCopy);
+        va_end(argsCopy);
+        if (length <= 0) {
+            return;
+        }
+
+        const QString message = QString::fromUtf8(buffer, std::min(length, static_cast<int>(sizeof(buffer) - 1))).trimmed();
+        if (!message.isEmpty())
+        {
+            impl->m_runtimeErrors.append(message);
+            qWarning() << "CameraYoloLiteRt:" << message;
+        }
+    }
+
+    QString runtimeErrorSummary() const
+    {
+        QStringList errors = m_runtimeErrors;
+        errors.removeDuplicates();
+        constexpr int maximumReportedErrors = 12;
+        if (errors.size() > maximumReportedErrors)
+        {
+            const int omitted = errors.size() - maximumReportedErrors;
+            errors = errors.mid(errors.size() - maximumReportedErrors);
+            errors.prepend(QStringLiteral("%1 earlier LiteRT messages omitted").arg(omitted));
+        }
+        return errors.join(QLatin1Char('\n'));
+    }
+
+    QString statusError(const QString& operation) const
+    {
+        const QString summary = runtimeErrorSummary();
+        const QString base = QStringLiteral("LiteRT failed to %1").arg(operation);
+        return summary.isEmpty() ? base : QStringLiteral("%1:\n%2").arg(base, summary);
     }
 
     bool createInterpreter(bool useGpu, QString& error)
     {
+        m_runtimeErrors.clear();
         m_options.reset(TfLiteInterpreterOptionsCreate());
         if (!m_options)
         {
             error = QStringLiteral("Cannot create LiteRT interpreter options");
             return false;
         }
+        TfLiteInterpreterOptionsSetErrorReporter(m_options.get(), errorReporter, this);
 
         if (useGpu)
         {
@@ -92,9 +145,11 @@ struct CameraYoloLiteRt::Impl
         m_interpreter.reset(TfLiteInterpreterCreate(m_model.get(), m_options.get()));
         if (!m_interpreter)
         {
-            error = useGpu
+            const QString base = useGpu
                 ? QStringLiteral("Cannot create a LiteRT interpreter with the GPU delegate; the model may contain unsupported GPU operations")
                 : QStringLiteral("Cannot create a LiteRT CPU interpreter");
+            const QString summary = runtimeErrorSummary();
+            error = summary.isEmpty() ? base : QStringLiteral("%1:\n%2").arg(base, summary);
             return false;
         }
         if (TfLiteInterpreterAllocateTensors(m_interpreter.get()) != kTfLiteOk)
@@ -157,10 +212,13 @@ struct CameraYoloLiteRt::Impl
         }
 
         reset();
-        m_model.reset(TfLiteModelCreateFromFile(modelPath.toUtf8().constData()));
+        m_model.reset(TfLiteModelCreateFromFileWithErrorReporter(
+            modelPath.toUtf8().constData(), errorReporter, this));
         if (!m_model)
         {
-            error = QStringLiteral("Cannot load LiteRT model %1").arg(modelPath);
+            const QString summary = runtimeErrorSummary();
+            const QString base = QStringLiteral("Cannot load LiteRT model %1").arg(modelPath);
+            error = summary.isEmpty() ? base : QStringLiteral("%1:\n%2").arg(base, summary);
             return false;
         }
 
@@ -175,6 +233,7 @@ struct CameraYoloLiteRt::Impl
         if (useGpu)
         {
             const QString gpuError = error;
+            m_gpuFallbackReason = gpuError;
             m_interpreter.reset();
             m_gpuDelegate.reset();
             m_options.reset();
@@ -390,3 +449,4 @@ bool CameraYoloLiteRt::infer(const cv::Mat& letterbox, std::vector<cv::Mat>& out
 
 cv::Size CameraYoloLiteRt::inputSize() const { return m_impl->m_inputSize; }
 bool CameraYoloLiteRt::gpuActive() const { return m_impl->m_gpuActive; }
+QString CameraYoloLiteRt::gpuFallbackReason() const { return m_impl->m_gpuFallbackReason; }

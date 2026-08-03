@@ -984,10 +984,15 @@ bool CameraObjectDetector::ensureYoloModelLoaded(YoloModelState& modelState, con
         modelState.m_loadedModelPath = modelPath;
         if ((backend == YoloBackend::LiteRtGpu) && !modelState.m_liteRt.gpuActive())
         {
+            QString message = tr("The selected model or Android device could not use the LiteRT GPU delegate. Object detection will continue with LiteRT CPU.");
+            const QString reason = modelState.m_liteRt.gpuFallbackReason();
+            if (!reason.isEmpty()) {
+                message += tr("\n\nLiteRT reported:\n%1").arg(reason);
+            }
             reportErrorToFeature(
                 QStringLiteral("yolo-litert-gpu-fallback:%1").arg(modelPath),
                 tr("LiteRT GPU fallback"),
-                tr("The selected model or Android device could not use the LiteRT GPU delegate. Object detection will continue with LiteRT CPU."));
+                message);
         }
         return true;
 #else

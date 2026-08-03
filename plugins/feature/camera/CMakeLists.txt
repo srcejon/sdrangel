@@ -1,8 +1,7 @@
 project(camera)
 option(ENABLE_CAMERA_TENSORRT "Enable optional TensorRT YOLO inference in the camera feature" OFF)
 option(ENABLE_CAMERA_LITERT "Enable optional Android LiteRT YOLO inference" ${ANDROID})
-set(LITERT_ROOT "" CACHE PATH "Root of the extracted Android LiteRT runtime AAR")
-set(LITERT_GPU_ROOT "" CACHE PATH "Root of the extracted Android LiteRT GPU AAR")
+set(LITERT_ROOT "" CACHE PATH "Root of the Android LiteRT CompiledModel SDK and libraries")
 
 set(camera_SOURCES
     camera.cpp
@@ -299,91 +298,49 @@ if(ENABLE_CAMERA_TENSORRT)
 endif()
 
 if(ANDROID AND ENABLE_CAMERA_LITERT)
-    find_path(LITERT_INCLUDE_DIR tflite/c/c_api.h
+    find_path(LITERT_COMPILED_MODEL_INCLUDE_DIR litert/c/litert_compiled_model.h
         HINTS
-            "$ENV{LITERT_ROOT}/include"
-            "$ENV{LITERT_ROOT}/headers"
-            "${LITERT_ROOT}/include"
-            "${LITERT_ROOT}/headers"
-            "${EXTERNAL_LIBRARY_FOLDER}/${ANDROID_ABI}/litert/include"
+            "$ENV{LITERT_ROOT}/litert_cc_sdk"
+            "${LITERT_ROOT}/litert_cc_sdk"
+            "${EXTERNAL_LIBRARY_FOLDER}/litert-2.1.6/litert_cc_sdk"
         NO_CMAKE_FIND_ROOT_PATH
     )
-    find_path(LITERT_GPU_INCLUDE_DIR tflite/delegates/gpu/delegate.h
-        HINTS
-            "$ENV{LITERT_GPU_ROOT}/include"
-            "$ENV{LITERT_GPU_ROOT}/headers"
-            "${LITERT_GPU_ROOT}/include"
-            "${LITERT_GPU_ROOT}/headers"
-            "${EXTERNAL_LIBRARY_FOLDER}/${ANDROID_ABI}/litert-gpu/include"
-        NO_CMAKE_FIND_ROOT_PATH
-    )
-    find_library(LITERT_LIBRARY
-        NAMES tensorflowlite_c tensorflowlite tensorflow-lite tensorflowlite_jni
+    find_file(LITERT_RUNTIME_LIBRARY
+        NAMES libLiteRt.so
         HINTS
             "$ENV{LITERT_ROOT}/lib/${ANDROID_ABI}"
-            "$ENV{LITERT_ROOT}/lib"
-            "$ENV{LITERT_ROOT}/jni/${ANDROID_ABI}"
             "${LITERT_ROOT}/lib/${ANDROID_ABI}"
-            "${LITERT_ROOT}/lib"
-            "${LITERT_ROOT}/jni/${ANDROID_ABI}"
-            "${EXTERNAL_LIBRARY_FOLDER}/${ANDROID_ABI}/litert/lib"
+            "${EXTERNAL_LIBRARY_FOLDER}/litert-2.1.6/lib/${ANDROID_ABI}"
         NO_CMAKE_FIND_ROOT_PATH
     )
-    if(NOT LITERT_LIBRARY)
-        # On a Windows host CMake may retain host suffix rules while cross-compiling,
-        # so explicitly accept the Android shared-library filenames as a fallback.
-        find_file(LITERT_LIBRARY
-            NAMES libtensorflowlite_c.so libtensorflowlite.so libtensorflow-lite.so libtensorflowlite_jni.so
-            HINTS
-                "$ENV{LITERT_ROOT}/lib/${ANDROID_ABI}"
-                "$ENV{LITERT_ROOT}/lib"
-                "$ENV{LITERT_ROOT}/jni/${ANDROID_ABI}"
-                "${LITERT_ROOT}/lib/${ANDROID_ABI}"
-                "${LITERT_ROOT}/lib"
-                "${LITERT_ROOT}/jni/${ANDROID_ABI}"
-                "${EXTERNAL_LIBRARY_FOLDER}/${ANDROID_ABI}/litert/lib"
-            NO_CMAKE_FIND_ROOT_PATH
-        )
-    endif()
-    find_library(LITERT_GPU_DELEGATE_LIBRARY
-        NAMES tensorflowlite_gpu_delegate tensorflow-lite-gpu-delegate tensorflowlite_gpu_jni
+    find_file(LITERT_GPU_ACCELERATOR_LIBRARY
+        NAMES libLiteRtClGlAccelerator.so
         HINTS
-            "$ENV{LITERT_GPU_ROOT}/lib/${ANDROID_ABI}"
-            "$ENV{LITERT_GPU_ROOT}/lib"
-            "$ENV{LITERT_GPU_ROOT}/jni/${ANDROID_ABI}"
-            "${LITERT_GPU_ROOT}/lib/${ANDROID_ABI}"
-            "${LITERT_GPU_ROOT}/lib"
-            "${LITERT_GPU_ROOT}/jni/${ANDROID_ABI}"
-            "${EXTERNAL_LIBRARY_FOLDER}/${ANDROID_ABI}/litert-gpu/lib"
+            "$ENV{LITERT_ROOT}/lib/${ANDROID_ABI}"
+            "${LITERT_ROOT}/lib/${ANDROID_ABI}"
+            "${EXTERNAL_LIBRARY_FOLDER}/litert-2.1.6/lib/${ANDROID_ABI}"
         NO_CMAKE_FIND_ROOT_PATH
     )
-    if(NOT LITERT_GPU_DELEGATE_LIBRARY)
-        find_file(LITERT_GPU_DELEGATE_LIBRARY
-            NAMES libtensorflowlite_gpu_delegate.so libtensorflow-lite-gpu-delegate.so libtensorflowlite_gpu_jni.so
-            HINTS
-                "$ENV{LITERT_GPU_ROOT}/lib/${ANDROID_ABI}"
-                "$ENV{LITERT_GPU_ROOT}/lib"
-                "$ENV{LITERT_GPU_ROOT}/jni/${ANDROID_ABI}"
-                "${LITERT_GPU_ROOT}/lib/${ANDROID_ABI}"
-                "${LITERT_GPU_ROOT}/lib"
-                "${LITERT_GPU_ROOT}/jni/${ANDROID_ABI}"
-                "${EXTERNAL_LIBRARY_FOLDER}/${ANDROID_ABI}/litert-gpu/lib"
-            NO_CMAKE_FIND_ROOT_PATH
-        )
-    endif()
 
-    if(LITERT_INCLUDE_DIR AND LITERT_GPU_INCLUDE_DIR AND LITERT_LIBRARY AND LITERT_GPU_DELEGATE_LIBRARY)
+    if(LITERT_COMPILED_MODEL_INCLUDE_DIR AND LITERT_RUNTIME_LIBRARY AND LITERT_GPU_ACCELERATOR_LIBRARY)
+        set(LITERT_GENERATED_INCLUDE_DIR "${CMAKE_CURRENT_BINARY_DIR}/litert-generated")
+        file(MAKE_DIRECTORY "${LITERT_GENERATED_INCLUDE_DIR}/litert/build_common")
+        set(LITERT_BUILD_CONFIG_DISABLE_GPU 0)
+        set(LITERT_BUILD_CONFIG_DISABLE_NPU 1)
+        configure_file(
+            "${LITERT_COMPILED_MODEL_INCLUDE_DIR}/litert/build_common/build_config.h.in"
+            "${LITERT_GENERATED_INCLUDE_DIR}/litert/build_common/build_config.h"
+        )
         target_compile_definitions(${TARGET_NAME} PRIVATE CAMERA_LITERT_YOLO)
-        target_include_directories(${TARGET_NAME} PRIVATE ${LITERT_INCLUDE_DIR} ${LITERT_GPU_INCLUDE_DIR})
-        target_link_libraries(${TARGET_NAME} PRIVATE ${LITERT_LIBRARY} ${LITERT_GPU_DELEGATE_LIBRARY})
-        foreach(litert_lib IN ITEMS ${LITERT_LIBRARY} ${LITERT_GPU_DELEGATE_LIBRARY})
-            if(litert_lib MATCHES "\\.so$")
-                set_property(GLOBAL APPEND PROPERTY SDRANGEL_ANDROID_EXTRA_LIBS ${litert_lib})
-            endif()
-        endforeach()
-        message(STATUS "Camera Android LiteRT YOLO support enabled")
+        target_include_directories(${TARGET_NAME} PRIVATE ${LITERT_COMPILED_MODEL_INCLUDE_DIR} ${LITERT_GENERATED_INCLUDE_DIR})
+        target_link_libraries(${TARGET_NAME} PRIVATE ${LITERT_RUNTIME_LIBRARY} EGL GLESv3)
+        set_property(GLOBAL APPEND PROPERTY SDRANGEL_ANDROID_EXTRA_LIBS
+            ${LITERT_RUNTIME_LIBRARY}
+            ${LITERT_GPU_ACCELERATOR_LIBRARY}
+        )
+        message(STATUS "Camera Android LiteRT 2.1 CompiledModel YOLO support enabled")
     else()
-        message(WARNING "ENABLE_CAMERA_LITERT is ON, but the LiteRT C runtime and GPU delegate were not found; camera LiteRT support is disabled. Set LITERT_ROOT and LITERT_GPU_ROOT, or set LITERT_INCLUDE_DIR/LITERT_GPU_INCLUDE_DIR/LITERT_LIBRARY/LITERT_GPU_DELEGATE_LIBRARY explicitly.")
+        message(WARNING "ENABLE_CAMERA_LITERT is ON, but the LiteRT CompiledModel SDK/runtime/GPU accelerator were not found; camera LiteRT support is disabled. Set LITERT_ROOT to an extracted LiteRT 2.1 package, or set LITERT_COMPILED_MODEL_INCLUDE_DIR, LITERT_RUNTIME_LIBRARY and LITERT_GPU_ACCELERATOR_LIBRARY explicitly.")
     endif()
 endif()
 

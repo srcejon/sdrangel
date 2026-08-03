@@ -21,6 +21,7 @@
 
 #include <QDebug>
 #include <QFile>
+#include <QFileInfo>
 #include <QMutableHashIterator>
 #include <QTextStream>
 
@@ -923,6 +924,8 @@ void CameraObjectDetector::resetYoloModelState(YoloModelState& modelState)
     modelState.m_net = cv::dnn::Net();
     modelState.m_inputSize = cv::Size(640, 640);
     modelState.m_loadedModelPath.clear();
+    modelState.m_loadedModelSize = -1;
+    modelState.m_loadedModelModifiedMs = -1;
     modelState.m_appliedDnnTarget = -1;
     modelState.m_failedDnnTarget = -1;
     modelState.m_liteRt.reset();
@@ -955,6 +958,24 @@ bool CameraObjectDetector::ensureYoloModelLoaded(YoloModelState& modelState, con
 
     const bool useTensorRt = backend == YoloBackend::TensorRt;
     const bool useLiteRt = (backend == YoloBackend::LiteRtCpu) || (backend == YoloBackend::LiteRtGpu);
+    const QFileInfo modelFileInfo(modelPath);
+    const qint64 modelSize = modelFileInfo.exists() ? modelFileInfo.size() : -1;
+    const QDateTime modelLastModified = modelFileInfo.lastModified();
+    const qint64 modelModifiedMs = modelLastModified.isValid() ? modelLastModified.toMSecsSinceEpoch() : -1;
+    const bool modelFileChanged = (modelState.m_loadedModelPath == modelPath)
+        && !modelState.m_loadedModelPath.isEmpty()
+        && ((modelState.m_loadedModelSize != modelSize)
+            || (modelState.m_loadedModelModifiedMs != modelModifiedMs));
+
+    if (modelFileChanged)
+    {
+        qDebug() << "CameraObjectDetector: reloading modified YOLO model" << modelPath
+                 << "size" << modelState.m_loadedModelSize << "->" << modelSize
+                 << "modifiedMs" << modelState.m_loadedModelModifiedMs << "->" << modelModifiedMs;
+        resetYoloModelState(modelState);
+        m_reportedErrorKeys.clear();
+    }
+
     if (!useLiteRt && ((m_settings.m_yoloDnnTarget == CameraSettings::LiteRT_CPU)
         || (m_settings.m_yoloDnnTarget == CameraSettings::LiteRT_GPU)))
     {
@@ -982,6 +1003,8 @@ bool CameraObjectDetector::ensureYoloModelLoaded(YoloModelState& modelState, con
         }
         modelState.m_inputSize = modelState.m_liteRt.inputSize();
         modelState.m_loadedModelPath = modelPath;
+        modelState.m_loadedModelSize = modelSize;
+        modelState.m_loadedModelModifiedMs = modelModifiedMs;
         if ((backend == YoloBackend::LiteRtGpu) && !modelState.m_liteRt.gpuActive())
         {
             QString message = tr("The selected model or Android device could not use the LiteRT GPU delegate. Object detection will continue with LiteRT CPU.");
@@ -1027,6 +1050,8 @@ bool CameraObjectDetector::ensureYoloModelLoaded(YoloModelState& modelState, con
             }
 
             modelState.m_loadedModelPath = modelPath;
+            modelState.m_loadedModelSize = modelSize;
+            modelState.m_loadedModelModifiedMs = modelModifiedMs;
             qDebug() << "CameraObjectDetector::runYoloDetections: loaded model" << modelPath
                      << "with input size" << modelState.m_inputSize.width << "x" << modelState.m_inputSize.height;
         }

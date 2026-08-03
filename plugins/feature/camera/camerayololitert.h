@@ -19,8 +19,8 @@
 /**
  * Android LiteRT backend for YOLO .tflite models.
  *
- * The implementation uses LiteRT's C API and optional GPU delegate. The model,
- * interpreter, delegate and tensor buffers persist on the detector thread.
+ * The implementation uses LiteRT's CompiledModel C API. The environment,
+ * compiled model and tensor buffers persist on the detector thread.
  */
 class CameraYoloLiteRt
 {

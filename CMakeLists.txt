@@ -524,6 +524,8 @@ elseif(ANDROID)
 
   set(Boost_INCLUDE_DIR "${EXTERNAL_LIBRARY_FOLDER}/ndk_26b_boost_1.83.0/include" CACHE INTERNAL "")
 
+  set(LITERT_ROOT "${EXTERNAL_LIBRARY_FOLDER}/litert-2.1.6" CACHE INTERNAL "" FORCE)
+
   set(FFTW3F_FOUND ON CACHE INTERNAL "")
   set(FFTW3F_INCLUDE_DIRS "${EXTERNAL_LIBRARY_FOLDER}/${ANDROID_ABI}/fftw-3/include" CACHE INTERNAL "")
   set(FFTW3F_LIBRARIES "${EXTERNAL_LIBRARY_FOLDER}/${ANDROID_ABI}/fftw-3/lib/libfftw3f.a" CACHE INTERNAL "")
@@ -666,6 +668,8 @@ elseif(ANDROID)
     set(ANDROID_EXTRA_LIBS
       ${EXTERNAL_LIBRARY_FOLDER}/android_openssl-master/ssl_3/${ANDROID_ABI}/libssl_3.so
       ${EXTERNAL_LIBRARY_FOLDER}/android_openssl-master/ssl_3/${ANDROID_ABI}/libcrypto_3.so
+      ${LITERT_ROOT}/lib/${ANDROID_ABI}/libLiteRt.so
+      ${LITERT_ROOT}/lib/${ANDROID_ABI}/libLiteRtClGlAccelerator.so
       ${EXTERNAL_LIBRARY_FOLDER}/${ANDROID_ABI}/ffmpeg/lib/libavcodec.so
       ${EXTERNAL_LIBRARY_FOLDER}/${ANDROID_ABI}/ffmpeg/lib/libavdevice.so
       ${EXTERNAL_LIBRARY_FOLDER}/${ANDROID_ABI}/ffmpeg/lib/libavfilter.so

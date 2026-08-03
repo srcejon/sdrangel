@@ -148,6 +148,8 @@ private:
         int m_failedDnnTarget = -1;
         bool m_batchedInferenceSupported = false;
         QString m_loadedModelPath;
+        qint64 m_loadedModelSize = -1;
+        qint64 m_loadedModelModifiedMs = -1;
     };
 
     YoloModelState m_yoloScaleModel;

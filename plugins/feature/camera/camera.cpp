@@ -2697,12 +2697,35 @@ void Camera::autoguideHandlePointingError(const CameraStarDetector::MsgReportPoi
         return;
     }
 
-    // Solve quality gate: a sparse match is more likely a marginal or wrong pose
+    // Solve quality gate. Match COUNT alone is the wrong measure: it mostly reflects how deep
+    // the catalogue was, not how good the pose is. Solving a sparse telescope field against a
+    // bright catalogue - the fastest and most reliable way to solve one, at well under a
+    // second - yields only 10-26 matches, and a flat count threshold of 20 silently locked
+    // guiding out of exactly that configuration. Those solves are excellent: rms about 1 px
+    // with 8-12 of 12 predicted bright stars matched, against deep solves that reach 40+
+    // matches at rms 5-14.
+    //
+    // So accept either a genuinely rich match set, or a modest one whose bright stars agree -
+    // most of what the pose predicts found, at magnitudes that line up. The fit-quality gate
+    // below still applies to both.
     const int minMatchedStars = 20;
-    if (report.getMatchedStars() < minMatchedStars)
+    const int minMatchedStarsWithBrightAgreement = 8;
+    const bool brightAgreementStrong =
+        (report.getBrightProjectedStars() >= 6)
+        && ((report.getMatchedBrightProjectedStars() * 2) >= report.getBrightProjectedStars())
+        && (report.getMatchedBrightProjectedStars() >= 6)
+        && (report.getBrightMagnitudeError() <= 0.60);
+    const bool matchSupportSufficient =
+        (report.getMatchedStars() >= minMatchedStars)
+        || (brightAgreementStrong && (report.getMatchedStars() >= minMatchedStarsWithBrightAgreement));
+    if (!matchSupportSufficient)
     {
-        autoguideStatus(QString("Skipped solve: only %1 matched stars (need %2)")
-            .arg(report.getMatchedStars()).arg(minMatchedStars));
+        autoguideStatus(QString("Skipped solve: %1 matched stars, %2/%3 bright (need %4, or %5 with bright agreement)")
+            .arg(report.getMatchedStars())
+            .arg(report.getMatchedBrightProjectedStars())
+            .arg(report.getBrightProjectedStars())
+            .arg(minMatchedStars)
+            .arg(minMatchedStarsWithBrightAgreement));
         return;
     }
 
@@ -2935,5 +2958,8 @@ void Camera::autoguideHandlePointingError(const CameraStarDetector::MsgReportPoi
         << " maxCorrectionDeg=" << QString::number(maxCorrection, 'f', 5)
         << " gain=" << QString::number(gain, 'f', 2)
         << " matched=" << report.getMatchedStars()
-        << " rms=" << QString::number(report.getRmsErrorPixels(), 'f', 2);
+        << " rms=" << QString::number(report.getRmsErrorPixels(), 'f', 2)
+        << " brightProj=" << report.getMatchedBrightProjectedStars()
+        << "/" << report.getBrightProjectedStars()
+        << " magErr=" << QString::number(report.getBrightMagnitudeError(), 'f', 2);
 }

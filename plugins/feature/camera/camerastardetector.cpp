@@ -910,7 +910,10 @@ void CameraStarDetector::processNewFrame(const CameraPipelineFramePtr& frame)
                     plateSolveResult.m_matchedStars,
                     static_cast<float>(plateSolveResult.m_rmsErrorPixels),
                     frame->m_plateSolve.m_solveTimeMs,
-                    frame->m_captureDateTime));
+                    frame->m_captureDateTime,
+                    plateSolveResult.m_brightProjectedStars,
+                    plateSolveResult.m_matchedBrightProjectedStars,
+                    plateSolveResult.m_brightDetectionMagnitudeError));
             }
         }
     }

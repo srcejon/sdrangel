@@ -87,14 +87,21 @@ public:
         float getRmsErrorPixels() const { return m_rmsErrorPixels; }
         double getSolveTimeMs() const { return m_solveTimeMs; }
         QDateTime getCaptureDateTime() const { return m_captureDateTime; }
+        // Bright-star agreement, so the guide loop can judge a solve on the quality of its
+        // evidence rather than on how many faint stars happened to be in the catalogue
+        int getBrightProjectedStars() const { return m_brightProjectedStars; }
+        int getMatchedBrightProjectedStars() const { return m_matchedBrightProjectedStars; }
+        double getBrightMagnitudeError() const { return m_brightMagnitudeError; }
 
         static MsgReportPointingError* create(
             double errorAzDeg, double errorElDeg, double solvedElDeg, double solvedFovDeg,
-            int matchedStars, float rmsErrorPixels, double solveTimeMs, const QDateTime& captureDateTime)
+            int matchedStars, float rmsErrorPixels, double solveTimeMs, const QDateTime& captureDateTime,
+            int brightProjectedStars, int matchedBrightProjectedStars, double brightMagnitudeError)
         {
             return new MsgReportPointingError(
                 errorAzDeg, errorElDeg, solvedElDeg, solvedFovDeg,
-                matchedStars, rmsErrorPixels, solveTimeMs, captureDateTime);
+                matchedStars, rmsErrorPixels, solveTimeMs, captureDateTime,
+                brightProjectedStars, matchedBrightProjectedStars, brightMagnitudeError);
         }
 
     private:
@@ -106,10 +113,14 @@ public:
         float m_rmsErrorPixels;
         double m_solveTimeMs;
         QDateTime m_captureDateTime;
+        int m_brightProjectedStars;
+        int m_matchedBrightProjectedStars;
+        double m_brightMagnitudeError;
 
         MsgReportPointingError(
             double errorAzDeg, double errorElDeg, double solvedElDeg, double solvedFovDeg,
-            int matchedStars, float rmsErrorPixels, double solveTimeMs, const QDateTime& captureDateTime) :
+            int matchedStars, float rmsErrorPixels, double solveTimeMs, const QDateTime& captureDateTime,
+            int brightProjectedStars, int matchedBrightProjectedStars, double brightMagnitudeError) :
             Message(),
             m_errorAzDeg(errorAzDeg),
             m_errorElDeg(errorElDeg),
@@ -118,7 +129,10 @@ public:
             m_matchedStars(matchedStars),
             m_rmsErrorPixels(rmsErrorPixels),
             m_solveTimeMs(solveTimeMs),
-            m_captureDateTime(captureDateTime)
+            m_captureDateTime(captureDateTime),
+            m_brightProjectedStars(brightProjectedStars),
+            m_matchedBrightProjectedStars(matchedBrightProjectedStars),
+            m_brightMagnitudeError(brightMagnitudeError)
         { }
     };
 

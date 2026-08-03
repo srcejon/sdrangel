@@ -2899,6 +2899,14 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
         || (settings.m_plateSolveStartMode == CameraSettings::PlateSolveStartFovAzElRoll)
         || (settings.m_plateSolveStartMode == CameraSettings::PlateSolveStartFovAzElRollLens)
         || (settings.m_plateSolveStartMode == CameraSettings::PlateSolveStartCurrentSettingsOnly);
+    // NB: the narrow-field rescue paths below (bright-first pre-pass, deepen escape, shallow
+    // escape, recenter ladder, moderate bright retry) deliberately do NOT test this. They
+    // used to, on the assumption that supplying a roll leaves the solve well enough
+    // constrained not to need rescuing. Measured on a guiding session that is wrong twice
+    // over: a roll-seeded solve of the same frames still picked wrong poses out of the deep
+    // catalogue (rms above 11 on every frame, against ~1 for the same frames without a roll),
+    // and having the rescues disabled was precisely why it could not recover. Excluding them
+    // made roll-seeded solves look fast only because they were giving up early.
     const bool solveUsesRoll =
         (settings.m_plateSolveStartMode == CameraSettings::PlateSolveStartFovAzElRoll)
         || (settings.m_plateSolveStartMode == CameraSettings::PlateSolveStartFovAzElRollLens)
@@ -2948,7 +2956,6 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
         result = runSolve(retrySettings, QStringLiteral("bright-catalog"));
     }
     else if (solveUsesDirection
-        && !solveUsesRoll
         && SolverContext::isNarrowField(settings)
         && (settings.m_plateSolveMaxMagnitude >= 15.0f)
         && (starDetections.size() <= 80))
@@ -3176,7 +3183,7 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
     // bounded; any solved result early-stops.
     const auto attemptDeepenEscape = [&]() {
         const bool catalogStarvedNarrowDirectionSolve =
-            solveUsesDirection && !solveUsesRoll && SolverContext::isNarrowField(settings)
+            solveUsesDirection && SolverContext::isNarrowField(settings)
             && (starDetections.size() >= 128)
             && (result.m_catalogCandidateStars > 0)
             && (result.m_catalogCandidateStars <= (starDetections.size() / 3));
@@ -3281,7 +3288,6 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
         constexpr qsizetype kShallowEscapeMaxDetections = 80;
         if (result.m_solved
             || !solveUsesDirection
-            || solveUsesRoll
             || !SolverContext::isNarrowField(settings)
             || (starDetections.size() > kShallowEscapeMaxDetections)
             || (static_cast<double>(settings.m_plateSolveMaxMagnitude) <= kShallowEscapeMaxMagnitude + 0.5)
@@ -3343,7 +3349,7 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
     // corrected). `denseNarrowDirectionSolve` (its >128-detection bright-catalog retry
     // sibling) is too strict here.
     const bool narrowDirectionRecenterEligible =
-        solveUsesDirection && !solveUsesRoll && SolverContext::isNarrowField(settings);
+        solveUsesDirection && SolverContext::isNarrowField(settings);
     if (!result.m_solved
         && narrowDirectionRecenterEligible
         && !isCancellationRequested())
@@ -3669,7 +3675,7 @@ CameraPlateSolveResult CameraPlateSolver::solve(const CameraSettings& settings,
     // roll-alias also strikes moderate fields (e.g. synth-rand-015/028/032 at 87-117
     // detections solve at mag 11/12 but not 13), which the >128 gate wrongly excluded.
     const bool moderateNarrowDirectionSolve =
-        solveUsesDirection && !solveUsesRoll && SolverContext::isNarrowField(settings)
+        solveUsesDirection && SolverContext::isNarrowField(settings)
         && (starDetections.size() > 64);
     if (!result.m_solved
         && moderateNarrowDirectionSolve

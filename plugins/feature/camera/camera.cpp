@@ -2556,6 +2556,8 @@ void Camera::autoguideReset()
 {
     m_autoguideLastCorrectionTime = QDateTime();
     m_autoguideNoiseCount = 0;
+    m_autoguideNoiseMeanAzSky = 0.0;
+    m_autoguideNoiseMeanEl = 0.0;
     m_autoguideNoiseVarAzSky = 0.0;
     m_autoguideNoiseVarEl = 0.0;
     m_autoguidePendingValid = false;
@@ -2673,6 +2675,7 @@ void Camera::autoguideHandlePointingError(const CameraStarDetector::MsgReportPoi
     // are hard floors below which a correction cannot take effect; the measured solve noise
     // stops the loop chasing its own scatter
     double deadband = static_cast<double>(m_settings.m_autoguideDeadbandDeg);
+    QString deadbandSource = QStringLiteral("setting");
     if (deadband <= 0.0)
     {
         double tolerance = 0.0;
@@ -2682,10 +2685,20 @@ void Camera::autoguideHandlePointingError(const CameraStarDetector::MsgReportPoi
         if (ChannelWebAPIUtils::getFeatureSetting(featureSetIndex, featureIndex, "precision", precision)) {
             precisionStep = std::pow(10.0, -precision);
         }
-        const double noise = m_autoguideNoiseCount >= 5
+        double noise = m_autoguideNoiseCount >= 5
             ? 1.5 * std::sqrt(std::max(m_autoguideNoiseVarAzSky, m_autoguideNoiseVarEl))
             : 0.0;
+        // Belt and braces after the runaway described above: measured scatter may widen the
+        // deadband somewhat, but never past a fraction of the field, so no mis-estimate can
+        // again park the loop in a deadband wide enough to swallow everything.
+        noise = std::min(noise, 0.1 * static_cast<double>(m_settings.m_fov));
         deadband = std::max({tolerance, precisionStep, noise, 0.002});
+        // Name whichever term won, so a deadband that looks too wide can be traced to the
+        // rotator setting behind it rather than guessed at
+        deadbandSource = (deadband <= 0.002) ? QStringLiteral("floor")
+            : (qFuzzyCompare(deadband, tolerance) ? QStringLiteral("rotatorTolerance")
+            : (qFuzzyCompare(deadband, precisionStep) ? QStringLiteral("rotatorPrecision")
+            : QStringLiteral("measuredNoise")));
     }
 
     // Adaptive per-axis correction clamp: within a quarter field the target stays framed even
@@ -2697,10 +2710,22 @@ void Camera::autoguideHandlePointingError(const CameraStarDetector::MsgReportPoi
 
     if (residualMagnitude <= deadband)
     {
-        // Converged: learn the solve-to-solve noise that sets the auto deadband
+        // Converged: learn the solve-to-solve SCATTER that sets the auto deadband - the spread of
+        // the residual about its own mean, not how big the residual is. Tracking the mean square
+        // instead made a steady pointing error look like noise, and the loop ate itself: the
+        // deadband grew to match the drift, which let the drift grow further, which grew the
+        // deadband again. Measured over 34 field frames - residual -0.117 to -0.216 deg with the
+        // deadband climbing 0.200 to 0.319 just behind it - so not one correction ever fired and
+        // the target walked out of the frame. A constant offset now contributes no variance at
+        // all, leaving the deadband at its floor where the drift gets corrected rather than
+        // absorbed.
         const double alpha = m_autoguideNoiseCount < 5 ? 1.0 / (m_autoguideNoiseCount + 1) : 0.2;
-        m_autoguideNoiseVarAzSky += alpha * (residualAzSky * residualAzSky - m_autoguideNoiseVarAzSky);
-        m_autoguideNoiseVarEl += alpha * (residualEl * residualEl - m_autoguideNoiseVarEl);
+        m_autoguideNoiseMeanAzSky += alpha * (residualAzSky - m_autoguideNoiseMeanAzSky);
+        m_autoguideNoiseMeanEl += alpha * (residualEl - m_autoguideNoiseMeanEl);
+        const double deviationAzSky = residualAzSky - m_autoguideNoiseMeanAzSky;
+        const double deviationEl = residualEl - m_autoguideNoiseMeanEl;
+        m_autoguideNoiseVarAzSky += alpha * ((deviationAzSky * deviationAzSky) - m_autoguideNoiseVarAzSky);
+        m_autoguideNoiseVarEl += alpha * ((deviationEl * deviationEl) - m_autoguideNoiseVarEl);
         m_autoguideNoiseCount++;
         m_autoguidePendingValid = false;
         autoguideStatus(QString("In deadband (%1 <= %2)")
@@ -2709,6 +2734,9 @@ void Camera::autoguideHandlePointingError(const CameraStarDetector::MsgReportPoi
             << "CameraAutoguide: state=deadband residualAzSkyDeg=" << QString::number(residualAzSky, 'f', 5)
             << " residualElDeg=" << QString::number(residualEl, 'f', 5)
             << " deadbandDeg=" << QString::number(deadband, 'f', 5)
+            << " deadbandFrom=" << deadbandSource
+            << " scatterAzSkyDeg=" << QString::number(std::sqrt(m_autoguideNoiseVarAzSky), 'f', 5)
+            << " scatterElDeg=" << QString::number(std::sqrt(m_autoguideNoiseVarEl), 'f', 5)
             << " noiseSamples=" << m_autoguideNoiseCount;
         return;
     }

@@ -462,8 +462,10 @@ private:
     // autoguideHandlePointingError() for the loop algebra.
     QDateTime m_autoguideLastCorrectionTime;    ///< Wall clock of the last offset patch; invalid = none yet
     int m_autoguideNoiseCount = 0;              ///< Residual samples folded into the noise estimate
-    double m_autoguideNoiseVarAzSky = 0.0;      ///< EW variance of the on-sky azimuth residual, deg^2
-    double m_autoguideNoiseVarEl = 0.0;         ///< EW variance of the elevation residual, deg^2
+    double m_autoguideNoiseMeanAzSky = 0.0;     ///< EW mean of the on-sky azimuth residual, degrees
+    double m_autoguideNoiseMeanEl = 0.0;        ///< EW mean of the elevation residual, degrees
+    double m_autoguideNoiseVarAzSky = 0.0;      ///< EW variance of the on-sky azimuth residual ABOUT ITS MEAN, deg^2
+    double m_autoguideNoiseVarEl = 0.0;         ///< EW variance of the elevation residual ABOUT ITS MEAN, deg^2
     bool m_autoguidePendingValid = false;       ///< A large correction awaits a confirming second solve
     double m_autoguidePendingAzRawDeg = 0.0;    ///< Pending raw azimuth residual, degrees
     double m_autoguidePendingElDeg = 0.0;       ///< Pending elevation residual, degrees

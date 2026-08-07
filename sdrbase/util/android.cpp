@@ -39,8 +39,18 @@ int nextDocumentTreeRequestCode()
 #if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
 
 #include <QtCore/private/qandroidextras_p.h>
+#include <QClipboard>
+#include <QDialog>
+#include <QDialogButtonBox>
+#include <QFontDatabase>
+#include <QGuiApplication>
 #include <QJniObject>
 #include <QJniEnvironment>
+#include <QLabel>
+#include <QPlainTextEdit>
+#include <QPushButton>
+#include <QScreen>
+#include <QVBoxLayout>
 
 namespace {
 
@@ -155,6 +165,95 @@ void Android::releaseScreenLock()
     if (activity.isValid()) {
         activity.callMethod<void>("releaseScreenLock");
     }
+}
+
+QString Android::getPendingNativeCrashReport()
+{
+    const QJniObject activity = androidActivity();
+    if (!activity.isValid()) {
+        return QString();
+    }
+
+    const QJniObject report = activity.callObjectMethod(
+        "getPendingNativeCrashReport", "()Ljava/lang/String;");
+    return report.isValid() ? report.toString() : QString();
+}
+
+QString Android::getPendingNativeCrashReportId()
+{
+    const QJniObject activity = androidActivity();
+    if (!activity.isValid()) {
+        return QString();
+    }
+
+    const QJniObject reportId = activity.callObjectMethod(
+        "getPendingNativeCrashReportId", "()Ljava/lang/String;");
+    return reportId.isValid() ? reportId.toString() : QString();
+}
+
+void Android::acknowledgeNativeCrashReport(const QString& reportId)
+{
+    const QJniObject activity = androidActivity();
+    if (!activity.isValid() || reportId.isEmpty()) {
+        return;
+    }
+
+    const QJniObject javaReportId = QJniObject::fromString(reportId);
+    activity.callMethod<void>(
+        "acknowledgeNativeCrashReport", "(Ljava/lang/String;)V", javaReportId.object<jstring>());
+}
+
+void Android::showPendingAndroidCrashReport()
+{
+    const QString report = getPendingNativeCrashReport();
+    const QString reportId = getPendingNativeCrashReportId();
+    if (report.isEmpty() || reportId.isEmpty()) {
+        return;
+    }
+
+    QDialog dialog;
+    dialog.setWindowTitle(QStringLiteral("Previous SDRangel crash"));
+
+    QVBoxLayout *layout = new QVBoxLayout(&dialog);
+    QLabel *description = new QLabel(
+        QStringLiteral("SDRangel ended because of a native crash during its previous run. "
+                       "The information below may help diagnose the problem."), &dialog);
+    description->setWordWrap(true);
+    layout->addWidget(description);
+
+    QPlainTextEdit *reportText = new QPlainTextEdit(&dialog);
+    reportText->setReadOnly(true);
+    reportText->setLineWrapMode(QPlainTextEdit::NoWrap);
+    reportText->setFont(QFontDatabase::systemFont(QFontDatabase::FixedFont));
+    reportText->setPlainText(report);
+    layout->addWidget(reportText, 1);
+
+    QDialogButtonBox *buttons = new QDialogButtonBox(QDialogButtonBox::Close, &dialog);
+    QPushButton *copyButton = buttons->addButton(
+        QStringLiteral("Copy to clipboard"), QDialogButtonBox::ActionRole);
+    QObject::connect(copyButton, &QPushButton::clicked, [report]() {
+        if (QGuiApplication::clipboard()) {
+            QGuiApplication::clipboard()->setText(report);
+        }
+    });
+    QObject::connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    layout->addWidget(buttons);
+
+    QScreen *screen = QGuiApplication::primaryScreen();
+    QSize dialogSize(900, 600);
+    if (screen)
+    {
+        const QRect available = screen->availableGeometry();
+        dialogSize = dialogSize.boundedTo(available.size());
+        dialog.resize(dialogSize);
+        dialog.move(available.center() - dialog.rect().center());
+    }
+    else {
+        dialog.resize(dialogSize);
+    }
+
+    dialog.exec();
+    acknowledgeNativeCrashReport(reportId);
 }
 
 void Android::selectDocumentTree(const std::function<void(const QString&)>& callback)
@@ -418,6 +517,25 @@ void Android::releaseScreenLock()
     if (activity.isValid()) {
         activity.callMethod<void>("releaseScreenLock");
     }
+}
+
+QString Android::getPendingNativeCrashReport()
+{
+    return QString();
+}
+
+QString Android::getPendingNativeCrashReportId()
+{
+    return QString();
+}
+
+void Android::acknowledgeNativeCrashReport(const QString& reportId)
+{
+    (void) reportId;
+}
+
+void Android::showPendingAndroidCrashReport()
+{
 }
 
 void Android::selectDocumentTree(const std::function<void(const QString&)>& callback)

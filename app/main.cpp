@@ -183,6 +183,10 @@ static int runQtApplication(int argc, char* argv[], qtwebapp::LoggerWithFile *lo
 
     SDRangelApplication a(argc, argv);
 
+#if defined(ANDROID) && (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
+    Android::showPendingAndroidCrashReport();
+#endif
+
 #if 1
     qApp->setStyle(QStyleFactory::create("fusion"));
 

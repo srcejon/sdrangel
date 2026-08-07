@@ -54,6 +54,8 @@ public class SDRangelActivity extends QtActivity
     int m_fd;
 
     private WakeLock m_wakeLock;
+    private boolean m_nativeCrashReportChecked;
+    private NativeCrashReport.Result m_pendingNativeCrashReport;
     
     public SDRangelActivity()
     {
@@ -67,6 +69,7 @@ public class SDRangelActivity extends QtActivity
     public void onCreate(Bundle savedInstanceState) 
     {
         super.onCreate(savedInstanceState);
+        ensureNativeCrashReportLoaded();
         try {
             m_manager = (UsbManager) getSystemService(Context.USB_SERVICE);
             Intent permissionIntent = new Intent(ACTION_USB_PERMISSION);
@@ -85,6 +88,36 @@ public class SDRangelActivity extends QtActivity
         } catch (Exception e) {
              Log.e(TAG, "SDRangelActivity::onCreate: Exception " + e.toString());
         }        
+    }
+
+    private synchronized void ensureNativeCrashReportLoaded()
+    {
+        if (!m_nativeCrashReportChecked)
+        {
+            m_nativeCrashReportChecked = true;
+            m_pendingNativeCrashReport = NativeCrashReport.load(this);
+        }
+    }
+
+    public synchronized String getPendingNativeCrashReport()
+    {
+        ensureNativeCrashReportLoaded();
+        return m_pendingNativeCrashReport == null ? "" : m_pendingNativeCrashReport.m_text;
+    }
+
+    public synchronized String getPendingNativeCrashReportId()
+    {
+        ensureNativeCrashReportLoaded();
+        return m_pendingNativeCrashReport == null ? "" : m_pendingNativeCrashReport.m_id;
+    }
+
+    public synchronized void acknowledgeNativeCrashReport(String reportId)
+    {
+        if ((m_pendingNativeCrashReport != null) && m_pendingNativeCrashReport.m_id.equals(reportId))
+        {
+            NativeCrashReport.acknowledge(this, reportId);
+            m_pendingNativeCrashReport = null;
+        }
     }
 
     @Override

@@ -698,7 +698,7 @@ if(ANDROID AND NOT ENABLE_QT6)
     target_link_libraries(sdrbase Qt::AndroidExtras)
 endif()
 if(ANDROID)
-    target_link_libraries(sdrbase log)
+    target_link_libraries(sdrbase Qt::Widgets log)
 endif()
 
 target_compile_definitions(sdrbase PRIVATE

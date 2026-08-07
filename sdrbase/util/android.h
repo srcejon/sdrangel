@@ -45,6 +45,10 @@ public:
     static void releaseWakeLock();
     static void acquireScreenLock();
     static void releaseScreenLock();
+    static QString getPendingNativeCrashReport();
+    static QString getPendingNativeCrashReportId();
+    static void acknowledgeNativeCrashReport(const QString& reportId);
+    static void showPendingAndroidCrashReport();
     static void selectDocumentTree(const std::function<void(const QString&)>& callback);
     static bool copyFileToDocumentTree(const QString& sourceFileName,
                                        const QString& treeUri,

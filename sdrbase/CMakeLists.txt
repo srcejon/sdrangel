@@ -261,6 +261,7 @@ set(sdrbase_SOURCES
     util/ourairportsdb.cpp
     util/peakfinder.cpp
     util/planespotters.cpp
+    util/vesselfinder.cpp
     util/png.cpp
     util/prettyprint.cpp
     util/profiler.cpp
@@ -417,6 +418,7 @@ set(sdrbase_HEADERS
     dsp/kissengine.h
     dsp/firfilter.h
     dsp/gaussian.h
+    dsp/gmskmlse.h
     dsp/mimochannel.h
     dsp/misc.h
     dsp/movingaverage.h
@@ -533,6 +535,7 @@ set(sdrbase_HEADERS
     util/outairportsdb.h
     util/peakfinder.h
     util/planespotters.h
+    util/vesselfinder.h
     util/png.h
     util/prettyprint.h
     util/profiler.h

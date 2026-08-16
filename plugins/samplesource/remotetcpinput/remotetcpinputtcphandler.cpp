@@ -2349,6 +2349,7 @@ void RemoteTCPInputTCPHandler::processUncompressedData(const char *inBuf, int nb
     else // invalid size
     {
         qWarning("RemoteTCPInputTCPHandler::convert: unexpected sample size in stream: %d bits", (int) m_settings.m_sampleBits);
+        return;
     }
 
     qint32 len = nbSamples*2;

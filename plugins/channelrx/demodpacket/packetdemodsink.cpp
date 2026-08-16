@@ -239,7 +239,7 @@ bool PacketDemodSink::sendPacket(const QByteArray& packet, quint64 stamp)
     MainCore::MsgPacket *msg = MainCore::MsgPacket::create(m_packetDemod, packet, dateTime);
     getMessageQueueToChannel()->push(msg);
 
-    sendEvent(dateTime, rxPacket);
+    sendEvent(dateTime, packet);
 
     return true;
 }

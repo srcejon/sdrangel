@@ -4331,7 +4331,7 @@ void ADSBDemodGUI::decodeCommB(const QByteArray data, const QDateTime dateTime, 
                     }
                 }
                 if (verticalRateValid_0_9) {
-                    aircraft->setVerticalRate(verticalRate, m_settings);
+                    aircraft->setVerticalRate(verticalRate, dateTime, m_settings);
                 }
             }
             if (bds_1_7)

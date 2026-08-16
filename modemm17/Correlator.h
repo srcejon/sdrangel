@@ -135,6 +135,7 @@ struct SyncWord
         float magnitude_2 = std::numeric_limits<float>::lowest()
     ) :
         sync_word_(std::move(sync_word)),
+        samples_{},
         magnitude_1_(magnitude_1),
         magnitude_2_(magnitude_2)
 	{}

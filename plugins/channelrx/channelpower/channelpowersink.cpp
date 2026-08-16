@@ -21,6 +21,7 @@
 #include "channelpowersink.h"
 
 ChannelPowerSink::ChannelPowerSink() :
+        m_channel(nullptr),
         m_channelSampleRate(10000),
         m_channelFrequencyOffset(0),
         m_lowpassFFT(nullptr),

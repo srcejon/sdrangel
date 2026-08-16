@@ -451,7 +451,7 @@ void MeshtasticModGUI::on_bw_valueChanged(int value)
         m_settings.m_bandwidthIndex = MeshtasticModSettings::nbBandwidths - 1;
     }
 
-	int thisBW = MeshtasticModSettings::bandwidths[value];
+	int thisBW = MeshtasticModSettings::bandwidths[m_settings.m_bandwidthIndex];
 	ui->bwText->setText(QString("%1 Hz").arg(thisBW));
 	m_channelMarker.setBandwidth(thisBW);
 

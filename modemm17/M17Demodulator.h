@@ -49,7 +49,6 @@ struct MODEMM17_API M17Demodulator
 	SyncWord packet_sync{  {+3, -3, +3, +3, -3, -3, -3, -3}, 31.f, -31.f};	// PACKET or BERT (inverted)
 
 	FreqDevEstimator dev;
-	float idev;
 	size_t count_ = 0;
 
 	int8_t polarity = 1;

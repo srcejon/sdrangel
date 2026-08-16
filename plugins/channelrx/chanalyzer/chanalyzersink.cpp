@@ -41,6 +41,7 @@ ChannelAnalyzerSink::RRCHelper::RRCHelper(int flen) :
 ChannelAnalyzerSink::RRCHelper::~RRCHelper()
 {
     delete m_filterFIR;
+    delete m_filterFFT;
     delete[] m_buffer;
 }
 

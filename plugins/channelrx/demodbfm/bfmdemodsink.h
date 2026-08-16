@@ -147,7 +147,7 @@ private:
     MagSqLevelsStore m_magSqLevelStore;
 
 	RDSPhaseLock m_pilotPLL;
-	Real m_pilotPLLSamples[4];
+	Real m_pilotPLLSamples[4]{};
 
 	RDSDemod m_rdsDemod;
 	RDSDecoder m_rdsDecoder;

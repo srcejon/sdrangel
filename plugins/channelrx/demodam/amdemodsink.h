@@ -119,7 +119,7 @@ private:
     PhaseLockComplex m_pll;
     fftfilt* DSBFilter;
     fftfilt* SSBFilter;
-    Real m_syncAMBuff[2*1024];
+    Real m_syncAMBuff[2*1024]{};
     uint32_t m_syncAMBuffIndex;
     MagAGC m_syncAMAGC;
 

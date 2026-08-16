@@ -74,6 +74,7 @@ public:
     ViStatus (*viFindNext) (ViSession vi, ViChar desc[]);
 
     VISA();
+    ~VISA();
 
     ViSession openDefault();
     void closeDefault();
@@ -100,6 +101,7 @@ protected:
 
     void *libraryOpen(const char *filename);
     void *libraryFunc(void *library, const char *function);
+    void libraryClose(void *library);
 };
 
 #endif // INCLUDE_VISA_H

@@ -154,7 +154,7 @@ private:
     std::vector<Real> m_mlseSoft;       // Viterbi output, including the warm up symbols
     std::vector<Real> m_symSoft;        // Symbol decisions handed to the deframer
 
-    unsigned char m_bytes[AISDEMOD_MAX_BYTES];
+    unsigned char m_bytes[AISDEMOD_MAX_BYTES]{};
     crc16x25 m_crc;
 
     QVector<qint16> m_demodBuffer;

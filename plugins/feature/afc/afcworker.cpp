@@ -297,16 +297,18 @@ void AFCWorker::processChannelSettings(
                 m_trackerChannelOffset = trackerChannelOffset;
                 QMap<ChannelAPI*, ChannelTracking>::iterator it = m_channelsMap.begin();
 
-                for (; it != m_channelsMap.end(); ++it)
+                for (; it != m_channelsMap.end();)
                 {
                     if (mainCore->existsChannel(it.key()))
                     {
                         int channelOffset = it.value().m_channelOffset + trackerChannelOffset - it.value().m_trackerOffset;
                         updateChannelOffset(it.key(), it.value().m_channelDirection, channelOffset);
+                        ++it;
                     }
                     else
                     {
-                        m_channelsMap.erase(it);
+                        // erase() invalidates the current iterator and returns the next valid one.
+                        it = m_channelsMap.erase(it);
                     }
                 }
             }

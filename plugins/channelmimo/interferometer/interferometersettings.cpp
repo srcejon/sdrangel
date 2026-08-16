@@ -47,6 +47,7 @@ void InterferometerSettings::resetToDefaults()
     m_reverseAPIPort = 8888;
     m_reverseAPIDeviceIndex = 0;
     m_reverseAPIChannelIndex = 0;
+    m_useReverseAPI = false;
     m_workspaceIndex = 0;
     m_hidden = false;
 }

@@ -84,6 +84,12 @@ public:
     {
         update(mapItem);
     }
+
+    ~ObjectMapItem()
+    {
+        delete m_aircraftState;
+    }
+
     void update(SWGSDRangel::SWGMapItem *mapItem) override;
 
 protected:

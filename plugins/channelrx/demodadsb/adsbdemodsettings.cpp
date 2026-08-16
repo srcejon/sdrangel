@@ -424,9 +424,10 @@ void ADSBDemodSettings::deserializeNotificationSettings(const QByteArray& data, 
     delete stream;
 }
 
-ADSBDemodSettings::NotificationSettings::NotificationSettings()
+ADSBDemodSettings::NotificationSettings::NotificationSettings() :
+    m_matchColumn(0),
+    m_autoTarget(false)
 {
-    m_matchColumn = 0;
 }
 
 void ADSBDemodSettings::NotificationSettings::updateRegularExpression()

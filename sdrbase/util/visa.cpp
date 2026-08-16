@@ -33,6 +33,9 @@ VISA::VISA() :
     viClose(nullptr),
     viPrintf(nullptr),
     viScanf(nullptr),
+    viFindRsrc(nullptr),
+    viFindNext(nullptr),
+    visaLibrary(nullptr),
     m_available(false)
 {
 #ifdef _MSC_VER
@@ -59,6 +62,14 @@ VISA::VISA() :
     else
     {
         qDebug() << "VISA::VISA: Unable to load " << visaName;
+    }
+}
+
+VISA::~VISA()
+{
+    if (visaLibrary && (m_defaultRM == 0)) {
+        libraryClose(visaLibrary);
+        visaLibrary = nullptr;
     }
 }
 
@@ -267,6 +278,11 @@ void *VISA::libraryFunc(void *library, const char *function)
     return GetProcAddress ((HMODULE)library, function);
 }
 
+void VISA::libraryClose(void *library)
+{
+    FreeLibrary((HMODULE)library);
+}
+
 #else
 
 void *VISA::libraryOpen(const char *filename)
@@ -277,6 +293,11 @@ void *VISA::libraryOpen(const char *filename)
 void *VISA::libraryFunc(void *library, const char *function)
 {
     return dlsym (library, function);
+}
+
+void VISA::libraryClose(void *library)
+{
+    dlclose(library);
 }
 
 #endif

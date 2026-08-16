@@ -163,7 +163,7 @@ void ChirpChatModGUI::on_bw_valueChanged(int value)
         m_settings.m_bandwidthIndex = ChirpChatModSettings::nbBandwidths - 1;
     }
 
-	int thisBW = ChirpChatModSettings::bandwidths[value];
+	int thisBW = ChirpChatModSettings::bandwidths[m_settings.m_bandwidthIndex];
 	ui->bwText->setText(QString("%1 Hz").arg(thisBW));
 	m_channelMarker.setBandwidth(thisBW);
 

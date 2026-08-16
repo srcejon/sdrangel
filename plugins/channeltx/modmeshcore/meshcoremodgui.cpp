@@ -462,7 +462,7 @@ void MeshcoreModGUI::on_bw_valueChanged(int value)
         m_settings.m_bandwidthIndex = MeshcoreModSettings::nbBandwidths - 1;
     }
 
-	int thisBW = MeshcoreModSettings::bandwidths[value];
+	int thisBW = MeshcoreModSettings::bandwidths[m_settings.m_bandwidthIndex];
 	ui->bwText->setText(QString("%1 Hz").arg(thisBW));
 	m_channelMarker.setBandwidth(thisBW);
 

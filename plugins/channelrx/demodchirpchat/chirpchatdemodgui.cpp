@@ -188,7 +188,7 @@ void ChirpChatDemodGUI::on_BW_valueChanged(int value)
         m_settings.m_bandwidthIndex = ChirpChatDemodSettings::nbBandwidths - 1;
     }
 
-	int thisBW = ChirpChatDemodSettings::bandwidths[value];
+	int thisBW = ChirpChatDemodSettings::bandwidths[m_settings.m_bandwidthIndex];
 	ui->BWText->setText(QString("%1 Hz").arg(thisBW));
 	m_channelMarker.setBandwidth(thisBW);
 	ui->glSpectrum->setSampleRate(thisBW);

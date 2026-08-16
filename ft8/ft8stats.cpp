@@ -28,6 +28,9 @@ namespace FT8 {
 Stats::Stats(int how, float log_tail, float log_rate) :
     sum_(0),
     finalized_(false),
+    mean_(0),
+    stddev_(0),
+    b_(0),
     how_(how),
     log_tail_(log_tail),
     log_rate_(log_rate)

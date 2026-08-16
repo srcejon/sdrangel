@@ -42,6 +42,16 @@ RadioAstronomyWorker::RadioAstronomyWorker(RadioAstronomy* radioAstronomy) :
 RadioAstronomyWorker::~RadioAstronomyWorker()
 {
     m_inputMessageQueue.clear();
+
+    for (int i = 0; i < RADIOASTRONOMY_SENSORS; i++)
+    {
+        if (m_session[i] != VI_NULL)
+        {
+            m_visa.close(m_session[i]);
+            m_session[i] = VI_NULL;
+        }
+    }
+
     m_visa.closeDefault();
 }
 

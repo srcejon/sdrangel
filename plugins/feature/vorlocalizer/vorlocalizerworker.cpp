@@ -752,5 +752,7 @@ void VorLocalizerWorker::rrNextTurn()
 
     if (m_msgQueueToFeature) {
         m_msgQueueToFeature->push(msg);
+    } else {
+        delete msg;
     }
 }

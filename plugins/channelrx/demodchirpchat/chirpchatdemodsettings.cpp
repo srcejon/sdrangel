@@ -59,7 +59,8 @@ const int ChirpChatDemodSettings::oversampling = 2;
 ChirpChatDemodSettings::ChirpChatDemodSettings() :
     m_inputFrequencyOffset(0),
     m_channelMarker(0),
-    m_spectrumGUI(0)
+    m_spectrumGUI(0),
+    m_rollupState(nullptr)
 {
     resetToDefaults();
 }
@@ -74,6 +75,7 @@ void ChirpChatDemodSettings::resetToDefaults()
     m_fftWindow = FFTWindow::Rectangle;
     m_eomSquelchTenths = 60;
     m_nbSymbolsMax = 255;
+    m_autoNbSymbolsMax = false;
     m_preambleChirps = 8;
     m_packetLength = 32;
     m_nbParityBits = 1;

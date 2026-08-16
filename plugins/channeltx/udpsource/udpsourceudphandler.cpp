@@ -223,9 +223,11 @@ void UDPSourceUDPHandler::advanceReadPointer(int nbBytes)
                 float dd = d - m_d; // derivative
                 float c = (d / 15.0) + (dd / 20.0); // damping and scaling
                 c = c < -0.05 ? -0.05 : c > 0.05 ? 0.05 : c; // limit
-                UDPSourceMessages::MsgSampleRateCorrection *msg = UDPSourceMessages::MsgSampleRateCorrection::create(c, d);
 
                 if (m_autoRWBalance && m_feedbackMessageQueue) {
+                    // create and immediately transfer ownership to queue
+                    UDPSourceMessages::MsgSampleRateCorrection *msg =
+                            UDPSourceMessages::MsgSampleRateCorrection::create(c, d);
                     m_feedbackMessageQueue->push(msg);
                 }
 

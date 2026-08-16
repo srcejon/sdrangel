@@ -23,6 +23,7 @@
 #include "beamsteeringcwmodstreamsource.h"
 
 BeamSteeringCWModStreamSource::BeamSteeringCWModStreamSource() :
+    m_streamIndex(0),
     m_amp(SDR_TX_SCALEF/sqrt(2.0f)),
     m_phase(0)
 {

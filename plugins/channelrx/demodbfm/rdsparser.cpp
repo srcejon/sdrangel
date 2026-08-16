@@ -232,7 +232,8 @@ const std::string RDSParser::label_descriptions[16] = {
 	"RFU (Reserved for future use)"
 };
 
-RDSParser::RDSParser()
+RDSParser::RDSParser():
+    m_radiotext_AB_flag(false)
 {
 	clearAllFields();
 }

@@ -111,7 +111,8 @@ struct Viterbi
     state_transition_t nextState_;
     state_transition_t prevState_;
 
-    metrics_t prevMetrics, currMetrics;
+    metrics_t prevMetrics{};
+    metrics_t currMetrics{};
 
     // This is the maximum amount of storage needed for M17.  If used for
     // other modes, this may need to be increased.  This will never overflow

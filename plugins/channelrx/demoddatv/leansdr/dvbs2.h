@@ -2979,6 +2979,16 @@ struct s2_fecdec : runnable
         }
     }
 
+    ~s2_fecdec()
+    {
+        if (bitcount) {
+            delete bitcount;
+        }
+        if (errcount) {
+            delete errcount;
+        }
+    }
+
     void run()
     {
         while (in.readable() >= 1 && out.writable() >= 1 &&
@@ -3292,6 +3302,12 @@ struct s2_fecdec_helper : runnable
     {
         free(command);
         killall(); // also deletes pools[mc][sf].procs if necessary
+        if (bitcount) {
+            delete bitcount;
+        }
+        if (errcount) {
+            delete errcount;
+        }
     }
 
     void run()
@@ -4062,6 +4078,16 @@ struct s2_deframer : runnable
         locktime(0),
         locktime_out(opt_writer(_locktime_out, MAX_TS_PER_BBFRAME))
     {
+    }
+
+    ~s2_deframer()
+    {
+        if (state_out) {
+            delete state_out;
+        }
+        if (locktime_out) {
+            delete locktime_out;
+        }
     }
 
     void run()

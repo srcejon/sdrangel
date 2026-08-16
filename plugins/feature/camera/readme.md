@@ -777,7 +777,7 @@ Selects which constellation major stars to overlay (Ursa Major, Orion or Crux), 
 
 <h4>7. Min elevation</h4>
 
-Sets the lowest elevation in degrees for tracked-object overlays.
+Sets the lowest elevation in degrees for tracked-object overlays. Negative values can be used for distant ground or sea-level objects that lie slightly below the geometric horizon.
 
 <h4>8. Track object font / colour</h4>
 
@@ -953,7 +953,7 @@ Selects the bounding box colour for detections.
 
 Selects the inference target: OpenCV CPU, OpenCV CUDA, OpenCV CUDA FP16, TensorRT, TensorRT FP16, OpenCV Vulkan, LiteRT CPU or LiteRT GPU, depending on what is available. ONNX models use OpenCV or TensorRT. On Android, `.tflite` models use LiteRT and never pass through OpenCV; LiteRT GPU uses the Android GPU delegate and falls back to LiteRT CPU if the device or model is not supported by that delegate. Vulkan is offered on Android when OpenCV reports the VKCOM/Vulkan backend.
 
-Android LiteRT support is optional at build time. Configure with `ENABLE_CAMERA_LITERT=ON`, set `LITERT_ROOT` to an extracted Android LiteRT runtime AAR and set `LITERT_GPU_ROOT` to an extracted Android LiteRT GPU AAR. The runtime package must provide `headers/tflite/c/c_api.h` and its LiteRT/TensorFlow Lite C runtime, while the GPU package must provide `headers/tflite/delegates/gpu/delegate.h` and its GPU delegate. Alternatively, set `LITERT_INCLUDE_DIR`, `LITERT_GPU_INCLUDE_DIR`, `LITERT_LIBRARY` and `LITERT_GPU_DELEGATE_LIBRARY` explicitly. Shared libraries are added to the Android package automatically. Models must have one fixed NHWC input shaped `[1, height, width, 3]`. Float32, uint8 and int8 input/output tensors are supported.
+Android LiteRT support is optional at build time. Configure with `ENABLE_CAMERA_LITERT=ON` and set `LITERT_ROOT` to an extracted LiteRT 2.1 SDK package containing `litert_cc_sdk`, `lib/<ABI>/libLiteRt.so` and `lib/<ABI>/libLiteRtClGlAccelerator.so`. Alternatively, set `LITERT_COMPILED_MODEL_INCLUDE_DIR`, `LITERT_RUNTIME_LIBRARY` and `LITERT_GPU_ACCELERATOR_LIBRARY` explicitly. The camera uses LiteRT's CompiledModel C API, and the required shared libraries are added to the Android package automatically. Models must have one fixed NHWC input shaped `[1, height, width, 3]`. Float32, uint8 and int8 input/output tensors are supported.
 
 <h4>7. Input mode</h4>
 

@@ -1609,7 +1609,7 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readBool(239, &m_trackObjectHeatMap, false);
         d.readBool(275, &m_trackObjectRange, false);
         d.readDouble(157, &m_trackObjectMinElevation, 0.0);
-        m_trackObjectMinElevation = qBound(m_minNormalized, m_trackObjectMinElevation, static_cast<double>(m_maxElevation));
+        m_trackObjectMinElevation = qBound(static_cast<double>(m_minElevation), m_trackObjectMinElevation, static_cast<double>(m_maxElevation));
         d.readDouble(279, &m_trackObjectMaxRangeKm, 0.0);
         m_trackObjectMaxRangeKm = std::max(0.0, m_trackObjectMaxRangeKm);
         qint32 trackObjectLabelDisplay = static_cast<qint32>(TrackObjectLabelAlways);
@@ -3051,7 +3051,7 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
         m_trackObjectRange = settings.m_trackObjectRange;
     }
     if (settingsKeys.contains("trackObjectMinElevation")) {
-        m_trackObjectMinElevation = qBound(m_minNormalized, settings.m_trackObjectMinElevation, static_cast<double>(m_maxElevation));
+        m_trackObjectMinElevation = qBound(static_cast<double>(m_minElevation), settings.m_trackObjectMinElevation, static_cast<double>(m_maxElevation));
     }
     if (settingsKeys.contains("trackObjectMaxRangeKm")) {
         m_trackObjectMaxRangeKm = std::max(0.0, settings.m_trackObjectMaxRangeKm);

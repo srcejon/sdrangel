@@ -903,7 +903,9 @@ static void appendOutlinedPreviewTextLabel(QVector<CameraPostProcessor::PreviewT
                                            const QPointF& point,
                                            const QColor& color,
                                            const QString& fontFamily,
-                                           double fontPointSize)
+                                           double fontPointSize,
+                                           const QString& interactionId = QString(),
+                                           const QString& alternateText = QString())
 {
     if (!labels || text.isEmpty()) {
         return;
@@ -911,6 +913,8 @@ static void appendOutlinedPreviewTextLabel(QVector<CameraPostProcessor::PreviewT
 
     CameraPostProcessor::PreviewTextLabel label;
     label.m_text = text;
+    label.m_alternateText = alternateText;
+    label.m_interactionId = interactionId;
     label.m_position = point;
     label.m_color = color;
     label.m_fontFamily = fontFamily;
@@ -1579,6 +1583,13 @@ void CameraPostProcessor::updateTrackedMapObject(const QObject* pipeSource, SWGS
             ? swgMapItem->getLabel()->trimmed()
             : name;
         object.m_label = object.m_label.replace("<br>", "\n");
+        object.m_text.clear();
+        if (swgMapItem->getText() && !swgMapItem->getText()->trimmed().isEmpty())
+        {
+            QTextDocument textDocument;
+            textDocument.setHtml(swgMapItem->getText()->trimmed());
+            object.m_text = textDocument.toPlainText().trimmed();
+        }
         object.m_latitude = swgMapItem->getLatitude();
         object.m_longitude = swgMapItem->getLongitude();
         object.m_altitude = swgMapItem->getAltitude();
@@ -3627,8 +3638,13 @@ void CameraPostProcessor::applyTrackedObjectOverlay(const CameraPipelineFrame& f
         if (labelVisible(point))
         {
             QString label = object.m_label;
+            QString alternateText = object.m_text;
             if (m_settings.m_trackObjectRange && std::isfinite(azEl.getDistance())) {
-                label += QStringLiteral("\n%1 km").arg(azEl.getDistance() / 1000.0, 0, 'f', 1);
+                const QString range = QStringLiteral("%1 km").arg(azEl.getDistance() / 1000.0, 0, 'f', 1);
+                label += QStringLiteral("\n") + range;
+                if (!alternateText.isEmpty()) {
+                    alternateText += QStringLiteral("\n") + range;
+                }
             }
 
             if (drawLabels) {
@@ -3640,7 +3656,9 @@ void CameraPostProcessor::applyTrackedObjectOverlay(const CameraPipelineFrame& f
                     point,
                     m_settings.m_trackObjectColor,
                     font.family(),
-                    font.pointSizeF());
+                    font.pointSizeF(),
+                    it.key(),
+                    alternateText);
             }
         }
     }

@@ -6399,7 +6399,7 @@ car</string>
                  <number>1</number>
                 </property>
                 <property name="minimum">
-                 <double>0.000000000000000</double>
+                 <double>-90.000000000000000</double>
                 </property>
                 <property name="maximum">
                  <double>90.000000000000000</double>

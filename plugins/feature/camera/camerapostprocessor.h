@@ -55,6 +55,8 @@ public:
     struct PreviewTextLabel
     {
         QString m_text;
+        QString m_alternateText;
+        QString m_interactionId;
         QPointF m_position;
         QColor m_color;
         QString m_fontFamily;
@@ -363,6 +365,7 @@ private:
 
         QString m_name;
         QString m_label;
+        QString m_text;
         double m_latitude = 0.0;
         double m_longitude = 0.0;
         double m_altitude = 0.0;

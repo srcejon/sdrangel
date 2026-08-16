@@ -292,6 +292,7 @@ private:
     QVector<CameraPipelineStarDetection> m_lastStarDetections;
     CameraPipelineThermal m_lastThermal;
     QVector<CameraPostProcessor::PreviewTextLabel> m_lastPreviewTextLabels;
+    QSet<QString> m_trackedObjectTextExpanded;
     QVector<CameraPostProcessor::PreviewRectItem> m_lastPreviewRectItems;
     QVector<CameraPostProcessor::WindowOverlayFrame> m_lastPreviewImageOverlays;
     qint64 m_previewPreRecordOffsetMs = 0;
@@ -521,6 +522,7 @@ private:
     void sendDisplayedFrameEvents(const QVector<QRect>& motionBoxes, const QVector<CameraPipelineDetection>& detections, const QVector<CameraPipelineMeteorPhotometry>& meteorPhotometry, const QVector<CameraPipelineTrackedObject>& trackedObjects, const QSize& imageSize, const QDateTime& captureDateTime);
     void updatePreviewOverlayItems();
     void clearPreviewOverlayItems();
+    bool toggleTrackedObjectTextAtViewportPoint(const QPoint& viewportPos);
     void updateCaptureModeControls();
     void updateCaptureIntervalWarning();
     void updateExposureControls();

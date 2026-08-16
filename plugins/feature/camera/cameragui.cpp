@@ -161,6 +161,8 @@
 
 namespace {
 
+constexpr int kTrackedObjectInteractionIdRole = 1;
+
 class CameraDrawingGraphicsItem : public QGraphicsItem
 {
 public:
@@ -3788,7 +3790,11 @@ void CameraGUI::updatePreviewOverlayItems()
 
     for (const CameraPostProcessor::PreviewTextLabel& previewLabel : m_lastPreviewTextLabels)
     {
-        if (previewLabel.m_text.isEmpty()) {
+        const bool showAlternate = !previewLabel.m_interactionId.isEmpty()
+            && !previewLabel.m_alternateText.isEmpty()
+            && m_trackedObjectTextExpanded.contains(previewLabel.m_interactionId);
+        const QString& displayText = showAlternate ? previewLabel.m_alternateText : previewLabel.m_text;
+        if (displayText.isEmpty()) {
             continue;
         }
 
@@ -3798,7 +3804,7 @@ void CameraGUI::updatePreviewOverlayItems()
         }
         font.setPointSizeF(std::max(4.0, previewLabel.m_fontPointSize));
         const QFontMetrics fontMetrics(font);
-        const QStringList lines = previewLabel.m_text.split(QChar('\n'));
+        const QStringList lines = displayText.split(QChar('\n'));
         int textWidth = 0;
         for (const QString& line : lines) {
             textWidth = std::max(textWidth, fontMetrics.horizontalAdvance(line));
@@ -3836,6 +3842,17 @@ void CameraGUI::updatePreviewOverlayItems()
             ? QPointF(targetRect.left() + 3.0, targetRect.top() + 2.0)
             : targetRect.topLeft();
 
+        if (!previewLabel.m_interactionId.isEmpty() && !previewLabel.m_alternateText.isEmpty())
+        {
+            QGraphicsRectItem *hitItem = m_imageScene->addRect(
+                targetRect.adjusted(-3, -3, 3, 3),
+                QPen(Qt::NoPen),
+                QBrush(QColor(0, 0, 0, 0)));
+            hitItem->setData(kTrackedObjectInteractionIdRole, previewLabel.m_interactionId);
+            hitItem->setZValue(1.65);
+            m_previewOverlayItems.append(hitItem);
+        }
+
         if (previewLabel.m_background)
         {
             QGraphicsRectItem *backgroundItem = m_imageScene->addRect(
@@ -3847,7 +3864,7 @@ void CameraGUI::updatePreviewOverlayItems()
         }
         else
         {
-            QGraphicsSimpleTextItem *shadowItem = m_imageScene->addSimpleText(previewLabel.m_text, font);
+            QGraphicsSimpleTextItem *shadowItem = m_imageScene->addSimpleText(displayText, font);
             // Small thermal labels otherwise have an overly prominent one-pixel shadow.
             const double shadowOffset = qBound(0.4, previewLabel.m_fontPointSize / 9.0, 1.0);
             shadowItem->setPos(textPos + QPointF(shadowOffset, shadowOffset));
@@ -3856,12 +3873,43 @@ void CameraGUI::updatePreviewOverlayItems()
             m_previewOverlayItems.append(shadowItem);
         }
 
-        QGraphicsSimpleTextItem *item = m_imageScene->addSimpleText(previewLabel.m_text, font);
+        QGraphicsSimpleTextItem *item = m_imageScene->addSimpleText(displayText, font);
         item->setPos(textPos);
         item->setBrush(QBrush(previewLabel.m_color));
         item->setZValue(1.6);
         m_previewOverlayItems.append(item);
     }
+}
+
+bool CameraGUI::toggleTrackedObjectTextAtViewportPoint(const QPoint& viewportPos)
+{
+    if (!m_imageScene) {
+        return false;
+    }
+
+    const QPointF scenePoint = ui->imageView->mapToScene(viewportPos);
+    const QList<QGraphicsItem *> items = m_imageScene->items(
+        scenePoint,
+        Qt::IntersectsItemShape,
+        Qt::DescendingOrder);
+
+    for (QGraphicsItem *item : items)
+    {
+        const QString interactionId = item->data(kTrackedObjectInteractionIdRole).toString();
+        if (interactionId.isEmpty()) {
+            continue;
+        }
+
+        if (m_trackedObjectTextExpanded.contains(interactionId)) {
+            m_trackedObjectTextExpanded.remove(interactionId);
+        } else {
+            m_trackedObjectTextExpanded.insert(interactionId);
+        }
+        updatePreviewOverlayItems();
+        return true;
+    }
+
+    return false;
 }
 
 void CameraGUI::makeUIConnections()
@@ -12911,6 +12959,16 @@ bool CameraGUI::eventFilter(QObject *watched, QEvent *event)
                 updateThermalMarkerFromViewport(mouseEvent->pos());
                 m_thermalMarkerDragging = false;
                 ui->imageView->viewport()->unsetCursor();
+                return true;
+            }
+        }
+
+        if ((m_previewDrawMode == PreviewDrawModeNone) && (event->type() == QEvent::MouseButtonPress))
+        {
+            const QMouseEvent *mouseEvent = static_cast<QMouseEvent*>(event);
+            if ((mouseEvent->button() == Qt::LeftButton)
+                && toggleTrackedObjectTextAtViewportPoint(mouseEvent->pos()))
+            {
                 return true;
             }
         }

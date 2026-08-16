@@ -3451,9 +3451,9 @@ void CameraPostProcessor::applyTrackedObjectOverlay(const CameraPipelineFrame& f
         return false;
     };
 
-    auto projectTrackPoint = [this, &projector, &rangeAllowed](const TrackedMapObject::TrackPoint& trackPoint, QPointF& imagePoint) -> bool {
+    auto projectTrackPoint = [this, &projectionSettings, &projector, &rangeAllowed](const TrackedMapObject::TrackPoint& trackPoint, QPointF& imagePoint) -> bool {
         AzEl trackAzEl;
-        trackAzEl.setLocation(m_settings.m_latitude, m_settings.m_longitude, m_settings.m_altitude);
+        trackAzEl.setLocation(projectionSettings.m_latitude, projectionSettings.m_longitude, projectionSettings.m_altitude);
         trackAzEl.setTarget(trackPoint.m_latitude, trackPoint.m_longitude, trackPoint.m_altitude);
         trackAzEl.calculate();
         return std::isfinite(trackAzEl.getAzimuth())
@@ -3576,7 +3576,7 @@ void CameraPostProcessor::applyTrackedObjectOverlay(const CameraPipelineFrame& f
         }
 
         AzEl azEl;
-        azEl.setLocation(m_settings.m_latitude, m_settings.m_longitude, m_settings.m_altitude);
+        azEl.setLocation(projectionSettings.m_latitude, projectionSettings.m_longitude, projectionSettings.m_altitude);
         azEl.setTarget(object.m_latitude, object.m_longitude, object.m_altitude);
         azEl.calculate();
         if (!std::isfinite(azEl.getAzimuth())

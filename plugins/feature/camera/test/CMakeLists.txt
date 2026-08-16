@@ -146,6 +146,7 @@ set(camera_cloud_tests_SOURCES
     ../cameradetector.cpp
     ../cameraimageutils.cpp
     ../cameraimagepool.cpp
+    ../cameramediametadata.cpp
     ../cameraclearskyreference.cpp
     ../cameraclouddetector.cpp
     ../cameramotiondetector.cpp
@@ -157,6 +158,7 @@ set(camera_cloud_tests_SOURCES
 set(camera_cloud_tests_HEADERS
     ../cameradetector.h
     ../cameraimageutils.h
+    ../cameramediametadata.h
     ../cameraclearskyreference.h
     ../cameraclouddetector.h
     ../cameramotiondetector.h

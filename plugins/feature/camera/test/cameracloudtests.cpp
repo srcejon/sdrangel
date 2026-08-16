@@ -1070,6 +1070,39 @@ void testMinElevationMask(TestContext& context)
         "min-elevation", "blob above the floor stays flagged");
 }
 
+void testSkyProjectorAzimuthWrapping(TestContext& context)
+{
+    CameraSettings settings = makeCloudSettings();
+    settings.m_fov = 150.0f;
+    settings.m_azimuth = 220.0f;
+    settings.m_elevation = 60.0f;
+    settings.m_roll = 0.0f;
+    settings.m_lensProjection = CameraSettings::LensProjectionEquidistant;
+
+    const SkyProjector projector = SkyProjector::create(settings, QSize(imageWidth, imageHeight));
+    QPointF negativePoint;
+    QPointF canonicalPoint;
+    QPointF overflowPoint;
+    QPointF distinctPoint;
+    const bool projected = projector.projectAltAz(-170.0, 25.0, negativePoint)
+        && projector.projectAltAz(190.0, 25.0, canonicalPoint)
+        && projector.projectAltAz(550.0, 25.0, overflowPoint)
+        && projector.projectAltAz(230.0, 25.0, distinctPoint);
+    context.check(projected, "azimuth-wrap", "wrapped and canonical azimuths project");
+    if (!projected) {
+        return;
+    }
+
+    const auto pointDistance = [](const QPointF& lhs, const QPointF& rhs) {
+        return std::hypot(lhs.x() - rhs.x(), lhs.y() - rhs.y());
+    };
+    context.check(pointDistance(negativePoint, canonicalPoint) < 1e-6
+            && pointDistance(overflowPoint, canonicalPoint) < 1e-6,
+        "azimuth-wrap", "-170, 190 and 550 degrees are equivalent");
+    context.check(pointDistance(canonicalPoint, distinctPoint) > 10.0,
+        "azimuth-wrap", "distinct azimuths above 180 degrees remain spatially distinct");
+}
+
 // Day auto-learn sun gate: a day frame whose sun is projected in-frame but shows no glare
 // is overcast in front of the sun and must not be learned as the clear-sky reference, even
 // when the (self-measured) coverage passes the gate; visible glare permits learning.
@@ -3102,6 +3135,7 @@ int main(int argc, char *argv[])
         {"star-sense", testStarSense},
         {"star-blank", testStarBlankCue},
         {"min-elevation", testMinElevationMask},
+        {"azimuth-wrap", testSkyProjectorAzimuthWrapping},
         {"sun-gate", testDayLearnSunGate},
         {"ref-darkday", testDarkDayCue},
         {"clear-sky-ref", testClearSkyReference},

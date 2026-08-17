@@ -29,15 +29,28 @@ void MainBench::testFFTRRCFilter()
 
     qDebug() << "MainBench::testFFTRRCFilter: filter created";
     FILE *fd_filter = fopen("test_rrc_filter.txt", "w");
+    if (!fd_filter)
+    {
+        qWarning() << "MainBench::testFFTRRCFilter: failed to open test_rrc_filter.txt : "
+                   << strerror(errno);
+        return;
+    }
 
     for (int i = 0; i < RRC_FFT_SIZE; i++) {
-        fprintf(fd_filter, "%f\n", std::abs(filter.getFilter()[i]));
+        fprintf(fd_filter, "%f\n", static_cast<double>(std::abs(filter.getFilter()[i])));
     }
     qDebug() << "MainBench::testFFTRRCFilter: filter coefficients written to test_rrc_filter.txt";
     fclose(fd_filter);
 
     qDebug() << "MainBench::testFFTRRCFilter: running filter";
     FILE *fd = fopen("test_rrc.txt", "w");
+    if (!fd)
+    {
+        qWarning() << "MainBench::testFFTRRCFilter: failed to open test_rrc.txt : "
+                   << strerror(errno);
+        return;
+    }
+
     int outLen = 0;
 
     for (int i = 0; i < 5000; i++)

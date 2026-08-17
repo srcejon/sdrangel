@@ -27,15 +27,27 @@ void MainBench::testFIRRRCFilter()
 
     qDebug() << "MainBench::testFIRRRCFilter: filter created";
     FILE *fd_filter = fopen("test_rrc_filter.txt", "w");
+    if (!fd_filter)
+    {
+        qWarning() << "MainBench::testFIRRRCFilter: failed to open test_rrc_filter.txt : "
+                   << strerror(errno);
+        return;
+    }
     const std::vector<float>& taps = filter.getTaps();
     for (auto tap : taps) {
-        fprintf(fd_filter, "%f\n", std::abs(tap));
+        fprintf(fd_filter, "%f\n", static_cast<double>(std::abs(tap)));
     }
     qDebug() << "MainBench::testFIRRRCFilter: filter coefficients written to test_rrc_filter.txt";
     fclose(fd_filter);
 
     qDebug() << "MainBench::testFIRRRCFilter: running filter";
     FILE *fd = fopen("test_rrc.txt", "w");
+    if (!fd)
+    {
+        qWarning() << "MainBench::testFIRRRCFilter: failed to open test_rrc.txt : "
+                   << strerror(errno);
+        return;
+    }
 
     for (int i = 0; i < 1000; i++)
     {

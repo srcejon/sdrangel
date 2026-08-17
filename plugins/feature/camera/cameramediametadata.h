@@ -65,6 +65,9 @@ public:
     [[nodiscard]] double lensCenterOffsetY() const { return m_lensCenterOffsetY; }
     [[nodiscard]] double lensDistortionK1() const { return m_lensDistortionK1; }
     [[nodiscard]] bool lensMirror() const { return m_lensMirror; }
+    [[nodiscard]] bool imageTransformValid() const { return m_imageTransformValid; }
+    [[nodiscard]] const QSize& opticalSize() const { return m_opticalSize; }
+    [[nodiscard]] const QTransform& opticalToImage() const { return m_opticalToImage; }
 
     [[nodiscard]] QByteArray toJson() const;
     void applyToFrame(CameraPipelineFrame& frame, qint64 captureOffsetMs = 0) const;

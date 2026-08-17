@@ -86,6 +86,54 @@ bool isValidFitsKeyword(const QString& keyword)
     return re.match(keyword).hasMatch();
 }
 
+QVariant parseFitsValue(const QString& field)
+{
+    QString value = field.trimmed();
+    if (value.startsWith(QLatin1Char('\'')))
+    {
+        QString text;
+        for (int i = 1; i < value.size(); ++i)
+        {
+            if (value.at(i) != QLatin1Char('\''))
+            {
+                text.append(value.at(i));
+                continue;
+            }
+            if ((i + 1 < value.size()) && (value.at(i + 1) == QLatin1Char('\'')))
+            {
+                text.append(QLatin1Char('\''));
+                ++i;
+                continue;
+            }
+            break;
+        }
+        return text;
+    }
+
+    const int commentIndex = value.indexOf(QLatin1Char('/'));
+    if (commentIndex >= 0) {
+        value = value.left(commentIndex).trimmed();
+    }
+    if (value == QLatin1String("T")) {
+        return true;
+    }
+    if (value == QLatin1String("F")) {
+        return false;
+    }
+
+    bool ok = false;
+    const qlonglong integerValue = value.toLongLong(&ok);
+    if (ok) {
+        return integerValue;
+    }
+
+    QString floatingValue = value;
+    floatingValue.replace(QLatin1Char('D'), QLatin1Char('E'));
+    floatingValue.replace(QLatin1Char('d'), QLatin1Char('E'));
+    const double number = floatingValue.toDouble(&ok);
+    return ok ? QVariant(number) : QVariant(value);
+}
+
 }
 
 FITS::FITS(QString resourceName) :
@@ -206,6 +254,15 @@ FITS::FITS(QString resourceName) :
     {
         qWarning() << "FITS: END missing";
         return;
+    }
+
+    for (int cardOffset = 0; cardOffset < endIdx; cardOffset += 80)
+    {
+        const QString card = header.mid(cardOffset, 80);
+        const QString keyword = card.left(8).trimmed();
+        if (!keyword.isEmpty() && (card.size() > 9) && (card.at(8) == QLatin1Char('='))) {
+            m_headers.insert(keyword, parseFitsValue(card.mid(10)));
+        }
     }
     m_dataStart = ((endIdx + m_headerSize) / m_headerSize) * m_headerSize;
     m_valid = true;

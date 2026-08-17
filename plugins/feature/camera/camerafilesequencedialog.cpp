@@ -28,20 +28,26 @@
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QFrame>
+#include <QHeaderView>
 #include <QHBoxLayout>
 #include <QImageReader>
 #include <QLabel>
 #include <QListWidget>
 #include <QListWidgetItem>
+#include <QPixelFormat>
 #include <QPixmap>
 #include <QPushButton>
 #include <QResizeEvent>
 #include <QSplitter>
+#include <QTableWidget>
+#include <QTableWidgetItem>
 #include <QVariant>
 #include <QVBoxLayout>
 
 #include "gui/dialogpositioner.h"
 #include "util/fits.h"
+#include "cameramediametadata.h"
+#include "camerasettings.h"
 
 namespace
 {
@@ -53,11 +59,14 @@ bool isFitsFile(const QString& fileName)
         || (suffix == QLatin1String("fts"));
 }
 
-QImage loadFitsImage(const QString& fileName)
+QImage loadFitsImage(const QString& fileName, QVariantMap *headers = nullptr)
 {
     FITS fits(fileName);
     if (!fits.valid()) {
         return QImage();
+    }
+    if (headers) {
+        *headers = fits.headers();
     }
 
     float minValue = std::numeric_limits<float>::max();
@@ -95,12 +104,106 @@ QImage loadFitsImage(const QString& fileName)
     }
     return image;
 }
+
+QString projectionName(int projection)
+{
+    switch (static_cast<CameraSettings::LensProjection>(projection))
+    {
+    case CameraSettings::LensProjectionEquidistant:
+        return QObject::tr("Equidistant");
+    case CameraSettings::LensProjectionEquisolid:
+        return QObject::tr("Equisolid");
+    case CameraSettings::LensProjectionRectilinear:
+    default:
+        return QObject::tr("Rectilinear");
+    }
+}
+
+QString imageFormatName(QImage::Format format)
+{
+    switch (format)
+    {
+    case QImage::Format_Mono: return QStringLiteral("Mono MSB");
+    case QImage::Format_MonoLSB: return QStringLiteral("Mono LSB");
+    case QImage::Format_Indexed8: return QStringLiteral("Indexed 8-bit");
+    case QImage::Format_RGB32: return QStringLiteral("RGB32");
+    case QImage::Format_ARGB32: return QStringLiteral("ARGB32");
+    case QImage::Format_ARGB32_Premultiplied: return QStringLiteral("ARGB32 premultiplied");
+    case QImage::Format_RGB16: return QStringLiteral("RGB565");
+    case QImage::Format_RGB888: return QStringLiteral("RGB888");
+    case QImage::Format_RGB444: return QStringLiteral("RGB444");
+    case QImage::Format_ARGB4444_Premultiplied: return QStringLiteral("ARGB4444 premultiplied");
+    case QImage::Format_RGBX8888: return QStringLiteral("RGBX8888");
+    case QImage::Format_RGBA8888: return QStringLiteral("RGBA8888");
+    case QImage::Format_RGBA8888_Premultiplied: return QStringLiteral("RGBA8888 premultiplied");
+    case QImage::Format_BGR30: return QStringLiteral("BGR30");
+    case QImage::Format_A2BGR30_Premultiplied: return QStringLiteral("A2BGR30 premultiplied");
+    case QImage::Format_RGB30: return QStringLiteral("RGB30");
+    case QImage::Format_A2RGB30_Premultiplied: return QStringLiteral("A2RGB30 premultiplied");
+    case QImage::Format_Alpha8: return QStringLiteral("Alpha8");
+    case QImage::Format_Grayscale8: return QStringLiteral("Grayscale8");
+    case QImage::Format_RGBX64: return QStringLiteral("RGBX64");
+    case QImage::Format_RGBA64: return QStringLiteral("RGBA64");
+    case QImage::Format_RGBA64_Premultiplied: return QStringLiteral("RGBA64 premultiplied");
+    case QImage::Format_Grayscale16: return QStringLiteral("Grayscale16");
+#if QT_VERSION >= QT_VERSION_CHECK(5, 14, 0)
+    case QImage::Format_BGR888: return QStringLiteral("BGR888");
+#endif
+    case QImage::Format_Invalid:
+    default:
+        return QObject::tr("Format %1").arg(static_cast<int>(format));
+    }
+}
+
+int imageColorChannelCount(const QImage& image)
+{
+    const QPixelFormat pixelFormat = image.pixelFormat();
+    switch (pixelFormat.colorModel())
+    {
+    case QPixelFormat::RGB:
+    case QPixelFormat::BGR:
+    case QPixelFormat::HSL:
+    case QPixelFormat::HSV:
+    case QPixelFormat::YUV:
+        return 3;
+    case QPixelFormat::CMYK:
+        return 4;
+    case QPixelFormat::Indexed:
+    case QPixelFormat::Grayscale:
+    case QPixelFormat::Alpha:
+    default:
+        return 1;
+    }
+}
+
+int imageComponentBitDepth(const QImage& image)
+{
+    const QPixelFormat pixelFormat = image.pixelFormat();
+    return std::max({
+        static_cast<int>(pixelFormat.redSize()),
+        static_cast<int>(pixelFormat.greenSize()),
+        static_cast<int>(pixelFormat.blueSize()),
+        static_cast<int>(pixelFormat.blackSize()),
+        static_cast<int>(pixelFormat.alphaSize())});
+}
+
+QString byteSizeString(qint64 bytes)
+{
+    if (bytes >= 1024 * 1024) {
+        return QObject::tr("%1 MiB (%2 bytes)").arg(bytes / (1024.0 * 1024.0), 0, 'f', 2).arg(bytes);
+    }
+    if (bytes >= 1024) {
+        return QObject::tr("%1 KiB (%2 bytes)").arg(bytes / 1024.0, 0, 'f', 2).arg(bytes);
+    }
+    return QObject::tr("%1 bytes").arg(bytes);
+}
 }
 
 CameraFileSequenceDialog::CameraFileSequenceDialog(const QStringList& fileNames, QWidget *parent) :
     QDialog(parent),
     m_fileList(new QListWidget(this)),
     m_previewLabel(new QLabel(this)),
+    m_metadataTable(new QTableWidget(this)),
     m_removeButton(new QPushButton(tr("Remove"), this)),
     m_moveUpButton(new QPushButton(tr("Up"), this)),
     m_moveDownButton(new QPushButton(tr("Down"), this))
@@ -123,6 +226,18 @@ CameraFileSequenceDialog::CameraFileSequenceDialog(const QStringList& fileNames,
     m_previewLabel->setFrameShape(QFrame::StyledPanel);
     m_previewLabel->setText(tr("No image selected"));
 
+    m_metadataTable->setColumnCount(2);
+    m_metadataTable->setHorizontalHeaderLabels({tr("Property"), tr("Value")});
+    m_metadataTable->horizontalHeader()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
+    m_metadataTable->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
+    m_metadataTable->verticalHeader()->setVisible(false);
+    m_metadataTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    m_metadataTable->setSelectionBehavior(QAbstractItemView::SelectRows);
+    m_metadataTable->setAlternatingRowColors(true);
+    m_metadataTable->setWordWrap(false);
+    m_metadataTable->setMinimumHeight(120);
+    m_metadataTable->setToolTip(tr("Metadata embedded in the selected image file"));
+
     QPushButton *addButton = new QPushButton(tr("Add..."), this);
     QDialogButtonBox *buttonBox = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
 
@@ -141,8 +256,14 @@ CameraFileSequenceDialog::CameraFileSequenceDialog(const QStringList& fileNames,
     fileListLayout->addLayout(listButtonsLayout);
 
     QSplitter *bodySplitter = new QSplitter(Qt::Horizontal, this);
+    QSplitter *previewSplitter = new QSplitter(Qt::Vertical, this);
+    previewSplitter->addWidget(m_previewLabel);
+    previewSplitter->addWidget(m_metadataTable);
+    previewSplitter->setStretchFactor(0, 1);
+    previewSplitter->setStretchFactor(1, 0);
+    previewSplitter->setSizes(QList<int>() << 270 << 130);
     bodySplitter->addWidget(fileListPane);
-    bodySplitter->addWidget(m_previewLabel);
+    bodySplitter->addWidget(previewSplitter);
     bodySplitter->setStretchFactor(0, 1);
     bodySplitter->setStretchFactor(1, 1);
     bodySplitter->setSizes(QList<int>() << 440 << 300);
@@ -165,6 +286,7 @@ CameraFileSequenceDialog::CameraFileSequenceDialog(const QStringList& fileNames,
         updatePreview();
     });
     connect(bodySplitter, &QSplitter::splitterMoved, this, [this]() { updatePreviewPixmap(); });
+    connect(previewSplitter, &QSplitter::splitterMoved, this, [this]() { updatePreviewPixmap(); });
     connect(buttonBox, &QDialogButtonBox::accepted, this, &QDialog::accept);
     connect(buttonBox, &QDialogButtonBox::rejected, this, &QDialog::reject);
 
@@ -324,10 +446,16 @@ void CameraFileSequenceDialog::updatePreview()
         m_previewImage = QImage();
         m_previewLabel->setPixmap(QPixmap());
         m_previewLabel->setText(tr("No image selected"));
+        setMetadataMessage(tr("No image selected"));
         return;
     }
 
-    m_previewImage = loadPreviewImage(fileNameForItem(item));
+    const QString fileName = fileNameForItem(item);
+    QVariantMap fitsHeaders;
+    m_previewImage = isFitsFile(fileName)
+        ? loadFitsImage(fileName, &fitsHeaders)
+        : loadPreviewImage(fileName);
+    updateMetadata(fileName, m_previewImage, fitsHeaders);
     if (m_previewImage.isNull())
     {
         m_previewLabel->setPixmap(QPixmap());
@@ -349,4 +477,135 @@ void CameraFileSequenceDialog::updatePreviewPixmap()
         m_previewLabel->size(),
         Qt::KeepAspectRatio,
         Qt::SmoothTransformation));
+}
+
+void CameraFileSequenceDialog::setMetadataMessage(const QString& message)
+{
+    m_metadataTable->setRowCount(0);
+    addMetadataRow(tr("Metadata"), message);
+}
+
+void CameraFileSequenceDialog::addMetadataRow(const QString& property, const QString& value)
+{
+    const int row = m_metadataTable->rowCount();
+    m_metadataTable->insertRow(row);
+    QTableWidgetItem *propertyItem = new QTableWidgetItem(property);
+    QTableWidgetItem *valueItem = new QTableWidgetItem(value);
+    propertyItem->setToolTip(property);
+    valueItem->setToolTip(value);
+    m_metadataTable->setItem(row, 0, propertyItem);
+    m_metadataTable->setItem(row, 1, valueItem);
+}
+
+void CameraFileSequenceDialog::updateMetadata(
+    const QString& fileName,
+    const QImage& image,
+    const QVariantMap& fitsHeaders)
+{
+    m_metadataTable->setRowCount(0);
+
+    const QFileInfo fileInfo(fileName);
+    addMetadataRow(tr("File type"), fileInfo.suffix().toUpper());
+    if (fileInfo.exists()) {
+        addMetadataRow(tr("File size"), byteSizeString(fileInfo.size()));
+    }
+
+    if (isFitsFile(fileName))
+    {
+        const int width = fitsHeaders.value(QStringLiteral("NAXIS1"), image.width()).toInt();
+        const int height = fitsHeaders.value(QStringLiteral("NAXIS2"), image.height()).toInt();
+        const int channels = fitsHeaders.value(QStringLiteral("NAXIS3"), 1).toInt();
+        const int bitPix = fitsHeaders.value(QStringLiteral("BITPIX"), 0).toInt();
+        addMetadataRow(tr("Image size"), tr("%1 x %2 px").arg(width).arg(height));
+        addMetadataRow(tr("Channels"), QString::number(channels));
+        if (bitPix != 0)
+        {
+            addMetadataRow(
+                tr("Bit depth per channel"),
+                bitPix < 0
+                    ? tr("%1-bit floating point").arg(std::abs(bitPix))
+                    : tr("%1-bit integer").arg(bitPix));
+        }
+        if (fitsHeaders.isEmpty())
+        {
+            addMetadataRow(tr("FITS metadata"), tr("Unavailable"));
+        }
+        else
+        {
+            for (auto it = fitsHeaders.cbegin(); it != fitsHeaders.cend(); ++it) {
+                addMetadataRow(it.key(), it.value().toString());
+            }
+        }
+        m_metadataTable->resizeRowsToContents();
+        return;
+    }
+
+    if (!image.isNull())
+    {
+        const int colorChannels = imageColorChannelCount(image);
+        const int channels = colorChannels + (image.hasAlphaChannel() ? 1 : 0);
+        addMetadataRow(tr("Image size"), tr("%1 x %2 px").arg(image.width()).arg(image.height()));
+        addMetadataRow(tr("Pixel format"), imageFormatName(image.format()));
+        addMetadataRow(tr("Channels"), QString::number(channels));
+        addMetadataRow(tr("Color channels"), QString::number(colorChannels));
+        addMetadataRow(tr("Bit depth per channel"), tr("%1 bits").arg(imageComponentBitDepth(image)));
+        addMetadataRow(tr("Storage depth"), tr("%1 bits/pixel").arg(image.depth()));
+        addMetadataRow(tr("Alpha channel"), image.hasAlphaChannel() ? tr("Yes") : tr("No"));
+        addMetadataRow(tr("Bytes per line"), QString::number(image.bytesPerLine()));
+        addMetadataRow(tr("Decoded image size"), byteSizeString(image.sizeInBytes()));
+    }
+
+    QString metadataError;
+    const CameraMediaMetadata metadata = CameraMediaMetadata::fromImage(image, &metadataError);
+    if (!metadata.isValid())
+    {
+        addMetadataRow(
+            tr("Camera metadata"),
+            metadataError.isEmpty() ? tr("Not present") : tr("Invalid: %1").arg(metadataError));
+    }
+    else
+    {
+        if (metadata.captureDateTimeUtc().isValid()) {
+            addMetadataRow(tr("Capture date/time (UTC)"), metadata.captureDateTimeUtc().toString(Qt::ISODateWithMs));
+        }
+        addMetadataRow(tr("Latitude"), tr("%1 deg").arg(metadata.latitude(), 0, 'f', 8));
+        addMetadataRow(tr("Longitude"), tr("%1 deg").arg(metadata.longitude(), 0, 'f', 8));
+        addMetadataRow(tr("Altitude"), tr("%1 m").arg(metadata.altitude(), 0, 'f', 2));
+        addMetadataRow(tr("Azimuth"), tr("%1 deg").arg(metadata.azimuth(), 0, 'f', 6));
+        addMetadataRow(tr("Elevation"), tr("%1 deg").arg(metadata.elevation(), 0, 'f', 6));
+        addMetadataRow(tr("Roll"), tr("%1 deg").arg(metadata.roll(), 0, 'f', 6));
+        addMetadataRow(tr("Field of view"), tr("%1 deg").arg(metadata.fov(), 0, 'f', 6));
+        addMetadataRow(tr("Lens projection"), projectionName(metadata.lensProjection()));
+        addMetadataRow(tr("Lens center X"), tr("%1 px").arg(metadata.lensCenterOffsetX(), 0, 'f', 3));
+        addMetadataRow(tr("Lens center Y"), tr("%1 px").arg(metadata.lensCenterOffsetY(), 0, 'f', 3));
+        addMetadataRow(tr("Lens distortion K1"), QString::number(metadata.lensDistortionK1(), 'g', 10));
+        addMetadataRow(tr("Lens mirror"), metadata.lensMirror() ? tr("Yes") : tr("No"));
+        if (metadata.imageTransformValid())
+        {
+            const QTransform& transform = metadata.opticalToImage();
+            addMetadataRow(
+                tr("Optical image size"),
+                tr("%1 x %2 px").arg(metadata.opticalSize().width()).arg(metadata.opticalSize().height()));
+            addMetadataRow(
+                tr("Optical transform"),
+                QStringLiteral("[%1, %2; %3, %4]")
+                    .arg(transform.m11(), 0, 'g', 8)
+                    .arg(transform.m12(), 0, 'g', 8)
+                    .arg(transform.m21(), 0, 'g', 8)
+                    .arg(transform.m22(), 0, 'g', 8));
+            addMetadataRow(
+                tr("Optical translation"),
+                tr("%1, %2 px")
+                    .arg(transform.dx(), 0, 'g', 8)
+                    .arg(transform.dy(), 0, 'g', 8));
+        }
+    }
+
+    for (const QString& key : image.textKeys())
+    {
+        if (key != CameraMediaMetadata::metadataKey()) {
+            addMetadataRow(key, image.text(key));
+        }
+    }
+    m_metadataTable->resizeRowsToContents();
 }

@@ -44,6 +44,7 @@ class SDRBASE_API FITS {
     float m_uintScale;
     double m_cdelta1;           // How many degrees RA per horizontal pixel
     double m_cdelta2;           // How many degrees Declination per vertical pixel
+    QVariantMap m_headers;
 
     int m_dataStart;
     QByteArray m_data;
@@ -77,6 +78,7 @@ public:
     int width() const { return m_width; }
     int height() const { return m_height; }
     bool valid() const { return m_valid; }
+    const QVariantMap& headers() const { return m_headers; }
 
 protected:
 

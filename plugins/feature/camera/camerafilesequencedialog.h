@@ -22,11 +22,13 @@
 #include <QDialog>
 #include <QImage>
 #include <QStringList>
+#include <QVariantMap>
 
 class QLabel;
 class QListWidget;
 class QListWidgetItem;
 class QPushButton;
+class QTableWidget;
 
 /**
  * \brief Dialog for assembling and ordering a sequence of image files to play back as a camera source.
@@ -59,9 +61,13 @@ private:
     void updateButtons();
     void updatePreview();
     void updatePreviewPixmap();
+    void updateMetadata(const QString& fileName, const QImage& image, const QVariantMap& fitsHeaders = QVariantMap());
+    void setMetadataMessage(const QString& message);
+    void addMetadataRow(const QString& property, const QString& value);
 
     QListWidget *m_fileList;
     QLabel *m_previewLabel;
+    QTableWidget *m_metadataTable;
     QPushButton *m_removeButton;
     QPushButton *m_moveUpButton;
     QPushButton *m_moveDownButton;

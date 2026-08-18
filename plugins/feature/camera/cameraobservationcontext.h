@@ -30,21 +30,27 @@ inline CameraSettings projectionSettingsForFrame(
 {
     CameraSettings result = settings;
 
-    if ((settings.m_siteSource == CameraSettings::SiteSourceMediaMetadata)
+    if (!settings.m_siteApplyToCurrentImage && frame.m_observationContext.m_valid)
+    {
+        result.m_latitude = frame.m_observationContext.m_latitude;
+        result.m_longitude = frame.m_observationContext.m_longitude;
+        result.m_altitude = frame.m_observationContext.m_altitude;
+    }
+    else if ((settings.m_siteSource == CameraSettings::SiteSourceMediaMetadata)
         && frame.m_mediaMetadata.isValid())
     {
         result.m_latitude = static_cast<float>(frame.m_mediaMetadata.latitude());
         result.m_longitude = static_cast<float>(frame.m_mediaMetadata.longitude());
         result.m_altitude = static_cast<float>(frame.m_mediaMetadata.altitude());
     }
-    else if (!settings.m_siteApplyToCurrentImage && frame.m_observationContext.m_valid)
-    {
-        result.m_latitude = frame.m_observationContext.m_latitude;
-        result.m_longitude = frame.m_observationContext.m_longitude;
-        result.m_altitude = frame.m_observationContext.m_altitude;
-    }
 
-    if ((settings.m_directionSource == CameraSettings::DirectionSourceMediaMetadata)
+    if (!settings.m_directionApplyToCurrentImage && frame.m_observationContext.m_valid)
+    {
+        result.m_azimuth = frame.m_observationContext.m_azimuth;
+        result.m_elevation = frame.m_observationContext.m_elevation;
+        result.m_roll = frame.m_observationContext.m_roll;
+    }
+    else if ((settings.m_directionSource == CameraSettings::DirectionSourceMediaMetadata)
         && frame.m_mediaMetadata.isValid())
     {
         result.m_azimuth = static_cast<float>(frame.m_mediaMetadata.azimuth());
@@ -58,7 +64,16 @@ inline CameraSettings projectionSettingsForFrame(
         result.m_roll = frame.m_captureDirection.m_roll;
     }
 
-    if ((settings.m_projectionSource == CameraSettings::ProjectionSourceMediaMetadata)
+    if (!settings.m_projectionApplyToCurrentImage && frame.m_observationContext.m_valid)
+    {
+        result.m_fov = frame.m_observationContext.m_fov;
+        result.m_lensProjection = static_cast<CameraSettings::LensProjection>(frame.m_observationContext.m_lensProjection);
+        result.m_lensCenterOffsetX = frame.m_observationContext.m_lensCenterOffsetX;
+        result.m_lensCenterOffsetY = frame.m_observationContext.m_lensCenterOffsetY;
+        result.m_lensDistortionK1 = frame.m_observationContext.m_lensDistortionK1;
+        result.m_lensMirror = frame.m_observationContext.m_lensMirror;
+    }
+    else if ((settings.m_projectionSource == CameraSettings::ProjectionSourceMediaMetadata)
         && frame.m_mediaMetadata.isValid())
     {
         result.m_fov = static_cast<float>(frame.m_mediaMetadata.fov());
@@ -68,16 +83,6 @@ inline CameraSettings projectionSettingsForFrame(
         result.m_lensDistortionK1 = frame.m_mediaMetadata.lensDistortionK1();
         result.m_lensMirror = frame.m_mediaMetadata.lensMirror();
     }
-    else if (!settings.m_projectionApplyToCurrentImage && frame.m_observationContext.m_valid)
-    {
-        result.m_fov = frame.m_observationContext.m_fov;
-        result.m_lensProjection = static_cast<CameraSettings::LensProjection>(frame.m_observationContext.m_lensProjection);
-        result.m_lensCenterOffsetX = frame.m_observationContext.m_lensCenterOffsetX;
-        result.m_lensCenterOffsetY = frame.m_observationContext.m_lensCenterOffsetY;
-        result.m_lensDistortionK1 = frame.m_observationContext.m_lensDistortionK1;
-        result.m_lensMirror = frame.m_observationContext.m_lensMirror;
-    }
-
     return result;
 }
 
@@ -89,24 +94,22 @@ inline QDateTime dateTimeForFrame(const CameraSettings& settings, const CameraPi
         source = CameraSettings::ObservationTimeCustom;
     }
 
+    if (!settings.m_observationTimeApplyToCurrentImage
+        && frame.m_observationContext.m_valid
+        && frame.m_observationContext.m_dateTime.isValid())
+    {
+        return frame.m_observationContext.m_dateTime;
+    }
+
     switch (source)
     {
     case CameraSettings::ObservationTimeCurrent:
-        if (settings.m_observationTimeApplyToCurrentImage) {
-            return QDateTime::currentDateTime();
-        }
-        if (frame.m_observationContext.m_valid && frame.m_observationContext.m_dateTime.isValid()) {
-            return frame.m_observationContext.m_dateTime;
-        }
-        return frame.m_captureDateTime;
+        return QDateTime::currentDateTime();
     case CameraSettings::ObservationTimeCustom:
-        if (settings.m_observationTimeApplyToCurrentImage && settings.m_plateSolveDateTime.isValid()) {
+        if (settings.m_plateSolveDateTime.isValid()) {
             return settings.m_plateSolveDateTime;
         }
-        if (frame.m_observationContext.m_valid && frame.m_observationContext.m_dateTime.isValid()) {
-            return frame.m_observationContext.m_dateTime;
-        }
-        return settings.m_plateSolveDateTime.isValid() ? settings.m_plateSolveDateTime : frame.m_captureDateTime;
+        return frame.m_captureDateTime;
     case CameraSettings::ObservationTimeCapture:
     default:
         if (frame.m_captureDateTime.isValid()) {

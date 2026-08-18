@@ -610,6 +610,9 @@ struct CameraSettings
     float m_latitude;              ///< Camera latitude in degrees
     float m_longitude;             ///< Camera longitude in degrees
     float m_altitude;              ///< Camera altitude in metres
+    float m_manualLatitude;        ///< Manual latitude retained while another site source is active
+    float m_manualLongitude;       ///< Manual longitude retained while another site source is active
+    float m_manualAltitude;        ///< Manual altitude retained while another site source is active
     bool m_positionSync;           ///< Continually sync camera location from Main Settings
     SiteSource m_siteSource;       ///< Source used for observer latitude/longitude/altitude
     bool m_siteApplyToCurrentImage; ///< Apply site setting changes to the current frame
@@ -617,6 +620,9 @@ struct CameraSettings
     float m_azimuth;               ///< Camera pointing azimuth in degrees
     float m_elevation;             ///< Camera pointing elevation in degrees
     float m_roll;                  ///< Camera roll about optical axis in degrees
+    float m_manualAzimuth;         ///< Manual azimuth retained while another direction source is active
+    float m_manualElevation;       ///< Manual elevation retained while another direction source is active
+    float m_manualRoll;            ///< Manual roll retained while another direction source is active
     QString m_rotator;             ///< "<featureSetIndex>:<featureIndex>" of rotator to follow
     QString m_directionSensor;      ///< Qt Sensors compass identifier used to follow camera azimuth/elevation
     DirectionSource m_directionSource; ///< Source used for camera azimuth/elevation/roll

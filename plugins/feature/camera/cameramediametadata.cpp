@@ -222,6 +222,22 @@ void CameraMediaMetadata::applyToFrame(
         frame.m_captureDateTime = m_captureDateTimeUtc.addMSecs(qMax<qint64>(0, captureOffsetMs));
     }
 
+    CameraPipelineObservationContext& context = frame.m_observationContext;
+    context.m_dateTime = frame.m_captureDateTime;
+    context.m_latitude = static_cast<float>(m_latitude);
+    context.m_longitude = static_cast<float>(m_longitude);
+    context.m_altitude = static_cast<float>(m_altitude);
+    context.m_azimuth = static_cast<float>(m_azimuth);
+    context.m_elevation = static_cast<float>(m_elevation);
+    context.m_roll = static_cast<float>(m_roll);
+    context.m_fov = static_cast<float>(m_fov);
+    context.m_lensProjection = m_lensProjection;
+    context.m_lensCenterOffsetX = m_lensCenterOffsetX;
+    context.m_lensCenterOffsetY = m_lensCenterOffsetY;
+    context.m_lensDistortionK1 = m_lensDistortionK1;
+    context.m_lensMirror = m_lensMirror;
+    context.m_valid = true;
+
     applyImageTransform(frame);
 }
 

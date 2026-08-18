@@ -85,6 +85,24 @@ bool checkFrame(const CameraMediaMetadata& metadata, QString& error)
         error = QStringLiteral("Capture date/time offset was not restored");
         return false;
     }
+    if (!frame.m_observationContext.m_valid
+        || frame.m_observationContext.m_dateTime != frame.m_captureDateTime
+        || !nearlyEqual(frame.m_observationContext.m_latitude, 51.5)
+        || !nearlyEqual(frame.m_observationContext.m_longitude, -0.125)
+        || !nearlyEqual(frame.m_observationContext.m_altitude, 72.0)
+        || !nearlyEqual(frame.m_observationContext.m_azimuth, 123.5)
+        || !nearlyEqual(frame.m_observationContext.m_elevation, 47.25)
+        || !nearlyEqual(frame.m_observationContext.m_roll, -12.75)
+        || !nearlyEqual(frame.m_observationContext.m_fov, 1.29)
+        || (frame.m_observationContext.m_lensProjection != 1)
+        || !nearlyEqual(frame.m_observationContext.m_lensCenterOffsetX, 4.5)
+        || !nearlyEqual(frame.m_observationContext.m_lensCenterOffsetY, -3.25)
+        || !nearlyEqual(frame.m_observationContext.m_lensDistortionK1, 0.0125)
+        || !frame.m_observationContext.m_lensMirror)
+    {
+        error = QStringLiteral("Observation context was not restored");
+        return false;
+    }
     if (!frame.m_imageTransform.isValid()
         || frame.m_imageTransform.m_opticalSize != QSize(3552, 3552)
         || !nearlyEqual(frame.m_imageTransform.m_opticalToImage.m11(), 0.5)

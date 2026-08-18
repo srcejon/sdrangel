@@ -1784,6 +1784,7 @@ void CameraPostProcessor::reportFrameToGUI(const QImage& image, const CameraPipe
             thermal,
             frame.m_captureDateTime,
             CameraMediaMetadata::fromFrame(m_settings, frame),
+            frame.m_mediaMetadata,
             frame.m_captureEpoch,
             frame.m_manualPreviewFrame,
             previewTextLabels,

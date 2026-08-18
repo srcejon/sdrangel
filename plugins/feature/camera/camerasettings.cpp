@@ -449,6 +449,9 @@ void CameraSettings::resetToDefaults()
     m_latitude = MainCore::instance()->getSettings().getLatitude();
     m_longitude = MainCore::instance()->getSettings().getLongitude();
     m_altitude = MainCore::instance()->getSettings().getAltitude();
+    m_manualLatitude = m_latitude;
+    m_manualLongitude = m_longitude;
+    m_manualAltitude = m_altitude;
     m_positionSync = false;
     m_siteSource = SiteSourceManual;
     m_siteApplyToCurrentImage = true;
@@ -456,6 +459,9 @@ void CameraSettings::resetToDefaults()
     m_azimuth = 0.0f;
     m_elevation = 0.0f;
     m_roll = 0.0f;
+    m_manualAzimuth = m_azimuth;
+    m_manualElevation = m_elevation;
+    m_manualRoll = m_roll;
     m_rotator.clear();
     m_directionSensor.clear();
     m_directionSource = DirectionSourceManual;
@@ -1088,6 +1094,12 @@ QByteArray CameraSettings::serialize() const
     s.writeBool(386, m_projectionApplyToCurrentImage);
     s.writeS32(387, static_cast<qint32>(m_observationTimeSource));
     s.writeBool(388, m_observationTimeApplyToCurrentImage);
+    s.writeFloat(389, m_manualLatitude);
+    s.writeFloat(390, m_manualLongitude);
+    s.writeFloat(391, m_manualAltitude);
+    s.writeFloat(392, m_manualAzimuth);
+    s.writeFloat(393, m_manualElevation);
+    s.writeFloat(394, m_manualRoll);
     s.writeDouble(319, m_opticalSpectrumDispersion);
     s.writeBool(320, m_opticalSpectrumZeroOrderAuto);
     s.writeDouble(321, m_opticalSpectrumZeroOrderX);
@@ -1786,6 +1798,12 @@ bool CameraSettings::deserialize(const QByteArray& data)
             static_cast<qint32>(ObservationTimeCustom)));
         m_plateSolveUseCaptureDateTime = m_observationTimeSource != ObservationTimeCustom;
         d.readBool(388, &m_observationTimeApplyToCurrentImage, true);
+        d.readFloat(389, &m_manualLatitude, m_latitude);
+        d.readFloat(390, &m_manualLongitude, m_longitude);
+        d.readFloat(391, &m_manualAltitude, m_altitude);
+        d.readFloat(392, &m_manualAzimuth, m_azimuth);
+        d.readFloat(393, &m_manualElevation, m_elevation);
+        d.readFloat(394, &m_manualRoll, m_roll);
         d.readDouble(319, &m_opticalSpectrumDispersion, 0.0);
         m_opticalSpectrumDispersion = qBound(0.0, m_opticalSpectrumDispersion, 100.0);
         d.readBool(320, &m_opticalSpectrumZeroOrderAuto, true);
@@ -1951,9 +1969,15 @@ bool CameraSettings::deserialize(const QByteArray& data)
         m_latitude = qBound(m_minLatitude, m_latitude, m_maxLatitude);
         m_longitude = qBound(m_minLongitude, m_longitude, m_maxLongitude);
         m_altitude = qBound(m_minAltitude, m_altitude, m_maxAltitude);
+        m_manualLatitude = qBound(m_minLatitude, m_manualLatitude, m_maxLatitude);
+        m_manualLongitude = qBound(m_minLongitude, m_manualLongitude, m_maxLongitude);
+        m_manualAltitude = qBound(m_minAltitude, m_manualAltitude, m_maxAltitude);
         m_azimuth = normalizePositiveDegrees(m_azimuth);
         m_elevation = qBound(m_minElevation, m_elevation, m_maxElevation);
         m_roll = normalizeSignedDegrees(m_roll);
+        m_manualAzimuth = normalizePositiveDegrees(m_manualAzimuth);
+        m_manualElevation = qBound(m_minElevation, m_manualElevation, m_maxElevation);
+        m_manualRoll = normalizeSignedDegrees(m_manualRoll);
         m_azimuthOffset = normalizeSignedDegrees(m_azimuthOffset);
         m_elevationOffset = qBound(-180.0f, m_elevationOffset, 180.0f);
         m_rollOffset = normalizeSignedDegrees(m_rollOffset);
@@ -2331,11 +2355,20 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     if (settingsKeys.contains("latitude")) {
         m_latitude = qBound(m_minLatitude, settings.m_latitude, m_maxLatitude);
     }
+    if (settingsKeys.contains("manualLatitude")) {
+        m_manualLatitude = qBound(m_minLatitude, settings.m_manualLatitude, m_maxLatitude);
+    }
     if (settingsKeys.contains("longitude")) {
         m_longitude = qBound(m_minLongitude, settings.m_longitude, m_maxLongitude);
     }
+    if (settingsKeys.contains("manualLongitude")) {
+        m_manualLongitude = qBound(m_minLongitude, settings.m_manualLongitude, m_maxLongitude);
+    }
     if (settingsKeys.contains("altitude")) {
         m_altitude = qBound(m_minAltitude, settings.m_altitude, m_maxAltitude);
+    }
+    if (settingsKeys.contains("manualAltitude")) {
+        m_manualAltitude = qBound(m_minAltitude, settings.m_manualAltitude, m_maxAltitude);
     }
     if (settingsKeys.contains("positionSync")) {
         m_positionSync = settings.m_positionSync;
@@ -2349,6 +2382,18 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
             static_cast<int>(SiteSourceMediaMetadata)));
         m_positionSync = m_siteSource == SiteSourceMyPosition;
     }
+    if (m_siteSource == SiteSourceManual)
+    {
+        if (settingsKeys.contains("latitude") && !settingsKeys.contains("manualLatitude")) {
+            m_manualLatitude = m_latitude;
+        }
+        if (settingsKeys.contains("longitude") && !settingsKeys.contains("manualLongitude")) {
+            m_manualLongitude = m_longitude;
+        }
+        if (settingsKeys.contains("altitude") && !settingsKeys.contains("manualAltitude")) {
+            m_manualAltitude = m_altitude;
+        }
+    }
     if (settingsKeys.contains("siteApplyToCurrentImage")) {
         m_siteApplyToCurrentImage = settings.m_siteApplyToCurrentImage;
     }
@@ -2358,11 +2403,20 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     if (settingsKeys.contains("azimuth")) {
         m_azimuth = normalizePositiveDegrees(settings.m_azimuth);
     }
+    if (settingsKeys.contains("manualAzimuth")) {
+        m_manualAzimuth = normalizePositiveDegrees(settings.m_manualAzimuth);
+    }
     if (settingsKeys.contains("elevation")) {
         m_elevation = qBound(m_minElevation, settings.m_elevation, m_maxElevation);
     }
+    if (settingsKeys.contains("manualElevation")) {
+        m_manualElevation = qBound(m_minElevation, settings.m_manualElevation, m_maxElevation);
+    }
     if (settingsKeys.contains("roll")) {
         m_roll = normalizeSignedDegrees(settings.m_roll);
+    }
+    if (settingsKeys.contains("manualRoll")) {
+        m_manualRoll = normalizeSignedDegrees(settings.m_manualRoll);
     }
     if (settingsKeys.contains("rotator")) {
         m_rotator = settings.m_rotator;
@@ -2378,6 +2432,18 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
         m_directionSource = !m_rotator.isEmpty()
             ? DirectionSourceRotator
             : (!m_directionSensor.isEmpty() ? DirectionSourceSensor : DirectionSourceManual);
+    }
+    if (m_directionSource == DirectionSourceManual)
+    {
+        if (settingsKeys.contains("azimuth") && !settingsKeys.contains("manualAzimuth")) {
+            m_manualAzimuth = m_azimuth;
+        }
+        if (settingsKeys.contains("elevation") && !settingsKeys.contains("manualElevation")) {
+            m_manualElevation = m_elevation;
+        }
+        if (settingsKeys.contains("roll") && !settingsKeys.contains("manualRoll")) {
+            m_manualRoll = m_roll;
+        }
     }
     if (settingsKeys.contains("sensorOpticalAxis")) {
         m_sensorOpticalAxis = static_cast<SensorOpticalAxis>(qBound(

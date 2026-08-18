@@ -287,6 +287,7 @@ private:
 
     QImage m_lastImage;     ///< Last processed image received from the worker (displayed in the GUI)
     CameraMediaMetadata m_lastMediaMetadata;
+    CameraMediaMetadata m_lastSourceMediaMetadata;
     CameraHistogramData m_lastHistogramData; ///< Last histogram computed after image processing but before detection/overlays
     CameraOpticalSpectrumData m_lastOpticalSpectrumData; ///< Last optical spectrum extracted from the detection RoI after image processing
     QVector<CameraPipelineStarDetection> m_lastStarDetections;
@@ -497,6 +498,7 @@ private:
     void applyPositionSync();
     void updatePositionControls();
     void updateFovControls();
+    void updateCopyToManualButtons();
     bool updateFovSensorSizeFromCamera();
     void updateCalculatedFov();
     void updateKeogramPreview(const QImage& image, const QString& fileName, bool visible);
@@ -770,6 +772,7 @@ private slots:
     void on_longitudeSpin_valueChanged(double value);
     void on_altitudeSpin_valueChanged(double value);
     void on_siteSourceCombo_currentIndexChanged(int index);
+    void on_siteCopyToManualButton_clicked();
     void on_siteApplyToCurrentImageCheck_toggled(bool checked);
     void on_owmApiKeyEdit_editingFinished();
     void on_useMyPositionButton_clicked();
@@ -789,7 +792,9 @@ private slots:
     void on_directionSensorFilterTimeConstantSpin_valueChanged(double value);
     void on_directionApplyToCurrentImageCheck_toggled(bool checked);
     void on_directionSourceCombo_currentIndexChanged(int index);
+    void on_directionCopyToManualButton_clicked();
     void on_projectionSourceCombo_currentIndexChanged(int index);
+    void on_projectionCopyToManualButton_clicked();
     void on_projectionApplyToCurrentImageCheck_toggled(bool checked);
     void on_fovModeCombo_currentIndexChanged(int index);
     void on_fovSpin_valueChanged(double value);
@@ -807,6 +812,7 @@ private slots:
     void on_playbackProjectionWidthSpin_valueChanged(int value);
     void on_playbackProjectionHeightSpin_valueChanged(int value);
     void on_observationTimeApplyToCurrentImageCheck_toggled(bool checked);
+    void on_captureTimeCopyToManualButton_clicked();
     void on_postProcessWhiteBalanceModeCombo_currentIndexChanged(int index);
     void on_postProcessWhiteBalanceRedGainSlider_valueChanged(int value);
     void on_postProcessWhiteBalanceRedGainSpin_valueChanged(double value);

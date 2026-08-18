@@ -172,6 +172,7 @@ public:
         const CameraPipelineThermal& getThermal() const { return m_thermal; }
         const QDateTime& getCaptureDateTime() const { return m_captureDateTime; }
         const CameraMediaMetadata& getMediaMetadata() const { return m_mediaMetadata; }
+        const CameraMediaMetadata& getSourceMediaMetadata() const { return m_sourceMediaMetadata; }
         quint64 getCaptureEpoch() const { return m_captureEpoch; }
         bool isManualPreviewFrame() const { return m_manualPreviewFrame; }
 
@@ -189,6 +190,7 @@ public:
                                        const CameraPipelineThermal& thermal,
                                        const QDateTime& captureDateTime,
                                        const CameraMediaMetadata& mediaMetadata,
+                                       const CameraMediaMetadata& sourceMediaMetadata,
                                        quint64 captureEpoch,
                                       bool manualPreviewFrame,
                                       const QVector<PreviewTextLabel>& previewTextLabels,
@@ -210,6 +212,7 @@ public:
                 thermal,
                 captureDateTime,
                 mediaMetadata,
+                sourceMediaMetadata,
                 captureEpoch,
                 manualPreviewFrame,
                 previewTextLabels,
@@ -232,6 +235,7 @@ public:
         CameraPipelineThermal m_thermal;
         QDateTime m_captureDateTime;
         CameraMediaMetadata m_mediaMetadata;
+        CameraMediaMetadata m_sourceMediaMetadata;
         quint64 m_captureEpoch;
         bool m_manualPreviewFrame;
         QVector<PreviewTextLabel> m_previewTextLabels;
@@ -252,6 +256,7 @@ public:
                        const CameraPipelineThermal& thermal,
                        const QDateTime& captureDateTime,
                        const CameraMediaMetadata& mediaMetadata,
+                       const CameraMediaMetadata& sourceMediaMetadata,
                        quint64 captureEpoch,
                        bool manualPreviewFrame,
                        const QVector<PreviewTextLabel>& previewTextLabels,
@@ -272,6 +277,7 @@ public:
             m_thermal(thermal),
             m_captureDateTime(captureDateTime),
             m_mediaMetadata(mediaMetadata),
+            m_sourceMediaMetadata(sourceMediaMetadata),
             m_captureEpoch(captureEpoch),
             m_manualPreviewFrame(manualPreviewFrame),
             m_previewTextLabels(previewTextLabels),

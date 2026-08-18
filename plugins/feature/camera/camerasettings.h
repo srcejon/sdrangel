@@ -337,6 +337,34 @@ struct CameraSettings
         FovModeCameraFocalLength
     };
 
+    enum SiteSource
+    {
+        SiteSourceManual = 0,
+        SiteSourceMyPosition,
+        SiteSourceMediaMetadata
+    };
+
+    enum DirectionSource
+    {
+        DirectionSourceManual = 0,
+        DirectionSourceMediaMetadata,
+        DirectionSourceRotator,
+        DirectionSourceSensor
+    };
+
+    enum ProjectionSource
+    {
+        ProjectionSourceManual = 0,
+        ProjectionSourceMediaMetadata
+    };
+
+    enum ObservationTimeSource
+    {
+        ObservationTimeCapture = 0,
+        ObservationTimeCurrent,
+        ObservationTimeCustom
+    };
+
     static constexpr int m_minHdrExposureCount = 2;
     static constexpr int m_maxHdrExposureCount = 4;
 
@@ -583,12 +611,15 @@ struct CameraSettings
     float m_longitude;             ///< Camera longitude in degrees
     float m_altitude;              ///< Camera altitude in metres
     bool m_positionSync;           ///< Continually sync camera location from Main Settings
+    SiteSource m_siteSource;       ///< Source used for observer latitude/longitude/altitude
+    bool m_siteApplyToCurrentImage; ///< Apply site setting changes to the current frame
     QString m_owmAPIKey;           ///< API key for openweathermap.org weather updates
     float m_azimuth;               ///< Camera pointing azimuth in degrees
     float m_elevation;             ///< Camera pointing elevation in degrees
     float m_roll;                  ///< Camera roll about optical axis in degrees
     QString m_rotator;             ///< "<featureSetIndex>:<featureIndex>" of rotator to follow
     QString m_directionSensor;      ///< Qt Sensors compass identifier used to follow camera azimuth/elevation
+    DirectionSource m_directionSource; ///< Source used for camera azimuth/elevation/roll
     SensorOpticalAxis m_sensorOpticalAxis; ///< Camera optical axis relative to the Qt Sensors device coordinates
     bool m_directionSensorFilterEnabled; ///< Smooth Qt Sensors direction readings
     double m_directionSensorFilterTimeConstant; ///< Qt Sensors smoothing time constant in seconds
@@ -601,6 +632,8 @@ struct CameraSettings
     float m_autoguideDeadbandDeg;  ///< On-sky residual below which no correction is sent, in degrees; 0 = auto (rotator tolerance/step and measured solve noise)
     float m_autoguideMaxCorrectionDeg; ///< Largest single on-sky correction per axis, in degrees; 0 = auto (solved FoV / 4)
     float m_fov;                   ///< Camera field of view in degrees
+    ProjectionSource m_projectionSource; ///< Source used for FoV and lens projection parameters
+    bool m_projectionApplyToCurrentImage; ///< Apply projection setting changes to the current frame
     FovMode m_fovMode;             ///< Whether FoV is entered directly or calculated from manual/camera sensor geometry
     double m_fovSensorWidthMm;     ///< Sensor width for calculated FoV
     double m_fovSensorHeightMm;    ///< Sensor height for calculated FoV
@@ -764,6 +797,8 @@ struct CameraSettings
     PlateSolveLabelMode m_plateSolveLabelMode; ///< Which catalog metadata should be shown for solved stars
     bool   m_plateSolveLabelHideSyntheticNames; ///< Skip labels for stars that only have a synthetic Gaia coordinate name (keep real catalogue names)
     bool   m_plateSolveUseCaptureDateTime; ///< Use the frame capture date/time for plate solving instead of a fixed timestamp
+    ObservationTimeSource m_observationTimeSource; ///< Source used for observation date/time
+    bool   m_observationTimeApplyToCurrentImage; ///< Apply time setting changes to the current frame
     QDateTime m_plateSolveDateTime; ///< User-specified date/time for plate solving recorded media
     bool   m_plateSolveDateTimeUtc; ///< Treat the user-specified plate solve date/time as UTC instead of local time
     bool   m_plateSolveUseDownloadedCatalog; ///< Prefer the downloaded HYG catalog over the bundled catalog when available

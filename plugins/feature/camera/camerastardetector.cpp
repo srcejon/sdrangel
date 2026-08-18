@@ -313,6 +313,8 @@ bool CameraStarDetector::plateSolveInputSettingsChanged(const QList<QString>& se
         || settingsKeys.contains("plateSolveSearchRadius")
         || settingsKeys.contains("plateSolveStartMode")
         || settingsKeys.contains("plateSolveUseCaptureDateTime")
+        || settingsKeys.contains("observationTimeSource")
+        || settingsKeys.contains("observationTimeApplyToCurrentImage")
         || settingsKeys.contains("plateSolveDateTime")
         || settingsKeys.contains("plateSolveDateTimeUtc")
         || settingsKeys.contains("plateSolveUseDownloadedCatalog")
@@ -321,12 +323,17 @@ bool CameraStarDetector::plateSolveInputSettingsChanged(const QList<QString>& se
         || settingsKeys.contains("longitude")
         || settingsKeys.contains("altitude")
         || settingsKeys.contains("positionSync")
+        || settingsKeys.contains("siteSource")
+        || settingsKeys.contains("siteApplyToCurrentImage")
         || (applyDirectionChanges && settingsKeys.contains("azimuth"))
         || (applyDirectionChanges && settingsKeys.contains("elevation"))
         || (applyDirectionChanges && settingsKeys.contains("roll"))
         || settingsKeys.contains("directionApplyToCurrentImage")
+        || settingsKeys.contains("directionSource")
         || settingsKeys.contains("rotator")
         || settingsKeys.contains("fov")
+        || settingsKeys.contains("projectionSource")
+        || settingsKeys.contains("projectionApplyToCurrentImage")
         || settingsKeys.contains("fovMode")
         || settingsKeys.contains("fovSensorWidthMm")
         || settingsKeys.contains("fovSensorHeightMm")
@@ -728,6 +735,11 @@ void CameraStarDetector::processNewFrame(const CameraPipelineFramePtr& frame)
         }
 
         CameraSettings solveSettings = CameraImageUtils::projectionSettingsForFrame(m_settings, *frame);
+        const QDateTime observationDateTime = CameraImageUtils::observationDateTimeForFrame(m_settings, *frame);
+        // Pass the resolved instant through the capture-time path. The custom-time path deliberately
+        // reinterprets its wall clock according to the UTC switch, which would corrupt timestamps that
+        // already carry the correct time specification (notably embedded media capture times).
+        solveSettings.m_plateSolveUseCaptureDateTime = true;
         solveSettings.m_lensMirror = false; // input already flipped above
         const QSize solveImageSize = frame->opticalImageSize();
         QElapsedTimer solveTimer;
@@ -735,7 +747,7 @@ void CameraStarDetector::processNewFrame(const CameraPipelineFramePtr& frame)
         const CameraPlateSolveResult plateSolveResult = m_plateSolver.solve(
             solveSettings,
             solveImageSize,
-            frame->m_captureDateTime,
+            observationDateTime,
             solveDetections);
         frame->m_plateSolve.m_solveTimeMs = static_cast<float>(solveTimer.elapsed());
         reportPlateSolveStatus(false);

@@ -399,6 +399,12 @@ CameraSettings:
     positionSync:
       description: "Sync camera location from main settings (1 for yes, 0 for no)"
       type: integer
+    siteSource:
+      description: "Site source: 0 manual, 1 My Position, 2 file metadata"
+      type: integer
+    siteApplyToCurrentImage:
+      description: "Apply site changes to the currently displayed image (1 for yes, 0 for no)"
+      type: integer
     owmAPIKey:
       description: "OpenWeatherMap API key"
       type: string
@@ -417,6 +423,12 @@ CameraSettings:
     rotator:
       description: "Rotator feature identifier as featureSetIndex:featureIndex"
       type: string
+    directionSource:
+      description: "Direction source: 0 manual, 1 file metadata, 2 rotator, 3 Qt Sensors"
+      type: integer
+    directionApplyToCurrentImage:
+      description: "Apply direction changes to the currently displayed image (1 for yes, 0 for no)"
+      type: integer
     autoguide:
       description: "Autoguide: trim the followed rotator's azimuth/elevation offsets to zero the plate-solve pointing error (1 for enabled)"
       type: integer
@@ -436,6 +448,12 @@ CameraSettings:
       description: "Camera field of view in degrees"
       type: number
       format: float
+    projectionSource:
+      description: "Lens/projection source: 0 manual, 1 file metadata"
+      type: integer
+    projectionApplyToCurrentImage:
+      description: "Apply lens/projection changes to the currently displayed image (1 for yes, 0 for no)"
+      type: integer
     fovMode:
       description: >
         Field-of-view input mode
@@ -1024,6 +1042,12 @@ CameraSettings:
       type: integer
     plateSolveUseCaptureDateTime:
       description: "Use frame capture date/time for plate solving; when 0 use plateSolveDateTime (1 for yes, 0 for no)"
+      type: integer
+    observationTimeSource:
+      description: "Observation-time source: 0 capture/media, 1 current clock, 2 custom"
+      type: integer
+    observationTimeApplyToCurrentImage:
+      description: "Apply observation-time changes to the currently displayed image (1 for yes, 0 for no)"
       type: integer
     plateSolveDateTime:
       description: "Fixed date/time for plate solving recorded media"

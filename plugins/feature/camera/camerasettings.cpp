@@ -450,12 +450,15 @@ void CameraSettings::resetToDefaults()
     m_longitude = MainCore::instance()->getSettings().getLongitude();
     m_altitude = MainCore::instance()->getSettings().getAltitude();
     m_positionSync = false;
+    m_siteSource = SiteSourceManual;
+    m_siteApplyToCurrentImage = true;
     m_owmAPIKey.clear();
     m_azimuth = 0.0f;
     m_elevation = 0.0f;
     m_roll = 0.0f;
     m_rotator.clear();
     m_directionSensor.clear();
+    m_directionSource = DirectionSourceManual;
     m_sensorOpticalAxis = SensorOpticalAxisAuto;
     m_directionSensorFilterEnabled = false;
     m_directionSensorFilterTimeConstant = 0.5;
@@ -468,6 +471,8 @@ void CameraSettings::resetToDefaults()
     m_autoguideDeadbandDeg = 0.0f;
     m_autoguideMaxCorrectionDeg = 0.0f;
     m_fov = 60.0f;
+    m_projectionSource = ProjectionSourceManual;
+    m_projectionApplyToCurrentImage = true;
     m_fovMode = FovModeDirect;
     m_fovSensorWidthMm = 36.0;
     m_fovSensorHeightMm = 24.0;
@@ -641,6 +646,8 @@ void CameraSettings::resetToDefaults()
     m_plateSolveLabelHideSyntheticNames = false;
     m_showStarDetectionBoxes = true;
     m_plateSolveUseCaptureDateTime = true;
+    m_observationTimeSource = ObservationTimeCapture;
+    m_observationTimeApplyToCurrentImage = true;
     m_plateSolveDateTime = QDateTime::currentDateTime();
     m_plateSolveDateTimeUtc = false;
     m_plateSolveUseDownloadedCatalog = false;
@@ -1074,6 +1081,13 @@ QByteArray CameraSettings::serialize() const
     s.writeBool(316, m_directionSensorFilterEnabled);
     s.writeDouble(317, m_directionSensorFilterTimeConstant);
     s.writeBool(318, m_directionApplyToCurrentImage);
+    s.writeS32(382, static_cast<qint32>(m_siteSource));
+    s.writeBool(383, m_siteApplyToCurrentImage);
+    s.writeS32(384, static_cast<qint32>(m_directionSource));
+    s.writeS32(385, static_cast<qint32>(m_projectionSource));
+    s.writeBool(386, m_projectionApplyToCurrentImage);
+    s.writeS32(387, static_cast<qint32>(m_observationTimeSource));
+    s.writeBool(388, m_observationTimeApplyToCurrentImage);
     s.writeDouble(319, m_opticalSpectrumDispersion);
     s.writeBool(320, m_opticalSpectrumZeroOrderAuto);
     s.writeDouble(321, m_opticalSpectrumZeroOrderX);
@@ -1737,6 +1751,41 @@ bool CameraSettings::deserialize(const QByteArray& data)
         d.readDouble(317, &m_directionSensorFilterTimeConstant, 0.5);
         m_directionSensorFilterTimeConstant = qBound(0.05, m_directionSensorFilterTimeConstant, 10.0);
         d.readBool(318, &m_directionApplyToCurrentImage, true);
+        qint32 siteSource = m_positionSync
+            ? static_cast<qint32>(SiteSourceMyPosition)
+            : static_cast<qint32>(SiteSourceManual);
+        d.readS32(382, &siteSource, siteSource);
+        m_siteSource = static_cast<SiteSource>(qBound(
+            static_cast<qint32>(SiteSourceManual), siteSource,
+            static_cast<qint32>(SiteSourceMediaMetadata)));
+        d.readBool(383, &m_siteApplyToCurrentImage, true);
+
+        qint32 directionSource = !m_rotator.isEmpty()
+            ? static_cast<qint32>(DirectionSourceRotator)
+            : (!m_directionSensor.isEmpty()
+                ? static_cast<qint32>(DirectionSourceSensor)
+                : static_cast<qint32>(DirectionSourceManual));
+        d.readS32(384, &directionSource, directionSource);
+        m_directionSource = static_cast<DirectionSource>(qBound(
+            static_cast<qint32>(DirectionSourceManual), directionSource,
+            static_cast<qint32>(DirectionSourceSensor)));
+
+        qint32 projectionSource = static_cast<qint32>(ProjectionSourceManual);
+        d.readS32(385, &projectionSource, projectionSource);
+        m_projectionSource = static_cast<ProjectionSource>(qBound(
+            static_cast<qint32>(ProjectionSourceManual), projectionSource,
+            static_cast<qint32>(ProjectionSourceMediaMetadata)));
+        d.readBool(386, &m_projectionApplyToCurrentImage, true);
+
+        qint32 observationTimeSource = m_plateSolveUseCaptureDateTime
+            ? static_cast<qint32>(ObservationTimeCapture)
+            : static_cast<qint32>(ObservationTimeCustom);
+        d.readS32(387, &observationTimeSource, observationTimeSource);
+        m_observationTimeSource = static_cast<ObservationTimeSource>(qBound(
+            static_cast<qint32>(ObservationTimeCapture), observationTimeSource,
+            static_cast<qint32>(ObservationTimeCustom)));
+        m_plateSolveUseCaptureDateTime = m_observationTimeSource != ObservationTimeCustom;
+        d.readBool(388, &m_observationTimeApplyToCurrentImage, true);
         d.readDouble(319, &m_opticalSpectrumDispersion, 0.0);
         m_opticalSpectrumDispersion = qBound(0.0, m_opticalSpectrumDispersion, 100.0);
         d.readBool(320, &m_opticalSpectrumZeroOrderAuto, true);
@@ -2290,6 +2339,18 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     }
     if (settingsKeys.contains("positionSync")) {
         m_positionSync = settings.m_positionSync;
+        if (!settingsKeys.contains("siteSource")) {
+            m_siteSource = m_positionSync ? SiteSourceMyPosition : SiteSourceManual;
+        }
+    }
+    if (settingsKeys.contains("siteSource")) {
+        m_siteSource = static_cast<SiteSource>(qBound(
+            static_cast<int>(SiteSourceManual), static_cast<int>(settings.m_siteSource),
+            static_cast<int>(SiteSourceMediaMetadata)));
+        m_positionSync = m_siteSource == SiteSourceMyPosition;
+    }
+    if (settingsKeys.contains("siteApplyToCurrentImage")) {
+        m_siteApplyToCurrentImage = settings.m_siteApplyToCurrentImage;
     }
     if (settingsKeys.contains("owmAPIKey")) {
         m_owmAPIKey = settings.m_owmAPIKey;
@@ -2308,6 +2369,15 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     }
     if (settingsKeys.contains("directionSensor")) {
         m_directionSensor = settings.m_directionSensor;
+    }
+    if (settingsKeys.contains("directionSource")) {
+        m_directionSource = static_cast<DirectionSource>(qBound(
+            static_cast<int>(DirectionSourceManual), static_cast<int>(settings.m_directionSource),
+            static_cast<int>(DirectionSourceSensor)));
+    } else if (settingsKeys.contains("rotator") || settingsKeys.contains("directionSensor")) {
+        m_directionSource = !m_rotator.isEmpty()
+            ? DirectionSourceRotator
+            : (!m_directionSensor.isEmpty() ? DirectionSourceSensor : DirectionSourceManual);
     }
     if (settingsKeys.contains("sensorOpticalAxis")) {
         m_sensorOpticalAxis = static_cast<SensorOpticalAxis>(qBound(
@@ -2407,6 +2477,14 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     }
     if (settingsKeys.contains("fov")) {
         m_fov = qBound(m_minFov, settings.m_fov, m_maxFov);
+    }
+    if (settingsKeys.contains("projectionSource")) {
+        m_projectionSource = static_cast<ProjectionSource>(qBound(
+            static_cast<int>(ProjectionSourceManual), static_cast<int>(settings.m_projectionSource),
+            static_cast<int>(ProjectionSourceMediaMetadata)));
+    }
+    if (settingsKeys.contains("projectionApplyToCurrentImage")) {
+        m_projectionApplyToCurrentImage = settings.m_projectionApplyToCurrentImage;
     }
     if (settingsKeys.contains("fovMode")) {
         m_fovMode = static_cast<FovMode>(qBound(
@@ -2807,6 +2885,20 @@ void CameraSettings::applySettings(const QStringList& settingsKeys, const Camera
     }
     if (settingsKeys.contains("plateSolveUseCaptureDateTime")) {
         m_plateSolveUseCaptureDateTime = settings.m_plateSolveUseCaptureDateTime;
+        if (!settingsKeys.contains("observationTimeSource")) {
+            m_observationTimeSource = m_plateSolveUseCaptureDateTime
+                ? ObservationTimeCapture
+                : ObservationTimeCustom;
+        }
+    }
+    if (settingsKeys.contains("observationTimeSource")) {
+        m_observationTimeSource = static_cast<ObservationTimeSource>(qBound(
+            static_cast<int>(ObservationTimeCapture), static_cast<int>(settings.m_observationTimeSource),
+            static_cast<int>(ObservationTimeCustom)));
+        m_plateSolveUseCaptureDateTime = m_observationTimeSource != ObservationTimeCustom;
+    }
+    if (settingsKeys.contains("observationTimeApplyToCurrentImage")) {
+        m_observationTimeApplyToCurrentImage = settings.m_observationTimeApplyToCurrentImage;
     }
     if (settingsKeys.contains("plateSolveDateTime")) {
         m_plateSolveDateTime = settings.m_plateSolveDateTime;
@@ -3528,6 +3620,12 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     if (settingsKeys.contains("positionSync") || force) {
         ostr << " m_positionSync: " << m_positionSync;
     }
+    if (settingsKeys.contains("siteSource") || force) {
+        ostr << " m_siteSource: " << static_cast<int>(m_siteSource);
+    }
+    if (settingsKeys.contains("siteApplyToCurrentImage") || force) {
+        ostr << " m_siteApplyToCurrentImage: " << m_siteApplyToCurrentImage;
+    }
     if (settingsKeys.contains("owmAPIKey") || force) {
         ostr << " m_owmAPIKey: " << m_owmAPIKey.toStdString();
     }
@@ -3557,6 +3655,9 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("directionApplyToCurrentImage") || force) {
         ostr << " m_directionApplyToCurrentImage: " << m_directionApplyToCurrentImage;
+    }
+    if (settingsKeys.contains("directionSource") || force) {
+        ostr << " m_directionSource: " << static_cast<int>(m_directionSource);
     }
     if (settingsKeys.contains("opticalSpectrumVisible") || force) {
         ostr << " m_opticalSpectrumVisible: " << m_opticalSpectrumVisible;
@@ -3656,6 +3757,12 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("lensProjection") || force) {
         ostr << " m_lensProjection: " << m_lensProjection;
+    }
+    if (settingsKeys.contains("projectionSource") || force) {
+        ostr << " m_projectionSource: " << static_cast<int>(m_projectionSource);
+    }
+    if (settingsKeys.contains("projectionApplyToCurrentImage") || force) {
+        ostr << " m_projectionApplyToCurrentImage: " << m_projectionApplyToCurrentImage;
     }
     if (settingsKeys.contains("lensCenterOffsetX") || force) {
         ostr << " m_lensCenterOffsetX: " << m_lensCenterOffsetX;
@@ -3998,6 +4105,12 @@ QString CameraSettings::getDebugString(const QStringList& settingsKeys, bool for
     }
     if (settingsKeys.contains("plateSolveUseCaptureDateTime") || force) {
         ostr << " m_plateSolveUseCaptureDateTime: " << m_plateSolveUseCaptureDateTime;
+    }
+    if (settingsKeys.contains("observationTimeSource") || force) {
+        ostr << " m_observationTimeSource: " << static_cast<int>(m_observationTimeSource);
+    }
+    if (settingsKeys.contains("observationTimeApplyToCurrentImage") || force) {
+        ostr << " m_observationTimeApplyToCurrentImage: " << m_observationTimeApplyToCurrentImage;
     }
     if (settingsKeys.contains("plateSolveDateTime") || force) {
         ostr << " m_plateSolveDateTime: " << m_plateSolveDateTime.toString(Qt::ISODateWithMs).toStdString();

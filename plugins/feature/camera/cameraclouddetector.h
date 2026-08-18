@@ -275,6 +275,9 @@ private:
     // picked up at the next settings change or capture start.
     mutable QVector<CameraPlateSolver::BrightStar> m_sensedStarCatalog;
     mutable double m_sensedStarCatalogMagnitude = -1.0;
+    CameraSettings m_frameProjectionSettings;
+    QDateTime m_frameObservationDateTime;
+    bool m_frameProjectionSettingsValid = false;
 
 #ifdef CAMERA_OPENCV_CUDA_CLOUD_DETECTION
     cv::cuda::Stream m_cudaCloudStream;
@@ -304,6 +307,8 @@ private:
     enum class BodyVisibility { Unknown, Visible, Obscured };
 
     [[nodiscard]] static bool cloudSettingsChanged(const QList<QString>& settingsKeys);
+    [[nodiscard]] const CameraSettings& effectiveProjectionSettings() const;
+    [[nodiscard]] QDateTime effectiveObservationDateTime(const QDateTime& captureDateTime) const;
     [[nodiscard]] bool resolveNightMode(const cv::Mat& medianGray, const cv::Mat& evaluationMask, const QDateTime& captureDateTime);
     void prepareWorkImages(const QImage& image, const cv::Rect& roi, cv::Mat& workBgr, cv::Mat& rawGray, cv::Mat& gray) const;
     void applyCloudDetection(const cv::Mat& workBgr, const cv::Mat& rawGray, const cv::Mat& gray, const cv::Rect& roi, const cv::Rect& contentRect, const QSize& imageSize, const CameraPipelineImageTransform& imageTransform, const QDateTime& captureDateTime, const CloudStarSense& starSense, CameraPipelineCloud& cloud, cv::Mat* debugMask);

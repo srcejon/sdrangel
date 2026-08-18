@@ -373,6 +373,22 @@ cv::Mat polynomialBackground(const cv::Mat& gray, const cv::Mat& skyMask, double
     return surface;
 }
 
+bool sameObservationProjection(const CameraSettings& left, const CameraSettings& right)
+{
+    return qFuzzyCompare(left.m_latitude, right.m_latitude)
+        && qFuzzyCompare(left.m_longitude, right.m_longitude)
+        && qFuzzyCompare(left.m_altitude, right.m_altitude)
+        && qFuzzyCompare(left.m_azimuth, right.m_azimuth)
+        && qFuzzyCompare(left.m_elevation, right.m_elevation)
+        && qFuzzyCompare(left.m_roll, right.m_roll)
+        && qFuzzyCompare(left.m_fov, right.m_fov)
+        && (left.m_lensProjection == right.m_lensProjection)
+        && qFuzzyCompare(left.m_lensCenterOffsetX, right.m_lensCenterOffsetX)
+        && qFuzzyCompare(left.m_lensCenterOffsetY, right.m_lensCenterOffsetY)
+        && qFuzzyCompare(left.m_lensDistortionK1, right.m_lensDistortionK1)
+        && (left.m_lensMirror == right.m_lensMirror);
+}
+
 } // namespace
 
 CameraCloudDetector::CameraCloudDetector() :
@@ -515,9 +531,13 @@ bool CameraCloudDetector::cloudSettingsChanged(const QList<QString>& settingsKey
         // Auto mode derives day/night from the sun elevation at the camera position
         || settingsKeys.contains("latitude")
         || settingsKeys.contains("longitude")
+        || settingsKeys.contains("siteSource")
+        || settingsKeys.contains("siteApplyToCurrentImage")
         || settingsKeys.contains("plateSolveUseCaptureDateTime")
         || settingsKeys.contains("plateSolveDateTime")
         || settingsKeys.contains("plateSolveDateTimeUtc")
+        || settingsKeys.contains("observationTimeSource")
+        || settingsKeys.contains("observationTimeApplyToCurrentImage")
         || settingsKeys.contains("cloudEdgeMarginPercent")
         || settingsKeys.contains("cloudMinElevation")
         || settingsKeys.contains("cloudDayRelativeMargin")
@@ -531,6 +551,10 @@ bool CameraCloudDetector::cloudSettingsChanged(const QList<QString>& settingsKey
         || settingsKeys.contains("starThreshold")
         // The sun/moon mask and star sensing project through the lens model
         || settingsKeys.contains("fov")
+        || settingsKeys.contains("directionSource")
+        || settingsKeys.contains("directionApplyToCurrentImage")
+        || settingsKeys.contains("projectionSource")
+        || settingsKeys.contains("projectionApplyToCurrentImage")
         || settingsKeys.contains("azimuth")
         || settingsKeys.contains("elevation")
         || settingsKeys.contains("roll")
@@ -544,6 +568,21 @@ bool CameraCloudDetector::cloudSettingsChanged(const QList<QString>& settingsKey
         || settingsKeys.contains("playbackProjectionY")
         || settingsKeys.contains("playbackProjectionWidth")
         || settingsKeys.contains("playbackProjectionHeight");
+}
+
+const CameraSettings& CameraCloudDetector::effectiveProjectionSettings() const
+{
+    return m_frameProjectionSettingsValid ? m_frameProjectionSettings : m_settings;
+}
+
+QDateTime CameraCloudDetector::effectiveObservationDateTime(const QDateTime& captureDateTime) const
+{
+    if (m_frameObservationDateTime.isValid()) {
+        return m_frameObservationDateTime;
+    }
+    CameraPipelineFrame frame;
+    frame.m_captureDateTime = captureDateTime;
+    return CameraImageUtils::observationDateTimeForFrame(m_settings, frame);
 }
 
 void CameraCloudDetector::invalidateCache()
@@ -564,6 +603,8 @@ void CameraCloudDetector::invalidateCache()
     m_elevationKeepMask = cv::Mat();
     // Sightings recorded under the old pose/settings do not transfer
     m_starLastVisible.clear();
+    m_frameProjectionSettingsValid = false;
+    m_frameObservationDateTime = QDateTime();
 }
 
 void CameraCloudDetector::applySettings(const CameraSettings& settings, const QList<QString>& settingsKeys, bool force)
@@ -643,6 +684,16 @@ void CameraCloudDetector::processNewFrame(const CameraPipelineFramePtr& frame)
     }
 
     frame->m_cloud = CameraPipelineCloud();
+
+    const CameraSettings projectionSettings = CameraImageUtils::projectionSettingsForFrame(m_settings, *frame);
+    const bool projectionChanged = !m_frameProjectionSettingsValid
+        || !sameObservationProjection(m_frameProjectionSettings, projectionSettings);
+    if (projectionChanged) {
+        invalidateCache();
+    }
+    m_frameProjectionSettings = projectionSettings;
+    m_frameProjectionSettingsValid = true;
+    m_frameObservationDateTime = CameraImageUtils::observationDateTimeForFrame(m_settings, *frame);
 
     // Retained even while detection is off, so enabling it (or requesting a save) on a
     // paused or finished source re-runs on the displayed frame instead of waiting for a
@@ -888,6 +939,7 @@ void CameraCloudDetector::renderDebugView(const CameraPipelineFramePtr& frame, c
 
 bool CameraCloudDetector::resolveNightMode(const cv::Mat& medianGray, const cv::Mat& evaluationMask, const QDateTime& captureDateTime)
 {
+    (void) captureDateTime;
     switch (m_settings.m_cloudMode)
     {
     case CameraSettings::CloudModeDay:
@@ -904,14 +956,13 @@ bool CameraCloudDetector::resolveNightMode(const cv::Mat& medianGray, const cv::
     // clock, video/image playback carries the capture time derived from the file name, and
     // the plate-solve date/time settings supply a manual override for recorded media without
     // one (the same policy the plate solver uses).
-    const QDateTime observationTime = m_settings.m_plateSolveUseCaptureDateTime
-        ? captureDateTime
-        : m_settings.m_plateSolveDateTime;
+    const QDateTime observationTime = effectiveObservationDateTime(captureDateTime);
     if (observationTime.isValid())
     {
         AzAlt sunAzAlt;
         RADec sunRaDec;
-        Astronomy::sunPosition(sunAzAlt, sunRaDec, m_settings.m_latitude, m_settings.m_longitude, observationTime);
+        const CameraSettings& projectionSettings = effectiveProjectionSettings();
+        Astronomy::sunPosition(sunAzAlt, sunRaDec, projectionSettings.m_latitude, projectionSettings.m_longitude, observationTime);
         // Day only when the sun is up or in early twilight; the whole rest of the
         // sub-horizon range routes to night. Through twilight a high-gain camera makes a
         // dark sky read bright, so frame brightness cannot be trusted to pick day/night;
@@ -955,20 +1006,20 @@ bool CameraCloudDetector::resolveNightMode(const cv::Mat& medianGray, const cv::
 // overcast sky). Runs after classification and morphology, before coverage is measured.
 void CameraCloudDetector::applySunMoonMask(cv::Mat& mask, cv::Mat& evaluationMask, const cv::Mat& gray, const cv::Mat& workBgr, const cv::Rect& roi, const QSize& imageSize, const CameraPipelineImageTransform& imageTransform, const QDateTime& captureDateTime) const
 {
+    (void) captureDateTime;
     if (!m_settings.m_cloudMaskSunMoon || (m_settings.m_cloudSunMoonRadiusDeg <= 0.0)) {
         return;
     }
 
     // Same observation-time policy as the day/night decision: live wall clock, playback
     // capture time, or the plate-solve manual override for recorded media without one.
-    const QDateTime observationTime = m_settings.m_plateSolveUseCaptureDateTime
-        ? captureDateTime
-        : m_settings.m_plateSolveDateTime;
+    const QDateTime observationTime = effectiveObservationDateTime(captureDateTime);
     if (!observationTime.isValid() || (roi.width <= 0) || (roi.height <= 0)) {
         return;
     }
 
-    const SkyProjector projector = SkyProjector::create(m_settings, imageSize, imageTransform);
+    const CameraSettings& projectionSettings = effectiveProjectionSettings();
+    const SkyProjector projector = SkyProjector::create(projectionSettings, imageSize, imageTransform);
     if (!projector.valid) {
         return;
     }
@@ -1036,7 +1087,7 @@ void CameraCloudDetector::applySunMoonMask(cv::Mat& mask, cv::Mat& evaluationMas
         }
         if (radiusImage <= 0.0) {
             // Edge point left the frame: fall back to the mean full-frame angular scale.
-            radiusImage = maxRadiusDeg / std::max(1.0, static_cast<double>(m_settings.m_fov)) * imageSize.width();
+            radiusImage = maxRadiusDeg / std::max(1.0, static_cast<double>(projectionSettings.m_fov)) * imageSize.width();
         }
 
         const int cx = static_cast<int>(std::lround((centerImage.x() - roi.x) * scaleX));
@@ -1215,9 +1266,9 @@ void CameraCloudDetector::applySunMoonMask(cv::Mat& mask, cv::Mat& evaluationMas
 
     AzAlt azAlt;
     RADec raDec;
-    Astronomy::sunPosition(azAlt, raDec, m_settings.m_latitude, m_settings.m_longitude, observationTime);
+    Astronomy::sunPosition(azAlt, raDec, projectionSettings.m_latitude, projectionSettings.m_longitude, observationTime);
     maskBody(false, azAlt);
-    Astronomy::moonPosition(azAlt, raDec, m_settings.m_latitude, m_settings.m_longitude, observationTime);
+    Astronomy::moonPosition(azAlt, raDec, projectionSettings.m_latitude, projectionSettings.m_longitude, observationTime);
     maskBody(true, azAlt);
 }
 
@@ -1229,21 +1280,21 @@ void CameraCloudDetector::applySunMoonMask(cv::Mat& mask, cv::Mat& evaluationMas
 // overcast is colorimetrically invisible.
 CameraCloudDetector::BodyVisibility CameraCloudDetector::sunVisibility(const cv::Mat& gray, const cv::Rect& roi, const QSize& imageSize, const CameraPipelineImageTransform& imageTransform, const QDateTime& captureDateTime) const
 {
-    const QDateTime observationTime = m_settings.m_plateSolveUseCaptureDateTime
-        ? captureDateTime
-        : m_settings.m_plateSolveDateTime;
+    (void) captureDateTime;
+    const QDateTime observationTime = effectiveObservationDateTime(captureDateTime);
     if (!observationTime.isValid() || (roi.width <= 0) || (roi.height <= 0)) {
         return BodyVisibility::Unknown;
     }
 
     AzAlt sunAzAlt;
     RADec sunRaDec;
-    Astronomy::sunPosition(sunAzAlt, sunRaDec, m_settings.m_latitude, m_settings.m_longitude, observationTime);
+    const CameraSettings& projectionSettings = effectiveProjectionSettings();
+    Astronomy::sunPosition(sunAzAlt, sunRaDec, projectionSettings.m_latitude, projectionSettings.m_longitude, observationTime);
     if (sunAzAlt.alt < sunVisibilityMinElevation) {
         return BodyVisibility::Unknown;
     }
 
-    const SkyProjector projector = SkyProjector::create(m_settings, imageSize, imageTransform);
+    const SkyProjector projector = SkyProjector::create(projectionSettings, imageSize, imageTransform);
     if (!projector.valid) {
         return BodyVisibility::Unknown;
     }
@@ -1261,7 +1312,7 @@ CameraCloudDetector::BodyVisibility CameraCloudDetector::sunVisibility(const cv:
         radiusImage = std::hypot(edgeImage.x() - centerImage.x(), edgeImage.y() - centerImage.y());
     }
     if (radiusImage <= 0.0) {
-        radiusImage = sunVisibilitySeedDeg / std::max(1.0, static_cast<double>(m_settings.m_fov)) * imageSize.width();
+        radiusImage = sunVisibilitySeedDeg / std::max(1.0, static_cast<double>(projectionSettings.m_fov)) * imageSize.width();
     }
 
     const double scaleX = static_cast<double>(gray.cols) / roi.width;
@@ -1374,7 +1425,7 @@ void CameraCloudDetector::applyMinElevationMask(cv::Mat& evaluationMask, const c
         m_elevationMaskImageSize = imageSize;
         m_elevationMaskTransform = imageTransform;
 
-        const SkyProjector projector = SkyProjector::create(m_settings, imageSize, imageTransform);
+        const SkyProjector projector = SkyProjector::create(effectiveProjectionSettings(), imageSize, imageTransform);
         if (!projector.valid) {
             return; // No usable lens pose: the floor cannot be evaluated, so nothing is excluded
         }
@@ -1542,14 +1593,13 @@ CameraCloudDetector::CloudStarSense CameraCloudDetector::senseStarVisibility(con
         return sense;
     }
 
-    const QDateTime observationTime = m_settings.m_plateSolveUseCaptureDateTime
-        ? frame->m_captureDateTime
-        : m_settings.m_plateSolveDateTime;
+    const QDateTime observationTime = effectiveObservationDateTime(frame->m_captureDateTime);
     if (!observationTime.isValid()) {
         return sense;
     }
 
-    const SkyProjector projector = SkyProjector::create(m_settings, imageSize, frame->m_imageTransform);
+    const CameraSettings& projectionSettings = effectiveProjectionSettings();
+    const SkyProjector projector = SkyProjector::create(projectionSettings, imageSize, frame->m_imageTransform);
     if (!projector.valid) {
         return sense;
     }
@@ -1558,7 +1608,7 @@ CameraCloudDetector::CloudStarSense CameraCloudDetector::senseStarVisibility(con
 
     AzAlt bodyAzAlt;
     RADec bodyRaDec;
-    Astronomy::sunPosition(bodyAzAlt, bodyRaDec, m_settings.m_latitude, m_settings.m_longitude, observationTime);
+    Astronomy::sunPosition(bodyAzAlt, bodyRaDec, projectionSettings.m_latitude, projectionSettings.m_longitude, observationTime);
     // No stars are detectable in daylight or early twilight; skip the patch sampling
     // entirely rather than measure a few hundred patches the night-only veto will ignore
     if (bodyAzAlt.alt >= sunDayElevation)
@@ -1572,7 +1622,7 @@ CameraCloudDetector::CloudStarSense CameraCloudDetector::senseStarVisibility(con
     // caps the glare-blob removal and users tune it for exposure, which should not silently
     // change which stars the visibility check trusts.
     const SkyVector sunVector = skyVectorFromAltAz(bodyAzAlt.az, bodyAzAlt.alt);
-    Astronomy::moonPosition(bodyAzAlt, bodyRaDec, m_settings.m_latitude, m_settings.m_longitude, observationTime);
+    Astronomy::moonPosition(bodyAzAlt, bodyRaDec, projectionSettings.m_latitude, projectionSettings.m_longitude, observationTime);
     const SkyVector moonVector = skyVectorFromAltAz(bodyAzAlt.az, bodyAzAlt.alt);
     const double avoidCos = std::cos(skyDegToRad(starSenseAvoidBodyDeg));
 
@@ -1598,7 +1648,11 @@ CameraCloudDetector::CloudStarSense CameraCloudDetector::senseStarVisibility(con
         const CameraPlateSolver::BrightStar& star = catalog[catalogIndex];
 
         const RADec raDec{star.rightAscensionDegrees / 15.0, star.declinationDegrees}; // ra in hours
-        const AzAlt azAlt = Astronomy::raDecToAzAlt(raDec, m_settings.m_latitude, m_settings.m_longitude, observationTime);
+        const AzAlt azAlt = Astronomy::raDecToAzAlt(
+            raDec,
+            projectionSettings.m_latitude,
+            projectionSettings.m_longitude,
+            observationTime);
         if (azAlt.alt < starSenseMinElevation) {
             continue;
         }
@@ -2414,9 +2468,7 @@ void CameraCloudDetector::applyCloudDetection(const cv::Mat& workBgr, const cv::
 
     // Clear-sky reference: resolve the sky-state slot for this frame (used by the save
     // request, the learned foreground exclusion, the deviation cue/veto and auto-learning)
-    const QDateTime observationTime = m_settings.m_plateSolveUseCaptureDateTime
-        ? captureDateTime
-        : m_settings.m_plateSolveDateTime;
+    const QDateTime observationTime = effectiveObservationDateTime(captureDateTime);
     int referenceSlot = -1;
     double referenceSunElevation = 0.0;
     double referenceMoonElevation = 0.0;
@@ -2424,8 +2476,9 @@ void CameraCloudDetector::applyCloudDetection(const cv::Mat& workBgr, const cv::
     {
         AzAlt sunAzAlt, moonAzAlt;
         RADec bodyRaDec;
-        Astronomy::sunPosition(sunAzAlt, bodyRaDec, m_settings.m_latitude, m_settings.m_longitude, observationTime);
-        Astronomy::moonPosition(moonAzAlt, bodyRaDec, m_settings.m_latitude, m_settings.m_longitude, observationTime);
+        const CameraSettings& projectionSettings = effectiveProjectionSettings();
+        Astronomy::sunPosition(sunAzAlt, bodyRaDec, projectionSettings.m_latitude, projectionSettings.m_longitude, observationTime);
+        Astronomy::moonPosition(moonAzAlt, bodyRaDec, projectionSettings.m_latitude, projectionSettings.m_longitude, observationTime);
         referenceSunElevation = sunAzAlt.alt;
         referenceMoonElevation = moonAzAlt.alt;
         referenceSlot = CameraClearSkyReference::slotFor(sunAzAlt.alt, moonAzAlt.alt);

@@ -84,6 +84,24 @@ struct CameraPipelineDirection
     bool m_valid = false;
 };
 
+struct CameraPipelineObservationContext
+{
+    QDateTime m_dateTime;
+    float m_latitude = 0.0f;
+    float m_longitude = 0.0f;
+    float m_altitude = 0.0f;
+    float m_azimuth = 0.0f;
+    float m_elevation = 0.0f;
+    float m_roll = 0.0f;
+    float m_fov = 0.0f;
+    int m_lensProjection = 0;
+    double m_lensCenterOffsetX = 0.0;
+    double m_lensCenterOffsetY = 0.0;
+    double m_lensDistortionK1 = 0.0;
+    bool m_lensMirror = false;
+    bool m_valid = false;
+};
+
 /** Raw mapped bytes and decoded measurements for a radiometric UVC frame. */
 struct CameraPipelineThermalRawFrame
 {
@@ -515,6 +533,7 @@ struct CameraPipelineFrameGeometry
 {
     QDateTime m_captureDateTime;
     CameraPipelineDirection m_captureDirection;
+    CameraPipelineObservationContext m_observationContext;
     CameraMediaMetadata m_mediaMetadata;
     CameraPipelineImageTransform m_imageTransform;
     QSize m_imageSize;
@@ -561,6 +580,7 @@ struct CameraPipelineFrame
     CameraOpticalSpectrumData m_opticalSpectrumData;
     QDateTime m_captureDateTime;
     CameraPipelineDirection m_captureDirection;
+    CameraPipelineObservationContext m_observationContext;
     CameraMediaMetadata m_mediaMetadata;
     CameraPipelineThermal m_thermal;
     quint64 m_captureEpoch = 0;
@@ -691,6 +711,7 @@ struct CameraPipelineFrame
         CameraPipelineFrameGeometry geometry;
         geometry.m_captureDateTime = m_captureDateTime;
         geometry.m_captureDirection = m_captureDirection;
+        geometry.m_observationContext = m_observationContext;
         geometry.m_mediaMetadata = m_mediaMetadata;
         geometry.m_imageTransform = m_imageTransform;
         geometry.m_imageSize = imageSize();
@@ -707,6 +728,7 @@ struct CameraPipelineFrame
 
         m_captureDateTime = geometry.m_captureDateTime;
         m_captureDirection = geometry.m_captureDirection;
+        m_observationContext = geometry.m_observationContext;
         m_mediaMetadata = geometry.m_mediaMetadata;
         m_imageTransform = geometry.m_imageTransform;
     }

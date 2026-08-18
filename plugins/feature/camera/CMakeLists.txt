@@ -64,6 +64,7 @@ set(camera_HEADERS
     camerahdrfusion.h
     cameraframestacker.h
     cameraimageutils.h
+    cameraobservationcontext.h
     cameraimagepool.h
     camerameteorphotometer.h
     cameraaudiobytequeue.h

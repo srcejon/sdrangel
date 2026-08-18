@@ -25,6 +25,7 @@
 
 #include "cameraimageutils.h"
 #include "cameraimagepool.h"
+#include "cameraobservationcontext.h"
 #include "camerasettings.h"
 
 namespace {
@@ -68,19 +69,36 @@ void CameraImageUtils::captureDirection(CameraPipelineFrame& frame, const Camera
     frame.m_captureDirection.m_elevation = settings.m_elevation;
     frame.m_captureDirection.m_roll = settings.m_roll;
     frame.m_captureDirection.m_valid = true;
+
+    CameraPipelineObservationContext& context = frame.m_observationContext;
+    context.m_dateTime = settings.m_observationTimeSource == CameraSettings::ObservationTimeCustom
+        ? settings.m_plateSolveDateTime
+        : frame.m_captureDateTime;
+    context.m_latitude = settings.m_latitude;
+    context.m_longitude = settings.m_longitude;
+    context.m_altitude = settings.m_altitude;
+    context.m_azimuth = settings.m_azimuth;
+    context.m_elevation = settings.m_elevation;
+    context.m_roll = settings.m_roll;
+    context.m_fov = settings.m_fov;
+    context.m_lensProjection = static_cast<int>(settings.m_lensProjection);
+    context.m_lensCenterOffsetX = settings.m_lensCenterOffsetX;
+    context.m_lensCenterOffsetY = settings.m_lensCenterOffsetY;
+    context.m_lensDistortionK1 = settings.m_lensDistortionK1;
+    context.m_lensMirror = settings.m_lensMirror;
+    context.m_valid = true;
 }
 
 CameraSettings CameraImageUtils::projectionSettingsForFrame(const CameraSettings& settings, const CameraPipelineFrame& frame)
 {
-    CameraSettings projectionSettings = settings;
-    frame.m_mediaMetadata.applyProjectionSettings(projectionSettings);
-    if (!settings.m_directionApplyToCurrentImage && frame.m_captureDirection.m_valid)
-    {
-        projectionSettings.m_azimuth = frame.m_captureDirection.m_azimuth;
-        projectionSettings.m_elevation = frame.m_captureDirection.m_elevation;
-        projectionSettings.m_roll = frame.m_captureDirection.m_roll;
-    }
-    return projectionSettings;
+    return CameraObservationContext::projectionSettingsForFrame(settings, frame);
+}
+
+QDateTime CameraImageUtils::observationDateTimeForFrame(
+    const CameraSettings& settings,
+    const CameraPipelineFrame& frame)
+{
+    return CameraObservationContext::dateTimeForFrame(settings, frame);
 }
 
 void CameraImageUtils::applyPlaybackProjectionTransform(CameraPipelineFrame& frame, const CameraSettings& settings, bool replaceExisting)

@@ -769,6 +769,8 @@ private slots:
     void on_latitudeSpin_valueChanged(double value);
     void on_longitudeSpin_valueChanged(double value);
     void on_altitudeSpin_valueChanged(double value);
+    void on_siteSourceCombo_currentIndexChanged(int index);
+    void on_siteApplyToCurrentImageCheck_toggled(bool checked);
     void on_owmApiKeyEdit_editingFinished();
     void on_useMyPositionButton_clicked();
     void useMyPositionButton_rightClicked(const QPoint& p);
@@ -787,6 +789,8 @@ private slots:
     void on_directionSensorFilterTimeConstantSpin_valueChanged(double value);
     void on_directionApplyToCurrentImageCheck_toggled(bool checked);
     void on_directionSourceCombo_currentIndexChanged(int index);
+    void on_projectionSourceCombo_currentIndexChanged(int index);
+    void on_projectionApplyToCurrentImageCheck_toggled(bool checked);
     void on_fovModeCombo_currentIndexChanged(int index);
     void on_fovSpin_valueChanged(double value);
     void on_fovSensorWidthSpin_valueChanged(double value);
@@ -802,6 +806,7 @@ private slots:
     void on_playbackProjectionYSpin_valueChanged(int value);
     void on_playbackProjectionWidthSpin_valueChanged(int value);
     void on_playbackProjectionHeightSpin_valueChanged(int value);
+    void on_observationTimeApplyToCurrentImageCheck_toggled(bool checked);
     void on_postProcessWhiteBalanceModeCombo_currentIndexChanged(int index);
     void on_postProcessWhiteBalanceRedGainSlider_valueChanged(int value);
     void on_postProcessWhiteBalanceRedGainSpin_valueChanged(double value);

@@ -1049,26 +1049,9 @@ void drawConstellationStars(QPainter& painter,
     }
 }
 
-QDateTime plateSolveOverlayDateTime(const CameraSettings& settings, const QDateTime& captureDateTime)
+QDateTime observationDateTime(const CameraSettings& settings, const CameraPipelineFrame& frame)
 {
-    if (settings.m_plateSolveUseCaptureDateTime)
-    {
-        if (captureDateTime.isValid()) {
-            return captureDateTime;
-        }
-
-        return QDateTime::currentDateTime();
-    }
-
-    if (settings.m_plateSolveDateTime.isValid()) {
-        return settings.m_plateSolveDateTime;
-    }
-
-    if (captureDateTime.isValid()) {
-        return captureDateTime;
-    }
-
-    return QDateTime::currentDateTime();
+    return CameraImageUtils::observationDateTimeForFrame(settings, frame);
 }
 
 QStringList detectedObjectClassesForReport(const QVector<CameraPipelineDetection>& detections)
@@ -1335,7 +1318,10 @@ void CameraPostProcessor::applySettings(const CameraSettings& settings, const QL
         "overlaySpectrum", "spectrumDevice", "spectrumOffsetX", "spectrumOffsetY", "spectrumScale", "spectrumOverlays", "windowOverlays",
         "drawingsEnabled", "drawingLineWidth", "drawingStrokeColor", "drawingFillEnabled", "drawingFillColor",
         "drawingFontFamily", "drawingFontPixelSize", "drawingFontBold", "drawingFontItalic", "drawings",
-        "latitude", "longitude", "altitude", "azimuth", "elevation", "roll", "directionApplyToCurrentImage", "fov",
+        "latitude", "longitude", "altitude", "siteSource", "siteApplyToCurrentImage",
+        "azimuth", "elevation", "roll", "directionSource", "directionApplyToCurrentImage", "fov",
+        "projectionSource", "projectionApplyToCurrentImage",
+        "observationTimeSource", "observationTimeApplyToCurrentImage", "plateSolveDateTime", "plateSolveDateTimeUtc",
         "lensProjection", "lensCenterOffsetX", "lensCenterOffsetY", "lensDistortionK1",
         "playbackProjectionEnabled", "playbackProjectionX", "playbackProjectionY", "playbackProjectionWidth", "playbackProjectionHeight",
         "owmAPIKey",
@@ -2377,9 +2363,9 @@ QString CameraPostProcessor::expandOverlayTextTemplate(const CameraSettings& set
     replaceToken(QStringLiteral("${time}"), m_captureDateTime.time().toString(QStringLiteral("HH:mm:ss")));
     replaceToken(QStringLiteral("${exposure}"), QString::number(m_settings.m_exposureTimeMs, 'f', 3));
     replaceToken(QStringLiteral("${cameraId}"), m_settings.m_cameraId);
-    replaceToken(QStringLiteral("${latitude}"), QString::number(m_settings.m_latitude, 'f', 6));
-    replaceToken(QStringLiteral("${longitude}"), QString::number(m_settings.m_longitude, 'f', 6));
-    replaceToken(QStringLiteral("${altitude}"), QString::number(m_settings.m_altitude, 'f', 2));
+    replaceToken(QStringLiteral("${latitude}"), QString::number(settings.m_latitude, 'f', 6));
+    replaceToken(QStringLiteral("${longitude}"), QString::number(settings.m_longitude, 'f', 6));
+    replaceToken(QStringLiteral("${altitude}"), QString::number(settings.m_altitude, 'f', 2));
     replaceToken(QStringLiteral("${azimuth}"), QString::number(settings.m_azimuth, 'f', 2));
     replaceToken(QStringLiteral("${elevation}"), QString::number(settings.m_elevation, 'f', 2));
     replaceToken(QStringLiteral("${roll}"), QString::number(settings.m_roll, 'f', 2));
@@ -2962,7 +2948,7 @@ void CameraPostProcessor::applySkyGridOverlay(const CameraPipelineFrame& frame, 
         return;
     }
 
-    const QDateTime utcDateTime = m_captureDateTime.toUTC();
+    const QDateTime utcDateTime = observationDateTime(m_settings, frame).toUTC();
 
     // Build the cache signature for the line overlay. The lines depend only on
     // the image size, grid colours and projection parameters; the equatorial
@@ -3046,7 +3032,7 @@ void CameraPostProcessor::applyConstellationOverlay(const CameraPipelineFrame& f
         return;
     }
 
-    const QDateTime utcDateTime = plateSolveOverlayDateTime(m_settings, m_captureDateTime).toUTC();
+    const QDateTime utcDateTime = observationDateTime(m_settings, frame).toUTC();
     QPainter painter(&image);
     painter.setRenderHint(QPainter::Antialiasing);
     painter.setClipRect(image.rect());
@@ -3123,7 +3109,7 @@ void CameraPostProcessor::applyMessierOverlay(const CameraPipelineFrame& frame, 
         return;
     }
 
-    const QDateTime utcDateTime = plateSolveOverlayDateTime(m_settings, m_captureDateTime).toUTC();
+    const QDateTime utcDateTime = observationDateTime(m_settings, frame).toUTC();
 
     QPainter painter(&image);
     painter.setRenderHint(QPainter::Antialiasing);
@@ -3411,7 +3397,7 @@ void CameraPostProcessor::applyTrackedObjectOverlay(const CameraPipelineFrame& f
         return;
     }
 
-    const QDateTime currentDateTime = m_captureDateTime.isValid() ? m_captureDateTime : QDateTime::currentDateTime();
+    const QDateTime currentDateTime = observationDateTime(m_settings, frame);
 
     QPainter painter(&image);
     painter.setRenderHint(QPainter::Antialiasing);

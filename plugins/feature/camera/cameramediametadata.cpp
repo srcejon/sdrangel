@@ -17,6 +17,7 @@
 #include <QJsonObject>
 
 #include "camerapipelineframe.h"
+#include "cameraobservationcontext.h"
 #include "camerasettings.h"
 
 namespace {
@@ -39,40 +40,25 @@ CameraMediaMetadata CameraMediaMetadata::fromFrame(
     const CameraPipelineFrame& frame)
 {
     CameraMediaMetadata metadata;
-    const CameraMediaMetadata& sourceMetadata = frame.m_mediaMetadata;
+    const CameraSettings effectiveSettings = CameraObservationContext::projectionSettingsForFrame(settings, frame);
 
     metadata.m_valid = true;
-    metadata.m_captureDateTimeUtc = frame.m_captureDateTime.isValid()
-        ? frame.m_captureDateTime.toUTC()
+    const QDateTime observationDateTime = CameraObservationContext::dateTimeForFrame(settings, frame);
+    metadata.m_captureDateTimeUtc = observationDateTime.isValid()
+        ? observationDateTime.toUTC()
         : QDateTime();
-    metadata.m_latitude = sourceMetadata.isValid() ? sourceMetadata.m_latitude : settings.m_latitude;
-    metadata.m_longitude = sourceMetadata.isValid() ? sourceMetadata.m_longitude : settings.m_longitude;
-    metadata.m_altitude = sourceMetadata.isValid() ? sourceMetadata.m_altitude : settings.m_altitude;
-    metadata.m_azimuth = frame.m_captureDirection.m_valid
-        ? frame.m_captureDirection.m_azimuth
-        : (sourceMetadata.isValid() ? sourceMetadata.m_azimuth : settings.m_azimuth);
-    metadata.m_elevation = frame.m_captureDirection.m_valid
-        ? frame.m_captureDirection.m_elevation
-        : (sourceMetadata.isValid() ? sourceMetadata.m_elevation : settings.m_elevation);
-    metadata.m_roll = frame.m_captureDirection.m_valid
-        ? frame.m_captureDirection.m_roll
-        : (sourceMetadata.isValid() ? sourceMetadata.m_roll : settings.m_roll);
-    metadata.m_fov = sourceMetadata.isValid() ? sourceMetadata.m_fov : settings.m_fov;
-    metadata.m_lensProjection = sourceMetadata.isValid()
-        ? sourceMetadata.m_lensProjection
-        : static_cast<int>(settings.m_lensProjection);
-    metadata.m_lensCenterOffsetX = sourceMetadata.isValid()
-        ? sourceMetadata.m_lensCenterOffsetX
-        : settings.m_lensCenterOffsetX;
-    metadata.m_lensCenterOffsetY = sourceMetadata.isValid()
-        ? sourceMetadata.m_lensCenterOffsetY
-        : settings.m_lensCenterOffsetY;
-    metadata.m_lensDistortionK1 = sourceMetadata.isValid()
-        ? sourceMetadata.m_lensDistortionK1
-        : settings.m_lensDistortionK1;
-    metadata.m_lensMirror = sourceMetadata.isValid()
-        ? sourceMetadata.m_lensMirror
-        : settings.m_lensMirror;
+    metadata.m_latitude = effectiveSettings.m_latitude;
+    metadata.m_longitude = effectiveSettings.m_longitude;
+    metadata.m_altitude = effectiveSettings.m_altitude;
+    metadata.m_azimuth = effectiveSettings.m_azimuth;
+    metadata.m_elevation = effectiveSettings.m_elevation;
+    metadata.m_roll = effectiveSettings.m_roll;
+    metadata.m_fov = effectiveSettings.m_fov;
+    metadata.m_lensProjection = static_cast<int>(effectiveSettings.m_lensProjection);
+    metadata.m_lensCenterOffsetX = effectiveSettings.m_lensCenterOffsetX;
+    metadata.m_lensCenterOffsetY = effectiveSettings.m_lensCenterOffsetY;
+    metadata.m_lensDistortionK1 = effectiveSettings.m_lensDistortionK1;
+    metadata.m_lensMirror = effectiveSettings.m_lensMirror;
 
     if (frame.m_imageTransform.isValid())
     {

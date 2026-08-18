@@ -53,6 +53,7 @@ public:
     [[nodiscard]] static cv::Mat debayerRawMat(const cv::Mat& input, CameraPipelineFrame::BayerPattern bayerPattern);
     static void captureDirection(CameraPipelineFrame& frame, const CameraSettings& settings);
     [[nodiscard]] static CameraSettings projectionSettingsForFrame(const CameraSettings& settings, const CameraPipelineFrame& frame);
+    [[nodiscard]] static QDateTime observationDateTimeForFrame(const CameraSettings& settings, const CameraPipelineFrame& frame);
     static void applyPlaybackProjectionTransform(CameraPipelineFrame& frame, const CameraSettings& settings, bool replaceExisting = false);
 };
 

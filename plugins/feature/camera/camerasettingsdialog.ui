@@ -5332,53 +5332,6 @@ car</string>
                 </property>
                </widget>
               </item>
-              <item row="8" column="2" colspan="2">
-               <layout class="QHBoxLayout" name="plateSolveDateTimeLayout">
-                <property name="spacing">
-                 <number>2</number>
-                </property>
-                <item>
-                 <widget class="WrappingDateTimeEdit" name="plateSolveDateTimeEdit">
-                  <property name="toolTip">
-                   <string>Custom date and time used for plate solving when capture time is not used.</string>
-                  </property>
-                  <property name="displayFormat">
-                   <string>yyyy-MM-dd HH:mm:ss</string>
-                  </property>
-                  <property name="calendarPopup">
-                   <bool>true</bool>
-                  </property>
-                 </widget>
-                </item>
-                <item>
-                 <widget class="ButtonSwitch" name="plateSolveDateTimeUtcButton">
-                  <property name="toolTip">
-                   <string>Treat the solve date/time as UTC</string>
-                  </property>
-                  <property name="text">
-                   <string>UTC</string>
-                  </property>
-                  <property name="checkable">
-                   <bool>true</bool>
-                  </property>
-                 </widget>
-                </item>
-                <item>
-                 <widget class="QToolButton" name="plateSolveDateTimeNowButton">
-                  <property name="toolTip">
-                   <string>Set solve date/time to now</string>
-                  </property>
-                  <property name="text">
-                   <string/>
-                  </property>
-                  <property name="icon">
-                   <iconset resource="../../../sdrgui/resources/res.qrc">
-                    <normaloff>:/recycle.png</normaloff>:/recycle.png</iconset>
-                  </property>
-                 </widget>
-                </item>
-               </layout>
-              </item>
               <item row="5" column="2">
                <widget class="QLabel" name="plateSolveFinalMatchRadiusLabel">
                 <property name="text">
@@ -5521,23 +5474,6 @@ car</string>
                 </property>
                </widget>
               </item>
-              <item row="8" column="1">
-               <widget class="QComboBox" name="plateSolveDateTimeModeCombo">
-                <property name="toolTip">
-                 <string>Chooses whether plate solving uses the frame capture time or a custom time.</string>
-                </property>
-                <item>
-                 <property name="text">
-                  <string>Capture</string>
-                 </property>
-                </item>
-                <item>
-                 <property name="text">
-                  <string>Custom</string>
-                 </property>
-                </item>
-               </widget>
-              </item>
               <item row="10" column="0">
                <widget class="QLabel" name="hideSyntheticNamesLabel">
                 <property name="text">
@@ -5594,13 +5530,6 @@ car</string>
                 </property>
                 <property name="singleStep">
                  <double>1.000000000000000</double>
-                </property>
-               </widget>
-              </item>
-              <item row="8" column="0">
-               <widget class="QLabel" name="plateSolveDateTimeModeLabel">
-                <property name="text">
-                 <string>Date/time</string>
                 </property>
                </widget>
               </item>
@@ -8206,7 +8135,7 @@ Use src=file:///path/to/images/logo.png for img tags. http is not supported.</st
             </property>
            </widget>
           </item>
-          <item row="3" column="0">
+          <item row="5" column="0">
            <widget class="QToolButton" name="useMyPositionButton">
             <property name="toolTip">
              <string>Left click: set to My Position once.
@@ -8219,6 +8148,32 @@ Right-click: toggle continual synchronization from My Position.</string>
              <iconset resource="../../../sdrgui/resources/res.qrc">
               <normaloff>:/import.png</normaloff>:/import.png</iconset>
             </property>
+           </widget>
+          </item>
+          <item row="3" column="0">
+           <widget class="QLabel" name="siteSourceLabel">
+            <property name="text">
+             <string>Source</string>
+            </property>
+           </widget>
+          </item>
+          <item row="3" column="1" colspan="3">
+           <widget class="QComboBox" name="siteSourceCombo">
+            <property name="toolTip">
+             <string>Select manual coordinates, My Position, or site coordinates stored in the current media file.</string>
+            </property>
+            <item><property name="text"><string>Manual</string></property></item>
+            <item><property name="text"><string>My Position</string></property></item>
+            <item><property name="text"><string>File metadata</string></property></item>
+           </widget>
+          </item>
+          <item row="4" column="0" colspan="4">
+           <widget class="QCheckBox" name="siteApplyToCurrentImageCheck">
+            <property name="toolTip">
+             <string>Apply site source and coordinate changes to the currently displayed image.</string>
+            </property>
+            <property name="text"><string>Apply site changes to current image</string></property>
+            <property name="checked"><bool>true</bool></property>
            </widget>
           </item>
          </layout>
@@ -8794,6 +8749,97 @@ Right-click: toggle continual synchronization from My Position.</string>
             <property name="text">
              <string>Mirrored</string>
             </property>
+           </widget>
+          </item>
+          <item row="10" column="0">
+           <widget class="QLabel" name="projectionSourceLabel">
+            <property name="text"><string>Source</string></property>
+           </widget>
+          </item>
+          <item row="10" column="1" colspan="3">
+           <widget class="QComboBox" name="projectionSourceCombo">
+            <property name="toolTip">
+             <string>Select manual lens/projection values or values stored in the current media file.</string>
+            </property>
+            <item><property name="text"><string>Manual</string></property></item>
+            <item><property name="text"><string>File metadata</string></property></item>
+           </widget>
+          </item>
+          <item row="11" column="0" colspan="4">
+           <widget class="QCheckBox" name="projectionApplyToCurrentImageCheck">
+            <property name="toolTip">
+             <string>Apply FoV and lens projection changes to the currently displayed image.</string>
+            </property>
+            <property name="text"><string>Apply projection changes to current image</string></property>
+            <property name="checked"><bool>true</bool></property>
+           </widget>
+          </item>
+         </layout>
+       </widget>
+      </item>
+       <item alignment="Qt::AlignmentFlag::AlignTop">
+        <widget class="QGroupBox" name="observationTimeGroup">
+         <property name="toolTip">
+          <string>Observation date and time used for sky projection, cloud calculations, and plate solving.</string>
+         </property>
+         <property name="title"><string>Observation time</string></property>
+         <layout class="QGridLayout" name="observationTimeLayout">
+          <item row="0" column="0">
+           <widget class="QLabel" name="plateSolveDateTimeModeLabel">
+            <property name="text"><string>Source</string></property>
+           </widget>
+          </item>
+          <item row="0" column="1">
+           <widget class="QComboBox" name="plateSolveDateTimeModeCombo">
+            <property name="toolTip">
+             <string>Use the frame capture/media time, the current clock, or a custom observation time.</string>
+            </property>
+            <item><property name="text"><string>Capture / media</string></property></item>
+            <item><property name="text"><string>Current time</string></property></item>
+            <item><property name="text"><string>Custom</string></property></item>
+           </widget>
+          </item>
+          <item row="1" column="0">
+           <widget class="QLabel" name="observationCustomDateTimeLabel">
+            <property name="text"><string>Custom time</string></property>
+           </widget>
+          </item>
+          <item row="1" column="1">
+           <layout class="QHBoxLayout" name="plateSolveDateTimeLayout">
+            <property name="spacing"><number>2</number></property>
+            <item>
+             <widget class="WrappingDateTimeEdit" name="plateSolveDateTimeEdit">
+              <property name="toolTip"><string>Custom observation date and time.</string></property>
+              <property name="displayFormat"><string>yyyy-MM-dd HH:mm:ss</string></property>
+              <property name="calendarPopup"><bool>true</bool></property>
+             </widget>
+            </item>
+            <item>
+             <widget class="ButtonSwitch" name="plateSolveDateTimeUtcButton">
+              <property name="toolTip"><string>Treat the custom observation date/time as UTC.</string></property>
+              <property name="text"><string>UTC</string></property>
+              <property name="checkable"><bool>true</bool></property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QToolButton" name="plateSolveDateTimeNowButton">
+              <property name="toolTip"><string>Set the custom observation date/time to now.</string></property>
+              <property name="text"><string/></property>
+              <property name="icon">
+               <iconset resource="../../../sdrgui/resources/res.qrc">
+                <normaloff>:/recycle.png</normaloff>:/recycle.png</iconset>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+          <item row="2" column="0" colspan="2">
+           <widget class="QCheckBox" name="observationTimeApplyToCurrentImageCheck">
+            <property name="toolTip">
+             <string>Apply observation-time source and custom-time changes to the currently displayed image.</string>
+            </property>
+            <property name="text"><string>Apply time changes to current image</string></property>
+            <property name="checked"><bool>true</bool></property>
            </widget>
           </item>
          </layout>

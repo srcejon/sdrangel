@@ -460,7 +460,6 @@ private:
     // preview deep-copy). Used only on the post-processor thread; cross-thread
     // release (the GUI holds the preview) is handled by CameraImagePool.
     CameraImagePool m_overlayImagePool;
-    QDateTime m_captureDateTime;
     float m_cloudCoveragePercent = std::numeric_limits<float>::quiet_NaN();
     bool m_captureActive = false;
     quint64 m_captureEpoch = 0;
@@ -523,9 +522,9 @@ private:
     void applyConstellationOverlay(const CameraPipelineFrame& frame, QImage& image) const;
     void applyMessierOverlay(const CameraPipelineFrame& frame, QImage& image, bool drawLabels, QVector<PreviewTextLabel> *previewTextLabels) const;
     void applyTrackedObjectOverlay(const CameraPipelineFrame& frame, QImage& image, bool drawLabels, QVector<PreviewTextLabel> *previewTextLabels, QVector<CameraPipelineTrackedObject> *trackedObjects = nullptr);
-    void applyDateTimeOverlay(QImage& image, bool drawLabel, QVector<PreviewTextLabel> *previewTextLabels) const;
+    void applyDateTimeOverlay(QImage& image, const QDateTime& captureDateTime, bool drawLabel, QVector<PreviewTextLabel> *previewTextLabels) const;
     void applyTextOverlay(QImage& image, QTextDocument& overlayTextDocument) const;
-    [[nodiscard]] QString expandOverlayTextTemplate(const CameraSettings& settings) const;
+    [[nodiscard]] QString expandOverlayTextTemplate(const CameraSettings& settings, const QDateTime& captureDateTime) const;
     void updateTrackedMapObject(const QObject* pipeSource, SWGSDRangel::SWGMapItem* swgMapItem);
     void updateTrackedObjectPipeRegistration();
     void registerTrackedObjectPipes();

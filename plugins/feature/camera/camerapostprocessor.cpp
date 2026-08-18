@@ -1686,7 +1686,6 @@ void CameraPostProcessor::processNewFrame(const CameraPipelineFramePtr& frame)
         return;
     }
 
-    m_captureDateTime = frame->m_captureDateTime.isValid() ? frame->m_captureDateTime : QDateTime::currentDateTime();
     m_cloudCoveragePercent = frame->m_cloud.m_valid ? frame->m_cloud.m_coveragePercent : std::numeric_limits<float>::quiet_NaN();
     QVector<PreviewTextLabel> previewTextLabels;
     QVector<PreviewRectItem> previewRectItems;
@@ -2312,10 +2311,10 @@ cv::Mat CameraPostProcessor::wrapRgb888Image(const QImage& image)
     return CameraImageUtils::wrapRgb888Image(image);
 }
 
-void CameraPostProcessor::applyDateTimeOverlay(QImage& image, bool drawLabel, QVector<PreviewTextLabel> *previewTextLabels) const
+void CameraPostProcessor::applyDateTimeOverlay(QImage& image, const QDateTime& captureDateTime, bool drawLabel, QVector<PreviewTextLabel> *previewTextLabels) const
 {
     PROFILER_START();
-    const QDateTime displayDateTime = m_settings.m_dateTimeUtc ? m_captureDateTime.toUTC() : m_captureDateTime.toLocalTime();
+    const QDateTime displayDateTime = m_settings.m_dateTimeUtc ? captureDateTime.toUTC() : captureDateTime.toLocalTime();
     const QString text = formatDateTimeOverlayText(displayDateTime, m_settings.m_dateTimeFormat);
     QFont font;
     if (!m_settings.m_overlayFontFamily.isEmpty()) {
@@ -2347,7 +2346,7 @@ void CameraPostProcessor::applyDateTimeOverlay(QImage& image, bool drawLabel, QV
     PROFILER_STOP(__FUNCTION__);
 }
 
-QString CameraPostProcessor::expandOverlayTextTemplate(const CameraSettings& settings) const
+QString CameraPostProcessor::expandOverlayTextTemplate(const CameraSettings& settings, const QDateTime& captureDateTime) const
 {
     QString overlayText = m_settings.m_overlayTextString;
     const auto replaceToken = [&overlayText](const QString& token, const QString& value)
@@ -2359,8 +2358,8 @@ QString CameraPostProcessor::expandOverlayTextTemplate(const CameraSettings& set
         return std::isnan(value) ? QStringLiteral("N/A") : QString::number(value, 'f', decimals);
     };
 
-    replaceToken(QStringLiteral("${date}"), m_captureDateTime.date().toString(Qt::ISODate));
-    replaceToken(QStringLiteral("${time}"), m_captureDateTime.time().toString(QStringLiteral("HH:mm:ss")));
+    replaceToken(QStringLiteral("${date}"), captureDateTime.date().toString(Qt::ISODate));
+    replaceToken(QStringLiteral("${time}"), captureDateTime.time().toString(QStringLiteral("HH:mm:ss")));
     replaceToken(QStringLiteral("${exposure}"), QString::number(m_settings.m_exposureTimeMs, 'f', 3));
     replaceToken(QStringLiteral("${cameraId}"), m_settings.m_cameraId);
     replaceToken(QStringLiteral("${latitude}"), QString::number(settings.m_latitude, 'f', 6));
@@ -3692,7 +3691,11 @@ QImage CameraPostProcessor::applyPostProcessing(
     }
     const bool needsWindowOverlays = !m_windowOverlayFrames.isEmpty();
     const CameraSettings projectionSettings = CameraImageUtils::projectionSettingsForFrame(m_settings, frame);
-    const QString expandedOverlayText = expandOverlayTextTemplate(projectionSettings);
+    QDateTime captureDateTime = observationDateTime(m_settings, frame);
+    if (!captureDateTime.isValid()) {
+        captureDateTime = frame.m_captureDateTime.isValid() ? frame.m_captureDateTime : QDateTime::currentDateTime();
+    }
+    const QString expandedOverlayText = expandOverlayTextTemplate(projectionSettings, captureDateTime);
     // Build the overlay text document once with font/style/HTML used for both the
     // empty-check and rendering, so we only call QTextDocument::setHtml() once per frame.
     QTextDocument overlayTextDocument;
@@ -3778,7 +3781,7 @@ QImage CameraPostProcessor::applyPostProcessing(
         applyWindowOverlays(result);
     }
     if (m_settings.m_overlayDateTime) {
-        applyDateTimeOverlay(result, drawPreviewText, previewTextLabels); 
+        applyDateTimeOverlay(result, captureDateTime, drawPreviewText, previewTextLabels);
     }
     if (needsTextOverlay) { 
         applyTextOverlay(result, overlayTextDocument); 

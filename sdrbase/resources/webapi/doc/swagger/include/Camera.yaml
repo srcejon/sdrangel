@@ -1043,10 +1043,10 @@ CameraSettings:
       description: "Use frame capture date/time for plate solving; when 0 use plateSolveDateTime (1 for yes, 0 for no)"
       type: integer
     observationTimeSource:
-      description: "Observation-time source: 0 capture/media, 1 current clock, 2 custom"
+      description: "Capture-time source: 0 file metadata/frame capture timestamp, 1 current clock, 2 manual"
       type: integer
     observationTimeApplyToCurrentImage:
-      description: "Apply observation-time changes to the currently displayed image (1 for yes, 0 for no)"
+      description: "Apply capture-time changes to the currently displayed image (1 for yes, 0 for no)"
       type: integer
     plateSolveDateTime:
       description: "Fixed date/time for plate solving recorded media"

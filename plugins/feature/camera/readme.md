@@ -1187,7 +1187,7 @@ Selects the star catalog used for plate solving (Auto, HYG local/bundled, Siril 
 
 <h4>10. Date/time</h4>
 
-Selects whether the solve date/time uses the capture time or a Custom value. When Custom, the date/time editor sets the value, the UTC button treats it as UTC, and the recycle button sets it to now.
+Selects whether the capture time comes from file metadata, the current clock, or a Manual value. When Manual, the date/time editor sets the value, the UTC button treats it as UTC, and the recycle button sets it to now. The selected capture time is used by the date/time overlay, sky projection, cloud calculations, and plate solving.
 
 <h4>11. Labels</h4>
 

@@ -8780,9 +8780,9 @@ Right-click: toggle continual synchronization from My Position.</string>
        <item alignment="Qt::AlignmentFlag::AlignTop">
         <widget class="QGroupBox" name="observationTimeGroup">
          <property name="toolTip">
-          <string>Observation date and time used for sky projection, cloud calculations, and plate solving.</string>
+          <string>Capture date and time used for overlays, sky projection, cloud calculations, and plate solving.</string>
          </property>
-         <property name="title"><string>Observation time</string></property>
+         <property name="title"><string>Capture time</string></property>
          <layout class="QGridLayout" name="observationTimeLayout">
           <item row="0" column="0">
            <widget class="QLabel" name="plateSolveDateTimeModeLabel">
@@ -8792,16 +8792,16 @@ Right-click: toggle continual synchronization from My Position.</string>
           <item row="0" column="1">
            <widget class="QComboBox" name="plateSolveDateTimeModeCombo">
             <property name="toolTip">
-             <string>Use the frame capture/media time, the current clock, or a custom observation time.</string>
+             <string>Use the capture time stored in file metadata, the current clock, or a manually entered capture time.</string>
             </property>
-            <item><property name="text"><string>Capture / media</string></property></item>
+            <item><property name="text"><string>File metadata</string></property></item>
             <item><property name="text"><string>Current time</string></property></item>
-            <item><property name="text"><string>Custom</string></property></item>
+            <item><property name="text"><string>Manual</string></property></item>
            </widget>
           </item>
           <item row="1" column="0">
            <widget class="QLabel" name="observationCustomDateTimeLabel">
-            <property name="text"><string>Custom time</string></property>
+            <property name="text"><string>Manual time</string></property>
            </widget>
           </item>
           <item row="1" column="1">
@@ -8809,21 +8809,21 @@ Right-click: toggle continual synchronization from My Position.</string>
             <property name="spacing"><number>2</number></property>
             <item>
              <widget class="WrappingDateTimeEdit" name="plateSolveDateTimeEdit">
-              <property name="toolTip"><string>Custom observation date and time.</string></property>
+              <property name="toolTip"><string>Manually entered capture date and time.</string></property>
               <property name="displayFormat"><string>yyyy-MM-dd HH:mm:ss</string></property>
               <property name="calendarPopup"><bool>true</bool></property>
              </widget>
             </item>
             <item>
              <widget class="ButtonSwitch" name="plateSolveDateTimeUtcButton">
-              <property name="toolTip"><string>Treat the custom observation date/time as UTC.</string></property>
+              <property name="toolTip"><string>Treat the manually entered capture date/time as UTC.</string></property>
               <property name="text"><string>UTC</string></property>
               <property name="checkable"><bool>true</bool></property>
              </widget>
             </item>
             <item>
              <widget class="QToolButton" name="plateSolveDateTimeNowButton">
-              <property name="toolTip"><string>Set the custom observation date/time to now.</string></property>
+              <property name="toolTip"><string>Set the manual capture date/time to now.</string></property>
               <property name="text"><string/></property>
               <property name="icon">
                <iconset resource="../../../sdrgui/resources/res.qrc">
@@ -8836,7 +8836,7 @@ Right-click: toggle continual synchronization from My Position.</string>
           <item row="2" column="0" colspan="2">
            <widget class="QCheckBox" name="observationTimeApplyToCurrentImageCheck">
             <property name="toolTip">
-             <string>Apply observation-time source and custom-time changes to the currently displayed image.</string>
+             <string>Apply capture-time source and manual-time changes to the currently displayed image.</string>
             </property>
             <property name="text"><string>Apply time changes to current image</string></property>
             <property name="checked"><bool>true</bool></property>

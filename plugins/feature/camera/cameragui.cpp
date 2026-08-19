@@ -852,7 +852,9 @@ bool CameraGUI::handleMessage(const Message& message)
         m_lastMediaMetadata = report.getMediaMetadata();
         m_lastSourceMediaMetadata = report.getSourceMediaMetadata();
         updateSourceValueDisplays();
-        updatePlateSolveDateTimeEdit();
+        if (m_settings.m_observationTimeSource != CameraSettings::ObservationTimeCustom) {
+            updatePlateSolveDateTimeEdit();
+        }
         m_lastHistogramData = report.getHistogramData();
         m_lastOpticalSpectrumData = report.getOpticalSpectrumData();
         m_lastStarDetections = report.getStarDetections();
@@ -6622,6 +6624,8 @@ void CameraGUI::updateFovControls()
 void CameraGUI::updateSourceValueDisplays()
 {
     const bool metadataAvailable = m_lastSourceMediaMetadata.isValid();
+    const bool derivedSite = m_settings.m_siteSource != CameraSettings::SiteSourceManual;
+    const bool derivedDirection = m_settings.m_directionSource != CameraSettings::DirectionSourceManual;
     const bool metadataSite = metadataAvailable
         && (m_settings.m_siteSource == CameraSettings::SiteSourceMediaMetadata);
     const bool metadataDirection = metadataAvailable
@@ -6629,6 +6633,7 @@ void CameraGUI::updateSourceValueDisplays()
     const bool metadataProjection = metadataAvailable
         && (m_settings.m_projectionSource == CameraSettings::ProjectionSourceMediaMetadata);
 
+    if (derivedSite)
     {
         QSignalBlocker latitudeBlocker(settingsUI()->latitudeSpin);
         QSignalBlocker longitudeBlocker(settingsUI()->longitudeSpin);
@@ -6641,6 +6646,7 @@ void CameraGUI::updateSourceValueDisplays()
             ? m_lastSourceMediaMetadata.altitude() : m_settings.m_altitude);
     }
 
+    if (derivedDirection)
     {
         QSignalBlocker azimuthBlocker(settingsUI()->azimuthSpin);
         QSignalBlocker elevationBlocker(settingsUI()->elevationSpin);
@@ -6653,6 +6659,7 @@ void CameraGUI::updateSourceValueDisplays()
             ? m_lastSourceMediaMetadata.roll() : m_settings.m_roll);
     }
 
+    if (m_settings.m_projectionSource == CameraSettings::ProjectionSourceMediaMetadata)
     {
         QSignalBlocker fovModeBlocker(settingsUI()->fovModeCombo);
         QSignalBlocker fovBlocker(settingsUI()->fovSpin);
@@ -10353,6 +10360,23 @@ void CameraGUI::on_projectionSourceCombo_currentIndexChanged(int index)
     m_settings.m_projectionSource = static_cast<CameraSettings::ProjectionSource>(qBound(
         static_cast<int>(CameraSettings::ProjectionSourceManual), index,
         static_cast<int>(CameraSettings::ProjectionSourceMediaMetadata)));
+    if (m_settings.m_projectionSource == CameraSettings::ProjectionSourceManual)
+    {
+        QSignalBlocker fovModeBlocker(settingsUI()->fovModeCombo);
+        QSignalBlocker fovBlocker(settingsUI()->fovSpin);
+        QSignalBlocker projectionBlocker(settingsUI()->lensProjectionCombo);
+        QSignalBlocker centerXBlocker(settingsUI()->lensCenterOffsetXSpin);
+        QSignalBlocker centerYBlocker(settingsUI()->lensCenterOffsetYSpin);
+        QSignalBlocker distortionBlocker(settingsUI()->lensDistortionK1Spin);
+        QSignalBlocker mirrorBlocker(settingsUI()->lensMirrorCheck);
+        settingsUI()->fovModeCombo->setCurrentIndex(static_cast<int>(m_settings.m_fovMode));
+        settingsUI()->fovSpin->setValue(m_settings.m_fov);
+        settingsUI()->lensProjectionCombo->setCurrentIndex(static_cast<int>(m_settings.m_lensProjection));
+        settingsUI()->lensCenterOffsetXSpin->setValue(m_settings.m_lensCenterOffsetX);
+        settingsUI()->lensCenterOffsetYSpin->setValue(m_settings.m_lensCenterOffsetY);
+        settingsUI()->lensDistortionK1Spin->setValue(m_settings.m_lensDistortionK1);
+        settingsUI()->lensMirrorCheck->setChecked(m_settings.m_lensMirror);
+    }
     updateFovControls();
     applySetting("projectionSource");
 }

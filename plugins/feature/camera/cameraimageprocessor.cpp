@@ -126,32 +126,6 @@ CameraImageProcessor::CameraImageProcessor() :
 
 CameraImageProcessor::~CameraImageProcessor() = default;
 
-void CameraImageProcessor::LastInputFrame::clear()
-{
-    m_image = QImage();
-    m_unprocessedImage = QImage();
-    m_rawInputImage = QImage();
-    m_captureDateTime = QDateTime();
-    m_captureDirection = CameraPipelineDirection();
-    m_mediaMetadata = CameraMediaMetadata();
-    m_captureEpoch = 0;
-    m_pipelineInputWallClockMs = 0;
-    m_playbackPositionMs = -1;
-    m_playbackFrameNumber = -1;
-    m_playbackFrameRate = 0.0;
-    m_exposureTimeMs = 0.0;
-    m_hdrExposureIndex = -1;
-    m_hdrExposureCount = 0;
-    m_stack = CameraPipelineStacking();
-    m_imageTransform.clear();
-    m_bayerPattern = CameraPipelineFrame::BayerNone;
-    m_rawInputBayerPattern = CameraPipelineFrame::BayerNone;
-#ifdef CAMERA_OPENCV_CUDA_IMAGE_PROCESSING
-    m_cudaBgrImage.release();
-    m_cudaGrayImage.release();
-#endif
-}
-
 bool CameraImageProcessor::LastInputFrame::hasImageData() const
 {
     return !m_image.isNull()
@@ -195,7 +169,6 @@ bool CameraImageProcessor::handleMessage(const Message& cmd)
         m_captureEpoch = activeMsg.getCaptureEpoch();
         if (m_captureActive)
         {
-            m_lastInputFrame.clear();
             m_autoWhiteBalanceGains = cv::Vec3d(1.0, 1.0, 1.0);
             m_autoWhiteBalanceInitialized = false;
             invalidateUnwarpMaps();
@@ -319,7 +292,10 @@ void CameraImageProcessor::applySettings(const CameraSettings& settings, const Q
     }
 
     if (sourceChanged) {
-        m_lastInputFrame.clear();
+        // Keep the cached input until an actual replacement frame arrives. It
+        // is also the source for reprocessing the image currently displayed by
+        // the GUI, which remains valid while capture is stopped or while a new
+        // source is waiting to deliver its first frame.
         invalidateUnwarpMaps();
     }
 

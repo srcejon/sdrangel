@@ -104,7 +104,6 @@ private:
         cv::cuda::GpuMat m_cudaGrayImage;
 #endif
 
-        void clear();
         [[nodiscard]] bool hasImageData() const;
     };
 

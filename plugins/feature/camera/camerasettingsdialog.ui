@@ -8051,7 +8051,7 @@ Use src=file:///path/to/images/logo.png for img tags. http is not supported.</st
           <string>Camera position</string>
          </property>
          <layout class="QGridLayout" name="cameraPositionLayout">
-          <item row="0" column="3">
+          <item row="1" column="3">
            <widget class="QDoubleSpinBox" name="longitudeSpin">
             <property name="toolTip">
              <string>Observer longitude in degrees; positive is east.</string>
@@ -8070,7 +8070,7 @@ Use src=file:///path/to/images/logo.png for img tags. http is not supported.</st
             </property>
            </widget>
           </item>
-          <item row="0" column="0">
+          <item row="1" column="0">
            <widget class="QLabel" name="latitudeLabel">
             <property name="minimumSize">
              <size>
@@ -8109,7 +8109,7 @@ Use src=file:///path/to/images/logo.png for img tags. http is not supported.</st
             </property>
            </widget>
           </item>
-          <item row="0" column="1">
+          <item row="1" column="1">
            <widget class="QDoubleSpinBox" name="latitudeSpin">
             <property name="toolTip">
              <string>Observer latitude in degrees; positive is north.</string>
@@ -8128,36 +8128,21 @@ Use src=file:///path/to/images/logo.png for img tags. http is not supported.</st
             </property>
            </widget>
           </item>
-          <item row="0" column="2">
+          <item row="1" column="2">
            <widget class="QLabel" name="longitudeLabel">
             <property name="text">
              <string>Longitude</string>
             </property>
            </widget>
           </item>
-          <item row="5" column="0">
-           <widget class="QToolButton" name="useMyPositionButton">
-            <property name="toolTip">
-             <string>Left click: set to My Position once.
-Right-click: toggle continual synchronization from My Position.</string>
-            </property>
-            <property name="text">
-             <string/>
-            </property>
-            <property name="icon">
-             <iconset resource="../../../sdrgui/resources/res.qrc">
-              <normaloff>:/import.png</normaloff>:/import.png</iconset>
-            </property>
-           </widget>
-          </item>
-          <item row="3" column="0">
+          <item row="0" column="0">
            <widget class="QLabel" name="siteSourceLabel">
             <property name="text">
              <string>Source</string>
             </property>
            </widget>
           </item>
-          <item row="3" column="1" colspan="2">
+          <item row="0" column="1">
            <widget class="QComboBox" name="siteSourceCombo">
             <property name="toolTip">
              <string>Select manual coordinates, My Position, or site coordinates stored in the current media file.</string>
@@ -8167,7 +8152,7 @@ Right-click: toggle continual synchronization from My Position.</string>
             <item><property name="text"><string>File metadata</string></property></item>
            </widget>
           </item>
-          <item row="3" column="3">
+          <item row="0" column="2">
            <widget class="QToolButton" name="siteCopyToManualButton">
             <property name="toolTip"><string>Copy the current site source values to the manual settings.</string></property>
             <property name="text"><string/></property>
@@ -8177,12 +8162,16 @@ Right-click: toggle continual synchronization from My Position.</string>
             </property>
            </widget>
           </item>
-          <item row="4" column="0" colspan="4">
-           <widget class="QCheckBox" name="siteApplyToCurrentImageCheck">
+          <item row="0" column="3">
+           <widget class="ButtonSwitch" name="siteApplyToCurrentImageButton">
             <property name="toolTip">
              <string>Apply site source and coordinate changes to the currently displayed image.</string>
             </property>
-            <property name="text"><string>Apply site changes to current image</string></property>
+            <property name="text"><string/></property>
+            <property name="icon">
+             <iconset resource="../../../sdrgui/resources/res.qrc">
+              <normaloff>:/checkmark.png</normaloff>:/checkmark.png</iconset>
+            </property>
             <property name="checked"><bool>true</bool></property>
            </widget>
           </item>
@@ -8340,13 +8329,15 @@ Right-click: toggle continual synchronization from My Position.</string>
             </property>
            </widget>
           </item>
-          <item row="3" column="0" colspan="4">
-           <widget class="QCheckBox" name="directionApplyToCurrentImageCheck">
+          <item row="0" column="3">
+           <widget class="ButtonSwitch" name="directionApplyToCurrentImageButton">
             <property name="toolTip">
              <string>When enabled, azimuth, elevation, and roll changes reproject the currently displayed image. Disable this for a moving camera so each frame retains the direction sampled when it was captured.</string>
             </property>
-            <property name="text">
-             <string>Apply direction changes to current image</string>
+            <property name="text"><string/></property>
+            <property name="icon">
+             <iconset resource="../../../sdrgui/resources/res.qrc">
+              <normaloff>:/checkmark.png</normaloff>:/checkmark.png</iconset>
             </property>
             <property name="checked">
              <bool>true</bool>
@@ -8473,14 +8464,14 @@ Right-click: toggle continual synchronization from My Position.</string>
             </property>
            </widget>
           </item>
-          <item row="0" column="1" colspan="2">
+          <item row="0" column="1">
            <widget class="QComboBox" name="directionSourceCombo">
             <property name="toolTip">
              <string>Select a GS232Controller rotator or Qt Sensors compass/tilt/rotation sensor set to continually synchronize the camera direction.</string>
             </property>
            </widget>
           </item>
-          <item row="0" column="3">
+          <item row="0" column="2">
            <widget class="QToolButton" name="directionCopyToManualButton">
             <property name="toolTip"><string>Copy the current metadata, rotator, or sensor direction to the manual settings.</string></property>
             <property name="text"><string/></property>
@@ -8502,21 +8493,21 @@ Right-click: toggle continual synchronization from My Position.</string>
           <string>Camera lens and sensor</string>
          </property>
          <layout class="QGridLayout" name="gridLayout_15">
-          <item row="7" column="0">
+          <item row="8" column="0">
            <widget class="QLabel" name="lensCenterOffsetXLabel">
             <property name="text">
              <string>Center offset X</string>
             </property>
            </widget>
           </item>
-          <item row="1" column="0">
+          <item row="2" column="0">
            <widget class="QLabel" name="fovLabel">
             <property name="text">
              <string>FoV</string>
             </property>
            </widget>
           </item>
-          <item row="6" column="1">
+          <item row="7" column="1">
            <widget class="QComboBox" name="lensProjectionCombo">
             <property name="toolTip">
              <string>Projection model used to map image pixels to sky directions.</string>
@@ -8538,7 +8529,7 @@ Right-click: toggle continual synchronization from My Position.</string>
             </item>
            </widget>
           </item>
-          <item row="1" column="1">
+          <item row="2" column="1">
            <widget class="QDoubleSpinBox" name="fovSpin">
             <property name="toolTip">
              <string>Camera field of view in degrees.</string>
@@ -8560,14 +8551,14 @@ Right-click: toggle continual synchronization from My Position.</string>
             </property>
            </widget>
           </item>
-          <item row="2" column="0">
+          <item row="3" column="0">
            <widget class="QLabel" name="fovSensorWidthLabel">
             <property name="text">
              <string>Sensor width</string>
             </property>
            </widget>
           </item>
-          <item row="2" column="1">
+          <item row="3" column="1">
            <widget class="QDoubleSpinBox" name="fovSensorWidthSpin">
             <property name="toolTip">
              <string>Sensor width in millimetres used to calculate field of view.</string>
@@ -8589,14 +8580,14 @@ Right-click: toggle continual synchronization from My Position.</string>
             </property>
            </widget>
           </item>
-          <item row="2" column="2">
+          <item row="3" column="2">
            <widget class="QLabel" name="fovSensorHeightLabel">
             <property name="text">
              <string>Sensor height</string>
             </property>
            </widget>
           </item>
-          <item row="5" column="1">
+          <item row="6" column="1">
            <widget class="QDoubleSpinBox" name="fovFocalLengthSpin">
             <property name="toolTip">
              <string>Focal length in millimetres used to calculate field of view.</string>
@@ -8618,7 +8609,7 @@ Right-click: toggle continual synchronization from My Position.</string>
             </property>
            </widget>
           </item>
-          <item row="0" column="1">
+          <item row="1" column="1">
            <widget class="QComboBox" name="fovModeCombo">
             <property name="toolTip">
              <string>Chooses whether field of view is entered directly, calculated from entered sensor dimensions, or calculated from camera-reported sensor dimensions. Focal length remains user supplied.</string>
@@ -8640,28 +8631,28 @@ Right-click: toggle continual synchronization from My Position.</string>
             </item>
            </widget>
           </item>
-          <item row="9" column="0">
+          <item row="10" column="0">
            <widget class="QLabel" name="lensDistortionK1Label">
             <property name="text">
              <string>Distortion K1</string>
             </property>
            </widget>
           </item>
-          <item row="5" column="0">
+          <item row="6" column="0">
            <widget class="QLabel" name="fovFocalLengthLabel">
             <property name="text">
              <string>Focal length</string>
             </property>
            </widget>
           </item>
-          <item row="0" column="0">
+          <item row="1" column="0">
            <widget class="QLabel" name="fovModeLabel">
             <property name="text">
              <string>FoV setting</string>
             </property>
            </widget>
           </item>
-          <item row="7" column="1">
+          <item row="8" column="1">
            <widget class="QDoubleSpinBox" name="lensCenterOffsetXSpin">
             <property name="toolTip">
              <string>Horizontal lens centre offset in pixels.</string>
@@ -8680,14 +8671,14 @@ Right-click: toggle continual synchronization from My Position.</string>
             </property>
            </widget>
           </item>
-          <item row="6" column="0">
+          <item row="7" column="0">
            <widget class="QLabel" name="lensProjectionLabel">
             <property name="text">
              <string>Projection</string>
             </property>
            </widget>
           </item>
-          <item row="9" column="1">
+          <item row="10" column="1">
            <widget class="QDoubleSpinBox" name="lensDistortionK1Spin">
             <property name="toolTip">
              <string>Radial distortion coefficient used by the lens projection model.</string>
@@ -8706,7 +8697,7 @@ Right-click: toggle continual synchronization from My Position.</string>
             </property>
            </widget>
           </item>
-          <item row="2" column="3">
+          <item row="3" column="3">
            <widget class="QDoubleSpinBox" name="fovSensorHeightSpin">
             <property name="toolTip">
              <string>Sensor height in millimetres used to calculate field of view.</string>
@@ -8728,14 +8719,14 @@ Right-click: toggle continual synchronization from My Position.</string>
             </property>
            </widget>
           </item>
-          <item row="7" column="2">
+          <item row="8" column="2">
            <widget class="QLabel" name="lensCenterOffsetYLabel">
             <property name="text">
              <string>Center offset Y</string>
             </property>
            </widget>
           </item>
-          <item row="7" column="3">
+          <item row="8" column="3">
            <widget class="QDoubleSpinBox" name="lensCenterOffsetYSpin">
             <property name="toolTip">
              <string>Vertical lens centre offset in pixels.</string>
@@ -8754,7 +8745,7 @@ Right-click: toggle continual synchronization from My Position.</string>
             </property>
            </widget>
           </item>
-          <item row="9" column="3">
+          <item row="10" column="3">
            <widget class="QCheckBox" name="lensMirrorCheck">
             <property name="toolTip">
              <string>Image is horizontally mirrored relative to the sky (up-looking all-sky camera or telescope star diagonal). Plate solving and sky overlays account for the reflection.</string>
@@ -8764,19 +8755,19 @@ Right-click: toggle continual synchronization from My Position.</string>
             </property>
            </widget>
           </item>
-          <item row="9" column="2">
+          <item row="10" column="2">
            <widget class="QLabel" name="lensMirrorLabel">
             <property name="text">
              <string>Mirrored</string>
             </property>
            </widget>
           </item>
-          <item row="10" column="0">
+          <item row="0" column="0">
            <widget class="QLabel" name="projectionSourceLabel">
             <property name="text"><string>Source</string></property>
            </widget>
           </item>
-          <item row="10" column="1" colspan="2">
+          <item row="0" column="1">
            <widget class="QComboBox" name="projectionSourceCombo">
             <property name="toolTip">
              <string>Select manual lens/projection values or values stored in the current media file.</string>
@@ -8785,7 +8776,7 @@ Right-click: toggle continual synchronization from My Position.</string>
             <item><property name="text"><string>File metadata</string></property></item>
            </widget>
           </item>
-          <item row="10" column="3">
+          <item row="0" column="2">
            <widget class="QToolButton" name="projectionCopyToManualButton">
              <property name="toolTip"><string>Copy the current file projection values, or freeze a calculated camera/sensor field of view, as manual settings.</string></property>
             <property name="text"><string/></property>
@@ -8795,12 +8786,16 @@ Right-click: toggle continual synchronization from My Position.</string>
             </property>
            </widget>
           </item>
-          <item row="11" column="0" colspan="4">
-           <widget class="QCheckBox" name="projectionApplyToCurrentImageCheck">
+          <item row="0" column="3">
+           <widget class="ButtonSwitch" name="projectionApplyToCurrentImageButton">
             <property name="toolTip">
              <string>Apply FoV and lens projection changes to the currently displayed image.</string>
             </property>
-            <property name="text"><string>Apply projection changes to current image</string></property>
+            <property name="text"><string/></property>
+            <property name="icon">
+             <iconset resource="../../../sdrgui/resources/res.qrc">
+              <normaloff>:/checkmark.png</normaloff>:/checkmark.png</iconset>
+            </property>
             <property name="checked"><bool>true</bool></property>
            </widget>
           </item>
@@ -8822,16 +8817,16 @@ Right-click: toggle continual synchronization from My Position.</string>
           <item row="0" column="1">
            <widget class="QComboBox" name="plateSolveDateTimeModeCombo">
             <property name="toolTip">
-             <string>Use the capture time stored in file metadata, the current clock, or a manually entered capture time.</string>
+             <string>Use the timestamp attached to the captured or media frame, the current clock, or a manually entered capture time.</string>
             </property>
-            <item><property name="text"><string>File metadata</string></property></item>
+            <item><property name="text"><string>Capture time / File metadata</string></property></item>
             <item><property name="text"><string>Current time</string></property></item>
             <item><property name="text"><string>Manual</string></property></item>
            </widget>
           </item>
           <item row="0" column="2">
            <widget class="QToolButton" name="captureTimeCopyToManualButton">
-            <property name="toolTip"><string>Copy the current file metadata or clock time to the manual capture time.</string></property>
+            <property name="toolTip"><string>Copy the displayed frame capture time or current clock time to the manual capture time.</string></property>
             <property name="text"><string/></property>
             <property name="icon">
              <iconset resource="../../../sdrgui/resources/res.qrc">
@@ -8839,9 +8834,22 @@ Right-click: toggle continual synchronization from My Position.</string>
             </property>
            </widget>
           </item>
+          <item row="0" column="3">
+           <widget class="ButtonSwitch" name="observationTimeApplyToCurrentImageButton">
+            <property name="toolTip">
+             <string>Apply capture-time source and manual-time changes to the currently displayed image.</string>
+            </property>
+            <property name="text"><string/></property>
+            <property name="icon">
+             <iconset resource="../../../sdrgui/resources/res.qrc">
+              <normaloff>:/checkmark.png</normaloff>:/checkmark.png</iconset>
+            </property>
+            <property name="checked"><bool>true</bool></property>
+           </widget>
+          </item>
           <item row="1" column="0">
            <widget class="QLabel" name="observationCustomDateTimeLabel">
-            <property name="text"><string>Manual time</string></property>
+            <property name="text"><string>Time</string></property>
            </widget>
           </item>
           <item row="1" column="1">
@@ -8849,7 +8857,7 @@ Right-click: toggle continual synchronization from My Position.</string>
             <property name="spacing"><number>2</number></property>
             <item>
              <widget class="WrappingDateTimeEdit" name="plateSolveDateTimeEdit">
-              <property name="toolTip"><string>Manually entered capture date and time.</string></property>
+              <property name="toolTip"><string>Capture date and time from the selected source. Editable when Manual is selected.</string></property>
               <property name="displayFormat"><string>yyyy-MM-dd HH:mm:ss</string></property>
               <property name="calendarPopup"><bool>true</bool></property>
              </widget>
@@ -8872,15 +8880,6 @@ Right-click: toggle continual synchronization from My Position.</string>
              </widget>
             </item>
            </layout>
-          </item>
-          <item row="2" column="0" colspan="3">
-           <widget class="QCheckBox" name="observationTimeApplyToCurrentImageCheck">
-            <property name="toolTip">
-             <string>Apply capture-time source and manual-time changes to the currently displayed image.</string>
-            </property>
-            <property name="text"><string>Apply time changes to current image</string></property>
-            <property name="checked"><bool>true</bool></property>
-           </widget>
           </item>
          </layout>
         </widget>

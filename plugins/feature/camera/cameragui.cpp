@@ -848,9 +848,11 @@ bool CameraGUI::handleMessage(const Message& message)
         const qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
         QSize oldSize = m_lastImage.size();
         m_lastImage = report.getImage();
+        m_lastCaptureDateTime = report.getCaptureDateTime();
         m_lastMediaMetadata = report.getMediaMetadata();
         m_lastSourceMediaMetadata = report.getSourceMediaMetadata();
-        updateCopyToManualButtons();
+        updateSourceValueDisplays();
+        updatePlateSolveDateTimeEdit();
         m_lastHistogramData = report.getHistogramData();
         m_lastOpticalSpectrumData = report.getOpticalSpectrumData();
         m_lastStarDetections = report.getStarDetections();
@@ -1468,8 +1470,6 @@ CameraGUI::CameraGUI(PluginAPI* pluginAPI, FeatureUISet *featureUISet, Feature *
 
     CRightClickEnabler *audioMuteRightClickEnabler = new CRightClickEnabler(ui->audioMute);
     connect(audioMuteRightClickEnabler, SIGNAL(rightClick(const QPoint &)), this, SLOT(audioSelect(const QPoint &)));
-    CRightClickEnabler *useMyPositionRightClickEnabler = new CRightClickEnabler(settingsUI()->useMyPositionButton);
-    connect(useMyPositionRightClickEnabler, SIGNAL(rightClick(const QPoint &)), this, SLOT(useMyPositionButton_rightClicked(const QPoint &)));
 
     // Populate white-balance combo (indices match QCamera::WhiteBalanceMode / QCameraImageProcessing::WhiteBalanceMode)
     settingsUI()->whiteBalanceCombo->addItem(tr("Auto"),        0);
@@ -2478,7 +2478,7 @@ void CameraGUI::displaySettings()
     settingsUI()->longitudeSpin->setValue(m_settings.m_longitude);
     settingsUI()->altitudeSpin->setValue(m_settings.m_altitude);
     settingsUI()->siteSourceCombo->setCurrentIndex(static_cast<int>(m_settings.m_siteSource));
-    settingsUI()->siteApplyToCurrentImageCheck->setChecked(m_settings.m_siteApplyToCurrentImage);
+    settingsUI()->siteApplyToCurrentImageButton->setChecked(m_settings.m_siteApplyToCurrentImage);
     settingsUI()->owmApiKeyEdit->setText(m_settings.m_owmAPIKey);
     settingsUI()->azimuthSpin->setValue(m_settings.m_azimuth);
     settingsUI()->elevationSpin->setValue(m_settings.m_elevation);
@@ -2493,11 +2493,11 @@ void CameraGUI::displaySettings()
     settingsUI()->sensorOpticalAxisCombo->setCurrentIndex(static_cast<int>(m_settings.m_sensorOpticalAxis));
     settingsUI()->directionSensorFilterCheck->setChecked(m_settings.m_directionSensorFilterEnabled);
     settingsUI()->directionSensorFilterTimeConstantSpin->setValue(m_settings.m_directionSensorFilterTimeConstant);
-    settingsUI()->directionApplyToCurrentImageCheck->setChecked(m_settings.m_directionApplyToCurrentImage);
+    settingsUI()->directionApplyToCurrentImageButton->setChecked(m_settings.m_directionApplyToCurrentImage);
     updateDirectionSensorOpticalAxis();
     settingsUI()->fovModeCombo->setCurrentIndex(static_cast<int>(m_settings.m_fovMode));
     settingsUI()->projectionSourceCombo->setCurrentIndex(static_cast<int>(m_settings.m_projectionSource));
-    settingsUI()->projectionApplyToCurrentImageCheck->setChecked(m_settings.m_projectionApplyToCurrentImage);
+    settingsUI()->projectionApplyToCurrentImageButton->setChecked(m_settings.m_projectionApplyToCurrentImage);
     settingsUI()->fovSpin->setValue(m_settings.m_fov);
     settingsUI()->fovSensorWidthSpin->setValue(m_settings.m_fovSensorWidthMm);
     settingsUI()->fovSensorHeightSpin->setValue(m_settings.m_fovSensorHeightMm);
@@ -2694,7 +2694,7 @@ void CameraGUI::displaySettings()
     settingsUI()->plateSolveStartModeCombo->setCurrentIndex(static_cast<int>(m_settings.m_plateSolveStartMode));
     updatePlateSolveStartModeUi();
     settingsUI()->plateSolveDateTimeModeCombo->setCurrentIndex(static_cast<int>(m_settings.m_observationTimeSource));
-    settingsUI()->observationTimeApplyToCurrentImageCheck->setChecked(m_settings.m_observationTimeApplyToCurrentImage);
+    settingsUI()->observationTimeApplyToCurrentImageButton->setChecked(m_settings.m_observationTimeApplyToCurrentImage);
     settingsUI()->plateSolveDateTimeUtcButton->setChecked(m_settings.m_plateSolveDateTimeUtc);
     updatePlateSolveDateTimeEdit();
     settingsUI()->plateSolveCatalogSourceCombo->setCurrentIndex(static_cast<int>(m_settings.m_plateSolveCatalogSource));
@@ -4160,9 +4160,8 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->altitudeSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_altitudeSpin_valueChanged);
     QObject::connect(settingsUI()->siteSourceCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_siteSourceCombo_currentIndexChanged);
     QObject::connect(settingsUI()->siteCopyToManualButton, &QToolButton::clicked, this, &CameraGUI::on_siteCopyToManualButton_clicked);
-    QObject::connect(settingsUI()->siteApplyToCurrentImageCheck, &QCheckBox::toggled, this, &CameraGUI::on_siteApplyToCurrentImageCheck_toggled);
+    QObject::connect(settingsUI()->siteApplyToCurrentImageButton, &QToolButton::toggled, this, &CameraGUI::on_siteApplyToCurrentImageButton_toggled);
     QObject::connect(settingsUI()->owmApiKeyEdit, &QLineEdit::editingFinished, this, &CameraGUI::on_owmApiKeyEdit_editingFinished);
-    QObject::connect(settingsUI()->useMyPositionButton, &QToolButton::clicked, this, &CameraGUI::on_useMyPositionButton_clicked);
     QObject::connect(settingsUI()->azimuthSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_azimuthSpin_valueChanged);
     QObject::connect(settingsUI()->elevationSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_elevationSpin_valueChanged);
     QObject::connect(settingsUI()->azimuthOffsetSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_azimuthOffsetSpin_valueChanged);
@@ -4176,12 +4175,12 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->sensorOpticalAxisCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_sensorOpticalAxisCombo_currentIndexChanged);
     QObject::connect(settingsUI()->directionSensorFilterCheck, &QCheckBox::toggled, this, &CameraGUI::on_directionSensorFilterCheck_toggled);
     QObject::connect(settingsUI()->directionSensorFilterTimeConstantSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_directionSensorFilterTimeConstantSpin_valueChanged);
-    QObject::connect(settingsUI()->directionApplyToCurrentImageCheck, &QCheckBox::toggled, this, &CameraGUI::on_directionApplyToCurrentImageCheck_toggled);
+    QObject::connect(settingsUI()->directionApplyToCurrentImageButton, &QToolButton::toggled, this, &CameraGUI::on_directionApplyToCurrentImageButton_toggled);
     QObject::connect(settingsUI()->directionSourceCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_directionSourceCombo_currentIndexChanged);
     QObject::connect(settingsUI()->directionCopyToManualButton, &QToolButton::clicked, this, &CameraGUI::on_directionCopyToManualButton_clicked);
     QObject::connect(settingsUI()->projectionSourceCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_projectionSourceCombo_currentIndexChanged);
     QObject::connect(settingsUI()->projectionCopyToManualButton, &QToolButton::clicked, this, &CameraGUI::on_projectionCopyToManualButton_clicked);
-    QObject::connect(settingsUI()->projectionApplyToCurrentImageCheck, &QCheckBox::toggled, this, &CameraGUI::on_projectionApplyToCurrentImageCheck_toggled);
+    QObject::connect(settingsUI()->projectionApplyToCurrentImageButton, &QToolButton::toggled, this, &CameraGUI::on_projectionApplyToCurrentImageButton_toggled);
     QObject::connect(settingsUI()->fovModeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_fovModeCombo_currentIndexChanged);
     QObject::connect(settingsUI()->fovSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_fovSpin_valueChanged);
     QObject::connect(settingsUI()->fovSensorWidthSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_fovSensorWidthSpin_valueChanged);
@@ -4371,7 +4370,7 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->plateSolveDateTimeEdit, &QDateTimeEdit::dateTimeChanged, this, &CameraGUI::on_plateSolveDateTimeEdit_dateTimeChanged);
     QObject::connect(settingsUI()->plateSolveDateTimeUtcButton, &QToolButton::toggled, this, &CameraGUI::on_plateSolveDateTimeUtcButton_toggled);
     QObject::connect(settingsUI()->plateSolveDateTimeNowButton, &QToolButton::clicked, this, &CameraGUI::on_plateSolveDateTimeNowButton_clicked);
-    QObject::connect(settingsUI()->observationTimeApplyToCurrentImageCheck, &QCheckBox::toggled, this, &CameraGUI::on_observationTimeApplyToCurrentImageCheck_toggled);
+    QObject::connect(settingsUI()->observationTimeApplyToCurrentImageButton, &QToolButton::toggled, this, &CameraGUI::on_observationTimeApplyToCurrentImageButton_toggled);
     QObject::connect(settingsUI()->plateSolveCatalogSourceCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_plateSolveCatalogSourceCombo_currentIndexChanged);
     QObject::connect(settingsUI()->starCatalogDiskCacheSizeSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_starCatalogDiskCacheSizeSpin_valueChanged);
     QObject::connect(settingsUI()->stellariumRemoteControlUrlEdit, &QLineEdit::editingFinished, this, &CameraGUI::on_stellariumRemoteControlUrlEdit_editingFinished);
@@ -6533,16 +6532,10 @@ void CameraGUI::syncFromDirectionSensors()
 void CameraGUI::applyPositionSync()
 {
     if (m_settings.m_positionSync) {
-        settingsUI()->useMyPositionButton->setStyleSheet(
-            QStringLiteral("QToolButton{ background-color: %1; }")
-                .arg(palette().highlight().color().darker(150).name()));
         syncFromMainSettings();
         connect(&MainCore::instance()->getSettings(), &MainSettings::preferenceChanged,
             this, &CameraGUI::preferenceChanged, Qt::UniqueConnection);
     } else {
-        settingsUI()->useMyPositionButton->setStyleSheet(
-            QStringLiteral("QToolButton{ background-color: %1; }")
-                .arg(palette().button().color().name()));
         disconnect(&MainCore::instance()->getSettings(), &MainSettings::preferenceChanged,
             this, &CameraGUI::preferenceChanged);
     }
@@ -6560,7 +6553,6 @@ void CameraGUI::updatePositionControls()
     settingsUI()->latitudeSpin->setReadOnly(!manualSite);
     settingsUI()->longitudeSpin->setReadOnly(!manualSite);
     settingsUI()->altitudeSpin->setReadOnly(!manualSite);
-    settingsUI()->useMyPositionButton->setEnabled(m_settings.m_siteSource != CameraSettings::SiteSourceMediaMetadata);
     settingsUI()->azimuthSpin->setReadOnly(!manualDirection);
     settingsUI()->elevationSpin->setReadOnly(!manualDirection);
     settingsUI()->rollSpin->setReadOnly(!manualDirection && !rotatorSynced);
@@ -6594,6 +6586,7 @@ void CameraGUI::updatePositionControls()
     settingsUI()->directionSourceCombo->setEnabled(true);
 #endif
     settingsUI()->directionSourceLabel->setEnabled(settingsUI()->directionSourceCombo->isEnabled());
+    updateSourceValueDisplays();
     updateCopyToManualButtons();
 }
 
@@ -6618,11 +6611,77 @@ void CameraGUI::updateFovControls()
     settingsUI()->lensDistortionK1Spin->setEnabled(manualProjection);
     settingsUI()->lensMirrorCheck->setEnabled(manualProjection);
 
-    if (calculateFov) {
+    if (manualProjection && calculateFov) {
         updateCalculatedFov();
     }
 
+    updateSourceValueDisplays();
     updateCopyToManualButtons();
+}
+
+void CameraGUI::updateSourceValueDisplays()
+{
+    const bool metadataAvailable = m_lastSourceMediaMetadata.isValid();
+    const bool metadataSite = metadataAvailable
+        && (m_settings.m_siteSource == CameraSettings::SiteSourceMediaMetadata);
+    const bool metadataDirection = metadataAvailable
+        && (m_settings.m_directionSource == CameraSettings::DirectionSourceMediaMetadata);
+    const bool metadataProjection = metadataAvailable
+        && (m_settings.m_projectionSource == CameraSettings::ProjectionSourceMediaMetadata);
+
+    {
+        QSignalBlocker latitudeBlocker(settingsUI()->latitudeSpin);
+        QSignalBlocker longitudeBlocker(settingsUI()->longitudeSpin);
+        QSignalBlocker altitudeBlocker(settingsUI()->altitudeSpin);
+        settingsUI()->latitudeSpin->setValue(metadataSite
+            ? m_lastSourceMediaMetadata.latitude() : m_settings.m_latitude);
+        settingsUI()->longitudeSpin->setValue(metadataSite
+            ? m_lastSourceMediaMetadata.longitude() : m_settings.m_longitude);
+        settingsUI()->altitudeSpin->setValue(metadataSite
+            ? m_lastSourceMediaMetadata.altitude() : m_settings.m_altitude);
+    }
+
+    {
+        QSignalBlocker azimuthBlocker(settingsUI()->azimuthSpin);
+        QSignalBlocker elevationBlocker(settingsUI()->elevationSpin);
+        QSignalBlocker rollBlocker(settingsUI()->rollSpin);
+        settingsUI()->azimuthSpin->setValue(metadataDirection
+            ? m_lastSourceMediaMetadata.azimuth() : m_settings.m_azimuth);
+        settingsUI()->elevationSpin->setValue(metadataDirection
+            ? m_lastSourceMediaMetadata.elevation() : m_settings.m_elevation);
+        settingsUI()->rollSpin->setValue(metadataDirection
+            ? m_lastSourceMediaMetadata.roll() : m_settings.m_roll);
+    }
+
+    {
+        QSignalBlocker fovModeBlocker(settingsUI()->fovModeCombo);
+        QSignalBlocker fovBlocker(settingsUI()->fovSpin);
+        QSignalBlocker projectionBlocker(settingsUI()->lensProjectionCombo);
+        QSignalBlocker centerXBlocker(settingsUI()->lensCenterOffsetXSpin);
+        QSignalBlocker centerYBlocker(settingsUI()->lensCenterOffsetYSpin);
+        QSignalBlocker distortionBlocker(settingsUI()->lensDistortionK1Spin);
+        QSignalBlocker mirrorBlocker(settingsUI()->lensMirrorCheck);
+
+        settingsUI()->fovModeCombo->setCurrentIndex(metadataProjection
+            ? static_cast<int>(CameraSettings::FovModeDirect)
+            : static_cast<int>(m_settings.m_fovMode));
+        settingsUI()->fovSpin->setValue(metadataProjection
+            ? m_lastSourceMediaMetadata.fov() : m_settings.m_fov);
+        settingsUI()->lensProjectionCombo->setCurrentIndex(metadataProjection
+            ? qBound(
+                static_cast<int>(CameraSettings::LensProjectionRectilinear),
+                m_lastSourceMediaMetadata.lensProjection(),
+                static_cast<int>(CameraSettings::LensProjectionEquisolid))
+            : static_cast<int>(m_settings.m_lensProjection));
+        settingsUI()->lensCenterOffsetXSpin->setValue(metadataProjection
+            ? m_lastSourceMediaMetadata.lensCenterOffsetX() : m_settings.m_lensCenterOffsetX);
+        settingsUI()->lensCenterOffsetYSpin->setValue(metadataProjection
+            ? m_lastSourceMediaMetadata.lensCenterOffsetY() : m_settings.m_lensCenterOffsetY);
+        settingsUI()->lensDistortionK1Spin->setValue(metadataProjection
+            ? m_lastSourceMediaMetadata.lensDistortionK1() : m_settings.m_lensDistortionK1);
+        settingsUI()->lensMirrorCheck->setChecked(metadataProjection
+            ? m_lastSourceMediaMetadata.lensMirror() : m_settings.m_lensMirror);
+    }
 }
 
 void CameraGUI::updateCopyToManualButtons()
@@ -6635,8 +6694,12 @@ void CameraGUI::updateCopyToManualButtons()
         static_cast<int>(CameraSettings::SiteSourceMediaMetadata), metadataText);
     settingsUI()->projectionSourceCombo->setItemText(
         static_cast<int>(CameraSettings::ProjectionSourceMediaMetadata), metadataText);
+    const bool captureTimeAvailable = m_lastCaptureDateTime.isValid();
     settingsUI()->plateSolveDateTimeModeCombo->setItemText(
-        static_cast<int>(CameraSettings::ObservationTimeCapture), metadataText);
+        static_cast<int>(CameraSettings::ObservationTimeCapture),
+        captureTimeAvailable
+            ? tr("Capture time / File metadata")
+            : tr("Capture time / File metadata (unavailable)"));
     const int directionMetadataIndex = settingsUI()->directionSourceCombo->findData(kDirectionSourceMediaMetadata);
     if (directionMetadataIndex >= 0) {
         settingsUI()->directionSourceCombo->setItemText(directionMetadataIndex, metadataText);
@@ -6654,7 +6717,7 @@ void CameraGUI::updateCopyToManualButtons()
             && (m_settings.m_fovMode != CameraSettings::FovModeDirect)));
     settingsUI()->captureTimeCopyToManualButton->setEnabled(
         (m_settings.m_observationTimeSource != CameraSettings::ObservationTimeCustom)
-        && ((m_settings.m_observationTimeSource != CameraSettings::ObservationTimeCapture) || metadataAvailable));
+        && ((m_settings.m_observationTimeSource != CameraSettings::ObservationTimeCapture) || captureTimeAvailable));
 }
 
 bool CameraGUI::updateFovSensorSizeFromCamera()
@@ -10053,7 +10116,7 @@ void CameraGUI::on_siteCopyToManualButton_clicked()
         "manualAltitude", "siteSource", "positionSync"});
 }
 
-void CameraGUI::on_siteApplyToCurrentImageCheck_toggled(bool checked)
+void CameraGUI::on_siteApplyToCurrentImageButton_toggled(bool checked)
 {
     m_settings.m_siteApplyToCurrentImage = checked;
     applySetting("siteApplyToCurrentImage");
@@ -10063,45 +10126,6 @@ void CameraGUI::on_owmApiKeyEdit_editingFinished()
 {
     m_settings.m_owmAPIKey = settingsUI()->owmApiKeyEdit->text().trimmed();
     applySetting("owmAPIKey");
-}
-
-void CameraGUI::on_useMyPositionButton_clicked()
-{
-    m_settings.m_latitude = MainCore::instance()->getSettings().getLatitude();
-    m_settings.m_longitude = MainCore::instance()->getSettings().getLongitude();
-    m_settings.m_altitude = MainCore::instance()->getSettings().getAltitude();
-    m_settings.m_manualLatitude = m_settings.m_latitude;
-    m_settings.m_manualLongitude = m_settings.m_longitude;
-    m_settings.m_manualAltitude = m_settings.m_altitude;
-    m_settings.m_siteSource = CameraSettings::SiteSourceManual;
-    m_settings.m_positionSync = false;
-    {
-        QSignalBlocker latitudeBlocker(settingsUI()->latitudeSpin);
-        QSignalBlocker longitudeBlocker(settingsUI()->longitudeSpin);
-        QSignalBlocker altitudeBlocker(settingsUI()->altitudeSpin);
-        QSignalBlocker sourceBlocker(settingsUI()->siteSourceCombo);
-        settingsUI()->latitudeSpin->setValue(m_settings.m_latitude);
-        settingsUI()->longitudeSpin->setValue(m_settings.m_longitude);
-        settingsUI()->altitudeSpin->setValue(m_settings.m_altitude);
-        settingsUI()->siteSourceCombo->setCurrentIndex(static_cast<int>(m_settings.m_siteSource));
-    }
-    applyPositionSync();
-    updatePositionControls();
-    applySettings({"latitude", "longitude", "altitude", "manualLatitude", "manualLongitude",
-        "manualAltitude", "siteSource", "positionSync"});
-}
-
-void CameraGUI::useMyPositionButton_rightClicked(const QPoint& p)
-{
-    (void) p;
-    m_settings.m_positionSync = !m_settings.m_positionSync;
-    m_settings.m_siteSource = m_settings.m_positionSync
-        ? CameraSettings::SiteSourceMyPosition
-        : CameraSettings::SiteSourceManual;
-    settingsUI()->siteSourceCombo->setCurrentIndex(static_cast<int>(m_settings.m_siteSource));
-    applyPositionSync();
-    updatePositionControls();
-    applySettings({"siteSource", "positionSync"});
 }
 
 void CameraGUI::on_azimuthSpin_valueChanged(double value)
@@ -10233,7 +10257,7 @@ void CameraGUI::on_directionSensorFilterTimeConstantSpin_valueChanged(double val
     applySetting("directionSensorFilterTimeConstant");
 }
 
-void CameraGUI::on_directionApplyToCurrentImageCheck_toggled(bool checked)
+void CameraGUI::on_directionApplyToCurrentImageButton_toggled(bool checked)
 {
     m_settings.m_directionApplyToCurrentImage = checked;
     applySetting("directionApplyToCurrentImage");
@@ -10380,7 +10404,7 @@ void CameraGUI::on_projectionCopyToManualButton_clicked()
         "lensDistortionK1", "lensMirror", "projectionSource"});
 }
 
-void CameraGUI::on_projectionApplyToCurrentImageCheck_toggled(bool checked)
+void CameraGUI::on_projectionApplyToCurrentImageButton_toggled(bool checked)
 {
     m_settings.m_projectionApplyToCurrentImage = checked;
     applySetting("projectionApplyToCurrentImage");
@@ -10650,14 +10674,27 @@ void CameraGUI::updatePlateSolveStartModeUi()
 
 void CameraGUI::updatePlateSolveDateTimeEdit()
 {
-    const QDateTime fallback = m_settings.m_plateSolveDateTimeUtc
-        ? QDateTime::currentDateTimeUtc()
-        : QDateTime::currentDateTime();
-    const QDateTime dateTime = m_settings.m_plateSolveDateTime.isValid()
-        ? (m_settings.m_plateSolveDateTimeUtc
-            ? m_settings.m_plateSolveDateTime.toUTC()
-            : m_settings.m_plateSolveDateTime.toLocalTime())
-        : fallback;
+    QDateTime sourceDateTime;
+    switch (m_settings.m_observationTimeSource)
+    {
+    case CameraSettings::ObservationTimeCapture:
+        sourceDateTime = m_lastCaptureDateTime;
+        break;
+    case CameraSettings::ObservationTimeCurrent:
+        sourceDateTime = QDateTime::currentDateTimeUtc();
+        break;
+    case CameraSettings::ObservationTimeCustom:
+        sourceDateTime = m_settings.m_plateSolveDateTime;
+        break;
+    }
+
+    if (!sourceDateTime.isValid()) {
+        sourceDateTime = QDateTime::currentDateTimeUtc();
+    }
+
+    const QDateTime dateTime = m_settings.m_plateSolveDateTimeUtc
+        ? sourceDateTime.toUTC()
+        : sourceDateTime.toLocalTime();
 
     QSignalBlocker dateTimeBlocker(settingsUI()->plateSolveDateTimeEdit);
     QSignalBlocker utcBlocker(settingsUI()->plateSolveDateTimeUtcButton);
@@ -12490,13 +12527,9 @@ void CameraGUI::on_captureTimeCopyToManualButton_clicked()
     }
 
     QDateTime captureDateTime;
-    if ((m_settings.m_observationTimeSource == CameraSettings::ObservationTimeCapture)
-        && m_lastSourceMediaMetadata.isValid())
-    {
-        captureDateTime = m_lastSourceMediaMetadata.captureDateTimeUtc();
-    }
-    else
-    {
+    if (m_settings.m_observationTimeSource == CameraSettings::ObservationTimeCapture) {
+        captureDateTime = m_lastCaptureDateTime;
+    } else {
         captureDateTime = QDateTime::currentDateTimeUtc();
     }
 
@@ -12518,7 +12551,7 @@ void CameraGUI::on_captureTimeCopyToManualButton_clicked()
     applySettings({"plateSolveDateTime", "observationTimeSource", "plateSolveUseCaptureDateTime"});
 }
 
-void CameraGUI::on_observationTimeApplyToCurrentImageCheck_toggled(bool checked)
+void CameraGUI::on_observationTimeApplyToCurrentImageButton_toggled(bool checked)
 {
     m_settings.m_observationTimeApplyToCurrentImage = checked;
     applySetting("observationTimeApplyToCurrentImage");
@@ -13633,6 +13666,16 @@ void CameraGUI::updateStatus()
         syncFromDirectionSensors();
     } else if (!m_settings.m_rotator.isEmpty()) {
         syncFromSelectedGs232Controller();
+    }
+
+    if (m_settings.m_observationTimeSource == CameraSettings::ObservationTimeCurrent)
+    {
+        const QDateTime now = m_settings.m_plateSolveDateTimeUtc
+            ? QDateTime::currentDateTimeUtc()
+            : QDateTime::currentDateTime();
+        if (settingsUI()->plateSolveDateTimeEdit->dateTime().toSecsSinceEpoch() != now.toSecsSinceEpoch()) {
+            updatePlateSolveDateTimeEdit();
+        }
     }
 
     int state = m_camera->getState();

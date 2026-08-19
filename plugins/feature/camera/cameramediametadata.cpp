@@ -288,10 +288,16 @@ bool CameraMediaMetadata::writeImage(
 
     const QByteArray format = QFileInfo(fileName).suffix().toLatin1();
     QImageWriter writer(&file, format);
+    QImage outputImage = image;
     if (metadata.isValid()) {
-        writer.setText(metadataKey(), QString::fromUtf8(metadata.toJson()));
+        const QString metadataJson = QString::fromUtf8(metadata.toJson());
+        // A decoded image can still contain the previous value. Replace it on
+        // the image as well as the writer so image plugins cannot restore the
+        // stale text after setText() has supplied the updated value.
+        outputImage.setText(metadataKey(), metadataJson);
+        writer.setText(metadataKey(), metadataJson);
     }
-    if (!writer.write(image))
+    if (!writer.write(outputImage))
     {
         if (errorMessage) {
             *errorMessage = writer.errorString();

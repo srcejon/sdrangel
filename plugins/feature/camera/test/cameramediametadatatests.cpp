@@ -27,7 +27,7 @@ bool nearlyEqual(double lhs, double rhs)
     return std::abs(lhs - rhs) < 1.0e-6;
 }
 
-QByteArray testMetadataJson()
+QByteArray testMetadataJson(int lensProjection = 1)
 {
     QJsonObject site;
     site.insert(QStringLiteral("latitude"), 51.5);
@@ -41,7 +41,7 @@ QByteArray testMetadataJson()
 
     QJsonObject projection;
     projection.insert(QStringLiteral("fov"), 1.29);
-    projection.insert(QStringLiteral("type"), 1);
+    projection.insert(QStringLiteral("type"), lensProjection);
     projection.insert(QStringLiteral("centerOffsetX"), 4.5);
     projection.insert(QStringLiteral("centerOffsetY"), -3.25);
     projection.insert(QStringLiteral("distortionK1"), 0.0125);
@@ -144,6 +144,53 @@ bool checkImageRoundTrip(
     return checkFrame(decodedMetadata, error);
 }
 
+bool checkImageMetadataReplacement(
+    const QString& fileName,
+    const CameraMediaMetadata& replacementMetadata,
+    int expectedLensProjection,
+    QString& error)
+{
+    QImage image;
+    QString readerError;
+    {
+        QImageReader reader(fileName);
+        image = reader.read();
+        readerError = reader.errorString();
+    }
+    if (image.isNull())
+    {
+        error = readerError;
+        return false;
+    }
+    if (!CameraMediaMetadata::writeImage(fileName, image, replacementMetadata, &error)) {
+        return false;
+    }
+
+    QImageReader replacementReader(fileName);
+    const QImage replacementImage = replacementReader.read();
+    if (replacementImage.isNull())
+    {
+        error = replacementReader.errorString();
+        return false;
+    }
+    const CameraMediaMetadata decodedMetadata = CameraMediaMetadata::fromImage(replacementImage, &error);
+    if (!decodedMetadata.isValid())
+    {
+        if (error.isEmpty()) {
+            error = QStringLiteral("Replacement metadata was not returned by QImageReader");
+        }
+        return false;
+    }
+    if (decodedMetadata.lensProjection() != expectedLensProjection)
+    {
+        error = QStringLiteral("Lens projection metadata was not replaced: expected %1, got %2")
+            .arg(expectedLensProjection)
+            .arg(decodedMetadata.lensProjection());
+        return false;
+    }
+    return true;
+}
+
 }
 
 int main(int argc, char **argv)
@@ -172,6 +219,18 @@ int main(int argc, char **argv)
         {
             qCritical().noquote() << "Camera media metadata" << suffix
                                   << "round-trip test failed:" << error;
+            return 1;
+        }
+
+        error.clear();
+        const CameraMediaMetadata replacementMetadata = CameraMediaMetadata::fromJson(
+            testMetadataJson(2),
+            &error);
+        if (!replacementMetadata.isValid()
+            || !checkImageMetadataReplacement(fileName, replacementMetadata, 2, error))
+        {
+            qCritical().noquote() << "Camera media metadata" << suffix
+                                  << "replacement test failed:" << error;
             return 1;
         }
     }

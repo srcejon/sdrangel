@@ -25,8 +25,11 @@
 
 #include <QByteArray>
 #include <QDebug>
+#include <QFile>
+#include <QFileInfo>
 #include <QPainter>
 #include <QStringList>
+#include <QTemporaryFile>
 
 #include "cameraffmpegcompat.h"
 #include "cameramediametadata.h"
@@ -128,6 +131,252 @@ QString CameraVideoWriter::codecName(CameraSettings::VideoCodec codec)
 QString CameraVideoWriter::codecName() const
 {
     return codecName(m_settings.m_codec);
+}
+
+bool CameraVideoWriter::updateFileMetadata(
+    const QString& fileName,
+    const QByteArray& cameraMetadataJson,
+    QString& errorMessage)
+{
+#ifndef CAMERA_FFMPEG_STREAMING
+    Q_UNUSED(fileName)
+    Q_UNUSED(cameraMetadataJson)
+    errorMessage = QStringLiteral("FFmpeg support is not available in this build");
+    return false;
+#else
+    const QFileInfo fileInfo(fileName);
+    if (!fileInfo.isFile())
+    {
+        errorMessage = QStringLiteral("Video file does not exist: %1").arg(fileName);
+        return false;
+    }
+
+    const QString suffix = fileInfo.suffix();
+    const QString temporaryTemplate = fileInfo.absolutePath()
+        + QStringLiteral("/.") + fileInfo.completeBaseName()
+        + QStringLiteral(".metadata-XXXXXX")
+        + (suffix.isEmpty() ? QString() : QStringLiteral(".") + suffix);
+    QTemporaryFile temporaryFile(temporaryTemplate);
+    if (!temporaryFile.open())
+    {
+        errorMessage = QStringLiteral("Cannot create a temporary file beside the video");
+        return false;
+    }
+    const QString temporaryPath = temporaryFile.fileName();
+    temporaryFile.close();
+    temporaryFile.setAutoRemove(false);
+    QFile::remove(temporaryPath);
+
+    AVFormatContext *inputContext = nullptr;
+    AVFormatContext *outputContext = nullptr;
+    const QByteArray inputPath = QFile::encodeName(fileName);
+    const QByteArray outputPath = QFile::encodeName(temporaryPath);
+    int ret = avformat_open_input(&inputContext, inputPath.constData(), nullptr, nullptr);
+    if (ret < 0)
+    {
+        errorMessage = QStringLiteral("Cannot open video input: %1").arg(avErrorString(ret));
+        QFile::remove(temporaryPath);
+        return false;
+    }
+
+    ret = avformat_find_stream_info(inputContext, nullptr);
+    if (ret < 0)
+    {
+        errorMessage = QStringLiteral("Cannot read video stream information: %1").arg(avErrorString(ret));
+        avformat_close_input(&inputContext);
+        QFile::remove(temporaryPath);
+        return false;
+    }
+
+    ret = avformat_alloc_output_context2(&outputContext, nullptr, nullptr, outputPath.constData());
+    if ((ret < 0) || !outputContext)
+    {
+        errorMessage = QStringLiteral("Cannot create temporary video output: %1").arg(avErrorString(ret));
+        avformat_close_input(&inputContext);
+        QFile::remove(temporaryPath);
+        return false;
+    }
+
+    bool success = true;
+    for (unsigned int i = 0; i < inputContext->nb_streams; ++i)
+    {
+        AVStream *inputStream = inputContext->streams[i];
+        AVStream *outputStream = avformat_new_stream(outputContext, nullptr);
+        if (!outputStream)
+        {
+            errorMessage = QStringLiteral("Cannot create output stream %1").arg(i);
+            success = false;
+            break;
+        }
+
+        ret = avcodec_parameters_copy(outputStream->codecpar, inputStream->codecpar);
+        if (ret < 0)
+        {
+            errorMessage = QStringLiteral("Cannot copy stream %1 parameters: %2")
+                .arg(i).arg(avErrorString(ret));
+            success = false;
+            break;
+        }
+        outputStream->codecpar->codec_tag = 0;
+        outputStream->time_base = inputStream->time_base;
+        outputStream->avg_frame_rate = inputStream->avg_frame_rate;
+        outputStream->r_frame_rate = inputStream->r_frame_rate;
+        outputStream->disposition = inputStream->disposition;
+        av_dict_copy(&outputStream->metadata, inputStream->metadata, 0);
+    }
+
+    if (success)
+    {
+        av_dict_copy(&outputContext->metadata, inputContext->metadata, 0);
+        const QByteArray metadataKey = CameraMediaMetadata::metadataKey().toUtf8();
+        av_dict_set(
+            &outputContext->metadata,
+            metadataKey.constData(),
+            cameraMetadataJson.constData(),
+            0);
+    }
+
+    if (success && (inputContext->nb_chapters > 0))
+    {
+        outputContext->chapters = static_cast<AVChapter**>(av_calloc(
+            inputContext->nb_chapters,
+            sizeof(*outputContext->chapters)));
+        if (!outputContext->chapters)
+        {
+            errorMessage = QStringLiteral("Cannot allocate video chapter metadata");
+            success = false;
+        }
+        for (unsigned int i = 0; success && (i < inputContext->nb_chapters); ++i)
+        {
+            const AVChapter *inputChapter = inputContext->chapters[i];
+            AVChapter *outputChapter = static_cast<AVChapter*>(av_mallocz(sizeof(*outputChapter)));
+            if (!outputChapter)
+            {
+                errorMessage = QStringLiteral("Cannot allocate video chapter %1").arg(i);
+                success = false;
+                break;
+            }
+            outputChapter->id = inputChapter->id;
+            outputChapter->time_base = inputChapter->time_base;
+            outputChapter->start = inputChapter->start;
+            outputChapter->end = inputChapter->end;
+            av_dict_copy(&outputChapter->metadata, inputChapter->metadata, 0);
+            outputContext->chapters[i] = outputChapter;
+            ++outputContext->nb_chapters;
+        }
+    }
+
+    if (success && !(outputContext->oformat->flags & AVFMT_NOFILE))
+    {
+        ret = avio_open(&outputContext->pb, outputPath.constData(), AVIO_FLAG_WRITE);
+        if (ret < 0)
+        {
+            errorMessage = QStringLiteral("Cannot open temporary video output: %1").arg(avErrorString(ret));
+            success = false;
+        }
+    }
+
+    AVDictionary *formatOptions = nullptr;
+    if (success)
+    {
+        const QString outputFormatName = outputContext->oformat && outputContext->oformat->name
+            ? QString::fromLatin1(outputContext->oformat->name)
+            : QString();
+        if (outputFormatName.contains(QStringLiteral("mp4"), Qt::CaseInsensitive)
+            || outputFormatName.contains(QStringLiteral("mov"), Qt::CaseInsensitive)) {
+            av_dict_set(&formatOptions, "movflags", "use_metadata_tags", 0);
+        }
+        ret = avformat_write_header(outputContext, &formatOptions);
+        av_dict_free(&formatOptions);
+        if (ret < 0)
+        {
+            errorMessage = QStringLiteral("Cannot write temporary video header: %1").arg(avErrorString(ret));
+            success = false;
+        }
+    }
+
+    AVPacket *packet = success ? av_packet_alloc() : nullptr;
+    if (success && !packet)
+    {
+        errorMessage = QStringLiteral("Cannot allocate a video packet");
+        success = false;
+    }
+    while (success && ((ret = av_read_frame(inputContext, packet)) >= 0))
+    {
+        AVStream *inputStream = inputContext->streams[packet->stream_index];
+        AVStream *outputStream = outputContext->streams[packet->stream_index];
+        av_packet_rescale_ts(packet, inputStream->time_base, outputStream->time_base);
+        packet->pos = -1;
+        ret = av_interleaved_write_frame(outputContext, packet);
+        av_packet_unref(packet);
+        if (ret < 0)
+        {
+            errorMessage = QStringLiteral("Cannot remux video packet: %1").arg(avErrorString(ret));
+            success = false;
+        }
+    }
+    if (success && (ret != AVERROR_EOF))
+    {
+        errorMessage = QStringLiteral("Cannot finish reading the input video: %1").arg(avErrorString(ret));
+        success = false;
+    }
+    av_packet_free(&packet);
+
+    if (success)
+    {
+        ret = av_write_trailer(outputContext);
+        if (ret < 0)
+        {
+            errorMessage = QStringLiteral("Cannot finish temporary video: %1").arg(avErrorString(ret));
+            success = false;
+        }
+    }
+
+    if (outputContext && !(outputContext->oformat->flags & AVFMT_NOFILE) && outputContext->pb) {
+        avio_closep(&outputContext->pb);
+    }
+    avformat_free_context(outputContext);
+    avformat_close_input(&inputContext);
+
+    if (!success)
+    {
+        QFile::remove(temporaryPath);
+        return false;
+    }
+
+    const QFileDevice::Permissions permissions = QFile::permissions(fileName);
+    QTemporaryFile backupFile(
+        fileInfo.absolutePath() + QStringLiteral("/.") + fileInfo.fileName()
+        + QStringLiteral(".metadata-backup-XXXXXX"));
+    if (!backupFile.open())
+    {
+        errorMessage = QStringLiteral("Cannot reserve a backup name beside the video");
+        QFile::remove(temporaryPath);
+        return false;
+    }
+    const QString backupPath = backupFile.fileName();
+    backupFile.close();
+    backupFile.setAutoRemove(false);
+    QFile::remove(backupPath);
+
+    if (!QFile::rename(fileName, backupPath))
+    {
+        errorMessage = QStringLiteral("Cannot replace the original video file");
+        QFile::remove(temporaryPath);
+        return false;
+    }
+    if (!QFile::rename(temporaryPath, fileName))
+    {
+        QFile::rename(backupPath, fileName);
+        errorMessage = QStringLiteral("Cannot move the updated video into place");
+        QFile::remove(temporaryPath);
+        return false;
+    }
+
+    QFile::setPermissions(fileName, permissions);
+    QFile::remove(backupPath);
+    return true;
+#endif
 }
 
 QSize CameraVideoWriter::evenSize(const QSize& size)

@@ -8996,10 +8996,27 @@ Use src=file:///path/to/images/logo.png for img tags. http is not supported.</st
            </widget>
           </item>
          </layout>
-        </widget>
-       </item>
-       <item>
-        <spacer name="verticalSpacerPosition">
+       </widget>
+      </item>
+      <item alignment="Qt::AlignmentFlag::AlignRight">
+       <widget class="QToolButton" name="updateFileMetadataButton">
+        <property name="toolTip">
+         <string>Replace the active image or video file metadata with the capture time, site, direction, projection, and playback transform currently shown on this tab. Capture must be stopped.</string>
+        </property>
+        <property name="text">
+         <string>Update file metadata</string>
+        </property>
+        <property name="toolButtonStyle">
+         <enum>Qt::ToolButtonStyle::ToolButtonTextBesideIcon</enum>
+        </property>
+        <property name="icon">
+         <iconset resource="../../../sdrgui/resources/res.qrc">
+          <normaloff>:/save.png</normaloff>:/save.png</iconset>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <spacer name="verticalSpacerPosition">
          <property name="orientation">
           <enum>Qt::Orientation::Vertical</enum>
          </property>

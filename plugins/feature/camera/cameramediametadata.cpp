@@ -13,8 +13,10 @@
 #include <cmath>
 
 #include <QImageWriter>
+#include <QFileInfo>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QSaveFile>
 
 #include "camerapipelineframe.h"
 #include "cameraobservationcontext.h"
@@ -275,15 +277,33 @@ bool CameraMediaMetadata::writeImage(
     const CameraMediaMetadata& metadata,
     QString *errorMessage)
 {
-    QImageWriter writer(fileName);
+    QSaveFile file(fileName);
+    if (!file.open(QIODevice::WriteOnly))
+    {
+        if (errorMessage) {
+            *errorMessage = file.errorString();
+        }
+        return false;
+    }
+
+    const QByteArray format = QFileInfo(fileName).suffix().toLatin1();
+    QImageWriter writer(&file, format);
     if (metadata.isValid()) {
         writer.setText(metadataKey(), QString::fromUtf8(metadata.toJson()));
     }
-    if (writer.write(image)) {
+    if (!writer.write(image))
+    {
+        if (errorMessage) {
+            *errorMessage = writer.errorString();
+        }
+        file.cancelWriting();
+        return false;
+    }
+    if (file.commit()) {
         return true;
     }
     if (errorMessage) {
-        *errorMessage = writer.errorString();
+        *errorMessage = file.errorString();
     }
     return false;
 }

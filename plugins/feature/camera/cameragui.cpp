@@ -143,6 +143,7 @@
 #include "cameraimageutils.h"
 #include "cameradetectionhistory.h"
 #include "cameramediametadata.h"
+#include "cameravideowriter.h"
 #include "cameraframestacker.h"
 #include "camerahistogramdialog.h"
 #include "cameraopticalspectrumdialog.h"
@@ -650,6 +651,7 @@ bool CameraGUI::handleMessage(const Message& message)
         m_displayedTrackedObjectsInView.clear();
         discardQueuedReportFrames(*getInputMessageQueue(), false);
         updateVideoFileControls();
+        updatePositionControls();
         updateSpectrumOverlayCaptureTimer();
         if (m_captureActive) {
             captureSpectrumOverlays(true);
@@ -4198,6 +4200,7 @@ void CameraGUI::makeUIConnections()
     QObject::connect(settingsUI()->playbackProjectionYSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_playbackProjectionYSpin_valueChanged);
     QObject::connect(settingsUI()->playbackProjectionWidthSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_playbackProjectionWidthSpin_valueChanged);
     QObject::connect(settingsUI()->playbackProjectionHeightSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraGUI::on_playbackProjectionHeightSpin_valueChanged);
+    QObject::connect(settingsUI()->updateFileMetadataButton, &QToolButton::clicked, this, &CameraGUI::on_updateFileMetadataButton_clicked);
     QObject::connect(settingsUI()->postProcessWhiteBalanceModeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraGUI::on_postProcessWhiteBalanceModeCombo_currentIndexChanged);
     QObject::connect(settingsUI()->postProcessWhiteBalanceRedGainSlider, &QSlider::valueChanged, this, &CameraGUI::on_postProcessWhiteBalanceRedGainSlider_valueChanged);
     QObject::connect(settingsUI()->postProcessWhiteBalanceRedGainSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraGUI::on_postProcessWhiteBalanceRedGainSpin_valueChanged);
@@ -6590,6 +6593,67 @@ void CameraGUI::updatePositionControls()
     settingsUI()->directionSourceLabel->setEnabled(settingsUI()->directionSourceCombo->isEnabled());
     updateSourceValueDisplays();
     updateCopyToManualButtons();
+    const QString metadataFilePath = currentMetadataFilePath();
+    const bool fileSource = m_settings.isVideoFileCamera() || m_settings.isImageFileSequenceCamera();
+    settingsUI()->updateFileMetadataButton->setVisible(fileSource);
+    settingsUI()->updateFileMetadataButton->setEnabled(
+        fileSource && !m_captureActive && !metadataFilePath.isEmpty() && QFileInfo::exists(metadataFilePath));
+}
+
+QString CameraGUI::currentMetadataFilePath() const
+{
+    if (m_settings.isVideoFileCamera()) {
+        return m_settings.m_videoFileCameraPath;
+    }
+    if (m_settings.isImageFileSequenceCamera()
+        && (m_imageSequenceIndex >= 0)
+        && (m_imageSequenceIndex < m_settings.m_imageFileCameraPaths.size())) {
+        return m_settings.m_imageFileCameraPaths.at(m_imageSequenceIndex);
+    }
+    return QString();
+}
+
+CameraMediaMetadata CameraGUI::positionTabMediaMetadata(const CameraMediaMetadata& existingMetadata) const
+{
+    CameraSettings metadataSettings = m_settings;
+    metadataSettings.m_siteSource = CameraSettings::SiteSourceManual;
+    metadataSettings.m_directionSource = CameraSettings::DirectionSourceManual;
+    metadataSettings.m_projectionSource = CameraSettings::ProjectionSourceManual;
+    metadataSettings.m_observationTimeSource = CameraSettings::ObservationTimeCustom;
+    metadataSettings.m_plateSolveUseCaptureDateTime = false;
+    metadataSettings.m_siteApplyToCurrentImage = true;
+    metadataSettings.m_directionApplyToCurrentImage = true;
+    metadataSettings.m_projectionApplyToCurrentImage = true;
+    metadataSettings.m_observationTimeApplyToCurrentImage = true;
+    metadataSettings.m_latitude = static_cast<float>(settingsUI()->latitudeSpin->value());
+    metadataSettings.m_longitude = static_cast<float>(settingsUI()->longitudeSpin->value());
+    metadataSettings.m_altitude = static_cast<float>(settingsUI()->altitudeSpin->value());
+    metadataSettings.m_azimuth = static_cast<float>(settingsUI()->azimuthSpin->value());
+    metadataSettings.m_elevation = static_cast<float>(settingsUI()->elevationSpin->value());
+    metadataSettings.m_roll = static_cast<float>(settingsUI()->rollSpin->value());
+    metadataSettings.m_fov = static_cast<float>(settingsUI()->fovSpin->value());
+    metadataSettings.m_lensProjection = static_cast<CameraSettings::LensProjection>(
+        settingsUI()->lensProjectionCombo->currentIndex());
+    metadataSettings.m_lensCenterOffsetX = settingsUI()->lensCenterOffsetXSpin->value();
+    metadataSettings.m_lensCenterOffsetY = settingsUI()->lensCenterOffsetYSpin->value();
+    metadataSettings.m_lensDistortionK1 = settingsUI()->lensDistortionK1Spin->value();
+    metadataSettings.m_lensMirror = settingsUI()->lensMirrorCheck->isChecked();
+    metadataSettings.m_plateSolveDateTime = settingsUI()->plateSolveDateTimeEdit->dateTime().toUTC();
+
+    CameraPipelineFrame frame;
+    existingMetadata.applyImageTransform(frame);
+    if (m_settings.m_playbackProjectionEnabled
+        && (m_settings.m_playbackProjectionWidth > 0)
+        && (m_settings.m_playbackProjectionHeight > 0))
+    {
+        const QRect contentRect(
+            m_settings.m_playbackProjectionX,
+            m_settings.m_playbackProjectionY,
+            m_settings.m_playbackProjectionWidth,
+            m_settings.m_playbackProjectionHeight);
+        frame.m_imageTransform.setScaled(contentRect.size(), contentRect);
+    }
+    return CameraMediaMetadata::fromFrame(metadataSettings, frame);
 }
 
 void CameraGUI::updateFovControls()
@@ -12573,6 +12637,75 @@ void CameraGUI::on_captureTimeCopyToManualButton_clicked()
     }
     updatePlateSolveDateTimeEdit();
     applySettings({"plateSolveDateTime", "observationTimeSource", "plateSolveUseCaptureDateTime"});
+}
+
+void CameraGUI::on_updateFileMetadataButton_clicked()
+{
+    const QString filePath = currentMetadataFilePath();
+    if (m_captureActive || filePath.isEmpty()) {
+        return;
+    }
+
+    const QString sourceDescription = m_settings.isImageFileSequenceCamera()
+        ? tr("the current image")
+        : tr("the video file");
+    if (QMessageBox::question(
+            this,
+            tr("Update file metadata"),
+            tr("Replace the camera position metadata in %1?\n\n%2")
+                .arg(sourceDescription, QDir::toNativeSeparators(filePath)))
+        != QMessageBox::Yes) {
+        return;
+    }
+
+    QString errorMessage;
+    CameraMediaMetadata existingMetadata = m_lastSourceMediaMetadata;
+    QImage image;
+    if (m_settings.isImageFileSequenceCamera())
+    {
+        const QString suffix = QFileInfo(filePath).suffix().toLower();
+        if ((suffix != QStringLiteral("jpg"))
+            && (suffix != QStringLiteral("jpeg"))
+            && (suffix != QStringLiteral("png")))
+        {
+            QMessageBox::warning(
+                this,
+                tr("Update file metadata"),
+                tr("Updating metadata is currently supported for JPEG, PNG, and video files."));
+            return;
+        }
+        if (!loadImageSequenceFrame(m_imageSequenceIndex, image))
+        {
+            QMessageBox::warning(this, tr("Update file metadata"), tr("The current image could not be loaded."));
+            return;
+        }
+        const CameraMediaMetadata imageMetadata = CameraMediaMetadata::fromImage(image);
+        if (imageMetadata.isValid()) {
+            existingMetadata = imageMetadata;
+        }
+    }
+
+    const CameraMediaMetadata metadata = positionTabMediaMetadata(existingMetadata);
+    const bool updated = m_settings.isImageFileSequenceCamera()
+        ? CameraMediaMetadata::writeImage(filePath, image, metadata, &errorMessage)
+        : CameraVideoWriter::updateFileMetadata(filePath, metadata.toJson(), errorMessage);
+    if (!updated)
+    {
+        QMessageBox::warning(
+            this,
+            tr("Update file metadata"),
+            tr("The metadata could not be updated:\n%1").arg(errorMessage));
+        return;
+    }
+
+    m_lastSourceMediaMetadata = metadata;
+    m_lastCaptureDateTime = metadata.captureDateTimeUtc();
+    updateSourceValueDisplays();
+    updatePlateSolveDateTimeEdit();
+    if (m_settings.isImageFileSequenceCamera()) {
+        showImageSequenceFrame(m_imageSequenceIndex);
+    }
+    QMessageBox::information(this, tr("Update file metadata"), tr("The file metadata was updated."));
 }
 
 void CameraGUI::on_observationTimeApplyToCurrentImageButton_toggled(bool checked)

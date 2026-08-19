@@ -76,6 +76,10 @@ public:
     [[nodiscard]] double fps() const { return m_settings.m_fps; }
     [[nodiscard]] QString fileName() const { return m_settings.m_fileName; }
     [[nodiscard]] static QString codecName(CameraSettings::VideoCodec codec);
+    [[nodiscard]] static bool updateFileMetadata(
+        const QString& fileName,
+        const QByteArray& cameraMetadataJson,
+        QString& errorMessage);
     [[nodiscard]] QString codecName() const;
     [[nodiscard]] bool open(const Settings& settings, const QImage& firstFrame, QString& errorMessage);
     [[nodiscard]] bool writeFrame(const QImage& image, QString& errorMessage, qint64 timestampMs = -1);

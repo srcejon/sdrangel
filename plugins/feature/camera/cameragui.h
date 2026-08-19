@@ -501,6 +501,8 @@ private:
     void updateFovControls();
     void updateSourceValueDisplays();
     void updateCopyToManualButtons();
+    CameraMediaMetadata positionTabMediaMetadata(const CameraMediaMetadata& existingMetadata) const;
+    QString currentMetadataFilePath() const;
     bool updateFovSensorSizeFromCamera();
     void updateCalculatedFov();
     void updateKeogramPreview(const QImage& image, const QString& fileName, bool visible);
@@ -813,6 +815,7 @@ private slots:
     void on_playbackProjectionHeightSpin_valueChanged(int value);
     void on_observationTimeApplyToCurrentImageButton_toggled(bool checked);
     void on_captureTimeCopyToManualButton_clicked();
+    void on_updateFileMetadataButton_clicked();
     void on_postProcessWhiteBalanceModeCombo_currentIndexChanged(int index);
     void on_postProcessWhiteBalanceRedGainSlider_valueChanged(int value);
     void on_postProcessWhiteBalanceRedGainSpin_valueChanged(double value);

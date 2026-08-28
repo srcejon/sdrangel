@@ -50,14 +50,14 @@ void WhittakerEilers::alloc(int length)
 
 void WhittakerEilers::dealloc()
 {
-    delete v1a;
-    delete v2a;
-    delete da;
-    delete dtd;
-    delete ca;
-    delete za;
-    delete zb;
-    delete b;
+    delete[] v1a;
+    delete[] v2a;
+    delete[] da;
+    delete[] dtd;
+    delete[] ca;
+    delete[] za;
+    delete[] zb;
+    delete[] b;
     m_length = 0;
 }
 

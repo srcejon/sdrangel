@@ -19,8 +19,9 @@
 #define INCLUDE_WAYPOINTS_H
 
 #include <QString>
+#include <QStringList>
 #include <QFile>
-#include <QHash>
+#include <QMultiHash>
 
 #include <stdio.h>
 #include <string.h>
@@ -30,7 +31,7 @@
 #include "util/units.h"
 #include "util/httpdownloadmanager.h"
 
-#define WAYPOINTS_URL     "https://github.com/srcejon/aviationwaypoints/waypoints.csv"
+#define WAYPOINTS_URL     "https://sdrangel.org/downloads/waypoints.zip"
 
 // Aviation waypoints
 struct SDRBASE_API Waypoint {
@@ -39,7 +40,7 @@ struct SDRBASE_API Waypoint {
     float m_latitude;
     float m_longitude;
 
-    static QHash<QString, Waypoint *> *readCSV(const QString &filename);
+    static QMultiHash<QString, Waypoint *> *readCSV(const QString &filename);
 };
 
 class SDRBASE_API Waypoints : public QObject {
@@ -51,19 +52,20 @@ public:
 
     void downloadWaypoints();
 
-    static const Waypoint* findWayPoint(const QString& name);
-    static QSharedPointer<const QHash<QString, Waypoint *>> getWaypoints();
+    static const Waypoint* findWayPoint(const QString& name, const QStringList& nearby = QStringList());
+    static QSharedPointer<const QMultiHash<QString, Waypoint *>> getWaypoints();
 
 private:
     HttpDownloadManager m_dlm;
 
-    static QSharedPointer<QHash<QString, Waypoint *>> m_waypoints;
+    static QSharedPointer<QMultiHash<QString, Waypoint *>> m_waypoints;
 
     static QDateTime m_waypointsModifiedDateTime;
 
-    static QHash<QString, Waypoint *> *readWaypoints();
+    static QMultiHash<QString, Waypoint *> *readWaypoints();
 
     static QString getDataDir();
+    static QString getWaypointsZipFilename();
     static QString getWaypointsFilename();
     static QDateTime getWaypointsModifiedDateTime();
 

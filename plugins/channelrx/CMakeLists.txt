@@ -1,5 +1,9 @@
 project(demod)
 
+if (ENABLE_CHANNELRX_DEMODACARS)
+    add_subdirectory(demodacars)
+endif()
+
 if (ENABLE_CHANNELRX_DEMODINMARSAT AND INMARSATC_FOUND)
     add_subdirectory(demodinmarsat)
 else()

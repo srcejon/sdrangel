@@ -35,6 +35,7 @@
 #include "export.h"
 #include "settings/mainsettings.h"
 #include "util/message.h"
+#include "util/aircraftreport.h"
 #include "pipes/messagepipes.h"
 #include "pipes/datapipes.h"
 #include "channel/channelapi.h"
@@ -713,6 +714,31 @@ public:
             Message(),
             m_pipeSource(pipeSource),
             m_swgMapItem(swgMapItem)
+        { }
+    };
+
+    // Message to pass aircraft sightings from demodulators to the Aircraft feature
+    class SDRBASE_API MsgAircraftReport : public Message {
+        MESSAGE_CLASS_DECLARATION
+
+    public:
+        const QObject *getPipeSource() const { return m_pipeSource; }
+        const AircraftReport& getReport() const { return m_report; }
+        AircraftReport& getReport() { return m_report; }
+
+        static MsgAircraftReport* create(const QObject *pipeSource, const AircraftReport& report)
+        {
+            return new MsgAircraftReport(pipeSource, report);
+        }
+
+    private:
+        const QObject *m_pipeSource;
+        AircraftReport m_report;
+
+        MsgAircraftReport(const QObject *pipeSource, const AircraftReport& report) :
+            Message(),
+            m_pipeSource(pipeSource),
+            m_report(report)
         { }
     };
 

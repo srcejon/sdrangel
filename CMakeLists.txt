@@ -172,6 +172,7 @@ option(ENABLE_CHANNELRX_ENDOFTRAIN "Enable channelrx end-of-train plugin" ON)
 option(ENABLE_CHANNELRX_CHANNELPOWER "Enable channelrx channel power plugin" ON)
 option(ENABLE_CHANNELRX_WDSPRX "Enable channelrx WDSP receiver plugin" ON)
 option(ENABLE_CHANNELRX_DEMODINMARSAT "Enable channelrx demodinmarsat plugin" ON)
+option(ENABLE_CHANNELRX_DEMODACARS "Enable channelrx demodacars plugin" ON)
 
 # Channel Tx enablers
 option(ENABLE_CHANNELTX "Enable channeltx plugins" ON)
@@ -503,6 +504,7 @@ elseif (WIN32)
   set(LIBACARS_FOUND ON CACHE INTERNAL "")
   set(LIBACARS_INCLUDE_DIR "${EXTERNAL_LIBRARY_FOLDER}/libacars/include/libacars-2" CACHE INTERNAL "")
   set(LIBACARS_LIBRARIES "${EXTERNAL_LIBRARY_FOLDER}/libacars/lib/acars-2.lib" CACHE INTERNAL "")
+  set(LIBACARS_DLL_DIR "${EXTERNAL_LIBRARY_FOLDER}/libacars/bin/" CACHE INTERNAL "")
 
   # used on fixup_bundle phase
   set(WINDOWS_FIXUP_BUNDLE_LIB_DIRS
@@ -1003,6 +1005,7 @@ if (NOT ENABLE_EXTERNAL_LIBRARIES OR (ENABLE_EXTERNAL_LIBRARIES STREQUAL "AUTO")
     find_package(FFmpeg COMPONENTS AVCODEC AVFORMAT AVUTIL SWSCALE)
     find_package(GGMorse)
     find_package(LibInmarsatC)
+    find_package(LibAcars)
     find_package(RNnoise)
     find_package(FLAC)
 

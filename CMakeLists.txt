@@ -216,6 +216,7 @@ option(ENABLE_FEATURE_SATELLITETRACKER "Enable feature satellitetracker plugin" 
 option(ENABLE_FEATURE_APRS "Enable feature aprs plugin" ON)
 option(ENABLE_FEATURE_DEMODANALYZER "Enable feature demodanalyzer plugin" ON)
 option(ENABLE_FEATURE_AMBE "Enable feature ambe plugin" ON)
+option(ENABLE_FEATURE_AIRCRAFT "Enable feature aircraft plugin" ON)
 option(ENABLE_FEATURE_AIS "Enable feature ais plugin" ON)
 option(ENABLE_FEATURE_AFC "Enable feature afc plugin" ON)
 option(ENABLE_FEATURE_STARTRACKER "Enable feature startracker plugin" ON)

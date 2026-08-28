@@ -9,6 +9,8 @@ FeatureReport:
       type: string
     AFCReport:
       $ref: "http://swgserver:8081/api/swagger/include/AFC.yaml#/AFCReport"
+    AircraftReport:
+      $ref: "http://swgserver:8081/api/swagger/include/Aircraft.yaml#/AircraftReport"
     AMBEReport:
       $ref: "http://swgserver:8081/api/swagger/include/AMBE.yaml#/AMBEReport"
     FreqDisplayReport:

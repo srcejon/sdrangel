@@ -1,0 +1,6 @@
+<!DOCTYPE RCC><RCC version="1.0">
+    <qresource>
+        <file>icons/stats.png</file>
+        <file>icons/chart.png</file>
+    </qresource>
+</RCC>

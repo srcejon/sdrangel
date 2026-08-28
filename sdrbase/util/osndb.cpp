@@ -346,6 +346,14 @@ QHash<QString, AircraftInformation *> *OsnDB::registrationHash(const QHash<int, 
     {
         i.next();
         AircraftInformation *info = i.value();
+        // Thousands of records in the database have no registration - military and
+        // government aircraft, gliders, anything withheld. They would all land on the
+        // "" key, leaving whichever was read last to answer for every aircraft whose
+        // registration is unknown, which then wears that record's owner, type, sideview
+        // and flag. There is no useful entry to make for them here.
+        if (info->m_registration.isEmpty()) {
+            continue;
+        }
         out->insert(info->m_registration, info);
     }
     return out;

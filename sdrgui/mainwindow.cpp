@@ -84,6 +84,7 @@
 #include "gui/dialogpositioner.h"
 #include "gui/welcomedialog.h"
 #include "gui/profiledialog.h"
+#include "util/profiler.h"
 #include "dsp/dspengine.h"
 #include "dsp/spectrumvis.h"
 #include "dsp/dspcommands.h"
@@ -291,6 +292,9 @@ MainWindow::MainWindow(qtwebapp::LoggerWithFile *logger, const MainParser& parse
 MainWindow::~MainWindow()
 {
 	qDebug() << "MainWindow::~MainWindow";
+
+    // Log before tearing anything down, so the data survives a problem during shutdown
+    GlobalProfileData::logProfileData();
 
     m_statusTimer.stop();
     m_apiServer->stop();
@@ -3468,9 +3472,9 @@ void MainWindow::startStop(const Workspace *workspace, bool start, bool includeF
                 ChannelWebAPIUtils::run(deviceIndex);
             } else {
                 ChannelWebAPIUtils::stop(deviceIndex);
+            }
         }
     }
-}
 
     if (includeFeatures)
     {

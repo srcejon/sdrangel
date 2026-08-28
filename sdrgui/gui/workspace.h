@@ -33,6 +33,8 @@ class QHBoxLayout;
 class QLabel;
 class QToolButton;
 class QPushButton;
+class QMenu;
+class QAction;
 class QMdiArea;
 class QMdiSubWindow;
 class QFrame;
@@ -71,10 +73,20 @@ public:
     QToolButton *getMenuButton() const { return m_menuButton; }
 
 private:
+    enum StartStopMode
+    {
+        StartStopCurrentWorkspaceDevices,
+        StartStopCurrentWorkspaceDevicesAndFeatures,
+        StartStopAllWorkspacesDevices,
+        StartStopAllWorkspacesDevicesAndFeatures
+    };
+
     int m_index;
     QToolButton *m_menuButton;
     QPushButton *m_configurationPresetsButton;
+    QMenu *m_startStopMenu;
     ButtonSwitch *m_startStopButton;
+    StartStopMode m_startStopMode;
     QFrame *m_vline1;
     QPushButton *m_addRxDeviceButton;
     QPushButton *m_addTxDeviceButton;
@@ -101,6 +113,7 @@ private:
     int m_autoStackChannelMinWidth; // Width of channel requested by stackSubWindows()
 
     void unmaximizeSubWindows();
+    void updateStartStopButtonState();
 
 protected:
     void resizeEvent(QResizeEvent *event) override;
@@ -120,6 +133,7 @@ private slots:
     void autoStackSubWindows(const QPoint&);
     void tabSubWindows();
     void startStopClicked(bool checked = false);
+    void startStopModeChanged(QAction *action);
     void addFeatureEmitted(int featureIndex);
     void toggleFloating();
     void deviceStateChanged(int, DeviceAPI *deviceAPI);
@@ -134,8 +148,7 @@ signals:
     void addFeature(Workspace*, int);
     void featurePresetsDialogRequested(QPoint, Workspace*);
     void configurationPresetsDialogRequested();
-    void startAllDevices(Workspace *inWorkspace);
-    void stopAllDevices(Workspace *inWorkspace);
+    void startStopRequested(Workspace *inWorkspace, bool start, bool includeFeatures, bool allWorkspaces);
 };
 
 

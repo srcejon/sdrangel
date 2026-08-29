@@ -7,7 +7,7 @@ import Qt5Compat.GraphicalEffects
 
 Item {
     id: qmlMap
-    property int aircraftZoomLevel: 11
+    property real aircraftZoomLevel: 11
     property int aircraftMinZoomLevel: 11
     property int airportZoomLevel: 11
     property string mapProvider: "osm"

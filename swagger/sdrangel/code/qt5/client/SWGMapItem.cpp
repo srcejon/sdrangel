@@ -30,6 +30,8 @@ SWGMapItem::SWGMapItem(QString* json) {
 SWGMapItem::SWGMapItem() {
     name = nullptr;
     m_name_isSet = false;
+    group = nullptr;
+    m_group_isSet = false;
     image = nullptr;
     m_image_isSet = false;
     image_rotation = 0;
@@ -112,6 +114,8 @@ void
 SWGMapItem::init() {
     name = new QString("");
     m_name_isSet = false;
+    group = new QString("");
+    m_group_isSet = false;
     image = new QString("");
     m_image_isSet = false;
     image_rotation = 0;
@@ -190,6 +194,9 @@ void
 SWGMapItem::cleanup() {
     if(name != nullptr) { 
         delete name;
+    }
+    if(group != nullptr) { 
+        delete group;
     }
     if(image != nullptr) { 
         delete image;
@@ -288,6 +295,8 @@ void
 SWGMapItem::fromJsonObject(QJsonObject &pJson) {
     ::SWGSDRangel::setValue(&name, pJson["name"], "QString", "QString");
     
+    ::SWGSDRangel::setValue(&group, pJson["group"], "QString", "QString");
+    
     ::SWGSDRangel::setValue(&image, pJson["image"], "QString", "QString");
     
     ::SWGSDRangel::setValue(&image_rotation, pJson["imageRotation"], "qint32", "");
@@ -378,6 +387,9 @@ SWGMapItem::asJsonObject() {
     QJsonObject* obj = new QJsonObject();
     if(name != nullptr && *name != QString("")){
         toJsonValue(QString("name"), name, obj, QString("QString"));
+    }
+    if(group != nullptr && *group != QString("")){
+        toJsonValue(QString("group"), group, obj, QString("QString"));
     }
     if(image != nullptr && *image != QString("")){
         toJsonValue(QString("image"), image, obj, QString("QString"));
@@ -499,6 +511,16 @@ void
 SWGMapItem::setName(QString* name) {
     this->name = name;
     this->m_name_isSet = true;
+}
+
+QString*
+SWGMapItem::getGroup() {
+    return group;
+}
+void
+SWGMapItem::setGroup(QString* group) {
+    this->group = group;
+    this->m_group_isSet = true;
 }
 
 QString*
@@ -867,6 +889,9 @@ SWGMapItem::isSet(){
     bool isObjectUpdated = false;
     do{
         if(name && *name != QString("")){
+            isObjectUpdated = true; break;
+        }
+        if(group && *group != QString("")){
             isObjectUpdated = true; break;
         }
         if(image && *image != QString("")){

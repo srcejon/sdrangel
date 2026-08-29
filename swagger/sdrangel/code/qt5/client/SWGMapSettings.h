@@ -49,6 +49,15 @@ public:
     QString* getTerrain();
     void setTerrain(QString* terrain);
 
+    float getMapCenterLatitude();
+    void setMapCenterLatitude(float map_center_latitude);
+
+    float getMapCenterLongitude();
+    void setMapCenterLongitude(float map_center_longitude);
+
+    float getMapZoomLevel();
+    void setMapZoomLevel(float map_zoom_level);
+
     QString* getTitle();
     void setTitle(QString* title);
 
@@ -82,6 +91,15 @@ private:
 
     QString* terrain;
     bool m_terrain_isSet;
+
+    float map_center_latitude;
+    bool m_map_center_latitude_isSet;
+
+    float map_center_longitude;
+    bool m_map_center_longitude_isSet;
+
+    float map_zoom_level;
+    bool m_map_zoom_level_isSet;
 
     QString* title;
     bool m_title_isSet;

@@ -49,6 +49,9 @@ public:
     QString* getName();
     void setName(QString* name);
 
+    QString* getGroup();
+    void setGroup(QString* group);
+
     QString* getImage();
     void setImage(QString* image);
 
@@ -163,6 +166,9 @@ public:
 private:
     QString* name;
     bool m_name_isSet;
+
+    QString* group;
+    bool m_group_isSet;
 
     QString* image;
     bool m_image_isSet;

@@ -32,6 +32,12 @@ SWGMapSettings::SWGMapSettings() {
     m_display_names_isSet = false;
     terrain = nullptr;
     m_terrain_isSet = false;
+    map_center_latitude = 0.0f;
+    m_map_center_latitude_isSet = false;
+    map_center_longitude = 0.0f;
+    m_map_center_longitude_isSet = false;
+    map_zoom_level = 0.0f;
+    m_map_zoom_level_isSet = false;
     title = nullptr;
     m_title_isSet = false;
     rgb_color = 0;
@@ -60,6 +66,12 @@ SWGMapSettings::init() {
     m_display_names_isSet = false;
     terrain = new QString("");
     m_terrain_isSet = false;
+    map_center_latitude = 0.0f;
+    m_map_center_latitude_isSet = false;
+    map_center_longitude = 0.0f;
+    m_map_center_longitude_isSet = false;
+    map_zoom_level = 0.0f;
+    m_map_zoom_level_isSet = false;
     title = new QString("");
     m_title_isSet = false;
     rgb_color = 0;
@@ -84,6 +96,9 @@ SWGMapSettings::cleanup() {
     if(terrain != nullptr) { 
         delete terrain;
     }
+
+
+
     if(title != nullptr) { 
         delete title;
     }
@@ -114,6 +129,12 @@ SWGMapSettings::fromJsonObject(QJsonObject &pJson) {
     ::SWGSDRangel::setValue(&display_names, pJson["displayNames"], "qint32", "");
     
     ::SWGSDRangel::setValue(&terrain, pJson["terrain"], "QString", "QString");
+    
+    ::SWGSDRangel::setValue(&map_center_latitude, pJson["mapCenterLatitude"], "float", "");
+    
+    ::SWGSDRangel::setValue(&map_center_longitude, pJson["mapCenterLongitude"], "float", "");
+    
+    ::SWGSDRangel::setValue(&map_zoom_level, pJson["mapZoomLevel"], "float", "");
     
     ::SWGSDRangel::setValue(&title, pJson["title"], "QString", "QString");
     
@@ -152,6 +173,15 @@ SWGMapSettings::asJsonObject() {
     }
     if(terrain != nullptr && *terrain != QString("")){
         toJsonValue(QString("terrain"), terrain, obj, QString("QString"));
+    }
+    if(m_map_center_latitude_isSet){
+        obj->insert("mapCenterLatitude", QJsonValue(map_center_latitude));
+    }
+    if(m_map_center_longitude_isSet){
+        obj->insert("mapCenterLongitude", QJsonValue(map_center_longitude));
+    }
+    if(m_map_zoom_level_isSet){
+        obj->insert("mapZoomLevel", QJsonValue(map_zoom_level));
     }
     if(title != nullptr && *title != QString("")){
         toJsonValue(QString("title"), title, obj, QString("QString"));
@@ -199,6 +229,36 @@ void
 SWGMapSettings::setTerrain(QString* terrain) {
     this->terrain = terrain;
     this->m_terrain_isSet = true;
+}
+
+float
+SWGMapSettings::getMapCenterLatitude() {
+    return map_center_latitude;
+}
+void
+SWGMapSettings::setMapCenterLatitude(float map_center_latitude) {
+    this->map_center_latitude = map_center_latitude;
+    this->m_map_center_latitude_isSet = true;
+}
+
+float
+SWGMapSettings::getMapCenterLongitude() {
+    return map_center_longitude;
+}
+void
+SWGMapSettings::setMapCenterLongitude(float map_center_longitude) {
+    this->map_center_longitude = map_center_longitude;
+    this->m_map_center_longitude_isSet = true;
+}
+
+float
+SWGMapSettings::getMapZoomLevel() {
+    return map_zoom_level;
+}
+void
+SWGMapSettings::setMapZoomLevel(float map_zoom_level) {
+    this->map_zoom_level = map_zoom_level;
+    this->m_map_zoom_level_isSet = true;
 }
 
 QString*
@@ -290,6 +350,15 @@ SWGMapSettings::isSet(){
             isObjectUpdated = true; break;
         }
         if(terrain && *terrain != QString("")){
+            isObjectUpdated = true; break;
+        }
+        if(m_map_center_latitude_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_map_center_longitude_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_map_zoom_level_isSet){
             isObjectUpdated = true; break;
         }
         if(title && *title != QString("")){

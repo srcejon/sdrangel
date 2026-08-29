@@ -7,6 +7,18 @@ MapSettings:
     terrain:
       description: "Terrain used for 3D map (E.g: 'Ellipsoid' or 'Cesium World Terrain')"
       type: string
+    mapCenterLatitude:
+      description: "Latitude in decimal degrees (North positive) the 2D map is centred on"
+      type: number
+      format: float
+    mapCenterLongitude:
+      description: "Longitude in decimal degrees (East positive) the 2D map is centred on"
+      type: number
+      format: float
+    mapZoomLevel:
+      description: "Zoom level of the 2D map. Negative means nothing has been saved, in which case the map opens centred on My Position"
+      type: number
+      format: float
     title:
       type: string
     rgbColor:
@@ -49,6 +61,11 @@ MapItem:
   properties:
     name:
       description: "A name for the item"
+      type: string
+    group:
+      description: "Which of the Map's item settings groups this item belongs to - its
+        colour, labels, minimum zoom and so on. Optional: when it is not given the item
+        takes the group named after the plugin that sent it!"
       type: string
     image:
       description: "Filename or URL of image to draw on the 2D map"

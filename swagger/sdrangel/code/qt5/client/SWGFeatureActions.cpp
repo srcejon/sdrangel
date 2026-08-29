@@ -36,6 +36,8 @@ SWGFeatureActions::SWGFeatureActions() {
     m_originator_feature_index_isSet = false;
     afc_actions = nullptr;
     m_afc_actions_isSet = false;
+    aircraft_actions = nullptr;
+    m_aircraft_actions_isSet = false;
     ambe_actions = nullptr;
     m_ambe_actions_isSet = false;
     gs232_controller_actions = nullptr;
@@ -80,6 +82,8 @@ SWGFeatureActions::init() {
     m_originator_feature_index_isSet = false;
     afc_actions = new SWGAFCActions();
     m_afc_actions_isSet = false;
+    aircraft_actions = new SWGAircraftActions();
+    m_aircraft_actions_isSet = false;
     ambe_actions = new SWGAMBEActions();
     m_ambe_actions_isSet = false;
     gs232_controller_actions = new SWGGS232ControllerActions();
@@ -119,6 +123,9 @@ SWGFeatureActions::cleanup() {
 
     if(afc_actions != nullptr) { 
         delete afc_actions;
+    }
+    if(aircraft_actions != nullptr) { 
+        delete aircraft_actions;
     }
     if(ambe_actions != nullptr) { 
         delete ambe_actions;
@@ -183,6 +190,8 @@ SWGFeatureActions::fromJsonObject(QJsonObject &pJson) {
     
     ::SWGSDRangel::setValue(&afc_actions, pJson["AFCActions"], "SWGAFCActions", "SWGAFCActions");
     
+    ::SWGSDRangel::setValue(&aircraft_actions, pJson["AircraftActions"], "SWGAircraftActions", "SWGAircraftActions");
+    
     ::SWGSDRangel::setValue(&ambe_actions, pJson["AMBEActions"], "SWGAMBEActions", "SWGAMBEActions");
     
     ::SWGSDRangel::setValue(&gs232_controller_actions, pJson["GS232ControllerActions"], "SWGGS232ControllerActions", "SWGGS232ControllerActions");
@@ -238,6 +247,9 @@ SWGFeatureActions::asJsonObject() {
     }
     if((afc_actions != nullptr) && (afc_actions->isSet())){
         toJsonValue(QString("AFCActions"), afc_actions, obj, QString("SWGAFCActions"));
+    }
+    if((aircraft_actions != nullptr) && (aircraft_actions->isSet())){
+        toJsonValue(QString("AircraftActions"), aircraft_actions, obj, QString("SWGAircraftActions"));
     }
     if((ambe_actions != nullptr) && (ambe_actions->isSet())){
         toJsonValue(QString("AMBEActions"), ambe_actions, obj, QString("SWGAMBEActions"));
@@ -323,6 +335,16 @@ void
 SWGFeatureActions::setAfcActions(SWGAFCActions* afc_actions) {
     this->afc_actions = afc_actions;
     this->m_afc_actions_isSet = true;
+}
+
+SWGAircraftActions*
+SWGFeatureActions::getAircraftActions() {
+    return aircraft_actions;
+}
+void
+SWGFeatureActions::setAircraftActions(SWGAircraftActions* aircraft_actions) {
+    this->aircraft_actions = aircraft_actions;
+    this->m_aircraft_actions_isSet = true;
 }
 
 SWGAMBEActions*
@@ -480,6 +502,9 @@ SWGFeatureActions::isSet(){
             isObjectUpdated = true; break;
         }
         if(afc_actions && afc_actions->isSet()){
+            isObjectUpdated = true; break;
+        }
+        if(aircraft_actions && aircraft_actions->isSet()){
             isObjectUpdated = true; break;
         }
         if(ambe_actions && ambe_actions->isSet()){

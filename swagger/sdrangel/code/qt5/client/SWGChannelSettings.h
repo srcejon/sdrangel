@@ -22,6 +22,7 @@
 #include <QJsonObject>
 
 
+#include "SWGACARSDemodSettings.h"
 #include "SWGADSBDemodSettings.h"
 #include "SWGAISDemodSettings.h"
 #include "SWGAISModSettings.h"
@@ -59,10 +60,10 @@
 #include "SWGLocalSourceSettings.h"
 #include "SWGM17DemodSettings.h"
 #include "SWGM17ModSettings.h"
-#include "SWGMeshtasticDemodSettings.h"
-#include "SWGMeshtasticModSettings.h"
 #include "SWGMeshcoreDemodSettings.h"
 #include "SWGMeshcoreModSettings.h"
+#include "SWGMeshtasticDemodSettings.h"
+#include "SWGMeshtasticModSettings.h"
 #include "SWGNFMDemodSettings.h"
 #include "SWGNFMModSettings.h"
 #include "SWGNavtexDemodSettings.h"
@@ -119,6 +120,9 @@ public:
 
     qint32 getOriginatorChannelIndex();
     void setOriginatorChannelIndex(qint32 originator_channel_index);
+
+    SWGACARSDemodSettings* getAcarsDemodSettings();
+    void setAcarsDemodSettings(SWGACARSDemodSettings* acars_demod_settings);
 
     SWGADSBDemodSettings* getAdsbDemodSettings();
     void setAdsbDemodSettings(SWGADSBDemodSettings* adsb_demod_settings);
@@ -333,6 +337,9 @@ private:
 
     qint32 originator_channel_index;
     bool m_originator_channel_index_isSet;
+
+    SWGACARSDemodSettings* acars_demod_settings;
+    bool m_acars_demod_settings_isSet;
 
     SWGADSBDemodSettings* adsb_demod_settings;
     bool m_adsb_demod_settings_isSet;

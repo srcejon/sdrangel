@@ -22,6 +22,7 @@
 #include <QJsonObject>
 
 
+#include "SWGACARSDemodReport.h"
 #include "SWGADSBDemodReport.h"
 #include "SWGAISDemodReport.h"
 #include "SWGAISModReport.h"
@@ -51,10 +52,10 @@
 #include "SWGInmarsatDemodReport.h"
 #include "SWGM17DemodReport.h"
 #include "SWGM17ModReport.h"
-#include "SWGMeshtasticDemodReport.h"
-#include "SWGMeshtasticModReport.h"
 #include "SWGMeshcoreDemodReport.h"
 #include "SWGMeshcoreModReport.h"
+#include "SWGMeshtasticDemodReport.h"
+#include "SWGMeshtasticModReport.h"
 #include "SWGNFMDemodReport.h"
 #include "SWGNFMModReport.h"
 #include "SWGNavtexDemodReport.h"
@@ -103,6 +104,9 @@ public:
 
     qint32 getDirection();
     void setDirection(qint32 direction);
+
+    SWGACARSDemodReport* getAcarsDemodReport();
+    void setAcarsDemodReport(SWGACARSDemodReport* acars_demod_report);
 
     SWGADSBDemodReport* getAdsbDemodReport();
     void setAdsbDemodReport(SWGADSBDemodReport* adsb_demod_report);
@@ -281,6 +285,9 @@ private:
 
     qint32 direction;
     bool m_direction_isSet;
+
+    SWGACARSDemodReport* acars_demod_report;
+    bool m_acars_demod_report_isSet;
 
     SWGADSBDemodReport* adsb_demod_report;
     bool m_adsb_demod_report_isSet;

@@ -24,6 +24,7 @@
 
 #include "SWGAFCReport.h"
 #include "SWGAMBEReport.h"
+#include "SWGAircraftReport.h"
 #include "SWGFreqDisplayReport.h"
 #include "SWGGS232ControllerReport.h"
 #include "SWGLimeRFEReport.h"
@@ -60,6 +61,9 @@ public:
 
     SWGAFCReport* getAfcReport();
     void setAfcReport(SWGAFCReport* afc_report);
+
+    SWGAircraftReport* getAircraftReport();
+    void setAircraftReport(SWGAircraftReport* aircraft_report);
 
     SWGAMBEReport* getAmbeReport();
     void setAmbeReport(SWGAMBEReport* ambe_report);
@@ -106,6 +110,9 @@ private:
 
     SWGAFCReport* afc_report;
     bool m_afc_report_isSet;
+
+    SWGAircraftReport* aircraft_report;
+    bool m_aircraft_report_isSet;
 
     SWGAMBEReport* ambe_report;
     bool m_ambe_report_isSet;

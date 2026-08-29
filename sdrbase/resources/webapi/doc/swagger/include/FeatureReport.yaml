@@ -9,6 +9,8 @@ FeatureReport:
       type: string
     AFCReport:
       $ref: "/doc/swagger/include/AFC.yaml#/AFCReport"
+    AircraftReport:
+      $ref: "/doc/swagger/include/Aircraft.yaml#/AircraftReport"
     AMBEReport:
       $ref: "/doc/swagger/include/AMBE.yaml#/AMBEReport"
     FreqDisplayReport:

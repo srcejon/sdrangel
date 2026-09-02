@@ -231,9 +231,12 @@
 #include "SWGMapAircraftState.h"
 #include "SWGMapAnimation.h"
 #include "SWGMapCoordinate.h"
+#include "SWGMapDatalinkMessage.h"
+#include "SWGMapFlightPlan.h"
 #include "SWGMapItem.h"
 #include "SWGMapItem_2.h"
 #include "SWGMapReport.h"
+#include "SWGMapRouteWaypoint.h"
 #include "SWGMapSettings.h"
 #include "SWGMeshcoreDemodReport.h"
 #include "SWGMeshcoreDemodSettings.h"
@@ -1499,6 +1502,16 @@ namespace SWGSDRangel {
       obj->init();
       return obj;
     }
+    if(QString("SWGMapDatalinkMessage").compare(type) == 0) {
+      SWGMapDatalinkMessage *obj = new SWGMapDatalinkMessage();
+      obj->init();
+      return obj;
+    }
+    if(QString("SWGMapFlightPlan").compare(type) == 0) {
+      SWGMapFlightPlan *obj = new SWGMapFlightPlan();
+      obj->init();
+      return obj;
+    }
     if(QString("SWGMapItem").compare(type) == 0) {
       SWGMapItem *obj = new SWGMapItem();
       obj->init();
@@ -1511,6 +1524,11 @@ namespace SWGSDRangel {
     }
     if(QString("SWGMapReport").compare(type) == 0) {
       SWGMapReport *obj = new SWGMapReport();
+      obj->init();
+      return obj;
+    }
+    if(QString("SWGMapRouteWaypoint").compare(type) == 0) {
+      SWGMapRouteWaypoint *obj = new SWGMapRouteWaypoint();
       obj->init();
       return obj;
     }

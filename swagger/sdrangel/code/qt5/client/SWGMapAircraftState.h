@@ -22,6 +22,8 @@
 #include <QJsonObject>
 
 
+#include "SWGMapDatalinkMessage.h"
+#include "SWGMapFlightPlan.h"
 #include <QString>
 
 #include "SWGObject.h"
@@ -117,6 +119,12 @@ public:
     float getStaticAirTemperature();
     void setStaticAirTemperature(float static_air_temperature);
 
+    SWGMapFlightPlan* getFlightPlan();
+    void setFlightPlan(SWGMapFlightPlan* flight_plan);
+
+    SWGMapDatalinkMessage* getDatalinkMessage();
+    void setDatalinkMessage(SWGMapDatalinkMessage* datalink_message);
+
 
     virtual bool isSet() override;
 
@@ -195,6 +203,12 @@ private:
 
     float static_air_temperature;
     bool m_static_air_temperature_isSet;
+
+    SWGMapFlightPlan* flight_plan;
+    bool m_flight_plan_isSet;
+
+    SWGMapDatalinkMessage* datalink_message;
+    bool m_datalink_message_isSet;
 
 };
 

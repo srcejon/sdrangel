@@ -160,6 +160,9 @@ public:
     SWGMapAircraftState* getAircraftState();
     void setAircraftState(SWGMapAircraftState* aircraft_state);
 
+    QString* getLoopSound();
+    void setLoopSound(QString* loop_sound);
+
 
     virtual bool isSet() override;
 
@@ -277,6 +280,9 @@ private:
 
     SWGMapAircraftState* aircraft_state;
     bool m_aircraft_state_isSet;
+
+    QString* loop_sound;
+    bool m_loop_sound_isSet;
 
 };
 

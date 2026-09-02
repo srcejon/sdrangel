@@ -78,6 +78,10 @@ SWGMapAircraftState::SWGMapAircraftState() {
     m_wind_direction_isSet = false;
     static_air_temperature = 0.0f;
     m_static_air_temperature_isSet = false;
+    flight_plan = nullptr;
+    m_flight_plan_isSet = false;
+    datalink_message = nullptr;
+    m_datalink_message_isSet = false;
 }
 
 SWGMapAircraftState::~SWGMapAircraftState() {
@@ -136,6 +140,10 @@ SWGMapAircraftState::init() {
     m_wind_direction_isSet = false;
     static_air_temperature = 0.0f;
     m_static_air_temperature_isSet = false;
+    flight_plan = new SWGMapFlightPlan();
+    m_flight_plan_isSet = false;
+    datalink_message = new SWGMapDatalinkMessage();
+    m_datalink_message_isSet = false;
 }
 
 void
@@ -175,6 +183,12 @@ SWGMapAircraftState::cleanup() {
 
 
 
+    if(flight_plan != nullptr) { 
+        delete flight_plan;
+    }
+    if(datalink_message != nullptr) { 
+        delete datalink_message;
+    }
 }
 
 SWGMapAircraftState*
@@ -237,6 +251,10 @@ SWGMapAircraftState::fromJsonObject(QJsonObject &pJson) {
     ::SWGSDRangel::setValue(&wind_direction, pJson["windDirection"], "float", "");
     
     ::SWGSDRangel::setValue(&static_air_temperature, pJson["staticAirTemperature"], "float", "");
+    
+    ::SWGSDRangel::setValue(&flight_plan, pJson["flightPlan"], "SWGMapFlightPlan", "SWGMapFlightPlan");
+    
+    ::SWGSDRangel::setValue(&datalink_message, pJson["datalinkMessage"], "SWGMapDatalinkMessage", "SWGMapDatalinkMessage");
     
 }
 
@@ -328,6 +346,12 @@ SWGMapAircraftState::asJsonObject() {
     }
     if(m_static_air_temperature_isSet){
         obj->insert("staticAirTemperature", QJsonValue(static_air_temperature));
+    }
+    if((flight_plan != nullptr) && (flight_plan->isSet())){
+        toJsonValue(QString("flightPlan"), flight_plan, obj, QString("SWGMapFlightPlan"));
+    }
+    if((datalink_message != nullptr) && (datalink_message->isSet())){
+        toJsonValue(QString("datalinkMessage"), datalink_message, obj, QString("SWGMapDatalinkMessage"));
     }
 
     return obj;
@@ -583,6 +607,26 @@ SWGMapAircraftState::setStaticAirTemperature(float static_air_temperature) {
     this->m_static_air_temperature_isSet = true;
 }
 
+SWGMapFlightPlan*
+SWGMapAircraftState::getFlightPlan() {
+    return flight_plan;
+}
+void
+SWGMapAircraftState::setFlightPlan(SWGMapFlightPlan* flight_plan) {
+    this->flight_plan = flight_plan;
+    this->m_flight_plan_isSet = true;
+}
+
+SWGMapDatalinkMessage*
+SWGMapAircraftState::getDatalinkMessage() {
+    return datalink_message;
+}
+void
+SWGMapAircraftState::setDatalinkMessage(SWGMapDatalinkMessage* datalink_message) {
+    this->datalink_message = datalink_message;
+    this->m_datalink_message_isSet = true;
+}
+
 
 bool
 SWGMapAircraftState::isSet(){
@@ -661,6 +705,12 @@ SWGMapAircraftState::isSet(){
             isObjectUpdated = true; break;
         }
         if(m_static_air_temperature_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(flight_plan && flight_plan->isSet()){
+            isObjectUpdated = true; break;
+        }
+        if(datalink_message && datalink_message->isSet()){
             isObjectUpdated = true; break;
         }
     }while(false);

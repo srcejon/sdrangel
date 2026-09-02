@@ -11,17 +11,19 @@
  */
 
 /*
- * SWGMapAnimation.h
+ * SWGMapFlightPlan.h
  *
- * Animation to play in the model on the 3D map
+ * Flight plan / cleared route, drawn on the Map&#39;s ND (Navigation Display)
  */
 
-#ifndef SWGMapAnimation_H_
-#define SWGMapAnimation_H_
+#ifndef SWGMapFlightPlan_H_
+#define SWGMapFlightPlan_H_
 
 #include <QJsonObject>
 
 
+#include "SWGMapRouteWaypoint.h"
+#include <QList>
 #include <QString>
 
 #include "SWGObject.h"
@@ -29,79 +31,61 @@
 
 namespace SWGSDRangel {
 
-class SWG_API SWGMapAnimation: public SWGObject {
+class SWG_API SWGMapFlightPlan: public SWGObject {
 public:
-    SWGMapAnimation();
-    SWGMapAnimation(QString* json);
-    virtual ~SWGMapAnimation();
+    SWGMapFlightPlan();
+    SWGMapFlightPlan(QString* json);
+    virtual ~SWGMapFlightPlan();
     void init();
     void cleanup();
 
     virtual QString asJson () override;
     virtual QJsonObject* asJsonObject() override;
     virtual void fromJsonObject(QJsonObject &json) override;
-    virtual SWGMapAnimation* fromJson(QString &jsonString) override;
+    virtual SWGMapFlightPlan* fromJson(QString &jsonString) override;
 
-    QString* getName();
-    void setName(QString* name);
+    QString* getDeparture();
+    void setDeparture(QString* departure);
 
-    qint32 getReverse();
-    void setReverse(qint32 reverse);
+    QString* getArrival();
+    void setArrival(QString* arrival);
 
-    qint32 getLoop();
-    void setLoop(qint32 loop);
+    QString* getArrivalRunway();
+    void setArrivalRunway(QString* arrival_runway);
 
-    QString* getStartDateTime();
-    void setStartDateTime(QString* start_date_time);
+    QString* getApproach();
+    void setApproach(QString* approach);
 
-    float getStartOffset();
-    void setStartOffset(float start_offset);
+    qint32 getActiveWaypoint();
+    void setActiveWaypoint(qint32 active_waypoint);
 
-    float getMultiplier();
-    void setMultiplier(float multiplier);
-
-    float getDuration();
-    void setDuration(float duration);
-
-    qint32 getStop();
-    void setStop(qint32 stop);
-
-    QString* getSound();
-    void setSound(QString* sound);
+    QList<SWGMapRouteWaypoint*>* getWaypoints();
+    void setWaypoints(QList<SWGMapRouteWaypoint*>* waypoints);
 
 
     virtual bool isSet() override;
 
 private:
-    QString* name;
-    bool m_name_isSet;
+    QString* departure;
+    bool m_departure_isSet;
 
-    qint32 reverse;
-    bool m_reverse_isSet;
+    QString* arrival;
+    bool m_arrival_isSet;
 
-    qint32 loop;
-    bool m_loop_isSet;
+    QString* arrival_runway;
+    bool m_arrival_runway_isSet;
 
-    QString* start_date_time;
-    bool m_start_date_time_isSet;
+    QString* approach;
+    bool m_approach_isSet;
 
-    float start_offset;
-    bool m_start_offset_isSet;
+    qint32 active_waypoint;
+    bool m_active_waypoint_isSet;
 
-    float multiplier;
-    bool m_multiplier_isSet;
-
-    float duration;
-    bool m_duration_isSet;
-
-    qint32 stop;
-    bool m_stop_isSet;
-
-    QString* sound;
-    bool m_sound_isSet;
+    QList<SWGMapRouteWaypoint*>* waypoints;
+    bool m_waypoints_isSet;
 
 };
 
 }
 
-#endif /* SWGMapAnimation_H_ */
+#endif /* SWGMapFlightPlan_H_ */

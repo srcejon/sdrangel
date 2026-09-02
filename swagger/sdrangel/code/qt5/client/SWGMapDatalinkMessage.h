@@ -11,13 +11,13 @@
  */
 
 /*
- * SWGMapAnimation.h
+ * SWGMapDatalinkMessage.h
  *
- * Animation to play in the model on the 3D map
+ * Datalink ATC message (CPDLC / pre-departure clearance / oceanic clearance), shown on the Map&#39;s DCDU
  */
 
-#ifndef SWGMapAnimation_H_
-#define SWGMapAnimation_H_
+#ifndef SWGMapDatalinkMessage_H_
+#define SWGMapDatalinkMessage_H_
 
 #include <QJsonObject>
 
@@ -29,79 +29,55 @@
 
 namespace SWGSDRangel {
 
-class SWG_API SWGMapAnimation: public SWGObject {
+class SWG_API SWGMapDatalinkMessage: public SWGObject {
 public:
-    SWGMapAnimation();
-    SWGMapAnimation(QString* json);
-    virtual ~SWGMapAnimation();
+    SWGMapDatalinkMessage();
+    SWGMapDatalinkMessage(QString* json);
+    virtual ~SWGMapDatalinkMessage();
     void init();
     void cleanup();
 
     virtual QString asJson () override;
     virtual QJsonObject* asJsonObject() override;
     virtual void fromJsonObject(QJsonObject &json) override;
-    virtual SWGMapAnimation* fromJson(QString &jsonString) override;
+    virtual SWGMapDatalinkMessage* fromJson(QString &jsonString) override;
 
-    QString* getName();
-    void setName(QString* name);
+    qint32 getId();
+    void setId(qint32 id);
 
-    qint32 getReverse();
-    void setReverse(qint32 reverse);
+    QString* getReceived();
+    void setReceived(QString* received);
 
-    qint32 getLoop();
-    void setLoop(qint32 loop);
+    qint32 getUplink();
+    void setUplink(qint32 uplink);
 
-    QString* getStartDateTime();
-    void setStartDateTime(QString* start_date_time);
+    QString* getStation();
+    void setStation(QString* station);
 
-    float getStartOffset();
-    void setStartOffset(float start_offset);
-
-    float getMultiplier();
-    void setMultiplier(float multiplier);
-
-    float getDuration();
-    void setDuration(float duration);
-
-    qint32 getStop();
-    void setStop(qint32 stop);
-
-    QString* getSound();
-    void setSound(QString* sound);
+    QString* getText();
+    void setText(QString* text);
 
 
     virtual bool isSet() override;
 
 private:
-    QString* name;
-    bool m_name_isSet;
+    qint32 id;
+    bool m_id_isSet;
 
-    qint32 reverse;
-    bool m_reverse_isSet;
+    QString* received;
+    bool m_received_isSet;
 
-    qint32 loop;
-    bool m_loop_isSet;
+    qint32 uplink;
+    bool m_uplink_isSet;
 
-    QString* start_date_time;
-    bool m_start_date_time_isSet;
+    QString* station;
+    bool m_station_isSet;
 
-    float start_offset;
-    bool m_start_offset_isSet;
-
-    float multiplier;
-    bool m_multiplier_isSet;
-
-    float duration;
-    bool m_duration_isSet;
-
-    qint32 stop;
-    bool m_stop_isSet;
-
-    QString* sound;
-    bool m_sound_isSet;
+    QString* text;
+    bool m_text_isSet;
 
 };
 
 }
 
-#endif /* SWGMapAnimation_H_ */
+#endif /* SWGMapDatalinkMessage_H_ */

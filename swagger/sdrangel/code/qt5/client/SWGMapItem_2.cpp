@@ -104,6 +104,8 @@ SWGMapItem_2::SWGMapItem_2() {
     m_color_isSet = false;
     aircraft_state = nullptr;
     m_aircraft_state_isSet = false;
+    loop_sound = nullptr;
+    m_loop_sound_isSet = false;
 }
 
 SWGMapItem_2::~SWGMapItem_2() {
@@ -188,6 +190,8 @@ SWGMapItem_2::init() {
     m_color_isSet = false;
     aircraft_state = new SWGMapAircraftState();
     m_aircraft_state_isSet = false;
+    loop_sound = new QString("");
+    m_loop_sound_isSet = false;
 }
 
 void
@@ -280,6 +284,9 @@ SWGMapItem_2::cleanup() {
     if(aircraft_state != nullptr) { 
         delete aircraft_state;
     }
+    if(loop_sound != nullptr) { 
+        delete loop_sound;
+    }
 }
 
 SWGMapItem_2*
@@ -368,6 +375,8 @@ SWGMapItem_2::fromJsonObject(QJsonObject &pJson) {
     ::SWGSDRangel::setValue(&color, pJson["color"], "qint32", "");
     
     ::SWGSDRangel::setValue(&aircraft_state, pJson["aircraftState"], "SWGMapAircraftState", "SWGMapAircraftState");
+    
+    ::SWGSDRangel::setValue(&loop_sound, pJson["loopSound"], "QString", "QString");
     
 }
 
@@ -498,6 +507,9 @@ SWGMapItem_2::asJsonObject() {
     }
     if((aircraft_state != nullptr) && (aircraft_state->isSet())){
         toJsonValue(QString("aircraftState"), aircraft_state, obj, QString("SWGMapAircraftState"));
+    }
+    if(loop_sound != nullptr && *loop_sound != QString("")){
+        toJsonValue(QString("loopSound"), loop_sound, obj, QString("QString"));
     }
 
     return obj;
@@ -883,6 +895,16 @@ SWGMapItem_2::setAircraftState(SWGMapAircraftState* aircraft_state) {
     this->m_aircraft_state_isSet = true;
 }
 
+QString*
+SWGMapItem_2::getLoopSound() {
+    return loop_sound;
+}
+void
+SWGMapItem_2::setLoopSound(QString* loop_sound) {
+    this->loop_sound = loop_sound;
+    this->m_loop_sound_isSet = true;
+}
+
 
 bool
 SWGMapItem_2::isSet(){
@@ -1000,6 +1022,9 @@ SWGMapItem_2::isSet(){
             isObjectUpdated = true; break;
         }
         if(aircraft_state && aircraft_state->isSet()){
+            isObjectUpdated = true; break;
+        }
+        if(loop_sound && *loop_sound != QString("")){
             isObjectUpdated = true; break;
         }
     }while(false);

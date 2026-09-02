@@ -11,13 +11,13 @@
  */
 
 /*
- * SWGMapAnimation.h
+ * SWGMapRouteWaypoint.h
  *
- * Animation to play in the model on the 3D map
+ * A waypoint of a flight plan, for the Map&#39;s ND (Navigation Display)
  */
 
-#ifndef SWGMapAnimation_H_
-#define SWGMapAnimation_H_
+#ifndef SWGMapRouteWaypoint_H_
+#define SWGMapRouteWaypoint_H_
 
 #include <QJsonObject>
 
@@ -29,45 +29,33 @@
 
 namespace SWGSDRangel {
 
-class SWG_API SWGMapAnimation: public SWGObject {
+class SWG_API SWGMapRouteWaypoint: public SWGObject {
 public:
-    SWGMapAnimation();
-    SWGMapAnimation(QString* json);
-    virtual ~SWGMapAnimation();
+    SWGMapRouteWaypoint();
+    SWGMapRouteWaypoint(QString* json);
+    virtual ~SWGMapRouteWaypoint();
     void init();
     void cleanup();
 
     virtual QString asJson () override;
     virtual QJsonObject* asJsonObject() override;
     virtual void fromJsonObject(QJsonObject &json) override;
-    virtual SWGMapAnimation* fromJson(QString &jsonString) override;
+    virtual SWGMapRouteWaypoint* fromJson(QString &jsonString) override;
 
     QString* getName();
     void setName(QString* name);
 
-    qint32 getReverse();
-    void setReverse(qint32 reverse);
+    float getLatitude();
+    void setLatitude(float latitude);
 
-    qint32 getLoop();
-    void setLoop(qint32 loop);
+    float getLongitude();
+    void setLongitude(float longitude);
 
-    QString* getStartDateTime();
-    void setStartDateTime(QString* start_date_time);
+    float getAltitude();
+    void setAltitude(float altitude);
 
-    float getStartOffset();
-    void setStartOffset(float start_offset);
-
-    float getMultiplier();
-    void setMultiplier(float multiplier);
-
-    float getDuration();
-    void setDuration(float duration);
-
-    qint32 getStop();
-    void setStop(qint32 stop);
-
-    QString* getSound();
-    void setSound(QString* sound);
+    QString* getEta();
+    void setEta(QString* eta);
 
 
     virtual bool isSet() override;
@@ -76,32 +64,20 @@ private:
     QString* name;
     bool m_name_isSet;
 
-    qint32 reverse;
-    bool m_reverse_isSet;
+    float latitude;
+    bool m_latitude_isSet;
 
-    qint32 loop;
-    bool m_loop_isSet;
+    float longitude;
+    bool m_longitude_isSet;
 
-    QString* start_date_time;
-    bool m_start_date_time_isSet;
+    float altitude;
+    bool m_altitude_isSet;
 
-    float start_offset;
-    bool m_start_offset_isSet;
-
-    float multiplier;
-    bool m_multiplier_isSet;
-
-    float duration;
-    bool m_duration_isSet;
-
-    qint32 stop;
-    bool m_stop_isSet;
-
-    QString* sound;
-    bool m_sound_isSet;
+    QString* eta;
+    bool m_eta_isSet;
 
 };
 
 }
 
-#endif /* SWGMapAnimation_H_ */
+#endif /* SWGMapRouteWaypoint_H_ */

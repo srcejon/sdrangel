@@ -265,8 +265,6 @@ private:
     QHash<int, VORGUI *> m_selectedVORs;
     AzEl m_azEl;                        // Position of station
     QIcon m_muteIcon;
-	QTimer m_statusTimer;
-	int m_lastFeatureState;
     int m_rrSecondsCount;
     QTimer m_redrawMapTimer;
     QString m_mapFeaturePositionName;
@@ -299,6 +297,7 @@ private slots:
     void on_startStop_toggled(bool checked);
     void on_getOpenAIPVORDB_clicked();
     void on_magDecAdjust_toggled(bool checked);
+    void on_displaySettings_clicked();
     void on_rrTime_valueChanged(int value);
     void on_centerShift_valueChanged(int value);
     void channelsRefresh();
@@ -309,7 +308,7 @@ private slots:
     void onWidgetRolled(QWidget* widget, bool rollDown);
     void onMenuDialogCalled(const QPoint& p);
     void handleInputMessages();
-    void updateStatus();
+    void updateFeatureState();
     void tick();
     void downloadingURL(const QString& url);
     void downloadError(const QString& error);

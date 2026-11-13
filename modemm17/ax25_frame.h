@@ -210,6 +210,7 @@ public:
         source_(),
         repeaters_(),
         type_(UNDEFINED),
+        raw_type_(0),
         info_(),
         fcs_(-1),
         crc_(0),
@@ -255,7 +256,9 @@ void write(std::ostream& os, const ax25_frame& frame)
 
     if (frame.pid())
     {
+        std::ios_base::fmtflags flags = os.flags();
         os << "PID: " << std::setbase(16) << int(frame.pid()) << std::endl;
+        os.flags(flags);
     }
     os << "Info: " << std::endl << frame.info() << std::endl;
 }

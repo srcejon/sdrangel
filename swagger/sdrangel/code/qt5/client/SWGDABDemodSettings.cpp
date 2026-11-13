@@ -46,6 +46,10 @@ SWGDABDemodSettings::SWGDABDemodSettings() {
     m_title_isSet = false;
     stream_index = 0;
     m_stream_index_isSet = false;
+    coherent = 0;
+    m_coherent_isSet = false;
+    announcement_types = 0;
+    m_announcement_types_isSet = false;
     use_reverse_api = 0;
     m_use_reverse_api_isSet = false;
     reverse_api_address = nullptr;
@@ -86,6 +90,10 @@ SWGDABDemodSettings::init() {
     m_title_isSet = false;
     stream_index = 0;
     m_stream_index_isSet = false;
+    coherent = 0;
+    m_coherent_isSet = false;
+    announcement_types = 0;
+    m_announcement_types_isSet = false;
     use_reverse_api = 0;
     m_use_reverse_api_isSet = false;
     reverse_api_address = new QString("");
@@ -118,6 +126,8 @@ SWGDABDemodSettings::cleanup() {
     if(title != nullptr) { 
         delete title;
     }
+
+
 
 
     if(reverse_api_address != nullptr) { 
@@ -162,6 +172,10 @@ SWGDABDemodSettings::fromJsonObject(QJsonObject &pJson) {
     ::SWGSDRangel::setValue(&title, pJson["title"], "QString", "QString");
     
     ::SWGSDRangel::setValue(&stream_index, pJson["streamIndex"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&coherent, pJson["coherent"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&announcement_types, pJson["announcementTypes"], "qint32", "");
     
     ::SWGSDRangel::setValue(&use_reverse_api, pJson["useReverseAPI"], "qint32", "");
     
@@ -219,6 +233,12 @@ SWGDABDemodSettings::asJsonObject() {
     }
     if(m_stream_index_isSet){
         obj->insert("streamIndex", QJsonValue(stream_index));
+    }
+    if(m_coherent_isSet){
+        obj->insert("coherent", QJsonValue(coherent));
+    }
+    if(m_announcement_types_isSet){
+        obj->insert("announcementTypes", QJsonValue(announcement_types));
     }
     if(m_use_reverse_api_isSet){
         obj->insert("useReverseAPI", QJsonValue(use_reverse_api));
@@ -336,6 +356,26 @@ SWGDABDemodSettings::setStreamIndex(qint32 stream_index) {
 }
 
 qint32
+SWGDABDemodSettings::getCoherent() {
+    return coherent;
+}
+void
+SWGDABDemodSettings::setCoherent(qint32 coherent) {
+    this->coherent = coherent;
+    this->m_coherent_isSet = true;
+}
+
+qint32
+SWGDABDemodSettings::getAnnouncementTypes() {
+    return announcement_types;
+}
+void
+SWGDABDemodSettings::setAnnouncementTypes(qint32 announcement_types) {
+    this->announcement_types = announcement_types;
+    this->m_announcement_types_isSet = true;
+}
+
+qint32
 SWGDABDemodSettings::getUseReverseApi() {
     return use_reverse_api;
 }
@@ -435,6 +475,12 @@ SWGDABDemodSettings::isSet(){
             isObjectUpdated = true; break;
         }
         if(m_stream_index_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_coherent_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_announcement_types_isSet){
             isObjectUpdated = true; break;
         }
         if(m_use_reverse_api_isSet){

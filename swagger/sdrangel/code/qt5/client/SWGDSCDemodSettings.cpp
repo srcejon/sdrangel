@@ -32,6 +32,8 @@ SWGDSCDemodSettings::SWGDSCDemodSettings() {
     m_input_frequency_offset_isSet = false;
     rf_bandwidth = 0.0f;
     m_rf_bandwidth_isSet = false;
+    mode = 0;
+    m_mode_isSet = false;
     filter_invalid = 0;
     m_filter_invalid_isSet = false;
     filter_column = 0;
@@ -84,6 +86,8 @@ SWGDSCDemodSettings::init() {
     m_input_frequency_offset_isSet = false;
     rf_bandwidth = 0.0f;
     m_rf_bandwidth_isSet = false;
+    mode = 0;
+    m_mode_isSet = false;
     filter_invalid = 0;
     m_filter_invalid_isSet = false;
     filter_column = 0;
@@ -128,6 +132,7 @@ SWGDSCDemodSettings::init() {
 
 void
 SWGDSCDemodSettings::cleanup() {
+
 
 
 
@@ -182,6 +187,8 @@ SWGDSCDemodSettings::fromJsonObject(QJsonObject &pJson) {
     ::SWGSDRangel::setValue(&input_frequency_offset, pJson["inputFrequencyOffset"], "qint64", "");
     
     ::SWGSDRangel::setValue(&rf_bandwidth, pJson["rfBandwidth"], "float", "");
+    
+    ::SWGSDRangel::setValue(&mode, pJson["mode"], "qint32", "");
     
     ::SWGSDRangel::setValue(&filter_invalid, pJson["filterInvalid"], "qint32", "");
     
@@ -244,6 +251,9 @@ SWGDSCDemodSettings::asJsonObject() {
     }
     if(m_rf_bandwidth_isSet){
         obj->insert("rfBandwidth", QJsonValue(rf_bandwidth));
+    }
+    if(m_mode_isSet){
+        obj->insert("mode", QJsonValue(mode));
     }
     if(m_filter_invalid_isSet){
         obj->insert("filterInvalid", QJsonValue(filter_invalid));
@@ -327,6 +337,16 @@ void
 SWGDSCDemodSettings::setRfBandwidth(float rf_bandwidth) {
     this->rf_bandwidth = rf_bandwidth;
     this->m_rf_bandwidth_isSet = true;
+}
+
+qint32
+SWGDSCDemodSettings::getMode() {
+    return mode;
+}
+void
+SWGDSCDemodSettings::setMode(qint32 mode) {
+    this->mode = mode;
+    this->m_mode_isSet = true;
 }
 
 qint32
@@ -538,6 +558,9 @@ SWGDSCDemodSettings::isSet(){
             isObjectUpdated = true; break;
         }
         if(m_rf_bandwidth_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_mode_isSet){
             isObjectUpdated = true; break;
         }
         if(m_filter_invalid_isSet){

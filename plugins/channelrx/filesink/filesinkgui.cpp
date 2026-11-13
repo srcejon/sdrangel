@@ -23,6 +23,7 @@
 
 #include "device/deviceuiset.h"
 #include "device/deviceapi.h"
+#include "gui/messagedialog.h"
 #include "gui/basicchannelsettingsdialog.h"
 #include "gui/dialpopup.h"
 #include "gui/dialogpositioner.h"
@@ -85,8 +86,12 @@ bool FileSinkGUI::handleMessage(const Message& message)
 
         if (m_fixedPosition)
         {
+            const qint32 inputFrequencyOffset = m_settings.m_inputFrequencyOffset;
             setFrequencyFromPos();
-            applySettings(QStringList(), true);
+
+            if (m_settings.m_inputFrequencyOffset != inputFrequencyOffset) {
+                applySettings(QStringList("inputFrequencyOffset"));
+            }
         }
         else
         {
@@ -143,7 +148,7 @@ bool FileSinkGUI::handleMessage(const Message& message)
         const FileSinkMessages::MsgReportSquelch& report = (FileSinkMessages::MsgReportSquelch&) message;
         qDebug("FileSinkGUI::handleMessage: FileSinkMessages::MsgReportRecording: %s", report.getOpen() ? "on" : "off");
 
-        blockSignals(true);
+        ui->record->blockSignals(true);
 
         if (report.getOpen())
         {
@@ -156,7 +161,7 @@ bool FileSinkGUI::handleMessage(const Message& message)
             ui->record->setChecked(false);
         }
 
-        blockSignals(false);
+        ui->record->blockSignals(false);
         return true;
     }
     else if (FileSinkMessages::MsgReportRecordFileName::match(message))
@@ -168,7 +173,7 @@ bool FileSinkGUI::handleMessage(const Message& message)
     else if (FileSinkMessages::MsgReportRecordFileError::match(message))
     {
         const FileSinkMessages::MsgReportRecordFileError& report = (FileSinkMessages::MsgReportRecordFileError&) message;
-        QMessageBox::critical(this, tr("File Error"), report.getMessage());
+        MessageDialog::critical(this, tr("File Error"), report.getMessage());
         return true;
     }
     else
@@ -264,6 +269,7 @@ void FileSinkGUI::displaySettings()
     m_channelMarker.setCenterFrequency(m_settings.m_inputFrequencyOffset);
     m_channelMarker.setBandwidth(m_basebandSampleRate / (1<<m_settings.m_log2Decim));
     m_channelMarker.setTitle(m_settings.m_title);
+    m_channelMarker.setVisible(m_settings.m_log2Decim != 0);
     m_channelMarker.blockSignals(false);
     m_channelMarker.setColor(m_settings.m_rgbColor); // activate signal on the last setting only
 
@@ -432,6 +438,7 @@ void FileSinkGUI::on_deltaFrequency_changed(qint64 value)
 void FileSinkGUI::on_decimationFactor_currentIndexChanged(int index)
 {
     m_settings.m_log2Decim = index;
+    m_channelMarker.setVisible(index != 0);
     applyDecimation();
     displayRate();
     displayPos();

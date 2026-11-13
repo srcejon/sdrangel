@@ -257,11 +257,12 @@ void ILSDemodGUI::handleInputMessages()
 {
     Message* message;
 
-    while ((message = getInputMessageQueue()->pop()) != 0)
+    while ((message = getInputMessageQueue()->pop()))
     {
-        if (handleMessage(*message)) {
-            delete message;
+        if (!handleMessage(*message)) {
+            qDebug("%s: unhandled message: %s", Q_FUNC_INFO, message->getIdentifier());
         }
+        delete message;
     }
 }
 
@@ -456,7 +457,7 @@ void ILSDemodGUI::on_addMarker_clicked()
         swgMapItem->setAltitude(stationAltitude);
         swgMapItem->setAltitudeReference(1); // CLAMP_TO_GROUND
         swgMapItem->setFixedPosition(true);
-        swgMapItem->setPositionDateTime(new QString(QDateTime::currentDateTime().toString(Qt::ISODateWithMs)));
+        swgMapItem->setPositionDateTime(new QString(QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs)));
 
         swgMapItem->setImage(new QString(QString("qrc:///aprs/aprs/aprs-symbols-24-0-06.png")));
         QString text;

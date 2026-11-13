@@ -40,6 +40,16 @@ SWGChannelActions::SWGChannelActions() {
     m_ais_mod_actions_isSet = false;
     apt_demod_actions = nullptr;
     m_apt_demod_actions_isSet = false;
+    wefax_demod_actions = nullptr;
+    m_wefax_demod_actions_isSet = false;
+    dvb_demod_actions = nullptr;
+    m_dvb_demod_actions_isSet = false;
+    drm_demod_actions = nullptr;
+    m_drm_demod_actions_isSet = false;
+    dsd_demod_actions = nullptr;
+    m_dsd_demod_actions_isSet = false;
+    dse_mod_actions = nullptr;
+    m_dse_mod_actions_isSet = false;
     file_sink_actions = nullptr;
     m_file_sink_actions_isSet = false;
     file_source_actions = nullptr;
@@ -80,6 +90,16 @@ SWGChannelActions::init() {
     m_ais_mod_actions_isSet = false;
     apt_demod_actions = new SWGAPTDemodActions();
     m_apt_demod_actions_isSet = false;
+    wefax_demod_actions = new SWGWefaxDemodActions();
+    m_wefax_demod_actions_isSet = false;
+    dvb_demod_actions = new SWGDVBDemodActions();
+    m_dvb_demod_actions_isSet = false;
+    drm_demod_actions = new SWGDRMDemodActions();
+    m_drm_demod_actions_isSet = false;
+    dsd_demod_actions = new SWGDSDDemodActions();
+    m_dsd_demod_actions_isSet = false;
+    dse_mod_actions = new SWGDSEModActions();
+    m_dse_mod_actions_isSet = false;
     file_sink_actions = new SWGFileSinkActions();
     m_file_sink_actions_isSet = false;
     file_source_actions = new SWGFileSourceActions();
@@ -115,6 +135,21 @@ SWGChannelActions::cleanup() {
     }
     if(apt_demod_actions != nullptr) { 
         delete apt_demod_actions;
+    }
+    if(wefax_demod_actions != nullptr) { 
+        delete wefax_demod_actions;
+    }
+    if(dvb_demod_actions != nullptr) { 
+        delete dvb_demod_actions;
+    }
+    if(drm_demod_actions != nullptr) { 
+        delete drm_demod_actions;
+    }
+    if(dsd_demod_actions != nullptr) { 
+        delete dsd_demod_actions;
+    }
+    if(dse_mod_actions != nullptr) { 
+        delete dse_mod_actions;
     }
     if(file_sink_actions != nullptr) { 
         delete file_sink_actions;
@@ -171,6 +206,16 @@ SWGChannelActions::fromJsonObject(QJsonObject &pJson) {
     
     ::SWGSDRangel::setValue(&apt_demod_actions, pJson["APTDemodActions"], "SWGAPTDemodActions", "SWGAPTDemodActions");
     
+    ::SWGSDRangel::setValue(&wefax_demod_actions, pJson["WefaxDemodActions"], "SWGWefaxDemodActions", "SWGWefaxDemodActions");
+    
+    ::SWGSDRangel::setValue(&dvb_demod_actions, pJson["DVBDemodActions"], "SWGDVBDemodActions", "SWGDVBDemodActions");
+    
+    ::SWGSDRangel::setValue(&drm_demod_actions, pJson["DRMDemodActions"], "SWGDRMDemodActions", "SWGDRMDemodActions");
+    
+    ::SWGSDRangel::setValue(&dsd_demod_actions, pJson["DSDDemodActions"], "SWGDSDDemodActions", "SWGDSDDemodActions");
+    
+    ::SWGSDRangel::setValue(&dse_mod_actions, pJson["DSEModActions"], "SWGDSEModActions", "SWGDSEModActions");
+    
     ::SWGSDRangel::setValue(&file_sink_actions, pJson["FileSinkActions"], "SWGFileSinkActions", "SWGFileSinkActions");
     
     ::SWGSDRangel::setValue(&file_source_actions, pJson["FileSourceActions"], "SWGFileSourceActions", "SWGFileSourceActions");
@@ -224,6 +269,21 @@ SWGChannelActions::asJsonObject() {
     }
     if((apt_demod_actions != nullptr) && (apt_demod_actions->isSet())){
         toJsonValue(QString("APTDemodActions"), apt_demod_actions, obj, QString("SWGAPTDemodActions"));
+    }
+    if((wefax_demod_actions != nullptr) && (wefax_demod_actions->isSet())){
+        toJsonValue(QString("WefaxDemodActions"), wefax_demod_actions, obj, QString("SWGWefaxDemodActions"));
+    }
+    if((dvb_demod_actions != nullptr) && (dvb_demod_actions->isSet())){
+        toJsonValue(QString("DVBDemodActions"), dvb_demod_actions, obj, QString("SWGDVBDemodActions"));
+    }
+    if((drm_demod_actions != nullptr) && (drm_demod_actions->isSet())){
+        toJsonValue(QString("DRMDemodActions"), drm_demod_actions, obj, QString("SWGDRMDemodActions"));
+    }
+    if((dsd_demod_actions != nullptr) && (dsd_demod_actions->isSet())){
+        toJsonValue(QString("DSDDemodActions"), dsd_demod_actions, obj, QString("SWGDSDDemodActions"));
+    }
+    if((dse_mod_actions != nullptr) && (dse_mod_actions->isSet())){
+        toJsonValue(QString("DSEModActions"), dse_mod_actions, obj, QString("SWGDSEModActions"));
     }
     if((file_sink_actions != nullptr) && (file_sink_actions->isSet())){
         toJsonValue(QString("FileSinkActions"), file_sink_actions, obj, QString("SWGFileSinkActions"));
@@ -317,6 +377,56 @@ void
 SWGChannelActions::setAptDemodActions(SWGAPTDemodActions* apt_demod_actions) {
     this->apt_demod_actions = apt_demod_actions;
     this->m_apt_demod_actions_isSet = true;
+}
+
+SWGWefaxDemodActions*
+SWGChannelActions::getWefaxDemodActions() {
+    return wefax_demod_actions;
+}
+void
+SWGChannelActions::setWefaxDemodActions(SWGWefaxDemodActions* wefax_demod_actions) {
+    this->wefax_demod_actions = wefax_demod_actions;
+    this->m_wefax_demod_actions_isSet = true;
+}
+
+SWGDVBDemodActions*
+SWGChannelActions::getDvbDemodActions() {
+    return dvb_demod_actions;
+}
+void
+SWGChannelActions::setDvbDemodActions(SWGDVBDemodActions* dvb_demod_actions) {
+    this->dvb_demod_actions = dvb_demod_actions;
+    this->m_dvb_demod_actions_isSet = true;
+}
+
+SWGDRMDemodActions*
+SWGChannelActions::getDrmDemodActions() {
+    return drm_demod_actions;
+}
+void
+SWGChannelActions::setDrmDemodActions(SWGDRMDemodActions* drm_demod_actions) {
+    this->drm_demod_actions = drm_demod_actions;
+    this->m_drm_demod_actions_isSet = true;
+}
+
+SWGDSDDemodActions*
+SWGChannelActions::getDsdDemodActions() {
+    return dsd_demod_actions;
+}
+void
+SWGChannelActions::setDsdDemodActions(SWGDSDDemodActions* dsd_demod_actions) {
+    this->dsd_demod_actions = dsd_demod_actions;
+    this->m_dsd_demod_actions_isSet = true;
+}
+
+SWGDSEModActions*
+SWGChannelActions::getDseModActions() {
+    return dse_mod_actions;
+}
+void
+SWGChannelActions::setDseModActions(SWGDSEModActions* dse_mod_actions) {
+    this->dse_mod_actions = dse_mod_actions;
+    this->m_dse_mod_actions_isSet = true;
 }
 
 SWGFileSinkActions*
@@ -440,6 +550,21 @@ SWGChannelActions::isSet(){
             isObjectUpdated = true; break;
         }
         if(apt_demod_actions && apt_demod_actions->isSet()){
+            isObjectUpdated = true; break;
+        }
+        if(wefax_demod_actions && wefax_demod_actions->isSet()){
+            isObjectUpdated = true; break;
+        }
+        if(dvb_demod_actions && dvb_demod_actions->isSet()){
+            isObjectUpdated = true; break;
+        }
+        if(drm_demod_actions && drm_demod_actions->isSet()){
+            isObjectUpdated = true; break;
+        }
+        if(dsd_demod_actions && dsd_demod_actions->isSet()){
+            isObjectUpdated = true; break;
+        }
+        if(dse_mod_actions && dse_mod_actions->isSet()){
             isObjectUpdated = true; break;
         }
         if(file_sink_actions && file_sink_actions->isSet()){

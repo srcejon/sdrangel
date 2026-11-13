@@ -10,12 +10,14 @@
 # which version/tag/checkout to use
 set(CODEC2_TAG "v1.1.1")
 set(CM256CC_TAG "v1.1.2")
-set(MBELIB_TAG "lib")
+set(MBEVOCODER_TAG "v3.0.0")
+set(VOCOSCODEC_TAG "v1")
 set(SERIALDV_TAG "v1.1.5")
-set(DSDCC_TAG "v1.9.6")
 set(LIMESUITE_TAG 524cd2e548b11084e6f739b2dfe0f958c2e30354)
 set(BLADERF_TAG "2025.10")
-if (WIN32)
+if (ENABLE_LIBIIO_V1 AND LINUX)
+    set(LIBIIO_TAG "v1.0.0")
+elseif (WIN32)
     # Using old version of libiio on windows, as we get unresolved symbols in dll: serial_create_context_from_uri
     set(LIBIIO_TAG 826563e41b5ce9890b75506f672017de8d76d52d)
 else()
@@ -27,7 +29,7 @@ set(MIRISDR_TAG "v2.0.0")
 set(LIBSIGMF_TAG "new-namespaces")
 
 set(PTHREADS4W_TAG "Version-2-11-0-release")
-set(RTLSDR_TAG "v2.0.1")
+set(RTLSDR_TAG "v2.0.3")
 set(RTLSDR_UDEV OFF)
 set(SOAPYSDR_TAG "1667b4e6301d7ad47b340dcdcd6e9969bf57d843")
 set(SOAPYSDR_SDRPLAY_TAG "soapy-sdrplay-0.2.0")
@@ -39,6 +41,8 @@ set(LIBXML2_TAG "v2.10.4")
 set(UHD_TAG "v4.9.0.1")
 set(BOOST_TAG "1.86.0")
 set(BOOST_TAG2 "1_86_0")
+set(FDKAAC_TAG "v2.0.3")
+set(OPUS_TAG "v1.6.1")
 
 # For some external project macros
 include(ExternalProject)
@@ -110,21 +114,21 @@ if (LINUX)
     macro(makeLink src dest target)
         if (NOT EXISTS ${dest})
             add_custom_command(TARGET ${target} PRE_BUILD
-                    COMMAND ${CMAKE_COMMAND} -E create_symlink ${src} ${dest} DEPENDS ${dest} COMMENT "mklink ${src} -> ${dest}")
+                    COMMAND ${CMAKE_COMMAND} -E create_symlink ${src} ${dest} COMMENT "mklink ${src} -> ${dest}")
         endif ()
     endmacro()
     # macro that copy folder
     macro(makeCopy src dest target)
         if (NOT EXISTS ${dest})
             add_custom_command(TARGET ${target} PRE_BUILD
-                    COMMAND ${CMAKE_COMMAND} -E copy_directory ${src} ${dest} DEPENDS ${dest} COMMENT "copy ${src} -> ${dest}")
+                    COMMAND ${CMAKE_COMMAND} -E copy_directory ${src} ${dest} COMMENT "copy ${src} -> ${dest}")
         endif ()
     endmacro()
     # macro that copy file
     macro(makeCopyFile src dest target)
         if (NOT EXISTS ${dest})
             add_custom_command(TARGET ${target} PRE_BUILD
-                    COMMAND ${CMAKE_COMMAND} -E copy_if_different ${src} ${dest} DEPENDS ${dest} COMMENT "copy ${src} -> ${dest}")
+                    COMMAND ${CMAKE_COMMAND} -E copy_if_different ${src} ${dest} COMMENT "copy ${src} -> ${dest}")
         endif ()
     endmacro()
 else ()
@@ -132,7 +136,7 @@ else ()
     macro(makeLink src dest target)
         if (NOT EXISTS ${dest})
             add_custom_command(TARGET ${target} POST_BUILD
-                    COMMAND ${CMAKE_COMMAND} -E create_symlink ${src} ${dest} DEPENDS ${dest} COMMENT "mklink ${src} -> ${dest}")
+                    COMMAND ${CMAKE_COMMAND} -E create_symlink ${src} ${dest} COMMENT "mklink ${src} -> ${dest}")
         endif ()
     endmacro()
 
@@ -140,7 +144,7 @@ else ()
     macro(makeCopyDir src dest target)
         if (NOT EXISTS ${dest})
             add_custom_command(TARGET ${target} POST_BUILD
-                    COMMAND ${CMAKE_COMMAND} -E copy_directory ${src} ${dest} DEPENDS ${dest} COMMENT "copy ${src} -> ${dest}")
+                    COMMAND ${CMAKE_COMMAND} -E copy_directory ${src} ${dest} COMMENT "copy ${src} -> ${dest}")
         endif ()
     endmacro()
 
@@ -148,10 +152,23 @@ else ()
     macro(makeCopy src dest target)
         if (NOT EXISTS ${dest})
             add_custom_command(TARGET ${target} POST_BUILD
-                    COMMAND ${CMAKE_COMMAND} -E copy_if_different ${src} ${dest} DEPENDS ${dest} COMMENT "copy ${src} -> ${dest}")
+                    COMMAND ${CMAKE_COMMAND} -E copy_if_different ${src} ${dest} COMMENT "copy ${src} -> ${dest}")
         endif ()
     endmacro()
 endif (LINUX)
+
+set(COPY_HEADERS_SCRIPT "${CMAKE_CURRENT_LIST_DIR}/copy_headers.cmake")
+
+# macro that mirrors the headers of a directory into another one, for the libraries whose sources
+# include them by a subdirectory name that is not in the library's own tree. Unlike makeCopyDir this
+# is safe when the destination is inside the source, and it runs on every build rather than only
+# when the destination is missing at configure time: an external project that re-clones wipes the
+# copy, and a configure time check would leave it gone until the next configure
+macro(makeCopyHeaders src dest target)
+    add_custom_command(TARGET ${target} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -DSRC=${src} -DDEST=${dest} -P ${COPY_HEADERS_SCRIPT}
+            COMMENT "copy headers ${src} -> ${dest}")
+endmacro()
 
 if (WIN32)
     if (VS2015)
@@ -256,9 +273,13 @@ endif ()
 if (NOT OPUS_FOUND AND NOT USE_PRECOMPILED_LIBS)
     ExternalProject_Add(opus
             GIT_REPOSITORY https://github.com/xiph/opus
-            GIT_TAG v1.5.2
+            GIT_TAG ${OPUS_TAG}
             PREFIX "${EXTERNAL_BUILD_LIBRARIES}/opus"
-            CMAKE_ARGS ${COMMON_CMAKE_ARGS} -DOPUS_BUILD_SHARED_LIBRARY=ON -DBUILD_SHARED_LIBS=ON -DCMAKE_INSTALL_PREFIX=<INSTALL_DIR>
+            # The weights of the neural networks OPUS_OSCE builds (Deep PLC, LACE, NoLACE, the
+            # bandwidth extension) are not in git: fetch then as autogen does (opus_model.cmake).
+            PATCH_COMMAND ${CMAKE_COMMAND} -P "${CMAKE_CURRENT_SOURCE_DIR}/opus_model.cmake"
+            CMAKE_ARGS ${COMMON_CMAKE_ARGS} -DOPUS_OSCE=ON -DCMAKE_C_FLAGS_INIT=-DENABLE_OSCE_BWE -DOPUS_BUILD_SHARED_LIBRARY=OFF
+                -DCMAKE_POSITION_INDEPENDENT_CODE=ON -DCMAKE_INSTALL_LIBDIR=lib -DCMAKE_INSTALL_PREFIX=<INSTALL_DIR>
             TEST_COMMAND ""
             )
     ExternalProject_Get_Property(opus install_dir)
@@ -268,12 +289,9 @@ if (NOT OPUS_FOUND AND NOT USE_PRECOMPILED_LIBS)
     set(OPUS_INCLUDE_DIRS "${install_dir}/include" CACHE INTERNAL "")
     set(OPUS_PKG_CONFIG_DIR "${install_dir}/lib/pkgconfig" CACHE INTERNAL "")
     if (WIN32)
-        set(OPUS_LIBRARIES "${SDRANGEL_BINARY_LIB_DIR}/libopus.lib" CACHE INTERNAL "")
-    elseif (LINUX)
-        set(OPUS_LIBRARIES "${install_dir}/lib${LIB_SUFFIX}/libopus${CMAKE_SHARED_LIBRARY_SUFFIX}" CACHE INTERNAL "")
-    elseif (APPLE)
-        set(OPUS_LIBRARIES "${install_dir}/lib/libopus${CMAKE_SHARED_LIBRARY_SUFFIX}" CACHE INTERNAL "")
-        set(MACOS_EXTERNAL_LIBS_FIXUP "${MACOS_EXTERNAL_LIBS_FIXUP};${install_dir}/lib")
+        set(OPUS_LIBRARIES "${install_dir}/lib/opus.lib" CACHE INTERNAL "")
+    else ()
+        set(OPUS_LIBRARIES "${install_dir}/lib/libopus.a" CACHE INTERNAL "")
     endif ()
 endif (NOT OPUS_FOUND AND NOT USE_PRECOMPILED_LIBS)
 
@@ -319,10 +337,13 @@ if (NOT FAAD_FOUND AND NOT USE_PRECOMPILED_LIBS)
     set(FAAD_INCLUDE_DIR "${install_dir}/include" CACHE INTERNAL "")
     if (WIN32)
         set(FAAD_LIBRARY "${SDRANGEL_BINARY_LIB_DIR}/libfaad.lib" CACHE INTERNAL "")
+        set(FAAD_DRM_LIBRARY "${SDRANGEL_BINARY_LIB_DIR}/libfaad_drm.lib" CACHE INTERNAL "")
     elseif (LINUX)
         set(FAAD_LIBRARY "${install_dir}/lib${LIB_SUFFIX}/libfaad${CMAKE_SHARED_LIBRARY_SUFFIX}" CACHE INTERNAL "")
+        set(FAAD_DRM_LIBRARY "${install_dir}/lib${LIB_SUFFIX}/libfaad_drm${CMAKE_SHARED_LIBRARY_SUFFIX}" CACHE INTERNAL "")
     elseif (APPLE)
         set(FAAD_LIBRARY "${install_dir}/lib/libfaad${CMAKE_SHARED_LIBRARY_SUFFIX}" CACHE INTERNAL "")
+        set(FAAD_DRM_LIBRARY "${install_dir}/lib/libfaad_drm${CMAKE_SHARED_LIBRARY_SUFFIX}" CACHE INTERNAL "")
         set(MACOS_EXTERNAL_LIBS_FIXUP "${MACOS_EXTERNAL_LIBS_FIXUP};${install_dir}/lib")
     endif ()
 endif (NOT FAAD_FOUND AND NOT USE_PRECOMPILED_LIBS)
@@ -357,6 +378,7 @@ endif (NOT FFTW3F_FOUND AND NOT USE_PRECOMPILED_LIBS)
 include(FetchContent)
 FetchContent_Declare(boost
     URL "https://sourceforge.net/projects/boost/files/boost/${BOOST_TAG}/boost_${BOOST_TAG2}.tar.gz/download"
+    DOWNLOAD_EXTRACT_TIMESTAMP TRUE
 )
 
 find_package(Boost QUIET)
@@ -544,6 +566,8 @@ if (NOT FFMPEG_FOUND AND NOT USE_PRECOMPILED_LIBS)
     set(AVUTIL_LIBRARIES "${install_dir}/lib/libavutil${CMAKE_SHARED_LIBRARY_SUFFIX}" CACHE INTERNAL "")
     set(SWRESAMPLE_LIBRARIES "${install_dir}/lib/libswresample${CMAKE_SHARED_LIBRARY_SUFFIX}" CACHE INTERNAL "")
     set(SWSCALE_LIBRARIES "${install_dir}/lib/libswscale${CMAKE_SHARED_LIBRARY_SUFFIX}" CACHE INTERNAL "")
+    set(AVFILTER_INCLUDE_DIRS "${install_dir}/include" CACHE INTERNAL "")
+    set(AVFILTER_LIBRARIES "${install_dir}/lib/libavfilter${CMAKE_SHARED_LIBRARY_SUFFIX}" CACHE INTERNAL "")
     if (APPLE)
         set(MACOS_EXTERNAL_LIBS_FIXUP "${MACOS_EXTERNAL_LIBS_FIXUP};${install_dir}/lib")
     endif ()
@@ -675,38 +699,69 @@ if (NOT CM256CC_FOUND OR CM256CC_EXTERNAL)
     endif ()
 endif (NOT CM256CC_FOUND OR CM256CC_EXTERNAL)
 
-if ((NOT LIBDSDCC_FOUND OR LIBDSDCC_EXTERNAL) AND (NOT LIBMBE_FOUND OR LIBMBE_EXTERNAL))
-    set(USE_MBELIB OFF)
-    if (WIN32)
-        set(LIBMBE_LIBRARIES "${SDRANGEL_BINARY_LIB_DIR}/libmbe.lib" CACHE INTERNAL "")
-    elseif (LINUX)
-        set(LIBMBE_LIBRARIES "${EXTERNAL_BUILD_LIBRARIES}/lib${LIB_SUFFIX}/libmbe${CMAKE_SHARED_LIBRARY_SUFFIX}" CACHE INTERNAL "")
-    elseif (APPLE)
-        set(LIBMBE_LIBRARIES "${EXTERNAL_BUILD_LIBRARIES}/mbelib/src/mbelib-build/libmbe${CMAKE_SHARED_LIBRARY_SUFFIX}" CACHE INTERNAL "")
+# mbevocoder: the AMBE, AMBE+2 and IMBE vocoder of the DSD demodulator and the DSE modulator.
+if ((ENABLE_CHANNELRX_DEMODDSD OR ENABLE_CHANNELTX_MODDSE) AND (NOT MBEVOCODER_FOUND OR MBEVOCODER_EXTERNAL))
+    if (CMAKE_BUILD_TYPE STREQUAL "Debug")
+        set(MBEVOCODER_POSTFIX "d")
     endif ()
-    ExternalProject_Add(mbelib
-            GIT_REPOSITORY https://github.com/srcejon/mbelib.git
-            GIT_TAG ${MBELIB_TAG}
-            PREFIX "${EXTERNAL_BUILD_LIBRARIES}/mbelib"
-            CMAKE_ARGS -DDISABLE_TEST=ON ${COMMON_CMAKE_ARGS}
-            BUILD_BYPRODUCTS "${LIBMBE_LIBRARIES}"
+    set(MBEVOCODER_INSTALL_DIR "${EXTERNAL_BUILD_LIBRARIES}/mbevocoder")
+    if (WIN32)
+        set(MBEVOCODER_LIBRARY_FILE "${MBEVOCODER_INSTALL_DIR}/lib/mbevocoder${MBEVOCODER_POSTFIX}.lib")
+    else ()
+        set(MBEVOCODER_LIBRARY_FILE "${MBEVOCODER_INSTALL_DIR}/lib/libmbevocoder${MBEVOCODER_POSTFIX}.a")
+    endif ()
+    ExternalProject_Add(mbevocoder
+            GIT_REPOSITORY https://github.com/srcejon/mbevocoder.git
+            GIT_TAG ${MBEVOCODER_TAG}
+            PREFIX "${MBEVOCODER_INSTALL_DIR}"
+            INSTALL_DIR "${MBEVOCODER_INSTALL_DIR}"
+            CMAKE_ARGS ${COMMON_CMAKE_ARGS} -DMBEVOCODER_BUILD_TOOLS=OFF -DMBEVOCODER_BUILD_TESTS=OFF
+                -DCMAKE_INSTALL_LIBDIR=lib -DCMAKE_INSTALL_PREFIX=<INSTALL_DIR>
+            BUILD_BYPRODUCTS "${MBEVOCODER_LIBRARY_FILE}"
+            TEST_COMMAND ""
+            )
+    set_global(MBEVOCODER_DEPENDS mbevocoder)
+    set_global_cache(MBEVOCODER_FOUND ON)
+    set(MBEVOCODER_EXTERNAL ON CACHE INTERNAL "")
+    set_global_cache(MBEVOCODER_INCLUDE_DIRS "${MBEVOCODER_INSTALL_DIR}/include")
+    set_global_cache(MBEVOCODER_LIBRARY "${MBEVOCODER_LIBRARY_FILE}")
+endif ((ENABLE_CHANNELRX_DEMODDSD OR ENABLE_CHANNELTX_MODDSE) AND (NOT MBEVOCODER_FOUND OR MBEVOCODER_EXTERNAL))
+
+# vocoscodec (EnCodec + Vocos) for Angel61's V1 voice, loaded at run time
+if((ENABLE_CHANNELRX_DEMODDSD OR ENABLE_CHANNELTX_MODDSE) AND VOCOSCODEC_TAG AND (NOT VOCOSCODEC_FOUND OR VOCOSCODEC_EXTERNAL))
+    if (WIN32)
+        set(VOCOSCODEC_RUNTIME_LIBRARY "${SDRANGEL_BINARY_BIN_DIR}/vocoscodec${CMAKE_SHARED_LIBRARY_SUFFIX}" CACHE INTERNAL "")
+    elseif (LINUX)
+        set(VOCOSCODEC_RUNTIME_LIBRARY "${EXTERNAL_BUILD_LIBRARIES}/lib${LIB_SUFFIX}/libvocoscodec${CMAKE_SHARED_LIBRARY_SUFFIX}" CACHE INTERNAL "")
+    elseif (APPLE)
+        set(VOCOSCODEC_RUNTIME_LIBRARY "${EXTERNAL_BUILD_LIBRARIES}/vocoscodec/src/vocoscodec-build/vocoscodec/libvocoscodec${CMAKE_SHARED_LIBRARY_SUFFIX}" CACHE INTERNAL "")
+    endif()
+    ExternalProject_Add(vocoscodec
+            GIT_REPOSITORY https://github.com/srcejon/vocoscodec.git
+            GIT_TAG ${VOCOSCODEC_TAG}
+            PREFIX "${EXTERNAL_BUILD_LIBRARIES}/vocoscodec"
+            CMAKE_ARGS ${COMMON_CMAKE_ARGS}
+                -DVOCOSCODEC_BUILD_RUNTIME=ON
+                -DVOCOSCODEC_BUILD_TESTS=OFF
+                -DVOCOSCODEC_BUILD_TOOLS=OFF
+            BUILD_BYPRODUCTS "${VOCOSCODEC_RUNTIME_LIBRARY}"
             INSTALL_COMMAND ""
             TEST_COMMAND ""
             )
-    ExternalProject_Get_Property(mbelib source_dir binary_dir)
-    set(USE_MBELIB ON)
-    set_global(DSDCC_DEPENDS mbelib)
-    set_global_cache(LIBMBE_FOUND ON)
-    set(LIBMBE_EXTERNAL ON CACHE INTERNAL "")
-    set(LIBMBE_INCLUDE_DIR "${source_dir}" CACHE INTERNAL "")
-    if (WIN32)
-        install(FILES "${SDRANGEL_BINARY_BIN_DIR}/libmbe${CMAKE_SHARED_LIBRARY_SUFFIX}" DESTINATION "${INSTALL_LIB_DIR}")
-    elseif (APPLE)
-        install(DIRECTORY "${binary_dir}/" DESTINATION "${INSTALL_LIB_DIR}"
-                FILES_MATCHING PATTERN "libmbe*${CMAKE_SHARED_LIBRARY_SUFFIX}")
-        set(MACOS_EXTERNAL_LIBS_FIXUP "${MACOS_EXTERNAL_LIBS_FIXUP};${binary_dir}")
-    endif ()
-endif ((NOT LIBDSDCC_FOUND OR LIBDSDCC_EXTERNAL) AND (NOT LIBMBE_FOUND OR LIBMBE_EXTERNAL))
+    ExternalProject_Get_Property(vocoscodec source_dir)
+    set(VOCOSCODEC_MODEL_DIR "${source_dir}/model" CACHE INTERNAL "")
+    set_global_cache(VOCOSCODEC_FOUND ON)
+    set(VOCOSCODEC_EXTERNAL ON CACHE INTERNAL "")
+    install(FILES "${VOCOSCODEC_RUNTIME_LIBRARY}" DESTINATION "${INSTALL_LIB_DIR}")
+    if(WIN32)
+        install(DIRECTORY "${VOCOSCODEC_MODEL_DIR}/" DESTINATION "${INSTALL_BIN_DIR}/vocoscodec"
+            FILES_MATCHING PATTERN "*.bin" PATTERN "SHA256SUMS")
+    else()
+        install(DIRECTORY "${VOCOSCODEC_MODEL_DIR}/" DESTINATION "${INSTALL_DOC_DIR}/vocoscodec"
+            FILES_MATCHING PATTERN "*.bin" PATTERN "SHA256SUMS")
+    endif()
+endif ()
+
 
 if (NOT LIBSERIALDV_FOUND OR LIBSERIALDV_EXTERNAL)
     # Works on MacOS with a dummy serialDV
@@ -731,7 +786,7 @@ if (NOT LIBSERIALDV_FOUND OR LIBSERIALDV_EXTERNAL)
     set(LIBSERIALDV_EXTERNAL ON CACHE INTERNAL "")
     set(LIBSERIALDV_INCLUDE_DIR "${source_dir}" CACHE INTERNAL "")
     if (WIN32)
-        makeCopyDir("${source_dir}" "${source_dir}/dsp" serialdv)
+        makeCopyHeaders("${source_dir}" "${source_dir}/dsp" serialdv)
         install(FILES "${SDRANGEL_BINARY_BIN_DIR}/serialdv${CMAKE_SHARED_LIBRARY_SUFFIX}" DESTINATION "${INSTALL_LIB_DIR}")
     elseif (LINUX)
         # because sdrbase/dsp/dvserialworker.h use dsp/dvcontroller.h
@@ -747,39 +802,6 @@ if (NOT LIBSERIALDV_FOUND OR LIBSERIALDV_EXTERNAL)
     endif ()
 endif (NOT LIBSERIALDV_FOUND OR LIBSERIALDV_EXTERNAL)
 
-if ((NOT LIBDSDCC_FOUND OR LIBDSDCC_EXTERNAL) AND LIBMBE_FOUND)
-    if (WIN32)
-        set(LIBDSDCC_LIBRARIES "${SDRANGEL_BINARY_LIB_DIR}/dsdcc.lib" CACHE INTERNAL "")
-    elseif (LINUX)
-        set(LIBDSDCC_LIBRARIES "${EXTERNAL_BUILD_LIBRARIES}/lib${LIB_SUFFIX}/libdsdcc${CMAKE_SHARED_LIBRARY_SUFFIX}" CACHE INTERNAL "")
-    elseif (APPLE)
-        set(LIBDSDCC_LIBRARIES "${EXTERNAL_BUILD_LIBRARIES}/dsdcc/src/dsdcc-build/libdsdcc${CMAKE_SHARED_LIBRARY_SUFFIX}" CACHE INTERNAL "")
-    endif ()
-    ExternalProject_Add(dsdcc
-            GIT_REPOSITORY https://github.com/f4exb/dsdcc.git
-            GIT_TAG ${DSDCC_TAG}
-            DEPENDS ${DSDCC_DEPENDS}
-            PREFIX "${EXTERNAL_BUILD_LIBRARIES}/dsdcc"
-            CMAKE_ARGS ${COMMON_CMAKE_ARGS}
-            -DBUILD_TOOL=OFF -DUSE_MBELIB=${USE_MBELIB}
-            -DLIBMBE_INCLUDE_DIR=${LIBMBE_INCLUDE_DIR}
-            -DLIBMBE_LIBRARY=${LIBMBE_LIBRARIES}
-            BUILD_BYPRODUCTS "${LIBDSDCC_LIBRARIES}"
-            INSTALL_COMMAND ""
-            TEST_COMMAND ""
-            )
-    ExternalProject_Get_Property(dsdcc source_dir binary_dir)
-    set_global_cache(LIBDSDCC_FOUND ON)
-    set(LIBDSDCC_EXTERNAL ON CACHE INTERNAL "")
-    set(LIBDSDCC_INCLUDE_DIR "${EXTERNAL_BUILD_LIBRARIES}/dsdcc/src" CACHE INTERNAL "")
-    if (WIN32)
-        install(FILES "${SDRANGEL_BINARY_BIN_DIR}/dsdcc${CMAKE_SHARED_LIBRARY_SUFFIX}" DESTINATION "${INSTALL_LIB_DIR}")
-    elseif (APPLE)
-        install(DIRECTORY "${binary_dir}/" DESTINATION "${INSTALL_LIB_DIR}"
-                FILES_MATCHING PATTERN "libdsdcc*${CMAKE_SHARED_LIBRARY_SUFFIX}")
-        set(MACOS_EXTERNAL_LIBS_FIXUP "${MACOS_EXTERNAL_LIBS_FIXUP};${binary_dir}/")
-    endif ()
-endif ((NOT LIBDSDCC_FOUND OR LIBDSDCC_EXTERNAL) AND LIBMBE_FOUND)
 
 if ((LINUX OR APPLE) AND (NOT LIBSIGMF_FOUND OR LIBSIGMF_EXTERNAL))
     set(LIBSIGMF_LIBRARIES "${EXTERNAL_BUILD_LIBRARIES}/lib${LIB_SUFFIX}/liblibsigmf${CMAKE_SHARED_LIBRARY_SUFFIX}" CACHE INTERNAL "")
@@ -840,7 +862,8 @@ endif ()
 
 # For Satellite Tracker feature and APT demod
 if(ENABLE_FEATURE_SATELLITETRACKER OR ENABLE_CHANNELRX_DEMODAPT)
-    # No tags for this in github - but doesn't change often
+    # No tags for this in github. Pin the commit to keep builds reproducible.
+    set(SGP4_TAG 1c0d4ee99404538572037fabfdcbc7133917eae8)
     # Fails to build with CMAKE_INTERPROCEDURAL_OPTIMIZATION=ON on Windows
     if (WIN32)
         set(SGP4_LIBRARIES "${SDRANGEL_BINARY_LIB_DIR}/sgp4s.lib" CACHE INTERNAL "")
@@ -851,6 +874,8 @@ if(ENABLE_FEATURE_SATELLITETRACKER OR ENABLE_CHANNELRX_DEMODAPT)
     endif()
     ExternalProject_Add(sgp4
             GIT_REPOSITORY https://github.com/dnwrnr/sgp4.git
+            GIT_TAG ${SGP4_TAG}
+            UPDATE_DISCONNECTED TRUE
             PREFIX "${EXTERNAL_BUILD_LIBRARIES}/sgp4"
             CMAKE_ARGS ${COMMON_CMAKE_ARGS}
             -DCMAKE_INTERPROCEDURAL_OPTIMIZATION=OFF
@@ -876,14 +901,24 @@ if(ENABLE_FEATURE_STARTRACKER)
     if (WIN32)
         set(CSPICE_LIBRARIES "${SDRANGEL_BINARY_LIB_DIR}/cspice.lib" CACHE INTERNAL "")
     elseif (LINUX)
-        # We need a shared library on Linux, as the static library has non PIC code, and we need to link it into a shared library
-        # ExternalProject cspice currently outputs libcspice.so under
-        #   ${EXTERNAL_BUILD_LIBRARIES}/cspice/src/cspice-build/lib/libcspice.so
-        # so point CSPICE_LIBRARIES there.
-        set(CSPICE_LIBRARIES
-            "${EXTERNAL_BUILD_LIBRARIES}/cspice/src/cspice-build/lib/libcspice.so"
-            CACHE INTERNAL ""
-        )
+        # We need a shared library on Linux, as the static library has non PIC code,
+        # and we need to link it into a shared library
+        if (CMAKE_BUILD_TYPE STREQUAL "None")
+            # ExternalProject cspice currently outputs libcspice.so under
+            #   ${EXTERNAL_BUILD_LIBRARIES}/cspice/src/cspice-build/lib/libcspice.so
+            # so point CSPICE_LIBRARIES there.
+            set(CSPICE_LIBRARIES
+                "${EXTERNAL_BUILD_LIBRARIES}/cspice/src/cspice-build/lib/libcspice.so"
+                CACHE INTERNAL ""
+            )
+        else()
+            # Release, Debug, and RelWithDebInfo have configuration-specific output
+            # directories supplied by SDRangel.
+            set(CSPICE_LIBRARIES
+                "${EXTERNAL_BUILD_LIBRARIES}/lib${LIB_SUFFIX}/libcspice.so"
+                CACHE INTERNAL ""
+            )
+        endif()
         # Disable -Werror=format-security for cspice only: distro hardening flags (e.g. Ubuntu Noble)
         # inject -Werror=format-security which fails cspice sources that lack -Wformat.
         set(CSPICE_ARGS "-DCSPICE_BUILD_STATIC_LIBRARY=OFF"
@@ -906,6 +941,9 @@ if(ENABLE_FEATURE_STARTRACKER)
     set_global_cache(CSPICE_FOUND ON)
     set(CSPICE_EXTERNAL ON CACHE INTERNAL "")
     set(CSPICE_INCLUDE_DIR "${EXTERNAL_BUILD_LIBRARIES}/cspice/src/cspice/include" CACHE INTERNAL "")
+    if (LINUX)
+        install(FILES "${CSPICE_LIBRARIES}" DESTINATION "${INSTALL_LIB_DIR}")
+    endif() 
 endif ()
 
 if(ENABLE_CHANNELRX_REMOTETCPSINK)
@@ -1029,14 +1067,81 @@ if(ENABLE_CHANNELRX_DEMODINMARSAT)
     endif ()
 endif()
 
+# For ACARS decoder
+if(ENABLE_CHANNELRX_DEMODACARS AND (NOT LIBACARS_FOUND))
+    if (LINUX)
+        set(LIBACARS_LIBRARIES "${EXTERNAL_BUILD_LIBRARIES}/lib${LIB_SUFFIX}/libacars-2${CMAKE_SHARED_LIBRARY_SUFFIX}" CACHE INTERNAL "")
+    elseif (APPLE)
+        set(LIBACARS_LIBRARIES "${EXTERNAL_BUILD_LIBRARIES}/libacars/src/libacars-build/libacars/libacars-2${CMAKE_SHARED_LIBRARY_SUFFIX}" CACHE INTERNAL "")
+    endif()
+    ExternalProject_Add(libacars
+        GIT_REPOSITORY https://github.com/szpajder/libacars
+        GIT_TAG "v2.2.1"
+        PREFIX "${EXTERNAL_BUILD_LIBRARIES}/libacars"
+        CMAKE_ARGS ${COMMON_CMAKE_ARGS}
+        BUILD_BYPRODUCTS "${LIBACARS_LIBRARIES}"
+        INSTALL_COMMAND ""
+        TEST_COMMAND ""
+        )
+    ExternalProject_Get_Property(libacars source_dir binary_dir)
+    set(LIBACARS_DEPENDS libacars CACHE INTERNAL "")
+    set_global_cache(LIBACARS_FOUND ON)
+    set(LIBACARS_EXTERNAL ON CACHE INTERNAL "")
+    set(LIBACARS_INCLUDE_DIR "${EXTERNAL_BUILD_LIBRARIES}/libacars/src/libacars" CACHE INTERNAL "")
+    if (APPLE)
+        install(DIRECTORY "${binary_dir}/libacars" DESTINATION "${INSTALL_LIB_DIR}"
+                FILES_MATCHING PATTERN "libacars-2*${CMAKE_SHARED_LIBRARY_SUFFIX}")
+        set(MACOS_EXTERNAL_LIBS_FIXUP "${MACOS_EXTERNAL_LIBS_FIXUP};${binary_dir}/libacars")
+    endif ()
+endif()
+# For DRM demodulator AAC/xHE-AAC audio
+# Built as a static library that only modemdrm links, so
+# not clash with the libfdk-aac that FFmpeg may load
+if (ENABLE_CHANNELRX AND ENABLE_CHANNELRX_DEMODDRM AND (NOT FDKAAC_FOUND OR FDKAAC_EXTERNAL))
+    set(FDKAAC_PREFIX "${EXTERNAL_BUILD_LIBRARIES}/fdkaac")
+    if (MSVC)
+        set(FDKAAC_LIBRARY "${FDKAAC_PREFIX}/lib/fdk-aac.lib" CACHE INTERNAL "")
+    else ()
+        set(FDKAAC_LIBRARY "${FDKAAC_PREFIX}/lib/libfdk-aac.a" CACHE INTERNAL "")
+    endif ()
+    set(FDKAAC_CMAKE_ARGS ${COMMON_CMAKE_ARGS})
+    list(FILTER FDKAAC_CMAKE_ARGS EXCLUDE REGEX "^-DCMAKE_(RUNTIME|ARCHIVE|LIBRARY)_OUTPUT_DIRECTORY")
+    ExternalProject_Add(fdkaac
+        GIT_REPOSITORY https://github.com/mstorsjo/fdk-aac.git
+        GIT_TAG ${FDKAAC_TAG}
+        PREFIX "${FDKAAC_PREFIX}"
+        CMAKE_ARGS ${FDKAAC_CMAKE_ARGS}
+        -DBUILD_SHARED_LIBS=OFF
+        -DCMAKE_POSITION_INDEPENDENT_CODE=ON
+        -DBUILD_PROGRAMS=OFF
+        -DFDK_AAC_INSTALL_CMAKE_CONFIG_MODULE=OFF
+        -DFDK_AAC_INSTALL_PKGCONFIG_MODULE=OFF
+        -DCMAKE_INSTALL_PREFIX=<INSTALL_DIR>
+        -DCMAKE_INSTALL_LIBDIR=lib
+        BUILD_BYPRODUCTS "${FDKAAC_LIBRARY}"
+        TEST_COMMAND ""
+        )
+    ExternalProject_Get_Property(fdkaac source_dir install_dir)
+    set_global(FDKAAC_DEPENDS fdkaac)
+    set_global_cache(FDKAAC_FOUND ON)
+    set(FDKAAC_EXTERNAL ON CACHE INTERNAL "")
+    set(FDKAAC_INCLUDE_DIR "${install_dir}/include" CACHE INTERNAL "")
+    # Its licence has to be distributed with the binaries
+    install(FILES "${source_dir}/NOTICE" DESTINATION "${INSTALL_DOC_DIR}/fdk-aac")
+endif ()
+
 # For denoiser feature
-if((LINUX OR APPLE) AND ENABLE_FEATURE_DENOISER)
+if(ENABLE_FEATURE_DENOISER)
     if (WIN32)
         set(RNNOISE_LIBRARIES "${SDRANGEL_BINARY_LIB_DIR}/rnnoise.lib" CACHE INTERNAL "")
         set(RNNOISE_ARGS "-DRNN_ENABLE_X86_RTCD=OFF")
     elseif (LINUX)
         set(RNNOISE_LIBRARIES "${EXTERNAL_BUILD_LIBRARIES}/lib${LIB_SUFFIX}/librnnoise${CMAKE_SHARED_LIBRARY_SUFFIX}" CACHE INTERNAL "")
-        set(RNNOISE_ARGS "-DRNN_ENABLE_X86_RTCD=ON")
+        if (ARCHITECTURE_x86 OR ARCHITECTURE_x86_64)
+            set(RNNOISE_ARGS "-DRNN_ENABLE_X86_RTCD=ON")
+        else()
+            set(RNNOISE_ARGS "-DRNN_ENABLE_X86_RTCD=OFF")
+        endif()
     elseif (APPLE)
         set(RNNOISE_LIBRARIES "${EXTERNAL_BUILD_LIBRARIES}/rnnoise/src/rnnoise-build/librnnoise${CMAKE_SHARED_LIBRARY_SUFFIX}" CACHE INTERNAL "")
         set(RNNOISE_ARGS "-DRNN_ENABLE_X86_RTCD=OFF")
@@ -1106,70 +1211,12 @@ if (WIN32)
     install(FILES "${source_dir}/pthreadVC2${CMAKE_SHARED_LIBRARY_SUFFIX}" DESTINATION "${INSTALL_LIB_DIR}")
 endif (WIN32)
 
-# For DAB demodulator
-if (ZLIB_FOUND AND FAAD_FOUND AND ENABLE_CHANNELRX_DEMODDAB)
-    if (WIN32)
-        set(DAB_LIBRARIES "${SDRANGEL_BINARY_LIB_DIR}/dab_lib.lib" CACHE INTERNAL "")
-    elseif (LINUX)
-        set(DAB_LIBRARIES "${EXTERNAL_BUILD_LIBRARIES}/lib${LIB_SUFFIX}/libdab_lib${CMAKE_SHARED_LIBRARY_SUFFIX}" CACHE INTERNAL "")
-    elseif (APPLE)
-        set(DAB_LIBRARIES "${EXTERNAL_BUILD_LIBRARIES}/dab/src/dab-build/libdab_lib${CMAKE_SHARED_LIBRARY_SUFFIX}" CACHE INTERNAL "")
-    endif()
-    if (WIN32)
-        ExternalProject_Add(dab
-                GIT_REPOSITORY https://github.com/srcejon/dab-cmdline.git
-                GIT_TAG msvc
-                DEPENDS ${PTHREADS4W_DEPENDS}
-                PREFIX "${EXTERNAL_BUILD_LIBRARIES}/dab"
-                SOURCE_SUBDIR "library"
-                CMAKE_ARGS ${COMMON_CMAKE_ARGS}
-                        -DFFTW3F_INCLUDE_DIRS=${FFTW3F_INCLUDE_DIRS}
-                        -DFFTW3F_LIBRARIES=${FFTW3F_LIBRARIES}
-                        -DFAAD_INCLUDE_DIR=${FAAD_INCLUDE_DIR}
-                        -DFAAD_LIBRARY=${FAAD_LIBRARY}
-                        -DZLIB_INCLUDE_DIR=${ZLIB_INCLUDE_DIRS}
-                        -DZLIB_LIBRARY=${ZLIB_LIBRARIES}
-                        -DPTHREADS=${PTHREADS4W_LIBRARIES}
-                BUILD_BYPRODUCTS "${DAB_LIBRARIES}"
-                INSTALL_COMMAND ""
-                TEST_COMMAND ""
-                )
-    else(WIN32)
-        ExternalProject_Add(dab
-                GIT_REPOSITORY https://github.com/srcejon/dab-cmdline.git
-                GIT_TAG msvc
-                DEPENDS ${ZLIB_DEPENDS} ${FAAD_DEPENDS} ${FFTW3F_DEPENDS}
-                PREFIX "${EXTERNAL_BUILD_LIBRARIES}/dab"
-                SOURCE_SUBDIR "library"
-                CMAKE_ARGS ${COMMON_CMAKE_ARGS}
-                        -DFFTW3F_INCLUDE_DIRS=${FFTW3F_INCLUDE_DIRS}
-                        -DFFTW3F_LIBRARIES=${FFTW3F_LIBRARIES}
-                        -DFAAD_INCLUDE_DIR=${FAAD_INCLUDE_DIR}
-                        -DFAAD_LIBRARY=${FAAD_LIBRARY}
-                        -DZLIB_INCLUDE_DIR=${ZLIB_INCLUDE_DIRS}
-                        -DZLIB_LIBRARY=${ZLIB_LIBRARIES}
-                BUILD_BYPRODUCTS "${DAB_LIBRARIES}"
-                INSTALL_COMMAND ""
-                TEST_COMMAND ""
-                )
-    endif(WIN32)
-    ExternalProject_Get_Property(dab source_dir binary_dir)
-    set_global(DAB_DEPENDS dab)
-    set_global_cache(DAB_FOUND ON)
-    set(DAB_EXTERNAL ON CACHE INTERNAL "")
-    set(DAB_INCLUDE_DIR "${EXTERNAL_BUILD_LIBRARIES}/dab/src/dab" CACHE INTERNAL "")
-    if (WIN32)
-        install(FILES "${SDRANGEL_BINARY_BIN_DIR}/dab_lib${CMAKE_SHARED_LIBRARY_SUFFIX}" DESTINATION "${INSTALL_LIB_DIR}")
-    elseif (APPLE)
-        install(DIRECTORY "${binary_dir}/" DESTINATION "${INSTALL_LIB_DIR}"
-                FILES_MATCHING PATTERN "libdab_lib*${CMAKE_SHARED_LIBRARY_SUFFIX}")
-        set(MACOS_EXTERNAL_LIBS_FIXUP "${MACOS_EXTERNAL_LIBS_FIXUP};${binary_dir}/")
-    endif ()
-else()
-    message(STATUS "Can't build DAB library as missing zlib (${ZLIB_FOUND}) or faad (${FAAD_FOUND})")
+# Device interface libraries.
+set(LIMESUITE_SIMD_ARGS)
+if (ARCHITECTURE_x86 OR ARCHITECTURE_x86_64)
+    set(LIMESUITE_SIMD_ARGS "-DENABLE_SIMD_FLAGS=SSE3")
 endif()
 
-# Device interface libraries.
 if (LINUX)
     # apt install liblimesuite-dev (only on ubuntu 18.04). Can be picky on version though so let's build it.
     # needs pkgconfig and libusb
@@ -1191,7 +1238,7 @@ if (LINUX)
                   -DENABLE_QUICKTEST=OFF
                   -DENABLE_EXAMPLES=OFF
                   -DENABLE_LIME_UTIL=OFF
-                  -DENABLE_SIMD_FLAGS=SSE3
+                  ${LIMESUITE_SIMD_ARGS}
                 BUILD_BYPRODUCTS "${LIMESUITE_LIBRARY}"
                 INSTALL_COMMAND ""
                 TEST_COMMAND ""
@@ -1205,8 +1252,27 @@ if (LINUX)
     if (ENABLE_BLADERF AND (NOT LIBBLADERF_FOUND OR LIBBLADERF_EXTERNAL))
         set_global_cache(LIBBLADERF_FOUND ON)
         set(LIBBLADERF_EXTERNAL ON CACHE INTERNAL "")
-        set(LIBBLADERF_INCLUDE_DIRS "${EXTERNAL_BUILD_LIBRARIES}/bladerf/src/bladerf/host/libraries/libbladeRF/include" CACHE INTERNAL "")
-        set(LIBBLADERF_LIBRARIES "${EXTERNAL_BUILD_LIBRARIES}/bladerf/src/bladerf-build/output/libbladeRF.so.2" CACHE INTERNAL "")
+        set(LIBBLADERF_INCLUDE_DIRS
+            "${EXTERNAL_BUILD_LIBRARIES}/bladerf/src/bladerf/host/libraries/libbladeRF/include"
+            CACHE INTERNAL ""
+        )
+        if (CMAKE_BUILD_TYPE STREQUAL "None")
+            # ExternalProject bladerf currently outputs libbladeRF.so.2 under
+            #   ${EXTERNAL_BUILD_LIBRARIES}/bladerf/src/bladerf-build/output/libbladeRF.so.2
+            # so point LIBBLADERF_LIBRARIES there.
+            set(LIBBLADERF_LIBRARIES
+                "${EXTERNAL_BUILD_LIBRARIES}/bladerf/src/bladerf-build/output/libbladeRF.so.2"
+                CACHE INTERNAL ""
+            )
+        else()
+            # Release, Debug, and RelWithDebInfo have configuration-specific output
+            # directories supplied by SDRangel.
+            set(LIBBLADERF_LIBRARIES
+                "${EXTERNAL_BUILD_LIBRARIES}/lib${LIB_SUFFIX}/libbladeRF.so.2"
+                CACHE INTERNAL ""
+            )
+        endif()
+
         ExternalProject_Add(bladerf
                 GIT_REPOSITORY https://github.com/Nuand/bladeRF.git
                 GIT_TAG ${BLADERF_TAG}
@@ -1223,20 +1289,36 @@ if (LINUX)
 
     # apt install libiio-dev
     # needs pkgconfig, libusb, libxml2, lzma, xz, libiconv
+    # libiio 1.x (ENABLE_LIBIIO_V1) also needs libzstd and libavahi-client
     if (ENABLE_IIO AND (NOT LIBIIO_FOUND OR LIBIIO_EXTERNAL))
         set_global_cache(LIBIIO_FOUND ON)
         set(LIBIIO_EXTERNAL ON CACHE INTERNAL "")
-        set(LIBIIO_INCLUDE_DIR "${EXTERNAL_BUILD_LIBRARIES}/libiio/src/libiio" CACHE INTERNAL "")
         set(LIBIIO_LIBRARIES "${EXTERNAL_BUILD_LIBRARIES}/lib${LIB_SUFFIX}/libiio.so" CACHE INTERNAL "")
+        if (ENABLE_LIBIIO_V1)
+            # libiio 1.x keeps its public header in include/iio/iio.h
+            set(LIBIIO_INCLUDE_DIR "${EXTERNAL_BUILD_LIBRARIES}/libiio/src/libiio/include" CACHE INTERNAL "")
+            set(LIBIIO_V1 TRUE CACHE INTERNAL "libiio 1.x API")
+            set(LIBIIO_CMAKE_ARGS
+                -DLIBIIO_COMPAT=OFF
+                -DWITH_UTILS=OFF
+                -DWITH_IIOD=OFF
+                -DWITH_EXAMPLES=OFF
+                -DWITH_TESTS=OFF
+                -DWITH_MAN=OFF)
+        else ()
+            set(LIBIIO_INCLUDE_DIR "${EXTERNAL_BUILD_LIBRARIES}/libiio/src/libiio" CACHE INTERNAL "")
+            set(LIBIIO_V1 FALSE CACHE INTERNAL "libiio 1.x API")
+            set(LIBIIO_CMAKE_ARGS
+                -DOSX_PACKAGE=OFF
+                -DWITH_DOC=OFF
+                -DWITH_MATLAB_BINDINGS_API=OFF
+                -DWITH_TESTS=OFF)
+        endif ()
         ExternalProject_Add(libiio
                 GIT_REPOSITORY https://github.com/analogdevicesinc/libiio.git
                 GIT_TAG ${LIBIIO_TAG}
                 PREFIX "${EXTERNAL_BUILD_LIBRARIES}/libiio"
-                CMAKE_ARGS ${COMMON_CMAKE_ARGS}
-                  -DOSX_PACKAGE=OFF
-                  -DWITH_DOC=OFF
-                  -DWITH_MATLAB_BINDINGS_API=OFF
-                  -DWITH_TESTS=OFF
+                CMAKE_ARGS ${COMMON_CMAKE_ARGS} ${LIBIIO_CMAKE_ARGS}
                 BUILD_BYPRODUCTS "${LIBIIO_LIBRARIES}"
                 INSTALL_COMMAND ""
                 TEST_COMMAND ""
@@ -1384,7 +1466,7 @@ if (WIN32 OR APPLE)
                 -DENABLE_QUICKTEST=OFF
                 -DENABLE_EXAMPLES=OFF
                 -DENABLE_LIME_UTIL=ON
-                -DENABLE_SIMD_FLAGS=SSE3
+                ${LIMESUITE_SIMD_ARGS}
                 -DENABLE_FX3=ON
                 -DFX3_SDK_PATH=${FX3SDK_DIR}
                 -DLIBUSB_1_LIBRARY=${LIBUSB_LIBRARIES}
@@ -1473,7 +1555,7 @@ if (WIN32 OR APPLE)
         set(LIBAIRSPY_EXTERNAL ON CACHE INTERNAL "")
         set(LIBAIRSPY_INCLUDE_DIR "${source_dir}/libairspy/src" CACHE INTERNAL "")
         if (WIN32)
-            makeCopyDir("${source_dir}/libairspy/src" "${source_dir}/libairspy/src/libairspy" airspy)
+            makeCopyHeaders("${source_dir}/libairspy/src" "${source_dir}/libairspy/src/libairspy" airspy)
             makeCopy("${binary_dir}/../airspy-tools/src/airspy${CMAKE_SHARED_LIBRARY_SUFFIX}" "${SDRANGEL_BINARY_BIN_DIR}/airspy${CMAKE_SHARED_LIBRARY_SUFFIX}" airspy)
             install(FILES "${SDRANGEL_BINARY_BIN_DIR}/airspy${CMAKE_SHARED_LIBRARY_SUFFIX}" DESTINATION "${INSTALL_LIB_DIR}")
         elseif (APPLE)
@@ -1515,7 +1597,7 @@ if (WIN32 OR APPLE)
         set(LIBAIRSPYHF_EXTERNAL ON CACHE INTERNAL "")
         set(LIBAIRSPYHF_INCLUDE_DIR "${source_dir}/libairspyhf/src" CACHE INTERNAL "")
         if (WIN32)
-            makeCopyDir("${source_dir}/libairspyhf/src" "${source_dir}/libairspyhf/src/libairspyhf" airspyhf)
+            makeCopyHeaders("${source_dir}/libairspyhf/src" "${source_dir}/libairspyhf/src/libairspyhf" airspyhf)
             install(FILES "${SDRANGEL_BINARY_BIN_DIR}/airspyhf${CMAKE_SHARED_LIBRARY_SUFFIX}" DESTINATION "${INSTALL_LIB_DIR}")
         elseif (APPLE)
             set(LIBAIRSPYHF_LIBRARIES "${binary_dir}/libairspyhf/src/libairspyhf${CMAKE_SHARED_LIBRARY_SUFFIX}" CACHE INTERNAL "")
@@ -1561,7 +1643,7 @@ if (WIN32 OR APPLE)
         set(LIBHACKRF_INCLUDE_DIR "${source_dir}/host/libhackrf" CACHE INTERNAL "")
         if (WIN32)
             # include "libhackrf/hackrf.h"
-            makeCopyDir("${source_dir}/host/libhackrf/src" "${source_dir}/host/libhackrf/libhackrf" hackrf)
+            makeCopyHeaders("${source_dir}/host/libhackrf/src" "${source_dir}/host/libhackrf/libhackrf" hackrf)
             install(FILES "${SDRANGEL_BINARY_BIN_DIR}/hackrf${CMAKE_SHARED_LIBRARY_SUFFIX}" DESTINATION "${INSTALL_LIB_DIR}")
         elseif (APPLE)
             set(LIBHACKRF_LIBRARIES "${binary_dir}/src/libhackrf${CMAKE_SHARED_LIBRARY_SUFFIX}" CACHE INTERNAL "")
@@ -1572,6 +1654,13 @@ if (WIN32 OR APPLE)
                     FILES_MATCHING PATTERN "libhackrf*${CMAKE_SHARED_LIBRARY_SUFFIX}")
         endif ()
     endif (ENABLE_HACKRF)
+
+    if (ENABLE_IIO AND ENABLE_LIBIIO_V1)
+        # Building libiio 1.x from source is only set up for Linux so far
+        message(WARNING "ENABLE_LIBIIO_V1 is not supported with external libraries on Windows and macOS: "
+            "building PlutoSDR support against libiio 0.x")
+        set(LIBIIO_V1 FALSE CACHE INTERNAL "libiio 1.x API")
+    endif ()
 
     if (ENABLE_IIO)
         if (WIN32)

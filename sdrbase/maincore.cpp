@@ -34,6 +34,7 @@
 #include "device/deviceset.h"
 #include "device/deviceapi.h"
 #include "channel/channelapi.h"
+#include "SWGMapItem.h"
 #ifdef ANDROID
 #include "util/android.h"
 #endif
@@ -64,12 +65,17 @@ MESSAGE_CLASS_DEFINITION(MainCore::MsgDeleteFeature, Message)
 MESSAGE_CLASS_DEFINITION(MainCore::MsgChannelReport, Message)
 MESSAGE_CLASS_DEFINITION(MainCore::MsgChannelSettings, Message)
 MESSAGE_CLASS_DEFINITION(MainCore::MsgChannelDemodReport, Message)
+MESSAGE_CLASS_DEFINITION(MainCore::MsgFeatureDemodReport, Message)
 MESSAGE_CLASS_DEFINITION(MainCore::MsgChannelDemodQuery, Message)
 MESSAGE_CLASS_DEFINITION(MainCore::MsgMoveDeviceUIToWorkspace, Message)
+MESSAGE_CLASS_DEFINITION(MainCore::MsgArrangeWorkspace, Message)
+MESSAGE_CLASS_DEFINITION(MainCore::MsgSetWindowHidden, Message)
 MESSAGE_CLASS_DEFINITION(MainCore::MsgMoveMainSpectrumUIToWorkspace, Message)
 MESSAGE_CLASS_DEFINITION(MainCore::MsgMoveFeatureUIToWorkspace, Message)
 MESSAGE_CLASS_DEFINITION(MainCore::MsgMoveChannelUIToWorkspace, Message)
 MESSAGE_CLASS_DEFINITION(MainCore::MsgMapItem, Message)
+MESSAGE_CLASS_DEFINITION(MainCore::MsgAircraftReport, Message)
+MESSAGE_CLASS_DEFINITION(MainCore::MsgAcarsBlock, Message)
 MESSAGE_CLASS_DEFINITION(MainCore::MsgPacket, Message)
 MESSAGE_CLASS_DEFINITION(MainCore::MsgTargetAzimuthElevation, Message)
 MESSAGE_CLASS_DEFINITION(MainCore::MsgStarTrackerTarget, Message)
@@ -835,4 +841,34 @@ QStringList MainCore::getChannelIds(const QString& uri)
     }
 
     return list;
+}
+
+void MainCore::setWindowState(const void* owner, const WindowState& state)
+{
+    QMutexLocker locker(&m_windowStatesMutex);
+    m_windowStates[owner] = state;
+}
+
+void MainCore::removeWindowState(const void* owner)
+{
+    QMutexLocker locker(&m_windowStatesMutex);
+    m_windowStates.remove(owner);
+}
+
+bool MainCore::getWindowState(const void* owner, WindowState& state) const
+{
+    QMutexLocker locker(&m_windowStatesMutex);
+    auto it = m_windowStates.constFind(owner);
+
+    if (it == m_windowStates.constEnd()) {
+        return false;
+    }
+
+    state = it.value();
+    return true;
+}
+
+MainCore::MsgAircraftReport::~MsgAircraftReport()
+{
+    delete m_report.m_mapItem;
 }

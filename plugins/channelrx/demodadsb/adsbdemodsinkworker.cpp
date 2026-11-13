@@ -261,18 +261,8 @@ bool ADSBDemodSinkWorker::icaoHeardRecently(unsigned icao, const QDateTime &date
 
 void ADSBDemodSinkWorker::forwardFrame(const unsigned char *data, int size, float preambleCorrelation, float correlationOnes, const QDateTime& dateTime, unsigned crc)
 {
-    // Pass to GUI
-    if (m_sink->getMessageQueueToGUI())
-    {
-        ADSBDemodReport::MsgReportADSB *msg = ADSBDemodReport::MsgReportADSB::create(
-            QByteArray((char*)data, size),
-            preambleCorrelation,
-            correlationOnes,
-            dateTime,
-            crc);
-        m_sink->getMessageQueueToGUI()->push(msg);
-    }
-    // Pass to worker to feed to other servers
+    // Pass to the tracker, which decodes the frame, and passes it on to be exported
+    // to other servers and to the GUI
     if (m_sink->getMessageQueueToWorker())
     {
         ADSBDemodReport::MsgReportADSB *msg = ADSBDemodReport::MsgReportADSB::create(
@@ -307,7 +297,7 @@ void ADSBDemodSinkWorker::run()
     int samplesPerBit = m_settings.m_samplesPerBit;
     int samplesPerFrame = samplesPerBit*(ADS_B_PREAMBLE_BITS+ADS_B_ES_BITS);
     int samplesPerChip = samplesPerBit/ADS_B_CHIPS_PER_BIT;
-    const qint64 samplesPerMSec = ADS_B_BITS_PER_SECOND * samplesPerBit / 1000;
+    const qint64 samplesPerMSec = qint64(ADS_B_BITS_PER_SECOND) * samplesPerBit / 1000;
 
     qDebug() << "ADSBDemodSinkWorker:: running with"
          << " samplesPerFrame: " << samplesPerFrame
@@ -325,6 +315,7 @@ void ADSBDemodSinkWorker::run()
         // chip+ indexes are 0, 2, 7, 9
         Real preambleCorrelationOnes = 0.0;
         Real preambleCorrelationZeros = 0.0;
+        Real preambleCorrelation = 0.0;
         for (int i = 0; i < samplesPerChip; i++)
         {
             preambleCorrelationOnes  += m_sink->m_sampleBuffer[readBuffer][startIdx +  0*samplesPerChip + i];
@@ -363,7 +354,11 @@ void ADSBDemodSinkWorker::run()
         // The threshold accounts for the different number of zeros and ones in the preamble
         // If the sum of ones is exactly 0, it's probably no signal
 
-        Real preambleCorrelation = preambleCorrelationOnes/preambleCorrelationZeros; // without one/zero ratio correction
+        if (preambleCorrelationZeros != 0.0)
+        {
+            // without one/zero ratio correction
+            preambleCorrelation = preambleCorrelationOnes/preambleCorrelationZeros;
+        }
 
         if ((preambleCorrelation > m_correlationThresholdLinear) && (preambleCorrelationOnes != 0.0f))
         {
@@ -688,6 +683,10 @@ void ADSBDemodSinkWorker::handleInputMessages()
         else if (ADSBDemod::MsgResetStats::match(*message))
         {
             m_demodStats.reset();
+        }
+        else
+        {
+            qDebug("%s: unhandled message: %s", Q_FUNC_INFO, message->getIdentifier());
         }
         delete message;
     }

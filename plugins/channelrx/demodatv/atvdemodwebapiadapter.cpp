@@ -15,6 +15,8 @@
 // along with this program. If not, see <http://www.gnu.org/licenses/>.          //
 ///////////////////////////////////////////////////////////////////////////////////
 
+#include <QHash>
+
 #include "SWGChannelSettings.h"
 #include "atvdemodwebapiadapter.h"
 
@@ -72,9 +74,23 @@ void ATVDemodWebAPIAdapter::webapiFormatChannelSettings(
     response.getAtvDemodSettings()->setIntNumberOfLines(settings.m_nbLines);
     response.getAtvDemodSettings()->setNbLinesIndex(ATVDemodSettings::getNumberOfLinesIndex(settings.m_nbLines));
     response.getAtvDemodSettings()->setRgbColor(settings.m_rgbColor);
-    response.getAtvDemodSettings()->setTitle(new QString(settings.m_title));
-    response.getAtvDemodSettings()->setUdpAddress(new QString(settings.m_udpAddress));
+    if (response.getAtvDemodSettings()->getTitle()) {
+        *response.getAtvDemodSettings()->getTitle() = settings.m_title;
+    } else {
+        response.getAtvDemodSettings()->setTitle(new QString(settings.m_title));
+    }
+    if (response.getAtvDemodSettings()->getUdpAddress()) {
+        *response.getAtvDemodSettings()->getUdpAddress() = settings.m_udpAddress;
+    } else {
+        response.getAtvDemodSettings()->setUdpAddress(new QString(settings.m_udpAddress));
+    }
     response.getAtvDemodSettings()->setUdpPort(settings.m_udpPort);
+    response.getAtvDemodSettings()->setColourSystem((int) settings.m_colourSystem);
+    response.getAtvDemodSettings()->setColourSaturation(settings.m_colourSaturation);
+    response.getAtvDemodSettings()->setColourHue(settings.m_colourHue);
+    response.getAtvDemodSettings()->setPalDelayLine(settings.m_palDelayLine ? 1 : 0);
+    response.getAtvDemodSettings()->setNoiseReduction(settings.m_noiseReduction);
+    response.getAtvDemodSettings()->setGhostCancellation(settings.m_ghostCancellation ? 1 : 0);
 }
 
 void ATVDemodWebAPIAdapter::webapiUpdateChannelSettings(
@@ -106,6 +122,9 @@ void ATVDemodWebAPIAdapter::webapiUpdateChannelSettings(
     if (channelSettingsKeys.contains("fltFramePerS")) {
         settings.m_fps = response.getAtvDemodSettings()->getFltFramePerS();
     }
+    if (channelSettingsKeys.contains("fpsIndex")) {
+        settings.m_fps = ATVDemodSettings::getFps(response.getAtvDemodSettings()->getFpsIndex());
+    }
     if (channelSettingsKeys.contains("fltRFBandwidth")) {
         settings.m_fftBandwidth = response.getAtvDemodSettings()->getFltRfBandwidth();
     }
@@ -136,6 +155,9 @@ void ATVDemodWebAPIAdapter::webapiUpdateChannelSettings(
     if (channelSettingsKeys.contains("intNumberOfLines")) {
         settings.m_nbLines = response.getAtvDemodSettings()->getIntNumberOfLines();
     }
+    if (channelSettingsKeys.contains("nbLinesIndex")) {
+        settings.m_nbLines = ATVDemodSettings::getNumberOfLines(response.getAtvDemodSettings()->getNbLinesIndex());
+    }
     if (channelSettingsKeys.contains("rgbColor")) {
         settings.m_rgbColor = response.getAtvDemodSettings()->getRgbColor();
     }
@@ -148,4 +170,52 @@ void ATVDemodWebAPIAdapter::webapiUpdateChannelSettings(
     if (channelSettingsKeys.contains("udpPort")) {
         settings.m_udpPort = response.getAtvDemodSettings()->getUdpPort();
     }
+    if (channelSettingsKeys.contains("colourSystem")) {
+        settings.m_colourSystem = (ATVDemodSettings::ColourSystem) response.getAtvDemodSettings()->getColourSystem();
+    }
+    if (channelSettingsKeys.contains("colourSaturation")) {
+        settings.m_colourSaturation = response.getAtvDemodSettings()->getColourSaturation();
+    }
+    if (channelSettingsKeys.contains("colourHue")) {
+        settings.m_colourHue = response.getAtvDemodSettings()->getColourHue();
+    }
+    if (channelSettingsKeys.contains("palDelayLine")) {
+        settings.m_palDelayLine = response.getAtvDemodSettings()->getPalDelayLine() != 0;
+    }
+    if (channelSettingsKeys.contains("noiseReduction")) {
+        settings.m_noiseReduction = response.getAtvDemodSettings()->getNoiseReduction();
+    }
+    if (channelSettingsKeys.contains("ghostCancellation")) {
+        settings.m_ghostCancellation = response.getAtvDemodSettings()->getGhostCancellation() != 0;
+    }
+}
+
+QStringList ATVDemodWebAPIAdapter::getSettingsKeys(const QStringList& channelSettingsKeys)
+{
+    static const QHash<QString, QString> settingsKeys = {
+        {"blnFFTFiltering", "fftFiltering"},
+        {"blnHSync", "hSync"},
+        {"blnInvertVideo", "invertVideo"},
+        {"blnVSync", "vSync"},
+        {"enmATVStandard", "atvStd"},
+        {"enmModulation", "atvModulation"},
+        {"fltBFOFrequency", "bfoFrequency"},
+        {"fltFramePerS", "fps"},
+        {"fltRFBandwidth", "fftBandwidth"},
+        {"fltRFOppBandwidth", "fftOppBandwidth"},
+        {"fltVoltLevelSynchroBlack", "levelBlack"},
+        {"fltVoltLevelSynchroTop", "levelSynchroTop"},
+        {"fpsIndex", "fps"},
+        {"halfImage", "halfFrames"},
+        {"intFrequencyOffset", "inputFrequencyOffset"},
+        {"intNumberOfLines", "nbLines"},
+        {"nbLinesIndex", "nbLines"}
+    };
+    QStringList keys;
+
+    for (const auto& key : channelSettingsKeys) {
+        keys.append(settingsKeys.value(key, key));
+    }
+
+    return keys;
 }

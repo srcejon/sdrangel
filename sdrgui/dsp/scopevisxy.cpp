@@ -75,7 +75,7 @@ void ScopeVisXY::feed(const SampleVector::const_iterator& cbegin, const SampleVe
 		if (m_pixelCount == m_pixelsPerFrame)
 		{
             int rows, cols;
-            m_tvScreen->getSize(rows, cols);
+            m_tvScreen->getSize(cols, rows);
 
             if ((rows != m_rows) || (cols != m_cols))
             {
@@ -85,7 +85,6 @@ void ScopeVisXY::feed(const SampleVector::const_iterator& cbegin, const SampleVe
             }
 
 			m_tvScreen->renderImage(0);
-			m_tvScreen->update();
             std::this_thread::sleep_for(std::chrono::microseconds(5000));
 			m_tvScreen->resetImage(m_alphaReset);
             drawGraticule();
@@ -96,6 +95,11 @@ void ScopeVisXY::feed(const SampleVector::const_iterator& cbegin, const SampleVe
 
 void ScopeVisXY::start()
 {
+	m_pixelCount = 0;
+	m_tvScreen->resetImage();
+	drawGraticule();
+	m_tvScreen->setAlphaReset();
+	m_tvScreen->renderImage(nullptr);
 }
 
 void ScopeVisXY::stop()
@@ -106,11 +110,12 @@ void ScopeVisXY::handleInputMessages()
 {
 	Message* message;
 
-	while ((message = m_inputMessageQueue.pop()) != 0)
+	while ((message = m_inputMessageQueue.pop()))
 	{
-		if (handleMessage(*message)) {
-			delete message;
+		if (!handleMessage(*message)) {
+			qDebug("%s: unhandled message: %s", Q_FUNC_INFO, message->getIdentifier());
 		}
+		delete message;
 	}
 }
 
@@ -161,4 +166,3 @@ void ScopeVisXY::drawGraticule()
         m_tvScreen->setDataColor(*colIt, qRed(m_gridRGB), qGreen(m_gridRGB), qBlue(m_gridRGB));
     }
 }
-

@@ -198,8 +198,8 @@ modules:
       - prefix=${FLATPAK_DEST}
     sources:
       - type: archive
-        url: https://pagure.io/libaio/archive/libaio-0.3.113/libaio-libaio-0.3.113.tar.gz
-        sha256: 716c7059703247344eb066b54ecbc3ca2134f0103307192e6c2b7dab5f9528ab
+        url: https://codeberg.org/jmoyer/libaio/releases/download/libaio-0.3.113/libaio-0.3.113.tar.gz
+        sha256: 2c44d1c5fd0d43752287c9ae1eb9c023f04ef848ea8d4aafa46e9aedb678200b
 
   - name: cm256cc
     buildsystem: cmake-ninja
@@ -211,14 +211,45 @@ modules:
         url: https://github.com/f4exb/cm256cc.git
         commit: da87adbe3e583877870cb159d37e0456549b2c29
 
-  - name: mbelib
+  - name: mbevocoder
     buildsystem: cmake-ninja
     config-opts:
       - -Wno-dev
+      - -DMBEVOCODER_BUILD_TOOLS=OFF
+      - -DMBEVOCODER_BUILD_TESTS=OFF
+      - -DCMAKE_INSTALL_LIBDIR=lib
+      - -DCMAKE_INSTALL_DOCDIR=share/licenses/mbevocoder
     sources:
-      - type: archive
-        url: https://github.com/szechyjs/mbelib/archive/refs/tags/v1.3.0.tar.gz
-        sha256: 5a2d5ca37cef3b6deddd5ce8c73918f27936c50eb0e63b27e4b4fc493310518d
+      - type: git
+        url: https://github.com/srcejon/mbevocoder.git
+        tag: v3.0.0
+    cleanup:
+      - /include/mbevocoder
+      - /include/mbelib
+      - /include/mbelib-neo
+      - /lib/libmbevocoder.a
+      - /lib/pkgconfig/mbevocoder.pc
+      - /lib/pkgconfig/libmbe-neo.pc
+      - /lib/cmake/mbevocoder
+      - /lib/cmake/mbe-neo
+
+  - name: vocoscodec
+    buildsystem: cmake-ninja
+    config-opts:
+      - -Wno-dev
+      - -DVOCOSCODEC_BUILD_RUNTIME=ON
+      - -DVOCOSCODEC_BUILD_TESTS=OFF
+      - -DVOCOSCODEC_BUILD_TOOLS=OFF
+      - -DCMAKE_INSTALL_LIBDIR=lib
+      - -DVOCOSCODEC_RUNTIME_MODEL_DIR=/app/share/vocoscodec/model
+    sources:
+      - type: git
+        url: https://github.com/srcejon/vocoscodec.git
+        tag: v1
+    cleanup:
+      - /include/vocoscodec
+      - /lib/libvocoscodec_codec.a
+      - /lib/cmake/Vocoscodec
 
   - name: serialdv
     buildsystem: cmake-ninja
@@ -228,16 +259,6 @@ modules:
       - type: archive
         url: https://github.com/f4exb/serialDV/archive/refs/tags/v1.1.5.tar.gz
         sha256: 9ff90d85ff613e81659a2d661515e01d3c1f3ad1cade58908838b97fdd7ab5d2
-
-  - name: dsdcc
-    buildsystem: cmake-ninja
-    config-opts:
-      - -Wno-dev
-      - -DUSE_MBELIB=ON
-    sources:
-      - type: archive
-        url: https://github.com/f4exb/dsdcc/archive/refs/tags/v1.9.6.tar.gz
-        sha256: 43505fe537b12492860a44d0373b6b2a7edacbaec058160b5007c341af1b40d9
 
   - name: codec2
     buildsystem: cmake-ninja
@@ -252,20 +273,27 @@ modules:
   - name: faad2
     sources:
       - type: archive
-        url: https://sourceforge.net/projects/faac/files/faad2-src/faad2-2.8.0/faad2-2.8.8.tar.gz
+        url: https://ftp2.osuosl.org/pub/blfs/conglomeration/faad2/faad2-2.8.8.tar.gz
         sha256: 985c3fadb9789d2815e50f4ff714511c79c2710ac27a4aaaf5c0c2662141426d
 
-  - name: libdab
-    subdir: library
+  - name: fdk-aac
     buildsystem: cmake-ninja
-    builddir: true
     config-opts:
-      - -Wno-dev
+      - -DBUILD_SHARED_LIBS=OFF
+      - -DCMAKE_POSITION_INDEPENDENT_CODE=ON
+      - -DBUILD_PROGRAMS=OFF
     sources:
       - type: git
-        url: https://github.com/srcejon/dab-cmdline.git
-        # branch: msvc
-        commit: 4c7ab58857a1de71f585728ffcbc4916db9b56c7
+        url: https://github.com/mstorsjo/fdk-aac.git
+        tag: v2.0.3
+        commit: 716f4394641d53f0d79c9ddac3fa93b03a49f278
+    post-install:
+      - install -Dm644 NOTICE ${FLATPAK_DEST}/share/licenses/fdk-aac/NOTICE
+    cleanup:
+      - /include/fdk-aac
+      - /lib/libfdk-aac.a
+      - /lib/pkgconfig/fdk-aac.pc
+      - /lib/cmake/fdk-aac
 
   - name: hidapi
     buildsystem: cmake-ninja
@@ -380,9 +408,8 @@ modules:
       - -Wno-dev
     sources:
       - type: git
-        url: https://github.com/steve-m/librtlsdr.git
-        # latest master for 2.0.2 versioning fix
-        commit: ae0dd6d4f09088d13500a854091b45ad281ca4f0
+        url: https://github.com/osmocom/rtl-sdr.git
+        commit: 797f8143266d983c56d8f35d2d442527529dd8a5
 
   - name: plutosdr
     buildsystem: cmake-ninja
@@ -534,6 +561,20 @@ modules:
         url: https://github.com/cropinghigh/inmarsatc.git
         commit: cda1242e79981d71cd8608e971c8dbc691942b10
 
+  - name: libacars
+    buildsystem: cmake-ninja
+    config-opts:
+      - -Wno-dev
+    sources:
+      - type: git
+        url: https://github.com/szpajder/libacars.git
+        tag: v2.2.1
+        commit: 9af09a0121d4ec577339cbd4c7420d7519da48fa
+    cleanup:
+      - /bin/decode_acars_apps
+      - /bin/adsc_get_position
+      - /bin/cpdlc_get_position
+
   - name: rnnoise
     sources:
       - type: git
@@ -559,6 +600,7 @@ modules:
       - -DCMAKE_BUILD_TYPE=RelWithDebInfo
       - -DENABLE_QT6=ON
       - -DRX_SAMPLE_24BIT=ON
+      - -DLIBACARS_DIR=/app
       - -Wno-dev
     sources:
       - type: dir
@@ -566,6 +608,5 @@ modules:
       - type: shell
         commands:
           - sed -e 's|/usr/|/app/|g' -i cmake/Modules/FindSerialDV.cmake
-          - sed -e 's|/usr/|/app/|g' -i cmake/Modules/FindLibDAB.cmake
           - sed -e 's|/usr/|/app/|g' -i cmake/Modules/FindSgp4.cmake
           - sed -e 's|/usr/|/app/|g' -i cmake/Modules/FindAptDec.cmake

@@ -1,6 +1,8 @@
 IF(NOT UHD_FOUND)
-    INCLUDE(FindPkgConfig)
-    PKG_CHECK_MODULES(PC_UHD uhd)
+    find_package(PkgConfig)
+    if(PkgConfig_FOUND)
+        PKG_CHECK_MODULES(PC_UHD uhd)
+    endif()
 
     FIND_PATH(
         UHD_INCLUDE_DIR

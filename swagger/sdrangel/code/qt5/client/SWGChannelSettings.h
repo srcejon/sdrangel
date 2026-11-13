@@ -22,6 +22,7 @@
 #include <QJsonObject>
 
 
+#include "SWGACARSDemodSettings.h"
 #include "SWGADSBDemodSettings.h"
 #include "SWGAISDemodSettings.h"
 #include "SWGAISModSettings.h"
@@ -31,6 +32,7 @@
 #include "SWGATVDemodSettings.h"
 #include "SWGATVModSettings.h"
 #include "SWGBFMDemodSettings.h"
+#include "SWGBFMModSettings.h"
 #include "SWGBeamSteeringCWModSettings.h"
 #include "SWGChannelAnalyzerSettings.h"
 #include "SWGChannelPowerSettings.h"
@@ -40,8 +42,12 @@
 #include "SWGDATVDemodSettings.h"
 #include "SWGDATVModSettings.h"
 #include "SWGDOA2Settings.h"
+#include "SWGDRMDemodSettings.h"
 #include "SWGDSCDemodSettings.h"
 #include "SWGDSDDemodSettings.h"
+#include "SWGDSEModSettings.h"
+#include "SWGDVBDemodSettings.h"
+#include "SWGDroneIDDemodSettings.h"
 #include "SWGEndOfTrainDemodSettings.h"
 #include "SWGFT8DemodSettings.h"
 #include "SWGFileSinkSettings.h"
@@ -51,6 +57,7 @@
 #include "SWGFreqScannerSettings.h"
 #include "SWGFreqTrackerSettings.h"
 #include "SWGHeatMapSettings.h"
+#include "SWGIEEE_802_15_4_DemodSettings.h"
 #include "SWGIEEE_802_15_4_ModSettings.h"
 #include "SWGILSDemodSettings.h"
 #include "SWGInmarsatDemodSettings.h"
@@ -68,6 +75,7 @@
 #include "SWGNFMModSettings.h"
 #include "SWGNavtexDemodSettings.h"
 #include "SWGNoiseFigureSettings.h"
+#include "SWGPSK31DemodSettings.h"
 #include "SWGPSK31ModSettings.h"
 #include "SWGPacketDemodSettings.h"
 #include "SWGPacketModSettings.h"
@@ -80,6 +88,7 @@
 #include "SWGRemoteSinkSettings.h"
 #include "SWGRemoteSourceSettings.h"
 #include "SWGRemoteTCPSinkSettings.h"
+#include "SWGSELCALDemodSettings.h"
 #include "SWGSSBDemodSettings.h"
 #include "SWGSSBModSettings.h"
 #include "SWGSigMFFileSinkSettings.h"
@@ -89,6 +98,7 @@
 #include "SWGWDSPRxSettings.h"
 #include "SWGWFMDemodSettings.h"
 #include "SWGWFMModSettings.h"
+#include "SWGWefaxDemodSettings.h"
 #include <QString>
 
 #include "SWGObject.h"
@@ -121,6 +131,9 @@ public:
     qint32 getOriginatorChannelIndex();
     void setOriginatorChannelIndex(qint32 originator_channel_index);
 
+    SWGACARSDemodSettings* getAcarsDemodSettings();
+    void setAcarsDemodSettings(SWGACARSDemodSettings* acars_demod_settings);
+
     SWGADSBDemodSettings* getAdsbDemodSettings();
     void setAdsbDemodSettings(SWGADSBDemodSettings* adsb_demod_settings);
 
@@ -139,6 +152,9 @@ public:
     SWGAPTDemodSettings* getAptDemodSettings();
     void setAptDemodSettings(SWGAPTDemodSettings* apt_demod_settings);
 
+    SWGWefaxDemodSettings* getWefaxDemodSettings();
+    void setWefaxDemodSettings(SWGWefaxDemodSettings* wefax_demod_settings);
+
     SWGATVDemodSettings* getAtvDemodSettings();
     void setAtvDemodSettings(SWGATVDemodSettings* atv_demod_settings);
 
@@ -150,6 +166,9 @@ public:
 
     SWGBFMDemodSettings* getBfmDemodSettings();
     void setBfmDemodSettings(SWGBFMDemodSettings* bfm_demod_settings);
+
+    SWGBFMModSettings* getBfmModSettings();
+    void setBfmModSettings(SWGBFMModSettings* bfm_mod_settings);
 
     SWGChannelAnalyzerSettings* getChannelAnalyzerSettings();
     void setChannelAnalyzerSettings(SWGChannelAnalyzerSettings* channel_analyzer_settings);
@@ -169,8 +188,14 @@ public:
     SWGDATVDemodSettings* getDatvDemodSettings();
     void setDatvDemodSettings(SWGDATVDemodSettings* datv_demod_settings);
 
+    SWGDVBDemodSettings* getDvbDemodSettings();
+    void setDvbDemodSettings(SWGDVBDemodSettings* dvb_demod_settings);
+
     SWGDABDemodSettings* getDabDemodSettings();
     void setDabDemodSettings(SWGDABDemodSettings* dab_demod_settings);
+
+    SWGDRMDemodSettings* getDrmDemodSettings();
+    void setDrmDemodSettings(SWGDRMDemodSettings* drm_demod_settings);
 
     SWGDOA2Settings* getDoa2Settings();
     void setDoa2Settings(SWGDOA2Settings* doa2_settings);
@@ -180,6 +205,12 @@ public:
 
     SWGDSDDemodSettings* getDsdDemodSettings();
     void setDsdDemodSettings(SWGDSDDemodSettings* dsd_demod_settings);
+
+    SWGDroneIDDemodSettings* getDroneIdDemodSettings();
+    void setDroneIdDemodSettings(SWGDroneIDDemodSettings* drone_id_demod_settings);
+
+    SWGDSEModSettings* getDseModSettings();
+    void setDseModSettings(SWGDSEModSettings* dse_mod_settings);
 
     SWGEndOfTrainDemodSettings* getEndOfTrainDemodSettings();
     void setEndOfTrainDemodSettings(SWGEndOfTrainDemodSettings* end_of_train_demod_settings);
@@ -216,6 +247,9 @@ public:
 
     SWGInterferometerSettings* getInterferometerSettings();
     void setInterferometerSettings(SWGInterferometerSettings* interferometer_settings);
+
+    SWGIEEE_802_15_4_DemodSettings* getIeee802154DemodSettings();
+    void setIeee802154DemodSettings(SWGIEEE_802_15_4_DemodSettings* ieee_802_15_4_demod_settings);
 
     SWGIEEE_802_15_4_ModSettings* getIeee802154ModSettings();
     void setIeee802154ModSettings(SWGIEEE_802_15_4_ModSettings* ieee_802_15_4_mod_settings);
@@ -271,6 +305,9 @@ public:
     SWGPSK31ModSettings* getPsk31ModSettings();
     void setPsk31ModSettings(SWGPSK31ModSettings* psk31_mod_settings);
 
+    SWGPSK31DemodSettings* getPsk31DemodSettings();
+    void setPsk31DemodSettings(SWGPSK31DemodSettings* psk31_demod_settings);
+
     SWGRadioAstronomySettings* getRadioAstronomySettings();
     void setRadioAstronomySettings(SWGRadioAstronomySettings* radio_astronomy_settings);
 
@@ -322,6 +359,9 @@ public:
     SWGWFMModSettings* getWfmModSettings();
     void setWfmModSettings(SWGWFMModSettings* wfm_mod_settings);
 
+    SWGSELCALDemodSettings* getSelcalDemodSettings();
+    void setSelcalDemodSettings(SWGSELCALDemodSettings* selcal_demod_settings);
+
 
     virtual bool isSet() override;
 
@@ -337,6 +377,9 @@ private:
 
     qint32 originator_channel_index;
     bool m_originator_channel_index_isSet;
+
+    SWGACARSDemodSettings* acars_demod_settings;
+    bool m_acars_demod_settings_isSet;
 
     SWGADSBDemodSettings* adsb_demod_settings;
     bool m_adsb_demod_settings_isSet;
@@ -356,6 +399,9 @@ private:
     SWGAPTDemodSettings* apt_demod_settings;
     bool m_apt_demod_settings_isSet;
 
+    SWGWefaxDemodSettings* wefax_demod_settings;
+    bool m_wefax_demod_settings_isSet;
+
     SWGATVDemodSettings* atv_demod_settings;
     bool m_atv_demod_settings_isSet;
 
@@ -367,6 +413,9 @@ private:
 
     SWGBFMDemodSettings* bfm_demod_settings;
     bool m_bfm_demod_settings_isSet;
+
+    SWGBFMModSettings* bfm_mod_settings;
+    bool m_bfm_mod_settings_isSet;
 
     SWGChannelAnalyzerSettings* channel_analyzer_settings;
     bool m_channel_analyzer_settings_isSet;
@@ -386,8 +435,14 @@ private:
     SWGDATVDemodSettings* datv_demod_settings;
     bool m_datv_demod_settings_isSet;
 
+    SWGDVBDemodSettings* dvb_demod_settings;
+    bool m_dvb_demod_settings_isSet;
+
     SWGDABDemodSettings* dab_demod_settings;
     bool m_dab_demod_settings_isSet;
+
+    SWGDRMDemodSettings* drm_demod_settings;
+    bool m_drm_demod_settings_isSet;
 
     SWGDOA2Settings* doa2_settings;
     bool m_doa2_settings_isSet;
@@ -397,6 +452,12 @@ private:
 
     SWGDSDDemodSettings* dsd_demod_settings;
     bool m_dsd_demod_settings_isSet;
+
+    SWGDroneIDDemodSettings* drone_id_demod_settings;
+    bool m_drone_id_demod_settings_isSet;
+
+    SWGDSEModSettings* dse_mod_settings;
+    bool m_dse_mod_settings_isSet;
 
     SWGEndOfTrainDemodSettings* end_of_train_demod_settings;
     bool m_end_of_train_demod_settings_isSet;
@@ -433,6 +494,9 @@ private:
 
     SWGInterferometerSettings* interferometer_settings;
     bool m_interferometer_settings_isSet;
+
+    SWGIEEE_802_15_4_DemodSettings* ieee_802_15_4_demod_settings;
+    bool m_ieee_802_15_4_demod_settings_isSet;
 
     SWGIEEE_802_15_4_ModSettings* ieee_802_15_4_mod_settings;
     bool m_ieee_802_15_4_mod_settings_isSet;
@@ -488,6 +552,9 @@ private:
     SWGPSK31ModSettings* psk31_mod_settings;
     bool m_psk31_mod_settings_isSet;
 
+    SWGPSK31DemodSettings* psk31_demod_settings;
+    bool m_psk31_demod_settings_isSet;
+
     SWGRadioAstronomySettings* radio_astronomy_settings;
     bool m_radio_astronomy_settings_isSet;
 
@@ -538,6 +605,9 @@ private:
 
     SWGWFMModSettings* wfm_mod_settings;
     bool m_wfm_mod_settings_isSet;
+
+    SWGSELCALDemodSettings* selcal_demod_settings;
+    bool m_selcal_demod_settings_isSet;
 
 };
 

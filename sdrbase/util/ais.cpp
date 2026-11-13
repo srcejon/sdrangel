@@ -16,6 +16,7 @@
 ///////////////////////////////////////////////////////////////////////////////////
 
 #include <QDebug>
+#include <QTimeZone>
 
 #include <cmath>
 
@@ -450,7 +451,7 @@ AISBaseStationReport::AISBaseStationReport(QByteArray ba) :
     int hour = ((ba[7] & 0x7) << 2) | ((ba[8] >> 6) & 0x3);
     int minute = ba[8] & 0x3f;
     int second = (ba[9] >> 2) & 0x3f;
-    m_utc = QDateTime(QDate(year, month, day), QTime(hour, minute, second), Qt::UTC);
+    m_utc = QDateTime(QDate(year, month, day), QTime(hour, minute, second), QTimeZone::utc());
 
     m_positionAccuracy = (ba[9] >> 1) & 0x1;
 
@@ -531,7 +532,9 @@ AISBinaryBroadcast::AISBinaryBroadcast(QByteArray ba) :
 }
 
 AISSARAircraftPositionReport::AISSARAircraftPositionReport(QByteArray ba) :
-    AISMessage(ba)
+    AISMessage(ba),
+    m_headingAvailable(false),
+    m_heading(0)
 {
     m_altitude = ((ba[4] & 0x3) << 10) | ((ba[5] & 0xff) << 2) | ((ba[6] >> 6) & 0x3);
     m_altitudeAvailable = m_altitude != 4095;
@@ -831,7 +834,8 @@ QString AISStaticDataReport::toString()
 }
 
 AISSingleSlotBinaryMessage::AISSingleSlotBinaryMessage(QByteArray ba) :
-    AISMessage(ba)
+    AISMessage(ba),
+    m_destinationId(0)
 {
     m_destinationIndicator = (ba[4] >> 1) & 1;
     m_binaryDataFlag = ba[4] & 1;

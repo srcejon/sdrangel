@@ -90,6 +90,7 @@ bool DemodAnalyzerGUI::handleMessage(const Message& message)
         ui->scopeGUI->updateSettings();
         displaySettings();
         blockApplySettings(false);
+        applyRealSpectrum();
 
         return true;
     }
@@ -124,9 +125,10 @@ void DemodAnalyzerGUI::handleInputMessages()
 
     while ((message = getInputMessageQueue()->pop()))
     {
-        if (handleMessage(*message)) {
-            delete message;
+        if (!handleMessage(*message)) {
+            qDebug("%s: unhandled message: %s", Q_FUNC_INFO, message->getIdentifier());
         }
+        delete message;
     }
 }
 
@@ -148,7 +150,6 @@ DemodAnalyzerGUI::DemodAnalyzerGUI(PluginAPI* pluginAPI, FeatureUISet *featureUI
     m_featureUISet(featureUISet),
     m_sampleRate(48000),
 	m_doApplySettings(true),
-    m_lastFeatureState(0),
     m_selectedChannel(nullptr)
 {
     m_feature = feature;
@@ -170,8 +171,8 @@ DemodAnalyzerGUI::DemodAnalyzerGUI(PluginAPI* pluginAPI, FeatureUISet *featureUI
     connect(this, SIGNAL(customContextMenuRequested(const QPoint &)), this, SLOT(onMenuDialogCalled(const QPoint &)));
     connect(getInputMessageQueue(), SIGNAL(messageEnqueued()), this, SLOT(handleInputMessages()));
 
-	connect(&m_statusTimer, SIGNAL(timeout()), this, SLOT(updateStatus()));
-	m_statusTimer.start(1000);
+	connect(m_demodAnalyzer, &Feature::stateChanged, this, &DemodAnalyzerGUI::updateFeatureState);
+	updateFeatureState();
 
 	ui->spectrumGUI->setBuddies(m_spectrumVis, ui->glSpectrum);
 	ui->scopeGUI->setBuddies(m_scopeVis->getInputMessageQueue(), m_scopeVis, ui->glScope);
@@ -188,6 +189,7 @@ DemodAnalyzerGUI::DemodAnalyzerGUI(PluginAPI* pluginAPI, FeatureUISet *featureUI
     m_settings.setRollupState(&m_rollupState);
 
     displaySettings();
+    applyRealSpectrum();
 	applySettings(true);
     makeUIConnections();
     DialPopup::addPopupsToChildDials(this);
@@ -218,6 +220,7 @@ void DemodAnalyzerGUI::displaySettings()
     setTitle(m_settings.m_title);
     blockApplySettings(true);
     ui->log2Decim->setCurrentIndex(m_settings.m_log2Decim);
+    ui->realSpectrum->setChecked(m_settings.m_realSpectrum);
     ui->record->setChecked(m_settings.m_recordToFile);
     ui->fileNameText->setText(m_settings.m_fileRecordName);
     ui->showFileDialog->setEnabled(!m_settings.m_recordToFile);
@@ -316,7 +319,7 @@ void DemodAnalyzerGUI::on_channels_currentIndexChanged(int index)
 {
     if ((index >= 0) && (index < m_availableChannels.size()))
     {
-        m_selectedChannel = qobject_cast<ChannelAPI*>(m_availableChannels[index].m_object);
+        m_selectedChannel = m_availableChannels[index].m_object;
         DemodAnalyzer::MsgSelectChannel *msg = DemodAnalyzer::MsgSelectChannel::create(m_selectedChannel);
         m_demodAnalyzer->getInputMessageQueue()->push(msg);
     }
@@ -327,6 +330,27 @@ void DemodAnalyzerGUI::on_channelApply_clicked()
     if (ui->channels->count() > 0) {
         on_channels_currentIndexChanged(ui->channels->currentIndex());
     }
+}
+
+void DemodAnalyzerGUI::applyRealSpectrum()
+{
+    // A real signal's spectrum is symmetric: show its positive half, 0 to half the sample rate, as
+    // the SSB demodulator does: the scope feeds the spectrum its positive frequencies only, the
+    // spectrum settings carry the flag (for the web socket spectrum) and the view sets its scale
+    m_scopeVis->setSSBSpectrum(m_settings.m_realSpectrum);
+    SpectrumSettings spectrumSettings = m_spectrumVis->getSettings();
+    spectrumSettings.m_ssb = m_settings.m_realSpectrum;
+    m_spectrumVis->getInputMessageQueue()->push(SpectrumVis::MsgConfigureSpectrumVis::create(spectrumSettings, false));
+    ui->glSpectrum->setLsbDisplay(false);
+    ui->glSpectrum->setSsbSpectrum(m_settings.m_realSpectrum);
+}
+
+void DemodAnalyzerGUI::on_realSpectrum_toggled(bool checked)
+{
+    m_settings.m_realSpectrum = checked;
+    applyRealSpectrum();
+    m_settingsKeys.append("realSpectrum");
+    applySettings();
 }
 
 void DemodAnalyzerGUI::on_log2Decim_currentIndexChanged(int index)
@@ -394,33 +418,9 @@ void DemodAnalyzerGUI::tick()
 	ui->channelPower->setText(tr("%1 dB").arg(powDb, 0, 'f', 1));
 }
 
-void DemodAnalyzerGUI::updateStatus()
+void DemodAnalyzerGUI::updateFeatureState()
 {
-    int state = m_demodAnalyzer->getState();
-
-    if (m_lastFeatureState != state)
-    {
-        switch (state)
-        {
-            case Feature::StNotStarted:
-                ui->startStop->setStyleSheet("QToolButton { background:rgb(79,79,79); }");
-                break;
-            case Feature::StIdle:
-                ui->startStop->setStyleSheet("QToolButton { background-color : blue; }");
-                break;
-            case Feature::StRunning:
-                ui->startStop->setStyleSheet("QToolButton { background-color : green; }");
-                break;
-            case Feature::StError:
-                ui->startStop->setStyleSheet("QToolButton { background-color : red; }");
-                QMessageBox::information(this, tr("Message"), m_demodAnalyzer->getErrorMessage());
-                break;
-            default:
-                break;
-        }
-
-        m_lastFeatureState = state;
-    }
+    updateStartStopButton(ui->startStop);
 }
 
 void DemodAnalyzerGUI::applySettings(bool force)
@@ -440,6 +440,7 @@ void DemodAnalyzerGUI::makeUIConnections()
 	QObject::connect(ui->channels, qOverload<int>(&QComboBox::currentIndexChanged), this, &DemodAnalyzerGUI::on_channels_currentIndexChanged);
 	QObject::connect(ui->channelApply, &QPushButton::clicked, this, &DemodAnalyzerGUI::on_channelApply_clicked);
 	QObject::connect(ui->log2Decim, qOverload<int>(&QComboBox::currentIndexChanged), this, &DemodAnalyzerGUI::on_log2Decim_currentIndexChanged);
+	QObject::connect(ui->realSpectrum, &ButtonSwitch::toggled, this, &DemodAnalyzerGUI::on_realSpectrum_toggled);
     QObject::connect(ui->record, &ButtonSwitch::toggled, this, &DemodAnalyzerGUI::on_record_toggled);
     QObject::connect(ui->showFileDialog, &QPushButton::clicked, this, &DemodAnalyzerGUI::on_showFileDialog_clicked);
     QObject::connect(ui->recordSilenceTime, &QSlider::valueChanged, this, &DemodAnalyzerGUI::on_recordSilenceTime_valueChanged);

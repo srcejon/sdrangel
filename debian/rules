@@ -1,9 +1,35 @@
 #!/usr/bin/make -f
+
+# Override with "debuild -eQT_VERSION=6 ..." to build the Qt6 package.
+QT_VERSION ?= 5
+
+include /usr/share/dpkg/architecture.mk
+
+ARCH_OPT :=
+ifeq ($(DEB_HOST_ARCH),amd64)
+ARCH_OPT := nehalem
+else ifeq ($(DEB_HOST_ARCH),arm64)
+ARCH_OPT := armv8-a
+endif
+
+ifeq ($(QT_VERSION),5)
+QT_CMAKE_OPTION := -DENABLE_QT6=OFF
+QT_RUNTIME_DEPENDS := libqt5multimedia5-plugins, qtspeech5-speechd-plugin, qml-module-qtlocation, qml-module-qtpositioning, qml-module-qtquick-window2, qml-module-qtquick-dialogs, qml-module-qtquick-controls, qml-module-qtquick-controls2, qml-module-qtquick-layouts, qml-module-qtgraphicaleffects
+else ifeq ($(QT_VERSION),6)
+QT_CMAKE_OPTION := -DENABLE_QT6=ON -DENABLE_PERSEUS=OFF -DENABLE_BLADERF=OFF -DENABLE_MIRISDR=OFF -DENABLE_CHANNELRX_SIGMFFILESINK=OFF  
+QT_RUNTIME_DEPENDS := qt6-speech-speechd-plugin, qt6-location-plugins, qml6-module-qtlocation, qml6-module-qtpositioning, qml6-module-qtquick-window, qml6-module-qtquick-dialogs, qml6-module-qtquick-controls, qml6-module-qtquick-layouts, qml6-module-qt5compat-graphicaleffects, qml6-module-qtquick-effects
+else
+$(error QT_VERSION must be either 5 or 6)
+endif
+
 %:
 	dh $@ --parallel --buildsystem=cmake+ninja
 
 override_dh_auto_configure:
-	dh_auto_configure -- -DARCH_OPT=nehalem -DENABLE_EXTERNAL_LIBRARIES=AUTO -DDEBUG_OUTPUT=ON -DBUILD_SERVER=OFF
+	dh_auto_configure -- -DARCH_OPT=$(ARCH_OPT) $(QT_CMAKE_OPTION) -DENABLE_EXTERNAL_LIBRARIES=AUTO -DDEBUG_OUTPUT=ON -DBUILD_SERVER=OFF
+
+override_dh_gencontrol:
+	dh_gencontrol -- -Vqt:Depends='$(QT_RUNTIME_DEPENDS)'
 
 # delete any external projects (such as libsigmf) that are installed
 # would be better if we could prevent them from being installed in CMakeLists.txt

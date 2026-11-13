@@ -26,6 +26,7 @@
 #include "SWGAISSettings.h"
 #include "SWGAMBESettings.h"
 #include "SWGAPRSSettings.h"
+#include "SWGAircraftSettings.h"
 #include "SWGAntennaToolsSettings.h"
 #include "SWGCameraSettings.h"
 #include "SWGDemodAnalyzerSettings.h"
@@ -34,6 +35,7 @@
 #include "SWGGS232ControllerSettings.h"
 #include "SWGJogdialControllerSettings.h"
 #include "SWGLimeRFESettings.h"
+#include "SWGMCPServerSettings.h"
 #include "SWGMapSettings.h"
 #include "SWGMorseDecoderSettings.h"
 #include "SWGPERTesterSettings.h"
@@ -77,6 +79,9 @@ public:
 
     SWGAFCSettings* getAfcSettings();
     void setAfcSettings(SWGAFCSettings* afc_settings);
+
+    SWGAircraftSettings* getAircraftSettings();
+    void setAircraftSettings(SWGAircraftSettings* aircraft_settings);
 
     SWGAISSettings* getAisSettings();
     void setAisSettings(SWGAISSettings* ais_settings);
@@ -126,6 +131,9 @@ public:
     SWGRigCtlServerSettings* getRigCtlServerSettings();
     void setRigCtlServerSettings(SWGRigCtlServerSettings* rig_ctl_server_settings);
 
+    SWGMCPServerSettings* getMcpServerSettings();
+    void setMcpServerSettings(SWGMCPServerSettings* mcp_server_settings);
+
     SWGSatelliteTrackerSettings* getSatelliteTrackerSettings();
     void setSatelliteTrackerSettings(SWGSatelliteTrackerSettings* satellite_tracker_settings);
 
@@ -162,6 +170,9 @@ private:
 
     SWGAFCSettings* afc_settings;
     bool m_afc_settings_isSet;
+
+    SWGAircraftSettings* aircraft_settings;
+    bool m_aircraft_settings_isSet;
 
     SWGAISSettings* ais_settings;
     bool m_ais_settings_isSet;
@@ -210,6 +221,9 @@ private:
 
     SWGRigCtlServerSettings* rig_ctl_server_settings;
     bool m_rig_ctl_server_settings_isSet;
+
+    SWGMCPServerSettings* mcp_server_settings;
+    bool m_mcp_server_settings_isSet;
 
     SWGSatelliteTrackerSettings* satellite_tracker_settings;
     bool m_satellite_tracker_settings_isSet;

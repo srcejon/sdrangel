@@ -1260,7 +1260,7 @@ void MeteorGUI::updateAntennaPatternsOnMap(bool force)
         }
         mapMesh->setTriangleIndices(indices);
         item->setMesh(mapMesh);
-        item->setType(4);
+        item->setType(5);
         messageQueue->push(MainCore::MsgMapItem::create(m_meteor, item));
     };
 
@@ -1295,9 +1295,9 @@ void MeteorGUI::updateAntennaPatternsOnMap(bool force)
         // Type 2 removals clear footprints created by versions before indexed meshes.
         removeItem(messageQueue, txName, 2);
         removeItem(messageQueue, rxName, 2);
-        removeItem(messageQueue, txName, 4);
-        removeItem(messageQueue, rxName, 4);
-        removeItem(messageQueue, intersectionName, 4);
+        removeItem(messageQueue, txName, 5);
+        removeItem(messageQueue, rxName, 5);
+        removeItem(messageQueue, intersectionName, 5);
 
         if (m_settings.m_showAntennaPatterns)
         {

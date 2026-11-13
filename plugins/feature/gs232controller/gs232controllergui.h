@@ -68,7 +68,6 @@ private:
     GS232Controller* m_gs232Controller;
     MessageQueue m_inputMessageQueue;
     QTimer m_statusTimer;
-    int m_lastFeatureState;
     bool m_lastOnTarget;
     bool m_canPark;
     bool m_atPark;
@@ -148,6 +147,7 @@ private slots:
     void on_park_toggled(bool checked);
     void on_home_clicked(bool checked);
     void updateStatus();
+    void updateFeatureState();
     void on_inputController_currentIndexChanged(int index);
     void on_inputConfigure_clicked();
     void on_highSensitivity_clicked(bool checked);

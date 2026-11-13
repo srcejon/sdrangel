@@ -135,11 +135,12 @@ void StarTrackerWorker::handleInputMessages()
 {
     Message* message;
 
-    while ((message = m_inputMessageQueue.pop()) != nullptr)
+    while ((message = m_inputMessageQueue.pop()))
     {
-        if (handleMessage(*message)) {
-            delete message;
+        if (!handleMessage(*message)) {
+            qDebug("%s: unhandled message: %s", Q_FUNC_INFO, message->getIdentifier());
         }
+        delete message;
     }
 }
 
@@ -612,8 +613,8 @@ bool StarTrackerWorker::getRAFromHorizons(const QDateTime &dateTime, RADec &rdJ2
 
 void StarTrackerWorker::update()
 {
-    AzAlt aa, sunAA, moonAA;
-    RADec rdJnow, sunRD, moonRD;
+    AzAlt aa{}, sunAA{}, moonAA;
+    RADec rdJnow, sunRD{}, moonRD;
     bool rdJnowValid = false;
     double l, b;
     bool lbTarget = false;
@@ -1006,7 +1007,7 @@ void StarTrackerWorker::update()
 
                 for (int step = 0; step <= 24*60*60/timestep; step++)
                 {
-                    AzAlt aa;
+                    AzAlt aa{};
                     RADec rdJnow, rdJ2000;
 
                     // Calculate elevation of desired object

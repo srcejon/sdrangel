@@ -138,6 +138,8 @@ bool PlutoSDRMIMO::openDevice()
         }
     }
 
+    m_plutoParams->getBox()->setTxLOPowerdown(true); // do not radiate LO leakage until Tx is started
+
     return true;
 }
 
@@ -181,8 +183,10 @@ bool PlutoSDRMIMO::startRx()
     }
 
     qDebug("PlutoSDRMIMO::startRx");
+    m_plutoParams->getBox()->setRxLOPowerdown(false);
 
     m_sourceThread = new PlutoSDRMIThread(m_plutoParams->getBox());
+    connect(m_sourceThread, &PlutoSDRMIThread::error, this, &PlutoSDRMIMO::handleError, Qt::QueuedConnection);
     m_sampleMIFifo.reset();
     m_sourceThread->setFifo(&m_sampleMIFifo);
     m_sourceThread->setFcPos(m_settings.m_fcPosRx);
@@ -219,8 +223,10 @@ bool PlutoSDRMIMO::startTx()
     }
 
     qDebug("PlutoSDRMIMO::startTx");
+    m_plutoParams->getBox()->setTxLOPowerdown(false);
 
     m_sinkThread = new PlutoSDRMOThread(m_plutoParams->getBox());
+    connect(m_sinkThread, &PlutoSDRMOThread::error, this, &PlutoSDRMIMO::handleError, Qt::QueuedConnection);
     m_sampleMOFifo.reset();
     m_sinkThread->setFifo(&m_sampleMOFifo);
     m_sinkThread->setFcPos(m_settings.m_fcPosTx);
@@ -270,6 +276,7 @@ void PlutoSDRMIMO::stopRx()
 
     m_plutoParams->getBox()->deleteRxBuffer();
     m_plutoTxBuffer = nullptr;
+    m_plutoParams->getBox()->setRxLOPowerdown(true);
 }
 
 void PlutoSDRMIMO::stopTx()
@@ -301,6 +308,63 @@ void PlutoSDRMIMO::stopTx()
 
     m_plutoParams->getBox()->deleteTxBuffer();
     m_plutoRxBuffer = nullptr;
+    m_plutoParams->getBox()->setTxLOPowerdown(true);
+}
+
+void PlutoSDRMIMO::handleError(int errorCode)
+{
+    QMutexLocker mutexLocker(&m_mutex);
+
+    // fatal error - shut it all off.
+    if (m_sourceThread) {
+        if (m_sourceThread->isRunning()) {
+            m_sourceThread->stopWork();
+        }
+        m_sourceThread->wait();
+        delete m_sourceThread;
+        m_sourceThread = nullptr;
+    }
+    if (m_nbRx > 1) {
+        m_plutoParams->getBox()->closeSecondRx();
+    }
+
+    if (m_nbRx > 0) {
+        m_plutoParams->getBox()->closeRx();
+    }
+
+    m_plutoParams->getBox()->deleteRxBuffer();
+    m_plutoTxBuffer = nullptr;
+
+    if (m_sinkThread) {
+        if (m_sinkThread->isRunning()) {
+            m_sinkThread->stopWork();
+        }
+        m_sinkThread->wait();
+        delete m_sinkThread;
+        m_sinkThread = nullptr;
+    }
+    if (m_nbTx > 1) {
+        m_plutoParams->getBox()->closeSecondTx();
+    }
+
+    if (m_nbTx > 0) {
+        m_plutoParams->getBox()->closeTx();
+    }
+
+    m_plutoParams->getBox()->deleteTxBuffer();
+    m_plutoRxBuffer = nullptr;
+
+    m_plutoParams->close();
+    delete m_plutoParams;
+    m_plutoParams = nullptr;
+    m_open = false;
+
+    const QString errorMessage =
+        tr("PlutoSDR needs a restart: %1 (%2)")
+            .arg(strerror(-errorCode))
+            .arg(errorCode);
+    m_deviceAPI->getDeviceEngineInputMessageQueue()->push(new DSPAcquisitionError(errorMessage));
+    m_deviceAPI->getDeviceEngineInputMessageQueue()->push(new DSPGenerationError(errorMessage));
 }
 
 QByteArray PlutoSDRMIMO::serialize() const
@@ -616,11 +680,11 @@ bool PlutoSDRMIMO::applySettings(const PlutoSDRMIMOSettings& settings, const QLi
     // Tx
 
     // Change affecting device sample rate chain and other buddies
-    if (settingsKeys.contains("devSampleRate") ||
+    if (plutoBox && (settingsKeys.contains("devSampleRate") ||
         settingsKeys.contains("lpfTxFIREnable") ||
         settingsKeys.contains("lpfTxFIRlog2Interp") ||
         settingsKeys.contains("lpfTxFIRBW") ||
-        settingsKeys.contains("lpfTxFIRGain") || force)
+        settingsKeys.contains("lpfTxFIRGain") || force))
     {
         plutoBox->setFIR(
             settings.m_devSampleRate,
@@ -715,7 +779,7 @@ bool PlutoSDRMIMO::applySettings(const PlutoSDRMIMOSettings& settings, const QLi
         paramsToSet = true;
     }
 
-    if (paramsToSet) {
+    if (plutoBox && paramsToSet) {
         plutoBox->set_params(DevicePlutoSDRBox::DEVICE_PHY, params);
     }
 
@@ -1219,9 +1283,17 @@ void PlutoSDRMIMO::webapiFormatDeviceReport(SWGSDRangel::SWGDeviceReport& respon
     response.getPlutoSdrMimoReport()->setAdcRate(getADCSampleRate());
     std::string rssiStr;
     getRxRSSI(rssiStr, 0);
-    response.getPlutoSdrMimoReport()->setRssiRx0(new QString(rssiStr.c_str()));
+    if (response.getPlutoSdrMimoReport()->getRssiRx0()) {
+        *response.getPlutoSdrMimoReport()->getRssiRx0() = rssiStr.c_str();
+    } else {
+        response.getPlutoSdrMimoReport()->setRssiRx0(new QString(rssiStr.c_str()));
+    }
     getRxRSSI(rssiStr, 1);
-    response.getPlutoSdrMimoReport()->setRssiRx1(new QString(rssiStr.c_str()));
+    if (response.getPlutoSdrMimoReport()->getRssiRx1()) {
+        *response.getPlutoSdrMimoReport()->getRssiRx1() = rssiStr.c_str();
+    } else {
+        response.getPlutoSdrMimoReport()->setRssiRx1(new QString(rssiStr.c_str()));
+    }
     int gainDB;
     getRxGain(gainDB, 0);
     response.getPlutoSdrMimoReport()->setRx0GainDb(gainDB);
@@ -1229,9 +1301,17 @@ void PlutoSDRMIMO::webapiFormatDeviceReport(SWGSDRangel::SWGDeviceReport& respon
     response.getPlutoSdrMimoReport()->setRx1GainDb(gainDB);
     response.getPlutoSdrMimoReport()->setDacRate(getDACSampleRate());
     getTxRSSI(rssiStr, 0);
-    response.getPlutoSdrMimoReport()->setRssiTx0(new QString(rssiStr.c_str()));
+    if (response.getPlutoSdrMimoReport()->getRssiTx0()) {
+        *response.getPlutoSdrMimoReport()->getRssiTx0() = rssiStr.c_str();
+    } else {
+        response.getPlutoSdrMimoReport()->setRssiTx0(new QString(rssiStr.c_str()));
+    }
     getTxRSSI(rssiStr, 1);
-    response.getPlutoSdrMimoReport()->setRssiTx1(new QString(rssiStr.c_str()));
+    if (response.getPlutoSdrMimoReport()->getRssiTx1()) {
+        *response.getPlutoSdrMimoReport()->getRssiTx1() = rssiStr.c_str();
+    } else {
+        response.getPlutoSdrMimoReport()->setRssiTx1(new QString(rssiStr.c_str()));
+    }
 }
 
 void PlutoSDRMIMO::networkManagerFinished(QNetworkReply *reply)
@@ -1263,13 +1343,9 @@ void PlutoSDRMIMO::getRxRSSI(std::string& rssiStr, int chan)
         return;
     }
 
-    if (m_plutoParams)
-    {
-        DevicePlutoSDRBox *plutoBox =  m_plutoParams->getBox();
-
-        if (!plutoBox->getRxRSSI(rssiStr, chan)) {
-            rssiStr = "xxx dB";
-        }
+    DevicePlutoSDRBox *plutoBox = m_plutoParams ? m_plutoParams->getBox() : nullptr;
+    if (plutoBox && !plutoBox->getRxRSSI(rssiStr, chan)) {
+       rssiStr = "xxx dB";
     }
 }
 
@@ -1281,15 +1357,10 @@ void PlutoSDRMIMO::getTxRSSI(std::string& rssiStr, int chan)
         return;
     }
 
-    if (m_plutoParams)
-    {
-        DevicePlutoSDRBox *plutoBox =  m_plutoParams->getBox();
-
-        if (!plutoBox->getTxRSSI(rssiStr, chan)) {
-            rssiStr = "xxx dB";
-        }
+    DevicePlutoSDRBox *plutoBox = m_plutoParams ? m_plutoParams->getBox() : nullptr;
+    if (plutoBox && !plutoBox->getTxRSSI(rssiStr, chan)) {
+        rssiStr = "xxx dB";
     }
-
 }
 
 void PlutoSDRMIMO::getRxGain(int& gaindB, int chan)
@@ -1300,13 +1371,9 @@ void PlutoSDRMIMO::getRxGain(int& gaindB, int chan)
         return;
     }
 
-    if (m_plutoParams)
-    {
-        DevicePlutoSDRBox *plutoBox =  m_plutoParams->getBox();
-
-        if (!plutoBox->getRxGain(gaindB, chan)) {
-            gaindB = 0;
-        }
+    DevicePlutoSDRBox *plutoBox = m_plutoParams ? m_plutoParams->getBox() : nullptr;
+    if (plutoBox && !plutoBox->getRxGain(gaindB, chan)) {
+        gaindB = 0;
     }
 }
 
@@ -1318,17 +1385,13 @@ void PlutoSDRMIMO::getbbLPRange(quint32& minLimit, quint32& maxLimit)
         return;
     }
 
-    if (m_plutoParams)
+    DevicePlutoSDRBox *plutoBox = m_plutoParams ? m_plutoParams->getBox() : nullptr;
+    if (plutoBox)
     {
-        DevicePlutoSDRBox *plutoBox =  m_plutoParams->getBox();
-
-        if (plutoBox)
-        {
-            uint32_t min, max;
-            plutoBox->getbbLPRxRange(min, max);
-            minLimit = min;
-            maxLimit = max;
-        }
+        uint32_t min, max;
+        plutoBox->getbbLPRxRange(min, max);
+        minLimit = min;
+        maxLimit = max;
     }
 }
 
@@ -1340,17 +1403,13 @@ void PlutoSDRMIMO::getLORange(qint64& minLimit, qint64& maxLimit)
         return;
     }
 
-    if (m_plutoParams)
+    DevicePlutoSDRBox *plutoBox = m_plutoParams ? m_plutoParams->getBox() : nullptr;
+    if (plutoBox)
     {
-        DevicePlutoSDRBox *plutoBox = m_plutoParams->getBox();
-
-        if (plutoBox)
-        {
-            uint64_t min, max;
-            plutoBox->getRxLORange(min, max);
-            minLimit = min;
-            maxLimit = max;
-        }
+        uint64_t min, max;
+        plutoBox->getRxLORange(min, max);
+        minLimit = min;
+        maxLimit = max;
     }
 }
 
@@ -1362,13 +1421,9 @@ bool PlutoSDRMIMO::fetchTemperature()
         return false;
     }
 
-    if (m_plutoParams)
-    {
-        DevicePlutoSDRBox *plutoBox =  m_plutoParams->getBox();
-
-        if (plutoBox) {
-            return plutoBox->fetchTemp();
-        }
+    DevicePlutoSDRBox *plutoBox = m_plutoParams ? m_plutoParams->getBox() : nullptr;
+    if (plutoBox) {
+        return plutoBox->fetchTemp();
     }
 
     return false;
@@ -1382,13 +1437,9 @@ float PlutoSDRMIMO::getTemperature()
         return 0.0;
     }
 
-    if (m_plutoParams)
-    {
-        DevicePlutoSDRBox *plutoBox =  m_plutoParams->getBox();
-
-        if (plutoBox) {
-            return plutoBox->getTemp();
-        }
+    DevicePlutoSDRBox *plutoBox = m_plutoParams ? m_plutoParams->getBox() : nullptr;
+    if (plutoBox) {
+        return plutoBox->getTemp();
     }
 
     return 0.0;

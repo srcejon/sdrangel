@@ -50,6 +50,9 @@ public:
     QString* getName();
     void setName(QString* name);
 
+    QString* getGroup();
+    void setGroup(QString* group);
+
     QString* getImage();
     void setImage(QString* image);
 
@@ -185,12 +188,18 @@ public:
     SWGMapAircraftState* getAircraftState();
     void setAircraftState(SWGMapAircraftState* aircraft_state);
 
+    QString* getLoopSound();
+    void setLoopSound(QString* loop_sound);
+
 
     virtual bool isSet() override;
 
 private:
     QString* name;
     bool m_name_isSet;
+
+    QString* group;
+    bool m_group_isSet;
 
     QString* image;
     bool m_image_isSet;
@@ -326,6 +335,9 @@ private:
 
     SWGMapAircraftState* aircraft_state;
     bool m_aircraft_state_isSet;
+
+    QString* loop_sound;
+    bool m_loop_sound_isSet;
 
 };
 

@@ -35,6 +35,7 @@ class QNetworkReply;
 class QThread;
 class DeviceAPI;
 class ADSBDemodWorker;
+class ADSBDemodTracker;
 
 class ADSBDemod : public BasebandSampleSink, public ChannelAPI {
 public:
@@ -143,6 +144,7 @@ public:
     virtual QString getIdentifier() const { return objectName(); }
     virtual void getTitle(QString& title) { title = m_settings.m_title; }
     virtual qint64 getCenterFrequency() const { return m_settings.m_inputFrequencyOffset; }
+    int getChannelSampleRate() const override;
     virtual void setCenterFrequency(qint64 frequency);
 
     virtual QByteArray serialize() const;
@@ -187,10 +189,9 @@ public:
             SWGSDRangel::SWGChannelSettings& response);
 
     void getMagSqLevels(double& avg, double& peak, int& nbSamples) { m_basebandSink->getMagSqLevels(avg, peak, nbSamples); }
-    void setMessageQueueToGUI(MessageQueue* queue) final {
-        ChannelAPI::setMessageQueueToGUI(queue);
-        m_basebandSink->setMessageQueueToGUI(queue);
-    }
+    void setMessageQueueToGUI(MessageQueue* queue) final;
+
+    ADSBDemodTracker *getTracker() { return m_tracker; }
 
     void setTarget(const QString& name, float targetAzimuth, float targetElevation, float targetRange);
     void clearTarget() { m_targetAzElValid = false; }
@@ -204,6 +205,8 @@ private:
     DeviceAPI* m_deviceAPI;
     QThread *m_thread;
     ADSBDemodWorker *m_worker;
+    ADSBDemodTracker *m_tracker;
+    QThread *m_workerThread;    //!< Runs the tracker and the export worker
     ADSBDemodBaseband* m_basebandSink;
     ADSBDemodSettings m_settings;
     int m_basebandSampleRate; //!< stored from device message used when starting baseband sink

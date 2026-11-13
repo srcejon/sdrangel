@@ -25,6 +25,8 @@
 #include <vector>
 
 #include <QMap>
+#include <QHash>
+#include <QMutex>
 #include <QTimer>
 #include <QElapsedTimer>
 #include <QDateTime>
@@ -35,6 +37,7 @@
 #include "export.h"
 #include "settings/mainsettings.h"
 #include "util/message.h"
+#include "util/aircraftreport.h"
 #include "pipes/messagepipes.h"
 #include "pipes/datapipes.h"
 #include "channel/channelapi.h"
@@ -564,6 +567,28 @@ public:
         { }
     };
 
+    class SDRBASE_API MsgFeatureDemodReport : public Message {
+        MESSAGE_CLASS_DECLARATION
+
+    public:
+        const QObject *getFeature() const { return m_feature; }
+        int getSampleRate() const { return m_sampleRate; }
+
+        static MsgFeatureDemodReport* create(const QObject *feature, int sampleRate) {
+            return new MsgFeatureDemodReport(feature, sampleRate);
+        }
+
+    private:
+        const QObject *m_feature;
+        int m_sampleRate;
+
+        MsgFeatureDemodReport(const QObject *feature, int sampleRate) :
+            Message(),
+            m_feature(feature),
+            m_sampleRate(sampleRate)
+        { }
+    };
+
     class SDRBASE_API MsgChannelSettings : public Message {
         MESSAGE_CLASS_DECLARATION
 
@@ -621,6 +646,60 @@ public:
             Message(),
             m_deviceSetIndex(deviceSetIndex),
             m_workspaceIndex(workspceIndex)
+        { }
+    };
+
+    class SDRBASE_API MsgArrangeWorkspace : public Message {
+        MESSAGE_CLASS_DECLARATION
+
+    public:
+        enum Arrangement { Cascade, Tile, StackVertical, Stack, AutoStack, Tab };
+
+        int getWorkspaceIndex() const { return m_workspaceIndex; }
+        Arrangement getArrangement() const { return m_arrangement; }
+
+        static MsgArrangeWorkspace* create(int workspaceIndex, Arrangement arrangement) {
+            return new MsgArrangeWorkspace(workspaceIndex, arrangement);
+        }
+
+    private:
+        int m_workspaceIndex;
+        Arrangement m_arrangement;
+
+        MsgArrangeWorkspace(int workspaceIndex, Arrangement arrangement) :
+            Message(),
+            m_workspaceIndex(workspaceIndex),
+            m_arrangement(arrangement)
+        { }
+    };
+
+    class SDRBASE_API MsgSetWindowHidden : public Message {
+        MESSAGE_CLASS_DECLARATION
+
+    public:
+        enum Kind { Device, Spectrum, Channel, Feature };
+
+        Kind getKind() const { return m_kind; }
+        int getDeviceSetIndex() const { return m_deviceSetIndex; } //!< Unused for a feature
+        int getIndex() const { return m_index; }                   //!< Channel or feature index; unused for a device or spectrum
+        bool getHidden() const { return m_hidden; }
+
+        static MsgSetWindowHidden* create(Kind kind, int deviceSetIndex, int index, bool hidden) {
+            return new MsgSetWindowHidden(kind, deviceSetIndex, index, hidden);
+        }
+
+    private:
+        Kind m_kind;
+        int m_deviceSetIndex;
+        int m_index;
+        bool m_hidden;
+
+        MsgSetWindowHidden(Kind kind, int deviceSetIndex, int index, bool hidden) :
+            Message(),
+            m_kind(kind),
+            m_deviceSetIndex(deviceSetIndex),
+            m_index(index),
+            m_hidden(hidden)
         { }
     };
 
@@ -717,6 +796,87 @@ public:
         { }
     };
 
+    // Message to pass aircraft sightings from demodulators to the Aircraft feature
+    class SDRBASE_API MsgAircraftReport : public Message {
+        MESSAGE_CLASS_DECLARATION
+
+    public:
+        const QObject *getPipeSource() const { return m_pipeSource; }
+        const AircraftReport& getReport() const { return m_report; }
+        AircraftReport& getReport() { return m_report; }
+
+        static MsgAircraftReport* create(const QObject *pipeSource, const AircraftReport& report)
+        {
+            return new MsgAircraftReport(pipeSource, report);
+        }
+        ~MsgAircraftReport();   // Owns m_report.m_mapItem until a consumer takes it
+
+    private:
+        const QObject *m_pipeSource;
+        AircraftReport m_report;
+
+        MsgAircraftReport(const QObject *pipeSource, const AircraftReport& report) :
+            Message(),
+            m_pipeSource(pipeSource),
+            m_report(report)
+        { }
+    };
+
+    // Message to pass a received ACARS block, exactly as it came off the air, to a
+    // feature that archives it and feeds it on to aggregators.
+    //
+    // The RAW block rather than anything decoded, which is the whole point: a decoder
+    // improves, and everything already stored improves with it. That is not theoretical -
+    // a three character sublabel was being read as two, which put a stray character into
+    // the middle of every block after the first of a long message, and every rendered
+    // document written before the fix keeps its corruption for good. The block re-decodes
+    // clean.
+    //
+    // Per BLOCK, not per reassembled message: that defect was introduced while parsing a
+    // block's own header, before reassembly, so the reassembled text would not have been
+    // enough to recover from it.
+    //
+    // The reception metadata travels with it because none of it is in the block - the
+    // aggregators want the frequency and the signal level, and the archive wants to know
+    // which bearer heard it.
+    class SDRBASE_API MsgAcarsBlock : public Message {
+        MESSAGE_CLASS_DECLARATION
+
+    public:
+        const QObject *getPipeSource() const { return m_pipeSource; }
+        const QByteArray& getBlock() const { return m_block; }
+        const QDateTime& getDateTime() const { return m_dateTime; }
+        qint64 getFrequency() const { return m_frequency; }
+        double getLevel() const { return m_level; }
+        int getProtocol() const { return m_protocol; }
+
+        static MsgAcarsBlock* create(const QObject *pipeSource, const QByteArray& block,
+                                     const QDateTime& dateTime, qint64 frequency,
+                                     double level, int protocol)
+        {
+            return new MsgAcarsBlock(pipeSource, block, dateTime, frequency, level, protocol);
+        }
+
+    private:
+        const QObject *m_pipeSource;
+        QByteArray m_block;
+        QDateTime m_dateTime;
+        qint64 m_frequency;         //!< Hz
+        double m_level;             //!< dB
+        int m_protocol;             //!< An AircraftReport::Protocol
+
+        MsgAcarsBlock(const QObject *pipeSource, const QByteArray& block,
+                      const QDateTime& dateTime, qint64 frequency, double level, int protocol) :
+            Message(),
+            m_pipeSource(pipeSource),
+            m_block(block),
+            m_dateTime(dateTime),
+            m_frequency(frequency),
+            m_level(level),
+            m_protocol(protocol)
+        { }
+    };
+
     // Message to pass received packets between channels and features
     class SDRBASE_API MsgPacket : public Message {
         MESSAGE_CLASS_DECLARATION
@@ -741,6 +901,8 @@ public:
         QByteArray m_packet;
         QDateTime m_dateTime;
 
+    protected:
+        // Protected rather than private so it can be subclassed to add extra info
         MsgPacket(const QObject *pipeSource, QByteArray packet, QDateTime dateTime) :
             Message(),
             m_pipeSource(pipeSource),
@@ -1014,7 +1176,26 @@ signals:
     void featureAdded(int featureSetIndex, Feature *feature);
     void featureRemoved(int featureSetIndex, Feature *oldFeature);
 
+public:
+    // What the GUI shows of a window, kept here so that the Web API, which has no access to
+    // the GUI and runs on its own threads, can answer for it. Keyed by the object the window
+    // belongs to (DeviceAPI, SpectrumVis, ChannelAPI or Feature) rather than an index, as
+    // indices renumber when a lower one is removed. The GUI publishes on every show, hide,
+    // move and retitle, and removes the entry when the window goes. Empty in the server
+    struct WindowState
+    {
+        int m_workspaceIndex = -1;
+        bool m_hidden = false;
+        QString m_title;
+    };
+
+    void setWindowState(const void *owner, const WindowState& state);
+    void removeWindowState(const void *owner);
+    bool getWindowState(const void *owner, WindowState& state) const; //!< False when the GUI has published nothing for it
+
 private:
+    mutable QMutex m_windowStatesMutex;
+    QHash<const void *, WindowState> m_windowStates;
     MainSettings m_settings;
     qtwebapp::LoggerWithFile *m_logger;
     MessageQueue *m_mainMessageQueue;

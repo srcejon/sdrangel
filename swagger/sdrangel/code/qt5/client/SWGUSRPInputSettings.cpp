@@ -60,6 +60,8 @@ SWGUSRPInputSettings::SWGUSRPInputSettings() {
     m_gpio_dir_isSet = false;
     gpio_pins = 0;
     m_gpio_pins_isSet = false;
+    wire_format = 0;
+    m_wire_format_isSet = false;
     use_reverse_api = 0;
     m_use_reverse_api_isSet = false;
     reverse_api_address = nullptr;
@@ -108,6 +110,8 @@ SWGUSRPInputSettings::init() {
     m_gpio_dir_isSet = false;
     gpio_pins = 0;
     m_gpio_pins_isSet = false;
+    wire_format = 0;
+    m_wire_format_isSet = false;
     use_reverse_api = 0;
     m_use_reverse_api_isSet = false;
     reverse_api_address = new QString("");
@@ -138,6 +142,7 @@ SWGUSRPInputSettings::cleanup() {
     if(clock_source != nullptr) { 
         delete clock_source;
     }
+
 
 
 
@@ -192,6 +197,8 @@ SWGUSRPInputSettings::fromJsonObject(QJsonObject &pJson) {
     ::SWGSDRangel::setValue(&gpio_dir, pJson["gpioDir"], "qint32", "");
     
     ::SWGSDRangel::setValue(&gpio_pins, pJson["gpioPins"], "qint32", "");
+    
+    ::SWGSDRangel::setValue(&wire_format, pJson["wireFormat"], "qint32", "");
     
     ::SWGSDRangel::setValue(&use_reverse_api, pJson["useReverseAPI"], "qint32", "");
     
@@ -264,6 +271,9 @@ SWGUSRPInputSettings::asJsonObject() {
     }
     if(m_gpio_pins_isSet){
         obj->insert("gpioPins", QJsonValue(gpio_pins));
+    }
+    if(m_wire_format_isSet){
+        obj->insert("wireFormat", QJsonValue(wire_format));
     }
     if(m_use_reverse_api_isSet){
         obj->insert("useReverseAPI", QJsonValue(use_reverse_api));
@@ -442,6 +452,16 @@ SWGUSRPInputSettings::setGpioPins(qint32 gpio_pins) {
 }
 
 qint32
+SWGUSRPInputSettings::getWireFormat() {
+    return wire_format;
+}
+void
+SWGUSRPInputSettings::setWireFormat(qint32 wire_format) {
+    this->wire_format = wire_format;
+    this->m_wire_format_isSet = true;
+}
+
+qint32
 SWGUSRPInputSettings::getUseReverseApi() {
     return use_reverse_api;
 }
@@ -532,6 +552,9 @@ SWGUSRPInputSettings::isSet(){
             isObjectUpdated = true; break;
         }
         if(m_gpio_pins_isSet){
+            isObjectUpdated = true; break;
+        }
+        if(m_wire_format_isSet){
             isObjectUpdated = true; break;
         }
         if(m_use_reverse_api_isSet){

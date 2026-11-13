@@ -56,6 +56,11 @@ struct SDRBASE_API AircraftInformation {
     QString m_operatorICAO;
     QString m_registered;
 
+    AircraftInformation() :
+        m_icao(0)
+    {
+    }
+
     static void init()
     {
         QMutexLocker locker(&m_mutex);
@@ -85,6 +90,8 @@ struct SDRBASE_API AircraftInformation {
 
     // Try to find an flag logo based on a country
     static QIcon *getFlagIcon(const QString &country);
+    static void cleanupFlagIcons();
+    static void cleanupAirlineIcons();
 
     static QString resourcePathToURL(const QString &path);
 
@@ -139,6 +146,8 @@ private:
     static QSharedPointer<const QHash<QString, AircraftInformation *>> m_aircraftInformationByReg;
     static QSharedPointer<const QHash<QString, AircraftRouteInformation *>> m_aircraftRouteInformation;
     static QDateTime m_modifiedDateTime;
+    // Guards the loading and replacement of the three databases above.
+    static QRecursiveMutex m_dbMutex;
 
     // Write a reduced size and validated version of the DB, so it loads quicker
     static bool writeFastDB(const QString &filename, const QHash<int, AircraftInformation *> *aircraftInfo);

@@ -37,9 +37,11 @@ AudioCATSISOCATWorker::AudioCATSISOCATWorker(QObject* parent) :
     m_inputMessageQueueToSISO(nullptr),
     m_running(false),
     m_connected(false),
+    m_rig(nullptr),
     m_pollTimer(nullptr),
     m_ptt(false),
-    m_frequency(0)
+    m_frequency(0),
+    m_rxSampleRate(0)
 {
     rig_set_debug(RIG_DEBUG_ERR);
 }
@@ -198,11 +200,12 @@ void AudioCATSISOCATWorker::handleInputMessages()
 {
     Message* message;
 
-    while ((message = m_inputMessageQueue.pop()) != 0)
+    while ((message = m_inputMessageQueue.pop()))
     {
-        if (handleMessage(*message)) {
-            delete message;
+        if (!handleMessage(*message)) {
+            qDebug("%s: unhandled message: %s", Q_FUNC_INFO, message->getIdentifier());
         }
+        delete message;
     }
 }
 
@@ -223,11 +226,10 @@ void AudioCATSISOCATWorker::catConnect()
             );
             m_inputMessageQueueToGUI->push(msg);
         }
+        return;
     }
-    else
-    {
-        qDebug("AudioCATSISOCATWorker::catConnect: rig initialized with num: %u", m_settings.m_hamlibModel);
-    }
+
+    qDebug("AudioCATSISOCATWorker::catConnect: rig initialized with num: %u", m_settings.m_hamlibModel);
 
     m_rig->state.rigport.type.rig = RIG_PORT_SERIAL;
     m_rig->state.rigport.parm.serial.rate = AudioCATSISOSettings::m_catSpeeds[m_settings.m_catSpeedIndex];

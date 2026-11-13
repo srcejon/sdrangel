@@ -1,7 +1,13 @@
 # Stuff qmake can tell us
 get_target_property (QMAKE_EXECUTABLE Qt::qmake LOCATION)
+
 function (QUERY_QMAKE VAR RESULT)
-  exec_program (${QMAKE_EXECUTABLE} ARGS "-query ${VAR}" RETURN_VALUE return_code OUTPUT_VARIABLE output)
+  execute_process(
+    COMMAND "${QMAKE_EXECUTABLE}" -query "${VAR}"
+    RESULT_VARIABLE return_code
+    OUTPUT_VARIABLE output
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+  )
   if (NOT return_code)
     file (TO_CMAKE_PATH "${output}" output)
     set (${RESULT} ${output} PARENT_SCOPE)
@@ -137,6 +143,19 @@ elseif(WIN32 OR MINGW)
   # unfortunately some libraries are dependencies of dll so we copy by hand
   # TODO check if we can use fixup_bundle() and have libraries on root path
 
+  # Wintun is loaded dynamically, so BundleUtilities cannot discover it as a
+  # dependency. Install the target-architecture DLL and its license explicitly.
+  get_property(SDRANGEL_WINTUN_DLL GLOBAL PROPERTY SDRANGEL_WINTUN_DLL)
+  if(SDRANGEL_WINTUN_DLL)
+    install(FILES "${SDRANGEL_WINTUN_DLL}"
+      DESTINATION "${INSTALL_BIN_DIR}"
+      COMPONENT Runtime)
+    install(FILES "${CMAKE_SOURCE_DIR}/external/windows/wintun/LICENSE.txt"
+      DESTINATION "${INSTALL_DOC_DIR}"
+      RENAME Wintun-LICENSE.txt
+      COMPONENT Runtime)
+  endif()
+
   # demoddatv.dll
   file(GLOB FFMPEG_DLLS "${FFMPEG_LIBRARIES}/*${CMAKE_SHARED_LIBRARY_SUFFIX}")
   foreach(ffmpeg_dll ${FFMPEG_DLLS})
@@ -146,7 +165,7 @@ elseif(WIN32 OR MINGW)
     )
   endforeach(ffmpeg_dll)
 
-  # modatv.dll/camera.dll
+  # modatv.dll, moddatv.dll and camera.dll: opencv DLLs
   file(GLOB OPENCV_DLLS "${OpenCV_LIBS_BIN_DIR}/opencv_*${CMAKE_SHARED_LIBRARY_SUFFIX}")
   foreach(opencv_dll ${OPENCV_DLLS})
     get_filename_component(opencv_dll_name "${opencv_dll}"  NAME)
@@ -199,6 +218,14 @@ elseif(WIN32 OR MINGW)
       COMMAND ${CMAKE_COMMAND} -E copy_if_different "${hidapi_dll}" "${SDRANGEL_BINARY_BIN_DIR}/"
     )
   endforeach(hidapi_dll)
+
+  file(GLOB ACARS_DLLS "${LIBACARS_DLL_DIR}/acars*${CMAKE_SHARED_LIBRARY_SUFFIX}")
+  foreach(acars_dll ${ACARS_DLLS})
+    get_filename_component(acars_dll_name "${acars_dll}"  NAME)
+    add_custom_target(copy_acars_${acars_dll_name} ALL
+      COMMAND ${CMAKE_COMMAND} -E copy_if_different "${acars_dll}" "${SDRANGEL_BINARY_BIN_DIR}/"
+    )
+  endforeach(acars_dll)
 
   if(ENABLE_USRP AND UHD_FOUND)
     file(GLOB UHD_DLLS "${UHD_DLL_DIR}/*${CMAKE_SHARED_LIBRARY_SUFFIX}")
@@ -292,9 +319,9 @@ elseif(WIN32 OR MINGW)
     # demoddatv.dll
     install(DIRECTORY "${FFMPEG_LIBRARIES}/" DESTINATION "${INSTALL_LIB_DIR}"
       FILES_MATCHING PATTERN "*${CMAKE_SHARED_LIBRARY_SUFFIX}")
-    # modatv.dll
+    # modatv.dll and moddatv.dll
     install(DIRECTORY "${OpenCV_LIBS_BIN_DIR}/" DESTINATION "${INSTALL_LIB_DIR}"
-      FILES_MATCHING PATTERN "opencv_world*${CMAKE_SHARED_LIBRARY_SUFFIX}")
+      FILES_MATCHING PATTERN "opencv_*${CMAKE_SHARED_LIBRARY_SUFFIX}")
     # libusb
     get_filename_component(GFN_LIBUSB_DIR "${LIBUSB_LIBRARIES}" DIRECTORY)
     install(FILES "${GFN_LIBUSB_DIR}/libusb-1.0${CMAKE_SHARED_LIBRARY_SUFFIX}" DESTINATION "${INSTALL_LIB_DIR}")
@@ -304,6 +331,9 @@ elseif(WIN32 OR MINGW)
     # hidapi
     install(DIRECTORY "${HIDAPI_DLL_DIR}/" DESTINATION "${INSTALL_LIB_DIR}"
       FILES_MATCHING PATTERN "*${CMAKE_SHARED_LIBRARY_SUFFIX}")
+    # acars
+    install(DIRECTORY "${LIBACARS_DLL_DIR}/" DESTINATION "${INSTALL_LIB_DIR}"
+      FILES_MATCHING PATTERN "acars*${CMAKE_SHARED_LIBRARY_SUFFIX}")
     # uhd
     install(DIRECTORY "${UHD_DLL_DIR}/" DESTINATION "${INSTALL_LIB_DIR}"
       FILES_MATCHING PATTERN "*${CMAKE_SHARED_LIBRARY_SUFFIX}")
@@ -356,6 +386,25 @@ elseif(WIN32 OR MINGW)
       ExecWait '$INSTDIR\\\\${VCREDIST_FILE} /passive /norestart'
       Delete '$INSTDIR\\\\${VCREDIST_FILE}'
     ")
+
+    # The Claude Desktop extension, in a file of its own: CPack writes
+    # CPACK_NSIS_EXTRA_INSTALL_COMMANDS into CPackConfig.cmake without escaping it, so the
+    # commands themselves cannot contain a quote
+    if(MCPBRIDGE_BUNDLE_NAME)
+      configure_file(
+        "${CMAKE_CURRENT_SOURCE_DIR}/claude_extension.nsh.in"
+        "${CMAKE_BINARY_DIR}/claude_extension.nsh"
+        @ONLY
+      )
+      # NSIS !include does not take forward slashes, and CPack writes this string into
+      # CPackConfig.cmake raw, so each separator has to survive being read back as CMake
+      file(TO_NATIVE_PATH "${CMAKE_BINARY_DIR}/claude_extension.nsh" MCPBRIDGE_NSH)
+      string(REPLACE "\\" "\\\\" MCPBRIDGE_NSH "${MCPBRIDGE_NSH}")
+      list(APPEND CPACK_NSIS_EXTRA_INSTALL_COMMANDS "
+      !include '${MCPBRIDGE_NSH}'
+      ")
+    endif()
+
     set(CPACK_NSIS_CREATE_ICONS_EXTRA
       "CreateShortCut '$SMPROGRAMS\\\\$STARTMENU_FOLDER\\\\SDRangel.lnk' '$INSTDIR\\\\sdrangel.exe'")
     set(CPACK_NSIS_DELETE_ICONS_EXTRA

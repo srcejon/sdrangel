@@ -20,6 +20,7 @@
 ///////////////////////////////////////////////////////////////////////////////////
 
 #include <QDebug>
+#include <QMutexLocker>
 #include <QNetworkReply>
 #include <QBuffer>
 
@@ -102,27 +103,42 @@ void PlutoSDRInput::init()
 
 bool PlutoSDRInput::start()
 {
+    // Buddy lists can be changed in the GUI thread, but are accessed here (and in functions called from here)
+    // in the device engine thread. Lock before any of our own mutexes, to keep a consistent lock order.
+    QMutexLocker buddiesLocker(&DeviceAPI::getBuddiesMutex());
+
     QMutexLocker mutexLocker(&m_mutex);
 
     if (m_running) {
         return true;
     }
 
+    if (!m_deviceShared.m_deviceParams)
+    {
+        qCritical("PlutoSDRInput::start: device not open");
+        return false;
+    }
     if (!m_deviceShared.m_deviceParams->getBox())
     {
         qCritical("PlutoSDRInput::start: device not open");
         return false;
     }
 
+    m_deviceShared.m_deviceParams->getBox()->setRxLOPowerdown(false);
+
     // start / stop streaming is done in the thread.
 
     m_plutoSDRInputThread = new PlutoSDRInputThread(PLUTOSDR_BLOCKSIZE_SAMPLES, m_deviceShared.m_deviceParams->getBox(), &m_sampleFifo);
+    connect(m_plutoSDRInputThread, &PlutoSDRInputThread::error, this, &PlutoSDRInput::handleError, Qt::QueuedConnection);
     qDebug("PlutoSDRInput::start: thread created");
 
     m_plutoSDRInputThread->setLog2Decimation(m_settings.m_log2Decim);
     m_plutoSDRInputThread->setIQOrder(m_settings.m_iqOrder);
-    m_plutoSDRInputThread->startWork();
-    m_deviceShared.m_thread = m_plutoSDRInputThread;
+    {
+        QMutexLocker threadsLocker(&DevicePlutoSDRShared::m_threadsMutex);
+        m_plutoSDRInputThread->startWork();
+        m_deviceShared.m_thread = m_plutoSDRInputThread;
+    }
     m_running = true;
 
     mutexLocker.unlock();
@@ -133,6 +149,10 @@ bool PlutoSDRInput::start()
 
 void PlutoSDRInput::stop()
 {
+    // Buddy lists can be changed in the GUI thread, but are accessed here (and in functions called from here)
+    // in the device engine thread. Lock before any of our own mutexes, to keep a consistent lock order.
+    QMutexLocker buddiesLocker(&DeviceAPI::getBuddiesMutex());
+
     QMutexLocker mutexLocker(&m_mutex);
 
     if (!m_running) {
@@ -141,14 +161,60 @@ void PlutoSDRInput::stop()
 
     m_running = false;
 
+    // Unpublish the thread before tearing it down, and keep the shared lock through
+    // stop/wait/delete. applySettings() holds the same lock across its suspend ->
+    // apply -> resume transaction, so teardown must not interleave with that sequence.
+    QMutexLocker threadsLocker(&DevicePlutoSDRShared::m_threadsMutex);
+    m_deviceShared.m_thread = nullptr;
+    m_deviceShared.m_threadWasRunning = false;
+
     if (m_plutoSDRInputThread)
     {
         m_plutoSDRInputThread->stopWork();
+        m_plutoSDRInputThread->wait();
         delete m_plutoSDRInputThread;
         m_plutoSDRInputThread = nullptr;
     }
 
+    if (m_deviceShared.m_deviceParams && m_deviceShared.m_deviceParams->getBox()) {
+        m_deviceShared.m_deviceParams->getBox()->setRxLOPowerdown(true);
+    }
+}
+
+void PlutoSDRInput::handleError(int errorCode)
+{
+    QMutexLocker mutexLocker(&m_mutex);
+
+    m_running = false;
+    QMutexLocker threadsLocker(&DevicePlutoSDRShared::m_threadsMutex);
     m_deviceShared.m_thread = nullptr;
+    m_deviceShared.m_threadWasRunning = false;
+    if (m_plutoSDRInputThread)
+    {
+        if (m_plutoSDRInputThread->isRunning())
+        {
+            m_plutoSDRInputThread->stopWork();
+        }
+        m_plutoSDRInputThread->wait();
+        delete m_plutoSDRInputThread;
+        m_plutoSDRInputThread = nullptr;
+    }
+
+    if (m_deviceAPI->getSinkBuddies().size() == 0)
+    {
+        m_deviceShared.m_deviceParams->close();
+        delete m_deviceShared.m_deviceParams;
+        m_deviceShared.m_deviceParams = 0;
+    }
+
+    m_open = false;
+
+    const QString errorMessage =
+        tr("Radio needs a restart: %1 (%2)")
+            .arg(strerror(-errorCode))
+            .arg(errorCode);
+
+    m_deviceAPI->getDeviceEngineInputMessageQueue()->push(new DSPAcquisitionError(errorMessage));
 }
 
 QByteArray PlutoSDRInput::serialize() const
@@ -379,6 +445,7 @@ void PlutoSDRInput::closeDevice()
 
 void PlutoSDRInput::suspendBuddies()
 {
+    QMutexLocker threadsLocker(&DevicePlutoSDRShared::m_threadsMutex);
     // suspend Tx buddy's thread
 
     for (unsigned int i = 0; i < m_deviceAPI->getSinkBuddies().size(); i++)
@@ -394,6 +461,7 @@ void PlutoSDRInput::suspendBuddies()
 
 void PlutoSDRInput::resumeBuddies()
 {
+    QMutexLocker threadsLocker(&DevicePlutoSDRShared::m_threadsMutex);
     // resume Tx buddy's thread
 
     for (unsigned int i = 0; i < m_deviceAPI->getSinkBuddies().size(); i++)
@@ -414,6 +482,10 @@ bool PlutoSDRInput::applySettings(const PlutoSDRInputSettings& settings, const Q
         qCritical("PlutoSDRInput::applySettings: device not open");
         return false;
     }
+
+    // Held for the whole suspend -> apply -> resume sequence below (own thread and buddies'),
+    // so that a concurrent stop()/start() of either device set cannot interleave with it.
+    QMutexLocker threadsLocker(&DevicePlutoSDRShared::m_threadsMutex);
 
     bool forwardChangeOwnDSP    = false;
     bool forwardChangeOtherDSP  = false;
@@ -637,13 +709,17 @@ bool PlutoSDRInput::applySettings(const PlutoSDRInputSettings& settings, const Q
         {
             DevicePlutoSDRShared *buddySharedPtr = (DevicePlutoSDRShared *) (*itSink)->getBuddySharedPtr();
 
-            if (buddySharedPtr && buddySharedPtr->m_threadWasRunning) {
+            // m_threadWasRunning is sticky state on the buddy's shared struct, but the
+            // buddy's thread can be gone by the time we resume (its device was stopped,
+            // or a preset was loaded into it), which nulls m_thread. The matching
+            // suspend block above already tests m_thread; test it here too.
+            if (buddySharedPtr && buddySharedPtr->m_threadWasRunning && buddySharedPtr->m_thread) {
                 buddySharedPtr->m_thread->startWork();
             }
         }
     }
 
-    if (ownThreadWasRunning) {
+    if (ownThreadWasRunning && m_plutoSDRInputThread) {
         m_plutoSDRInputThread->startWork();
     }
 
@@ -892,10 +968,10 @@ void PlutoSDRInput::webapiUpdateDeviceSettings(
         settings.m_hwBBDCBlock = response.getPlutoSdrInputSettings()->getHwBbdcBlock() != 0;
     }
     if (deviceSettingsKeys.contains("hwRFDCBlock")) {
-        settings.m_hwBBDCBlock = response.getPlutoSdrInputSettings()->getHwRfdcBlock() != 0;
+        settings.m_hwRFDCBlock = response.getPlutoSdrInputSettings()->getHwRfdcBlock() != 0;
     }
     if (deviceSettingsKeys.contains("hwIQCorrection")) {
-        settings.m_hwBBDCBlock = response.getPlutoSdrInputSettings()->getHwIqCorrection() != 0;
+        settings.m_hwIQCorrection = response.getPlutoSdrInputSettings()->getHwIqCorrection() != 0;
     }
     if (deviceSettingsKeys.contains("log2Decim")) {
         settings.m_log2Decim = response.getPlutoSdrInputSettings()->getLog2Decim();
@@ -997,7 +1073,11 @@ void PlutoSDRInput::webapiFormatDeviceReport(SWGSDRangel::SWGDeviceReport& respo
     response.getPlutoSdrInputReport()->setAdcRate(getADCSampleRate());
     std::string rssiStr;
     getRSSI(rssiStr);
-    response.getPlutoSdrInputReport()->setRssi(new QString(rssiStr.c_str()));
+    if (response.getPlutoSdrInputReport()->getRssi()) {
+        *response.getPlutoSdrInputReport()->getRssi() = rssiStr.c_str();
+    } else {
+        response.getPlutoSdrInputReport()->setRssi(new QString(rssiStr.c_str()));
+    }
     int gainDB;
     getGain(gainDB);
     response.getPlutoSdrInputReport()->setGainDb(gainDB);

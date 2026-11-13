@@ -14,6 +14,8 @@
 #define ModelFactory_H_
 
 
+#include "SWGACARSDemodReport.h"
+#include "SWGACARSDemodSettings.h"
 #include "SWGADSBDemodAircraftState.h"
 #include "SWGADSBDemodReport.h"
 #include "SWGADSBDemodSettings.h"
@@ -25,7 +27,9 @@
 #include "SWGAISModActions.h"
 #include "SWGAISModReport.h"
 #include "SWGAISModSettings.h"
+#include "SWGAISReport.h"
 #include "SWGAISSettings.h"
+#include "SWGAISVessel.h"
 #include "SWGAMBEActions.h"
 #include "SWGAMBEDevice.h"
 #include "SWGAMBEDeviceReport.h"
@@ -36,11 +40,14 @@
 #include "SWGAMDemodSettings.h"
 #include "SWGAMModReport.h"
 #include "SWGAMModSettings.h"
+#include "SWGAPRSReport.h"
 #include "SWGAPRSSettings.h"
+#include "SWGAPRSStation.h"
 #include "SWGAPTDemodActions.h"
 #include "SWGAPTDemodActions_aos.h"
 #include "SWGAPTDemodActions_los.h"
 #include "SWGAPTDemodSettings.h"
+#include "SWGATVDemodReport.h"
 #include "SWGATVDemodSettings.h"
 #include "SWGATVModReport.h"
 #include "SWGATVModSettings.h"
@@ -48,6 +55,11 @@
 #include "SWGAaroniaRTSAOutputSettings.h"
 #include "SWGAaroniaRTSAReport.h"
 #include "SWGAaroniaRTSASettings.h"
+#include "SWGAircraftActions.h"
+#include "SWGAircraftNotificationSettings.h"
+#include "SWGAircraftProtocolReport.h"
+#include "SWGAircraftReport.h"
+#include "SWGAircraftSettings.h"
 #include "SWGAirspyHFReport.h"
 #include "SWGAirspyHFSettings.h"
 #include "SWGAirspyReport.h"
@@ -65,6 +77,8 @@
 #include "SWGAudioOutputSettings.h"
 #include "SWGBFMDemodReport.h"
 #include "SWGBFMDemodSettings.h"
+#include "SWGBFMModReport.h"
+#include "SWGBFMModSettings.h"
 #include "SWGBandwidth.h"
 #include "SWGBase64Blob.h"
 #include "SWGBeamSteeringCWModSettings.h"
@@ -106,17 +120,49 @@
 #include "SWGConfigurationImportExport.h"
 #include "SWGConfigurationItem.h"
 #include "SWGConfigurations.h"
+#include "SWGDABDemodReport.h"
 #include "SWGDABDemodSettings.h"
+#include "SWGDABProgram.h"
 #include "SWGDATVDemodReport.h"
 #include "SWGDATVDemodSettings.h"
 #include "SWGDATVModReport.h"
 #include "SWGDATVModSettings.h"
 #include "SWGDOA2Report.h"
 #include "SWGDOA2Settings.h"
+#include "SWGDRMAFS.h"
+#include "SWGDRMAFSFrequency.h"
+#include "SWGDRMCapability.h"
+#include "SWGDRMDemodActions.h"
+#include "SWGDRMDemodReport.h"
+#include "SWGDRMDemodSettings.h"
+#include "SWGDRMJournaline.h"
+#include "SWGDRMJournalineItem.h"
+#include "SWGDRMJournalineObject.h"
+#include "SWGDRMJournalineService.h"
+#include "SWGDRMService.h"
 #include "SWGDSCDemodReport.h"
 #include "SWGDSCDemodSettings.h"
+#include "SWGDSDDemodActions.h"
 #include "SWGDSDDemodReport.h"
 #include "SWGDSDDemodSettings.h"
+#include "SWGDSEModActions.h"
+#include "SWGDSEModCapabilities.h"
+#include "SWGDSEModFrame.h"
+#include "SWGDSEModMessage.h"
+#include "SWGDSEModMessageStatus.h"
+#include "SWGDSEModPCM.h"
+#include "SWGDSEModReport.h"
+#include "SWGDSEModSettings.h"
+#include "SWGDSEModTransmit.h"
+#include "SWGDSEModTransmitSession.h"
+#include "SWGDSEModTransmitStatus.h"
+#include "SWGDVBDemodActions.h"
+#include "SWGDVBDemodApp.h"
+#include "SWGDVBDemodCarousel.h"
+#include "SWGDVBDemodEPGEvent.h"
+#include "SWGDVBDemodEPGService.h"
+#include "SWGDVBDemodReport.h"
+#include "SWGDVBDemodSettings.h"
 #include "SWGDVSerialDevice.h"
 #include "SWGDVSerialDevices.h"
 #include "SWGDemodAnalyzerActions.h"
@@ -131,6 +177,8 @@
 #include "SWGDeviceSetList.h"
 #include "SWGDeviceSettings.h"
 #include "SWGDeviceState.h"
+#include "SWGDroneIDDemodReport.h"
+#include "SWGDroneIDDemodSettings.h"
 #include "SWGEndOfTrainDemodReport.h"
 #include "SWGEndOfTrainDemodSettings.h"
 #include "SWGErrorResponse.h"
@@ -179,6 +227,9 @@
 #include "SWGFrequencyRange.h"
 #include "SWGGLScope.h"
 #include "SWGGLSpectrum.h"
+#include "SWGGLSpectrumData.h"
+#include "SWGGLSpectrumHistory.h"
+#include "SWGGLSpectrumReport.h"
 #include "SWGGS232ControllerActions.h"
 #include "SWGGS232ControllerReport.h"
 #include "SWGGS232ControllerSettings.h"
@@ -187,6 +238,8 @@
 #include "SWGHackRFOutputSettings.h"
 #include "SWGHeatMapReport.h"
 #include "SWGHeatMapSettings.h"
+#include "SWGIEEE_802_15_4_DemodReport.h"
+#include "SWGIEEE_802_15_4_DemodSettings.h"
 #include "SWGIEEE_802_15_4_ModActions.h"
 #include "SWGIEEE_802_15_4_ModReport.h"
 #include "SWGIEEE_802_15_4_ModSettings.h"
@@ -226,14 +279,20 @@
 #include "SWGM17DemodSettings.h"
 #include "SWGM17ModReport.h"
 #include "SWGM17ModSettings.h"
+#include "SWGMCPServerActions.h"
+#include "SWGMCPServerReport.h"
+#include "SWGMCPServerSettings.h"
 #include "SWGMapActions.h"
 #include "SWGMapAircraftState.h"
 #include "SWGMapAnimation.h"
 #include "SWGMapCoordinate.h"
+#include "SWGMapDatalinkMessage.h"
+#include "SWGMapFlightPlan.h"
 #include "SWGMapItem.h"
 #include "SWGMapItem_2.h"
 #include "SWGMapMesh.h"
 #include "SWGMapReport.h"
+#include "SWGMapRouteWaypoint.h"
 #include "SWGMapSettings.h"
 #include "SWGMeshcoreDemodReport.h"
 #include "SWGMeshcoreDemodSettings.h"
@@ -261,6 +320,8 @@
 #include "SWGPERTesterActions_aos.h"
 #include "SWGPERTesterReport.h"
 #include "SWGPERTesterSettings.h"
+#include "SWGPSK31DemodReport.h"
+#include "SWGPSK31DemodSettings.h"
 #include "SWGPSK31ModActions.h"
 #include "SWGPSK31ModActions_payload.h"
 #include "SWGPSK31ModReport.h"
@@ -303,8 +364,10 @@
 #include "SWGRadioAstronomySettings.h"
 #include "SWGRadioClockReport.h"
 #include "SWGRadioClockSettings.h"
+#include "SWGRadiosonde.h"
 #include "SWGRadiosondeDemodReport.h"
 #include "SWGRadiosondeDemodSettings.h"
+#include "SWGRadiosondeReport.h"
 #include "SWGRadiosondeSettings.h"
 #include "SWGRange.h"
 #include "SWGRangeFloat.h"
@@ -329,6 +392,8 @@
 #include "SWGSDRPlaySettings.h"
 #include "SWGSDRPlayV3Report.h"
 #include "SWGSDRPlayV3Settings.h"
+#include "SWGSELCALDemodReport.h"
+#include "SWGSELCALDemodSettings.h"
 #include "SWGSIDSettings.h"
 #include "SWGSSBDemodReport.h"
 #include "SWGSSBDemodSettings.h"
@@ -368,9 +433,13 @@
 #include "SWGSoapySDRInputSettings.h"
 #include "SWGSoapySDROutputSettings.h"
 #include "SWGSoapySDRReport.h"
+#include "SWGSpectrumActions.h"
 #include "SWGSpectrumAnnotationMarker.h"
 #include "SWGSpectrumCalibrationPoint.h"
 #include "SWGSpectrumHistogramMarker.h"
+#include "SWGSpectrumHistorySignal.h"
+#include "SWGSpectrumMemorySettings.h"
+#include "SWGSpectrumPeak.h"
 #include "SWGSpectrumServer.h"
 #include "SWGSpectrumServer_clients.h"
 #include "SWGSpectrumWaterfallMarker.h"
@@ -397,6 +466,8 @@
 #include "SWGUDPSourceSettings.h"
 #include "SWGUSRPInputReport.h"
 #include "SWGUSRPInputSettings.h"
+#include "SWGUSRPMIMOReport.h"
+#include "SWGUSRPMIMOSettings.h"
 #include "SWGUSRPOutputReport.h"
 #include "SWGUSRPOutputSettings.h"
 #include "SWGVORDemodReport.h"
@@ -410,6 +481,12 @@
 #include "SWGWFMDemodSettings.h"
 #include "SWGWFMModReport.h"
 #include "SWGWFMModSettings.h"
+#include "SWGWefaxDemodActions.h"
+#include "SWGWefaxDemodReport.h"
+#include "SWGWefaxDemodSettings.h"
+#include "SWGWindowInfo.h"
+#include "SWGWindowList.h"
+#include "SWGWorkspaceActions.h"
 #include "SWGWorkspaceInfo.h"
 #include "SWGXtrxInputReport.h"
 #include "SWGXtrxInputSettings.h"
@@ -421,6 +498,16 @@
 namespace SWGSDRangel {
 
   inline void* create(QString type) {
+    if(QString("SWGACARSDemodReport").compare(type) == 0) {
+      SWGACARSDemodReport *obj = new SWGACARSDemodReport();
+      obj->init();
+      return obj;
+    }
+    if(QString("SWGACARSDemodSettings").compare(type) == 0) {
+      SWGACARSDemodSettings *obj = new SWGACARSDemodSettings();
+      obj->init();
+      return obj;
+    }
     if(QString("SWGADSBDemodAircraftState").compare(type) == 0) {
       SWGADSBDemodAircraftState *obj = new SWGADSBDemodAircraftState();
       obj->init();
@@ -476,8 +563,18 @@ namespace SWGSDRangel {
       obj->init();
       return obj;
     }
+    if(QString("SWGAISReport").compare(type) == 0) {
+      SWGAISReport *obj = new SWGAISReport();
+      obj->init();
+      return obj;
+    }
     if(QString("SWGAISSettings").compare(type) == 0) {
       SWGAISSettings *obj = new SWGAISSettings();
+      obj->init();
+      return obj;
+    }
+    if(QString("SWGAISVessel").compare(type) == 0) {
+      SWGAISVessel *obj = new SWGAISVessel();
       obj->init();
       return obj;
     }
@@ -531,8 +628,18 @@ namespace SWGSDRangel {
       obj->init();
       return obj;
     }
+    if(QString("SWGAPRSReport").compare(type) == 0) {
+      SWGAPRSReport *obj = new SWGAPRSReport();
+      obj->init();
+      return obj;
+    }
     if(QString("SWGAPRSSettings").compare(type) == 0) {
       SWGAPRSSettings *obj = new SWGAPRSSettings();
+      obj->init();
+      return obj;
+    }
+    if(QString("SWGAPRSStation").compare(type) == 0) {
+      SWGAPRSStation *obj = new SWGAPRSStation();
       obj->init();
       return obj;
     }
@@ -553,6 +660,11 @@ namespace SWGSDRangel {
     }
     if(QString("SWGAPTDemodSettings").compare(type) == 0) {
       SWGAPTDemodSettings *obj = new SWGAPTDemodSettings();
+      obj->init();
+      return obj;
+    }
+    if(QString("SWGATVDemodReport").compare(type) == 0) {
+      SWGATVDemodReport *obj = new SWGATVDemodReport();
       obj->init();
       return obj;
     }
@@ -588,6 +700,31 @@ namespace SWGSDRangel {
     }
     if(QString("SWGAaroniaRTSASettings").compare(type) == 0) {
       SWGAaroniaRTSASettings *obj = new SWGAaroniaRTSASettings();
+      obj->init();
+      return obj;
+    }
+    if(QString("SWGAircraftActions").compare(type) == 0) {
+      SWGAircraftActions *obj = new SWGAircraftActions();
+      obj->init();
+      return obj;
+    }
+    if(QString("SWGAircraftNotificationSettings").compare(type) == 0) {
+      SWGAircraftNotificationSettings *obj = new SWGAircraftNotificationSettings();
+      obj->init();
+      return obj;
+    }
+    if(QString("SWGAircraftProtocolReport").compare(type) == 0) {
+      SWGAircraftProtocolReport *obj = new SWGAircraftProtocolReport();
+      obj->init();
+      return obj;
+    }
+    if(QString("SWGAircraftReport").compare(type) == 0) {
+      SWGAircraftReport *obj = new SWGAircraftReport();
+      obj->init();
+      return obj;
+    }
+    if(QString("SWGAircraftSettings").compare(type) == 0) {
+      SWGAircraftSettings *obj = new SWGAircraftSettings();
       obj->init();
       return obj;
     }
@@ -673,6 +810,16 @@ namespace SWGSDRangel {
     }
     if(QString("SWGBFMDemodSettings").compare(type) == 0) {
       SWGBFMDemodSettings *obj = new SWGBFMDemodSettings();
+      obj->init();
+      return obj;
+    }
+    if(QString("SWGBFMModReport").compare(type) == 0) {
+      SWGBFMModReport *obj = new SWGBFMModReport();
+      obj->init();
+      return obj;
+    }
+    if(QString("SWGBFMModSettings").compare(type) == 0) {
+      SWGBFMModSettings *obj = new SWGBFMModSettings();
       obj->init();
       return obj;
     }
@@ -881,8 +1028,18 @@ namespace SWGSDRangel {
       obj->init();
       return obj;
     }
+    if(QString("SWGDABDemodReport").compare(type) == 0) {
+      SWGDABDemodReport *obj = new SWGDABDemodReport();
+      obj->init();
+      return obj;
+    }
     if(QString("SWGDABDemodSettings").compare(type) == 0) {
       SWGDABDemodSettings *obj = new SWGDABDemodSettings();
+      obj->init();
+      return obj;
+    }
+    if(QString("SWGDABProgram").compare(type) == 0) {
+      SWGDABProgram *obj = new SWGDABProgram();
       obj->init();
       return obj;
     }
@@ -916,6 +1073,61 @@ namespace SWGSDRangel {
       obj->init();
       return obj;
     }
+    if(QString("SWGDRMAFS").compare(type) == 0) {
+      SWGDRMAFS *obj = new SWGDRMAFS();
+      obj->init();
+      return obj;
+    }
+    if(QString("SWGDRMAFSFrequency").compare(type) == 0) {
+      SWGDRMAFSFrequency *obj = new SWGDRMAFSFrequency();
+      obj->init();
+      return obj;
+    }
+    if(QString("SWGDRMCapability").compare(type) == 0) {
+      SWGDRMCapability *obj = new SWGDRMCapability();
+      obj->init();
+      return obj;
+    }
+    if(QString("SWGDRMDemodActions").compare(type) == 0) {
+      SWGDRMDemodActions *obj = new SWGDRMDemodActions();
+      obj->init();
+      return obj;
+    }
+    if(QString("SWGDRMDemodReport").compare(type) == 0) {
+      SWGDRMDemodReport *obj = new SWGDRMDemodReport();
+      obj->init();
+      return obj;
+    }
+    if(QString("SWGDRMDemodSettings").compare(type) == 0) {
+      SWGDRMDemodSettings *obj = new SWGDRMDemodSettings();
+      obj->init();
+      return obj;
+    }
+    if(QString("SWGDRMJournaline").compare(type) == 0) {
+      SWGDRMJournaline *obj = new SWGDRMJournaline();
+      obj->init();
+      return obj;
+    }
+    if(QString("SWGDRMJournalineItem").compare(type) == 0) {
+      SWGDRMJournalineItem *obj = new SWGDRMJournalineItem();
+      obj->init();
+      return obj;
+    }
+    if(QString("SWGDRMJournalineObject").compare(type) == 0) {
+      SWGDRMJournalineObject *obj = new SWGDRMJournalineObject();
+      obj->init();
+      return obj;
+    }
+    if(QString("SWGDRMJournalineService").compare(type) == 0) {
+      SWGDRMJournalineService *obj = new SWGDRMJournalineService();
+      obj->init();
+      return obj;
+    }
+    if(QString("SWGDRMService").compare(type) == 0) {
+      SWGDRMService *obj = new SWGDRMService();
+      obj->init();
+      return obj;
+    }
     if(QString("SWGDSCDemodReport").compare(type) == 0) {
       SWGDSCDemodReport *obj = new SWGDSCDemodReport();
       obj->init();
@@ -926,6 +1138,11 @@ namespace SWGSDRangel {
       obj->init();
       return obj;
     }
+    if(QString("SWGDSDDemodActions").compare(type) == 0) {
+      SWGDSDDemodActions *obj = new SWGDSDDemodActions();
+      obj->init();
+      return obj;
+    }
     if(QString("SWGDSDDemodReport").compare(type) == 0) {
       SWGDSDDemodReport *obj = new SWGDSDDemodReport();
       obj->init();
@@ -933,6 +1150,96 @@ namespace SWGSDRangel {
     }
     if(QString("SWGDSDDemodSettings").compare(type) == 0) {
       SWGDSDDemodSettings *obj = new SWGDSDDemodSettings();
+      obj->init();
+      return obj;
+    }
+    if(QString("SWGDSEModActions").compare(type) == 0) {
+      SWGDSEModActions *obj = new SWGDSEModActions();
+      obj->init();
+      return obj;
+    }
+    if(QString("SWGDSEModCapabilities").compare(type) == 0) {
+      SWGDSEModCapabilities *obj = new SWGDSEModCapabilities();
+      obj->init();
+      return obj;
+    }
+    if(QString("SWGDSEModFrame").compare(type) == 0) {
+      SWGDSEModFrame *obj = new SWGDSEModFrame();
+      obj->init();
+      return obj;
+    }
+    if(QString("SWGDSEModMessage").compare(type) == 0) {
+      SWGDSEModMessage *obj = new SWGDSEModMessage();
+      obj->init();
+      return obj;
+    }
+    if(QString("SWGDSEModMessageStatus").compare(type) == 0) {
+      SWGDSEModMessageStatus *obj = new SWGDSEModMessageStatus();
+      obj->init();
+      return obj;
+    }
+    if(QString("SWGDSEModPCM").compare(type) == 0) {
+      SWGDSEModPCM *obj = new SWGDSEModPCM();
+      obj->init();
+      return obj;
+    }
+    if(QString("SWGDSEModReport").compare(type) == 0) {
+      SWGDSEModReport *obj = new SWGDSEModReport();
+      obj->init();
+      return obj;
+    }
+    if(QString("SWGDSEModSettings").compare(type) == 0) {
+      SWGDSEModSettings *obj = new SWGDSEModSettings();
+      obj->init();
+      return obj;
+    }
+    if(QString("SWGDSEModTransmit").compare(type) == 0) {
+      SWGDSEModTransmit *obj = new SWGDSEModTransmit();
+      obj->init();
+      return obj;
+    }
+    if(QString("SWGDSEModTransmitSession").compare(type) == 0) {
+      SWGDSEModTransmitSession *obj = new SWGDSEModTransmitSession();
+      obj->init();
+      return obj;
+    }
+    if(QString("SWGDSEModTransmitStatus").compare(type) == 0) {
+      SWGDSEModTransmitStatus *obj = new SWGDSEModTransmitStatus();
+      obj->init();
+      return obj;
+    }
+    if(QString("SWGDVBDemodActions").compare(type) == 0) {
+      SWGDVBDemodActions *obj = new SWGDVBDemodActions();
+      obj->init();
+      return obj;
+    }
+    if(QString("SWGDVBDemodApp").compare(type) == 0) {
+      SWGDVBDemodApp *obj = new SWGDVBDemodApp();
+      obj->init();
+      return obj;
+    }
+    if(QString("SWGDVBDemodCarousel").compare(type) == 0) {
+      SWGDVBDemodCarousel *obj = new SWGDVBDemodCarousel();
+      obj->init();
+      return obj;
+    }
+    if(QString("SWGDVBDemodEPGEvent").compare(type) == 0) {
+      SWGDVBDemodEPGEvent *obj = new SWGDVBDemodEPGEvent();
+      obj->init();
+      return obj;
+    }
+    if(QString("SWGDVBDemodEPGService").compare(type) == 0) {
+      SWGDVBDemodEPGService *obj = new SWGDVBDemodEPGService();
+      obj->init();
+      return obj;
+    }
+    if(QString("SWGDVBDemodReport").compare(type) == 0) {
+      SWGDVBDemodReport *obj = new SWGDVBDemodReport();
+      obj->init();
+      return obj;
+    }
+    if(QString("SWGDVBDemodSettings").compare(type) == 0) {
+      SWGDVBDemodSettings *obj = new SWGDVBDemodSettings();
       obj->init();
       return obj;
     }
@@ -1003,6 +1310,16 @@ namespace SWGSDRangel {
     }
     if(QString("SWGDeviceState").compare(type) == 0) {
       SWGDeviceState *obj = new SWGDeviceState();
+      obj->init();
+      return obj;
+    }
+    if(QString("SWGDroneIDDemodReport").compare(type) == 0) {
+      SWGDroneIDDemodReport *obj = new SWGDroneIDDemodReport();
+      obj->init();
+      return obj;
+    }
+    if(QString("SWGDroneIDDemodSettings").compare(type) == 0) {
+      SWGDroneIDDemodSettings *obj = new SWGDroneIDDemodSettings();
       obj->init();
       return obj;
     }
@@ -1246,6 +1563,21 @@ namespace SWGSDRangel {
       obj->init();
       return obj;
     }
+    if(QString("SWGGLSpectrumData").compare(type) == 0) {
+      SWGGLSpectrumData *obj = new SWGGLSpectrumData();
+      obj->init();
+      return obj;
+    }
+    if(QString("SWGGLSpectrumHistory").compare(type) == 0) {
+      SWGGLSpectrumHistory *obj = new SWGGLSpectrumHistory();
+      obj->init();
+      return obj;
+    }
+    if(QString("SWGGLSpectrumReport").compare(type) == 0) {
+      SWGGLSpectrumReport *obj = new SWGGLSpectrumReport();
+      obj->init();
+      return obj;
+    }
     if(QString("SWGGS232ControllerActions").compare(type) == 0) {
       SWGGS232ControllerActions *obj = new SWGGS232ControllerActions();
       obj->init();
@@ -1283,6 +1615,16 @@ namespace SWGSDRangel {
     }
     if(QString("SWGHeatMapSettings").compare(type) == 0) {
       SWGHeatMapSettings *obj = new SWGHeatMapSettings();
+      obj->init();
+      return obj;
+    }
+    if(QString("SWGIEEE_802_15_4_DemodReport").compare(type) == 0) {
+      SWGIEEE_802_15_4_DemodReport *obj = new SWGIEEE_802_15_4_DemodReport();
+      obj->init();
+      return obj;
+    }
+    if(QString("SWGIEEE_802_15_4_DemodSettings").compare(type) == 0) {
+      SWGIEEE_802_15_4_DemodSettings *obj = new SWGIEEE_802_15_4_DemodSettings();
       obj->init();
       return obj;
     }
@@ -1481,6 +1823,21 @@ namespace SWGSDRangel {
       obj->init();
       return obj;
     }
+    if(QString("SWGMCPServerActions").compare(type) == 0) {
+      SWGMCPServerActions *obj = new SWGMCPServerActions();
+      obj->init();
+      return obj;
+    }
+    if(QString("SWGMCPServerReport").compare(type) == 0) {
+      SWGMCPServerReport *obj = new SWGMCPServerReport();
+      obj->init();
+      return obj;
+    }
+    if(QString("SWGMCPServerSettings").compare(type) == 0) {
+      SWGMCPServerSettings *obj = new SWGMCPServerSettings();
+      obj->init();
+      return obj;
+    }
     if(QString("SWGMapActions").compare(type) == 0) {
       SWGMapActions *obj = new SWGMapActions();
       obj->init();
@@ -1501,6 +1858,16 @@ namespace SWGSDRangel {
       obj->init();
       return obj;
     }
+    if(QString("SWGMapDatalinkMessage").compare(type) == 0) {
+      SWGMapDatalinkMessage *obj = new SWGMapDatalinkMessage();
+      obj->init();
+      return obj;
+    }
+    if(QString("SWGMapFlightPlan").compare(type) == 0) {
+      SWGMapFlightPlan *obj = new SWGMapFlightPlan();
+      obj->init();
+      return obj;
+    }
     if(QString("SWGMapItem").compare(type) == 0) {
       SWGMapItem *obj = new SWGMapItem();
       obj->init();
@@ -1518,6 +1885,11 @@ namespace SWGSDRangel {
     }
     if(QString("SWGMapReport").compare(type) == 0) {
       SWGMapReport *obj = new SWGMapReport();
+      obj->init();
+      return obj;
+    }
+    if(QString("SWGMapRouteWaypoint").compare(type) == 0) {
+      SWGMapRouteWaypoint *obj = new SWGMapRouteWaypoint();
       obj->init();
       return obj;
     }
@@ -1653,6 +2025,16 @@ namespace SWGSDRangel {
     }
     if(QString("SWGPERTesterSettings").compare(type) == 0) {
       SWGPERTesterSettings *obj = new SWGPERTesterSettings();
+      obj->init();
+      return obj;
+    }
+    if(QString("SWGPSK31DemodReport").compare(type) == 0) {
+      SWGPSK31DemodReport *obj = new SWGPSK31DemodReport();
+      obj->init();
+      return obj;
+    }
+    if(QString("SWGPSK31DemodSettings").compare(type) == 0) {
+      SWGPSK31DemodSettings *obj = new SWGPSK31DemodSettings();
       obj->init();
       return obj;
     }
@@ -1866,6 +2248,11 @@ namespace SWGSDRangel {
       obj->init();
       return obj;
     }
+    if(QString("SWGRadiosonde").compare(type) == 0) {
+      SWGRadiosonde *obj = new SWGRadiosonde();
+      obj->init();
+      return obj;
+    }
     if(QString("SWGRadiosondeDemodReport").compare(type) == 0) {
       SWGRadiosondeDemodReport *obj = new SWGRadiosondeDemodReport();
       obj->init();
@@ -1873,6 +2260,11 @@ namespace SWGSDRangel {
     }
     if(QString("SWGRadiosondeDemodSettings").compare(type) == 0) {
       SWGRadiosondeDemodSettings *obj = new SWGRadiosondeDemodSettings();
+      obj->init();
+      return obj;
+    }
+    if(QString("SWGRadiosondeReport").compare(type) == 0) {
+      SWGRadiosondeReport *obj = new SWGRadiosondeReport();
       obj->init();
       return obj;
     }
@@ -1993,6 +2385,16 @@ namespace SWGSDRangel {
     }
     if(QString("SWGSDRPlayV3Settings").compare(type) == 0) {
       SWGSDRPlayV3Settings *obj = new SWGSDRPlayV3Settings();
+      obj->init();
+      return obj;
+    }
+    if(QString("SWGSELCALDemodReport").compare(type) == 0) {
+      SWGSELCALDemodReport *obj = new SWGSELCALDemodReport();
+      obj->init();
+      return obj;
+    }
+    if(QString("SWGSELCALDemodSettings").compare(type) == 0) {
+      SWGSELCALDemodSettings *obj = new SWGSELCALDemodSettings();
       obj->init();
       return obj;
     }
@@ -2191,6 +2593,11 @@ namespace SWGSDRangel {
       obj->init();
       return obj;
     }
+    if(QString("SWGSpectrumActions").compare(type) == 0) {
+      SWGSpectrumActions *obj = new SWGSpectrumActions();
+      obj->init();
+      return obj;
+    }
     if(QString("SWGSpectrumAnnotationMarker").compare(type) == 0) {
       SWGSpectrumAnnotationMarker *obj = new SWGSpectrumAnnotationMarker();
       obj->init();
@@ -2203,6 +2610,21 @@ namespace SWGSDRangel {
     }
     if(QString("SWGSpectrumHistogramMarker").compare(type) == 0) {
       SWGSpectrumHistogramMarker *obj = new SWGSpectrumHistogramMarker();
+      obj->init();
+      return obj;
+    }
+    if(QString("SWGSpectrumHistorySignal").compare(type) == 0) {
+      SWGSpectrumHistorySignal *obj = new SWGSpectrumHistorySignal();
+      obj->init();
+      return obj;
+    }
+    if(QString("SWGSpectrumMemorySettings").compare(type) == 0) {
+      SWGSpectrumMemorySettings *obj = new SWGSpectrumMemorySettings();
+      obj->init();
+      return obj;
+    }
+    if(QString("SWGSpectrumPeak").compare(type) == 0) {
+      SWGSpectrumPeak *obj = new SWGSpectrumPeak();
       obj->init();
       return obj;
     }
@@ -2336,6 +2758,16 @@ namespace SWGSDRangel {
       obj->init();
       return obj;
     }
+    if(QString("SWGUSRPMIMOReport").compare(type) == 0) {
+      SWGUSRPMIMOReport *obj = new SWGUSRPMIMOReport();
+      obj->init();
+      return obj;
+    }
+    if(QString("SWGUSRPMIMOSettings").compare(type) == 0) {
+      SWGUSRPMIMOSettings *obj = new SWGUSRPMIMOSettings();
+      obj->init();
+      return obj;
+    }
     if(QString("SWGUSRPOutputReport").compare(type) == 0) {
       SWGUSRPOutputReport *obj = new SWGUSRPOutputReport();
       obj->init();
@@ -2398,6 +2830,36 @@ namespace SWGSDRangel {
     }
     if(QString("SWGWFMModSettings").compare(type) == 0) {
       SWGWFMModSettings *obj = new SWGWFMModSettings();
+      obj->init();
+      return obj;
+    }
+    if(QString("SWGWefaxDemodActions").compare(type) == 0) {
+      SWGWefaxDemodActions *obj = new SWGWefaxDemodActions();
+      obj->init();
+      return obj;
+    }
+    if(QString("SWGWefaxDemodReport").compare(type) == 0) {
+      SWGWefaxDemodReport *obj = new SWGWefaxDemodReport();
+      obj->init();
+      return obj;
+    }
+    if(QString("SWGWefaxDemodSettings").compare(type) == 0) {
+      SWGWefaxDemodSettings *obj = new SWGWefaxDemodSettings();
+      obj->init();
+      return obj;
+    }
+    if(QString("SWGWindowInfo").compare(type) == 0) {
+      SWGWindowInfo *obj = new SWGWindowInfo();
+      obj->init();
+      return obj;
+    }
+    if(QString("SWGWindowList").compare(type) == 0) {
+      SWGWindowList *obj = new SWGWindowList();
+      obj->init();
+      return obj;
+    }
+    if(QString("SWGWorkspaceActions").compare(type) == 0) {
+      SWGWorkspaceActions *obj = new SWGWorkspaceActions();
       obj->init();
       return obj;
     }

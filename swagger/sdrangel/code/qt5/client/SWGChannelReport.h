@@ -22,21 +22,29 @@
 #include <QJsonObject>
 
 
+#include "SWGACARSDemodReport.h"
 #include "SWGADSBDemodReport.h"
 #include "SWGAISDemodReport.h"
 #include "SWGAISModReport.h"
 #include "SWGAMDemodReport.h"
 #include "SWGAMModReport.h"
+#include "SWGATVDemodReport.h"
 #include "SWGATVModReport.h"
 #include "SWGBFMDemodReport.h"
+#include "SWGBFMModReport.h"
 #include "SWGChannelPowerReport.h"
 #include "SWGChirpChatDemodReport.h"
 #include "SWGChirpChatModReport.h"
+#include "SWGDABDemodReport.h"
 #include "SWGDATVDemodReport.h"
 #include "SWGDATVModReport.h"
 #include "SWGDOA2Report.h"
+#include "SWGDRMDemodReport.h"
 #include "SWGDSCDemodReport.h"
 #include "SWGDSDDemodReport.h"
+#include "SWGDSEModReport.h"
+#include "SWGDVBDemodReport.h"
+#include "SWGDroneIDDemodReport.h"
 #include "SWGEndOfTrainDemodReport.h"
 #include "SWGFT8DemodReport.h"
 #include "SWGFileSinkReport.h"
@@ -46,6 +54,7 @@
 #include "SWGFreqScannerReport.h"
 #include "SWGFreqTrackerReport.h"
 #include "SWGHeatMapReport.h"
+#include "SWGIEEE_802_15_4_DemodReport.h"
 #include "SWGIEEE_802_15_4_ModReport.h"
 #include "SWGILSDemodReport.h"
 #include "SWGInmarsatDemodReport.h"
@@ -59,6 +68,7 @@
 #include "SWGNFMModReport.h"
 #include "SWGNavtexDemodReport.h"
 #include "SWGNoiseFigureReport.h"
+#include "SWGPSK31DemodReport.h"
 #include "SWGPSK31ModReport.h"
 #include "SWGPacketDemodReport.h"
 #include "SWGPacketModReport.h"
@@ -69,6 +79,7 @@
 #include "SWGRadioClockReport.h"
 #include "SWGRadiosondeDemodReport.h"
 #include "SWGRemoteSourceReport.h"
+#include "SWGSELCALDemodReport.h"
 #include "SWGSSBDemodReport.h"
 #include "SWGSSBModReport.h"
 #include "SWGSigMFFileSinkReport.h"
@@ -78,6 +89,7 @@
 #include "SWGWDSPRxReport.h"
 #include "SWGWFMDemodReport.h"
 #include "SWGWFMModReport.h"
+#include "SWGWefaxDemodReport.h"
 #include <QString>
 
 #include "SWGObject.h"
@@ -104,6 +116,9 @@ public:
     qint32 getDirection();
     void setDirection(qint32 direction);
 
+    SWGACARSDemodReport* getAcarsDemodReport();
+    void setAcarsDemodReport(SWGACARSDemodReport* acars_demod_report);
+
     SWGADSBDemodReport* getAdsbDemodReport();
     void setAdsbDemodReport(SWGADSBDemodReport* adsb_demod_report);
 
@@ -116,14 +131,29 @@ public:
     SWGAMDemodReport* getAmDemodReport();
     void setAmDemodReport(SWGAMDemodReport* am_demod_report);
 
+    SWGWefaxDemodReport* getWefaxDemodReport();
+    void setWefaxDemodReport(SWGWefaxDemodReport* wefax_demod_report);
+
     SWGAMModReport* getAmModReport();
     void setAmModReport(SWGAMModReport* am_mod_report);
+
+    SWGATVDemodReport* getAtvDemodReport();
+    void setAtvDemodReport(SWGATVDemodReport* atv_demod_report);
 
     SWGATVModReport* getAtvModReport();
     void setAtvModReport(SWGATVModReport* atv_mod_report);
 
     SWGBFMDemodReport* getBfmDemodReport();
     void setBfmDemodReport(SWGBFMDemodReport* bfm_demod_report);
+
+    SWGBFMModReport* getBfmModReport();
+    void setBfmModReport(SWGBFMModReport* bfm_mod_report);
+
+    SWGDABDemodReport* getDabDemodReport();
+    void setDabDemodReport(SWGDABDemodReport* dab_demod_report);
+
+    SWGDRMDemodReport* getDrmDemodReport();
+    void setDrmDemodReport(SWGDRMDemodReport* drm_demod_report);
 
     SWGChannelPowerReport* getChannelPowerReport();
     void setChannelPowerReport(SWGChannelPowerReport* channel_power_report);
@@ -137,6 +167,9 @@ public:
     SWGDATVDemodReport* getDatvDemodReport();
     void setDatvDemodReport(SWGDATVDemodReport* datv_demod_report);
 
+    SWGDVBDemodReport* getDvbDemodReport();
+    void setDvbDemodReport(SWGDVBDemodReport* dvb_demod_report);
+
     SWGDATVModReport* getDatvModReport();
     void setDatvModReport(SWGDATVModReport* datv_mod_report);
 
@@ -149,8 +182,17 @@ public:
     SWGDSDDemodReport* getDsdDemodReport();
     void setDsdDemodReport(SWGDSDDemodReport* dsd_demod_report);
 
+    SWGDroneIDDemodReport* getDroneIdDemodReport();
+    void setDroneIdDemodReport(SWGDroneIDDemodReport* drone_id_demod_report);
+
+    SWGDSEModReport* getDseModReport();
+    void setDseModReport(SWGDSEModReport* dse_mod_report);
+
     SWGEndOfTrainDemodReport* getEndOfTrainDemodReport();
     void setEndOfTrainDemodReport(SWGEndOfTrainDemodReport* end_of_train_demod_report);
+
+    SWGIEEE_802_15_4_DemodReport* getIeee802154DemodReport();
+    void setIeee802154DemodReport(SWGIEEE_802_15_4_DemodReport* ieee_802_15_4_demod_report);
 
     SWGIEEE_802_15_4_ModReport* getIeee802154ModReport();
     void setIeee802154ModReport(SWGIEEE_802_15_4_ModReport* ieee_802_15_4_mod_report);
@@ -248,6 +290,9 @@ public:
     SWGPSK31ModReport* getPsk31ModReport();
     void setPsk31ModReport(SWGPSK31ModReport* psk31_mod_report);
 
+    SWGPSK31DemodReport* getPsk31DemodReport();
+    void setPsk31DemodReport(SWGPSK31DemodReport* psk31_demod_report);
+
     SWGSigMFFileSinkReport* getSigMfFileSinkReport();
     void setSigMfFileSinkReport(SWGSigMFFileSinkReport* sig_mf_file_sink_report);
 
@@ -272,6 +317,9 @@ public:
     SWGWFMModReport* getWfmModReport();
     void setWfmModReport(SWGWFMModReport* wfm_mod_report);
 
+    SWGSELCALDemodReport* getSelcalDemodReport();
+    void setSelcalDemodReport(SWGSELCALDemodReport* selcal_demod_report);
+
 
     virtual bool isSet() override;
 
@@ -281,6 +329,9 @@ private:
 
     qint32 direction;
     bool m_direction_isSet;
+
+    SWGACARSDemodReport* acars_demod_report;
+    bool m_acars_demod_report_isSet;
 
     SWGADSBDemodReport* adsb_demod_report;
     bool m_adsb_demod_report_isSet;
@@ -294,14 +345,29 @@ private:
     SWGAMDemodReport* am_demod_report;
     bool m_am_demod_report_isSet;
 
+    SWGWefaxDemodReport* wefax_demod_report;
+    bool m_wefax_demod_report_isSet;
+
     SWGAMModReport* am_mod_report;
     bool m_am_mod_report_isSet;
+
+    SWGATVDemodReport* atv_demod_report;
+    bool m_atv_demod_report_isSet;
 
     SWGATVModReport* atv_mod_report;
     bool m_atv_mod_report_isSet;
 
     SWGBFMDemodReport* bfm_demod_report;
     bool m_bfm_demod_report_isSet;
+
+    SWGBFMModReport* bfm_mod_report;
+    bool m_bfm_mod_report_isSet;
+
+    SWGDABDemodReport* dab_demod_report;
+    bool m_dab_demod_report_isSet;
+
+    SWGDRMDemodReport* drm_demod_report;
+    bool m_drm_demod_report_isSet;
 
     SWGChannelPowerReport* channel_power_report;
     bool m_channel_power_report_isSet;
@@ -315,6 +381,9 @@ private:
     SWGDATVDemodReport* datv_demod_report;
     bool m_datv_demod_report_isSet;
 
+    SWGDVBDemodReport* dvb_demod_report;
+    bool m_dvb_demod_report_isSet;
+
     SWGDATVModReport* datv_mod_report;
     bool m_datv_mod_report_isSet;
 
@@ -327,8 +396,17 @@ private:
     SWGDSDDemodReport* dsd_demod_report;
     bool m_dsd_demod_report_isSet;
 
+    SWGDroneIDDemodReport* drone_id_demod_report;
+    bool m_drone_id_demod_report_isSet;
+
+    SWGDSEModReport* dse_mod_report;
+    bool m_dse_mod_report_isSet;
+
     SWGEndOfTrainDemodReport* end_of_train_demod_report;
     bool m_end_of_train_demod_report_isSet;
+
+    SWGIEEE_802_15_4_DemodReport* ieee_802_15_4_demod_report;
+    bool m_ieee_802_15_4_demod_report_isSet;
 
     SWGIEEE_802_15_4_ModReport* ieee_802_15_4_mod_report;
     bool m_ieee_802_15_4_mod_report_isSet;
@@ -426,6 +504,9 @@ private:
     SWGPSK31ModReport* psk31_mod_report;
     bool m_psk31_mod_report_isSet;
 
+    SWGPSK31DemodReport* psk31_demod_report;
+    bool m_psk31_demod_report_isSet;
+
     SWGSigMFFileSinkReport* sig_mf_file_sink_report;
     bool m_sig_mf_file_sink_report_isSet;
 
@@ -449,6 +530,9 @@ private:
 
     SWGWFMModReport* wfm_mod_report;
     bool m_wfm_mod_report_isSet;
+
+    SWGSELCALDemodReport* selcal_demod_report;
+    bool m_selcal_demod_report_isSet;
 
 };
 

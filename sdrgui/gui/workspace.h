@@ -28,11 +28,14 @@
 #include "export.h"
 #include "featureadddialog.h"
 #include "device/deviceapi.h"
+#include "connectionoverlay.h"
 
 class QHBoxLayout;
 class QLabel;
 class QToolButton;
 class QPushButton;
+class QMenu;
+class QAction;
 class QMdiArea;
 class QMdiSubWindow;
 class QFrame;
@@ -68,13 +71,26 @@ public:
     void orderByIndex(QList<MainSpectrumGUI *> &list);
     void adjustSubWindowsAfterRestore();
     void updateStartStopButton(bool checked);
+    void updateMCPServerButton(bool available, bool running, int port);
     QToolButton *getMenuButton() const { return m_menuButton; }
+    void setConnectionOverlayVisible(bool visible);
+    void setConnections(const QList<ConnectionOverlay::Connection>& connections);
 
 private:
+    enum StartStopMode
+    {
+        StartStopCurrentWorkspaceDevices,
+        StartStopCurrentWorkspaceDevicesAndFeatures,
+        StartStopAllWorkspacesDevices,
+        StartStopAllWorkspacesDevicesAndFeatures
+    };
+
     int m_index;
     QToolButton *m_menuButton;
     QPushButton *m_configurationPresetsButton;
+    QMenu *m_startStopMenu;
     ButtonSwitch *m_startStopButton;
+    StartStopMode m_startStopMode;
     QFrame *m_vline1;
     QPushButton *m_addRxDeviceButton;
     QPushButton *m_addTxDeviceButton;
@@ -82,12 +98,15 @@ private:
     QFrame *m_vline2;
     QPushButton *m_addFeatureButton;
     QPushButton *m_featurePresetsButton;
+    QPushButton *m_mcpServerButton;
     QFrame *m_vline3;
     QPushButton *m_cascadeSubWindows;
     QPushButton *m_tileSubWindows;
     QPushButton *m_stackVerticalSubWindows;
     QPushButton *m_stackSubWindows;
     ButtonSwitch *m_tabSubWindows;
+    ButtonSwitch *m_connectionOverlayButton;
+    ConnectionOverlay *m_connectionOverlay;
     QWidget *m_titleBar;
     QHBoxLayout *m_titleBarLayout;
     QLabel *m_titleLabel;
@@ -101,6 +120,7 @@ private:
     int m_autoStackChannelMinWidth; // Width of channel requested by stackSubWindows()
 
     void unmaximizeSubWindows();
+    void updateStartStopButtonState();
 
 protected:
     void resizeEvent(QResizeEvent *event) override;
@@ -113,29 +133,33 @@ private slots:
     void addFeatureDialog();
     void featurePresetsDialog();
     void configurationPresetsDialog();
-    void cascadeSubWindows();
-    void tileSubWindows();
-    void stackVerticalSubWindows();
-    void stackSubWindows();
     void autoStackSubWindows(const QPoint&);
     void tabSubWindows();
     void startStopClicked(bool checked = false);
+    void startStopModeChanged(QAction *action);
     void addFeatureEmitted(int featureIndex);
     void toggleFloating();
     void deviceStateChanged(int, DeviceAPI *deviceAPI);
     void subWindowActivated(QMdiSubWindow *window);
 public slots:
     void layoutSubWindows();
+    // Same as the corresponding title bar buttons, so the Window menu can invoke them
+    void cascadeSubWindows();
+    void tileSubWindows();
+    void stackVerticalSubWindows();
+    void stackSubWindows();
 
 signals:
+    void focused(Workspace *workspace); // The user is working in this workspace
+    void connectionOverlayToggled(bool visible);
     void addRxDevice(Workspace *inWorkspace, int deviceIndex);
     void addTxDevice(Workspace *inWorkspace, int deviceIndex);
     void addMIMODevice(Workspace *inWorkspace, int deviceIndex);
     void addFeature(Workspace*, int);
     void featurePresetsDialogRequested(QPoint, Workspace*);
+    void showMCPServer();
     void configurationPresetsDialogRequested();
-    void startAllDevices(Workspace *inWorkspace);
-    void stopAllDevices(Workspace *inWorkspace);
+    void startStopRequested(Workspace *inWorkspace, bool start, bool includeFeatures, bool allWorkspaces);
 };
 
 

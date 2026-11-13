@@ -7,6 +7,7 @@ set(CMAKE_AUTOUIC OFF)
 set(sdrgui_SOURCES
     mainwindow.cpp
     gui/aboutdialog.cpp
+    gui/acarsmessageview.cpp
     gui/acronymview.cpp
     gui/addpresetdialog.cpp
     gui/audiodialog.cpp
@@ -36,8 +37,12 @@ set(sdrgui_SOURCES
     gui/devicestreamselectiondialog.cpp
     gui/deviceuserargsdialog.cpp
     gui/dialogpositioner.cpp
+    gui/journalinebrowser.cpp
+    gui/messagedialog.cpp
     gui/dialpopup.cpp
     gui/dmsspinbox.cpp
+    gui/fastheaderview.cpp
+    gui/fastitemdelegate.cpp
     gui/editcommanddialog.cpp
     gui/externalclockbutton.cpp
     gui/externalclockdialog.cpp
@@ -59,6 +64,12 @@ set(sdrgui_SOURCES
     gui/glshaderspectrogram.cpp
     gui/glshadertextured.cpp
     gui/glshadertvarray.cpp
+    gui/glvideorenderer.cpp
+    gui/glvideowidget.cpp
+    gui/glvideointeropd3d11.cpp
+    gui/glvideointeropcuda.cpp
+    gui/glvideointeropdmabuf.cpp
+    gui/glvideointeropiosurface.cpp
     gui/glspectrum.cpp
     gui/glspectrumgui.cpp
     gui/glspectrumview.cpp
@@ -80,6 +91,7 @@ set(sdrgui_SOURCES
     gui/pluginpresetsdialog.cpp
     gui/presetitem.cpp
     gui/profiledialog.cpp
+    gui/programmeguide.cpp
     gui/rollupcontents.cpp
     gui/samplingdevicedialog.cpp
     gui/scaleengine.cpp
@@ -98,19 +110,29 @@ set(sdrgui_SOURCES
     gui/timedelegate.cpp
     gui/transverterbutton.cpp
     gui/transverterdialog.cpp
+    gui/udpsettingsdialog.cpp
     gui/tvscreen.cpp
     gui/tvscreenanalog.cpp
     gui/valuedial.cpp
     gui/valuedialz.cpp
+    gui/websitebrowser.cpp
     gui/welcomedialog.cpp
     gui/workspace.cpp
+    gui/connectionoverlay.cpp
     gui/workspaceselectiondialog.cpp
+    gui/workspacewindow.cpp
     gui/wsspectrumsettingsdialog.cpp
     gui/wrappingdatetimeedit.cpp
     gui/wrappingdial.cpp
     gui/wrappingspinbox.cpp
 
     dsp/scopevisxy.cpp
+
+    dtv/dtvappsdialog.cpp
+    dtv/dtvepgdialog.cpp
+    dtv/dtvepggrid.cpp
+    dtv/dtvguideoverlay.cpp
+    dtv/dtvscope.cpp
 
     device/devicegui.cpp
     device/deviceuiset.cpp
@@ -138,8 +160,11 @@ set(sdrgui_SOURCES
 set(sdrgui_HEADERS
     mainwindow.h
     gui/aboutdialog.h
+    gui/fastheaderview.h
+    gui/fastitemdelegate.h
     gui/accessiblevaluedial.h
     gui/accessiblevaluedialz.h
+    gui/acarsmessageview.h
     gui/acronymview.h
     gui/addpresetdialog.h
     gui/audiodialog.h
@@ -168,6 +193,8 @@ set(sdrgui_HEADERS
     gui/devicestreamselectiondialog.h
     gui/deviceuserargsdialog.h
     gui/dialogpositioner.h
+    gui/journalinebrowser.h
+    gui/messagedialog.h
     gui/dialpopup.h
     gui/dmsspinbox.h
     gui/doublevalidator.h
@@ -191,6 +218,10 @@ set(sdrgui_HEADERS
     gui/glshadersimple.h
     gui/glshaderspectrogram.h
     gui/glshadertvarray.h
+    gui/glvideoframe.h
+    gui/glvideointerop.h
+    gui/glvideorenderer.h
+    gui/glvideowidget.h
     gui/glshadertextured.h
     gui/glspectrum.h
     gui/glspectrumgui.h
@@ -215,6 +246,7 @@ set(sdrgui_HEADERS
     gui/presetitem.h
     gui/presets/dialog.h
     gui/profiledialog.h
+    gui/programmeguide.h
     gui/qtcompatibility.h
     gui/rollupcontents.h
     gui/samplingdevicedialog.h
@@ -234,19 +266,29 @@ set(sdrgui_HEADERS
     gui/timedelegate.h
     gui/transverterbutton.h
     gui/transverterdialog.h
+    gui/udpsettingsdialog.h
     gui/tvscreen.h
     gui/tvscreenanalog.h
     gui/valuedial.h
     gui/valuedialz.h
+    gui/websitebrowser.h
     gui/welcomedialog.h
     gui/workspace.h
     gui/workspaceselectiondialog.h
+    gui/workspacewindow.h
+    gui/connectionoverlay.h
     gui/wsspectrumsettingsdialog.h
     gui/wrappingdatetimeedit.h
     gui/wrappingdial.h
     gui/wrappingspinbox.h
 
     dsp/scopevisxy.h
+
+    dtv/dtvappsdialog.h
+    dtv/dtvepgdialog.h
+    dtv/dtvepggrid.h
+    dtv/dtvguideoverlay.h
+    dtv/dtvscope.h
 
     device/devicegui.h
     device/deviceuiset.h
@@ -308,6 +350,7 @@ set(sdrgui_FORMS
     gui/spectrumdisplaysettingsdialog.ui
     gui/myposdialog.ui
     gui/transverterdialog.ui
+    gui/udpsettingsdialog.ui
     gui/loggingdialog.ui
     gui/welcomedialog.ui
     gui/workspaceselectiondialog.ui
@@ -320,6 +363,40 @@ set(sdrgui_FORMS
 )
 
 qt_wrap_ui(sdrgui_FORMS_HEADERS ${sdrgui_FORMS})
+
+# Digital TV's video player (DVB and ATSC demodulators): FFmpeg demultiplexes and decodes the transport stream
+if(NOT FFMPEG_FOUND)
+    find_package(FFmpeg COMPONENTS AVCODEC AVFORMAT AVUTIL SWSCALE)
+endif()
+if(FFMPEG_FOUND)
+    set(sdrgui_SOURCES ${sdrgui_SOURCES} dtv/dtvvideoplayer.cpp dtv/dtvstreamremuxer.cpp dtv/dtvstreamplayback.cpp)
+    set(sdrgui_HEADERS ${sdrgui_HEADERS} dtv/dtvvideoplayer.h dtv/dtvstreamremuxer.h dtv/dtvstreamplayback.h)
+    set(sdrgui_DTV_INCLUDE_DIRS
+        ${AVCODEC_INCLUDE_DIRS}
+        ${AVFORMAT_INCLUDE_DIRS}
+        ${AVUTIL_INCLUDE_DIRS}
+        ${SWSCALE_INCLUDE_DIRS}
+        ${SWRESAMPLE_INCLUDE_DIRS}
+    )
+    set(sdrgui_DTV_LIBRARIES ${AVCODEC_LIBRARIES} ${AVFORMAT_LIBRARIES} ${AVUTIL_LIBRARIES} ${SWSCALE_LIBRARIES} ${SWRESAMPLE_LIBRARIES})
+
+    # Deinterlacing uses libavfilter, if available
+    if(NOT AVFILTER_LIBRARIES)
+        find_library(DTV_AVFILTER_LIBRARY NAMES avfilter)
+        find_path(DTV_AVFILTER_INCLUDE_DIR libavfilter/avfilter.h HINTS ${AVCODEC_INCLUDE_DIRS})
+        if(DTV_AVFILTER_LIBRARY AND DTV_AVFILTER_INCLUDE_DIR)
+            set(AVFILTER_LIBRARIES ${DTV_AVFILTER_LIBRARY})
+            set(AVFILTER_INCLUDE_DIRS ${DTV_AVFILTER_INCLUDE_DIR})
+        endif()
+    endif()
+    if(AVFILTER_LIBRARIES)
+        set(sdrgui_DTV_INCLUDE_DIRS ${sdrgui_DTV_INCLUDE_DIRS} ${AVFILTER_INCLUDE_DIRS})
+        set(sdrgui_DTV_LIBRARIES ${sdrgui_DTV_LIBRARIES} ${AVFILTER_LIBRARIES})
+        set_source_files_properties(dtv/dtvvideoplayer.cpp PROPERTIES COMPILE_DEFINITIONS DTV_DEINTERLACE)
+    else()
+        message(STATUS "sdrgui: libavfilter not found, so no deinterlacing in the digital TV video player")
+    endif()
+endif()
 
 include_directories(
   ${CMAKE_SOURCE_DIR}/exports
@@ -338,6 +415,20 @@ add_library(sdrgui
   ${sdrgui_FORMS_HEADERS}
   )
 
+if(FFMPEG_FOUND)
+  target_include_directories(sdrgui PRIVATE ${sdrgui_DTV_INCLUDE_DIRS})
+  target_link_libraries(sdrgui ${sdrgui_DTV_LIBRARIES})
+  if(DEFINED FFMPEG_DEPENDS)
+    add_dependencies(sdrgui ${FFMPEG_DEPENDS})
+  endif()
+  if(WIN32)
+    target_link_libraries(sdrgui winmm) # The video player sets the timer resolution
+  endif()
+  if(APPLE)
+    target_link_libraries(sdrgui "-framework CoreVideo") # VideoToolbox frames' IOSurfaces
+  endif()
+endif()
+
 target_link_libraries(sdrgui
   Qt::Core
   Qt::Widgets
@@ -348,6 +439,7 @@ target_link_libraries(sdrgui
   ${sdrgui_LIMERFE_LIB}
   sdrbase
   logging
+  modemdr
   )
 if (Qt6_FOUND)
   target_link_libraries(sdrgui
@@ -360,6 +452,15 @@ endif()
 
 if(ANDROID)
   target_link_libraries(sdrgui GLESv3)
+endif()
+
+# GPU video frames shown without copying them: D3D11 on Windows, IOSurface on macOS
+if(WIN32 AND MSVC)
+  target_link_libraries(sdrgui d3d11)
+endif()
+
+if(APPLE)
+  target_link_libraries(sdrgui "-framework IOSurface" "-framework OpenGL")
 endif()
 
 install(TARGETS sdrgui DESTINATION ${INSTALL_LIB_DIR})

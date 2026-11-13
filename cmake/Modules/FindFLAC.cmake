@@ -1,6 +1,8 @@
 IF(NOT FLAC_FOUND)
-    INCLUDE(FindPkgConfig)
-    PKG_CHECK_MODULES(PC_FLAC flac)
+    find_package(PkgConfig)
+    if(PkgConfig_FOUND)
+        PKG_CHECK_MODULES(PC_FLAC flac)
+    endif()
 
     FIND_PATH(
         FLAC_INCLUDE_DIR

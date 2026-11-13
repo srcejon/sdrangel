@@ -66,14 +66,14 @@ static const char* fragmentShaderSource2 =
     "    float p3x = floor(txs3) * tlw - tlhw;\n"
     "    float p2x = p1x + tlw;\n"
     "    float p4x = p3x + tlw;\n"
-    "    float p1 = texture2D(tex1, vec2(p1x, p1y)).r;\n"
-    "    float p2 = texture2D(tex1, vec2(p2x, p1y)).r;\n"
-    "    float p3 = texture2D(tex1, vec2(p3x, p3y)).r;\n"
-    "    float p4 = texture2D(tex1, vec2(p4x, p3y)).r;\n"
-    "    float p12 = mix(p1, p2, fract(txs1));\n"
-    "    float p34 = mix(p3, p4, fract(txs3));\n"
-    "    float p = mix(p12, p34, fract(tys));\n"
-    "    gl_FragColor = vec4(p);\n"
+    "    vec3 p1 = texture2D(tex1, vec2(p1x, p1y)).rgb;\n"
+    "    vec3 p2 = texture2D(tex1, vec2(p2x, p1y)).rgb;\n"
+    "    vec3 p3 = texture2D(tex1, vec2(p3x, p3y)).rgb;\n"
+    "    vec3 p4 = texture2D(tex1, vec2(p4x, p3y)).rgb;\n"
+    "    vec3 p12 = mix(p1, p2, fract(txs1));\n"
+    "    vec3 p34 = mix(p3, p4, fract(txs3));\n"
+    "    vec3 p = mix(p12, p34, fract(tys));\n"
+    "    gl_FragColor = vec4(p, 1.0);\n"
     "}\n";
 
 static const char* fragmentShaderSource =
@@ -102,25 +102,34 @@ static const char* fragmentShaderSource =
     "    float p3x = floor(txs3) * tlw - tlhw;\n"
     "    float p2x = p1x + tlw;\n"
     "    float p4x = p3x + tlw;\n"
-    "    float p1 = texture(tex1, vec2(p1x, p1y)).r;\n"
-    "    float p2 = texture(tex1, vec2(p2x, p1y)).r;\n"
-    "    float p3 = texture(tex1, vec2(p3x, p3y)).r;\n"
-    "    float p4 = texture(tex1, vec2(p4x, p3y)).r;\n"
-    "    float p12 = mix(p1, p2, fract(txs1));\n"
-    "    float p34 = mix(p3, p4, fract(txs3));\n"
-    "    float p = mix(p12, p34, fract(tys));\n"
-    "    fragColor = vec4(p);\n"
+    "    vec3 p1 = texture(tex1, vec2(p1x, p1y)).rgb;\n"
+    "    vec3 p2 = texture(tex1, vec2(p2x, p1y)).rgb;\n"
+    "    vec3 p3 = texture(tex1, vec2(p3x, p3y)).rgb;\n"
+    "    vec3 p4 = texture(tex1, vec2(p4x, p3y)).rgb;\n"
+    "    vec3 p12 = mix(p1, p2, fract(txs1));\n"
+    "    vec3 p34 = mix(p3, p4, fract(txs3));\n"
+    "    vec3 p = mix(p12, p34, fract(tys));\n"
+    "    fragColor = vec4(p, 1.0);\n"
     "}\n";
 
 TVScreenAnalog::TVScreenAnalog(QWidget *parent)	:
-	QOpenGLWidget(parent),
-	m_shader(nullptr),
+    QOpenGLWidget(parent),
+    m_textureLoc1(0),
+    m_textureLoc2(0),
+    m_imageWidthLoc(0),
+    m_imageHeightLoc(0),
+    m_texelWidthLoc(0),
+    m_texelHeightLoc(0),
+    m_vertexAttribIndex(0),
+    m_texCoordAttribIndex(0),
+    m_shader(nullptr),
     m_vao(nullptr),
     m_verticesBuf(nullptr),
     m_textureCoordsBuf(nullptr),
-	m_imageTexture(nullptr),
-	m_lineShiftsTexture(nullptr)
+    m_imageTexture(nullptr),
+    m_lineShiftsTexture(nullptr)
 {
+	setAttribute(Qt::WA_OpaquePaintEvent);
 	m_isDataChanged = false;
 	m_frontBuffer = new TVScreenAnalogBuffer(5, 1);
 	m_backBuffer = new TVScreenAnalogBuffer(5, 1);
@@ -283,6 +292,8 @@ void TVScreenAnalog::initializeGL()
 
 void TVScreenAnalog::initializeTextures(TVScreenAnalogBuffer *buffer)
 {
+	delete m_imageTexture;
+	delete m_lineShiftsTexture;
 	m_imageTexture = new QOpenGLTexture(QOpenGLTexture::Target2D);
 	m_lineShiftsTexture = new QOpenGLTexture(QOpenGLTexture::Target2D);
 	m_imageTexture->setSize(buffer->getWidth(), buffer->getHeight());
@@ -308,13 +319,13 @@ TVScreenAnalogBuffer *TVScreenAnalog::swapBuffers()
 {
 	QMutexLocker lock(&m_buffersMutex);
 	std::swap(m_frontBuffer, m_backBuffer);
-	m_isDataChanged = true;
+	m_isDataChanged.store(true, std::memory_order_release);
 	return m_backBuffer;
 }
 
 void TVScreenAnalog::tick()
 {
-	if (m_isDataChanged)
+	if (m_isDataChanged.load(std::memory_order_acquire))
 	{
 		update();
 	}
@@ -322,7 +333,7 @@ void TVScreenAnalog::tick()
 
 void TVScreenAnalog::paintGL()
 {
-	m_isDataChanged = false;
+	m_isDataChanged.store(false, std::memory_order_release);
 
 	if (!m_shader)
 	{
@@ -331,6 +342,8 @@ void TVScreenAnalog::paintGL()
 		return;
 	}
 
+	// Hold the buffers lock only while the front buffer is being read
+	QMutexLocker lock(&m_buffersMutex);
 	TVScreenAnalogBuffer *buffer = m_frontBuffer;
 
 	if (!m_imageTexture ||
@@ -362,6 +375,8 @@ void TVScreenAnalog::paintGL()
 	m_lineShiftsTexture->bind();
 	glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0,
 		1, buffer->getHeight(), GL_RGBA, GL_UNSIGNED_BYTE, buffer->getLineShiftData());
+
+	lock.unlock();
 
 	float rectHalfWidth = 1.0f + 4.0f / (imageWidth - 4.0f);
 	GLfloat vertices[] =
@@ -416,4 +431,10 @@ void TVScreenAnalog::paintGL()
     }
 
 	m_shader->release();
+
+	// Leave texture unit 0 active with nothing bound
+	glActiveTexture(GL_TEXTURE1);
+	m_lineShiftsTexture->release();
+	glActiveTexture(GL_TEXTURE0);
+	m_imageTexture->release();
 }

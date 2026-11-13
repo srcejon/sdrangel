@@ -1,4 +1,8 @@
+message(STATUS "cmake version: ${CMAKE_VERSION}")
 cmake_minimum_required(VERSION 3.17.0)
+if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.31")
+    cmake_policy(SET CMP0177 NEW)
+endif()
 
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
 
@@ -18,9 +22,9 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # configure version
-set(sdrangel_VERSION_MAJOR "7")
-set(sdrangel_VERSION_MINOR "27")
-set(sdrangel_VERSION_PATCH "1")
+set(sdrangel_VERSION_MAJOR "8")
+set(sdrangel_VERSION_MINOR "1")
+set(sdrangel_VERSION_PATCH "0")
 set(sdrangel_VERSION_SUFFIX "")
 
 # SDRAngel cmake options
@@ -31,6 +35,8 @@ option(RX_SAMPLE_24BIT "Internal 24 bit Rx DSP" ON)
 option(BUILD_SERVER "Build Server" ON)
 option(BUILD_GUI "Build GUI" ON)
 option(BUILD_BENCH "Build benchmark" ON)
+option(BUILD_MCP_BRIDGE "Build the Claude Desktop stdio bridge for the MCP server feature" ON)
+option(BUILD_MCP_BUNDLE "Package the MCP bridge as a Claude Desktop extension bundle" ON)
 option(HIDE_CONSOLE "Hide console when running GUI on Windows" ON)
 option(BUNDLE "Enable distribution bundle" OFF)
 set(ARCH_OPT "native" CACHE STRING "Specify instruction set to use. Will be passed directly as `-march` or `/arch:` argument on supported compilers. \
@@ -114,6 +120,7 @@ option(ENABLE_BLADERF "Enable bladeRF support" ON)
 option(ENABLE_FUNCUBE "Enable FUNcube support" ON)
 option(ENABLE_HACKRF "Enable HackRF support" ON)
 option(ENABLE_IIO "Enable liniio support like PlutoSDR" ON)
+option(ENABLE_LIBIIO_V1 "Build PlutoSDR support against the libiio 1.x API (default: 0.x)" OFF)
 option(ENABLE_LIMESUITE "Enable limesuite support" ON)
 option(ENABLE_METIS "Enable Metis support" ON)
 option(ENABLE_MIRISDR "Enable LibMiri for old SDRPlay" ON)
@@ -131,13 +138,16 @@ option(ENABLE_CHANNELRX "Enable channelrx plugins" ON)
 option(ENABLE_CHANNELRX_DEMODADSB "Enable channelrx demodadsb plugin" ON)
 option(ENABLE_CHANNELRX_DEMODAM "Enable channelrx demodam plugin" ON)
 option(ENABLE_CHANNELRX_DEMODDATV "Enable channelrx demoddatv plugin" ON)
+option(ENABLE_CHANNELRX_DEMODDVB "Enable channelrx demoddvb plugin" ON)
 option(ENABLE_CHANNELRX_RADIOCLOCK "Enable channelrx radioclock plugin" ON)
 option(ENABLE_CHANNELRX_RADIOASTRONOMY "Enable channelrx radioastronomy plugin" ON)
 option(ENABLE_CHANNELRX_DEMODRADIOSONDE "Enable channelrx demodradiosonde plugin" ON)
+option(ENABLE_CHANNELRX_DEMODDRONEID "Enable channelrx demoddroneid plugin" ON)
 option(ENABLE_CHANNELRX_FREQTRACKER "Enable channelrx freqtracker plugin" ON)
 option(ENABLE_CHANNELRX_DEMODATV "Enable channelrx demodatv plugin" ON)
 option(ENABLE_CHANNELRX_DEMODPAGER "Enable channelrx demodpager plugin" ON)
 option(ENABLE_CHANNELRX_DEMODDAB "Enable channelrx demoddab plugin" ON)
+option(ENABLE_CHANNELRX_DEMODDRM "Enable channelrx demoddrm plugin" ON)
 option(ENABLE_CHANNELRX_UDPSINK "Enable channelrx udpsink plugin" ON)
 option(ENABLE_CHANNELRX_DEMODAIS "Enable channelrx demodais plugin" ON)
 option(ENABLE_CHANNELRX_DEMODNFM "Enable channelrx demodnfm plugin" ON)
@@ -159,11 +169,15 @@ option(ENABLE_CHANNELRX_DEMODVOR "Enable channelrx demodvor plugin" ON)
 option(ENABLE_CHANNELRX_LOCALSINK "Enable channelrx localsink plugin" ON)
 option(ENABLE_CHANNELRX_DEMODPACKET "Enable channelrx demodpacket plugin" ON)
 option(ENABLE_CHANNELRX_DEMODAPT "Enable channelrx demodapt plugin" ON)
+option(ENABLE_CHANNELRX_DEMODWEFAX "Enable channelrx demodwefax plugin" ON)
 option(ENABLE_CHANNELRX_DEMODDSD "Enable channelrx demoddsd plugin" ON)
 option(ENABLE_CHANNELRX_DEMODFT8 "Enable channelrx demodft8 plugin" ON)
 option(ENABLE_CHANNELRX_DEMODNAVTEX "Enable channelrx demodnavtex plugin" ON)
 option(ENABLE_CHANNELRX_DEMODRTTY "Enable channelrx demodrtty plugin" ON)
+option(ENABLE_CHANNELRX_DEMODPSK31 "Enable channelrx demodpsk31 plugin" ON)
 option(ENABLE_CHANNELRX_DEMODILS "Enable channelrx demodils plugin" ON)
+option(ENABLE_CHANNELRX_DEMODSELCAL "Enable channelrx demodselcal plugin" ON)
+option(ENABLE_CHANNELRX_DEMOD802.15.4 "Enable channelrx demod802.15.4 plugin" ON)
 option(ENABLE_CHANNELRX_DEMODDSC "Enable channelrx demoddsc plugin" ON)
 option(ENABLE_CHANNELRX_HEATMAP "Enable channelrx heatmap plugin" ON)
 option(ENABLE_CHANNELRX_FREQSCANNER "Enable channelrx freqscanner plugin" ON)
@@ -172,6 +186,7 @@ option(ENABLE_CHANNELRX_CHANNELPOWER "Enable channelrx channel power plugin" ON)
 option(ENABLE_CHANNELRX_METEOR "Enable channelrx meteor detector plugin" ON)
 option(ENABLE_CHANNELRX_WDSPRX "Enable channelrx WDSP receiver plugin" ON)
 option(ENABLE_CHANNELRX_DEMODINMARSAT "Enable channelrx demodinmarsat plugin" ON)
+option(ENABLE_CHANNELRX_DEMODACARS "Enable channelrx demodacars plugin" ON)
 
 # Channel Tx enablers
 option(ENABLE_CHANNELTX "Enable channeltx plugins" ON)
@@ -182,6 +197,7 @@ option(ENABLE_CHANNELTX_LOCALSOURCE "Enable channeltx localsource plugin" ON)
 option(ENABLE_CHANNELTX_MODDATV "Enable channeltx moddatv plugin" ON)
 option(ENABLE_CHANNELTX_MODAM "Enable channeltx modam plugin" ON)
 option(ENABLE_CHANNELTX_MODFREEDV "Enable channeltx modfreedv plugin" ON)
+option(ENABLE_CHANNELTX_MODDSE "Enable channeltx moddse plugin" ON)
 option(ENABLE_CHANNELTX_MODPACKET "Enable channeltx modpacket plugin" ON)
 option(ENABLE_CHANNELTX_MODSSB "Enable channeltx modssb plugin" ON)
 option(ENABLE_CHANNELTX_UDPSOURCE "Enable channeltx udpsource plugin" ON)
@@ -189,6 +205,7 @@ option(ENABLE_CHANNELTX_MODCHIRPCHAT "Enable channeltx modchirpchat plugin" ON)
 option(ENABLE_CHANNELTX_MODMESHTASTIC "Enable channeltx modmeshtastic plugin" ON)
 option(ENABLE_CHANNELTX_MODMESHCORE "Enable channeltx modmeshcore plugin" ON)
 option(ENABLE_CHANNELTX_MODWFM "Enable channeltx modwfm plugin" ON)
+option(ENABLE_CHANNELTX_MODBFM "Enable channeltx modbfm plugin" ON)
 option(ENABLE_CHANNELTX_MODATV "Enable channeltx modatv plugin" ON)
 option(ENABLE_CHANNELTX_MOD802.15.4 "Enable channeltx mod802.15.4 plugin" ON)
 option(ENABLE_CHANNELTX_REMOTESOURCE "Enable channeltx remotesource plugin" ON)
@@ -215,6 +232,7 @@ option(ENABLE_FEATURE_SATELLITETRACKER "Enable feature satellitetracker plugin" 
 option(ENABLE_FEATURE_APRS "Enable feature aprs plugin" ON)
 option(ENABLE_FEATURE_DEMODANALYZER "Enable feature demodanalyzer plugin" ON)
 option(ENABLE_FEATURE_AMBE "Enable feature ambe plugin" ON)
+option(ENABLE_FEATURE_AIRCRAFT "Enable feature aircraft plugin" ON)
 option(ENABLE_FEATURE_AIS "Enable feature ais plugin" ON)
 option(ENABLE_FEATURE_AFC "Enable feature afc plugin" ON)
 option(ENABLE_FEATURE_STARTRACKER "Enable feature startracker plugin" ON)
@@ -229,6 +247,7 @@ option(ENABLE_FEATURE_DENOISER "Enable feature denoiser plugin" ON)
 option(ENABLE_FEATURE_FREQDISPLAY "Enable feature freqdisplay plugin" ON)
 option(ENABLE_FEATURE_CAMERA "Enable feature camera plugin" ON)
 option(ENABLE_FEATURE_SCHEDULER "Enable feature scheduler plugin" ON)
+option(ENABLE_FEATURE_MCPSERVER "Enable feature mcpserver plugin" ON)
 
 # on windows always build external libraries
 if(WIN32)
@@ -262,8 +281,10 @@ if(GIT_FOUND AND EXISTS "${CMAKE_SOURCE_DIR}/.git/")
     endif()
 endif()
 
-find_program(CCACHE "ccache")
-if(CCACHE AND NOT EMSCRIPTEN)
+option(ENABLE_CCACHE "Enable ccache for faster builds" ON)
+if (ENABLE_CCACHE)
+  find_program(CCACHE "ccache")
+  if(CCACHE AND NOT EMSCRIPTEN)
     message(STATUS "Using ccache ${CCACHE}")
     set(CMAKE_C_COMPILER_LAUNCHER ${CCACHE})
     set(CMAKE_CXX_COMPILER_LAUNCHER ${CCACHE})
@@ -271,6 +292,11 @@ if(CCACHE AND NOT EMSCRIPTEN)
         set(CMAKE_OBJCXX_COMPILER_LAUNCHER ${CCACHE})
     endif()
     set(ENV{CCACHE_SLOPPINESS} pch_defines,time_macros)
+  else()
+    message(STATUS "Skipping ccache")
+  endif()
+else()
+  message(STATUS "Disabled ccache")
 endif()
 
 set(sdrangel_VERSION "${sdrangel_VERSION_MAJOR}.${sdrangel_VERSION_MINOR}.${sdrangel_VERSION_PATCH}${sdrangel_VERSION_SUFFIX}" CACHE INTERNAL "")
@@ -420,6 +446,10 @@ elseif (WIN32)
   set(FFTW3F_WISDOM "${EXTERNAL_LIBRARY_FOLDER}/fftw-3/fftwf-wisdom.exe" CACHE INTERNAL "")
   set(FFTW3F_DLL_DIR "${EXTERNAL_LIBRARY_FOLDER}/fftw-3" CACHE INTERNAL "")
 
+  set(OPUS_FOUND ON CACHE INTERNAL "")
+  set(OPUS_INCLUDE_DIRS "${CMAKE_SOURCE_DIR}/external/windows/libopus/include" CACHE INTERNAL "")
+  set(OPUS_LIBRARIES "${CMAKE_SOURCE_DIR}/external/windows/libopus/lib/opus.lib" CACHE INTERNAL "")
+
   set(LIBUSB_FOUND ON CACHE INTERNAL "")
   set(LIBUSB_INCLUDE_DIR "${EXTERNAL_LIBRARY_FOLDER}/libusb/include" CACHE INTERNAL "")
   set(LIBUSB_LIBRARIES "${EXTERNAL_LIBRARY_FOLDER}/libusb/MS64/dll/libusb-1.0.lib" CACHE INTERNAL "")
@@ -453,11 +483,6 @@ elseif (WIN32)
   set(UHD_LIBRARIES "${EXTERNAL_LIBRARY_FOLDER}/uhd/lib/uhd.lib" CACHE INTERNAL "")
   set(UHD_DLL_DIR "${EXTERNAL_LIBRARY_FOLDER}/uhd/bin" CACHE INTERNAL "")
 
-  set(DAB_FOUND ON CACHE INTERNAL "")
-  set(DAB_INCLUDE_DIR "${EXTERNAL_LIBRARY_FOLDER}/dab" CACHE INTERNAL "")
-  set(DAB_LIBRARIES "${EXTERNAL_LIBRARY_FOLDER}/dab/dab_lib.lib" CACHE INTERNAL "")
-  set(DAB_DLL_DIR "${EXTERNAL_LIBRARY_FOLDER}/dab" CACHE INTERNAL "")
-
   set(OPENSSL_FOUND ON CACHE INTERNAL "")
   set(OPENSSL_DLL_DIR "${EXTERNAL_LIBRARY_FOLDER}/openssl" CACHE INTERNAL "")
 
@@ -474,6 +499,8 @@ elseif (WIN32)
   set(SWRESAMPLE_LIBRARIES "${EXTERNAL_LIBRARY_FOLDER}/ffmpeg/lib/swresample.lib" CACHE INTERNAL "")
   set(SWSCALE_INCLUDE_DIRS "${EXTERNAL_LIBRARY_FOLDER}/ffmpeg/include" CACHE INTERNAL "")
   set(SWSCALE_LIBRARIES "${EXTERNAL_LIBRARY_FOLDER}/ffmpeg/lib/swscale.lib" CACHE INTERNAL "")
+  set(AVFILTER_INCLUDE_DIRS "${EXTERNAL_LIBRARY_FOLDER}/ffmpeg/include" CACHE INTERNAL "")
+  set(AVFILTER_LIBRARIES "${EXTERNAL_LIBRARY_FOLDER}/ffmpeg/lib/avfilter.lib" CACHE INTERNAL "")
 
   # LimeSuite FX3 support
   set(FX3SDK_DIR "${EXTERNAL_LIBRARY_FOLDER}/FX3SDK" CACHE INTERNAL "")
@@ -485,7 +512,8 @@ elseif (WIN32)
 
   set(FAAD_FOUND ON CACHE INTERNAL "")
   set(FAAD_INCLUDE_DIR "${EXTERNAL_LIBRARY_FOLDER}/faad2/include" CACHE INTERNAL "")
-  set(FAAD_LIBRARY "${EXTERNAL_LIBRARY_FOLDER}/faad2/lib/libfaad.lib" CACHE INTERNAL "")
+  set(FAAD_LIBRARY "${EXTERNAL_LIBRARY_FOLDER}/faad2/lib/faad.lib" CACHE INTERNAL "")
+  set(FAAD_DRM_LIBRARY "${EXTERNAL_LIBRARY_FOLDER}/faad2/lib/faad_drm.lib" CACHE INTERNAL "")
 
   set(ZLIB_FOUND ON CACHE INTERNAL "")
   set(ZLIB_INCLUDE_DIRS "${EXTERNAL_LIBRARY_FOLDER}/zlib/include" CACHE INTERNAL "")
@@ -505,6 +533,7 @@ elseif (WIN32)
   set(LIBACARS_FOUND ON CACHE INTERNAL "")
   set(LIBACARS_INCLUDE_DIR "${EXTERNAL_LIBRARY_FOLDER}/libacars/include/libacars-2" CACHE INTERNAL "")
   set(LIBACARS_LIBRARIES "${EXTERNAL_LIBRARY_FOLDER}/libacars/lib/acars-2.lib" CACHE INTERNAL "")
+  set(LIBACARS_DLL_DIR "${EXTERNAL_LIBRARY_FOLDER}/libacars/bin/" CACHE INTERNAL "")
 
   set(ASICAMERA_FOUND ON CACHE INTERNAL "")
   set(ASICAMERA_INCLUDE_DIR "${EXTERNAL_LIBRARY_FOLDER}/asi/include" CACHE INTERNAL "")
@@ -562,18 +591,6 @@ elseif(ANDROID)
   set(FAAD_INCLUDE_DIR "${EXTERNAL_LIBRARY_FOLDER}/${ANDROID_ABI}/faad2/include" CACHE INTERNAL "")
   set(FAAD_LIBRARY "${EXTERNAL_LIBRARY_FOLDER}/${ANDROID_ABI}/faad2/lib/liblibfaadstatic.a" CACHE INTERNAL "")
 
-  set(DAB_FOUND ON CACHE INTERNAL "")
-  set(DAB_INCLUDE_DIR "${EXTERNAL_LIBRARY_FOLDER}/${ANDROID_ABI}/libdab/include/dab_lib" CACHE INTERNAL "")
-  set(DAB_LIBRARIES "${EXTERNAL_LIBRARY_FOLDER}/${ANDROID_ABI}/libdab/lib/libdab_lib.so" CACHE INTERNAL "")
-
-  set(LIBMBE_FOUND ON CACHE INTERNAL "")
-  set(LIBMBE_INCLUDE_DIR "${EXTERNAL_LIBRARY_FOLDER}/${ANDROID_ABI}/mbelib/include/" CACHE INTERNAL "")
-  set(LIBMBE_LIBRARIES "${EXTERNAL_LIBRARY_FOLDER}/${ANDROID_ABI}/mbelib/lib/libmbe.a" CACHE INTERNAL "")
-
-  set(LIBDSDCC_FOUND ON CACHE INTERNAL "")
-  set(LIBDSDCC_INCLUDE_DIR "${EXTERNAL_LIBRARY_FOLDER}/${ANDROID_ABI}/dsdcc/include/" CACHE INTERNAL "")
-  set(LIBDSDCC_LIBRARIES "${EXTERNAL_LIBRARY_FOLDER}/${ANDROID_ABI}/dsdcc/lib/libdsdcc.so" CACHE INTERNAL "")
-
   set(FFMPEG_FOUND ON CACHE INTERNAL "")
   set(FFMPEG_SKIP_CHECK ON CACHE INTERNAL "")
   set(FFMPEG_INCLUDE_DIRS "${EXTERNAL_LIBRARY_FOLDER}/${ANDROID_ABI}/ffmpeg/include" CACHE INTERNAL "")
@@ -624,20 +641,20 @@ elseif(ANDROID)
   set(OpenCV_FOUND ON CACHE INTERNAL "")
   set(OpenCV_INCLUDE_DIRS "${EXTERNAL_LIBRARY_FOLDER}/${ANDROID_ABI}/opencv/sdk/native/jni/include/" CACHE INTERNAL "")
   set(OpenCV_LIBS_DIR "${EXTERNAL_LIBRARY_FOLDER}/${ANDROID_ABI}/opencv/sdk/native/staticlibs/${ANDROID_ABI}")
-  set(OpenCV_LIBS    
-    "${OpenCV_LIBS_DIR}/libopencv_bgsegm.a" 
-    "${OpenCV_LIBS_DIR}/libopencv_calib3d.a" 
-    "${OpenCV_LIBS_DIR}/libopencv_core.a" 
-    "${OpenCV_LIBS_DIR}/libopencv_dnn.a" 
-    "${OpenCV_LIBS_DIR}/libopencv_features2d.a" 
-    "${OpenCV_LIBS_DIR}/libopencv_flann.a" 
-    "${OpenCV_LIBS_DIR}/libopencv_highgui.a" 
-    "${OpenCV_LIBS_DIR}/libopencv_imgcodecs.a" 
-    "${OpenCV_LIBS_DIR}/libopencv_imgproc.a" 
-    "${OpenCV_LIBS_DIR}/libopencv_photo.a" 
-    "${OpenCV_LIBS_DIR}/libopencv_video.a" 
-    "${OpenCV_LIBS_DIR}/libopencv_videoio.a" 
-    "${OpenCV_LIBS_DIR}/libopencv_ximgproc.a" 
+  set(OpenCV_LIBS
+    "${OpenCV_LIBS_DIR}/libopencv_bgsegm.a"
+    "${OpenCV_LIBS_DIR}/libopencv_calib3d.a"
+    "${OpenCV_LIBS_DIR}/libopencv_core.a"
+    "${OpenCV_LIBS_DIR}/libopencv_dnn.a"
+    "${OpenCV_LIBS_DIR}/libopencv_features2d.a"
+    "${OpenCV_LIBS_DIR}/libopencv_flann.a"
+    "${OpenCV_LIBS_DIR}/libopencv_highgui.a"
+    "${OpenCV_LIBS_DIR}/libopencv_imgcodecs.a"
+    "${OpenCV_LIBS_DIR}/libopencv_imgproc.a"
+    "${OpenCV_LIBS_DIR}/libopencv_photo.a"
+    "${OpenCV_LIBS_DIR}/libopencv_video.a"
+    "${OpenCV_LIBS_DIR}/libopencv_videoio.a"
+    "${OpenCV_LIBS_DIR}/libopencv_ximgproc.a"
     CACHE INTERNAL "")
   set(OpenCV_3RDPARTY_LIBS_DIR "${EXTERNAL_LIBRARY_FOLDER}/${ANDROID_ABI}/opencv/sdk/native/3rdparty/libs/${ANDROID_ABI}")
   set(OpenCV_3RDPARTY_LIBS
@@ -678,8 +695,6 @@ elseif(ANDROID)
       ${EXTERNAL_LIBRARY_FOLDER}/${ANDROID_ABI}/ffmpeg/lib/libswresample.so
       ${EXTERNAL_LIBRARY_FOLDER}/${ANDROID_ABI}/ffmpeg/lib/libswscale.so
       ${EXTERNAL_LIBRARY_FOLDER}/${ANDROID_ABI}/ffmpeg/lib/libc++_shared.so
-      ${EXTERNAL_LIBRARY_FOLDER}/${ANDROID_ABI}/libdab/lib/libdab_lib.so
-      ${EXTERNAL_LIBRARY_FOLDER}/${ANDROID_ABI}/dsdcc/lib/libdsdcc.so
       ${EXTERNAL_LIBRARY_FOLDER}/${ANDROID_ABI}/libusb/lib/libunrooted_android.so
       ${EXTERNAL_LIBRARY_FOLDER}/${ANDROID_ABI}/libusb/lib/libusb1.0.so
       ${EXTERNAL_LIBRARY_FOLDER}/${ANDROID_ABI}/cm256cc/lib/libcm256cc.so
@@ -711,6 +726,7 @@ elseif(ANDROID)
       ${CMAKE_BINARY_DIR}/lib/libmetisdevice.so
       ${CMAKE_BINARY_DIR}/lib/libmodemm17.so
       ${CMAKE_BINARY_DIR}/lib/libmodemmeshtastic.so
+      ${CMAKE_BINARY_DIR}/lib/libmodemdvb.so
       ${CMAKE_BINARY_DIR}/lib/libwdsp.so
       CACHE INTERNAL ""
     )
@@ -758,8 +774,6 @@ elseif(ANDROID)
         ${EXTERNAL_LIBRARY_FOLDER}/arm64-v8a/ffmpeg/lib/libswresample.so
         ${EXTERNAL_LIBRARY_FOLDER}/arm64-v8a/ffmpeg/lib/libswscale.so
         ${EXTERNAL_LIBRARY_FOLDER}/arm64-v8a/ffmpeg/lib/libc++_shared.so
-        ${EXTERNAL_LIBRARY_FOLDER}/arm64-v8a/libdab/lib/libdab_lib.so
-        ${EXTERNAL_LIBRARY_FOLDER}/arm64-v8a/dsdcc/lib/libdsdcc.so
         ${EXTERNAL_LIBRARY_FOLDER}/arm64-v8a/libusb/lib/libunrooted_android.so
         ${EXTERNAL_LIBRARY_FOLDER}/arm64-v8a/libusb/lib/libusb1.0.so
         ${EXTERNAL_LIBRARY_FOLDER}/arm64-v8a/flac/lib/libFLAC.so
@@ -771,8 +785,6 @@ elseif(ANDROID)
         ${EXTERNAL_LIBRARY_FOLDER}/armeabi-v7a/ffmpeg/lib/libswresample.so
         ${EXTERNAL_LIBRARY_FOLDER}/armeabi-v7a/ffmpeg/lib/libswscale.so
         ${EXTERNAL_LIBRARY_FOLDER}/armeabi-v7a/ffmpeg/lib/libc++_shared.so
-        ${EXTERNAL_LIBRARY_FOLDER}/armeabi-v7a/libdab/lib/libdab_lib.so
-        ${EXTERNAL_LIBRARY_FOLDER}/armeabi-v7a/dsdcc/lib/libdsdcc.so
         ${EXTERNAL_LIBRARY_FOLDER}/armeabi-v7a/libusb/lib/libunrooted_android.so
         ${EXTERNAL_LIBRARY_FOLDER}/armeabi-v7a/libusb/lib/libusb1.0.so
         ${EXTERNAL_LIBRARY_FOLDER}/armeabi-v7a/flac/lib/libFLAC.so
@@ -817,6 +829,9 @@ endif()
 # Set compiler options based on target architecture and selected extensions
 include(CompilerOptions)
 
+# Enable the Cppcheck CMake integration when available.
+include(Cppcheck)
+
 # Instruct CMake to run moc automatically when needed
 set(CMAKE_AUTOMOC ON)
 
@@ -836,6 +851,7 @@ if(ENABLE_QT6)
     find_package(Qt6
                    COMPONENTS
                      Core
+                     Network
                      Widgets
                      WebSockets
                      Multimedia
@@ -848,6 +864,7 @@ else()
     find_package(Qt5 5.15
                    REQUIRED COMPONENTS
                      Core
+                     Network
                      Widgets
                      WebSockets
                      Multimedia
@@ -959,6 +976,9 @@ endif()
 if(WIN32)
   find_package(OpenCV OPTIONAL_COMPONENTS core highgui imgproc imgcodecs videoio bgsegm dnn photo ximgproc cudaarithm cudaimgproc cudawarping cudafilters cudabgsegm)
 
+  if(OpenCV_LIBS)
+    list(REMOVE_DUPLICATES OpenCV_LIBS)
+  endif()
   set(OpenCV_INCLUDE_DIRS "${OpenCV_INCLUDE_DIRS}" CACHE INTERNAL "")
   set(OpenCV_LIBS "${OpenCV_LIBS}" CACHE INTERNAL "")
 
@@ -996,6 +1016,8 @@ elseif(ENABLE_EXTERNAL_LIBRARIES STREQUAL "AUTO")
     if(NOT ANDROID)
         find_package(LibUSB)
     endif()
+elseif(${CMAKE_SYSTEM_NAME} STREQUAL "Linux" AND ENABLE_EXTERNAL_LIBRARIES STREQUAL "ON")
+    find_package(FFTW3F)
 endif()
 
 if (NOT ENABLE_EXTERNAL_LIBRARIES OR (ENABLE_EXTERNAL_LIBRARIES STREQUAL "AUTO"))
@@ -1003,23 +1025,27 @@ if (NOT ENABLE_EXTERNAL_LIBRARIES OR (ENABLE_EXTERNAL_LIBRARIES STREQUAL "AUTO")
         find_package(OpenCV OPTIONAL_COMPONENTS core highgui imgproc imgcodecs videoio bgsegm dnn photo cudaarithm cudaimgproc cudawarping cudafilters cudabgsegm) # modatv & camera
     endif()
     find_package(LibSigMF) # SigMF recording files support
-    find_package(ZLIB) # For DAB
+    find_package(ZLIB)
     find_package(FAAD) # For DAB
     find_package(Codec2)
     find_package(CM256cc)
-    find_package(LibMbe)
     find_package(SerialDV)
-    find_package(LibDSDcc)
+    find_package(LibMBEVocoder)
+    find_package(LibVocosCodec)
+    find_package(LibDSDcc) # only the DSE modulator and DSD demodulator test harnesses use it, as a reference decoder
     find_package(Sgp4)
     find_package(CSPICE)
     find_package(AptDec)
-    find_package(LibDAB)
     find_package(HIDAPI)
     find_package(FFmpeg COMPONENTS AVCODEC AVFORMAT AVUTIL SWSCALE)
     find_package(GGMorse)
     find_package(LibInmarsatC)
+    find_package(LibAcars)
     find_package(RNnoise)
     find_package(FLAC)
+    if (ENABLE_CHANNELRX AND ENABLE_CHANNELRX_DEMODDRM)
+        find_package(FDKAAC)
+    endif()
 
     # Devices
     if(ENABLE_AIRSPY)
@@ -1093,6 +1119,14 @@ add_subdirectory(devices)
 add_subdirectory(modemm17)
 add_subdirectory(modemmeshtastic)
 add_subdirectory(modemmeshcore)
+add_subdirectory(modemdvb)
+add_subdirectory(modemdr)
+if (ENABLE_CHANNELRX AND ENABLE_CHANNELRX_DEMODDRM)
+    add_subdirectory(modemdrm)
+endif()
+if (ENABLE_CHANNELRX AND ENABLE_CHANNELRX_DEMODDAB)
+    add_subdirectory(modemdab)
+endif()
 
 if (FFTW3F_FOUND)
     add_subdirectory(ft8)
@@ -1108,6 +1142,12 @@ endif()
 
 if (BUILD_BENCH)
 add_subdirectory(sdrbench)
+endif()
+
+# Standalone, and not built by default: only a release that ships a Claude Desktop
+# extension bundle needs it
+if (BUILD_MCP_BRIDGE OR BUILD_MCP_BUNDLE)
+    add_subdirectory(plugins/feature/mcpserver/bridge)
 endif()
 
 if (BUILD_GUI)
@@ -1280,6 +1320,9 @@ if (BUILD_GUI)
   if(WIN32)
     set_target_properties(${CMAKE_PROJECT_NAME} PROPERTIES
                             WIN32_EXECUTABLE ${HIDE_CONSOLE})
+    if (ENABLE_CHANNELTX_MODDSE OR ENABLE_CHANNELRX_DEMODDSD)
+      add_dependencies(${CMAKE_PROJECT_NAME} sdrangel-tunnel-helper)
+    endif()
   endif()
 endif()
 
@@ -1299,6 +1342,10 @@ if (BUILD_SERVER)
         sdrsrv
         logging
     )
+
+    if(WIN32 AND (ENABLE_CHANNELTX_MODDSE OR ENABLE_CHANNELRX_DEMODDSD))
+      add_dependencies(sdrangelsrv sdrangel-tunnel-helper)
+    endif()
 
     if(HAVE_LIBUNWIND)
       target_link_libraries(sdrangelsrv ${LIBUNWIND_LIBRARIES})
@@ -1324,13 +1371,13 @@ endif()
 if (LINUX AND ENABLE_EXTERNAL_LIBRARIES)
     install(DIRECTORY ${EXTERNAL_BUILD_LIBRARIES}/lib${LIB_SUFFIX}/ DESTINATION ${INSTALL_LIB_DIR})
 endif()
-if(WIN32)
+if(WIN32 AND BUILD_GUI)
   include(DeployQt)
   windeployqt(${CMAKE_PROJECT_NAME} ${SDRANGEL_BINARY_BIN_DIR} ${PROJECT_SOURCE_DIR}/sdrgui/resources)
 endif()
 
 # Install debug symbols
-if (WIN32)
+if (WIN32 AND BUILD_GUI)
   install(FILES $<TARGET_PROPERTY:${CMAKE_PROJECT_NAME},RUNTIME_OUTPUT_DIRECTORY>/${CMAKE_PROJECT_NAME}stripped.pdb CONFIGURATIONS Release DESTINATION ${INSTALL_LIB_DIR} RENAME ${CMAKE_PROJECT_NAME}.pdb)
   install(FILES $<TARGET_PDB_FILE:${CMAKE_PROJECT_NAME}> CONFIGURATIONS Debug RelWithDebInfo DESTINATION ${INSTALL_BIN_DIR} )
 endif()

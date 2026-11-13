@@ -42,6 +42,7 @@
 
 #include "adsbdemod.h"
 #include "adsbdemodworker.h"
+#include "adsbdemodtracker.h"
 
 MESSAGE_CLASS_DEFINITION(ADSBDemod::MsgConfigureADSBDemod, Message)
 MESSAGE_CLASS_DEFINITION(ADSBDemod::MsgAircraftReport, Message)
@@ -57,17 +58,32 @@ ADSBDemod::ADSBDemod(DeviceAPI *devieAPI) :
         m_centerFrequency(0),
         m_targetAzElValid(false),
         m_targetAzimuth(0.0f),
-        m_targetElevation(0.0f)
+        m_targetElevation(0.0f),
+        m_targetRange(0.0f)
 {
     qDebug("ADSBDemod::ADSBDemod");
     setObjectName(m_channelId);
 
     m_thread = new QThread(this);
+    m_thread->setObjectName("ADSBDemodBB");
     m_basebandSink = new ADSBDemodBaseband();
     m_basebandSink->moveToThread(m_thread);
 
+    m_workerThread = new QThread();
     m_worker = new ADSBDemodWorker();
-    m_basebandSink->setMessageQueueToWorker(m_worker->getInputMessageQueue());
+    m_tracker = new ADSBDemodTracker(this);
+    m_tracker->setExportWorker(m_worker);
+    m_worker->moveToThread(m_workerThread);
+    m_tracker->moveToThread(m_workerThread);
+    QObject::connect(m_workerThread, &QThread::started, m_worker, &ADSBDemodWorker::startWork);
+    QObject::connect(m_workerThread, &QThread::started, m_tracker, &ADSBDemodTracker::startWork);
+    QObject::connect(m_workerThread, &QThread::finished, m_worker, &QObject::deleteLater);
+    QObject::connect(m_workerThread, &QThread::finished, m_tracker, &QObject::deleteLater);
+    QObject::connect(m_workerThread, &QThread::finished, m_workerThread, &QThread::deleteLater);
+    m_workerThread->start();
+
+    // Frames are decoded by the tracker, which passes them on for export and logging
+    m_basebandSink->setMessageQueueToWorker(m_tracker->getInputMessageQueue());
 
     applySettings(m_settings, QStringList(), true);
 
@@ -91,9 +107,6 @@ ADSBDemod::ADSBDemod(DeviceAPI *devieAPI) :
 
 ADSBDemod::~ADSBDemod()
 {
-    if (m_worker->isRunning()) {
-        stop();
-    }
     QObject::disconnect(
         m_networkManager,
         &QNetworkAccessManager::finished,
@@ -104,8 +117,21 @@ ADSBDemod::~ADSBDemod()
     m_deviceAPI->removeChannelSinkAPI(this);
     m_deviceAPI->removeChannelSink(this, true);
     delete m_basebandSink; // This results in a call to ADSBDemod::stop(), so need to delete before worker and thread
-    delete m_worker;
     delete m_thread;
+
+    // Nothing pushes to the tracker any more, so the thread can go. The tracker and
+    // the worker delete themselves when it finishes
+    m_workerThread->quit();
+    m_workerThread->wait();
+    m_tracker = nullptr;
+    m_worker = nullptr;
+}
+
+void ADSBDemod::setMessageQueueToGUI(MessageQueue* queue)
+{
+    ChannelAPI::setMessageQueueToGUI(queue);
+    m_basebandSink->setMessageQueueToGUI(queue);
+    m_tracker->setMessageQueueToGUI(queue);
 }
 
 void ADSBDemod::setDeviceAPI(DeviceAPI *deviceAPI)
@@ -135,8 +161,6 @@ void ADSBDemod::start()
 {
     qDebug() << "ADSBDemod::start";
 
-    m_worker->reset();
-    m_worker->startWork();
     m_basebandSink->reset();
     m_basebandSink->startWork();
     m_thread->start();
@@ -146,13 +170,15 @@ void ADSBDemod::start()
 
     ADSBDemodWorker::MsgConfigureADSBDemodWorker *msg = ADSBDemodWorker::MsgConfigureADSBDemodWorker::create(m_settings, QStringList(), true);
     m_worker->getInputMessageQueue()->push(msg);
+
+    ADSBDemodTracker::MsgConfigureADSBDemodTracker *trackerMsg = ADSBDemodTracker::MsgConfigureADSBDemodTracker::create(m_settings, QStringList(), true);
+    m_tracker->getInputMessageQueue()->push(trackerMsg);
 }
 
 void ADSBDemod::stop()
 {
     qDebug() << "ADSBDemod::stop";
     m_basebandSink->stopWork();
-    m_worker->stopWork();
     m_thread->exit();
 #ifndef __EMSCRIPTEN__
     m_thread->wait();
@@ -183,6 +209,8 @@ bool ADSBDemod::handleMessage(const Message& cmd)
         if (m_guiMessageQueue) {
             m_guiMessageQueue->push(new DSPSignalNotification(notif));
         }
+        // And to the tracker, which needs the frequency for the reports it sends
+        m_tracker->getInputMessageQueue()->push(new DSPSignalNotification(notif));
 
         return true;
     }
@@ -230,6 +258,9 @@ void ADSBDemod::applySettings(const ADSBDemodSettings& settings, const QStringLi
 
     ADSBDemodWorker::MsgConfigureADSBDemodWorker *workerMsg = ADSBDemodWorker::MsgConfigureADSBDemodWorker::create(settings, settingsKeys, force);
     m_worker->getInputMessageQueue()->push(workerMsg);
+
+    ADSBDemodTracker::MsgConfigureADSBDemodTracker *trackerMsg = ADSBDemodTracker::MsgConfigureADSBDemodTracker::create(settings, settingsKeys, force);
+    m_tracker->getInputMessageQueue()->push(trackerMsg);
 
     if (settings.m_useReverseAPI)
     {
@@ -467,23 +498,63 @@ void ADSBDemod::webapiFormatChannelSettings(SWGSDRangel::SWGChannelSettings& res
     response.getAdsbDemodSettings()->setRemoveTimeout(settings.m_removeTimeout);
     response.getAdsbDemodSettings()->setFeedEnabled(settings.m_feedEnabled ? 1 : 0);
     response.getAdsbDemodSettings()->setExportClientEnabled(settings.m_exportClientEnabled ? 1 : 0);
-    response.getAdsbDemodSettings()->setExportClientHost(new QString(settings.m_exportClientHost));
+    if (response.getAdsbDemodSettings()->getExportClientHost()) {
+        *response.getAdsbDemodSettings()->getExportClientHost() = settings.m_exportClientHost;
+    } else {
+        response.getAdsbDemodSettings()->setExportClientHost(new QString(settings.m_exportClientHost));
+    }
     response.getAdsbDemodSettings()->setExportClientPort(settings.m_exportClientPort);
     response.getAdsbDemodSettings()->setExportClientFormat((int) settings.m_exportClientFormat);
     response.getAdsbDemodSettings()->setExportServerEnabled(settings.m_exportServerEnabled ? 1 : 0);
     response.getAdsbDemodSettings()->setExportServerPort(settings.m_exportServerPort);
     response.getAdsbDemodSettings()->setImportEnabled(settings.m_importEnabled ? 1 : 0);
-    response.getAdsbDemodSettings()->setImportHost(new QString(settings.m_importHost));
-    response.getAdsbDemodSettings()->setImportUsername(new QString(settings.m_importClientId));
-    response.getAdsbDemodSettings()->setImportPassword(new QString(settings.m_importClientSecret));
-    response.getAdsbDemodSettings()->setImportParameters(new QString(settings.m_importParameters));
+    if (response.getAdsbDemodSettings()->getImportHost()) {
+        *response.getAdsbDemodSettings()->getImportHost() = settings.m_importHost;
+    } else {
+        response.getAdsbDemodSettings()->setImportHost(new QString(settings.m_importHost));
+    }
+    if (response.getAdsbDemodSettings()->getImportUsername()) {
+        *response.getAdsbDemodSettings()->getImportUsername() = settings.m_importClientId;
+    } else {
+        response.getAdsbDemodSettings()->setImportUsername(new QString(settings.m_importClientId));
+    }
+    if (response.getAdsbDemodSettings()->getImportPassword()) {
+        *response.getAdsbDemodSettings()->getImportPassword() = settings.m_importClientSecret;
+    } else {
+        response.getAdsbDemodSettings()->setImportPassword(new QString(settings.m_importClientSecret));
+    }
+    if (response.getAdsbDemodSettings()->getImportParameters()) {
+        *response.getAdsbDemodSettings()->getImportParameters() = settings.m_importParameters;
+    } else {
+        response.getAdsbDemodSettings()->setImportParameters(new QString(settings.m_importParameters));
+    }
     response.getAdsbDemodSettings()->setImportPeriod(settings.m_importPeriod);
-    response.getAdsbDemodSettings()->setImportMinLatitude(new QString(settings.m_importMinLatitude));
-    response.getAdsbDemodSettings()->setImportMaxLatitude(new QString(settings.m_importMaxLatitude));
-    response.getAdsbDemodSettings()->setImportMinLongitude(new QString(settings.m_importMinLongitude));
-    response.getAdsbDemodSettings()->setImportMaxLongitude(new QString(settings.m_importMaxLongitude));
+    if (response.getAdsbDemodSettings()->getImportMinLatitude()) {
+        *response.getAdsbDemodSettings()->getImportMinLatitude() = settings.m_importMinLatitude;
+    } else {
+        response.getAdsbDemodSettings()->setImportMinLatitude(new QString(settings.m_importMinLatitude));
+    }
+    if (response.getAdsbDemodSettings()->getImportMaxLatitude()) {
+        *response.getAdsbDemodSettings()->getImportMaxLatitude() = settings.m_importMaxLatitude;
+    } else {
+        response.getAdsbDemodSettings()->setImportMaxLatitude(new QString(settings.m_importMaxLatitude));
+    }
+    if (response.getAdsbDemodSettings()->getImportMinLongitude()) {
+        *response.getAdsbDemodSettings()->getImportMinLongitude() = settings.m_importMinLongitude;
+    } else {
+        response.getAdsbDemodSettings()->setImportMinLongitude(new QString(settings.m_importMinLongitude));
+    }
+    if (response.getAdsbDemodSettings()->getImportMaxLongitude()) {
+        *response.getAdsbDemodSettings()->getImportMaxLongitude() = settings.m_importMaxLongitude;
+    } else {
+        response.getAdsbDemodSettings()->setImportMaxLongitude(new QString(settings.m_importMaxLongitude));
+    }
     response.getAdsbDemodSettings()->setRgbColor(settings.m_rgbColor);
-    response.getAdsbDemodSettings()->setLogFilename(new QString(settings.m_logFilename));
+    if (response.getAdsbDemodSettings()->getLogFilename()) {
+        *response.getAdsbDemodSettings()->getLogFilename() = settings.m_logFilename;
+    } else {
+        response.getAdsbDemodSettings()->setLogFilename(new QString(settings.m_logFilename));
+    }
     response.getAdsbDemodSettings()->setLogEnabled(settings.m_logEnabled);
 
     if (response.getAdsbDemodSettings()->getTitle()) {
@@ -550,7 +621,11 @@ void ADSBDemod::webapiFormatChannelReport(SWGSDRangel::SWGChannelReport& respons
 
     if (m_targetAzElValid)
     {
-        response.getAdsbDemodReport()->setTargetName(new QString(m_targetName));
+        if (response.getAdsbDemodReport()->getTargetName()) {
+            *response.getAdsbDemodReport()->getTargetName() = m_targetName;
+        } else {
+            response.getAdsbDemodReport()->setTargetName(new QString(m_targetName));
+        }
         response.getAdsbDemodReport()->setTargetAzimuth(m_targetAzimuth);
         response.getAdsbDemodReport()->setTargetElevation(m_targetElevation);
         response.getAdsbDemodReport()->setTargetRange(m_targetRange);
@@ -560,40 +635,68 @@ void ADSBDemod::webapiFormatChannelReport(SWGSDRangel::SWGChannelReport& respons
     for (const auto& report : m_aircraftReport)
     {
         SWGSDRangel::SWGADSBDemodAircraftState *aircraftState = new SWGSDRangel::SWGADSBDemodAircraftState();
-        aircraftState->setIcao(new QString(report.m_icao));
-        aircraftState->setCallsign(new QString(report.m_callsign));
-        aircraftState->setLatitude(report.m_latitude);
-        aircraftState->setLongitude(report.m_longitude);
+        if (aircraftState->getIcao()) {
+            *aircraftState->getIcao() = report.m_icao;
+        } else {
+            aircraftState->setIcao(new QString(report.m_icao));
+        }
+        if (aircraftState->getCallsign()) {
+            *aircraftState->getCallsign() = report.m_callsign;
+        } else {
+            aircraftState->setCallsign(new QString(report.m_callsign));
+        }
+        // Only fields that have been received are set, so that unknown ones are left out of the
+        // JSON rather than reported as zero, which is a real position, altitude and speed
+        if (report.m_positionValid)
+        {
+            aircraftState->setLatitude(report.m_latitude);
+            aircraftState->setLongitude(report.m_longitude);
+        }
         aircraftState->setPositionValid(report.m_positionValid ? 1 : 0);
         if (report.m_positionDateTime.isValid()) {
             aircraftState->setPositionDateTime(
                 new QString(report.m_positionDateTime.toUTC().toString(Qt::ISODateWithMs)));
         }
-        aircraftState->setAltitude(report.m_altitude);
+
+        if (report.m_altitudeValid) {
+            aircraftState->setAltitude(report.m_altitude);
+        }
         aircraftState->setAltitudeValid(report.m_altitudeValid ? 1 : 0);
         if (report.m_altitudeDateTime.isValid()) {
             aircraftState->setAltitudeDateTime(
                 new QString(report.m_altitudeDateTime.toUTC().toString(Qt::ISODateWithMs)));
         }
-        aircraftState->setGroundSpeed(report.m_groundSpeed);
+
+        if (report.m_groundSpeedValid) {
+            aircraftState->setGroundSpeed(report.m_groundSpeed);
+        }
         aircraftState->setGroundSpeedValid(report.m_groundSpeedValid ? 1 : 0);
         if (report.m_groundSpeedDateTime.isValid()) {
             aircraftState->setGroundSpeedDateTime(
                 new QString(report.m_groundSpeedDateTime.toUTC().toString(Qt::ISODateWithMs)));
         }
-        aircraftState->setTrack(report.m_track);
+
+        if (report.m_trackValid) {
+            aircraftState->setTrack(report.m_track);
+        }
         aircraftState->setTrackValid(report.m_trackValid ? 1 : 0);
         if (report.m_trackDateTime.isValid()) {
             aircraftState->setTrackDateTime(
                 new QString(report.m_trackDateTime.toUTC().toString(Qt::ISODateWithMs)));
         }
-        aircraftState->setHeading(report.m_heading);
+
+        if (report.m_headingValid) {
+            aircraftState->setHeading(report.m_heading);
+        }
         aircraftState->setHeadingValid(report.m_headingValid ? 1 : 0);
         if (report.m_headingDateTime.isValid()) {
             aircraftState->setHeadingDateTime(
                 new QString(report.m_headingDateTime.toUTC().toString(Qt::ISODateWithMs)));
         }
-        aircraftState->setVerticalRate(report.m_verticalRate);
+
+        if (report.m_verticalRateValid) {
+            aircraftState->setVerticalRate(report.m_verticalRate);
+        }
         aircraftState->setVerticalRateValid(report.m_verticalRateValid ? 1 : 0);
         if (report.m_verticalRateDateTime.isValid()) {
             aircraftState->setVerticalRateDateTime(
@@ -781,4 +884,9 @@ void ADSBDemod::handleIndexInDeviceSetChanged(int index)
         .arg(m_deviceAPI->getDeviceSetIndex())
         .arg(index);
     m_basebandSink->setFifoLabel(fifoLabel);
+}
+
+int ADSBDemod::getChannelSampleRate() const
+{
+    return m_basebandSink ? m_basebandSink->getChannelSampleRate() : 0;
 }

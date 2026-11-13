@@ -29,6 +29,10 @@
 #include "sigmffilesinksink.h"
 
 SigMFFileSinkSink::SigMFFileSinkSink() :
+    m_channelSampleRate(0),
+    m_channelFrequencyOffset(0),
+    m_sinkSampleRate(0),
+    m_centerFrequency(0),
     m_preRecordBuffer(48000),
     m_preRecordFill(0),
     m_spectrumSink(nullptr),
@@ -37,6 +41,7 @@ SigMFFileSinkSink::SigMFFileSinkSink() :
     m_record(false),
     m_squelchOpen(false),
     m_postSquelchCounter(0),
+    m_deviceUId(0),
     m_msCount(0),
     m_byteCount(0)
 {}
@@ -246,26 +251,24 @@ void SigMFFileSinkSink::applySettings(const QStringList& settingsKeys, const Sig
 {
     qDebug() << "SigMFFileSinkSink::applySettings:" << settings.getDebugString(settingsKeys, force);
 
-    QString fileRecordName = settings.m_fileRecordName;
+    QStringList dotBreakout = settings.m_fileRecordName.split(QLatin1Char('.'));
 
-    if ((settingsKeys.contains("fileRecordName") && (settings.m_fileRecordName != m_settings.m_fileRecordName)) || force)
+    if (dotBreakout.size() > 1) {
+        QString extension = dotBreakout.last();
+
+        if (extension != "sigmf-meta") {
+            dotBreakout.last() = "sigmf-meta";
+        }
+    }
+    else
     {
-        QStringList dotBreakout = settings.m_fileRecordName.split(QLatin1Char('.'));
+        dotBreakout.append("sigmf-meta");
+    }
 
-        if (dotBreakout.size() > 1) {
-            QString extension = dotBreakout.last();
+    QString fileRecordName = dotBreakout.join(QLatin1Char('.'));
 
-            if (extension != "sigmf-meta") {
-                dotBreakout.last() = "sigmf-meta";
-            }
-        }
-        else
-        {
-            dotBreakout.append("sigmf-meta");
-        }
-
-        fileRecordName = dotBreakout.join(QLatin1Char('.'));
-
+    if ((settingsKeys.contains("fileRecordName") || force) && (fileRecordName != m_settings.m_fileRecordName))
+    {
         QString fileBase;
         FileRecordInterface::RecordType recordType = FileRecordInterface::guessTypeFromFileName(fileRecordName, fileBase);
 
@@ -302,7 +305,9 @@ void SigMFFileSinkSink::applySettings(const QStringList& settingsKeys, const Sig
         m_settings.applySettings(settingsKeys, settings);
     }
 
-    m_settings.m_fileRecordName = fileRecordName;
+    if (settingsKeys.contains("fileRecordName") || force) {
+        m_settings.m_fileRecordName = fileRecordName;
+    }
 }
 
 void SigMFFileSinkSink::squelchRecording(bool squelchOpen)

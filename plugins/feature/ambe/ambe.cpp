@@ -43,8 +43,10 @@ AMBE::AMBE(WebAPIAdapterInterface *webAPIAdapterInterface) :
     Feature(m_featureIdURI, webAPIAdapterInterface)
 {
     setObjectName(m_featureId);
-    m_state = StIdle;
+    setState(StIdle);
     m_errorMessage = "AMBE error";
+    m_encoderPort = std::make_shared<MbeEncoderPort>();
+    m_encoderPort->setProvider([this](const Message& msg) { return handleMessage(msg); });
     m_networkManager = new QNetworkAccessManager();
     QObject::connect(
         m_networkManager,
@@ -56,6 +58,7 @@ AMBE::AMBE(WebAPIAdapterInterface *webAPIAdapterInterface) :
 
 AMBE::~AMBE()
 {
+    m_encoderPort->setProvider(nullptr); // encode clients calling from their threads now get false
     QObject::disconnect(
         m_networkManager,
         &QNetworkAccessManager::finished,
@@ -68,13 +71,13 @@ AMBE::~AMBE()
 void AMBE::start()
 {
 	qDebug("AMBE::start");
-    m_state = StRunning;
+    setState(StRunning);
 }
 
 void AMBE::stop()
 {
     qDebug("AMBE::stop");
-    m_state = StIdle;
+    setState(StIdle);
 }
 
 void AMBE::applySettings(const AMBESettings& settings, const QList<QString>& settingsKeys,  bool force)
@@ -107,6 +110,30 @@ bool AMBE::handleMessage(const Message& cmd)
             cfg.getUpsampling(),
             cfg.getAudioFifo()
         );
+        return true;
+    }
+    else if (DSPPushMbeAudio::match(cmd))
+    {
+        DSPPushMbeAudio& req = (DSPPushMbeAudio&) cmd;
+        m_ambeEngine.pushMbeAudio(
+            req.getAudio(),
+            req.getMbeRateIndex(),
+            req.getGain(),
+            req.getSequence(),
+            req.getClient(),
+            req.getReplyQueue()
+        );
+        return true;
+    }
+    else if (DSPReleaseMbeClient::match(cmd))
+    {
+        DSPReleaseMbeClient& req = (DSPReleaseMbeClient&) cmd;
+        m_ambeEngine.releaseEncodeClient(req.getClient());
+        return true;
+    }
+    else if (DSPGetMbeEncoderPort::match(cmd))
+    {
+        ((DSPGetMbeEncoderPort&) cmd).setPort(m_encoderPort);
         return true;
     }
 
@@ -357,7 +384,11 @@ void AMBE::webapiFormatFeatureReport(SWGSDRangel::SWGFeatureReport& response)
     for (auto& deviceRef : deviceRefs)
     {
         response.getAmbeReport()->getDevices()->append(new SWGSDRangel::SWGAMBEDeviceReport);
-        response.getAmbeReport()->getDevices()->back()->setDevicePath(new QString(deviceRef.m_devicePath));
+        if (response.getAmbeReport()->getDevices()->back()->getDevicePath()) {
+            *response.getAmbeReport()->getDevices()->back()->getDevicePath() = deviceRef.m_devicePath;
+        } else {
+            response.getAmbeReport()->getDevices()->back()->setDevicePath(new QString(deviceRef.m_devicePath));
+        }
         response.getAmbeReport()->getDevices()->back()->setSuccessCount(deviceRef.m_successCount);
         response.getAmbeReport()->getDevices()->back()->setFailureCount(deviceRef.m_failureCount);
     }

@@ -42,13 +42,16 @@ const QStringList DemodAnalyzerSettings::m_channelURIs = {
     QStringLiteral("sdrangel.channel.packetdemod"),
     QStringLiteral("sdrangel.channeltx.modpacket"),
     QStringLiteral("sdrangel.channel.radiosondedemod"),
+    QStringLiteral("sdrangel.channel.selcaldemod"),
     QStringLiteral("sdrangel.channeltx.modpsk31"),
     QStringLiteral("sdrangel.channeltx.modrtty"),
     QStringLiteral("sdrangel.channel.ssbdemod"),
     QStringLiteral("sdrangel.channeltx.modssb"),
     QStringLiteral("sdrangel.channel.wfmdemod"),
     QStringLiteral("sdrangel.channeltx.modwfm"),
+    QStringLiteral("sdrangel.channeltx.modbfm"),
     QStringLiteral("sdrangel.channel.wdsprx"),
+    QStringLiteral("sdrangel.feature.denoiser"),
 };
 
 DemodAnalyzerSettings::DemodAnalyzerSettings() :
@@ -73,6 +76,7 @@ void DemodAnalyzerSettings::resetToDefaults()
     m_fileRecordName.clear();
     m_recordToFile = false;
     m_recordSilenceTime = 0;
+    m_realSpectrum = false;
 }
 
 QByteArray DemodAnalyzerSettings::serialize() const
@@ -105,6 +109,7 @@ QByteArray DemodAnalyzerSettings::serialize() const
     s.writeString(15, m_fileRecordName);
     s.writeBool(16, m_recordToFile);
     s.writeS32(17, m_recordSilenceTime);
+    s.writeBool(18, m_realSpectrum);
 
     return s.final();
 }
@@ -166,6 +171,7 @@ bool DemodAnalyzerSettings::deserialize(const QByteArray& data)
         d.readString(15, &m_fileRecordName);
         d.readBool(16, &m_recordToFile, false);
         d.readS32(17, &m_recordSilenceTime, 0);
+        d.readBool(18, &m_realSpectrum, false);
 
         return true;
     }
@@ -214,6 +220,9 @@ void DemodAnalyzerSettings::applySettings(const QStringList& settingsKeys, const
     if (settingsKeys.contains("recordSilenceTime")) {
         m_recordSilenceTime = settings.m_recordSilenceTime;
     }
+    if (settingsKeys.contains("realSpectrum")) {
+        m_realSpectrum = settings.m_realSpectrum;
+    }
 }
 
 QString DemodAnalyzerSettings::getDebugString(const QStringList& settingsKeys, bool force) const
@@ -255,6 +264,9 @@ QString DemodAnalyzerSettings::getDebugString(const QStringList& settingsKeys, b
     }
     if (settingsKeys.contains("recordSilenceTime") || force) {
         ostr << " m_recordSilenceTime: " << m_recordSilenceTime;
+    }
+    if (settingsKeys.contains("realSpectrum") || force) {
+        ostr << " m_realSpectrum: " << m_realSpectrum;
     }
 
     return QString(ostr.str().c_str());

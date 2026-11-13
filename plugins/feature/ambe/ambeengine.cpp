@@ -249,6 +249,7 @@ bool AMBEEngine::registerController(const std::string& deviceRef)
         m_controllers.push_back(AMBEController());
         m_controllers.back().worker = worker;
         m_controllers.back().thread = new QThread();
+        m_controllers.back().thread->setObjectName("AMBE:" + QString::fromStdString(deviceRef));
         m_controllers.back().device = deviceRef;
 
         m_controllers.back().worker->moveToThread(m_controllers.back().thread);
@@ -359,5 +360,67 @@ void AMBEEngine::pushMbeFrame(
         {
             qDebug("AMBEEngine::pushMbeFrame: no DV device available. MBE frame dropped");
         }
+    }
+}
+
+void AMBEEngine::pushMbeAudio(
+        const short *audio,
+        int mbeRateIndex,
+        int gain,
+        unsigned int sequence,
+        const void *client,
+        MessageQueue *replyQueue)
+{
+    QMutexLocker locker(&m_mutex);
+    std::vector<AMBEController>::iterator it = m_controllers.begin();
+    std::vector<AMBEController>::iterator itBound = m_controllers.end();
+    std::vector<AMBEController>::iterator itFree = m_controllers.end();
+    std::vector<AMBEController>::iterator itAvail = m_controllers.end();
+
+    while (it != m_controllers.end())
+    {
+        if (it->worker->hasEncodeClient(client))
+        {
+            itBound = it;
+            break;
+        }
+        else if (it->worker->isAvailableForEncode())
+        {
+            // Prefer a device not used for decoding to avoid switching rates back and forth
+            if (!it->worker->hasDecodeFifo() && (itFree == m_controllers.end())) {
+                itFree = it;
+            } else if (itAvail == m_controllers.end()) {
+                itAvail = it;
+            }
+        }
+
+        ++it;
+    }
+
+    std::vector<AMBEController>::iterator itUse = itBound != m_controllers.end() ? itBound
+        : itFree != m_controllers.end() ? itFree
+        : itAvail;
+
+    if (itUse != m_controllers.end())
+    {
+        if (itUse != itBound) {
+            qDebug("AMBEEngine::pushMbeAudio: bind client %p to device %d", client, (int) (itUse - m_controllers.begin()));
+        }
+
+        itUse->worker->pushMbeAudio(audio, mbeRateIndex, gain, sequence, client, replyQueue);
+    }
+    else
+    {
+        qDebug("AMBEEngine::pushMbeAudio: no DV device available. Audio frame dropped");
+    }
+}
+
+void AMBEEngine::releaseEncodeClient(const void *client)
+{
+    QMutexLocker locker(&m_mutex);
+
+    for (auto& controller : m_controllers) {
+        controller.worker->releaseEncodeClient(client);
+        controller.worker->releaseDecodeFifo(client);
     }
 }

@@ -1,6 +1,8 @@
 IF (NOT DAB_FOUND)
-    INCLUDE(FindPkgConfig)
-    PKG_CHECK_MODULES(LIBDAB_PKG libdab)
+    find_package(PkgConfig)
+    if(PkgConfig_FOUND)
+        PKG_CHECK_MODULES(LIBDAB_PKG libdab)
+    endif()
 
     FIND_PATH(
         DAB_INCLUDE_DIR

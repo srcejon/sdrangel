@@ -1239,16 +1239,16 @@ void XTRXMIMO::webapiUpdateDeviceSettings(
         settings.m_gpioPins = response.getXtrxMimoSettings()->getGpioPins();
     }
     if (deviceSettingsKeys.contains("useReverseAPI")) {
-        settings.m_useReverseAPI = response.getXtrxInputSettings()->getUseReverseApi() != 0;
+        settings.m_useReverseAPI = response.getXtrxMimoSettings()->getUseReverseApi() != 0;
     }
     if (deviceSettingsKeys.contains("reverseAPIAddress")) {
-        settings.m_reverseAPIAddress = *response.getXtrxInputSettings()->getReverseApiAddress();
+        settings.m_reverseAPIAddress = *response.getXtrxMimoSettings()->getReverseApiAddress();
     }
     if (deviceSettingsKeys.contains("reverseAPIPort")) {
-        settings.m_reverseAPIPort = response.getXtrxInputSettings()->getReverseApiPort();
+        settings.m_reverseAPIPort = response.getXtrxMimoSettings()->getReverseApiPort();
     }
     if (deviceSettingsKeys.contains("reverseAPIDeviceIndex")) {
-        settings.m_reverseAPIDeviceIndex = response.getXtrxInputSettings()->getReverseApiDeviceIndex();
+        settings.m_reverseAPIDeviceIndex = response.getXtrxMimoSettings()->getReverseApiDeviceIndex();
     }
     // Rx
     if (deviceSettingsKeys.contains("rxDevSampleRate")) {
@@ -1355,7 +1355,7 @@ void XTRXMIMO::webapiUpdateDeviceSettings(
         settings.m_gainTx0 = response.getXtrxMimoSettings()->getGainTx0();
     }
     if (deviceSettingsKeys.contains("pwrmodeTx0")) {
-        settings.m_pwrmodeRx0 = response.getXtrxMimoSettings()->getPwrmodeTx0();
+        settings.m_pwrmodeTx0 = response.getXtrxMimoSettings()->getPwrmodeTx0();
     }
     // Tx1
     if (deviceSettingsKeys.contains("lpfBWTx1")) {
@@ -1365,7 +1365,7 @@ void XTRXMIMO::webapiUpdateDeviceSettings(
         settings.m_gainTx1 = response.getXtrxMimoSettings()->getGainTx1();
     }
     if (deviceSettingsKeys.contains("pwrmodeTx1")) {
-        settings.m_pwrmodeRx1 = response.getXtrxMimoSettings()->getPwrmodeTx1();
+        settings.m_pwrmodeTx1 = response.getXtrxMimoSettings()->getPwrmodeTx1();
     }
 }
 
@@ -1445,8 +1445,8 @@ int XTRXMIMO::webapiReportGet(
         QString& errorMessage)
 {
     (void) errorMessage;
-    response.setXtrxInputReport(new SWGSDRangel::SWGXtrxInputReport());
-    response.getXtrxInputReport()->init();
+    response.setXtrxMimoReport(new SWGSDRangel::SWGXtrxMIMOReport());
+    response.getXtrxMimoReport()->init();
     webapiFormatDeviceReport(response);
     return 200;
 }

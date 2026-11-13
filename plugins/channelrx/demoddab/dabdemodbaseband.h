@@ -73,12 +73,14 @@ public:
     void getMagSqLevels(double& avg, double& peak, int& nbSamples) {
         m_sink.getMagSqLevels(avg, peak, nbSamples);
     }
+    bool isAudioActive() const { return m_sink.isAudioActive(); }
     void setMessageQueueToChannel(MessageQueue *messageQueue) { m_sink.setMessageQueueToChannel(messageQueue); }
     void setBasebandSampleRate(int sampleRate);
     void setChannel(ChannelAPI *channel);
     double getMagSq() const { return m_sink.getMagSq(); }
     bool isRunning() const { return m_running; }
     int getAudioSampleRate() const { return m_sink.getAudioSampleRate(); }
+    int getChannelSampleRate() const { return m_sink.getChannelSampleRate(); }
     void setFifoLabel(const QString& label) { m_sampleFifo.setLabel(label); }
     void setAudioFifoLabel(const QString& label) { m_sink.setAudioFifoLabel(label); }
 

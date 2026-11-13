@@ -31,6 +31,22 @@
 
 using namespace libsgp4;
 
+// Support both libsgp4 APIs: CoordTopocentric::range_rate was renamed
+// to rangeRate. Keep both overloads for compatibility with older
+// host-installed versions of libsgp4.
+
+template<typename T>
+auto getRangeRate(const T& topo, int) -> decltype(topo.rangeRate)
+{
+    return topo.rangeRate;
+}
+
+template<typename T>
+auto getRangeRate(const T& topo, long) -> decltype(topo.range_rate)
+{
+    return topo.range_rate;
+}
+
 class SatelliteStateContext::Impl
 {
 public:
@@ -280,7 +296,7 @@ bool getPassesThrough0Deg(const QString& tle0, const QString& tle1, const QStrin
 
         double timeStep = (losTime - aosTime).TotalSeconds() / steps;
 
-        double prevAz;
+        double prevAz = 0.0;
         for (int i = 0; i < steps; i++)
         {
             // Calculate satellite position
@@ -587,7 +603,7 @@ void getSatelliteState(QDateTime dateTime,
         satState->m_azimuth = Units::radiansToDegrees(topo.azimuth);
         satState->m_elevation = Units::radiansToDegrees(topo.elevation);
         satState->m_range = topo.range;
-        satState->m_rangeRate = topo.range_rate;
+        satState->m_rangeRate = getRangeRate(topo, 0);
         satState->m_speed = eci.Velocity().Magnitude();
         satState->m_period = ele.Period();
         satState->m_error = "";

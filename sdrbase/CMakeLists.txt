@@ -1,10 +1,5 @@
 project (sdrbase)
 
-if(WIN32)
-    # This should probably be in ../CMakeLists.txt with the other variables like it
-    set(OPUS_INCLUDE_DIRS "${CMAKE_SOURCE_DIR}/external/windows/libopus/include")
-    set(OPUS_LIBRARIES "${CMAKE_SOURCE_DIR}/external/windows/libopus/lib/x64/libopus.lib")
-endif()
 find_package(Opus REQUIRED)
 
 if(FFTW3F_FOUND)
@@ -101,6 +96,7 @@ set(sdrbase_SOURCES
     audio/audiocompressorsnd.cpp
     audio/audiodeviceinfo.cpp
     audio/audiodevicemanager.cpp
+    audio/audiofilereader.cpp
     audio/audiofifo.cpp
     audio/audiofilter.cpp
     audio/audiog722.cpp
@@ -142,6 +138,7 @@ set(sdrbase_SOURCES
     dsp/dspdevicesinkengine.cpp
     dsp/dspdevicemimoengine.cpp
     dsp/fftcorr.cpp
+    dsp/lteturbo.cpp
     dsp/fftengine.cpp
     dsp/fftfactory.cpp
     dsp/fftfilt.cpp
@@ -186,6 +183,44 @@ set(sdrbase_SOURCES
     dsp/spectrumcalibrationpoint.cpp
     dsp/spectrumvis.cpp
     dsp/wavfilerecord.cpp
+    dsp/dv/dvbits.cpp
+    dsp/dv/dvblockcode.cpp
+    dsp/dv/dvreedsolomon.cpp
+    dsp/dv/dvconvolutional.cpp
+    dsp/dv/dvcrc.cpp
+    dsp/dv/dvscrambler.cpp
+    dsp/dv/dvambe.cpp
+    dsp/dv/dvdtmf.cpp
+    dsp/dv/dvsync.cpp
+    dsp/dv/dvdmr.cpp
+    dsp/dv/dvp25.cpp
+    dsp/dv/dvp25p2.cpp
+    dsp/dv/dvysf.cpp
+    dsp/dv/dvnxdn.cpp
+    dsp/dv/dvdpmr.cpp
+    dsp/dv/dvdstar.cpp
+    dsp/dv/dvangel61.cpp
+    dsp/dv/dvangel61frames.cpp
+    dsp/dv/dvangel61ofdm.cpp
+    dsp/dv/dvangel61ofdmrx.cpp
+    dsp/dv/dvm17.cpp
+    dsp/dv/dvangel61aprs.cpp
+    dsp/dv/dvangel61file.cpp
+    dsp/dv/dvangel61ip.cpp
+    dsp/dv/dvangel61hc.cpp
+    dsp/dv/dvopus.cpp
+    dsp/dv/dvframe.cpp
+    dsp/dv/vocoscodec.cpp
+
+    dtv/dtvapps.cpp
+    dtv/dtvcarousel.cpp
+    dtv/dtvcarouselserver.cpp
+    dtv/dtvguide.cpp
+    dtv/dtvpsi.cpp
+    dtv/dtvrecorder.cpp
+    dtv/dtvsections.cpp
+    dtv/dtvtsfifo.cpp
+    dtv/dtvudp.cpp
 
     device/deviceapi.cpp
     device/deviceenumerator.cpp
@@ -215,9 +250,14 @@ set(sdrbase_SOURCES
     settings/mainsettings.cpp
     settings/rollupstate.cpp
 
+    tun/iptunnel.cpp
+    tun/iptunnelbackend.cpp
+    tun/iptunnelrouting.cpp
+
     util/airlines.cpp
     util/ais.cpp
     util/android.cpp
+    util/asset3dmanifest.cpp
     util/aprsfi.cpp
     util/aviationweather.cpp
     util/ax25.cpp
@@ -232,6 +272,7 @@ set(sdrbase_SOURCES
     util/corsproxy.cpp
     util/countrydat.cpp
     util/crc.cpp
+    util/droneid.cpp
     util/CRC64.cpp
     util/csv.cpp
     util/db.cpp
@@ -239,16 +280,19 @@ set(sdrbase_SOURCES
     util/fixedtraits.cpp
     util/fits.cpp
     util/flightinformation.cpp
+    util/flightpathpalette.cpp
     util/ft8message.cpp
     util/giro.cpp
     util/goesxray.cpp
     util/golay2312.cpp
     util/grb.cpp
     util/httpdownloadmanager.cpp
+    util/ieee_802_15_4.cpp
     util/interpolation.cpp
     util/jplhorizons.cpp
     util/kiwisdrlist.cpp
     util/lfsr.cpp
+    util/ltegold.cpp
     util/maidenhead.cpp
     util/message.cpp
     util/messagequeue.cpp
@@ -257,6 +301,8 @@ set(sdrbase_SOURCES
     util/nasaglobalimagery.cpp
     util/navtex.cpp
     util/openaip.cpp
+    util/aircraft3dmodels.cpp
+    util/bglwaypointreader.cpp
     util/osndb.cpp
     util/ourairportsdb.cpp
     util/peakfinder.cpp
@@ -269,12 +315,16 @@ set(sdrbase_SOURCES
     util/radiosonde.cpp
     util/rainviewer.cpp
     util/rtpsink.cpp
+    util/selcaldb.cpp
     util/syncmessenger.cpp
     util/samplesourceserializer.cpp
     util/sdrangelserverlist.cpp
     util/simbad.cpp
     util/simpleserializer.cpp
     util/serialutil.cpp
+    util/acarsmessage.cpp
+    util/acarsmultipartassembler.cpp
+    util/sidstar.cpp
     util/socket.cpp
     util/solardynamicsobservatory.cpp
     util/sondehub.cpp
@@ -282,6 +332,7 @@ set(sdrbase_SOURCES
     util/spyserverlist.cpp
     util/stix.cpp
     util/stringlist.cpp
+    util/rds.cpp
     util/rtty.cpp
     util/systemclockoffset.cpp
     util/uid.cpp
@@ -329,6 +380,7 @@ set(sdrbase_HEADERS
     audio/audiocompressorsnd.h
     audio/audiodeviceinfo.h
     audio/audiodevicemanager.h
+    audio/audiofilereader.h
     audio/audiofifo.h
     audio/audiofilter.h
     audio/audiog722.h
@@ -378,6 +430,7 @@ set(sdrbase_HEADERS
     dsp/dspdevicemimoengine.h
     dsp/dsptypes.h
     dsp/fftcorr.h
+    dsp/lteturbo.h
     dsp/fftengine.h
     dsp/fftfactory.h
     dsp/fftfilt.h
@@ -417,6 +470,7 @@ set(sdrbase_HEADERS
     dsp/kissfft.h
     dsp/kissengine.h
     dsp/firfilter.h
+    dsp/afskmlse.h
     dsp/gaussian.h
     dsp/gmskmlse.h
     dsp/mimochannel.h
@@ -447,6 +501,43 @@ set(sdrbase_HEADERS
     dsp/devicesamplestatic.h
     dsp/spectrumvis.h
     dsp/wavfilerecord.h
+    dsp/dv/dvbits.h
+    dsp/dv/dvblockcode.h
+    dsp/dv/dvreedsolomon.h
+    dsp/dv/dvconvolutional.h
+    dsp/dv/dvcrc.h
+    dsp/dv/dvscrambler.h
+    dsp/dv/dvambe.h
+    dsp/dv/dvdtmf.h
+    dsp/dv/dvsync.h
+    dsp/dv/dvdmr.h
+    dsp/dv/dvp25.h
+    dsp/dv/dvp25p2.h
+    dsp/dv/dvysf.h
+    dsp/dv/dvnxdn.h
+    dsp/dv/dvdpmr.h
+    dsp/dv/dvdstar.h
+    dsp/dv/dvangel61.h
+    dsp/dv/dvangel61ofdm.h
+    dsp/dv/dvm17.h
+    dsp/dv/dvangel61aprs.h
+    dsp/dv/dvangel61file.h
+    dsp/dv/dvangel61ip.h
+    dsp/dv/dvangel61hc.h
+    dsp/dv/dvopus.h
+    dsp/dv/dvframe.h
+    dsp/dv/vocoscodec.h
+    dsp/dv/dvangel61tables.h
+
+    dtv/dtvapps.h
+    dtv/dtvcarousel.h
+    dtv/dtvcarouselserver.h
+    dtv/dtvguide.h
+    dtv/dtvpsi.h
+    dtv/dtvrecorder.h
+    dtv/dtvsections.h
+    dtv/dtvtsfifo.h
+    dtv/dtvudp.h
 
     device/deviceapi.h
     device/deviceenumerator.h
@@ -482,9 +573,16 @@ set(sdrbase_HEADERS
     settings/mainsettings.h
     settings/rollupstate.h
 
+    tun/iptunnel.h
+    tun/iptunnelbackend.h
+    tun/iptunnelbrokerprotocol.h
+    tun/iptunnelrouting.h
+    tun/iptunneltypes.h
+
     util/airlines.h
     util/ais.h
     util/android.h
+    util/asset3dmanifest.h
     util/aprsfi.h
     util/aurora.h
     util/aviationweather.h
@@ -509,18 +607,21 @@ set(sdrbase_HEADERS
     util/fixedtraits.h
     util/fits.h
     util/flightinformation.h
+    util/flightpathpalette.h
     util/ft8message.h
     util/giro.h
     util/goesxray.h
     util/golay2312.h
     util/grb.h
     util/httpdownloadmanager.h
+    util/ieee_802_15_4.h
     util/incrementalarray.h
     util/incrementalvector.h
     util/interpolation.h
     util/jplhorizons.h
     util/kiwisdrlist.h
     util/lfsr.h
+    util/ltegold.h
     util/maidenhead.h
     util/message.h
     util/messagequeue.h
@@ -531,25 +632,37 @@ set(sdrbase_HEADERS
     util/nasaglobalimagery.h
     util/navtex.h
     util/openaip.h
+    util/aircraft3dmodels.h
+    util/aircraftenginesound.h
+    util/bglwaypointreader.h
     util/osndb.h
     util/outairportsdb.h
     util/peakfinder.h
+    util/aircraftreport.h
     util/planespotters.h
     util/vesselfinder.h
     util/png.h
     util/prettyprint.h
     util/profiler.h
     util/psk31.h
+    util/droneid.h
     util/radiosonde.h
     util/rainviewer.h
+    util/rds.h
     util/rtpsink.h
     util/rtty.h
+    util/selcaldb.h
     util/syncmessenger.h
     util/samplesourceserializer.h
     util/sdrangelserverlist.h
     util/simbad.h
     util/simpleserializer.h
     util/serialutil.h
+    util/acarsmessage.h
+    util/acarstextformat.h
+    util/acarsmultipartassembler.h
+    util/do219.h
+    util/sidstar.h
     util/socket.h
     util/solardynamicsobservatory.h
     util/sondehub.h
@@ -588,6 +701,16 @@ set(sdrbase_HEADERS
     maincore.h
     remotetcpsinkstarter.h
 )
+
+if(WIN32)
+    list(APPEND sdrbase_SOURCES tun/iptunnel_win.cpp)
+elseif(APPLE)
+    list(APPEND sdrbase_SOURCES tun/iptunnel_mac.cpp)
+elseif(LINUX AND NOT ANDROID)
+    list(APPEND sdrbase_SOURCES tun/iptunnel_linux.cpp)
+else()
+    list(APPEND sdrbase_SOURCES tun/iptunnel_unsupported.cpp)
+endif()
 
 include_directories(
     ${CMAKE_SOURCE_DIR}/exports
@@ -676,6 +799,7 @@ target_link_libraries(sdrbase
     ${sdrbase_LIMERFE_LIB}
     ${sdrbase_LIBSIGMF_LIB}
     Qt::Core
+    Qt::Network
     Qt::Multimedia
     Qt::WebSockets
     Qt::Positioning
@@ -692,6 +816,45 @@ if (LIBSIGMF_FOUND)
         target_link_libraries(sdrbase ${LIBSIGMF_LIBRARIES})
     endif()
 endif()
+
+if(WIN32)
+    target_include_directories(sdrbase PRIVATE ${CMAKE_SOURCE_DIR}/external/windows/wintun/include)
+    target_link_libraries(sdrbase iphlpapi ws2_32)
+
+    string(TOLOWER "${CMAKE_SYSTEM_PROCESSOR}" WINTUN_PROCESSOR)
+    if(WINTUN_PROCESSOR MATCHES "^(amd64|x86_64|x64)$")
+        set(WINTUN_ARCH amd64)
+    elseif(WINTUN_PROCESSOR MATCHES "^(arm64|aarch64)$")
+        set(WINTUN_ARCH arm64)
+    elseif(WINTUN_PROCESSOR MATCHES "^(x86|i[3-6]86)$")
+        set(WINTUN_ARCH x86)
+    elseif(WINTUN_PROCESSOR MATCHES "^arm")
+        set(WINTUN_ARCH arm)
+    else()
+        message(FATAL_ERROR "Unsupported Wintun target architecture: ${CMAKE_SYSTEM_PROCESSOR}")
+    endif()
+    set(WINTUN_DLL "${CMAKE_SOURCE_DIR}/external/windows/wintun/bin/${WINTUN_ARCH}/wintun.dll")
+    set_property(GLOBAL PROPERTY SDRANGEL_WINTUN_DLL "${WINTUN_DLL}")
+    add_custom_command(TARGET sdrbase POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${WINTUN_DLL}" "$<TARGET_FILE_DIR:sdrbase>/wintun.dll")
+
+    add_executable(sdrangel-tunnel-helper
+        tun/iptunnelhelper_main.cpp
+        tun/iptunnel.cpp
+        tun/iptunnelbackend.cpp
+        tun/iptunnelrouting.cpp
+        tun/iptunnel_win.cpp
+        tun/iptunnel.h
+    )
+    target_compile_definitions(sdrangel-tunnel-helper PRIVATE sdrangel_STATIC IPTUNNEL_ELEVATED_HELPER)
+    target_include_directories(sdrangel-tunnel-helper PRIVATE
+        ${CMAKE_SOURCE_DIR}/exports
+        ${CMAKE_SOURCE_DIR}/external/windows/wintun/include
+    )
+    target_link_libraries(sdrangel-tunnel-helper PRIVATE Qt::Core Qt::Network iphlpapi ws2_32)
+    install(TARGETS sdrangel-tunnel-helper DESTINATION ${INSTALL_BIN_DIR})
+endif()
+
 if (Qt6_FOUND)
     target_link_libraries(sdrbase
         Qt::CorePrivate
@@ -707,6 +870,25 @@ endif()
 target_compile_definitions(sdrbase PRIVATE
 	-DPLUGIN_PREFIX=\"${PLUGIN_PREFIX}\"
 )
+
+# vocoscodec is loaded at run time, so merely finding it does not add its directory to
+# the dynamic loader's search path.  Keep the relocatable, application-relative lookup
+# first, but also pass the locations found by FindLibVocosCodec as fallbacks.  This is
+# particularly important when SDRangel and vocoscodec are installed under different
+# prefixes.
+if(VOCOSCODEC_LIBRARY)
+    file(TO_CMAKE_PATH "${VOCOSCODEC_LIBRARY}" VOCOSCODEC_LIBRARY_PATH)
+    target_compile_definitions(sdrbase PRIVATE
+        VOCOSCODEC_LIBRARY_PATH="${VOCOSCODEC_LIBRARY_PATH}"
+    )
+endif()
+
+if(VOCOSCODEC_MODEL_DIR)
+    file(TO_CMAKE_PATH "${VOCOSCODEC_MODEL_DIR}" VOCOSCODEC_CONFIGURED_MODEL_DIR)
+    target_compile_definitions(sdrbase PRIVATE
+        VOCOSCODEC_CONFIGURED_MODEL_DIR="${VOCOSCODEC_CONFIGURED_MODEL_DIR}"
+    )
+endif()
 
 install(TARGETS sdrbase DESTINATION ${INSTALL_LIB_DIR})
 

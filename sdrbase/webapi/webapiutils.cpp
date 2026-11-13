@@ -22,11 +22,13 @@
 #include "webapiutils.h"
 
 const QMap<QString, QString> WebAPIUtils::m_channelURIToSettingsKey = {
+    {"sdrangel.channel.acarsdemod", "ACARSDemodSettings"},
     {"sdrangel.channel.adsbdemod", "ADSBDemodSettings"},
     {"sdrangel.channel.modais", "AISModSettings"},
     {"sdrangel.channel.aisdemod", "AISDemodSettings"},
     {"sdrangel.channel.amdemod", "AMDemodSettings"},
     {"sdrangel.channel.aptdemod", "APTDemodSettings"},
+    {"sdrangel.channel.wefaxdemod", "WefaxDemodSettings"},
     {"de.maintech.sdrangelove.channel.am", "AMDemodSettings"}, // remap
     {"sdrangel.channeltx.modam", "AMModSettings"},
     {"sdrangel.channeltx.modatv", "ATVModSettings"},
@@ -43,10 +45,15 @@ const QMap<QString, QString> WebAPIUtils::m_channelURIToSettingsKey = {
     {"sdrangel.channeltx.modmeshcore", "MeshcoreModSettings"},
     {"sdrangel.channel.demodatv", "ATVDemodSettings"},
     {"sdrangel.channel.demoddatv", "DATVDemodSettings"},
+    {"sdrangel.channel.demoddvb", "DVBDemodSettings"},
     {"sdrangel.channel.dabdemod", "DABDemodSettings"},
+    {"sdrangel.channel.drmdemod", "DRMDemodSettings"},
     {"sdrangel.channel.doa2", "DOA2Settings"},
     {"sdrangel.channel.dscdemod", "DSCDemodSettings"},
+    {"sdrangel.channel.selcaldemod", "SELCALDemodSettings"},
     {"sdrangel.channel.dsddemod", "DSDDemodSettings"},
+    {"sdrangel.channel.droneiddemod", "DroneIDDemodSettings"},
+    {"sdrangel.channeltx.moddse", "DSEModSettings"},
     {"sdrangel.channel.endoftraindemod", "EndOfTrainDemodSettings"},
     {"sdrangel.channel.filesink", "FileSinkSettings"},
     {"sdrangel.channeltx.filesource", "FileSourceSettings"},
@@ -57,7 +64,8 @@ const QMap<QString, QString> WebAPIUtils::m_channelURIToSettingsKey = {
     {"sdrangel.channel.heatmap", "HeatMapSettings"},
     {"sdrangel.channel.ilsdemod", "ILSDemodSettings"},
     {"sdrangel.channel.inmarsatdemod", "InmarsatDemodSettings"},
-    {"sdrangel.channel.navtexemod", "NavtexDemodSettings"},
+    {"sdrangel.channel.navtexdemod", "NavtexDemodSettings"},
+    {"sdrangel.channel.navtexemod", "NavtexDemodSettings"}, // legacy typo
     {"sdrangel.channel.m17demod", "M17DemodSettings"},
     {"sdrangel.channeltx.modm17", "M17ModSettings"},
     {"sdrangel.channel.nfmdemod", "NFMDemodSettings"},
@@ -71,6 +79,8 @@ const QMap<QString, QString> WebAPIUtils::m_channelURIToSettingsKey = {
     {"sdrangel.channel.pagerdemod", "PagerDemodSettings"},
     {"sdrangel.channeltx.modpacket", "PacketModSettings"},
     {"sdrangel.channel.psk31mod", "PSK31ModSettings"},
+    {"sdrangel.channel.psk31demod", "PSK31DemodSettings"},
+    {"sdrangel.channelrx.demod802.15.4", "IEEE_802_15_4_DemodSettings"},
     {"sdrangel.channeltx.mod802.15.4", "IEEE_802_15_4_ModSettings"},
     {"sdrangel.channel.radioclock", "RadioClockSettings"},
     {"sdrangel.channel.radiosondedemod", "RadiosondeDemodSettings"},
@@ -94,6 +104,7 @@ const QMap<QString, QString> WebAPIUtils::m_channelURIToSettingsKey = {
     {"sdrangel.channel.wfmdemod", "WFMDemodSettings"},
     {"de.maintech.sdrangelove.channel.wfm", "WFMDemodSettings"}, // remap
     {"sdrangel.channeltx.modwfm", "WFMModSettings"},
+    {"sdrangel.channeltx.modbfm", "BFMModSettings"},
     {"sdrangel.channel.beamsteeringcwmod", "BeamSteeringCWModSettings"},
     {"sdrangel.channelmimo.interferometer", "InterferometerSettings"},
     {"sdrangel.channel.sigmffilesink", "SigMFFileSinkSettings"}
@@ -148,16 +159,19 @@ const QMap<QString, QString> WebAPIUtils::m_deviceIdToSettingsKey = {
     {"sdrangel.samplemimo.testmosync", "testMOSyncSettings"},
     {"sdrangel.samplesource.usrp", "usrpInputSettings"},
     {"sdrangel.samplesink.usrp", "usrpOutputSettings"},
+    {"sdrangel.samplemimo.usrpmimo", "usrpMIMOSettings"},
     {"sdrangel.samplesource.xtrx", "xtrxInputSettings"},
     {"sdrangel.samplesink.xtrx", "xtrxOutputSettings"},
     {"sdrangel.samplemimo.xtrxmimo", "xtrxMIMOSettings"}
 };
 
 const QMap<QString, QString> WebAPIUtils::m_channelTypeToSettingsKey = {
+    {"ACARSDemod", "ACARSDemodSettings"},
     {"ADSBDemod", "ADSBDemodSettings"},
     {"AISDemod", "AISDemodSettings"},
     {"AISMod", "AISModSettings"},
     {"APTDemod", "APTDemodSettings"},
+    {"WefaxDemod", "WefaxDemodSettings"},
     {"AMDemod", "AMDemodSettings"},
     {"AMMod", "AMModSettings"},
     {"ATVDemod", "ATVDemodSettings"},
@@ -171,11 +185,16 @@ const QMap<QString, QString> WebAPIUtils::m_channelTypeToSettingsKey = {
     {"MeshcoreMod", "MeshcoreModSettings"},
     {"ChannelPower", "ChannelPowerSettings"},
     {"DATVDemod", "DATVDemodSettings"},
+    {"DVBDemod", "DVBDemodSettings"},
     {"DATVMod", "DATVModSettings"},
     {"DABDemod", "DABDemodSettings"},
+    {"DRMDemod", "DRMDemodSettings"},
     {"DOA2", "DOA2Settings"},
     {"DSCDemod", "DSCDemodSettings"},
+    {"SELCALDemod", "SELCALDemodSettings"},
     {"DSDDemod", "DSDDemodSettings"},
+    {"DroneIDDemod", "DroneIDDemodSettings"},
+    {"DSEMod", "DSEModSettings"},
     {"EndOfTrainDemod", "EndOfTrainDemodSettings"},
     {"FileSink", "FileSinkSettings"},
     {"FileSource", "FileSourceSettings"},
@@ -184,6 +203,7 @@ const QMap<QString, QString> WebAPIUtils::m_channelTypeToSettingsKey = {
     {"FreqScanner", "FreqScannerSettings"},
     {"FreqTracker", "FreqTrackerSettings"},
     {"HeatMap", "HeatMapSettings"},
+    {"IEEE_802_15_4_Demod", "IEEE_802_15_4_DemodSettings"},
     {"IEEE_802_15_4_Mod", "IEEE_802_15_4_ModSettings"},
     {"M17Demod", "M17DemodSettings"},
     {"M17Mod", "M17ModSettings"},
@@ -195,6 +215,7 @@ const QMap<QString, QString> WebAPIUtils::m_channelTypeToSettingsKey = {
     {"PacketMod", "PacketModSettings"},
     {"PagerDemod", "PagerDemodSettings"},
     {"PSK31Mod", "PSK31ModSettings"},
+    {"PSK31Demod", "PSK31DemodSettings"},
     {"LocalSink", "LocalSinkSettings"},
     {"LocalSource", "LocalSourceSettings"},
     {"RadioAstronomy", "RadioAstronomySettings"},
@@ -215,6 +236,7 @@ const QMap<QString, QString> WebAPIUtils::m_channelTypeToSettingsKey = {
     {"VORDemod", "VORDemodSettings"},
     {"WFMDemod", "WFMDemodSettings"},
     {"WFMMod", "WFMModSettings"},
+    {"BFMMod", "BFMModSettings"},
     {"BeamSteeringCWMod", "BeamSteeringCWModSettings"},
     {"Interferometer", "InterferometerSettings"},
     {"SigMFFileSink", "SigMFFileSinkSettings"}
@@ -223,6 +245,11 @@ const QMap<QString, QString> WebAPIUtils::m_channelTypeToSettingsKey = {
 const QMap<QString, QString> WebAPIUtils::m_channelTypeToActionsKey = {
     {"AISMod", "AISModActions"},
     {"APTDemod", "APTDemodActions"},
+    {"WefaxDemod", "WefaxDemodActions"},
+    {"DVBDemod", "DVBDemodActions"},
+    {"DRMDemod", "DRMDemodActions"},
+    {"DSDDemod", "DSDDemodActions"},
+    {"DSEMod", "DSEModActions"},
     {"FileSink", "FileSinkActions"},
     {"FileSource", "FileSourceActions"},
     {"FreqScanner", "FreqScannerActions"},
@@ -312,6 +339,7 @@ const QMap<QString, QString> WebAPIUtils::m_mimoDeviceHwIdToSettingsKey = {
     {"MetisMISO", "metisMISOSettings"},
     {"TestMI", "testMISettings"},
     {"TestMOSync", "testMOSyncSettings"},
+    {"USRP", "usrpMIMOSettings"},
     {"XTRX", "xtrxMIMOSettings"}
 };
 
@@ -321,6 +349,7 @@ const QMap<QString, QString> WebAPIUtils::m_mimoDeviceHwIdToActionsKey = {
 const QMap<QString, QString> WebAPIUtils::m_featureTypeToSettingsKey = {
     {"AFC", "AFCSettings"},
     {"AIS", "AISSettings"},
+    {"Aircraft", "AircraftSettings"},
     {"AMBE", "AMBESettings"},
     {"AntennaTools", "AntennaToolsSettings"},
     {"APRS", "APRSSettings"},
@@ -335,6 +364,7 @@ const QMap<QString, QString> WebAPIUtils::m_featureTypeToSettingsKey = {
     {"PERTester", "PERTesterSettings"},
     {"Radiosonde", "RadiosondeSettings"},
     {"RigCtlServer", "RigCtlServerSettings"},
+    {"MCPServer", "MCPServerSettings"},
     {"SatelliteTracker", "SatelliteTrackerSettings"},
     {"SID", "SIDSettings"},
     {"SimplePTT", "SimplePTTSettings"},
@@ -345,6 +375,7 @@ const QMap<QString, QString> WebAPIUtils::m_featureTypeToSettingsKey = {
 
 const QMap<QString, QString> WebAPIUtils::m_featureTypeToActionsKey = {
     {"AFC", "AFCActions"},
+    {"Aircraft", "AircraftActions"},
     {"AMBE", "AMBEActions"},
     {"Camera", "CameraActions"},
     {"GS232Controller", "GS232ControllerActions"},
@@ -352,6 +383,7 @@ const QMap<QString, QString> WebAPIUtils::m_featureTypeToActionsKey = {
     {"Map", "MapActions"},
     {"PERTester", "PERTesterActions"},
     {"RigCtlServer", "RigCtlServerActions"},
+    {"MCPServer", "MCPServerActions"},
     {"SatelliteTracker", "SatelliteTrackerActions"},
     {"SimplePTT", "SimplePTTActions"},
     {"SkyMap", "SkyMapActions"},
@@ -364,6 +396,7 @@ const QMap<QString, QString> WebAPIUtils::m_featureTypeToActionsKey = {
 const QMap<QString, QString> WebAPIUtils::m_featureURIToSettingsKey = {
     {"sdrangel.feature.afc", "AFCSettings"},
     {"sdrangel.feature.ais", "AISSSettings"},
+    {"sdrangel.feature.aircraft", "AircraftSettings"},
     {"sdrangel.feature.ambe", "AMBESSettings"},
     {"sdrangel.feature.antennatools", "AntennaToolsSettings"},
     {"sdrangel.feature.aprs", "APRSSettings"},
@@ -378,6 +411,7 @@ const QMap<QString, QString> WebAPIUtils::m_featureURIToSettingsKey = {
     {"sdrangel.feature.pertester", "PERTesterSettings"},
     {"sdrangel.feature.radiosonde", "RadiosondeSettings"},
     {"sdrangel.feature.rigctlserver", "RigCtlServerSettings"},
+    {"sdrangel.feature.mcpserver", "MCPServerSettings"},
     {"sdrangel.feature.satellitetracker", "SatelliteTrackerSettings"},
     {"sdrangel.feature.simpleptt", "SimplePTTSettings"},
     {"sdrangel.feature.skymap", "SkyMapSettings"},

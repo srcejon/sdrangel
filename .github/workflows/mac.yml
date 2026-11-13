@@ -24,8 +24,8 @@ jobs:
         run: brew install nasm subversion ncurses md5sha1sum
       - name: Install SDRplay API
         run: |
-            wget https://www.sdrplay.com/software/SDRplayAPI-macos-installer-universal-3.15.0.pkg
-            sudo installer -pkg SDRplayAPI-macos-installer-universal-3.15.0.pkg -target /
+            wget https://www.sdrangel.org/downloads/SDRplayAPI-macos-installer-universal-3.15.1.pkg
+            sudo installer -pkg SDRplayAPI-macos-installer-universal-3.15.1.pkg -target /
       - name: Install python
         run: |
             wget  https://www.python.org/ftp/python/3.12.7/python-3.12.7-macos11.pkg
@@ -36,7 +36,7 @@ jobs:
       - name: Install Qt
         uses: jurplel/install-qt-action@v4
         with:
-          version: '6.9.1'
+          version: '6.11.3'
           host: 'mac'
           arch: 'clang_64'
           modules: 'qtcharts qtscxml qt5compat qtlocation qtmultimedia qtpositioning qtserialport qtspeech qtwebsockets qtwebengine qtshadertools qtwebchannel'
@@ -87,7 +87,7 @@ jobs:
           files: ${{ github.workspace }}/build/${{ steps.get_filename.outputs.filename }}.dmg
 
   build_mac_arm64:
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
         with:
@@ -99,8 +99,8 @@ jobs:
         run: brew install nasm subversion ncurses md5sha1sum
       - name: Install SDRplay API
         run: |
-            wget https://www.sdrplay.com/software/SDRplayAPI-macos-installer-universal-3.15.0.pkg
-            sudo installer -pkg SDRplayAPI-macos-installer-universal-3.15.0.pkg -target /
+            wget https://www.sdrangel.org/downloads/SDRplayAPI-macos-installer-universal-3.15.1.pkg
+            sudo installer -pkg SDRplayAPI-macos-installer-universal-3.15.1.pkg -target /
       - name: Install python
         run: |
             wget  https://www.python.org/ftp/python/3.12.7/python-3.12.7-macos11.pkg
@@ -111,7 +111,7 @@ jobs:
       - name: Install Qt
         uses: jurplel/install-qt-action@v4
         with:
-          version: '6.9.1'
+          version: '6.11.3'
           host: 'mac'
           arch: 'clang_64'
           modules: 'qtcharts qtscxml qt5compat qtlocation qtmultimedia qtpositioning qtserialport qtspeech qtwebsockets qtwebengine qtshadertools qtwebchannel'
@@ -160,3 +160,119 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: ${{ github.workspace }}/build/${{ steps.get_filename.outputs.filename }}.dmg
+          
+  smoke_test_mac:
+    name: Smoke test macOS ${{ matrix.arch }}
+    needs:
+      - build_mac_x64
+      - build_mac_arm64
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            runner: macos-15-intel
+            artifact_pattern: sdrangel-*-macx64.dmg
+          - arch: arm64
+            runner: macos-15
+            artifact_pattern: sdrangel-*-macarm64.dmg
+
+    runs-on: ${{ matrix.runner }}
+
+    steps:
+      - name: Download installer
+        uses: actions/download-artifact@v5
+        with:
+          pattern: ${{ matrix.artifact_pattern }}
+          path: ${{ runner.temp }}/installer
+          merge-multiple: true
+
+      - name: Install and launch SDRangel
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          DMG="$(find "$RUNNER_TEMP/installer" -type f -name '*.dmg' -print -quit)"
+          test -n "$DMG"
+
+          MOUNT="$RUNNER_TEMP/sdrangel-mount"
+          INSTALLED_APP="$RUNNER_TEMP/Applications/SDRangel.app"
+          LOG="$RUNNER_TEMP/sdrangel-smoke.log"
+          RESPONSE="$RUNNER_TEMP/sdrangel-response.json"
+          PID=""
+
+          cleanup() {
+            if [[ -n "$PID" ]] && kill -0 "$PID" 2>/dev/null; then
+              kill "$PID" 2>/dev/null || true
+              wait "$PID" 2>/dev/null || true
+            fi
+            if mount | grep -Fq "$MOUNT"; then
+              hdiutil detach "$MOUNT" -force || true
+            fi
+          }
+          trap cleanup EXIT
+
+          hdiutil verify "$DMG"
+          mkdir -p "$MOUNT" "$(dirname "$INSTALLED_APP")"
+          printf 'Y\n' | PAGER=/bin/cat hdiutil attach "$DMG" -readonly -nobrowse -mountpoint "$MOUNT"
+           
+          SOURCE_APP="$(find "$MOUNT" -maxdepth 2 -type d -name 'SDRangel.app' -print -quit)"
+          test -n "$SOURCE_APP"
+
+          ditto "$SOURCE_APP" "$INSTALLED_APP"
+          hdiutil detach "$MOUNT"
+
+          PLIST="$INSTALLED_APP/Contents/Info.plist"
+          plutil -lint "$PLIST"
+
+          EXECUTABLE_NAME="$(/usr/libexec/PlistBuddy \
+            -c 'Print :CFBundleExecutable' "$PLIST")"
+          EXECUTABLE="$INSTALLED_APP/Contents/MacOS/$EXECUTABLE_NAME"
+
+          test -x "$EXECUTABLE"
+          file "$EXECUTABLE"
+
+          mkdir -p "$RUNNER_TEMP/sdrangel-home"
+          HOME="$RUNNER_TEMP/sdrangel-home" \
+            "$EXECUTABLE" \
+            --scratch \
+            --api-address 127.0.0.1 \
+            --api-port 18091 \
+            >"$LOG" 2>&1 &
+          PID=$!
+
+          ready=false
+          for attempt in {1..60}; do
+            if ! kill -0 "$PID" 2>/dev/null; then
+              echo "SDRangel exited during startup"
+              cat "$LOG"
+              exit 1
+            fi
+
+            if curl --fail --silent --show-error \
+              http://127.0.0.1:18091/sdrangel \
+              >"$RESPONSE"; then
+              ready=true
+              break
+            fi
+
+            sleep 1
+          done
+
+          if [[ "$ready" != true ]]; then
+            echo "SDRangel Web API did not become ready"
+            cat "$LOG"
+            exit 1
+          fi
+
+          grep -Eq '"appname"[[:space:]]*:[[:space:]]*"SDRangel"' "$RESPONSE"
+          echo "SDRangel installed and started successfully"
+
+      - name: Upload startup log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mac-${{ matrix.arch }}-startup-log
+          path: ${{ runner.temp }}/sdrangel-smoke.log
+          if-no-files-found: ignore          

@@ -30,12 +30,15 @@
 #include <QApplication>
 #include <QMenu>
 #include <QAction>
+#include <QActionGroup>
 
 #include "gui/samplingdevicedialog.h"
 #include "gui/rollupcontents.h"
 #include "gui/buttonswitch.h"
 #include "gui/crightclickenabler.h"
 #include "channel/channelgui.h"
+#include "feature/feature.h"
+#include "feature/featureset.h"
 #include "feature/featuregui.h"
 #include "device/devicegui.h"
 #include "device/deviceset.h"
@@ -47,6 +50,8 @@ Workspace::Workspace(int index, QWidget *parent, Qt::WindowFlags flags) :
     QDockWidget(parent, flags),
     m_index(index),
     m_menuButton(nullptr),
+    m_startStopMenu(nullptr),
+    m_startStopMode(StartStopCurrentWorkspaceDevices),
     m_featureAddDialog(this),
     m_stacking(false),
     m_autoStack(false),
@@ -57,6 +62,7 @@ Workspace::Workspace(int index, QWidget *parent, Qt::WindowFlags flags) :
     m_mdi->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
     m_mdi->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
     setWidget(m_mdi);
+    m_connectionOverlay = new ConnectionOverlay(m_mdi);
 
     setWindowTitle(tr("W%1").arg(m_index));
     setObjectName(tr("W%1").arg(m_index));
@@ -88,8 +94,28 @@ Workspace::Workspace(int index, QWidget *parent, Qt::WindowFlags flags) :
 
     m_startStopButton = new ButtonSwitch();
     m_startStopButton->setCheckable(true);
+    m_startStopMenu = new QMenu(m_startStopButton);
+    QActionGroup *startStopActionGroup = new QActionGroup(m_startStopMenu);
+    startStopActionGroup->setExclusive(true);
+    const QStringList startStopModes {
+        tr("Start/stop devices in current workspace"),
+        tr("Start/stop devices and features in current workspace"),
+        tr("Start/stop devices in all workspaces"),
+        tr("Start/stop devices and features in all workspaces")
+    };
+    for (int i = 0; i < startStopModes.size(); i++)
+    {
+        QAction *action = m_startStopMenu->addAction(startStopModes[i]);
+        action->setCheckable(true);
+        action->setData(i);
+        action->setActionGroup(startStopActionGroup);
+        action->setChecked(i == static_cast<int>(m_startStopMode));
+    }
+    connect(startStopActionGroup, &QActionGroup::triggered, this, &Workspace::startStopModeChanged);
+    m_startStopButton->setMenu(m_startStopMenu);
+    m_startStopButton->setPopupMode(QToolButton::MenuButtonPopup);
     updateStartStopButton(false);
-    m_startStopButton->setFixedSize(20, 20);
+    m_startStopButton->setFixedSize(34, 20);
     m_startStopButton->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_S));
 
     m_vline1 = new QFrame();
@@ -135,6 +161,14 @@ Workspace::Workspace(int index, QWidget *parent, Qt::WindowFlags flags) :
     m_featurePresetsButton->setFixedSize(20, 20);
     m_featurePresetsButton->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_P));
 
+    m_mcpServerButton = new QPushButton("AI");
+    QFont mcpServerFont = m_mcpServerButton->font();
+    mcpServerFont.setBold(true);
+    m_mcpServerButton->setFont(mcpServerFont);
+    m_mcpServerButton->setToolTip("MCP Server feature is not open");
+    m_mcpServerButton->setFixedSize(20, 20);
+    m_mcpServerButton->setEnabled(false);
+
     m_vline3 = new QFrame();
     m_vline3->setFrameShape(QFrame::VLine);
     m_vline3->setFrameShadow(QFrame::Sunken);
@@ -144,28 +178,24 @@ Workspace::Workspace(int index, QWidget *parent, Qt::WindowFlags flags) :
     m_cascadeSubWindows->setIcon(cascadeSubWindowsIcon);
     m_cascadeSubWindows->setToolTip("Cascade sub windows");
     m_cascadeSubWindows->setFixedSize(20, 20);
-    m_cascadeSubWindows->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_C));
 
     m_tileSubWindows = new QPushButton();
     QIcon tileSubWindowsIcon(":/tiles.png");
     m_tileSubWindows->setIcon(tileSubWindowsIcon);
     m_tileSubWindows->setToolTip("Tile sub windows");
     m_tileSubWindows->setFixedSize(20, 20);
-    m_tileSubWindows->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_T));
 
     m_stackVerticalSubWindows = new QPushButton();
     QIcon stackVerticalSubWindowsIcon(":/stackvertical.png");
     m_stackVerticalSubWindows->setIcon(stackVerticalSubWindowsIcon);
     m_stackVerticalSubWindows->setToolTip("Stack sub windows vertically");
     m_stackVerticalSubWindows->setFixedSize(20, 20);
-    m_stackVerticalSubWindows->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_V));
 
     m_stackSubWindows = new QPushButton();
     QIcon stackSubWindowsIcon(":/stackcolumns.png");
     m_stackSubWindows->setIcon(stackSubWindowsIcon);
     m_stackSubWindows->setToolTip("Stack sub windows in columns. Right click to stack automatically.");
     m_stackSubWindows->setFixedSize(20, 20);
-    m_stackSubWindows->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_S));
     CRightClickEnabler *stackSubWindowsRightClickEnabler = new CRightClickEnabler(m_stackSubWindows);
     connect(stackSubWindowsRightClickEnabler, &CRightClickEnabler::rightClick, this, &Workspace::autoStackSubWindows);
 
@@ -175,7 +205,15 @@ Workspace::Workspace(int index, QWidget *parent, Qt::WindowFlags flags) :
     m_tabSubWindows->setCheckable(true);
     m_tabSubWindows->setToolTip("Display sub windows in tabs");
     m_tabSubWindows->setFixedSize(20, 20);
-    m_tabSubWindows->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_B));
+
+    m_connectionOverlayButton = new ButtonSwitch();
+    m_connectionOverlayButton->setCheckable(true);
+    m_connectionOverlayButton->setFixedSize(20, 20);
+    // Must match the shortcut created in MainWindow. NativeText shows Cmd on macOS.
+    m_connectionOverlayButton->setToolTip(QString("Show device, channel, spectrum and feature connections (%1)")
+        .arg(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_L).toString(QKeySequence::NativeText)));
+    QIcon connectionOverlayIcon(":/wiring.png");
+    m_connectionOverlayButton->setIcon(connectionOverlayIcon);
 
     m_normalButton = new QPushButton();
     QIcon normalIcon(":/dock.png");
@@ -208,7 +246,9 @@ Workspace::Workspace(int index, QWidget *parent, Qt::WindowFlags flags) :
     m_titleBarLayout->addWidget(m_stackVerticalSubWindows);
     m_titleBarLayout->addWidget(m_stackSubWindows);
     m_titleBarLayout->addWidget(m_tabSubWindows);
+    m_titleBarLayout->addWidget(m_connectionOverlayButton);
     m_titleBarLayout->addStretch(1);
+    m_titleBarLayout->addWidget(m_mcpServerButton);
 #ifndef ANDROID
     // Can't undock on Android, as windows don't have title bars to allow them to be moved
     m_titleBarLayout->addWidget(m_normalButton);
@@ -253,6 +293,13 @@ Workspace::Workspace(int index, QWidget *parent, Qt::WindowFlags flags) :
         &QPushButton::clicked,
         this,
         &Workspace::featurePresetsDialog
+    );
+
+    QObject::connect(
+        m_mcpServerButton,
+        &QPushButton::clicked,
+        this,
+        &Workspace::showMCPServer
     );
 
     QObject::connect(
@@ -304,6 +351,9 @@ Workspace::Workspace(int index, QWidget *parent, Qt::WindowFlags flags) :
         &Workspace::tabSubWindows
     );
 
+    QObject::connect(m_connectionOverlayButton, &ButtonSwitch::clicked,
+        this, &Workspace::connectionOverlayToggled);
+
     QObject::connect(
         m_normalButton,
         &QPushButton::clicked,
@@ -346,6 +396,7 @@ Workspace::~Workspace()
     delete m_closeButton;
     delete m_normalButton;
     delete m_tabSubWindows;
+    delete m_connectionOverlayButton;
     delete m_stackSubWindows;
     delete m_stackVerticalSubWindows;
     delete m_tileSubWindows;
@@ -361,6 +412,7 @@ Workspace::~Workspace()
     delete m_addMIMODeviceButton;
     delete m_addFeatureButton;
     delete m_featurePresetsButton;
+    delete m_mcpServerButton;
     delete m_titleLabel;
     delete m_titleBarLayout;
     delete m_titleBar;
@@ -375,6 +427,17 @@ void Workspace::setIndex(int index)
     setWindowTitle(tr("W%1").arg(m_index));
     setObjectName(tr("W%1").arg(m_index));
     m_titleLabel->setText(windowTitle());
+}
+
+void Workspace::setConnectionOverlayVisible(bool visible)
+{
+    m_connectionOverlayButton->doToggle(visible);
+    m_connectionOverlay->setOverlayVisible(visible);
+}
+
+void Workspace::setConnections(const QList<ConnectionOverlay::Connection>& connections)
+{
+    m_connectionOverlay->setConnections(connections);
 }
 
 QList<QMdiSubWindow *> Workspace::getSubWindowList() const
@@ -899,6 +962,13 @@ void Workspace::tabSubWindows()
 
 void Workspace::subWindowActivated(QMdiSubWindow *activatedWindow)
 {
+    if (activatedWindow) {
+        emit focused(this);
+    }
+
+    if (m_connectionOverlay->isVisible()) {
+        m_connectionOverlay->raise();
+    }
     if (activatedWindow && m_tabSubWindows->isChecked())
     {
         // Move other windows out of the way
@@ -921,58 +991,116 @@ void Workspace::layoutSubWindows()
     }
 }
 
-// Start/stop all devices in workspace
+// Start/stop the devices and features selected in the button menu
 void Workspace::startStopClicked(bool checked)
 {
-    if (!checked) {
-        emit stopAllDevices(this);
-    } else {
-        emit startAllDevices(this);
-    }
+    const bool includeFeatures = (m_startStopMode == StartStopCurrentWorkspaceDevicesAndFeatures)
+        || (m_startStopMode == StartStopAllWorkspacesDevicesAndFeatures);
+    const bool allWorkspaces = (m_startStopMode == StartStopAllWorkspacesDevices)
+        || (m_startStopMode == StartStopAllWorkspacesDevicesAndFeatures);
+    emit startStopRequested(this, checked, includeFeatures, allWorkspaces);
     updateStartStopButton(checked);
+}
+
+void Workspace::startStopModeChanged(QAction *action)
+{
+    m_startStopMode = static_cast<StartStopMode>(action->data().toInt());
+    updateStartStopButtonState();
 }
 
 void Workspace::updateStartStopButton(bool checked)
 {
+    const bool includeFeatures = (m_startStopMode == StartStopCurrentWorkspaceDevicesAndFeatures)
+        || (m_startStopMode == StartStopAllWorkspacesDevicesAndFeatures);
+    const bool allWorkspaces = (m_startStopMode == StartStopAllWorkspacesDevices)
+        || (m_startStopMode == StartStopAllWorkspacesDevicesAndFeatures);
+    const QString targets = includeFeatures ? tr("devices and features") : tr("devices");
+    const QString scope = allWorkspaces ? tr("all workspaces") : tr("current workspace");
+
     if (!checked)
     {
         QIcon startIcon(":/play.png");
         m_startStopButton->setIcon(startIcon);
         m_startStopButton->setStyleSheet("QToolButton { background-color : blue; }");
-        m_startStopButton->setToolTip("Start all devices in workspace");
+        m_startStopButton->setToolTip(tr("Start %1 in %2").arg(targets, scope));
     }
     else
     {
         QIcon stopIcon(":/stop.png");
         m_startStopButton->setIcon(stopIcon);
         m_startStopButton->setStyleSheet("QToolButton { background-color : green; }");
-        m_startStopButton->setToolTip("Stop all devices in workspace");
+        m_startStopButton->setToolTip(tr("Stop %1 in %2").arg(targets, scope));
+    }
+}
+
+void Workspace::updateStartStopButtonState()
+{
+    const bool includeFeatures = (m_startStopMode == StartStopCurrentWorkspaceDevicesAndFeatures)
+        || (m_startStopMode == StartStopAllWorkspacesDevicesAndFeatures);
+    const bool allWorkspaces = (m_startStopMode == StartStopAllWorkspacesDevices)
+        || (m_startStopMode == StartStopAllWorkspacesDevicesAndFeatures);
+    bool running = false;
+    bool error = false;
+    const std::vector<DeviceSet*>& deviceSets = MainCore::instance()->getDeviceSets();
+
+    for (const auto *deviceSet : deviceSets)
+    {
+        if (allWorkspaces || (deviceSet->m_deviceAPI->getWorkspaceIndex() == m_index))
+        {
+            const DeviceAPI::EngineState state = deviceSet->m_deviceAPI->state();
+            running |= state == DeviceAPI::StRunning;
+            error |= state == DeviceAPI::StError;
+        }
+    }
+
+    if (includeFeatures)
+    {
+        const std::vector<FeatureSet*>& featureSets = MainCore::instance()->getFeatureeSets();
+        for (const auto *featureSet : featureSets)
+        {
+            for (int i = 0; i < featureSet->getNumberOfFeatures(); i++)
+            {
+                const Feature *feature = featureSet->getFeatureAt(i);
+                if (allWorkspaces || (feature->getWorkspaceIndex() == m_index))
+                {
+                    running |= feature->getState() == Feature::StRunning;
+                    error |= feature->getState() == Feature::StError;
+                }
+            }
+        }
+    }
+
+    updateStartStopButton(running);
+    m_startStopButton->setChecked(running);
+    if (error) {
+        m_startStopButton->setStyleSheet("QToolButton { background-color : red; }");
+    }
+}
+
+void Workspace::updateMCPServerButton(bool available, bool running, int port)
+{
+    m_mcpServerButton->setEnabled(available);
+    m_mcpServerButton->setStyleSheet(running
+        ? "QPushButton { background-color : green; }"
+        : QString());
+
+    if (!available) {
+        m_mcpServerButton->setToolTip("MCP Server feature is not open");
+    } else if (running && (port > 0)) {
+        m_mcpServerButton->setToolTip(QString("Show MCP Server (running on port %1)").arg(port));
+    } else if (running) {
+        m_mcpServerButton->setToolTip("Show MCP Server (running)");
+    } else {
+        m_mcpServerButton->setToolTip("Show MCP Server");
     }
 }
 
 void Workspace::deviceStateChanged(int, DeviceAPI *deviceAPI)
 {
-    if (deviceAPI->getWorkspaceIndex() == m_index)
-    {
-        // Check state of all devices in workspace, to see if any are running or have errors
-        bool running = false;
-        bool error = false;
-        std::vector<DeviceSet*> deviceSets = MainCore::instance()->getDeviceSets();
-        for (auto deviceSet : deviceSets)
-        {
-            DeviceAPI::EngineState state = deviceSet->m_deviceAPI->state();
-            if (state == DeviceAPI::StRunning) {
-                running = true;
-            } else if (state == DeviceAPI::StError) {
-                error = true;
-            }
-        }
-        // Update start/stop button to reflect current state of devices
-        updateStartStopButton(running);
-        m_startStopButton->setChecked(running);
-        if (error) {
-            m_startStopButton->setStyleSheet("QToolButton { background-color : red; }");
-        }
+    const bool allWorkspaces = (m_startStopMode == StartStopAllWorkspacesDevices)
+        || (m_startStopMode == StartStopAllWorkspacesDevicesAndFeatures);
+    if (allWorkspaces || (deviceAPI->getWorkspaceIndex() == m_index)) {
+        updateStartStopButtonState();
     }
 }
 
@@ -991,6 +1119,9 @@ void Workspace::addToMdiArea(QMdiSubWindow *sub)
     connect(sub, &QObject::destroyed, this, &Workspace::layoutSubWindows);
     m_mdi->addSubWindow(sub);
     sub->show();
+    if (m_connectionOverlay->isVisible()) {
+        m_connectionOverlay->raise();
+    }
     // Auto-stack when sub-window's widgets are rolled up
     ChannelGUI *channel = qobject_cast<ChannelGUI *>(sub);
     if (channel) {
@@ -1138,4 +1269,3 @@ void Workspace::adjustSubWindowsAfterRestore()
         }
     }
 }
-

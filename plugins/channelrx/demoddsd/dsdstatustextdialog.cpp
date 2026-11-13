@@ -28,11 +28,14 @@
 #include <QMessageBox>
 #include <QTextStream>
 
+#include "gui/messagedialog.h"
+
 DSDStatusTextDialog::DSDStatusTextDialog(QWidget* parent) :
     QDialog(parent),
     ui(new Ui::DSDStatusTextDialog)
 {
     ui->setupUi(this);
+    setWindowModality(Qt::NonModal);
 }
 
 DSDStatusTextDialog::~DSDStatusTextDialog()
@@ -44,21 +47,34 @@ void DSDStatusTextDialog::addLine(const QString& line)
 {
     if ((line.size() > 0) && (line != m_lastLine))
     {
-        QDateTime dt = QDateTime::currentDateTime();
-        QString dateStr = dt.toString("HH:mm:ss");
-        QTextCursor cursor = ui->logEdit->textCursor();
-        cursor.movePosition(QTextCursor::End, QTextCursor::MoveAnchor);
-        cursor.insertText(tr("%1 %2\n").arg(dateStr).arg(line));
-        if (ui->pinToLastLine->isChecked()) {
-            ui->logEdit->verticalScrollBar()->setValue(ui->logEdit->verticalScrollBar()->maximum());
-        }
+        appendLine(line);
         m_lastLine = line;
+    }
+}
+
+void DSDStatusTextDialog::addEvent(const QString& line)
+{
+    if (line.size() > 0) {
+        appendLine(line);
+    }
+}
+
+void DSDStatusTextDialog::appendLine(const QString& line)
+{
+    QDateTime dt = QDateTime::currentDateTime();
+    QString dateStr = dt.toString("HH:mm:ss");
+    QTextCursor cursor = ui->logEdit->textCursor();
+    cursor.movePosition(QTextCursor::End, QTextCursor::MoveAnchor);
+    cursor.insertText(tr("%1 %2\n").arg(dateStr).arg(line));
+    if (ui->pinToLastLine->isChecked()) {
+        ui->logEdit->verticalScrollBar()->setValue(ui->logEdit->verticalScrollBar()->maximum());
     }
 }
 
 void DSDStatusTextDialog::on_clear_clicked()
 {
     ui->logEdit->clear();
+    m_lastLine.clear();
 }
 
 void DSDStatusTextDialog::on_saveLog_clicked()
@@ -84,7 +100,7 @@ void DSDStatusTextDialog::on_saveLog_clicked()
         }
         else
         {
-            QMessageBox::information(this, tr("Message"), tr("Cannot open file for writing"));
+            MessageDialog::information(this, tr("Message"), tr("Cannot open file for writing"));
         }
     }
 

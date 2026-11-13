@@ -36,6 +36,8 @@ SWGFeatureSettings::SWGFeatureSettings() {
     m_originator_feature_index_isSet = false;
     afc_settings = nullptr;
     m_afc_settings_isSet = false;
+    aircraft_settings = nullptr;
+    m_aircraft_settings_isSet = false;
     ais_settings = nullptr;
     m_ais_settings_isSet = false;
     ambe_settings = nullptr;
@@ -68,6 +70,8 @@ SWGFeatureSettings::SWGFeatureSettings() {
     m_radiosonde_settings_isSet = false;
     rig_ctl_server_settings = nullptr;
     m_rig_ctl_server_settings_isSet = false;
+    mcp_server_settings = nullptr;
+    m_mcp_server_settings_isSet = false;
     satellite_tracker_settings = nullptr;
     m_satellite_tracker_settings_isSet = false;
     scheduler_settings = nullptr;
@@ -98,6 +102,8 @@ SWGFeatureSettings::init() {
     m_originator_feature_index_isSet = false;
     afc_settings = new SWGAFCSettings();
     m_afc_settings_isSet = false;
+    aircraft_settings = new SWGAircraftSettings();
+    m_aircraft_settings_isSet = false;
     ais_settings = new SWGAISSettings();
     m_ais_settings_isSet = false;
     ambe_settings = new SWGAMBESettings();
@@ -130,6 +136,8 @@ SWGFeatureSettings::init() {
     m_radiosonde_settings_isSet = false;
     rig_ctl_server_settings = new SWGRigCtlServerSettings();
     m_rig_ctl_server_settings_isSet = false;
+    mcp_server_settings = new SWGMCPServerSettings();
+    m_mcp_server_settings_isSet = false;
     satellite_tracker_settings = new SWGSatelliteTrackerSettings();
     m_satellite_tracker_settings_isSet = false;
     scheduler_settings = new SWGSchedulerSettings();
@@ -155,6 +163,9 @@ SWGFeatureSettings::cleanup() {
 
     if(afc_settings != nullptr) { 
         delete afc_settings;
+    }
+    if(aircraft_settings != nullptr) { 
+        delete aircraft_settings;
     }
     if(ais_settings != nullptr) { 
         delete ais_settings;
@@ -204,6 +215,9 @@ SWGFeatureSettings::cleanup() {
     if(rig_ctl_server_settings != nullptr) { 
         delete rig_ctl_server_settings;
     }
+    if(mcp_server_settings != nullptr) { 
+        delete mcp_server_settings;
+    }
     if(satellite_tracker_settings != nullptr) { 
         delete satellite_tracker_settings;
     }
@@ -246,6 +260,8 @@ SWGFeatureSettings::fromJsonObject(QJsonObject &pJson) {
     
     ::SWGSDRangel::setValue(&afc_settings, pJson["AFCSettings"], "SWGAFCSettings", "SWGAFCSettings");
     
+    ::SWGSDRangel::setValue(&aircraft_settings, pJson["AircraftSettings"], "SWGAircraftSettings", "SWGAircraftSettings");
+    
     ::SWGSDRangel::setValue(&ais_settings, pJson["AISSettings"], "SWGAISSettings", "SWGAISSettings");
     
     ::SWGSDRangel::setValue(&ambe_settings, pJson["AMBESettings"], "SWGAMBESettings", "SWGAMBESettings");
@@ -277,6 +293,8 @@ SWGFeatureSettings::fromJsonObject(QJsonObject &pJson) {
     ::SWGSDRangel::setValue(&radiosonde_settings, pJson["RadiosondeSettings"], "SWGRadiosondeSettings", "SWGRadiosondeSettings");
     
     ::SWGSDRangel::setValue(&rig_ctl_server_settings, pJson["RigCtlServerSettings"], "SWGRigCtlServerSettings", "SWGRigCtlServerSettings");
+    
+    ::SWGSDRangel::setValue(&mcp_server_settings, pJson["MCPServerSettings"], "SWGMCPServerSettings", "SWGMCPServerSettings");
     
     ::SWGSDRangel::setValue(&satellite_tracker_settings, pJson["SatelliteTrackerSettings"], "SWGSatelliteTrackerSettings", "SWGSatelliteTrackerSettings");
     
@@ -319,6 +337,9 @@ SWGFeatureSettings::asJsonObject() {
     }
     if((afc_settings != nullptr) && (afc_settings->isSet())){
         toJsonValue(QString("AFCSettings"), afc_settings, obj, QString("SWGAFCSettings"));
+    }
+    if((aircraft_settings != nullptr) && (aircraft_settings->isSet())){
+        toJsonValue(QString("AircraftSettings"), aircraft_settings, obj, QString("SWGAircraftSettings"));
     }
     if((ais_settings != nullptr) && (ais_settings->isSet())){
         toJsonValue(QString("AISSettings"), ais_settings, obj, QString("SWGAISSettings"));
@@ -367,6 +388,9 @@ SWGFeatureSettings::asJsonObject() {
     }
     if((rig_ctl_server_settings != nullptr) && (rig_ctl_server_settings->isSet())){
         toJsonValue(QString("RigCtlServerSettings"), rig_ctl_server_settings, obj, QString("SWGRigCtlServerSettings"));
+    }
+    if((mcp_server_settings != nullptr) && (mcp_server_settings->isSet())){
+        toJsonValue(QString("MCPServerSettings"), mcp_server_settings, obj, QString("SWGMCPServerSettings"));
     }
     if((satellite_tracker_settings != nullptr) && (satellite_tracker_settings->isSet())){
         toJsonValue(QString("SatelliteTrackerSettings"), satellite_tracker_settings, obj, QString("SWGSatelliteTrackerSettings"));
@@ -431,6 +455,16 @@ void
 SWGFeatureSettings::setAfcSettings(SWGAFCSettings* afc_settings) {
     this->afc_settings = afc_settings;
     this->m_afc_settings_isSet = true;
+}
+
+SWGAircraftSettings*
+SWGFeatureSettings::getAircraftSettings() {
+    return aircraft_settings;
+}
+void
+SWGFeatureSettings::setAircraftSettings(SWGAircraftSettings* aircraft_settings) {
+    this->aircraft_settings = aircraft_settings;
+    this->m_aircraft_settings_isSet = true;
 }
 
 SWGAISSettings*
@@ -593,6 +627,16 @@ SWGFeatureSettings::setRigCtlServerSettings(SWGRigCtlServerSettings* rig_ctl_ser
     this->m_rig_ctl_server_settings_isSet = true;
 }
 
+SWGMCPServerSettings*
+SWGFeatureSettings::getMcpServerSettings() {
+    return mcp_server_settings;
+}
+void
+SWGFeatureSettings::setMcpServerSettings(SWGMCPServerSettings* mcp_server_settings) {
+    this->mcp_server_settings = mcp_server_settings;
+    this->m_mcp_server_settings_isSet = true;
+}
+
 SWGSatelliteTrackerSettings*
 SWGFeatureSettings::getSatelliteTrackerSettings() {
     return satellite_tracker_settings;
@@ -680,6 +724,9 @@ SWGFeatureSettings::isSet(){
         if(afc_settings && afc_settings->isSet()){
             isObjectUpdated = true; break;
         }
+        if(aircraft_settings && aircraft_settings->isSet()){
+            isObjectUpdated = true; break;
+        }
         if(ais_settings && ais_settings->isSet()){
             isObjectUpdated = true; break;
         }
@@ -726,6 +773,9 @@ SWGFeatureSettings::isSet(){
             isObjectUpdated = true; break;
         }
         if(rig_ctl_server_settings && rig_ctl_server_settings->isSet()){
+            isObjectUpdated = true; break;
+        }
+        if(mcp_server_settings && mcp_server_settings->isSet()){
             isObjectUpdated = true; break;
         }
         if(satellite_tracker_settings && satellite_tracker_settings->isSet()){

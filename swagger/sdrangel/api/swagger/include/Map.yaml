@@ -4,26 +4,221 @@ MapSettings:
     displayNames:
       description: Display object names on the map (1 for yes, 0 for no)
       type: integer
+      minimum: 0
+      maximum: 1
+    map2DEnabled:
+      description: Display the 2D map pane (1 for yes, 0 for no). Disable this while keeping map3DEnabled enabled to show only the 3D map.
+      type: integer
+      minimum: 0
+      maximum: 1
+    map3DEnabled:
+      description: Display the 3D map pane (1 for yes, 0 for no).
+      type: integer
+      minimum: 0
+      maximum: 1
+    mapProvider:
+      description: 2D map provider identifier.
+      type: string
+    mapType:
+      description: Selected 2D map type, for example Street Map or Satellite Map.
+      type: string
+    osmURL:
+      description: Custom OpenStreetMap tile-server URL.
+      type: string
+    mapBoxStyles:
+      description: Mapbox style identifier used by the selected 2D provider.
+      type: string
+    displaySelectedGroundTracks:
+      description: Display ground tracks for selected items (1 for yes, 0 for no).
+      type: integer
+      minimum: 0
+      maximum: 1
+    displayAllGroundTracks:
+      description: Display ground tracks for all items (1 for yes, 0 for no).
+      type: integer
+      minimum: 0
+      maximum: 1
     terrain:
       description: "Terrain used for 3D map (E.g: 'Ellipsoid' or 'Cesium World Terrain')"
       type: string
+    buildings:
+      description: 3D buildings layer, for example None or Cesium OSM Buildings.
+      type: string
+    sunLightEnabled:
+      description: Light the globe from the Sun's direction (1 for yes, 0 for no).
+      type: integer
+      minimum: 0
+      maximum: 1
+    lightIntensity:
+      description: Camera light intensity used by the 3D map.
+      type: number
+      format: float
+      minimum: 0
+    distantLightIntensity:
+      description: Ambient light added to distant 3D models, so they are not dark silhouettes against a bright sky. 0 disables it.
+      type: number
+      format: float
+      minimum: 0
+    lowDetailModels:
+      description: Draw aircraft that are small on screen with their low detail model, where they have one (1 for yes, 0 for no).
+      type: integer
+      minimum: 0
+      maximum: 1
+    eciCamera:
+      description: Use an ECI rather than ECEF camera frame (1 for yes, 0 for no).
+      type: integer
+      minimum: 0
+      maximum: 1
+    fxaa:
+      description: Enable fast approximate anti-aliasing (1 for yes, 0 for no).
+      type: integer
+      minimum: 0
+      maximum: 1
+    msaa:
+      description: Multisample anti-aliasing level.
+      type: integer
+      minimum: 1
+      maximum: 8
+    terrainLighting:
+      description: Enable terrain lighting (1 for yes, 0 for no).
+      type: integer
+      minimum: 0
+      maximum: 1
+    water:
+      description: Enable water effects (1 for yes, 0 for no).
+      type: integer
+      minimum: 0
+      maximum: 1
+    hdr:
+      description: Enable high dynamic range rendering (1 for yes, 0 for no).
+      type: integer
+      minimum: 0
+      maximum: 1
+    fog:
+      description: Enable atmospheric fog (1 for yes, 0 for no).
+      type: integer
+      minimum: 0
+      maximum: 1
+    fps:
+      description: Display the 3D map frame rate (1 for yes, 0 for no).
+      type: integer
+      minimum: 0
+    frameRate:
+      description: Frame rate to render the 3D map at, in frames per second. 0 to use the refresh rate of the display the map is on.
+      type: integer
+      minimum: 0
+      maximum: 1
+    displayMUF:
+      description: Display maximum-usable-frequency contours (1 for yes, 0 for no).
+      type: integer
+      minimum: 0
+      maximum: 1
+    displayfoF2:
+      description: Display F2 critical-frequency contours (1 for yes, 0 for no).
+      type: integer
+      minimum: 0
+      maximum: 1
+    displayRain:
+      description: Display weather-radar rain and snow overlay (1 for yes, 0 for no).
+      type: integer
+      minimum: 0
+      maximum: 1
+    displayClouds:
+      description: Display satellite infrared cloud overlay (1 for yes, 0 for no).
+      type: integer
+      minimum: 0
+      maximum: 1
+    displaySeaMarks:
+      description: Display sea marks (1 for yes, 0 for no).
+      type: integer
+      minimum: 0
+      maximum: 1
+    displayRailways:
+      description: Display railways (1 for yes, 0 for no).
+      type: integer
+      minimum: 0
+      maximum: 1
+    displayNASAGlobalImagery:
+      description: Display NASA GIBS imagery (1 for yes, 0 for no).
+      type: integer
+      minimum: 0
+      maximum: 1
+    nasaGlobalImageryIdentifier:
+      description: NASA GIBS imagery-layer identifier.
+      type: string
+    nasaGlobalImageryOpacity:
+      description: NASA GIBS imagery opacity as a percentage.
+      type: integer
+      minimum: 0
+      maximum: 100
+    displayAurora:
+      description: Display aurora-probability overlay (1 for yes, 0 for no).
+      type: integer
+      minimum: 0
+      maximum: 1
+    displayMagDec:
+      description: Display magnetic-declination contours (1 for yes, 0 for no).
+      type: integer
+      minimum: 0
+      maximum: 1
+    displayMaidenheadGrid:
+      description: Display Maidenhead grid (1 for yes, 0 for no).
+      type: integer
+      minimum: 0
+      maximum: 1
+    displayPFD:
+      description: Display the aircraft primary-flight display (1 for yes, 0 for no).
+      type: integer
+      minimum: 0
+      maximum: 1
+    viewFirstPerson:
+      description: Use first-person 3D map view (1 for yes, 0 for no).
+      type: integer
+      minimum: 0
+      maximum: 1
+    defaultImagery:
+      description: Default imagery layer for the 3D map.
+      type: string
+    mapCenterLatitude:
+      description: "Latitude in decimal degrees (North positive) the 2D map is centred on"
+      type: number
+      format: float
+    mapCenterLongitude:
+      description: "Longitude in decimal degrees (East positive) the 2D map is centred on"
+      type: number
+      format: float
+    mapZoomLevel:
+      description: "Zoom level of the 2D map. Negative means nothing has been saved, in which case the map opens centred on My Position"
+      type: number
+      format: float
     title:
       type: string
+      description: "User-visible title."
     rgbColor:
       type: integer
+      description: "Display color encoded as an RGB integer."
     useReverseAPI:
       description: Synchronize with reverse API (1 for yes, 0 for no)
       type: integer
+      minimum: 0
+      maximum: 1
     reverseAPIAddress:
       type: string
+      description: "IPv4 address or host name of the reverse API peer."
     reverseAPIPort:
       type: integer
+      description: "TCP port of the reverse API peer."
+      minimum: 1
+      maximum: 65535
     reverseAPIFeatureSetIndex:
       type: integer
+      description: "Feature-set index used by the reverse API peer."
     reverseAPIFeatureIndex:
       type: integer
+      description: "Feature index used by the reverse API peer."
     rollupState:
       $ref: "http://swgserver:8081/api/swagger/include/RollupState.yaml#/RollupState"
+      description: "Saved expanded or collapsed state of the GUI sections."
 
 MapReport:
   description: Map
@@ -50,6 +245,11 @@ MapItem:
     name:
       description: "A name for the item"
       type: string
+    group:
+      description: "Which of the Map's item settings groups this item belongs to - its
+        colour, labels, minimum zoom and so on. Optional: when it is not given the item
+        takes the group named after the plugin that sent it!"
+      type: string
     image:
       description: "Filename or URL of image to draw on the 2D map"
       type: string
@@ -64,10 +264,14 @@ MapItem:
       description: "Latitude in decimal degrees, positive to the North"
       type: number
       format: float
+      minimum: -90
+      maximum: 90
     longitude:
       description: "Longitude in decimal degrees, positive to the East"
       type: number
       format: float
+      minimum: -180
+      maximum: 180
     altitude:
       description: "Altitude / height above sea level in metres"
       type: number
@@ -75,6 +279,8 @@ MapItem:
     fixedPosition:
       description: "Indicates whether position of item is constant with time (0 - variable, 1 - fixed)"
       type: integer
+      minimum: 0
+      maximum: 1
     positionDateTime:
       description: "Date and time at this position (ISO 8601 extended format)"
       type: string
@@ -145,6 +351,8 @@ MapItem:
     orientation:
       description: "How to orientate the model (0 - Along direction of motion, 1 - Use heading, pitch and roll)"
       type: integer
+      minimum: 0
+      maximum: 1
     heading:
       description: "Heading angle, in decimal degrees clockwise from North"
       type: number
@@ -177,26 +385,34 @@ MapItem:
     altitudeReference:
       description: "0 - NONE (Absolute), 1 - CLAMP_TO_GROUND, 2 - RELATIVE_TO_GROUND, 3 - CLIP_TO_GROUND."
       type: integer
+      minimum: 0
+      maximum: 3
     animations:
       description: "Animations to play"
       type: array
       items:
         $ref: "http://swgserver:8081/api/swagger/include/Map.yaml#/MapAnimation"
     type:
-      description: "(0 - Map Item, 1 - Image Tile, 2 - Polygon, 3 - Polyline, 4 - Indexed mesh)"
+      description: "(0 - Map Item, 1 - Image Tile, 2 - Polygon, 3 - Polyline, 4 - Track, 5 - Indexed mesh)"
       type: integer
+      minimum: 0
+      maximum: 3
     imageTileWest:
       type: number
       format: float
+      description: "Image tile west for Map item."
     imageTileSouth:
       type: number
       format: float
+      description: "Image tile south for Map item."
     imageTileEast:
       type: number
       format: float
+      description: "Image tile east for Map item."
     imageTileNorth:
       type: number
       format: float
+      description: "Image tile north for Map item."
     imageZoomLevel:
       description: "For 2D map"
       type: number
@@ -207,7 +423,7 @@ MapItem:
       items:
         $ref: "http://swgserver:8081/api/swagger/include/Map.yaml#/MapCoordinate"
     mesh:
-      description: "Indexed triangle mesh for type 4 map items"
+      description: "Indexed triangle mesh for type 5 map items"
       $ref: "http://swgserver:8081/api/swagger/include/Map.yaml#/MapMesh"
     extrudedHeight:
       description: "Extruded height (from surface) for polygons"
@@ -222,11 +438,17 @@ MapItem:
     colorValid:
       description: "0 - Use default color, 1 - Use specified color"
       type: integer
+      minimum: 0
+      maximum: 1
     color:
       description: "RGBA for polygon, polyline and indexed mesh"
       type: integer
     aircraftState:
       $ref: "http://swgserver:8081/api/swagger/include/Map.yaml#/MapAircraftState"
+      description: "Current states of aircraft tracked by the ADS-B demodulator."
+    loopSound:
+      description: "Sound to loop while the item is on the 3D map, spatially located at the item. Either an engine sound-set directory below the configured 3d/Sounds directory, containing engine.json and OGG layers, or a legacy audio file name from the Map's bundled audio directory (e.g. helicopter.wav). Empty for none"
+      type: string
 
 MapAnimation:
   description: "Animation to play in the model on the 3D map"
@@ -237,9 +459,13 @@ MapAnimation:
     reverse:
       description: "(0 - Forward, 1 - Reverse)"
       type: integer
+      minimum: 0
+      maximum: 1
     loop:
       description: "(0 - Play once, 1 - Play in loop)"
       type: integer
+      minimum: 0
+      maximum: 1
     startDateTime:
       description: "Date and time to start playing this animation (ISO 8601 extended format)"
       type: string
@@ -261,6 +487,9 @@ MapAnimation:
     stop:
       description: "Stop a looped animation from playing"
       type: integer
+    sound:
+      description: "Audio file to play when the animation starts (from the Map's audio directory, e.g. A320_gear.wav), spatially located at the map item. Empty for none"
+      type: string
 
 MapCoordinate:
   description: "A map coordinate"
@@ -269,10 +498,14 @@ MapCoordinate:
       description: "Latitude in decimal degrees, positive to the North"
       type: number
       format: float
+      minimum: -90
+      maximum: 90
     longitude:
       description: "Longitude in decimal degrees, positive to the East"
       type: number
       format: float
+      minimum: -180
+      maximum: 180
     altitude:
       description: "Altitude / height above sea level in metres"
       type: number
@@ -306,12 +539,21 @@ MapMesh:
 MapAircraftState:
   description: "Aircraft state for PFD/ND"
   properties:
+    dateTime:
+      description: "Date and time at which this complete aircraft state applies (ISO 8601 extended format). When set, the Map preserves this sample instead of coalescing it with a later update."
+      type: string
+    icao:
+      description: "ICAO Mode S address of this aircraft as lower-case hex"
+      type: string
     callsign:
       type: string
+      description: "Radio callsign."
     aircraftType:
       type: string
+      description: "Aircraft type for Map aircraft state."
     onSurface:
       type: integer
+      description: "On surface for Map aircraft state."
     airspeed:
       description: "Indicated airspeed in knots"
       type: number
@@ -330,6 +572,7 @@ MapAircraftState:
     mach:
       type: number
       format: float
+      description: "Mach for Map aircraft state."
     altitude:
       description: "Barometric altitude in feet"
       type: number
@@ -359,12 +602,15 @@ MapAircraftState:
     selectedAirspeed:
       type: number
       format: float
+      description: "Selected airspeed for Map aircraft state."
     selectedAltitude:
       type: number
       format: float
+      description: "Selected altitude for Map aircraft state."
     selectedHeading:
       type: number
       format: float
+      description: "Selected heading for Map aircraft state."
     autopilot:
       description: "-1 unknown, 0 off, 1 on"
       type: integer
@@ -375,15 +621,92 @@ MapAircraftState:
       description: "0 unknown, 1 LNAV, APP (LOC)"
       type: integer
     tcasMode:
-      description: "-1 unknown, 0 Off, 1 TA, 2 TA/RA"
-      type: integer  
+      description: "0 unknown, 1 Off, 2 TA only, 3 TA/RA"
+      type: integer
+    tcasRA:
+      description: "Active TCAS resolution advisory bitfield. 0 none, bit 0 active, bit 1 corrective (vs preventive), bit 2 downward sense (descend), bit 3 positive (vs vertical speed limit), bit 4 clear of conflict, bit 5 multiple threats, bit 6 opposite-sense multiple-threat coding"
+      type: integer
+    tcasThreatIcao:
+      description: "ICAO Mode S address of the RA threat aircraft as lower-case hex, empty if not identified"
+      type: string
+    squawk:
+      description: "Mode A squawk code as decimal digits (e.g. 7000), -1 for unknown"
+      type: integer
     windSpeed:
       type: number
       format: float
+      description: "Wind speed for Map aircraft state."
     windDirection:
       type: number
       format: float
+      description: "Wind direction for Map aircraft state."
     staticAirTemperature:
       type: number
       format: float
-      
+      description: "Static air temperature for Map aircraft state."
+    flightPlan:
+      $ref: "http://swgserver:8081/api/swagger/include/Map.yaml#/MapFlightPlan"
+    datalinkMessage:
+      $ref: "http://swgserver:8081/api/swagger/include/Map.yaml#/MapDatalinkMessage"
+
+MapDatalinkMessage:
+  description: "Datalink ATC message (CPDLC / pre-departure clearance / oceanic clearance), shown on the Map's DCDU"
+  properties:
+    id:
+      description: "Sequence number, incremented for each message for an aircraft"
+      type: integer
+    received:
+      description: "Date and time the message was received (ISO 8601 extended format)"
+      type: string
+    uplink:
+      description: "1 ground to air, 0 air to ground"
+      type: integer
+    station:
+      description: "Ground station / ATC facility, e.g. EDDS. Empty if unknown"
+      type: string
+    text:
+      type: string
+
+MapFlightPlan:
+  description: "Flight plan / cleared route, drawn on the Map's ND (Navigation Display)"
+  properties:
+    departure:
+      description: "ICAO of departure airport"
+      type: string
+    arrival:
+      description: "ICAO of arrival airport"
+      type: string
+    arrivalRunway:
+      description: "Arrival runway, e.g. 27R. Empty if unknown"
+      type: string
+    approach:
+      description: "Arrival approach procedure as filed, e.g. ILSY01R. Empty if unknown"
+      type: string
+    activeWaypoint:
+      description: "Index in to waypoints of the waypoint being flown to, -1 if unknown"
+      type: integer
+    waypoints:
+      type: array
+      items:
+        $ref: "http://swgserver:8081/api/swagger/include/Map.yaml#/MapRouteWaypoint"
+
+MapRouteWaypoint:
+  description: "A waypoint of a flight plan, for the Map's ND (Navigation Display)"
+  properties:
+    name:
+      type: string
+    latitude:
+      description: "Latitude in decimal degrees, positive to the North. NaN if the waypoint could not be placed"
+      type: number
+      format: float
+    longitude:
+      description: "Longitude in decimal degrees, positive to the East. NaN if the waypoint could not be placed"
+      type: number
+      format: float
+    altitude:
+      description: "Expected or constrained altitude at this waypoint in feet. NaN if unknown"
+      type: number
+      format: float
+    eta:
+      description: "Estimated time over this waypoint (ISO 8601 extended format). Empty if unknown"
+      type: string

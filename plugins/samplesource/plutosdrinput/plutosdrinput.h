@@ -26,12 +26,13 @@
 #include <QByteArray>
 #include <QNetworkRequest>
 
-#include "iio.h"
 #include "dsp/devicesamplesource.h"
 #include "util/message.h"
 #include "plutosdr/deviceplutosdrshared.h"
 #include "plutosdr/deviceplutosdrbox.h"
 #include "plutosdrinputsettings.h"
+
+struct iio_buffer;
 
 class QNetworkAccessManager;
 class QNetworkReply;
@@ -163,6 +164,7 @@ public:
 
     bool openDevice();
     void closeDevice();
+    void handleError(int errorCode);
     void suspendBuddies();
     void resumeBuddies();
     bool applySettings(const PlutoSDRInputSettings& settings, const QList<QString>& settingsKeys, bool force = false);

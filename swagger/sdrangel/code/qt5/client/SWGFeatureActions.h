@@ -24,11 +24,13 @@
 
 #include "SWGAFCActions.h"
 #include "SWGAMBEActions.h"
+#include "SWGAircraftActions.h"
 #include "SWGCameraActions.h"
 #include "SWGDemodAnalyzerActions.h"
 #include "SWGDenoiserActions.h"
 #include "SWGGS232ControllerActions.h"
 #include "SWGLimeRFEActions.h"
+#include "SWGMCPServerActions.h"
 #include "SWGMapActions.h"
 #include "SWGMorseDecoderActions.h"
 #include "SWGPERTesterActions.h"
@@ -70,6 +72,9 @@ public:
     SWGAFCActions* getAfcActions();
     void setAfcActions(SWGAFCActions* afc_actions);
 
+    SWGAircraftActions* getAircraftActions();
+    void setAircraftActions(SWGAircraftActions* aircraft_actions);
+
     SWGAMBEActions* getAmbeActions();
     void setAmbeActions(SWGAMBEActions* ambe_actions);
 
@@ -93,6 +98,9 @@ public:
 
     SWGRigCtlServerActions* getRigCtlServerActions();
     void setRigCtlServerActions(SWGRigCtlServerActions* rig_ctl_server_actions);
+
+    SWGMCPServerActions* getMcpServerActions();
+    void setMcpServerActions(SWGMCPServerActions* mcp_server_actions);
 
     SWGSatelliteTrackerActions* getSatelliteTrackerActions();
     void setSatelliteTrackerActions(SWGSatelliteTrackerActions* satellite_tracker_actions);
@@ -131,6 +139,9 @@ private:
     SWGAFCActions* afc_actions;
     bool m_afc_actions_isSet;
 
+    SWGAircraftActions* aircraft_actions;
+    bool m_aircraft_actions_isSet;
+
     SWGAMBEActions* ambe_actions;
     bool m_ambe_actions_isSet;
 
@@ -154,6 +165,9 @@ private:
 
     SWGRigCtlServerActions* rig_ctl_server_actions;
     bool m_rig_ctl_server_actions_isSet;
+
+    SWGMCPServerActions* mcp_server_actions;
+    bool m_mcp_server_actions_isSet;
 
     SWGSatelliteTrackerActions* satellite_tracker_actions;
     bool m_satellite_tracker_actions_isSet;

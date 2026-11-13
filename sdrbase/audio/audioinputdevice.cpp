@@ -35,11 +35,12 @@ MESSAGE_CLASS_DEFINITION(AudioInputDevice::MsgStop, Message)
 MESSAGE_CLASS_DEFINITION(AudioInputDevice::MsgReportSampleRate, Message)
 
 AudioInputDevice::AudioInputDevice() :
-	m_audioInput(0),
-	m_audioUsageCount(0),
-	m_onExit(false),
-	m_volume(0.5f),
-	m_audioFifos()
+    m_audioInput(0),
+    m_audioUsageCount(0),
+    m_onExit(false),
+    m_volume(0.5f),
+    m_audioFifos(),
+    m_managerMessageQueue(nullptr)
 {
     connect(&m_inputMessageQueue, SIGNAL(messageEnqueued()), this, SLOT(handleInputMessages()), Qt::QueuedConnection);
 }
@@ -186,14 +187,14 @@ void AudioInputDevice::stop()
 
 void AudioInputDevice::addFifo(AudioFifo* audioFifo)
 {
-	QMutexLocker mutexLocker(&m_mutex);
+	QMutexLocker mutexLocker(&m_fifosMutex);
 
 	m_audioFifos.push_back(audioFifo);
 }
 
 void AudioInputDevice::removeFifo(AudioFifo* audioFifo)
 {
-	QMutexLocker mutexLocker(&m_mutex);
+	QMutexLocker mutexLocker(&m_fifosMutex);
 
 	m_audioFifos.remove(audioFifo);
 }
@@ -228,6 +229,9 @@ qint64 AudioInputDevice::writeData(const char *data, qint64 len)
     	qCritical("AudioInputDevice::writeData: invalid format not stereo");
     	return 0;
     }
+
+	// FIFOs are added and removed from other threads (e.g. a modulator being started)
+	QMutexLocker mutexLocker(&m_fifosMutex);
 
 	for (std::list<AudioFifo*>::iterator it = m_audioFifos.begin(); it != m_audioFifos.end(); ++it)
 	{
@@ -265,10 +269,11 @@ void AudioInputDevice::handleInputMessages()
 {
 	Message* message;
 
-	while ((message = m_inputMessageQueue.pop()) != nullptr)
+	while ((message = m_inputMessageQueue.pop()))
 	{
-		if (handleMessage(*message)) {
-			delete message;
+		if (!handleMessage(*message)) {
+			qDebug("%s: unhandled message: %s", Q_FUNC_INFO, message->getIdentifier());
 		}
+		delete message;
 	}
 }

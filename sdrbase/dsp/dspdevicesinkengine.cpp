@@ -101,9 +101,30 @@ void DSPDeviceSinkEngine::addChannelSource(BasebandSampleSource* source)
     getInputMessageQueue()->push(cmd);
 }
 
+// Whether a removal can be run on the engine thread and waited for: not from that thread
+// itself, which would deadlock, and not once it has stopped, which would wait forever
+// Neither should happen in practice: channels are deleted from the main thread, and a device
+// set's channels go before its engine does
+static bool canWaitOn(const QObject *engine)
+{
+    QThread *engineThread = engine->thread();
+    return engineThread && engineThread->isRunning() && (QThread::currentThread() != engineThread);
+}
+
 void DSPDeviceSinkEngine::removeChannelSource(BasebandSampleSource* source, bool deleting)
 {
 	qDebug() << "DSPDeviceSinkEngine::removeChannelSource: " << source->getSourceName().toStdString().c_str();
+
+    // When deleting, the source needs to be removed before returning
+    if (deleting && canWaitOn(this))
+    {
+		// Same code as for DSPRemoveBasebandSampleSource in handleMessage
+        QMetaObject::invokeMethod(this, [this, source]() {
+            m_basebandSampleSources.remove(source);
+        }, Qt::BlockingQueuedConnection);
+        return;
+    }
+
 	auto *cmd = new DSPRemoveBasebandSampleSource(source, deleting);
     getInputMessageQueue()->push(cmd);
 }
@@ -363,9 +384,11 @@ DSPDeviceSinkEngine::State DSPDeviceSinkEngine::gotoRunning()
 
 DSPDeviceSinkEngine::State DSPDeviceSinkEngine::gotoError(const QString& errorMessage)
 {
-	qDebug() << "DSPDeviceSinkEngine::gotoError";
+	QString message = QString("T:%1: %2").arg(getUID()).arg(errorMessage);
 
-	m_errorMessage = errorMessage;
+	qDebug() << "DSPDeviceSinkEngine::gotoError: " << message;
+
+	m_errorMessage = message;
 	m_deviceDescription.clear();
 	setState(State::StError);
 	return State::StError;
@@ -508,6 +531,12 @@ bool DSPDeviceSinkEngine::handleMessage(const Message& message)
 		m_basebandSampleSources.remove(source);
         return true;
 	}
+    else if (DSPGenerationError::match(message))
+    {
+        const DSPGenerationError& deviceError = (const DSPGenerationError&) message;
+        gotoError(deviceError.getErrorMessage());
+        return true;
+    }
 
     return false;
 }
@@ -516,11 +545,11 @@ void DSPDeviceSinkEngine::handleInputMessages()
 {
 	Message* message;
 
-	while ((message = m_inputMessageQueue.pop()) != nullptr)
+	while ((message = m_inputMessageQueue.pop()))
 	{
-		qDebug("DSPDeviceSinkEngine::handleInputMessages: message: %s", message->getIdentifier());
-        if (handleMessage(*message)) {
-            delete message;
-        }
+		if (!handleMessage(*message)) {
+			qDebug("%s: unhandled message: %s", Q_FUNC_INFO, message->getIdentifier());
+		}
+		delete message;
 	}
 }

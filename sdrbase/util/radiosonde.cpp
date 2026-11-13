@@ -18,6 +18,7 @@
 ///////////////////////////////////////////////////////////////////////////////////
 
 #include <QDateTime>
+#include <QTimeZone>
 #include <QVector3D>
 
 #include "util/radiosonde.h"
@@ -25,6 +26,7 @@
 
 RS41Frame::RS41Frame(const QByteArray ba) :
     m_statusValid(false),
+    m_frameNumber(0),
     m_batteryVoltage(0.0),
     m_pcbTemperature(0),
     m_humiditySensorHeating(0),
@@ -32,15 +34,36 @@ RS41Frame::RS41Frame(const QByteArray ba) :
     m_maxSubframeNumber(0),
     m_subframeNumber(0),
     m_measValid(false),
+    m_tempMain(0),
+    m_tempRef1(0),
+    m_tempRef2(0),
+    m_humidityMain(0),
+    m_humidityRef1(0),
+    m_humidityRef2(0),
+    m_humidityTempMain(0),
+    m_humidityTempRef1(0),
+    m_humidityTempRef2(0),
+    m_pressureMain(0),
+    m_pressureRef1(0),
+    m_pressureRef2(0),
+    m_pressureTemp(0.0),
     m_gpsInfoValid(false),
     m_posValid(false),
     m_latitude(0.0),
     m_longitude(0.0),
     m_height(0.0),
+    m_speed(0.0),
+    m_heading(0.0),
+    m_verticalRate(0.0),
+    m_satellitesUsed(0),
     m_bytes(ba),
+    m_pressure(0.0),
     m_pressureCalibrated(false),
+    m_temperature(0.0),
     m_temperatureCalibrated(false),
+    m_humidityTemperature(0.0),
     m_humidityTemperatureCalibrated(false),
+    m_humidity(0.0),
     m_humidityCalibrated(false)
 {
     int length = getFrameLength(ba[RS41_OFFSET_FRAME_TYPE]);
@@ -201,7 +224,7 @@ void RS41Frame::decodePosDateTime(const QByteArray ba)
         if ((ba[0x19] & 0xff) < 100) {
             msec = (ba[0x19] & 0xff) * 10;
         }
-        m_gpsDateTime = QDateTime(QDate(year, month, day), QTime(hour, minute, second, msec), Qt::UTC);
+        m_gpsDateTime = QDateTime(QDate(year, month, day), QTime(hour, minute, second, msec), QTimeZone::utc());
     }
 }
 

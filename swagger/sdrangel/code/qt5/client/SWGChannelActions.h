@@ -24,6 +24,10 @@
 
 #include "SWGAISModActions.h"
 #include "SWGAPTDemodActions.h"
+#include "SWGDRMDemodActions.h"
+#include "SWGDSDDemodActions.h"
+#include "SWGDSEModActions.h"
+#include "SWGDVBDemodActions.h"
 #include "SWGFileSinkActions.h"
 #include "SWGFileSourceActions.h"
 #include "SWGFreqScannerActions.h"
@@ -34,6 +38,7 @@
 #include "SWGRTTYModActions.h"
 #include "SWGRadioAstronomyActions.h"
 #include "SWGSigMFFileSinkActions.h"
+#include "SWGWefaxDemodActions.h"
 #include <QString>
 
 #include "SWGObject.h"
@@ -71,6 +76,21 @@ public:
 
     SWGAPTDemodActions* getAptDemodActions();
     void setAptDemodActions(SWGAPTDemodActions* apt_demod_actions);
+
+    SWGWefaxDemodActions* getWefaxDemodActions();
+    void setWefaxDemodActions(SWGWefaxDemodActions* wefax_demod_actions);
+
+    SWGDVBDemodActions* getDvbDemodActions();
+    void setDvbDemodActions(SWGDVBDemodActions* dvb_demod_actions);
+
+    SWGDRMDemodActions* getDrmDemodActions();
+    void setDrmDemodActions(SWGDRMDemodActions* drm_demod_actions);
+
+    SWGDSDDemodActions* getDsdDemodActions();
+    void setDsdDemodActions(SWGDSDDemodActions* dsd_demod_actions);
+
+    SWGDSEModActions* getDseModActions();
+    void setDseModActions(SWGDSEModActions* dse_mod_actions);
 
     SWGFileSinkActions* getFileSinkActions();
     void setFileSinkActions(SWGFileSinkActions* file_sink_actions);
@@ -123,6 +143,21 @@ private:
 
     SWGAPTDemodActions* apt_demod_actions;
     bool m_apt_demod_actions_isSet;
+
+    SWGWefaxDemodActions* wefax_demod_actions;
+    bool m_wefax_demod_actions_isSet;
+
+    SWGDVBDemodActions* dvb_demod_actions;
+    bool m_dvb_demod_actions_isSet;
+
+    SWGDRMDemodActions* drm_demod_actions;
+    bool m_drm_demod_actions_isSet;
+
+    SWGDSDDemodActions* dsd_demod_actions;
+    bool m_dsd_demod_actions_isSet;
+
+    SWGDSEModActions* dse_mod_actions;
+    bool m_dse_mod_actions_isSet;
 
     SWGFileSinkActions* file_sink_actions;
     bool m_file_sink_actions_isSet;

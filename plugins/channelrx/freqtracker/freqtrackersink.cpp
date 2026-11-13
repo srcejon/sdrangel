@@ -35,6 +35,8 @@ FreqTrackerSink::FreqTrackerSink() :
         m_spectrumSink(nullptr),
         m_sampleBufferCount(0),
       	m_undersampleCount(0),
+        m_squelchLevel(0.0),
+        m_squelchCount(0),
         m_squelchOpen(false),
         m_squelchGate(0),
         m_magsqSum(0.0f),
@@ -61,7 +63,7 @@ FreqTrackerSink::FreqTrackerSink() :
     m_rrcFilter = new FIRFilterRRC();
     m_rrcFilter->create(m_settings.m_rfBandwidth / m_sinkSampleRate, m_settings.m_rrcRolloff / 100.0f, 8, FIRFilterRRC::Normalization::Energy);
     m_pll.computeCoefficients(0.002f, 0.5f, 10.0f); // bandwidth, damping factor, loop gain
-    applyChannelSettings(m_channelSampleRate, m_inputFrequencyOffset, true);
+    applyChannelSettings(m_sinkSampleRate, m_channelSampleRate, m_inputFrequencyOffset, true);
 }
 
 FreqTrackerSink::~FreqTrackerSink()

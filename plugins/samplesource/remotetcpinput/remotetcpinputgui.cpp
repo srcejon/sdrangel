@@ -23,6 +23,7 @@
 #include <QFileDialog>
 
 #include "ui_remotetcpinputgui.h"
+#include "gui/messagedialog.h"
 #include "gui/colormapper.h"
 #include "gui/glspectrum.h"
 #include "gui/basicdevicesettingsdialog.h"
@@ -76,6 +77,17 @@ RemoteTCPInputGui::RemoteTCPInputGui(DeviceUISet *deviceUISet, QWidget* parent) 
     ui->deltaFrequency->setValueRange(false, 7, -9999999, 9999999);
 
     ui->channelPowerMeter->setColorTheme(LevelMeterSignalDB::ColorGreenAndBlue);
+
+    ui->channelPower->setFixedSize(
+        ui->channelPower->fontMetrics().horizontalAdvance("-100.0") + 2,
+        ui->channelPower->sizeHint().height());
+    ui->channelPower->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    ui->inBufferLenSecsText->setFixedSize(
+        ui->inBufferLenSecsText->fontMetrics().horizontalAdvance("99.99s") + 2,
+        ui->inBufferLenSecsText->sizeHint().height());
+    ui->outBufferLenSecsText->setFixedSize(
+        ui->outBufferLenSecsText->fontMetrics().horizontalAdvance("99.99s") + 2,
+        ui->outBufferLenSecsText->sizeHint().height());
 
     connect(this, SIGNAL(customContextMenuRequested(const QPoint &)), this, SLOT(openDeviceSettingsDialog(const QPoint &)));
 
@@ -176,6 +188,9 @@ bool RemoteTCPInputGui::handleMessage(const Message& message)
     }
     else if (RemoteTCPInput::MsgReportTCPBuffer::match(message))
     {
+        if (ui->inGauge->visibleRegion().isEmpty() && ui->outGauge->visibleRegion().isEmpty()) {
+            return true;
+        }
         const RemoteTCPInput::MsgReportTCPBuffer& report = (const RemoteTCPInput::MsgReportTCPBuffer&) message;
         ui->inGauge->setMaximum((int)report.getInSize());
         ui->inGauge->setValue((int)report.getInBytesAvailable());
@@ -434,10 +449,11 @@ void RemoteTCPInputGui::handleInputMessages()
         }
         else
         {
-            if (handleMessage(*message))
+            if (!handleMessage(*message))
             {
-                delete message;
+                qDebug("%s: unhandled message: %s", Q_FUNC_INFO, message->getIdentifier());
             }
+            delete message;
         }
     }
 }
@@ -1011,7 +1027,7 @@ void RemoteTCPInputGui::updateStatus()
                 break;
             case DeviceAPI::StError:
                 ui->startStop->setStyleSheet("QToolButton { background-color : red; }");
-                QMessageBox::information(this, tr("Message"), m_deviceUISet->m_deviceAPI->errorMessage());
+                MessageDialog::information(this, tr("Message"), m_deviceUISet->m_deviceAPI->errorMessage());
                 break;
             default:
                 break;
@@ -1033,7 +1049,11 @@ void RemoteTCPInputGui::tick()
             (100.0f + powDbPeak) / 100.0f,
             nbMagsqSamples);
 
-    if (m_tickCount % 4 == 0) {
+    // Only while the label can be seen. One covered by another window, or outside the part
+    // of its workspace on screen, is still visible as far as Qt is concerned, so setting
+    // its text marks it dirty and has the main window composite all its OpenGL and Quick
+    // content and swap buffers, for a label that is never drawn
+    if ((m_tickCount % 4 == 0) && !ui->channelPower->visibleRegion().isEmpty()) {
         ui->channelPower->setText(tr("%1").arg(powDbAvg, 0, 'f', 1));
     }
 
@@ -1045,7 +1065,7 @@ void RemoteTCPInputGui::openDeviceSettingsDialog(const QPoint& p)
     if (m_contextMenuType == ContextMenuDeviceSettings)
     {
         BasicDeviceSettingsDialog dialog(this);
-        dialog.setReplayBytesPerSecond(m_settings.m_devSampleRate * 2 * sizeof(FixReal));
+        dialog.setReplayBytesPerSecond(m_settings.m_channelSampleRate * 2 * sizeof(FixReal));
         dialog.setReplayLength(m_settings.m_replayLength);
         dialog.setReplayStep(m_settings.m_replayStep);
         dialog.setUseReverseAPI(m_settings.m_useReverseAPI);

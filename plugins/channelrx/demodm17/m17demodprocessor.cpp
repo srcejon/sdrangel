@@ -40,6 +40,20 @@ M17DemodProcessor::M17DemodProcessor() :
     m_audioFifo(nullptr),
     m_audioMute(false),
     m_volume(1.0f),
+    m_upsamplerLastValue(0.0f),
+    m_dcd(false),
+    m_evm(0.0f),
+    m_deviation(0.0f),
+    m_offset(0.0f),
+    m_status(0),
+    m_syncWordType(0),
+    m_clock(0.0f),
+    m_sampleIndex(0),
+    m_syncIndex(0),
+    m_clockIndex(0),
+    m_viterbiCost(0),
+    m_streamElsePacket(true),
+    m_stdPacketProtocol(StdPacketRaw),
     m_demodInputMessageQueue(nullptr)
 {
     m_this = this;
@@ -330,7 +344,7 @@ bool M17DemodProcessor::decode_packet(modemm17::M17FrameDecoder::packet_buffer_t
         }
 
         uint16_t calcChecksum = crc16.get_bytes()[1] + (crc16.get_bytes()[0]<<8);
-        uint16_t xmitChecksum = m_currentPacket.back() + (m_currentPacket.end()[-2]<<8);
+        uint16_t xmitChecksum = m_currentPacket.back() + (m_currentPacket[m_currentPacket.size() - 2] << 8);
 
         if (calcChecksum == xmitChecksum) // (checksum == 0x0f47)
         {

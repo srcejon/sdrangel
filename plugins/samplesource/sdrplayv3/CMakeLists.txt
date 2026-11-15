@@ -63,14 +63,35 @@ target_link_libraries(${TARGET_NAME} PRIVATE
         ${SDRPLAY_LIBRARIES}
 )
 
-#  /usr/local/lib doesn't seem to be searched by default
-if (APPLE AND (CMAKE_HOST_SYSTEM_PROCESSOR STREQUAL arm64))
-    add_custom_command(TARGET ${TARGET_NAME}
-        POST_BUILD COMMAND
-        ${CMAKE_INSTALL_NAME_TOOL} -change libsdrplay_api.so.3.15 /usr/local/lib/libsdrplay_api.so.3.15  $<TARGET_FILE:${TARGET_NAME}>)
-    add_custom_command(TARGET ${TARGET_NAME}
-        POST_BUILD COMMAND
-        ${CMAKE_INSTALL_NAME_TOOL} -change libsdrplay_api.so.3 /usr/local/lib/libsdrplay_api.so.3  $<TARGET_FILE:${TARGET_NAME}>)
+# Fix path to library
+if (APPLE AND BUILD_SHARED_LIBS AND SDRPLAY_LIBRARIES)
+    find_program(OTOOL_EXECUTABLE otool)
+    execute_process(
+        COMMAND ${OTOOL_EXECUTABLE} -D ${SDRPLAY_LIBRARIES}
+        OUTPUT_VARIABLE SDRPLAY_OTOOL_OUTPUT
+        RESULT_VARIABLE SDRPLAY_OTOOL_RESULT
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+    )
+    # Output is "<file>:" followed by the install name (repeated per architecture for universal binaries)
+    string(REPLACE "\n" ";" SDRPLAY_OTOOL_LINES "${SDRPLAY_OTOOL_OUTPUT}")
+    list(LENGTH SDRPLAY_OTOOL_LINES SDRPLAY_OTOOL_LINE_COUNT)
+    if (SDRPLAY_OTOOL_RESULT EQUAL 0 AND SDRPLAY_OTOOL_LINE_COUNT GREATER 1)
+        list(GET SDRPLAY_OTOOL_LINES -1 SDRPLAY_INSTALL_NAME)
+        string(STRIP "${SDRPLAY_INSTALL_NAME}" SDRPLAY_INSTALL_NAME)
+    else()
+        set(SDRPLAY_INSTALL_NAME "")
+    endif()
+    if (SDRPLAY_INSTALL_NAME STREQUAL "")
+        message(WARNING "Couldn't get install name of ${SDRPLAY_LIBRARIES}. SDRplay plugin may fail to load from app bundle.")
+    elseif (NOT IS_ABSOLUTE "${SDRPLAY_INSTALL_NAME}")
+        get_filename_component(SDRPLAY_LIB_DIR "${SDRPLAY_LIBRARIES}" DIRECTORY)
+        get_filename_component(SDRPLAY_LIB_NAME "${SDRPLAY_INSTALL_NAME}" NAME)
+        set(SDRPLAY_ABSOLUTE_INSTALL_NAME "${SDRPLAY_LIB_DIR}/${SDRPLAY_LIB_NAME}")
+        message(STATUS "SDRplay plugin: changing ${SDRPLAY_INSTALL_NAME} to ${SDRPLAY_ABSOLUTE_INSTALL_NAME}")
+        add_custom_command(TARGET ${TARGET_NAME}
+            POST_BUILD COMMAND
+            ${CMAKE_INSTALL_NAME_TOOL} -change ${SDRPLAY_INSTALL_NAME} ${SDRPLAY_ABSOLUTE_INSTALL_NAME} $<TARGET_FILE:${TARGET_NAME}>)
+    endif()
 endif()
 
 install(TARGETS ${TARGET_NAME} DESTINATION ${INSTALL_FOLDER})
